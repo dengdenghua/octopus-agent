@@ -62,6 +62,11 @@ from dataclasses import dataclass
 
 from runtime.core.cerebrum.react_parsing import (
     _TEST_FUNC_RE,
+    _detect_destructive_calls_in_payload,
+    _detect_dynamic_exec_in_payload,
+    _detect_secrets_in_payload,
+    _detect_shell_injection_in_payload,
+    _detect_unsafe_deser_in_payload,
     _detect_weak_tests_in_payload,
     _final_answer_claims_verification,
     _has_code_verification,
@@ -1427,7 +1432,7 @@ def _secret_in_payload_guard(
     No help-request short circuit — leaking a secret while asking for
     help is still a leak. The guard always fires when a hit lands.
     """
-    if not is_code_mode or not steps:
+    if not steps:
         return None
     hits = _trajectory_secret_hits(steps)
     if not hits:
@@ -1488,7 +1493,7 @@ def _new_destructive_call_guard(
 ) -> str | None:
     """Reject finals where a write step introduced a new destructive
     filesystem/shell call without a paired test edit."""
-    if not is_code_mode or not steps:
+    if not steps:
         return None
     if _final_answer_requests_user_help(final_answer):
         return None
@@ -2385,6 +2390,19 @@ def _spec_code_mode(
     return GuardSpec(label=label, category=category, invoke=_invoke)
 
 
+def _spec_security(
+    label: str,
+    category: str,
+    fn: Callable[..., str | None],
+) -> GuardSpec:
+    """Build a GuardSpec for security gates that must run in every mode."""
+
+    def _invoke(ctx: GuardContext) -> str | None:
+        return fn(ctx.steps, ctx.final_answer, is_code_mode=ctx.is_code_mode)
+
+    return GuardSpec(label=label, category=category, invoke=_invoke)
+
+
 # ── B/C-class invoke wrappers (non-standard signatures) ───────────
 
 
@@ -2428,6 +2446,80 @@ def _invoke_code_mode_completion(ctx: GuardContext) -> str | None:
     return _code_mode_completion_guard(ctx.steps, ctx.final_answer)
 
 
+def _preview_labels(labels: list[str], limit: int = 3) -> str:
+    preview = ", ".join(labels[:limit])
+    if len(labels) > limit:
+        preview += f", +{len(labels) - limit} more"
+    return preview
+
+
+def _final_answer_security_guard(
+    ctx: GuardContext,
+) -> tuple[str, str] | None:
+    """Scan the final answer itself for security-sensitive code snippets.
+
+    Trajectory guards catch unsafe code written via tools. This catches the
+    separate failure mode where a chat/research answer contains a fenced code
+    block or command snippet with obvious unsafe patterns.
+    """
+    text = ctx.final_answer or ""
+    if not text:
+        return None
+
+    secret_hits = _detect_secrets_in_payload(text)
+    if secret_hits:
+        return (
+            "secret-leak guard",
+            "Cannot finish yet: the final answer itself contains a "
+            f"credential-shaped value ({_preview_labels(secret_hits)}). "
+            "Do not reveal API keys, access tokens, private keys, or "
+            "password-like literals in the user-visible answer. Redact the "
+            "value and explain how to store it safely."
+        )
+
+    dynamic_hits = _detect_dynamic_exec_in_payload(text)
+    if dynamic_hits:
+        return (
+            "dynamic-exec guard",
+            "Cannot finish yet: the final answer includes dynamic-execution "
+            f"code ({_preview_labels(dynamic_hits)}). Replace it with a safer "
+            "pattern such as ast.literal_eval, explicit dispatch, or a "
+            "trusted import allowlist, or clearly mark it as unsafe and do "
+            "not present it as recommended code."
+        )
+
+    shell_hits = _detect_shell_injection_in_payload(text)
+    if shell_hits:
+        return (
+            "shell-injection guard",
+            "Cannot finish yet: the final answer includes shell-injection "
+            f"surface(s) ({_preview_labels(shell_hits)}). Prefer argv-list "
+            "subprocess calls and avoid shell=True/os.system/os.popen in "
+            "recommended code."
+        )
+
+    deser_hits = _detect_unsafe_deser_in_payload(text)
+    if deser_hits:
+        return (
+            "unsafe-deser guard",
+            "Cannot finish yet: the final answer includes unsafe "
+            f"deserialization ({_preview_labels(deser_hits)}). Recommend "
+            "json.loads, yaml.safe_load, or a typed schema validator instead."
+        )
+
+    destructive_hits = _detect_destructive_calls_in_payload(text)
+    if destructive_hits:
+        return (
+            "destructive-call guard",
+            "Cannot finish yet: the final answer includes destructive "
+            f"filesystem/process calls ({_preview_labels(destructive_hits)}). "
+            "Add explicit path validation, dry-run/confirmation semantics, "
+            "or avoid presenting the snippet as safe production code."
+        )
+
+    return None
+
+
 # ── The registry: ordered by precedence (security → quality) ──────
 # Order here REPLACES the old if-elif chain order exactly. Security
 # guards fire first (highest blast radius), protocol/tool-availability
@@ -2436,11 +2528,11 @@ def _invoke_code_mode_completion(ctx: GuardContext) -> str | None:
 
 GUARD_REGISTRY: list[GuardSpec] = [
     # ── Security cluster (highest priority) ──
-    _spec_code_mode("secret-leak guard", "security", _secret_in_payload_guard),
-    _spec_code_mode("destructive-call guard", "security", _new_destructive_call_guard),
-    _spec_code_mode("dynamic-exec guard", "security", _dynamic_exec_guard),
-    _spec_code_mode("shell-injection guard", "security", _shell_injection_guard),
-    _spec_code_mode("unsafe-deser guard", "security", _unsafe_deser_guard),
+    _spec_security("secret-leak guard", "security", _secret_in_payload_guard),
+    _spec_security("destructive-call guard", "security", _new_destructive_call_guard),
+    _spec_security("dynamic-exec guard", "security", _dynamic_exec_guard),
+    _spec_security("shell-injection guard", "security", _shell_injection_guard),
+    _spec_security("unsafe-deser guard", "security", _unsafe_deser_guard),
     # ── Tool-availability / inspection-evidence ──
     GuardSpec("inspection-evidence guard", "protocol", _invoke_missing_inspection),
     GuardSpec("tool-availability guard", "protocol", _invoke_false_no_tool),
@@ -2488,6 +2580,7 @@ def evaluate_guards(
     registry: list[GuardSpec] | None = None,
     recorder: Callable[[str, str], None] | None = None,
     disabled_labels: frozenset[str] | set[str] | None = None,
+    categories: frozenset[str] | set[str] | None = None,
 ) -> tuple[str, str] | None:
     """Walk the registry in priority order; return the first
     ``(label, message)`` that fires, or ``None`` if all pass.
@@ -2508,10 +2601,25 @@ def evaluate_guards(
     ``OCTOPUS_DISABLED_GUARDS="magic-number guard,long-function guard"``
     and restart the loop without a code release. Disabled hits are NOT
     recorded to telemetry (they didn't actually block anything).
+
+    ``categories`` (optional) narrows evaluation to coarse guard groups.
+    Salvage paths use this to run only the security cluster without turning
+    a malformed plain-text answer into a todo/protocol failure.
     """
     specs = registry if registry is not None else GUARD_REGISTRY
+    if registry is None and (categories is None or "security" in categories):
+        final_answer_hit = _final_answer_security_guard(ctx)
+        if final_answer_hit is not None:
+            label, message = final_answer_hit
+            if not disabled_labels or label not in disabled_labels:
+                if recorder is not None:
+                    with contextlib.suppress(Exception):
+                        recorder(label, "security")
+                return (label, message)
     for spec in specs:
         if not spec.enabled:
+            continue
+        if categories is not None and spec.category not in categories:
             continue
         if disabled_labels and spec.label in disabled_labels:
             continue
@@ -2522,4 +2630,3 @@ def evaluate_guards(
                     recorder(spec.label, spec.category)
             return (spec.label, message)
     return None
-

@@ -15,6 +15,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any
 
 _logger = logging.getLogger(__name__)
@@ -155,14 +156,72 @@ class ContainerSandbox:
         if not self._container_id and not self.ensure_running():
             return {"error": "sandbox not available", "sandboxed": False}
 
-        safe_path = rel_path.replace("'", "'\\''")
-        escaped = content.replace("'", "'\\''")
-        cmd = (
-            f"mkdir -p \"$(dirname '/workspace/{safe_path}')\" "
-            f"&& printf '%s' '{escaped}' > '/workspace/{safe_path}'"
+        if not rel_path.strip():
+            return {
+                "error": "invalid sandbox path: empty path",
+                "sandboxed": True,
+                "exit_code": -1,
+            }
+
+        rel = PurePosixPath(rel_path)
+        if (
+            rel.parts == ()
+            or rel.is_absolute()
+            or any(part in {"", ".", ".."} for part in rel.parts)
+        ):
+            return {
+                "error": f"invalid sandbox path: {rel_path!r}",
+                "sandboxed": True,
+                "exit_code": -1,
+            }
+
+        script = (
+            "from pathlib import Path\n"
+            "import sys\n"
+            "rel = sys.argv[1]\n"
+            "target = (Path('/workspace') / rel).resolve()\n"
+            "root = Path('/workspace').resolve()\n"
+            "if root not in target.parents and target != root:\n"
+            "    raise SystemExit('path escapes /workspace')\n"
+            "target.parent.mkdir(parents=True, exist_ok=True)\n"
+            "target.write_text(sys.stdin.read(), encoding='utf-8')\n"
         )
 
-        return self.exec(cmd)
+        try:
+            result = subprocess.run(
+                [
+                    "docker", "exec", "-i", self.container_name,
+                    "python", "-c", script, str(rel),
+                ],
+                input=content,
+                capture_output=True,
+                text=True,
+                timeout=self.config.timeout_seconds,
+            )
+            return {
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "exit_code": result.returncode,
+                "sandboxed": True,
+            }
+        except subprocess.TimeoutExpired:
+            return {
+                "stdout": "",
+                "stderr": f"write timed out after {self.config.timeout_seconds}s",
+                "exit_code": -1,
+                "sandboxed": True,
+            }
+        except (OSError, subprocess.SubprocessError) as exc:
+            _logger.error("docker write_file failed, refusing host fallback: %s", exc)
+            return {
+                "stdout": "",
+                "stderr": (
+                    f"sandbox write failed: {exc} "
+                    "(host execution disabled for safety)"
+                ),
+                "exit_code": -1,
+                "sandboxed": False,
+            }
 
     def cleanup(self) -> None:
         if not self.is_docker_available:

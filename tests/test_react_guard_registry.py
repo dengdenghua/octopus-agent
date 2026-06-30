@@ -128,9 +128,9 @@ class TestEvaluateGuards:
         if hit is not None:
             assert hit[0] != "secret-leak guard"
 
-    def test_non_code_mode_only_protocol(self) -> None:
-        # In non-code mode, code-only guards are inert; a secret in the
-        # payload should NOT fire (is_code_mode gates it).
+    def test_non_code_mode_still_runs_security_guards(self) -> None:
+        # Security guards are mode-independent; chat/research turns can still
+        # leak secrets through tool writes and must be blocked.
         sk = "sk-abcdefghijklmnopqrstuvwxyz1234567890"
         steps = [
             _step(
@@ -148,8 +148,25 @@ class TestEvaluateGuards:
             is_code_mode=False,
             todo_protocol_required=False,
         )
-        # No code-mode guards run, no todo protocol required → None.
-        assert evaluate_guards(ctx) is None
+        hit = evaluate_guards(ctx)
+        assert hit is not None
+        assert hit[0] == "secret-leak guard"
+
+    def test_final_answer_security_scans_non_code_answers(self) -> None:
+        ctx = GuardContext(
+            steps=[_step(1)],
+            final_answer=(
+                "Use this:\n"
+                "```python\n"
+                "import subprocess\n"
+                "subprocess.run(user_cmd, shell=True)\n"
+                "```"
+            ),
+            is_code_mode=False,
+        )
+        hit = evaluate_guards(ctx)
+        assert hit is not None
+        assert hit[0] == "shell-injection guard"
 
     def test_empty_registry_returns_none(self) -> None:
         ctx = GuardContext(steps=[_step(1)], final_answer="done", is_code_mode=True)

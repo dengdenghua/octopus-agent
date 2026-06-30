@@ -44,8 +44,8 @@ def test_tiny_messages_low_ratio() -> None:
 
 
 def test_padded_messages_exceed_eighty_percent() -> None:
-    # Default unknown-model budget is 100_000 chars, so 90k chars
-    # of content gets us comfortably above the 0.80 threshold.
+    # Default unknown-model budget is ~25k estimated tokens, so 90k ASCII chars
+    # (~22.5k tokens) gets us comfortably above the 0.80 threshold.
     big = "x" * 90_000
     ratio = _estimate_context_fullness([_Msg(content=big)], "unknown-model")
     assert ratio > 0.8
@@ -55,7 +55,7 @@ def test_padded_messages_exceed_eighty_percent() -> None:
 
 
 def test_unknown_model_uses_default_budget() -> None:
-    # 50k chars vs 100k default → exactly 0.5
+    # 50k ASCII chars ~= 12.5k estimated tokens vs 25k default → 0.5
     msgs = [_Msg(content="x" * 50_000)]
     ratio = _estimate_context_fullness(msgs, "totally-made-up-model")
     assert abs(ratio - 0.5) < 1e-6
@@ -65,8 +65,8 @@ def test_unknown_model_uses_default_budget() -> None:
 
 
 def test_claude_sonnet_uses_large_budget() -> None:
-    # 60k chars → 0.1 against the 600k claude budget; same content
-    # against the 100k default would be 0.6, so the budget mapping
+    # 60k ASCII chars ~= 15k tokens → 0.1 against the 150k claude budget;
+    # same content against the 25k default would be 0.6, so the budget mapping
     # matters here.
     msgs = [_Msg(content="x" * 60_000)]
     ratio = _estimate_context_fullness(msgs, "anthropic/claude-sonnet-4")
@@ -80,7 +80,7 @@ def test_claude_3_5_uses_large_budget() -> None:
 
 
 def test_gpt_4o_uses_400k_budget() -> None:
-    # 40k chars / 400k budget == 0.1
+    # 40k ASCII chars ~= 10k tokens / 100k budget == 0.1
     msgs = [_Msg(content="x" * 40_000)]
     ratio = _estimate_context_fullness(msgs, "openai/gpt-4o-mini")
     assert abs(ratio - 0.1) < 1e-6
@@ -100,6 +100,13 @@ def test_none_model_treated_as_default_budget() -> None:
     msgs = [_Msg(content="x" * 100_000)]
     ratio = _estimate_context_fullness(msgs, None)
     assert ratio == 1.0
+
+
+def test_chinese_text_uses_token_proxy_not_raw_chars() -> None:
+    # 15k Chinese chars ~= 10k estimated tokens, so default 25k budget => 0.4.
+    msgs = [_Msg(content="中" * 15_000)]
+    ratio = _estimate_context_fullness(msgs, "unknown-model")
+    assert abs(ratio - 0.4) < 0.01
 
 
 def test_ratio_always_within_bounds_for_varied_inputs() -> None:

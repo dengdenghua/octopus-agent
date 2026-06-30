@@ -370,7 +370,7 @@ class TestStepIntroducesDynamicExec:
 
 
 class TestDynamicExecGuard:
-    def test_non_code_mode_silent(self) -> None:
+    def test_non_code_mode_still_fires(self) -> None:
         steps = [
             _step(
                 1,
@@ -381,9 +381,11 @@ class TestDynamicExecGuard:
                 ),
             ),
         ]
-        assert _dynamic_exec_guard(
+        msg = _dynamic_exec_guard(
             steps, "done", is_code_mode=False,
-        ) is None
+        )
+        assert msg is not None
+        assert "dynamic-execution" in msg
 
     def test_no_exec_silent(self) -> None:
         steps = [_step(1, action='edit_file({"path": "runtime/foo.py", "old_string": "x", "new_string": "y"})')]

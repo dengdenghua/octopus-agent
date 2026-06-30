@@ -33,6 +33,7 @@ from runtime.core.cerebrum.react_context import (
     _prefetch_related_files,
     _restore_messages_from_checkpoint,
     _serialize_messages_for_checkpoint,
+    context_budget_tokens_for_model,
 )
 from runtime.core.cerebrum.react_execution import (
     _background_task_info_from_observation,
@@ -80,6 +81,11 @@ from runtime.core.cerebrum.react_parsing import (
     _ACTION_RE,
     _FINAL_RE,
     _THOUGHT_RE,
+    _detect_destructive_calls_in_payload,
+    _detect_secrets_in_payload,
+    _detect_dynamic_exec_in_payload,
+    _detect_shell_injection_in_payload,
+    _detect_unsafe_deser_in_payload,
     _escape_md_brackets,
     _is_format_violation,
     _parse_action,
@@ -205,6 +211,73 @@ def _looks_like_observation_echo(text: str) -> bool:
         or head.startswith("<tool_call")
         or head.startswith("<function")
         or "(real tool execution succeeded)" in head
+    )
+
+
+def _final_answer_needs_pre_emit_guard(text: str, *, is_code_mode: bool) -> bool:
+    """Whether user-visible final text must be buffered until guards pass."""
+    if is_code_mode:
+        return True
+    body = text or ""
+    if not body:
+        return False
+    lower = body.lower()
+    if (
+        "```" in body
+        or "subprocess" in lower
+        or "os.system" in lower
+        or "os.popen" in lower
+        or "pickle." in lower
+        or "marshal." in lower
+        or "yaml.load" in lower
+        or "eval(" in lower
+        or "exec(" in lower
+        or "__import__(" in lower
+        or "rm -rf" in lower
+    ):
+        return True
+    return bool(
+        _detect_secrets_in_payload(body)
+        or _detect_dynamic_exec_in_payload(body)
+        or _detect_shell_injection_in_payload(body)
+        or _detect_unsafe_deser_in_payload(body)
+        or _detect_destructive_calls_in_payload(body)
+    )
+
+
+def _evaluate_final_answer_guards(
+    *,
+    steps: list[ReActStep],
+    step: ReActStep,
+    final_answer: str,
+    is_code_mode: bool,
+    todo_protocol_required: bool,
+    todo_protocol_visible: bool,
+    file_inspection_tools_visible: bool,
+    tools_active: bool,
+    goal: str,
+    categories: frozenset[str] | set[str] | None = None,
+) -> tuple[str, str] | None:
+    """Run the final-answer guard registry for regular and salvage paths."""
+    from runtime.core.cerebrum.react_guards import (
+        GuardContext,
+        evaluate_guards,
+    )
+
+    return evaluate_guards(
+        GuardContext(
+            steps=steps + [step],
+            final_answer=final_answer,
+            is_code_mode=is_code_mode,
+            todo_protocol_required=todo_protocol_required,
+            todo_protocol_visible=todo_protocol_visible,
+            file_inspection_tools_visible=file_inspection_tools_visible,
+            tools_active=tools_active,
+            goal=goal,
+        ),
+        recorder=_guard_hit_recorder(),
+        disabled_labels=_disabled_guard_labels(),
+        categories=categories,
     )
 
 
@@ -1865,6 +1938,7 @@ def stream_react_loop(
             # they may contain Thought:/Action: prose that must not leak.
             _final_stream_started = False
             _streamed_final_chars = 0
+            _final_stream_guarded = False
 
             def _maybe_emit_throughput(chars: int) -> dict[str, Any] | None:
                 nonlocal _throughput_last_emit
@@ -1896,6 +1970,16 @@ def stream_react_loop(
                         # Already past the anchor — every subsequent
                         # token is part of the user-visible answer.
                         if evt.delta:
+                            joined = "".join(text_parts)
+                            if (
+                                not _final_stream_guarded
+                                and _final_answer_needs_pre_emit_guard(
+                                    joined,
+                                    is_code_mode=_is_code_mode,
+                                )
+                            ):
+                                _final_stream_started = False
+                                continue
                             yield {
                                 "type": "text_delta",
                                 "delta": evt.delta,
@@ -1934,6 +2018,12 @@ def stream_react_loop(
                                 # safe to surface.
                                 pass
                             elif answer_so_far:
+                                if _final_answer_needs_pre_emit_guard(
+                                    answer_so_far,
+                                    is_code_mode=_is_code_mode,
+                                ):
+                                    _final_stream_guarded = True
+                                    continue
                                 yield {
                                     "type": "text_delta",
                                     "delta": answer_so_far,
@@ -1963,6 +2053,12 @@ def stream_react_loop(
                             # consecutive rounds to bail). With it, the
                             # user sees text streaming the moment it's
                             # clear ReAct format isn't coming.
+                            if _final_answer_needs_pre_emit_guard(
+                                joined,
+                                is_code_mode=_is_code_mode,
+                            ):
+                                _final_stream_guarded = True
+                                continue
                             yield {
                                 "type": "text_delta",
                                 "delta": joined,
@@ -2118,7 +2214,14 @@ def stream_react_loop(
         _finish_reason = (getattr(resp, "finish_reason", "") or "").strip().lower()
         _length_limited = _finish_reason_is_length_limited(_finish_reason)
         _length_limit_should_continue = False
-        if maybe_final and not _final_stream_started:
+        if (
+            maybe_final
+            and not _final_stream_started
+            and not _final_answer_needs_pre_emit_guard(
+                maybe_final,
+                is_code_mode=_is_code_mode,
+            )
+        ):
             # Fall-through emission for routers that don't actually
             # stream (e.g. tests, non-streaming providers): yield the
             # parsed final once. When _final_stream_started is true the
@@ -2145,11 +2248,33 @@ def stream_react_loop(
             and not _looks_like_observation_echo(text)
             and not _FINAL_RE.search(text)
         ):
-            final_answer = text
-            terminated_reason = "final_answer"
-            final_answer_emitted = True
-            steps.append(step)
-            break
+            _guard_hit = _evaluate_final_answer_guards(
+                steps=steps,
+                step=step,
+                final_answer=text,
+                is_code_mode=_is_code_mode,
+                todo_protocol_required=_todo_protocol_required,
+                todo_protocol_visible=_todo_protocol_visible,
+                file_inspection_tools_visible=_file_inspection_tools_visible,
+                tools_active=tools_active,
+                goal=intent.normalized_goal,
+                categories=frozenset({"security"}),
+            )
+            if _guard_hit is not None:
+                _guard_label, _guard_message = _guard_hit
+                _final_stream_started = False
+                step.observation = (
+                    (((step.observation or "") + "\n\n") if step.observation else "")
+                    + f"[{_guard_label}]\n"
+                    + _guard_message
+                )
+                maybe_final = None
+            else:
+                final_answer = text
+                terminated_reason = "final_answer"
+                final_answer_emitted = True
+                steps.append(step)
+                break
 
         if _is_format_violation(step, maybe_final):
             # Length-limited generation gets a free pass on the
@@ -2193,20 +2318,46 @@ def stream_react_loop(
                     # If the chat-style early-flush branch above already
                     # streamed this text live, skip the duplicate yield —
                     # otherwise the user sees the answer twice.
-                    if text and not maybe_final and not _final_stream_started:
+                    _guard_hit = None
+                    if text and not maybe_final:
+                        _guard_hit = _evaluate_final_answer_guards(
+                            steps=steps,
+                            step=step,
+                            final_answer=text,
+                            is_code_mode=_is_code_mode,
+                            todo_protocol_required=_todo_protocol_required,
+                            todo_protocol_visible=_todo_protocol_visible,
+                            file_inspection_tools_visible=_file_inspection_tools_visible,
+                            tools_active=tools_active,
+                            goal=intent.normalized_goal,
+                            categories=frozenset({"security"}),
+                        )
+                    if _guard_hit is not None:
+                        _guard_label, _guard_message = _guard_hit
+                        consecutive_format_violations = 0
+                        step.observation = (
+                            (((step.observation or "") + "\n\n") if step.observation else "")
+                            + f"[{_guard_label}]\n"
+                            + _guard_message
+                        )
+                    elif text and not maybe_final and not _final_stream_started:
                         yield {
                             "type": "text_delta",
                             "delta": text,
                             "iteration": i + 1,
                         }
-                    _persist_react_trajectory(
-                        stack,
-                        react_task_id=react_task_id,
-                        beak_steps=executed_beak_steps,
-                        success=False,
-                    )
-                    _pause.unregister_active(str(react_task_id))
-                    return None
+                    if _guard_hit is not None:
+                        consecutive_format_violations = 0
+                        maybe_final = None
+                    else:
+                        _persist_react_trajectory(
+                            stack,
+                            react_task_id=react_task_id,
+                            beak_steps=executed_beak_steps,
+                            success=False,
+                        )
+                        _pause.unregister_active(str(react_task_id))
+                        return None
         else:
             consecutive_format_violations = 0
 
@@ -2711,15 +2862,17 @@ def stream_react_loop(
                 ((step.observation or "") + "\n\n") if step.observation else ""
             ) + "\n\n".join(_midflight_nudges)
 
-        if maybe_final and (_is_code_mode or (_todo_protocol_required and _todo_protocol_visible)):
-            _steps_with_current = steps + [step]
-            from runtime.core.cerebrum.react_guards import (
-                GuardContext,
-                evaluate_guards,
+        if maybe_final:
+            _deferred_final_emit = (
+                not _final_stream_started
+                and _final_answer_needs_pre_emit_guard(
+                    maybe_final,
+                    is_code_mode=_is_code_mode,
+                )
             )
-
-            _guard_ctx = GuardContext(
-                steps=_steps_with_current,
+            _guard_hit = _evaluate_final_answer_guards(
+                steps=steps,
+                step=step,
                 final_answer=maybe_final,
                 is_code_mode=_is_code_mode,
                 todo_protocol_required=_todo_protocol_required,
@@ -2727,11 +2880,6 @@ def stream_react_loop(
                 file_inspection_tools_visible=_file_inspection_tools_visible,
                 tools_active=tools_active,
                 goal=intent.normalized_goal,
-            )
-            _guard_hit = evaluate_guards(
-                _guard_ctx,
-                recorder=_guard_hit_recorder(),
-                disabled_labels=_disabled_guard_labels(),
             )
             if _guard_hit is not None:
                 _guard_label, _guard_message = _guard_hit
@@ -2741,6 +2889,13 @@ def stream_react_loop(
                     + f"[{_guard_label}]\n"
                     + _guard_message
                 )
+            elif _deferred_final_emit:
+                _delta = maybe_final[_streamed_final_chars:] if _streamed_final_chars else maybe_final
+                yield {
+                    "type": "text_delta",
+                    "delta": _delta,
+                    "iteration": i + 1,
+                }
 
         _public_progress_summary = (
             _progress_summary if _is_code_mode else _build_research_progress_summary(steps + [step])
@@ -3027,7 +3182,7 @@ def stream_react_loop(
 
         messages = _compress_context(
             messages,
-            max_tokens=60000,
+            max_tokens=context_budget_tokens_for_model(effective_model),
             router=router,
             model=effective_model,
             is_code_mode=_is_code_mode,
@@ -3108,18 +3263,28 @@ def stream_react_loop(
             final_m = _FINAL_RE.search(text)
             if final_m:
                 final_answer = final_m.group(1).strip()
-                if _is_code_mode:
-                    _guard_message = _path_verification_policy_guard(
-                        steps,
-                        final_answer,
-                        is_code_mode=True,
-                    ) or _code_mode_completion_guard(steps, final_answer)
-                    if _guard_message:
-                        final_answer = (
-                            "我还不能把这个 code 任务标记为完成。\n\n"
-                            f"{_guard_message}\n\n"
-                            "请点击继续让我接着执行, 或提供必要的权限/登录/信息后我再继续。"
-                        )
+                _forced_step = ReActStep(
+                    iteration=(steps[-1].iteration + 1) if steps else 1,
+                    action="none",
+                )
+                _guard_hit = _evaluate_final_answer_guards(
+                    steps=steps,
+                    step=_forced_step,
+                    final_answer=final_answer,
+                    is_code_mode=_is_code_mode,
+                    todo_protocol_required=_todo_protocol_required,
+                    todo_protocol_visible=_todo_protocol_visible,
+                    file_inspection_tools_visible=_file_inspection_tools_visible,
+                    tools_active=tools_active,
+                    goal=intent.normalized_goal,
+                )
+                if _guard_hit is not None:
+                    _guard_label, _guard_message = _guard_hit
+                    final_answer = (
+                        "我还不能把这个任务标记为完成。\n\n"
+                        f"[{_guard_label}]\n{_guard_message}\n\n"
+                        "请点击继续让我接着执行, 或提供必要的权限/登录/信息后我再继续。"
+                    )
             else:
                 _logger.warning(
                     "react_loop 强制收敛未得 Final Answer · raw head=%r",

@@ -13,6 +13,10 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from runtime.core.cerebrum.react_context import (
+    _estimate_messages_tokens,
+    context_budget_tokens_for_model,
+)
 from runtime.core.cerebrum.react_types import _DEFAULT_REACT_RECIPES, ReActRecipe
 from runtime.safety.experiments.variant import ABSplitter
 
@@ -213,25 +217,19 @@ def _reset_disabled_set_for_tests() -> None:
 def _estimate_context_fullness(messages: list, model: str | None) -> float:
     """Rough fraction of the model's context budget consumed by ``messages``.
 
-    Uses a coarse character-count proxy (no tokenizer in the hot path) and
-    a model-name-keyed budget. Returned value is clamped to ``[0.0, 1.0]``.
+    Uses the same approximate token counter and model-name-keyed budget as
+    context compression. Returned value is clamped to ``[0.0, 1.0]``.
     """
     try:
-        used_chars = sum(len(str(getattr(m, "content", m))) for m in messages)
+        used_tokens = _estimate_messages_tokens(messages)
     except (TypeError, AttributeError):
-        used_chars = 0
+        used_tokens = 0
 
-    name = (model or "").lower()
-    if "claude-3-5" in name or "claude-4" in name or "claude-sonnet" in name:
-        budget = 600_000
-    elif "gpt-4o" in name or "gpt-5" in name:
-        budget = 400_000
-    else:
-        budget = 100_000
+    budget = context_budget_tokens_for_model(model)
 
     if budget <= 0:
         return 0.0
-    ratio = used_chars / budget
+    ratio = used_tokens / budget
     if ratio < 0.0:
         return 0.0
     if ratio > 1.0:

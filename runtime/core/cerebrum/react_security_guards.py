@@ -74,7 +74,7 @@ def _dynamic_exec_guard(
     *,
     is_code_mode: bool,
 ) -> str | None:
-    if not is_code_mode or not steps:
+    if not steps:
         return None
     if _user_help_requested(final_answer):
         return None
@@ -128,7 +128,7 @@ def _shell_injection_guard(
     *,
     is_code_mode: bool,
 ) -> str | None:
-    if not is_code_mode or not steps:
+    if not steps:
         return None
     if _user_help_requested(final_answer):
         return None
@@ -180,7 +180,7 @@ def _unsafe_deser_guard(
     *,
     is_code_mode: bool,
 ) -> str | None:
-    if not is_code_mode or not steps:
+    if not steps:
         return None
     if _user_help_requested(final_answer):
         return None

@@ -2402,6 +2402,52 @@ def test_text_delta_streams_before_done_after_final_answer_anchor() -> None:
     assert "".join(deltas) == "Hello world."
 
 
+def test_unsafe_final_answer_is_guarded_before_streaming() -> None:
+    """Security-sensitive final text must not be emitted before guards run."""
+    from runtime.sensing.model_router.models import (
+        CostEntry,
+        ModelResponse,
+        ModelStreamEvent,
+    )
+
+    chunks = [
+        "Final Answer: Here is code:\n",
+        "```python\n",
+        "import subprocess\nsubprocess.run(user_cmd, shell=True)\n",
+        "```\n",
+    ]
+    full = "".join(chunks)
+
+    class _UnsafeFinalRouter:
+        def call(self, req: Any) -> _FakeResponse:  # noqa: ARG002
+            return _FakeResponse(text=full)
+
+        def call_stream(self, req: Any):  # noqa: ARG002
+            for c in chunks:
+                yield ModelStreamEvent(type="text_delta", delta=c)
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(
+                    text=full, model="test-model", cost=CostEntry(),
+                ),
+            )
+
+    events, result = _drain(
+        stream_react_loop(
+            _FakeStack(_UnsafeFinalRouter()),
+            _intent("show unsafe code"),
+            agent=None,
+            max_iterations=1,
+        )
+    )
+
+    assert result is not None
+    assert "shell-injection guard" in result.final_answer
+    assert "subprocess.run" not in result.final_answer
+    visible = "".join(e["delta"] for e in events if e["type"] == "text_delta")
+    assert "subprocess.run" not in visible
+
+
 def test_chat_style_zero_anchor_streams_live_after_120_chars() -> None:
     """When the model writes plain markdown without Final Answer/
     Thought/Action markers, the loop must NOT wait for two

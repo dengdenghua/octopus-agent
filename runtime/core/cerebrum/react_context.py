@@ -22,6 +22,22 @@ def _estimate_messages_tokens(messages: list) -> int:
     return sum(_estimate_tokens(getattr(m, "content", "") or "") for m in messages)
 
 
+def context_budget_tokens_for_model(model: str | None) -> int:
+    """Return the coarse context budget used by pressure + compression.
+
+    The hot path intentionally avoids tokenizer imports.  Budgets are in
+    the same approximate token units as ``_estimate_tokens`` so Chinese
+    text no longer gets treated as if one character were one English
+    character.
+    """
+    name = (model or "").lower()
+    if "claude-3-5" in name or "claude-4" in name or "claude-sonnet" in name:
+        return 150_000
+    if "gpt-4o" in name or "gpt-5" in name:
+        return 100_000
+    return 25_000
+
+
 def _compress_context(
     messages: list,
     *,

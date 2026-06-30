@@ -95,7 +95,7 @@ class TestStepIntroducesShellInjection:
 
 
 class TestShellInjectionGuard:
-    def test_non_code_mode_silent(self) -> None:
+    def test_non_code_mode_still_fires(self) -> None:
         steps = [
             _step(
                 1,
@@ -106,7 +106,9 @@ class TestShellInjectionGuard:
                 ),
             ),
         ]
-        assert _shell_injection_guard(steps, "done", is_code_mode=False) is None
+        msg = _shell_injection_guard(steps, "done", is_code_mode=False)
+        assert msg is not None
+        assert "shell-injection" in msg
 
     def test_clean_silent(self) -> None:
         steps = [_step(1, action='edit_file({"path": "runtime/foo.py", "old_string": "x", "new_string": "y"})')]
