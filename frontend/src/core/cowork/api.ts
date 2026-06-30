@@ -2,6 +2,7 @@ import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 
 import type {
+  CollaborationSession,
   CoworkGroupResponse,
   CoworkInviteInput,
   CoworkMode,
@@ -11,6 +12,7 @@ import type {
 } from "./types";
 
 const BASE = () => `${getBackendBaseURL()}/api/cowork`;
+const COLLAB_BASE = () => `${getBackendBaseURL()}/api/collab`;
 
 async function parseJson<T>(res: Response, action: string): Promise<T> {
   if (!res.ok) {
@@ -143,4 +145,28 @@ export async function coworkHeartbeat(
     },
   );
   await parseJson<{ ok: boolean }>(res, "Cowork heartbeat");
+}
+
+export async function getCollabSession(
+  threadId: string,
+): Promise<CollaborationSession> {
+  const res = await fetch(`${COLLAB_BASE()}/${encodeURIComponent(threadId)}`, {
+    headers: authHeaders(),
+  });
+  return parseJson<CollaborationSession>(res, "Load collaboration session");
+}
+
+export async function linkCoworkRoom(
+  threadId: string,
+  roomId: string,
+): Promise<void> {
+  const res = await fetch(
+    `${COLLAB_BASE()}/${encodeURIComponent(threadId)}/link-room`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({ room_id: roomId }),
+    },
+  );
+  await parseJson<{ ok: boolean }>(res, "Link cowork room");
 }

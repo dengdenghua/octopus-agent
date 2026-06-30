@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
+  getCollabSession,
   getCoworkGroup,
   inviteCoworkMember,
+  linkCoworkRoom,
   removeCoworkMember,
   setCoworkMode,
 } from "./api";
@@ -94,5 +96,45 @@ describe("cowork api", () => {
     await expect(getCoworkGroup("thread-1")).rejects.toThrow(
       "Load cowork group failed: 401 nope",
     );
+  });
+
+  test("loads the unified collaboration session", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        session_id: "thread/1",
+        room_id: "room-9",
+        mode: "swarm",
+        roster: [],
+        blackboard: {},
+        tasks: [],
+        presence: [],
+        room_messages: [{ text: "hi" }],
+        room_participants: [{ id: "p1" }],
+      }),
+    );
+
+    const session = await getCollabSession("thread/1");
+
+    expect(session.session_id).toBe("thread/1");
+    expect(session.room_id).toBe("room-9");
+    expect(session.room_messages).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledWith("/api/collab/thread%2F1", {
+      headers: {},
+    });
+  });
+
+  test("links a team room to a session", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, state }));
+
+    await linkCoworkRoom("thread/1", "room-9");
+
+    expect(fetchMock.mock.calls[0]).toEqual([
+      "/api/collab/thread%2F1/link-room",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ room_id: "room-9" }),
+      },
+    ]);
   });
 });

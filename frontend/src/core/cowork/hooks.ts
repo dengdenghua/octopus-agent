@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  getCollabSession,
   getCoworkGroup,
   getCoworkPresence,
   inviteCoworkMember,
+  linkCoworkRoom,
   removeCoworkMember,
   searchCowork,
   setCoworkMode,
@@ -24,6 +26,8 @@ export const coworkQueryKeys = {
     [...COWORK_KEY, "presence", threadId ?? "none"] as const,
   search: (threadId?: string | null, query?: string, kinds?: CoworkSearchKind[]) =>
     [...COWORK_KEY, "search", threadId ?? "none", query ?? "", (kinds ?? []).join(",")] as const,
+  session: (threadId?: string | null) =>
+    [...COWORK_KEY, "session", threadId ?? "none"] as const,
 };
 
 export function useCoworkGroup(threadId?: string | null) {
@@ -110,5 +114,26 @@ export function useCoworkSearch(
       searchCowork(threadId!, trimmed, { kinds: opts.kinds, limit: opts.limit }),
     enabled: Boolean(threadId && threadId !== "new") && trimmed.length > 0,
     staleTime: 2000,
+  });
+}
+
+export function useCollabSession(threadId?: string | null) {
+  return useQuery({
+    queryKey: coworkQueryKeys.session(threadId),
+    queryFn: () => getCollabSession(threadId!),
+    enabled: Boolean(threadId && threadId !== "new"),
+    staleTime: 2000,
+  });
+}
+
+export function useLinkCoworkRoom() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ threadId, roomId }: { threadId: string; roomId: string }) =>
+      linkCoworkRoom(threadId, roomId),
+    onSuccess: (_void, { threadId }) => {
+      void qc.invalidateQueries({ queryKey: coworkQueryKeys.session(threadId) });
+      void qc.invalidateQueries({ queryKey: coworkQueryKeys.group(threadId) });
+    },
   });
 }

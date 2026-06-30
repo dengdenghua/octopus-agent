@@ -89,3 +89,18 @@ export interface CoworkPresenceResponse {
   thread_id: string;
   members: CoworkMemberPresence[];
 }
+
+/** Unified collaboration session — one view over the cowork thread (canonical)
+ * plus a linked Team Room's transcript + participants. Mirrors the backend
+ * CollaborationSession (GET /api/collab/{thread_id}). */
+export interface CollaborationSession {
+  session_id: string;
+  room_id: string | null;
+  mode: CoworkMode;
+  roster: CoworkMember[];
+  blackboard: Record<string, unknown>;
+  tasks: Record<string, unknown>[];
+  presence: CoworkMemberPresence[];
+  room_messages: Record<string, unknown>[];
+  room_participants: Record<string, unknown>[];
+}
