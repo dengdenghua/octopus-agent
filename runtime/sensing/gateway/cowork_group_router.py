@@ -77,6 +77,10 @@ class HeartbeatBody(BaseModel):
     member_id: str = Field(min_length=1)
 
 
+class LinkRoomBody(BaseModel):
+    room_id: str = Field(min_length=1)
+
+
 def create_cowork_group_router(
     *,
     store: GroupStore | None = None,
@@ -140,6 +144,29 @@ def create_cowork_group_router(
             "events": [e.to_dict() for e in group_store.events(thread_id)],
             "responders": responders(state),
         }
+
+    @router.get("/api/collab/{thread_id}")
+    def get_session(thread_id: str) -> dict[str, Any]:
+        """Unified collaboration session — one read over roster/mode/room link,
+        shared blackboard, async tasks, and presence (instead of stitching the
+        per-surface endpoints). The cowork thread is the canonical session; a
+        Team Room is its optional linked surface."""
+        from runtime.memory.cowork.session import resolve_session
+
+        session = resolve_session(
+            group_store, thread_id,
+            async_store=_async_store(), presence_store=_presence_store(),
+        )
+        return session.to_dict()
+
+    @router.post("/api/collab/{thread_id}/link-room", dependencies=[Depends(_auth_dep)])
+    def link_session_room(thread_id: str, body: LinkRoomBody) -> dict[str, Any]:
+        """Link a Team Room to this session (event-sourced) so the two surfaces
+        stop drifting as separate sources of truth."""
+        from runtime.memory.cowork.session import link_room
+
+        state = link_room(group_store, thread_id, body.room_id)
+        return {"ok": True, "state": state.to_dict()}
 
     @router.get("/api/cowork/{thread_id}/nominate")
     def nominate_turn(thread_id: str, text: str = "", threshold: float = 0.5) -> dict[str, Any]:

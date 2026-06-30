@@ -31,7 +31,7 @@ MemberRole = Literal["participant", "observer"]
 GrantScope = Literal["all", "from_join", "range", "summary"]
 GroupMode = Literal["chat", "cluster", "swarm", "project"]
 
-EventAction = Literal["invite", "leave", "mute", "unmute", "mode"]
+EventAction = Literal["invite", "leave", "mute", "unmute", "mode", "room_link"]
 
 DEFAULT_MODE: GroupMode = "chat"
 # "project" is the milestone-driven collaboration mode — there is no separate
@@ -97,7 +97,7 @@ class MemberEvent:
     @classmethod
     def from_dict(cls, raw: dict) -> MemberEvent:
         action = raw.get("action")
-        if action not in ("invite", "leave", "mute", "unmute", "mode"):
+        if action not in ("invite", "leave", "mute", "unmute", "mode", "room_link"):
             raise ValueError(f"unknown member event action: {action!r}")
         mode = raw.get("mode")
         return cls(
@@ -145,6 +145,7 @@ class GroupState:
     roster: list[Member] = field(default_factory=list)
     mode: GroupMode = DEFAULT_MODE
     event_count: int = 0
+    room_id: str | None = None  # linked Team Room (the session's other surface)
 
     @property
     def is_one_to_one(self) -> bool:
@@ -163,6 +164,7 @@ class GroupState:
             "mode": self.mode,
             "event_count": self.event_count,
             "is_one_to_one": self.is_one_to_one,
+            "room_id": self.room_id,
         }
 
 
@@ -186,6 +188,7 @@ def fold_state(events: list[MemberEvent], until_seq: int | None = None) -> Group
     state is event-sourced."""
     members: dict[str, Member] = {}
     mode: GroupMode = DEFAULT_MODE
+    room_id: str | None = None
     scoped = events if until_seq is None else [e for e in events if e.seq <= until_seq]
     for ev in sorted(scoped, key=lambda e: e.seq):
         if ev.action == "invite":
@@ -208,7 +211,12 @@ def fold_state(events: list[MemberEvent], until_seq: int | None = None) -> Group
                 m.muted = ev.action == "mute"
         elif ev.action == "mode" and ev.mode in VALID_MODES:
             mode = ev.mode  # type: ignore[assignment]
-    return GroupState(roster=list(members.values()), mode=mode, event_count=len(scoped))
+        elif ev.action == "room_link":
+            room_id = ev.target_id or None
+    return GroupState(
+        roster=list(members.values()), mode=mode,
+        event_count=len(scoped), room_id=room_id,
+    )
 
 
 def visible_message_range(

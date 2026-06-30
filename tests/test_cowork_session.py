@@ -1,0 +1,68 @@
+"""Unified CollaborationSession read-model + the event-sourced room link (#1)."""
+
+from __future__ import annotations
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from runtime.memory.cowork.async_work import AsyncWorkStore
+from runtime.memory.cowork.group import MemberEvent
+from runtime.memory.cowork.group_store import GroupStore
+from runtime.memory.cowork.presence import PresenceStore
+from runtime.memory.cowork.session import link_room, resolve_session
+from runtime.sensing.gateway.cowork_group_router import create_cowork_group_router
+
+
+def test_room_link_event_sets_room_id(tmp_path) -> None:
+    store = GroupStore(base_dir=tmp_path)
+    store.append("t1", MemberEvent(action="invite", actor="u", target_id="alice",
+                                   target_kind="agent"))
+    assert store.state("t1").room_id is None
+    link_room(store, "t1", "room-42")
+    assert store.state("t1").room_id == "room-42"
+    # event-sourced: replay before the link shows no room
+    seq_before = store.events("t1")[0].seq
+    assert store.state("t1", until_seq=seq_before).room_id is None
+
+
+def test_resolve_session_composes_surfaces(tmp_path) -> None:
+    store = GroupStore(base_dir=tmp_path)
+    aw = AsyncWorkStore(base_dir=store.base_dir, group_store=store)
+    ps = PresenceStore(base_dir=tmp_path)
+    store.append("t1", MemberEvent(action="invite", actor="u", target_id="alice",
+                                   target_kind="agent"))
+    store.append("t1", MemberEvent(action="mode", actor="u", mode="swarm"))
+    store.blackboard("t1").write("plan", "ship it", writer="alice")
+    aw.assign("t1", "alice", "do x", actor="u")
+    link_room(store, "t1", "room-9")
+
+    s = resolve_session(store, "t1", async_store=aw, presence_store=ps)
+    assert s.session_id == "t1"
+    assert s.room_id == "room-9"
+    assert s.mode == "swarm"
+    assert {m["id"] for m in s.roster} == {"alice"}
+    assert s.blackboard["plan"] == "ship it"
+    assert len(s.tasks) == 1
+    assert any(m["member_id"] == "alice" for m in s.presence)
+
+
+def _client(tmp_path) -> TestClient:
+    app = FastAPI()
+    app.include_router(create_cowork_group_router(store=GroupStore(base_dir=tmp_path)))
+    return TestClient(app)
+
+
+def test_collab_endpoints(tmp_path) -> None:
+    c = _client(tmp_path)
+    t = "thread-collab"
+    c.post(f"/api/cowork/{t}/members", json={"target_id": "alice", "kind": "agent"})
+    c.post(f"/api/cowork/{t}/blackboard", json={"key": "k", "value": "v"})
+
+    # link a room, then the unified session reflects it
+    assert c.post(f"/api/collab/{t}/link-room", json={"room_id": "room-x"}).status_code == 200
+    sess = c.get(f"/api/collab/{t}").json()
+    assert sess["session_id"] == t
+    assert sess["room_id"] == "room-x"
+    assert {m["id"] for m in sess["roster"]} == {"alice"}
+    assert sess["blackboard"]["k"] == "v"
+    assert "presence" in sess and "tasks" in sess
