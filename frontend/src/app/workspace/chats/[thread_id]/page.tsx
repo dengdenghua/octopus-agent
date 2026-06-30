@@ -51,7 +51,6 @@ import type { PersonalMode } from "@/components/workspace/personal-mode-selector
 import { RecRecorderOverlay } from "@/components/workspace/rec-recorder-overlay";
 import type { PromptInputFilePart } from "@/core/uploads";
 import { ChatPageLayout } from "@/components/workspace/chat-page-layout";
-import { PersistentRunFooter } from "@/components/workspace/chat-streaming-footer";
 import { AgentWelcome } from "@/components/workspace/agent-welcome";
 import { RealtimeApprovalToasts } from "@/components/workspace/realtime-approval-toasts";
 import { DeepResearchHistoryPanel } from "@/components/workspace/deep-research-history-panel";
@@ -2515,18 +2514,6 @@ function ChatsPageContent({
                     />
                   ) : null
                 }
-              />
-            }
-            bottomBar={
-              <PersistentRunFooter
-                thread={thread}
-                liveToolEvents={agentDisplayEvents}
-                threadId={threadId}
-                mode={effectiveMode}
-                onOpenWorkbench={
-                  canOpenAgentWorkbench ? openAgentPanel : undefined
-                }
-                onStop={thread.isLoading ? handleStop : undefined}
               />
             }
             inputArea={

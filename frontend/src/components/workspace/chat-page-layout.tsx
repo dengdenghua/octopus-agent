@@ -46,7 +46,6 @@ interface ChatPageLayoutProps {
   inputArea: ReactNode;
   sidebar?: ReactNode;
   secondaryPanel?: ReactNode;
-  bottomBar?: ReactNode;
   isNewThread?: boolean;
   messageListClassName?: string;
   headerClassName?: string;
@@ -61,7 +60,6 @@ export function ChatPageLayout({
   inputArea,
   sidebar,
   secondaryPanel,
-  bottomBar,
   isNewThread = false,
   messageListClassName,
   headerClassName,
@@ -246,7 +244,6 @@ export function ChatPageLayout({
           </aside>
         )}
       </div>
-      {bottomBar}
     </div>
   );
 }
