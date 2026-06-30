@@ -29,8 +29,6 @@ tier: "standard"
 - `ModelResponse`
 - `ModelRouter`
 - `ModelStrength`
-- `MoliliCredentialsRequired`
-- `MoliliModelRouter`
 - `MultiModelRouter`
 - `OllamaModelRouter`
 - `OllamaRouterError`
@@ -55,6 +53,7 @@ tier: "standard"
 
 | Module | Summary |
 | --- | --- |
+| `actor_context.py` | Actor context for model-router calls — a provider-neutral home. |
 | `anthropic_router.py` | — |
 | `capability_probe.py` | Provider Capability Auto-Detection. |
 | `credential_pool.py` | — |
@@ -63,8 +62,8 @@ tier: "standard"
 | `hf_catalog.py` | Live local-model catalog from the HuggingFace Hub (GGUF), with offline fallback. |
 | `hwfit.py` | Local-model cookbook: recommend which model to run on THIS machine. |
 | `models.py` | Model router types and the mock implementation. |
-| `molili_router.py` | — |
 | `multi_router.py` | — |
+| `oct_router.py` | — |
 | `ollama_router.py` | — |
 | `openai_compat_providers.py` | Provider profiles for OpenAI-compatible chat-completion gateways. |
 | `openai_compat_smoke_matrix.py` | Live-smoke metadata for OpenAI-compatible provider profiles. |
@@ -76,7 +75,7 @@ tier: "standard"
 
 ## Who imports this
 
-**23** file(s) reference this package:
+**24** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
@@ -94,6 +93,8 @@ tier: "standard"
   - `runtime/platform/process/session.py`
   - `runtime/platform/ui/app.py`
   - _… and 2 more_
+- **`runtime/projectos/`** · 1 file(s)
+  - `runtime/projectos/llm_hooks.py`
 - **`runtime/research/`** · 2 file(s)
   - `runtime/research/pipeline.py`
   - `runtime/research/query_rewrite.py`

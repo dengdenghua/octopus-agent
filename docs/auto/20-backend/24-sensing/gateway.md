@@ -89,6 +89,7 @@ tier: "standard"
 | `parallel_agents_router.py` | — |
 | `plugin_hub_router.py` | PluginHub management REST API. |
 | `plugins_router.py` | — |
+| `projects_router.py` | Project OS API — drive milestone-driven projects over HTTP. |
 | `prompts_router.py` | Prompts router · ``/api/prompts/*``. |
 | `realtime_approval.py` | Approval bridge between the blocking react loop and the async gateway. |
 | `realtime_cerebrum.py` | Cerebrum-backed realtime runtime. |
@@ -105,6 +106,7 @@ tier: "standard"
 | `realtime_turn_outcome.py` | Turn outcome inspection for the realtime runtime. |
 | `realtime_turn_routing.py` | Turn-routing helpers for the realtime runtime. |
 | `realtime_workbench.py` | Workbench snapshot + workspace-focus helpers for the realtime runtime. |
+| `registry_consumer_router.py` | 资产 Registry 消费路由(母体接 registry · 只读浏览 + 安装 prompt-skill)。 |
 | `remote_backends_router.py` | Remote backends router · ``/api/remote-backends/*``. |
 | `remote_transport.py` | Remote Transport · connect a desktop session to a remote octopus-agent runtime over SSH-tunneled HTTP. |
 | `retrieve_router.py` | Retrieval router · ``/api/retrieve/rank``. |

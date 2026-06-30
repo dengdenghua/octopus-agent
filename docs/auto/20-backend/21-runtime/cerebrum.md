@@ -56,6 +56,7 @@ tier: "core"
 | `tool_output_sink.py` | Compatibility re-export for the lightweight process output sink. |
 | `turn_complexity.py` | Three-tier smart model routing. |
 | `verification_policy.py` | — |
+| `work_mode.py` | Unified work-mode resolution — one model for "what kind of work is this turn". |
 
 ## Who imports this
 

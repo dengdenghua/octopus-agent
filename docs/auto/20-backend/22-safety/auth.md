@@ -60,7 +60,7 @@ tier: "core"
 
 - **`runtime/adapters/`** · 2 file(s)
   - `runtime/adapters/integrations/local_auth/router.py`
-  - `runtime/adapters/integrations/molili/router_auth.py`
+  - `runtime/adapters/integrations/oct/router_auth.py`
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
 - **`runtime/cli_run.py/`** · 1 file(s)

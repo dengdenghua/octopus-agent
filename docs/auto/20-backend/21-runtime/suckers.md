@@ -99,7 +99,7 @@ Suckers = skill pool.
 
 ## Who imports this
 
-**46** file(s) reference this package:
+**47** file(s) reference this package:
 
 - **`runtime/adapters/`** · 1 file(s)
   - `runtime/adapters/mcp_client/bridge.py`
@@ -143,13 +143,13 @@ Suckers = skill pool.
   - `runtime/safety/hooks/tool_edge_hooks.py`
   - `runtime/safety/recovery/intel_collector.py`
   - `runtime/safety/recovery/skill_forge.py`
-- **`runtime/sensing/`** · 14 file(s)
+- **`runtime/sensing/`** · 15 file(s)
   - `runtime/sensing/gateway/agent_world_router.py`
   - `runtime/sensing/gateway/computer_router.py`
   - `runtime/sensing/gateway/debug_router.py`
   - `runtime/sensing/gateway/evolution_ops_router.py`
   - `runtime/sensing/gateway/index_router.py`
-  - _… and 9 more_
+  - _… and 10 more_
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 
