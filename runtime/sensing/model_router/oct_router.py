@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from collections.abc import Iterator
@@ -74,22 +75,28 @@ class OctModelRouter(Provider, ModelRouter):
                 return actor_ids[0]
         raise OctCredentialsRequired("no current_actor set · OctModelRouter 需要登录态")
 
-    def _link_token(self) -> str:
+    def _link(self) -> tuple[str, Any]:
         actor = self._resolve_actor()
         link = self.link_store.get(actor)
         if link is None:
             raise OctCredentialsRequired(f"actor {actor!r} 没有绑定 oct 账号")
         if getattr(link, "token_invalid", False):
             raise OctCredentialsRequired(f"actor {actor!r} 的 oct 登录已过期 · 请重新登录")
-        return link.oct_token
+        return actor, link
 
-    def call(self, request: ModelRequest) -> ModelResponse:
-        token = self._link_token()
-        model = request.model or self.default_model
+    def _mark_dead(self, actor: str) -> None:
+        """收到网关 401 时标记 link 失效 → 下回合 OctFallbackRouter 自动降级到自配模型。"""
+        with contextlib.suppress(Exception):
+            self.link_store.mark_token_invalid(actor, "TOKEN_EXPIRED")
 
+    def _build_payload(self, request: ModelRequest, *, stream: bool) -> dict[str, Any]:
+        """call 与 call_stream 共享:messages 经 _messages_to_openai、带图片、带 tools。
+
+        统一构造杜绝两条路径漂移(曾出现 call_stream 丢 tools/图片导致流式 native 工具循环空转)。
+        """
         from .openai_router import _messages_to_openai
-        messages = _messages_to_openai(list(request.messages or []))
 
+        messages = _messages_to_openai(list(request.messages or []))
         imgs = list(getattr(request, "images_b64", []) or [])
         if imgs:
             for i in range(len(messages) - 1, -1, -1):
@@ -104,7 +111,11 @@ class OctModelRouter(Provider, ModelRouter):
                     messages[i] = {"role": "user", "content": content}
                     break
 
-        payload: dict[str, Any] = {"model": model, "messages": messages, "stream": False}
+        payload: dict[str, Any] = {
+            "model": request.model or self.default_model,
+            "messages": messages,
+            "stream": stream,
+        }
         if request.max_tokens:
             payload["max_tokens"] = request.max_tokens
         if request.temperature is not None:
@@ -122,8 +133,13 @@ class OctModelRouter(Provider, ModelRouter):
                 for t in request.tools
             ]
             payload["tool_choice"] = "auto"
+        return payload
 
-        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    def call(self, request: ModelRequest) -> ModelResponse:
+        actor, link = self._link()
+        model = request.model or self.default_model
+        payload = self._build_payload(request, stream=False)
+        headers = {"Authorization": f"Bearer {link.oct_token}", "Content-Type": "application/json"}
         client = self._http or (httpx if HTTPX_AVAILABLE else None)
         if client is None:
             raise RuntimeError("httpx 未安装 · 无法调 oct 网关 · 注入 http_client")
@@ -136,6 +152,7 @@ class OctModelRouter(Provider, ModelRouter):
         status = getattr(r, "status_code", 0)
         text = getattr(r, "text", "") or ""
         if status == 401:
+            self._mark_dead(actor)
             raise OctCredentialsRequired("oct 登录已过期 · 请重新登录")
         if status == 402:
             raise RuntimeError("oct 积分不足 · 请充值或开通会员")
@@ -157,17 +174,17 @@ class OctModelRouter(Provider, ModelRouter):
         from .models import ToolCall
         raw_calls = choices[0].get("message", {}).get("tool_calls") or []
         tool_calls: list[ToolCall] = []
-        for call in raw_calls:
-            if not isinstance(call, dict):
+        for tc in raw_calls:
+            if not isinstance(tc, dict):
                 continue
-            fn = call.get("function") or {}
+            fn = tc.get("function") or {}
             args_raw = fn.get("arguments") or ""
             try:
                 args = json.loads(args_raw) if args_raw else {}
             except json.JSONDecodeError:
                 args = {}
             tool_calls.append(ToolCall(
-                id=str(call.get("id") or ""),
+                id=str(tc.get("id") or ""),
                 name=str(fn.get("name") or ""),
                 input=args if isinstance(args, dict) else {},
             ))
@@ -188,18 +205,10 @@ class OctModelRouter(Provider, ModelRouter):
     def call_stream(self, request: ModelRequest) -> Iterator[ModelStreamEvent]:
         from .openai_compat_stream import iter_openai_sse
 
-        token = self._link_token()
+        actor, link = self._link()
         model = request.model or self.default_model
-        messages: list[dict[str, Any]] = [
-            {"role": m.role, "content": m.content} for m in (request.messages or [])
-        ]
-        payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True}
-        if request.max_tokens:
-            payload["max_tokens"] = request.max_tokens
-        if request.temperature is not None:
-            payload["temperature"] = request.temperature
-
-        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        payload = self._build_payload(request, stream=True)
+        headers = {"Authorization": f"Bearer {link.oct_token}", "Content-Type": "application/json"}
         client = self._http or (httpx if HTTPX_AVAILABLE else None)
         if client is None:
             yield from super().call_stream(request)
@@ -209,7 +218,17 @@ class OctModelRouter(Provider, ModelRouter):
         try:
             with client.stream("POST", url, json=payload, headers=headers,
                                timeout=self.timeout_seconds) as r:
+                status = getattr(r, "status_code", 0)
+                if status == 401:
+                    self._mark_dead(actor)
+                    raise OctCredentialsRequired("oct 登录已过期 · 请重新登录")
+                if status == 402:
+                    raise RuntimeError("oct 积分不足 · 请充值或开通会员")
+                if status >= 400:
+                    raise RuntimeError(f"oct gateway HTTP {status}")
                 yield from iter_openai_sse(r, model=model, provider="oct")
+        except RuntimeError:
+            raise
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(f"oct stream failed: {exc}") from exc
 

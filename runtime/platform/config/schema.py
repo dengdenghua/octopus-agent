@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class PlannerConfig(BaseModel):
@@ -264,6 +264,14 @@ class OctConfig(BaseModel):
     jwt_expire_seconds: int = Field(default=2_592_000, gt=0)
     jwt_issuer: str = "octopus-agent"
 
+    @model_validator(mode="after")
+    def _require_secret_when_enabled(self) -> OctConfig:
+        # 启用 oct 必须配 jwt_secret:agent 要用它签发自有会话 JWT 并被全局鉴权门校验。
+        # 否则登录会回退到"复用网关 JWT"——agent 不持网关密钥、验不过 → 已登录用户被锁死。
+        if self.enabled and not self.jwt_secret:
+            raise ValueError("config.oct.enabled=true 时必须设置 oct.jwt_secret(≥32 字符)")
+        return self
+
 
 class LocalAuthConfig(BaseModel):
 
@@ -354,3 +362,11 @@ class AgentConfig(BaseModel):
     journal_file: str | None = None        # Implementation note.
     enable_web_skills: bool = True         # Implementation note.
     default_arm_id: str = "code_arm"
+
+    @model_validator(mode="after")
+    def _oct_molili_mutually_exclusive(self) -> AgentConfig:
+        # 全局只有一个 cocoloop_jwt_secret 驱动鉴权门;oct 与 molili 各自密钥不同时同开会导致
+        # 一方已签发的 JWT 被另一方密钥校验失败 → 静默锁死。迁移期二选一,默认走 oct。
+        if self.oct.enabled and self.molili.enabled:
+            raise ValueError("config.oct.enabled 与 config.molili.enabled 不能同时为 true(账号体系已统一到 oct)")
+        return self

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -84,6 +85,9 @@ class OctLinkStore:
         assert self._cache is not None
         payload = {k: asdict(v) for k, v in self._cache.items()}
         atomic_write_json(self._path, payload)
+        # 含网关 bearer JWT(默认 30 天有效),限本用户可读
+        with contextlib.suppress(OSError):
+            os.chmod(self._path, 0o600)
 
     def get(self, octopus_user_id: str) -> OctLink | None:
         with self._lock:

@@ -340,3 +340,61 @@ def test_fallback_invalid_token_uses_self(tmp_path: Any) -> None:
     store.put(OctLink(octopus_user_id="oct:a@b.com", oct_user_id="u1", oct_token="jwt"))
     store.mark_token_invalid("oct:a@b.com", "EXPIRED")
     assert _call_fb(_fb(store), "oct:a@b.com") == "SELF"
+
+
+# ─── 审查后加固(评审 #1/#2/#9/#6)───────────────────────
+
+def _tools_request() -> ModelRequest:
+    from runtime.sensing.model_router.models import ToolSpec
+
+    return ModelRequest(
+        model="qwen3.5-flash",
+        messages=[Message(role="user", content="hi")],
+        tools=[ToolSpec(name="t1", description="d", input_schema={"type": "object"})],
+    )
+
+
+def test_build_payload_includes_tools_both_modes(tmp_path: Any) -> None:
+    # 评审 #2:call_stream 曾丢 tools → 共享 _build_payload 后两条路径都带 tools
+    mr = OctModelRouter(link_store=OctLinkStore(path=tmp_path / "l.json"))
+    for stream in (False, True):
+        p = mr._build_payload(_tools_request(), stream=stream)
+        assert p["stream"] is stream
+        assert "tools" in p and p["tools"][0]["function"]["name"] == "t1"
+        assert p["tool_choice"] == "auto"
+
+
+def test_model_router_401_marks_token_invalid(tmp_path: Any) -> None:
+    # 评审 #9:401 时标记 link 失效 → 下回合 OctFallbackRouter 降级自配
+    store = OctLinkStore(path=tmp_path / "l.json")
+    store.put(OctLink(octopus_user_id="oct:a@b.com", oct_user_id="u1", oct_token="gw-jwt"))
+    mr = OctModelRouter(link_store=store, http_client=_FakeHttp({"completions": _Resp({"d": 1}, status=401)}))
+    tok = current_actor.set("oct:a@b.com")
+    try:
+        with pytest.raises(OctCredentialsRequired):
+            mr.call(ModelRequest(model="x", messages=[Message(role="user", content="hi")]))
+    finally:
+        current_actor.reset(tok)
+    assert store.get("oct:a@b.com").token_invalid is True
+
+
+def test_schema_oct_requires_secret_when_enabled() -> None:
+    # 评审 #1:enabled 必须有 jwt_secret(否则运行期锁死)
+    from runtime.platform.config.schema import OctConfig as SchemaOct
+
+    SchemaOct(enabled=False)  # ok
+    SchemaOct(enabled=True, jwt_secret="x" * 32)  # ok
+    with pytest.raises(ValueError, match="jwt_secret"):
+        SchemaOct(enabled=True)
+
+
+def test_schema_oct_molili_mutually_exclusive() -> None:
+    # 评审 #6:oct 与 molili 不能同开(单密钥鉴权门冲突)
+    from runtime.platform.config.schema import AgentConfig, MoliliConfig
+    from runtime.platform.config.schema import OctConfig as SchemaOct
+
+    with pytest.raises(ValueError, match="同时"):
+        AgentConfig(
+            oct=SchemaOct(enabled=True, jwt_secret="x" * 32),
+            molili=MoliliConfig(enabled=True),
+        )

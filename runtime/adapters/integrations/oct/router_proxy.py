@@ -108,6 +108,10 @@ def create_proxy_router(
         def _stream() -> Any:
             with client.stream("POST", url, json=body, headers=headers,
                                timeout=config.llm_timeout_seconds) as r:
+                if is_dead_token(getattr(r, "status_code", 0)):
+                    link_store.mark_token_invalid(actor, "TOKEN_EXPIRED")
+                    yield b'data: {"error":"oct \\u767b\\u5f55\\u5df2\\u8fc7\\u671f\\uff0c\\u8bf7\\u91cd\\u65b0\\u767b\\u5f55"}\n\n'
+                    return
                 for chunk in r.iter_bytes():
                     if chunk:
                         yield chunk

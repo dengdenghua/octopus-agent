@@ -196,9 +196,11 @@ def create_auth_router(
                 logger.error("oct JWT signing failed: %s", exc, exc_info=True)
                 raise HTTPException(status_code=500, detail=f"JWT 签发失败: {exc}") from exc
         else:
-            # 未配 agent 密钥:直接把网关 JWT 当会话凭证
-            access_token = str(gateway_token)
-            expires_in = config.jwt_expire_seconds
+            # 未配 agent jwt_secret。schema 在 oct.enabled 时已强制必填,这里仅防御性兜底:
+            # 绝不返回网关原始 JWT —— agent 不持网关密钥、全局鉴权门验不过会把用户锁死。
+            logger.error("oct.enabled 但缺 jwt_secret · 不签发会话 token(请配置 oct.jwt_secret)")
+            access_token = None
+            expires_in = None
 
         logger.info(
             "oct email_login ok · total_ms=%d created=%s new=%s email=%s",
