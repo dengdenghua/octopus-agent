@@ -200,8 +200,32 @@ default_arm_id: code_arm
 # auth.token_path:     响应中 token 的 JSONPath
 # auth.mobile_path:    响应中手机号的 JSONPath
 # auth.credits_path:   响应中积分/配额信息的 JSONPath
+# ─────────────── oct 账号网关(推荐)─────────────────
+# octopus 自己的账号网关(octopus-mobile server)· 替代 molili
+# 邮箱验证码登录 + 积分/会员/用量/商品/订单 + LLM 中转计费(/v1)
+#
+# enabled:               是否启用(⚠️ 启用时 jwt_secret 必填,且与 molili 互斥)
+# base_url:              网关根地址(线上 https://api.octoapk.com;本地测试可指 http://127.0.0.1:8099)
+# default_model:         默认模型 id
+# request_timeout_seconds: 账号/积分请求超时
+# llm_timeout_seconds:   LLM 中转(/v1/chat/completions)超时
+# mock_mode:             开发模式(走网关 ALLOW_MOCK_AUTH 的 devCode)
+# jwt_secret:            agent 自有会话 JWT 的 HS256 密钥 ⚠️ 32+ 字符强随机值(启用时必填)
+oct:
+  enabled: false   # 改 true 启用 · 同时必须设 jwt_secret(32+ 字符)
+  base_url: https://api.octoapk.com
+  default_model: qwen3.5-flash
+  request_timeout_seconds: 15
+  llm_timeout_seconds: 120
+  mock_mode: false
+  jwt_secret: null    # ⚠️ enabled=true 时必须设 32+ 字符强随机值
+  jwt_expire_seconds: 2592000
+  jwt_issuer: octopus-agent
+
+# ─────────────── Molili 认证集成(已废弃,被 oct 取代)─────────────────
+# 账号体系已统一到 oct;molili 与 oct 互斥,默认关闭。保留仅为平滑迁移。
 molili:
-  enabled: true
+  enabled: false
   base_url: https://molili.8kbl.com/molili-agi/chatApi/v1
   info_url: https://molili.8kbl.com/molili-agi/userApi/v1/userInfo
 
