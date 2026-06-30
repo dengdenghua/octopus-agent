@@ -1,0 +1,214 @@
+# ruff: noqa: E402 — module-level imports below are intentionally late
+
+from __future__ import annotations
+
+import json
+import os
+from collections.abc import Iterator
+from typing import Any
+
+try:
+    import httpx  # type: ignore[import-untyped]
+
+    HTTPX_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    HTTPX_AVAILABLE = False
+    httpx = None  # type: ignore[assignment]
+
+from .actor_context import current_actor
+from .models import CostEntry, ModelRequest, ModelResponse, ModelRouter, ModelStreamEvent
+
+
+class OctCredentialsRequired(RuntimeError):
+    pass
+
+
+from .provider import Provider, ProviderCapabilities
+
+
+class OctModelRouter(Provider, ModelRouter):
+    """走 oct 账号网关(api.octoapk.com)/v1/chat/completions 的模型路由。
+
+    用 OctLink 里存的网关 JWT 做 ``Authorization: Bearer``,网关侧按 token 用量扣积分
+    → agent 的 LLM 用量计入统一积分池(会员 BYO 在网关侧免扣)。替代 MoliliModelRouter。
+    """
+
+    provider_name = "oct"
+    capabilities = ProviderCapabilities(
+        supports_vision=True,
+        supports_tool_use=True,
+        supports_streaming=True,
+        supports_prompt_cache=False,
+        supports_structured_output=False,
+        default_model="qwen3.5-flash",
+        pricing_hint="low",
+    )
+
+    def __init__(
+        self,
+        *,
+        link_store: Any,
+        base_url: str = "https://api.octoapk.com",
+        default_model: str = "qwen3.5-flash",
+        timeout_seconds: float = 120.0,
+        http_client: Any = None,
+    ) -> None:
+        if not base_url:
+            raise ValueError("base_url required")
+        self.link_store = link_store
+        self.base_url = base_url.rstrip("/")
+        self.default_model = default_model
+        self.timeout_seconds = timeout_seconds
+        self._http = http_client
+
+    def _resolve_actor(self) -> str:
+        actor = current_actor.get()
+        if actor:
+            return actor
+        if os.environ.get("OCTOPUS_DESKTOP") == "1":
+            try:
+                actor_ids = self.link_store.all_actor_ids()
+            except (OSError, RuntimeError):  # noqa: BLE001
+                actor_ids = []
+            if len(actor_ids) == 1:
+                return actor_ids[0]
+        raise OctCredentialsRequired("no current_actor set · OctModelRouter 需要登录态")
+
+    def _link_token(self) -> str:
+        actor = self._resolve_actor()
+        link = self.link_store.get(actor)
+        if link is None:
+            raise OctCredentialsRequired(f"actor {actor!r} 没有绑定 oct 账号")
+        if getattr(link, "token_invalid", False):
+            raise OctCredentialsRequired(f"actor {actor!r} 的 oct 登录已过期 · 请重新登录")
+        return link.oct_token
+
+    def call(self, request: ModelRequest) -> ModelResponse:
+        token = self._link_token()
+        model = request.model or self.default_model
+
+        from .openai_router import _messages_to_openai
+        messages = _messages_to_openai(list(request.messages or []))
+
+        imgs = list(getattr(request, "images_b64", []) or [])
+        if imgs:
+            for i in range(len(messages) - 1, -1, -1):
+                if messages[i]["role"] == "user":
+                    text = messages[i]["content"]
+                    content: list[dict[str, Any]] = [{"type": "text", "text": text}]
+                    for b64 in imgs:
+                        content.append({
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{b64}"},
+                        })
+                    messages[i] = {"role": "user", "content": content}
+                    break
+
+        payload: dict[str, Any] = {"model": model, "messages": messages, "stream": False}
+        if request.max_tokens:
+            payload["max_tokens"] = request.max_tokens
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
+        if request.tools:
+            payload["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.input_schema,
+                    },
+                }
+                for t in request.tools
+            ]
+            payload["tool_choice"] = "auto"
+
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        client = self._http or (httpx if HTTPX_AVAILABLE else None)
+        if client is None:
+            raise RuntimeError("httpx 未安装 · 无法调 oct 网关 · 注入 http_client")
+
+        url = f"{self.base_url}/v1/chat/completions"
+        try:
+            r = client.post(url, json=payload, headers=headers, timeout=self.timeout_seconds)
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"oct gateway unreachable: {exc}") from exc
+        status = getattr(r, "status_code", 0)
+        text = getattr(r, "text", "") or ""
+        if status == 401:
+            raise OctCredentialsRequired("oct 登录已过期 · 请重新登录")
+        if status == 402:
+            raise RuntimeError("oct 积分不足 · 请充值或开通会员")
+        if status >= 400:
+            raise RuntimeError(f"oct gateway HTTP {status}: {text[:500]}")
+        try:
+            data = r.json()
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"oct gateway non-JSON: {text[:200]}") from exc
+
+        choices = data.get("choices") or []
+        if not choices:
+            raise RuntimeError(f"oct response missing choices: {str(data)[:200]}")
+        content = (
+            choices[0].get("message", {}).get("content")
+            or choices[0].get("text")
+            or ""
+        )
+        from .models import ToolCall
+        raw_calls = choices[0].get("message", {}).get("tool_calls") or []
+        tool_calls: list[ToolCall] = []
+        for call in raw_calls:
+            if not isinstance(call, dict):
+                continue
+            fn = call.get("function") or {}
+            args_raw = fn.get("arguments") or ""
+            try:
+                args = json.loads(args_raw) if args_raw else {}
+            except json.JSONDecodeError:
+                args = {}
+            tool_calls.append(ToolCall(
+                id=str(call.get("id") or ""),
+                name=str(fn.get("name") or ""),
+                input=args if isinstance(args, dict) else {},
+            ))
+        usage = data.get("usage") or {}
+        prompt_tokens = int(usage.get("prompt_tokens") or 0)
+        completion_tokens = int(usage.get("completion_tokens") or 0)
+
+        return ModelResponse(
+            text=content,
+            tool_calls=tool_calls,
+            input_tokens=prompt_tokens,
+            output_tokens=completion_tokens,
+            cost=CostEntry(tokens_in=prompt_tokens, tokens_out=completion_tokens, usd=0.0),
+            model=model,
+            provider="oct",
+        )
+
+    def call_stream(self, request: ModelRequest) -> Iterator[ModelStreamEvent]:
+        from .openai_compat_stream import iter_openai_sse
+
+        token = self._link_token()
+        model = request.model or self.default_model
+        messages: list[dict[str, Any]] = [
+            {"role": m.role, "content": m.content} for m in (request.messages or [])
+        ]
+        payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True}
+        if request.max_tokens:
+            payload["max_tokens"] = request.max_tokens
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
+
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        client = self._http or (httpx if HTTPX_AVAILABLE else None)
+        if client is None:
+            yield from super().call_stream(request)
+            return
+
+        url = f"{self.base_url}/v1/chat/completions"
+        try:
+            with client.stream("POST", url, json=payload, headers=headers,
+                               timeout=self.timeout_seconds) as r:
+                yield from iter_openai_sse(r, model=model, provider="oct")
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"oct stream failed: {exc}") from exc
