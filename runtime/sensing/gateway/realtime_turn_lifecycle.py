@@ -535,6 +535,18 @@ async def _start_turn(
                     text=text,
                 )
             elif (
+                (intent.user_context or {}).get("cowork_mode") == "project"
+                and not (intent.user_context or {}).get("cowork_responders")
+            ):
+                await runtime._drive_project_os(
+                    turn,
+                    log,
+                    emitter,
+                    intent,
+                    thread_id=thread_id,
+                    text=text,
+                )
+            elif (
                 str((intent.user_context or {}).get("serve_mesh") or "").strip()
                 == "1"
                 or (

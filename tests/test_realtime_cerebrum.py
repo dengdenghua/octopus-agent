@@ -568,6 +568,133 @@ def test_cowork_swarm_plan_drives_group_fanout(
     assert "use_primary_response" in audit_items[0]["content"]
 
 
+def test_cowork_project_mode_runs_project_os(
+    tmp_path: Path,
+) -> None:
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.projectos.store import ProjectStore
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    invite_member(store, "th-project", actor="u", target_id="research-agent", kind="agent")
+    invite_member(store, "th-project", actor="u", target_id="build-agent", kind="agent")
+    set_mode(store, "th-project", actor="u", mode="project")
+    project_store = ProjectStore(base_dir=tmp_path / "projectos")
+    _set_script(
+        [
+            {"type": "text_delta", "delta": "react should not run"},
+            {"type": "react_completed"},
+        ]
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=store,
+        project_store=project_store,
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-project",
+                "input": [{"type": "text", "text": "交付一个研究到实现的项目"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    agent_texts = [
+        item["text"] for item in turn["items"] if item["type"] == "agentMessage"
+    ]
+    assert len(agent_texts) == 1
+    assert "Project OS 已接管并运行项目" in agent_texts[0]
+    assert "react should not run" not in agent_texts[0]
+    projects = project_store.list_projects()
+    assert len(projects) == 1
+    project = projects[0]
+    assert project.status == "done"
+    assigned = {
+        task.assigned_agent
+        for milestone in project_store.milestones_for(project.id)
+        for task in project_store.tasks_for_milestone(milestone.id)
+    }
+    assert assigned <= {"research-agent", "build-agent"}
+    assert assigned
+
+
+def test_cowork_project_mode_reuses_active_project(
+    tmp_path: Path,
+) -> None:
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.projectos.store import ProjectStore
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    invite_member(store, "th-project", actor="u", target_id="research-agent", kind="agent")
+    invite_member(store, "th-project", actor="u", target_id="build-agent", kind="agent")
+    set_mode(store, "th-project", actor="u", mode="project")
+    project_store = ProjectStore(base_dir=tmp_path / "projectos")
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=store,
+        project_store=project_store,
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        first = _drive(
+            ws,
+            {
+                "threadId": "th-project",
+                "input": [
+                    {
+                        "type": "text",
+                        "text": "启动项目",
+                        "metadata": {"context": {"project_os_max_ticks": 1}},
+                    }
+                ],
+                "approvalPolicy": "never",
+            },
+        )
+        first_project_id = project_store.project_for_thread("th-project").id
+        assert project_store.get_project(first_project_id).status == "running"
+
+        second = _drive(
+            ws,
+            {
+                "threadId": "th-project",
+                "input": [{"type": "text", "text": "继续"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    assert len(project_store.list_projects()) == 1
+    assert project_store.project_for_thread("th-project").id == first_project_id
+    first_text = "\n".join(
+        item["text"] for item in first["response"].result["turn"]["items"]
+        if item["type"] == "agentMessage"
+    )
+    second_text = "\n".join(
+        item["text"] for item in second["response"].result["turn"]["items"]
+        if item["type"] == "agentMessage"
+    )
+    assert "Project OS 已接管并运行项目" in first_text
+    assert "Project OS 已继续推进项目" in second_text
+
+
 def test_blocked_topology_id_falls_back_to_react(
     gateway: Any,
     monkeypatch: pytest.MonkeyPatch,

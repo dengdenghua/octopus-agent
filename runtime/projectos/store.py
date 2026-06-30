@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS milestones (
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY, milestone_id TEXT NOT NULL, doc TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS thread_projects (
+    thread_id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_ms_project ON milestones(project_id);
 CREATE INDEX IF NOT EXISTS idx_task_ms ON tasks(milestone_id);
 """
@@ -63,6 +67,32 @@ class ProjectStore:
         with self._lock, self._conn() as conn:
             rows = conn.execute("SELECT doc FROM projects ORDER BY id").fetchall()
         return [Project.from_dict(json.loads(r[0])) for r in rows]
+
+    # ── thread bindings ─────────────────────────────────────────────────────
+    def bind_thread(self, thread_id: str, project_id: str) -> None:
+        thread = str(thread_id or "").strip()
+        project = str(project_id or "").strip()
+        if not thread or not project:
+            return
+        with self._lock, self._conn() as conn:
+            conn.execute(
+                "INSERT INTO thread_projects(thread_id, project_id) VALUES (?, ?) "
+                "ON CONFLICT(thread_id) DO UPDATE SET project_id=excluded.project_id",
+                (thread, project),
+            )
+
+    def project_for_thread(self, thread_id: str) -> Project | None:
+        thread = str(thread_id or "").strip()
+        if not thread:
+            return None
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                "SELECT project_id FROM thread_projects WHERE thread_id=?",
+                (thread,),
+            ).fetchone()
+        if not row:
+            return None
+        return self.get_project(str(row[0]))
 
     # ── milestones ───────────────────────────────────────────────────────────
     def save_milestone(self, project_id: str, ms: Milestone) -> Milestone:

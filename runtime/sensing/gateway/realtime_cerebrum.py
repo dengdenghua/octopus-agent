@@ -57,6 +57,64 @@ from runtime.safety.approval.approval_gate import (
 )
 from runtime.safety.approval.approval_policy_store import load_policy
 
+
+def _format_project_os_result(state: dict[str, Any]) -> str:
+    """Human-readable Project OS result for the realtime chat surface."""
+    project = state.get("project") if isinstance(state.get("project"), dict) else {}
+    result = state.get("result") if isinstance(state.get("result"), dict) else {}
+    milestones = state.get("milestones") if isinstance(state.get("milestones"), list) else []
+    tasks_by_ms = state.get("tasks") if isinstance(state.get("tasks"), dict) else {}
+    roster = [str(member) for member in (state.get("roster") or []) if str(member).strip()]
+
+    project_name = str(project.get("name") or "当前项目")
+    project_id = str(project.get("id") or "")
+    status = str(result.get("final_status") or project.get("status") or "running")
+    ticks = result.get("ticks")
+
+    reused = bool(state.get("reused"))
+    lines = [
+        "Project OS 已继续推进项目。" if reused else "Project OS 已接管并运行项目。",
+        "",
+    ]
+    if project_id:
+        lines.append(f"项目：{project_name}（{project_id}）")
+    else:
+        lines.append(f"项目：{project_name}")
+    lines.append(f"状态：{status}" + (f" · ticks {ticks}" if ticks is not None else ""))
+    if roster:
+        lines.append(f"成员：{', '.join(roster)}")
+    lines.append("")
+    lines.append("里程碑进展：")
+
+    for milestone in milestones[:6]:
+        if not isinstance(milestone, dict):
+            continue
+        ms_id = str(milestone.get("id") or "")
+        ms_name = str(milestone.get("name") or ms_id or "milestone")
+        ms_status = str(milestone.get("status") or "pending")
+        tasks = tasks_by_ms.get(ms_id) if isinstance(tasks_by_ms, dict) else []
+        tasks = tasks if isinstance(tasks, list) else []
+        done = sum(1 for task in tasks if isinstance(task, dict) and task.get("status") == "done")
+        lines.append(f"- {ms_name}：{ms_status} · {done}/{len(tasks)} 任务完成")
+        assignments: list[str] = []
+        for task in tasks[:4]:
+            if not isinstance(task, dict):
+                continue
+            task_id = str(task.get("id") or "")
+            assignee = str(task.get("assigned_agent") or task.get("assigned_role") or "")
+            task_status = str(task.get("status") or "")
+            if task_id and assignee:
+                assignments.append(f"{task_id}->{assignee}({task_status})")
+        if assignments:
+            lines.append(f"  派发：{', '.join(assignments)}")
+    if len(milestones) > 6:
+        lines.append(f"- 其余 {len(milestones) - 6} 个里程碑已省略，可在 Project OS 视图继续查看。")
+    if status not in {"done", "failed"}:
+        lines.append("")
+        lines.append("项目还未结束；后续回合会继续从当前 Project OS 状态推进。")
+    return "\n".join(lines)
+
+
 # ── Split-module compat re-exports ────────────────────────────
 # The helpers below moved out of this file into focused sibling
 # modules. Re-import them under their original names (redundant-alias
@@ -345,6 +403,8 @@ class CerebrumRuntime:
         reflex_router: Any = None,
         trace_store: Any = None,
         cowork_group_store: Any = None,
+        project_store: Any = None,
+        project_os_hooks: dict[str, Any] | None = None,
     ) -> None:
         """Wire a CerebrumRuntime onto an existing octopus stack.
 
@@ -391,6 +451,8 @@ class CerebrumRuntime:
         self._reflex_router = reflex_router
         self._trace_store = trace_store
         self._cowork_group_store = cowork_group_store
+        self._project_store = project_store
+        self._project_os_hooks = dict(project_os_hooks or {})
         # Server-side authority over auto-approval. When False (default),
         # a client setting ``approvalPolicy="never"`` is downgraded to
         # ``"on-request"`` server-side — the client never gets to silently
@@ -991,6 +1053,74 @@ class CerebrumRuntime:
         await self._emit_item_started(turn, log, emitter, item)
         item.status = ItemStatus.COMPLETED
         await self._emit_item_completed(turn, log, emitter, item)
+
+    async def _drive_project_os(
+        self,
+        turn: Turn,
+        log: EventLog,
+        emitter: EventEmitter,
+        intent: ParsedIntent,
+        *,
+        thread_id: str,
+        text: str,
+    ) -> None:
+        """Run Project OS directly from a cowork thread in project mode."""
+        if self._cowork_group_store is None:
+            await self._emit_agent_message(
+                turn,
+                log,
+                emitter,
+                "Project OS 需要先绑定协作组；当前线程还没有可用的 cowork group。",
+            )
+            return
+        if self._project_store is None:
+            from runtime.projectos.store import ProjectStore
+
+            self._project_store = ProjectStore()
+
+        context = intent.user_context if isinstance(intent.user_context, dict) else {}
+        goal = str(getattr(intent, "normalized_goal", "") or text or "").strip() or "当前目标"
+        raw_name = str(context.get("team_name") or context.get("project") or "").strip()
+        name = raw_name[:80] if raw_name else "当前项目"
+        try:
+            max_ticks = int(context.get("project_os_max_ticks") or 50)
+        except (TypeError, ValueError):
+            max_ticks = 50
+        max_ticks = max(1, min(max_ticks, 200))
+
+        from runtime.projectos.cowork_bridge import run_project_from_group
+
+        def _run() -> dict[str, Any]:
+            return run_project_from_group(
+                self._project_store,
+                self._cowork_group_store,
+                thread_id,
+                name=name,
+                goal=goal,
+                hooks=dict(self._project_os_hooks),
+                run=True,
+                max_ticks=max_ticks,
+                reuse_active=True,
+            )
+
+        loop = asyncio.get_running_loop()
+        try:
+            state = await loop.run_in_executor(None, _run)
+        except ValueError:
+            await self._emit_agent_message(
+                turn,
+                log,
+                emitter,
+                "Project OS 已进入项目模式，但当前协作组没有可执行的 agent 成员。"
+                "请先添加至少一个参与者后再运行项目。",
+            )
+            return
+        await self._emit_agent_message(
+            turn,
+            log,
+            emitter,
+            _format_project_os_result(state),
+        )
 
     def _is_local_partner(self, agent: Any) -> bool:
         """True when this agent should be driven by spawning its registered

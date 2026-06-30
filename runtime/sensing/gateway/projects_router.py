@@ -17,6 +17,7 @@ from runtime.projectos.engine import (
     stub_decompose_tasks,
     stub_generate_milestones,
 )
+from runtime.projectos.cowork_bridge import full_project_state, run_project_from_group
 from runtime.projectos.store import ProjectStore
 
 
@@ -82,18 +83,10 @@ def create_projects_router(
     router = APIRouter(tags=["projectos"])
 
     def _full_state(project_id: str) -> dict[str, Any]:
-        project = project_store.get_project(project_id)
-        if project is None:
+        state = full_project_state(project_store, project_id)
+        if state is None:
             raise HTTPException(404, "project not found")
-        mss = project_store.milestones_for(project_id)
-        return {
-            "project": project.to_dict(),
-            "milestones": [m.to_dict() for m in mss],
-            "tasks": {
-                m.id: [t.to_dict() for t in project_store.tasks_for_milestone(m.id)]
-                for m in mss
-            },
-        }
+        return state
 
     @router.get("/api/projects")
     def list_projects() -> dict[str, Any]:
@@ -134,23 +127,21 @@ def create_projects_router(
         default) run them, routing each task to the group's ACTUAL members by
         capability — not the fixed 4 roles. This is "assemble a group → turn on
         project mode"."""
-        from runtime.memory.cowork.service import set_mode
-        from runtime.projectos.cowork_bridge import engine_for_group, roster_from_group
-
-        gs = _group_store()
-        roster = [a for a, _ in roster_from_group(gs, thread_id)]
-        if not roster:
+        try:
+            return run_project_from_group(
+                project_store,
+                _group_store(),
+                thread_id,
+                name=body.name,
+                goal=body.goal,
+                hooks=_base_hooks(),
+                run=body.run,
+                max_ticks=body.max_ticks,
+            )
+        except ValueError as exc:
             raise HTTPException(400, "group has no participant agents to staff the project")
-        # Project is a collaboration mode of the group — reflect it in the roster.
-        set_mode(gs, thread_id, actor="project-os", mode="project")
-        engine = engine_for_group(project_store, gs, thread_id, hooks=_base_hooks())
-        project = engine.plan(body.name, body.goal)
-        result = (
-            engine.run(project.id, max_ticks=body.max_ticks)
-            if body.run
-            else {"final_status": project.status}
-        )
-        return {"ok": True, "roster": roster, "result": result, **_full_state(project.id)}
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(500, f"project run failed: {exc}") from exc
 
     @router.post("/api/projects/{project_id}/tick", dependencies=[Depends(_auth_dep)])
     def tick(project_id: str) -> dict[str, Any]:

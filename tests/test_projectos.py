@@ -38,6 +38,14 @@ def test_store_roundtrip(tmp_path) -> None:
     assert [t.id for t in s.tasks_for_milestone("M1")] == ["T1"]
 
 
+def test_store_binds_thread_to_project(tmp_path) -> None:
+    s = ProjectStore(base_dir=tmp_path)
+    s.save_project(Project(id="P1", name="x", goal="g"))
+    s.bind_thread("thread-1", "P1")
+    assert s.project_for_thread("thread-1").id == "P1"
+    assert s.project_for_thread("missing") is None
+
+
 # ── engine ───────────────────────────────────────────────────────────────────
 def _stub_milestones(goal: str) -> list[Milestone]:
     return [

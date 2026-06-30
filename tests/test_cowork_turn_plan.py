@@ -53,6 +53,22 @@ def test_cluster_routes_to_leader() -> None:
     assert "cluster" in plan.reason
 
 
+def test_project_mode_hands_off_to_project_os() -> None:
+    state = GroupState(roster=_agents("lead", "helper"), mode="project")
+    plan = plan_turn(state, "ship the roadmap")
+    assert plan.responders == []
+    assert plan.is_multi is False
+    assert "milestone engine" in plan.reason
+
+
+def test_project_mode_ignores_chat_mentions() -> None:
+    state = GroupState(roster=_agents("lead", "helper"), mode="project")
+    plan = plan_turn(state, "@agent:helper quick answer")
+    assert plan.addressed == ["helper"]
+    assert plan.responders == []
+    assert "milestone engine" in plan.reason
+
+
 def test_mention_overrides_mode() -> None:
     # Even in swarm, an explicit @mention narrows to that agent.
     state = GroupState(roster=_agents("alice", "bob"), mode="swarm")
@@ -84,3 +100,29 @@ def test_realtime_intent_gets_cowork_turn_plan(tmp_path) -> None:
     assert intent.user_context["cowork_is_multi"] is True
     assert intent.user_context["cowork_responders"] == ["db-agent", "ui-agent"]
     assert intent.user_context["cowork_plan"]["reason"].startswith("swarm")
+
+
+def test_realtime_intent_marks_project_mode_without_responders(tmp_path) -> None:
+    store = GroupStore(base_dir=tmp_path)
+    invite_member(store, "thread-1", actor="u", target_id="db-agent", kind="agent")
+    invite_member(store, "thread-1", actor="u", target_id="ui-agent", kind="agent")
+    set_mode(store, "thread-1", actor="u", mode="project")
+    runtime = type("Runtime", (), {"_cowork_group_store": store})()
+    intent = ParsedIntent(
+        raw="ship it",
+        intent_type="task",
+        normalized_goal="ship it",
+        user_context={},
+    )
+
+    _inject_cowork_turn_plan(
+        runtime,
+        thread_id="thread-1",
+        text="ship it",
+        intent=intent,
+    )
+
+    assert intent.user_context["cowork_mode"] == "project"
+    assert intent.user_context["cowork_is_multi"] is False
+    assert intent.user_context["cowork_responders"] == []
+    assert "milestone engine" in intent.user_context["cowork_plan"]["reason"]

@@ -1474,15 +1474,25 @@ def create_app(
     # ─── Project OS · milestone-driven project execution ──
     # GET /api/projects/* (state/report, public) + POST plan/tick/run (auth).
     # LLM hooks when a model router is available, else deterministic stubs.
+    from runtime.projectos.store import ProjectStore
     from runtime.sensing.gateway.projects_router import create_projects_router
 
+    project_store = ProjectStore()
+    app.state.project_store = project_store
+    project_model_router = (
+        getattr(getattr(stack, "planner", None), "router", None)
+        if stack is not None
+        else None
+    )
     app.include_router(
         create_projects_router(
-            model_router=(
-                getattr(getattr(stack, "planner", None), "router", None)
-                if stack is not None
+            store=project_store,
+            group_store=(
+                getattr(cowork_runtime, "group_store", None)
+                if cowork_runtime is not None
                 else None
             ),
+            model_router=project_model_router,
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
             jwt_secret=cocoloop_jwt_secret,
@@ -2162,6 +2172,17 @@ def create_app(
                 max_summary_chars=4_000,
             )
             _summary_router = getattr(getattr(stack, "planner", None), "router", None)
+            _project_os_hooks: dict[str, Any] = {}
+            if project_model_router is not None:
+                try:
+                    from runtime.projectos.llm_hooks import create_llm_hooks
+
+                    _project_os_hooks = create_llm_hooks(project_model_router)
+                except Exception as exc:  # noqa: BLE001
+                    logging.getLogger(__name__).warning(
+                        "projectos llm hooks unavailable for realtime: %s",
+                        exc,
+                    )
 
             _realtime_runtime: Any = CerebrumRuntime(
                 stack=stack,
@@ -2181,6 +2202,8 @@ def create_app(
                     if cowork_runtime is not None
                     else None
                 ),
+                project_store=project_store,
+                project_os_hooks=_project_os_hooks,
             )
         else:
             from runtime.sensing.gateway.realtime_echo import EchoRuntime

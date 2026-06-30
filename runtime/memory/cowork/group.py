@@ -254,12 +254,12 @@ def responders(state: GroupState, addressed: list[str] | None = None) -> list[st
         m for m in state.roster
         if m.kind == "agent" and m.role == "participant" and not m.muted
     ]
+    if state.mode == "project":
+        return []  # the Project OS engine dispatches tasks, not the chat turn
     if addressed:
         targeted = [m.id for m in agents if m.id in set(addressed)]
         if targeted:
             return targeted
-    if state.mode == "project":
-        return []  # the Project OS engine dispatches tasks, not the chat turn
     if state.mode == "swarm":
         return [m.id for m in agents]
     if state.mode == "cluster":

@@ -10,6 +10,7 @@ from runtime.projectos.cowork_bridge import (
     engine_for_group,
     nominate_assigner,
     roster_from_group,
+    run_project_from_group,
 )
 from runtime.projectos.engine import stub_generate_milestones
 from runtime.projectos.model import Milestone, Task
@@ -74,6 +75,45 @@ def test_project_runs_on_custom_group(tmp_path) -> None:
     ms1_tasks = {t.goal: t.assigned_agent for t in eng.store.tasks_for_milestone("MS1")}
     assert ms1_tasks["database schema work"] == "database-expert"
     assert ms1_tasks["frontend screens design"] == "frontend-designer"
+
+
+def test_project_from_group_can_reuse_active_thread_project(tmp_path) -> None:
+    gs = GroupStore(base_dir=tmp_path / "cowork")
+    for a in ("research-agent", "build-agent"):
+        service.invite_member(gs, "thread-1", actor="u", target_id=a, kind="agent")
+    store = ProjectStore(base_dir=tmp_path / "projectos")
+    hooks = {"generate_milestones": stub_generate_milestones}
+
+    first = run_project_from_group(
+        store,
+        gs,
+        "thread-1",
+        name="x",
+        goal="ship it",
+        hooks=hooks,
+        run=True,
+        max_ticks=1,
+        reuse_active=True,
+    )
+    pid = first["project"]["id"]
+    assert first["reused"] is False
+    assert store.project_for_thread("thread-1").id == pid
+    assert first["project"]["status"] == "running"
+
+    second = run_project_from_group(
+        store,
+        gs,
+        "thread-1",
+        name="x",
+        goal="ship it again",
+        hooks=hooks,
+        run=True,
+        max_ticks=50,
+        reuse_active=True,
+    )
+    assert second["project"]["id"] == pid
+    assert second["reused"] is True
+    assert second["result"]["final_status"] == "done"
 
 
 def test_from_group_endpoint_turns_a_group_into_a_project_team(tmp_path) -> None:
