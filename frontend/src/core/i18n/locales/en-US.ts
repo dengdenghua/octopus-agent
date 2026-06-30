@@ -408,6 +408,17 @@ export const enUS: Translations = {
     readme: "README",
   },
 
+  coworkCollab: {
+    searchPlaceholder: "Search blackboard / tasks / events",
+    noResults: "No matches",
+    online: "online",
+    members: "Members",
+    unread: (n) => `${n} unread`,
+    kindBlackboard: "Blackboard",
+    kindTask: "Task",
+    kindEvent: "Event",
+  },
+
   // Collaboration Mode
   teamMode: {
     mode: "Collaboration",

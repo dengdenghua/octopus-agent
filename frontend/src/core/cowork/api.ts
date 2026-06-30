@@ -5,6 +5,9 @@ import type {
   CoworkGroupResponse,
   CoworkInviteInput,
   CoworkMode,
+  CoworkPresenceResponse,
+  CoworkSearchKind,
+  CoworkSearchResponse,
 } from "./types";
 
 const BASE = () => `${getBackendBaseURL()}/api/cowork`;
@@ -86,4 +89,58 @@ export async function setCoworkMode(
     "Set cowork mode",
   );
   return data.state;
+}
+
+export async function searchCowork(
+  threadId: string,
+  query: string,
+  opts: { kinds?: CoworkSearchKind[]; limit?: number; untilSeq?: number } = {},
+): Promise<CoworkSearchResponse> {
+  const params = new URLSearchParams({ q: query });
+  if (opts.kinds?.length) params.set("kinds", opts.kinds.join(","));
+  if (opts.limit != null) params.set("limit", String(opts.limit));
+  if (opts.untilSeq != null) params.set("until_seq", String(opts.untilSeq));
+  const res = await fetch(
+    `${BASE()}/${encodeURIComponent(threadId)}/search?${params.toString()}`,
+    { headers: authHeaders() },
+  );
+  return parseJson<CoworkSearchResponse>(res, "Search cowork group");
+}
+
+export async function getCoworkPresence(
+  threadId: string,
+): Promise<CoworkPresenceResponse> {
+  const res = await fetch(
+    `${BASE()}/${encodeURIComponent(threadId)}/presence`,
+    { headers: authHeaders() },
+  );
+  return parseJson<CoworkPresenceResponse>(res, "Load cowork presence");
+}
+
+export async function markCoworkRead(
+  threadId: string,
+  memberId: string,
+  seq?: number,
+): Promise<void> {
+  const res = await fetch(`${BASE()}/${encodeURIComponent(threadId)}/read`, {
+    method: "POST",
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({ member_id: memberId, ...(seq != null ? { seq } : {}) }),
+  });
+  await parseJson<{ ok: boolean }>(res, "Mark cowork read");
+}
+
+export async function coworkHeartbeat(
+  threadId: string,
+  memberId: string,
+): Promise<void> {
+  const res = await fetch(
+    `${BASE()}/${encodeURIComponent(threadId)}/heartbeat`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({ member_id: memberId }),
+    },
+  );
+  await parseJson<{ ok: boolean }>(res, "Cowork heartbeat");
 }

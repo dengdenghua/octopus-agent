@@ -58,3 +58,34 @@ export interface CoworkInviteInput {
 export interface CoworkModeInput {
   mode: CoworkMode;
 }
+
+export type CoworkSearchKind = "blackboard" | "task" | "event";
+
+export interface CoworkSearchHit {
+  kind: CoworkSearchKind;
+  title: string;
+  snippet: string;
+  score: number;
+  actor: string;
+  ts: string | null;
+  ref: Record<string, unknown>;
+}
+
+export interface CoworkSearchResponse {
+  thread_id: string;
+  query: string;
+  hits: CoworkSearchHit[];
+}
+
+export interface CoworkMemberPresence {
+  member_id: string;
+  last_read: number;
+  last_seen_at: string | null;
+  online: boolean;
+  unread: number;
+}
+
+export interface CoworkPresenceResponse {
+  thread_id: string;
+  members: CoworkMemberPresence[];
+}

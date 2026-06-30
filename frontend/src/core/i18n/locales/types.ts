@@ -335,6 +335,18 @@ export interface Translations {
     readme: string;
   };
 
+  // Cowork group: presence + unread + replayable search
+  coworkCollab: {
+    searchPlaceholder: string;
+    noResults: string;
+    online: string;
+    members: string;
+    unread: (n: number) => string;
+    kindBlackboard: string;
+    kindTask: string;
+    kindEvent: string;
+  };
+
   // Collaboration capability
   teamMode: {
     mode: string;

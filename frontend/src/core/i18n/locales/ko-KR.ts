@@ -404,6 +404,17 @@ export const koKR: Translations = {
     readme: "README",
   },
 
+  coworkCollab: {
+    searchPlaceholder: "블랙보드 / 작업 / 이벤트 검색",
+    noResults: "결과 없음",
+    online: "온라인",
+    members: "멤버",
+    unread: (n) => `${n}개 안 읽음`,
+    kindBlackboard: "블랙보드",
+    kindTask: "작업",
+    kindEvent: "이벤트",
+  },
+
   // Collaboration Mode
   teamMode: {
     mode: "Collaboration",

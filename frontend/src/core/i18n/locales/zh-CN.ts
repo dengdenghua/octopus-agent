@@ -389,6 +389,17 @@ export const zhCN: Translations = {
     readme: "README",
   },
 
+  coworkCollab: {
+    searchPlaceholder: "搜索黑板 / 任务 / 事件",
+    noResults: "没有匹配结果",
+    online: "在线",
+    members: "成员",
+    unread: (n) => `${n} 未读`,
+    kindBlackboard: "黑板",
+    kindTask: "任务",
+    kindEvent: "事件",
+  },
+
   // Collaboration Mode
   teamMode: {
     mode: "协作任务",

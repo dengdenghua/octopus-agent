@@ -404,6 +404,17 @@ export const jaJP: Translations = {
     readme: "README",
   },
 
+  coworkCollab: {
+    searchPlaceholder: "ブラックボード / タスク / イベントを検索",
+    noResults: "一致なし",
+    online: "オンライン",
+    members: "メンバー",
+    unread: (n) => `${n} 件未読`,
+    kindBlackboard: "ブラックボード",
+    kindTask: "タスク",
+    kindEvent: "イベント",
+  },
+
   // Collaboration Mode
   teamMode: {
     mode: "Collaboration",
