@@ -46,6 +46,7 @@ __all__ = [
     "ReasoningEffort",
     "ToolCall",
     "ToolSpec",
+    "UnconfiguredModelRouter",
     "normalize_reasoning_effort",
     "thinking_budget_for_effort",
 ]
@@ -118,3 +119,21 @@ class MockModelRouter(ModelRouter):
             if m.role == "user":
                 return f"mock-echo: {m.content[:80]}"
         return "mock: (no user message)"
+
+
+class UnconfiguredModelRouter(ModelRouter):
+    """Last-resort dispatch fallback when no model is configured.
+
+    Replaces the old Molili fallback, which required a logged-in actor and
+    failed with a confusing "no current_actor set · 需要登录态". This raises a
+    clear, actionable error instead — reached only when a request resolves to
+    no registered sub-router AND no self-configured model exists.
+    """
+
+    _MESSAGE = (
+        "no LLM model configured — add one to data/custom_models.json "
+        "(or set ANTHROPIC_API_KEY)"
+    )
+
+    def call(self, request: ModelRequest) -> ModelResponse:
+        raise RuntimeError(self._MESSAGE)

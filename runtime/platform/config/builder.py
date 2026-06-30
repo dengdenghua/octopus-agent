@@ -230,26 +230,19 @@ def _build_planner(
             and not os.environ.get("ANTHROPIC_API_KEY")
             and not os.environ.get("ANTHROPIC_AUTH_TOKEN")
         ):
-            from runtime.adapters.integrations.molili import MoliliLinkStore
             from runtime.sensing.model_router.dispatch_router import ModelDispatchRouter
-            from runtime.sensing.model_router.molili_router import MoliliModelRouter
+            from runtime.sensing.model_router.models import UnconfiguredModelRouter
             from runtime.sensing.model_router.openai_router import (
                 build_fallback_router_from_custom_models,
             )
 
-            # Prefer a self-configured model (custom_models.json) as the
-            # fallback so unresolved / guest requests don't hit Molili's
-            # login gate ("no current_actor set"). Molili stays the
-            # last-resort fallback only when no self model is configured.
+            # Self-configured model (custom_models.json) is the fallback so
+            # unresolved / guest requests run a real model. When none is
+            # configured, a clear "no model configured" error beats the old
+            # Molili fallback's confusing login gate.
             self_fallback = build_fallback_router_from_custom_models(p.model)
             router = ModelDispatchRouter(
-                fallback=self_fallback
-                or MoliliModelRouter(
-                    link_store=MoliliLinkStore(),
-                    base_url=config.molili.base_url,
-                    default_model=p.model or "molili",
-                    timeout_seconds=config.molili.request_timeout_seconds,
-                )
+                fallback=self_fallback or UnconfiguredModelRouter()
             )
         else:
             from runtime.sensing.model_router.anthropic_router import AnthropicModelRouter

@@ -229,3 +229,19 @@ class TestBuildFallbackFromCustomModels:
         )
         # tmp file not written → no entries → caller keeps Molili
         assert build_fallback_router_from_custom_models("x") is None
+
+
+def test_unconfigured_model_router_raises_clear_error() -> None:
+    """The last-resort fallback (no model configured) raises an actionable
+    error instead of the old Molili login gate."""
+    import pytest as _pytest
+
+    from runtime.sensing.model_router.models import (
+        Message,
+        ModelRequest,
+        UnconfiguredModelRouter,
+    )
+
+    req = ModelRequest(model="x", messages=[Message(role="user", content="hi")])
+    with _pytest.raises(RuntimeError, match="no LLM model configured"):
+        UnconfiguredModelRouter().call(req)
