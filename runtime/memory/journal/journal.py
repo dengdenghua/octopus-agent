@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from threading import Lock
@@ -367,7 +368,7 @@ class Journal:
     def read_all(self) -> list[JournalEvent]:
         raise NotImplementedError
 
-    def subscribe(self, callback: "Callable[[JournalEvent], None]") -> "Callable[[], None]":
+    def subscribe(self, callback: Callable[[JournalEvent], None]) -> Callable[[], None]:
         """Default no-op pub/sub. Returns an unsubscribe callable.
 
         The base Journal is append-only and has no live subscribers —
