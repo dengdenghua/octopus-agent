@@ -9,6 +9,7 @@ from runtime.memory.cowork.async_work import AsyncWorkStore
 from runtime.memory.cowork.group import MemberEvent
 from runtime.memory.cowork.group_store import GroupStore
 from runtime.memory.cowork.presence import PresenceStore
+from runtime.memory.cowork.room_messages import RoomMessageStore
 from runtime.memory.cowork.session import link_room, resolve_session
 from runtime.sensing.gateway.cowork_group_router import create_cowork_group_router
 
@@ -35,8 +36,10 @@ def test_resolve_session_composes_surfaces(tmp_path) -> None:
     store.blackboard("t1").write("plan", "ship it", writer="alice")
     aw.assign("t1", "alice", "do x", actor="u")
     link_room(store, "t1", "room-9")
+    rms = RoomMessageStore(base_dir=tmp_path)
+    rms.append("room-9", text="hi from the room", participant_id="p1", display_name="Bob")
 
-    s = resolve_session(store, "t1", async_store=aw, presence_store=ps)
+    s = resolve_session(store, "t1", async_store=aw, presence_store=ps, room_message_store=rms)
     assert s.session_id == "t1"
     assert s.room_id == "room-9"
     assert s.mode == "swarm"
@@ -44,6 +47,19 @@ def test_resolve_session_composes_surfaces(tmp_path) -> None:
     assert s.blackboard["plan"] == "ship it"
     assert len(s.tasks) == 1
     assert any(m["member_id"] == "alice" for m in s.presence)
+    # linked room's transcript is folded into the session view
+    assert [m["text"] for m in s.room_messages] == ["hi from the room"]
+
+
+def test_unlinked_session_has_no_room_messages(tmp_path) -> None:
+    store = GroupStore(base_dir=tmp_path)
+    store.append("t1", MemberEvent(action="invite", actor="u", target_id="alice",
+                                   target_kind="agent"))
+    rms = RoomMessageStore(base_dir=tmp_path)
+    rms.append("room-9", text="orphan", participant_id="p", display_name="P")
+    # no link → the room's messages are NOT pulled in
+    s = resolve_session(store, "t1", room_message_store=rms)
+    assert s.room_id is None and s.room_messages == []
 
 
 def _client(tmp_path) -> TestClient:
@@ -53,16 +69,23 @@ def _client(tmp_path) -> TestClient:
 
 
 def test_collab_endpoints(tmp_path) -> None:
-    c = _client(tmp_path)
+    rms = RoomMessageStore(base_dir=tmp_path / "rooms")
+    app = FastAPI()
+    app.include_router(create_cowork_group_router(
+        store=GroupStore(base_dir=tmp_path), room_message_store=rms,
+    ))
+    c = TestClient(app)
     t = "thread-collab"
     c.post(f"/api/cowork/{t}/members", json={"target_id": "alice", "kind": "agent"})
     c.post(f"/api/cowork/{t}/blackboard", json={"key": "k", "value": "v"})
+    rms.append("room-x", text="room line", participant_id="p", display_name="P")
 
-    # link a room, then the unified session reflects it
+    # link a room, then the unified session reflects it (incl. the transcript)
     assert c.post(f"/api/collab/{t}/link-room", json={"room_id": "room-x"}).status_code == 200
     sess = c.get(f"/api/collab/{t}").json()
     assert sess["session_id"] == t
     assert sess["room_id"] == "room-x"
     assert {m["id"] for m in sess["roster"]} == {"alice"}
     assert sess["blackboard"]["k"] == "v"
+    assert [m["text"] for m in sess["room_messages"]] == ["room line"]
     assert "presence" in sess and "tasks" in sess

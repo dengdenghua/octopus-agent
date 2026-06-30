@@ -85,6 +85,7 @@ def create_cowork_group_router(
     *,
     store: GroupStore | None = None,
     async_store: Any = None,
+    room_message_store: Any = None,
     runtime: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
@@ -111,6 +112,21 @@ def create_cowork_group_router(
 
             store = PresenceStore(base_dir=group_store.base_dir)
             _presence_holder["v"] = store
+        return store
+
+    _room_msg_holder: dict[str, Any] = {}
+
+    def _room_message_store():
+        if room_message_store is not None:
+            return room_message_store
+        store = _room_msg_holder.get("v")
+        if store is None:
+            from runtime.memory.cowork.room_messages import RoomMessageStore
+
+            # Default teamroom dir — shared with the team_rooms router's store,
+            # so a linked room's transcript is the same one it persists.
+            store = RoomMessageStore()
+            _room_msg_holder["v"] = store
         return store
 
     def _actor(request: Request) -> str:
@@ -156,6 +172,7 @@ def create_cowork_group_router(
         session = resolve_session(
             group_store, thread_id,
             async_store=_async_store(), presence_store=_presence_store(),
+            room_message_store=_room_message_store(),
         )
         return session.to_dict()
 

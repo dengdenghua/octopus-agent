@@ -31,6 +31,7 @@ class CollaborationSession:
     blackboard: dict[str, Any]
     tasks: list[dict[str, Any]]
     presence: list[dict[str, Any]]
+    room_messages: list[dict[str, Any]]  # linked room's recent transcript, if any
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -41,6 +42,7 @@ class CollaborationSession:
             "blackboard": self.blackboard,
             "tasks": self.tasks,
             "presence": self.presence,
+            "room_messages": self.room_messages,
         }
 
 
@@ -50,10 +52,13 @@ def resolve_session(
     *,
     async_store: Any = None,
     presence_store: Any = None,
+    room_message_store: Any = None,
 ) -> CollaborationSession:
     """Fold the canonical thread into one session view. ``async_store`` /
     ``presence_store`` are reused if given, else built from the group store's
-    base dir; presence is omitted when no store is available."""
+    base dir; presence is omitted when no store is available. When the session
+    has a linked room and ``room_message_store`` is given, the room's recent
+    transcript is folded in too — so the linked surface stops being a bare id."""
     state = group_store.state(thread_id)
 
     if async_store is None:
@@ -71,6 +76,13 @@ def resolve_session(
             for m in group_presence(group_store, presence_store, thread_id)
         ]
 
+    room_messages: list[dict[str, Any]] = []
+    if state.room_id and room_message_store is not None:
+        try:
+            room_messages = room_message_store.history(state.room_id, limit=50)
+        except Exception:  # noqa: BLE001 — linked-room transcript is best-effort
+            room_messages = []
+
     return CollaborationSession(
         session_id=thread_id,
         room_id=state.room_id,
@@ -79,6 +91,7 @@ def resolve_session(
         blackboard=group_store.blackboard_snapshot(thread_id),
         tasks=tasks,
         presence=presence,
+        room_messages=room_messages,
     )
 
 
