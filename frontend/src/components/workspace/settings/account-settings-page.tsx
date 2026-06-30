@@ -35,7 +35,7 @@ import {
   useUpdatePrivacySettings,
 } from "@/core/account";
 import { useI18n } from "@/core/i18n/hooks";
-import { useMoliliLink, useRefreshMoliliCredits } from "@/core/molili";
+import { useOctLink, useRefreshOctCredits } from "@/core/oct";
 
 function formatCredits(
   n: number | undefined | null,
@@ -509,8 +509,8 @@ export default function AccountSettingsPage() {
 
 function OfficialCreditsCard() {
   const { t } = useI18n();
-  const link = useMoliliLink();
-  const refresh = useRefreshMoliliCredits();
+  const link = useOctLink();
+  const refresh = useRefreshOctCredits();
 
   if (link.isLoading) {
     return (

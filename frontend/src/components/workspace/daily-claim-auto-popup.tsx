@@ -9,7 +9,7 @@
 import { swallow } from "@/core/utils/log";
 import { useEffect, useState } from "react";
 
-import { useDailyClaimInfo, useMoliliLink } from "@/core/molili";
+import { useDailyClaimInfo, useOctLink } from "@/core/oct";
 import { useAuth } from "@/providers/AuthProvider";
 
 import { DailyClaimDialog } from "./daily-claim-dialog";
@@ -47,7 +47,7 @@ function markDismissedToday() {
 
 export function DailyClaimAutoPopup() {
   const { user, isGuest } = useAuth();
-  const link = useMoliliLink();
+  const link = useOctLink();
   const linked = Boolean(link.data);
 
   // Only fetch claim info when we know the user is actually linked —
@@ -59,7 +59,7 @@ export function DailyClaimAutoPopup() {
     if (!user || isGuest || !linked) return;
     if (info.isLoading || !info.data) return;
     const data = info.data.data;
-    const claimed = Boolean(data?.claimed ?? data?.claimedToday ?? false);
+    const claimed = Boolean(data?.claimedToday ?? false);
     if (claimed) return;
     if (wasDismissedToday()) return;
     setOpen(true);

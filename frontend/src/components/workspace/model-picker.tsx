@@ -16,7 +16,7 @@ import { jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
-import { useMoliliLink } from "@/core/molili";
+import { useOctLink } from "@/core/oct";
 import type { ReasoningEffort } from "@/core/threads";
 import { cn } from "@/lib/utils";
 
@@ -400,7 +400,7 @@ export function ModelPicker({
     }
   }, [customEntries, isGuest, onChange, selected, selectedMeta]);
 
-  const moliliLink = useMoliliLink();
+  const moliliLink = useOctLink();
   const queryClient = useQueryClient();
   const [enabling, setEnabling] = useState<string | null>(null);
 
@@ -409,7 +409,7 @@ export function ModelPicker({
     meta: OfficialMeta,
     upstreamId: string,
   ) => {
-    const moliliUserId = moliliLink.data?.molili_user_id;
+    const moliliUserId = moliliLink.data?.oct_user_id;
     if (!moliliUserId) {
       setOpen(false);
       toast.message(t.modelPicker.bindMoliliFirst, {

@@ -11,19 +11,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useI18n } from "@/core/i18n/hooks";
-import {
-  useClaimDailyCredits,
-  useDailyClaimInfo,
-  type MoliliDailyClaimData,
-  type MoliliDailyClaimResult,
-} from "@/core/molili";
+import { useClaimDailyCredits, useDailyClaimInfo } from "@/core/oct";
 import { cn } from "@/lib/utils";
+
+type ClaimInfoData = {
+  fixedCredits?: number;
+  directCredits?: number;
+  maxCredits?: number;
+  maxDrawCredits?: number;
+  claimedToday?: boolean;
+} | null | undefined;
 
 /**
  * Pull the best-known fields out of the account service response with
  * sensible fallbacks matching the reference UX (2500 / 4000).
  */
-function extractClaimData(data: MoliliDailyClaimData | null | undefined): {
+function extractClaimData(data: ClaimInfoData): {
   fixed: number;
   max: number;
   canClaim: boolean;
@@ -31,14 +34,14 @@ function extractClaimData(data: MoliliDailyClaimData | null | undefined): {
 } {
   const fixed = data?.fixedCredits ?? data?.directCredits ?? 2500;
   const max = data?.maxCredits ?? data?.maxDrawCredits ?? 4000;
-  const claimed = Boolean(data?.claimed ?? data?.claimedToday ?? false);
+  const claimed = Boolean(data?.claimedToday ?? false);
   const canClaim = !claimed;
   return { fixed, max, canClaim, claimed };
 }
 
 /** Credits actually awarded by a claim call — tries multiple known paths. */
-function extractAwardedCredits(result: MoliliDailyClaimResult): number {
-  const d = result.data ?? {};
+function extractAwardedCredits(result: Record<string, unknown>): number {
+  const d = (result.data as Record<string, unknown> | undefined) ?? result;
   const n = d.credits ?? d.addedCredits;
   return typeof n === "number" && Number.isFinite(n) ? n : 0;
 }
@@ -73,7 +76,7 @@ export function DailyClaimDialog({
     try {
       const result = await claim.mutateAsync(draw);
       if (result && result.success === false) {
-        toast.error(result.errMessage || t.dailyClaim.claimFailed);
+        toast.error(String(result.errMessage || t.dailyClaim.claimFailed));
         return;
       }
       const awarded = extractAwardedCredits(result);

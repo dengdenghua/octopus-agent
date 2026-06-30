@@ -16,10 +16,10 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import {
-  useMoliliLink,
-  useRefreshMoliliCredits,
-  type MoliliCredits,
-} from "@/core/molili";
+  useOctLink,
+  useRefreshOctCredits,
+  type OctBalance,
+} from "@/core/oct";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "sonner";
 import { useI18n } from "@/core/i18n/hooks";
@@ -61,8 +61,8 @@ function getAccountDisplayName(user: {
 export function UserMenu() {
   const navigate = useNavigate();
   const { user, logout, authStatus, isLoading } = useAuth();
-  const moliliQuery = useMoliliLink();
-  const refresh = useRefreshMoliliCredits();
+  const moliliQuery = useOctLink();
+  const refresh = useRefreshOctCredits();
   const { t } = useI18n();
 
   const handleLogout = async () => {
@@ -93,7 +93,7 @@ export function UserMenu() {
   // "Rendered more hooks than during the previous render." Reads
   // account data which is always defined (the hook itself
   // runs earlier) · defensively handles ``undefined`` inside.
-  const credits: MoliliCredits | undefined = moliliQuery.data?.credits;
+  const credits: OctBalance | undefined = moliliQuery.data?.credits;
   const remaining = credits?.surplusCredits;
   const summary = credits?.creditsSummary;
   const accountName = user ? getAccountDisplayName(user) : "";

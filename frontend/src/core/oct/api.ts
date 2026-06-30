@@ -85,6 +85,15 @@ export interface OctBalance {
   // hooks 归一补出的兼容字段(消费者读总余额/会员态)
   surplusCredits?: number;
   isMember?: boolean;
+  // molili 历史展示字段:oct 无 credit 分桶/套餐名 → 永不填,使旧渲染块优雅显示空
+  // (会员信息改由 OctMembership 提供;消费者可逐步迁到 membership 展示)
+  plan?: string;
+  modelDisplayName?: string;
+  creditsSummary?: {
+    by_type?: Record<string, { granted: number; remaining: number }>;
+    total_granted?: number;
+    total_remaining?: number;
+  };
   [key: string]: unknown;
 }
 

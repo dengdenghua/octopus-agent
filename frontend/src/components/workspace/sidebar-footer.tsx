@@ -35,7 +35,7 @@ import { getAuthProviders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
-import { useMoliliLink } from "@/core/molili";
+import { useOctLink } from "@/core/oct";
 import { useAuth } from "@/providers/AuthProvider";
 import { cn } from "@/lib/utils";
 
@@ -137,7 +137,7 @@ export function AgentFooter() {
   const { user, isGuest, logout } = useAuth();
   const _navigate = useNavigate();
   const { pathname, search } = useLocation();
-  const moliliLink = useMoliliLink();
+  const moliliLink = useOctLink();
   const { t } = useI18n();
   const credits = moliliLink.data?.credits?.surplusCredits;
   const [activeName, setActiveName] = useState<string | null>(() =>

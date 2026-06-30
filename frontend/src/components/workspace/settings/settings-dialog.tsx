@@ -110,7 +110,7 @@ import { useI18n } from "@/core/i18n/hooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
-import { moliliApi } from "@/core/molili/api";
+import { octApi } from "@/core/oct/api";
 
 type SettingsSection =
   | "account"
@@ -262,7 +262,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       // account tabs can fetch their own optional data when opened.
       queryClient.prefetchQuery({
         queryKey: ["account", "molili"],
-        queryFn: () => moliliApi.get().catch(() => null),
+        queryFn: () => octApi.get().catch(() => null),
         staleTime: 30_000,
       });
     }
