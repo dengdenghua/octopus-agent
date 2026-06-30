@@ -118,7 +118,9 @@ if [[ "$run_frontend_static" == "1" ]]; then
 
   if [[ "$run_frontend_unit" != "1" ]]; then
     section "frontend production unit tests"
-    (cd frontend && pnpm exec vitest run src/core/i18n/translations.test.ts)
+    (cd frontend && pnpm exec vitest run \
+      src/core/i18n/translations.test.ts \
+      src/components/workspace/settings/appearance-settings-page.test.tsx)
   fi
 fi
 

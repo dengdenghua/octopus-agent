@@ -21,7 +21,7 @@ import { type ReactElement, type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 
 import { I18nProvider } from "@/core/i18n/context";
-import { enUS, zhCN } from "@/core/i18n/locales";
+import { enUS, jaJP, koKR, zhCN, type Translations } from "@/core/i18n/locales";
 import type { Locale } from "@/core/i18n";
 
 function makeQueryClient(): QueryClient {
@@ -53,7 +53,7 @@ export function AllProviders({
   children: ReactNode;
 } & AllProvidersOptions) {
   const client = queryClient ?? makeQueryClient();
-  const translations = locale === "zh-CN" ? zhCN : enUS;
+  const translations = TRANSLATIONS_BY_LOCALE[locale];
   // Seed the locale cookie so ``useI18n()``'s first useEffect
   // Implementation note.
   // mount) doesn't stomp the initial locale back to the jsdom
@@ -75,6 +75,13 @@ export function AllProviders({
     </QueryClientProvider>
   );
 }
+
+const TRANSLATIONS_BY_LOCALE: Record<Locale, Translations> = {
+  "en-US": enUS,
+  "zh-CN": zhCN,
+  "ja-JP": jaJP,
+  "ko-KR": koKR,
+};
 
 /** Convenience render that wraps with AllProviders in one call. */
 export function renderWithProviders(

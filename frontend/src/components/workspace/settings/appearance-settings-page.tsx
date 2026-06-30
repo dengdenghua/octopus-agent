@@ -23,8 +23,9 @@ import {
 } from "@/components/ui/select";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Separator } from "@/components/ui/separator";
-import { isLocale, type Locale } from "@/core/i18n";
+import { isLocale, SUPPORTED_LOCALES, type Locale } from "@/core/i18n";
 import { useI18n } from "@/core/i18n/hooks";
+import { enUS, jaJP, koKR, zhCN, type Translations } from "@/core/i18n/locales";
 import { useLocalSettings } from "@/core/settings";
 import {
   useAppearance,
@@ -38,13 +39,19 @@ import { cn } from "@/lib/utils";
 import { SettingsSection } from "./settings-section";
 
 function useLanguageOptions(
-  t: ReturnType<typeof useI18n>["t"],
 ): { value: Locale; label: string }[] {
-  return [
-    { value: "en-US", label: t.settings.appearance.languageEnglish },
-    { value: "zh-CN", label: t.settings.appearance.languageChineseSimplified },
-  ];
+  return SUPPORTED_LOCALES.map((value) => ({
+    value,
+    label: TRANSLATIONS_BY_LOCALE[value].locale.localName,
+  }));
 }
+
+const TRANSLATIONS_BY_LOCALE: Record<Locale, Translations> = {
+  "en-US": enUS,
+  "zh-CN": zhCN,
+  "ja-JP": jaJP,
+  "ko-KR": koKR,
+};
 
 function AppleIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -237,11 +244,14 @@ export default function AppearanceSettingsPage() {
             }
           }}
         >
-          <SelectTrigger className="w-[220px]">
+          <SelectTrigger
+            aria-label={t.settings.appearance.languageTitle}
+            className="w-[220px]"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {useLanguageOptions(t).map((item) => (
+            {useLanguageOptions().map((item) => (
               <SelectItem key={item.value} value={item.value}>
                 {item.label}
               </SelectItem>
