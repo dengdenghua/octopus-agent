@@ -82,17 +82,47 @@ def full_project_state(project_store: ProjectStore, project_id: str) -> dict[str
     if project is None:
         return None
     milestones = project_store.milestones_for(project_id)
+    tasks_by_ms = {
+        milestone.id: [
+            _task_read_model(task)
+            for task in project_store.tasks_for_milestone(milestone.id)
+        ]
+        for milestone in milestones
+    }
     return {
         "project": project.to_dict(),
         "milestones": [milestone.to_dict() for milestone in milestones],
-        "tasks": {
-            milestone.id: [
-                task.to_dict()
-                for task in project_store.tasks_for_milestone(milestone.id)
-            ]
-            for milestone in milestones
-        },
+        "tasks": tasks_by_ms,
+        "available_actions": _project_available_actions(project.status),
     }
+
+
+def _project_available_actions(status: str) -> list[str]:
+    if status == "blocked":
+        return ["recover", "recover_and_run"]
+    if status in {"planning", "running"}:
+        return ["run", "tick"]
+    if status == "done":
+        return ["inspect", "report"]
+    return ["inspect"]
+
+
+def _task_read_model(task: Task) -> dict[str, Any]:
+    raw = task.to_dict()
+    raw["available_actions"] = _task_available_actions(task.status)
+    return raw
+
+
+def _task_available_actions(status: str) -> list[str]:
+    if status in {"failed", "rejected", "blocked"}:
+        return ["reassign", "reset", "complete", "skip"]
+    if status in {"pending", "ready"}:
+        return ["reassign", "reset", "complete", "skip"]
+    if status == "running":
+        return ["reassign", "reset"]
+    if status == "done":
+        return ["reset"]
+    return ["inspect"]
 
 
 def project_run_trace(
@@ -148,6 +178,7 @@ def project_run_trace(
                         "type": task.get("type"),
                         "status": task.get("status"),
                         "assigned_agent": task.get("assigned_agent"),
+                        "available_actions": task.get("available_actions") or [],
                     }
                     for task in tasks
                     if isinstance(task, dict)

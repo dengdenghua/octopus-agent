@@ -1369,6 +1369,7 @@ class CerebrumRuntime:
                     if isinstance(state.get("result"), dict)
                     else project.get("status")
                 ),
+                "available_actions": state.get("available_actions") or [],
                 "control": state.get("control"),
                 "intervention": state.get("intervention"),
                 "audit_events": self._project_store.events_for_project(

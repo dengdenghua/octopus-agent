@@ -873,6 +873,7 @@ def test_cowork_project_mode_accepts_task_control_command(
     assert trace_items
     trace = json.loads(trace_items[-1]["content"])
     assert trace["control"]["action"] == "reassign"
+    assert trace["available_actions"] == ["inspect", "report"]
     assert trace["audit_events"][-1]["kind"] == "task.intervention"
 
 

@@ -30,6 +30,7 @@ def test_plan_run_report_flow(tmp_path) -> None:
     assert planned.status_code == 200
     pid = planned.json()["project"]["id"]
     assert planned.json()["milestones"]  # at least one milestone generated (stub: 1)
+    assert planned.json()["available_actions"] == ["run", "tick"]
 
     run = c.post(f"/api/projects/{pid}/run", json={"max_ticks": 20})
     assert run.status_code == 200
@@ -97,6 +98,8 @@ def test_recover_reopens_blocked_project_and_can_run(tmp_path) -> None:
     assert body["run"]["final_status"] == "done"
     assert body["project"]["status"] == "done"
     assert body["tasks"]["MS1"][0]["status"] == "done"
+    assert body["available_actions"] == ["inspect", "report"]
+    assert body["tasks"]["MS1"][0]["available_actions"] == ["reset"]
     events = c.get("/api/projects/P-blocked/events").json()["events"]
     assert [event["kind"] for event in events] == ["project.recover"]
     assert events[0]["payload"]["events"] == body["recover"]["events"]
@@ -148,6 +151,7 @@ def test_intervene_task_reassigns_and_runs(tmp_path) -> None:
     task = body["tasks"]["MS1"][0]
     assert task["assigned_agent"] == "new-agent"
     assert task["status"] == "done"
+    assert task["available_actions"] == ["reset"]
     events = c.get("/api/projects/P-intervene/events").json()["events"]
     assert [event["kind"] for event in events] == ["task.intervention"]
     assert events[0]["payload"]["action"] == "reassign"
@@ -182,3 +186,39 @@ def test_intervene_task_validates_missing_and_unknown_action(tmp_path) -> None:
 def test_project_events_404(tmp_path) -> None:
     c = _client(tmp_path)
     assert c.get("/api/projects/nope/events").status_code == 404
+
+
+def test_project_state_exposes_action_hints(tmp_path) -> None:
+    c, store = _client_with_store(tmp_path)
+    project = Project(
+        id="P-actions",
+        name="actions",
+        goal="g",
+        milestone_ids=["MS1"],
+        current_ms="MS1",
+        status="blocked",
+    )
+    store.save_project(project)
+    store.save_milestone(
+        project.id,
+        Milestone(id="MS1", name="build", goal="build it", status="blocked"),
+    )
+    store.save_task(
+        Task(
+            id="MS1-T1",
+            milestone_id="MS1",
+            type="code",
+            goal="fix it",
+            status="failed",
+        )
+    )
+
+    body = c.get("/api/projects/P-actions").json()
+
+    assert body["available_actions"] == ["recover", "recover_and_run"]
+    assert body["tasks"]["MS1"][0]["available_actions"] == [
+        "reassign",
+        "reset",
+        "complete",
+        "skip",
+    ]
