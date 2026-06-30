@@ -159,6 +159,63 @@ def test_task_execution_error_blocks_project_after_retry_cap(tmp_path) -> None:
     assert "project_blocked:task_failed" in events
 
 
+def test_recover_reopens_blocked_project_and_reruns_task(tmp_path) -> None:
+    fail = {"enabled": True}
+
+    def maybe_failing_execute(task: Task, context: dict) -> str:
+        if task.id == "MS1-T1" and fail["enabled"]:
+            raise RuntimeError("persistent tool failure")
+        return f"ok:{task.id}"
+
+    eng = _engine(tmp_path, execute_task=maybe_failing_execute)
+    p = eng.plan("x", "g")
+    blocked = eng.run(p.id, max_ticks=20)
+    assert blocked["final_status"] == "blocked"
+
+    fail["enabled"] = False
+    recovered = eng.recover(p.id)
+    assert recovered["project_status"] == "running"
+    assert "project_recovered" in recovered["events"]
+    assert "task_recovered:MS1-T1" in recovered["events"]
+    assert eng.store.get_task("MS1-T1").status == "pending"
+    assert eng.store.get_task("MS1-T1").attempts == 0
+
+    done = eng.run(p.id, max_ticks=20)
+    assert done["final_status"] == "done"
+    assert eng.store.get_project(p.id).status == "done"
+    assert eng.store.get_task("MS1-T1").status == "done"
+
+
+def test_recover_explicit_task_resets_downstream_dependants(tmp_path) -> None:
+    eng = _engine(tmp_path)
+    p = eng.plan("x", "g")
+    eng.tick(p.id)
+    t1 = eng.store.get_task("MS1-T1")
+    t2 = eng.store.get_task("MS1-T2")
+    t1.status = "failed"
+    t1.output = "bad upstream"
+    t1.attempts = 2
+    t2.status = "done"
+    t2.output = "stale downstream"
+    eng.store.save_task(t1)
+    eng.store.save_task(t2)
+    ms = eng.store.get_milestone("MS1")
+    ms.status = "blocked"
+    eng.store.save_milestone(p.id, ms)
+    p.status = "blocked"
+    p.current_ms = "MS1"
+    eng.store.save_project(p)
+
+    recovered = eng.recover(p.id, task_ids=["MS1-T1"])
+
+    assert recovered["project_status"] == "running"
+    assert "task_recovered:MS1-T1" in recovered["events"]
+    assert "task_recovered:MS1-T2" in recovered["events"]
+    assert eng.store.get_task("MS1-T1").status == "pending"
+    assert eng.store.get_task("MS1-T2").status == "pending"
+    assert eng.store.get_task("MS1-T2").output is None
+
+
 def test_milestone_gate_blocks_when_criteria_unmet(tmp_path) -> None:
     def strict_gate(ms: Milestone, tasks: list[Task]) -> dict:
         return {"met": ms.id != "MS1", "reason": "MS1 forced-fail"}

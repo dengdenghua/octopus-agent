@@ -159,6 +159,90 @@ class ProjectEngine:
             "history": history,
         }
 
+    def recover(
+        self,
+        project_id: str,
+        *,
+        task_ids: list[str] | None = None,
+        reset_attempts: bool = True,
+        clear_outputs: bool = True,
+    ) -> dict[str, Any]:
+        """Reopen a blocked project so the loop can continue.
+
+        By default, only failed/rejected/blocked tasks in the current blocked
+        milestone are retried. When operators pass explicit task ids, those
+        tasks and their downstream dependants in the same milestone are reset
+        together so stale outputs do not survive a partial rework.
+        """
+        project = self.store.get_project(project_id)
+        if project is None:
+            return {"events": ["project_not_found"], "project_status": "failed"}
+
+        events: list[str] = []
+        selected = {str(task_id) for task_id in (task_ids or []) if str(task_id).strip()}
+        milestones = self.store.milestones_for(project.id)
+        target_ms_ids = {project.current_ms} if project.current_ms else set()
+        target_ms_ids.update(ms.id for ms in milestones if ms.status == "blocked")
+
+        changed = False
+        first_reopened: str | None = None
+        for ms in milestones:
+            tasks = self.store.tasks_for_milestone(ms.id)
+            explicit_here = {task.id for task in tasks if task.id in selected}
+            should_consider = (
+                bool(explicit_here)
+                or ms.id in target_ms_ids
+                or any(task.status in {"failed", "rejected", "blocked"} for task in tasks)
+            )
+            if not should_consider:
+                continue
+
+            reset_ids = explicit_here
+            if selected and explicit_here:
+                reset_ids = self._with_downstream_tasks(tasks, reset_ids)
+            elif not selected:
+                reset_ids = {
+                    task.id
+                    for task in tasks
+                    if task.status in {"failed", "rejected", "blocked"}
+                }
+
+            for task in tasks:
+                if task.id not in reset_ids:
+                    continue
+                task.status = "pending"
+                if reset_attempts:
+                    task.attempts = 0
+                if clear_outputs:
+                    task.output = None
+                    task.qa_verdict = None
+                self.store.save_task(task)
+                events.append(f"task_recovered:{task.id}")
+                changed = True
+
+            if ms.status == "blocked" or reset_ids:
+                ms.status = "in_progress"
+                self.store.save_milestone(project.id, ms)
+                events.append(f"milestone_reopened:{ms.id}")
+                first_reopened = first_reopened or ms.id
+                changed = True
+
+        if changed:
+            project.status = "running"
+            if first_reopened:
+                project.current_ms = first_reopened
+            self.store.save_project(project)
+            events.append("project_recovered")
+        else:
+            events.append("nothing_to_recover")
+
+        current = self.store.get_project(project_id)
+        return {
+            "events": events,
+            "project_status": current.status if current else "failed",
+            "current_ms": current.current_ms if current else None,
+        }
+
     # ── steps ────────────────────────────────────────────────────────────────
     def _ensure_active_milestone(self, project: Project, events: list[str]) -> Milestone | None:
         mss = self.store.milestones_for(project.id)
@@ -273,6 +357,19 @@ class ProjectEngine:
             project.current_ms = milestone_id
         self.store.save_project(project)
         events.append(f"project_blocked:{reason}")
+
+    def _with_downstream_tasks(self, tasks: list[Task], task_ids: set[str]) -> set[str]:
+        out = set(task_ids)
+        changed = True
+        while changed:
+            changed = False
+            for task in tasks:
+                if task.id in out:
+                    continue
+                if any(dep in out for dep in task.depends_on):
+                    out.add(task.id)
+                    changed = True
+        return out
 
     def _context(self, project: Project, ms: Milestone, tasks: list[Task]) -> dict[str, Any]:
         return {

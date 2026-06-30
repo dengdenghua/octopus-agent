@@ -30,6 +30,14 @@ class RunBody(BaseModel):
     max_ticks: int = 50
 
 
+class RecoverBody(BaseModel):
+    task_ids: list[str] = Field(default_factory=list)
+    reset_attempts: bool = True
+    clear_outputs: bool = True
+    run: bool = False
+    max_ticks: int = 50
+
+
 class FromGroupBody(BaseModel):
     name: str = Field(min_length=1)
     goal: str = Field(min_length=1)
@@ -156,5 +164,26 @@ def create_projects_router(
         if project_store.get_project(project_id) is None:
             raise HTTPException(404, "project not found")
         return _engine().run(project_id, max_ticks=body.max_ticks)
+
+    @router.post("/api/projects/{project_id}/recover", dependencies=[Depends(_auth_dep)])
+    def recover(project_id: str, body: RecoverBody) -> dict[str, Any]:
+        """Reopen blocked project work after an operator fixes the cause."""
+        if project_store.get_project(project_id) is None:
+            raise HTTPException(404, "project not found")
+        engine = _engine()
+        recovered = engine.recover(
+            project_id,
+            task_ids=body.task_ids,
+            reset_attempts=body.reset_attempts,
+            clear_outputs=body.clear_outputs,
+        )
+        if body.run:
+            return {
+                "ok": True,
+                "recover": recovered,
+                "run": engine.run(project_id, max_ticks=body.max_ticks),
+                **_full_state(project_id),
+            }
+        return {"ok": True, "recover": recovered, **_full_state(project_id)}
 
     return router

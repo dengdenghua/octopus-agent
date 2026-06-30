@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from runtime.projectos.model import Milestone, Project, Task
 from runtime.projectos.store import ProjectStore
 from runtime.sensing.gateway.projects_router import create_projects_router
 
@@ -13,6 +14,13 @@ def _client(tmp_path) -> TestClient:
     app = FastAPI()
     app.include_router(create_projects_router(store=ProjectStore(base_dir=tmp_path)))
     return TestClient(app)
+
+
+def _client_with_store(tmp_path) -> tuple[TestClient, ProjectStore]:
+    store = ProjectStore(base_dir=tmp_path)
+    app = FastAPI()
+    app.include_router(create_projects_router(store=store))
+    return TestClient(app), store
 
 
 def test_plan_run_report_flow(tmp_path) -> None:
@@ -47,3 +55,45 @@ def test_404s(tmp_path) -> None:
     assert c.get("/api/projects/nope").status_code == 404
     assert c.post("/api/projects/nope/tick").status_code == 404
     assert c.get("/api/projects/nope/report").status_code == 404
+
+
+def test_recover_reopens_blocked_project_and_can_run(tmp_path) -> None:
+    c, store = _client_with_store(tmp_path)
+    project = Project(
+        id="P-blocked",
+        name="blocked",
+        goal="recover me",
+        milestone_ids=["MS1"],
+        current_ms="MS1",
+        status="blocked",
+    )
+    store.save_project(project)
+    store.save_milestone(
+        project.id,
+        Milestone(id="MS1", name="build", goal="build it", status="blocked"),
+    )
+    store.save_task(
+        Task(
+            id="MS1-T1",
+            milestone_id="MS1",
+            type="code",
+            goal="retry this",
+            status="failed",
+            output="bad",
+            attempts=2,
+        )
+    )
+
+    recovered = c.post(
+        "/api/projects/P-blocked/recover",
+        json={"run": True, "max_ticks": 10},
+    )
+
+    assert recovered.status_code == 200
+    body = recovered.json()
+    assert body["ok"] is True
+    assert body["recover"]["project_status"] == "running"
+    assert "project_recovered" in body["recover"]["events"]
+    assert body["run"]["final_status"] == "done"
+    assert body["project"]["status"] == "done"
+    assert body["tasks"]["MS1"][0]["status"] == "done"
