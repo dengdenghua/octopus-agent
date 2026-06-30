@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 run_backend=1
 run_frontend_static=1
+run_frontend_unit="${OCTOPUS_VERIFY_SKIP_FRONTEND_UNIT:-0}"
 run_frontend_build="${OCTOPUS_VERIFY_SKIP_BUILD:-0}"
 run_full_stack="${OCTOPUS_VERIFY_SKIP_FULL_STACK:-0}"
 run_full_stack_mobile="${OCTOPUS_VERIFY_SKIP_FULL_STACK_MOBILE:-0}"
@@ -18,12 +19,15 @@ Usage: scripts/verify_local.sh [--full-stack-only]
 Runs the local stability gate:
   - targeted backend regressions for model compatibility, team/cowork tasks, and org runs
   - production readiness scorecard gate for operator, automation, and policy evidence
+  - focused frontend production unit tests for runtime-critical UI contracts
   - frontend typecheck, lint, and build
   - full-stack Playwright smoke for FastAPI + Vite across localhost/127.0.0.1
   - mobile full-stack Playwright smoke for core workspace responsive paths
 
 Environment:
   PYTHON                         Python executable. Defaults to .venv/bin/python, then python3/python.
+  OCTOPUS_VERIFY_SKIP_FRONTEND_UNIT=1
+                                  Skip focused frontend production unit tests.
   OCTOPUS_VERIFY_SKIP_BUILD=1     Skip frontend production build.
   OCTOPUS_VERIFY_SKIP_PRODUCTION_GATE=1
                                   Skip production readiness scorecard gate.
@@ -111,6 +115,11 @@ if [[ "$run_frontend_static" == "1" ]]; then
 
   section "frontend lint"
   (cd frontend && pnpm lint)
+
+  if [[ "$run_frontend_unit" != "1" ]]; then
+    section "frontend production unit tests"
+    (cd frontend && pnpm exec vitest run src/core/i18n/translations.test.ts)
+  fi
 fi
 
 if [[ "$run_frontend_build" != "1" ]]; then
