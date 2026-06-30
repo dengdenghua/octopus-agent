@@ -75,7 +75,7 @@ function StepItem({
         <div className="relative flex flex-col items-center">
           <div
             className={cn(
-              "flex size-6 items-center justify-center rounded-full border-2 transition-all duration-300",
+              "flex size-6 items-center justify-center rounded-full border-2 transition-colors duration-300",
               step.status === "completed" &&
                 "border-emerald-500 bg-emerald-500/10 text-emerald-600",
               step.status === "running" &&
@@ -252,7 +252,7 @@ export function AgentWorkflowPanel({
         <div className="h-1.5 overflow-hidden rounded-full bg-muted">
           <div
             className={cn(
-              "h-full rounded-full transition-all duration-500",
+              "h-full rounded-full transition-colors duration-500",
               isRunning ? "bg-violet-500" : "bg-emerald-500",
             )}
             style={{ width: `${progress}%` }}

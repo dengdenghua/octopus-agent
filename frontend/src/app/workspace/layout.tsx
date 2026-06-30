@@ -3,7 +3,6 @@ import { Outlet, useNavigate } from "react-router-dom";
 import { Toaster } from "sonner";
 
 import { MoliliLoginDialog } from "@/components/auth/molili-login-dialog";
-import { LiquidGlassField } from "@/components/browser/liquid-glass-field";
 import { Banner } from "@/components/ui/banner";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
@@ -17,7 +16,6 @@ import { swallow } from "@/core/utils/log";
 import { uuid } from "@/core/utils/uuid";
 import { useWorkspaceShortcuts } from "@/core/shortcuts/use-global-shortcuts";
 import { useI18n } from "@/core/i18n/hooks";
-import { useAppearance } from "@/hooks/use-appearance";
 
 const CommandPalette = lazy(() =>
   import("@/components/workspace/command-palette").then((m) => ({
@@ -117,7 +115,6 @@ function StubResponseBannerHost() {
 
 export default function WorkspaceLayout() {
   const electron = inElectron();
-  const { materialTheme } = useAppearance();
   const navigate = useNavigate();
   useTitleBarThemeSync();
   useWorkspaceShortcuts();
@@ -142,7 +139,6 @@ export default function WorkspaceLayout() {
             : undefined
         }
       >
-        {materialTheme === "liquid" ? <LiquidGlassField /> : null}
         <WorkspaceSidebar />
         <SidebarInset className="relative z-[1] flex min-w-0 flex-col overflow-hidden">
           <StubResponseBannerHost />

@@ -38,7 +38,7 @@ function MiniSparkline({
         <div
           key={i}
           className={cn(
-            "w-1 min-h-[2px] rounded-lg transition-all duration-300",
+            "w-1 min-h-[2px] rounded-lg transition-colors duration-300",
             color,
           )}
           style={{ height: `${Math.max(2, (value / max) * 20)}px` }}

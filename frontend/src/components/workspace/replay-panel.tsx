@@ -128,7 +128,7 @@ export function ReplayGateCard({
             {gate?.reason || "Waiting for replay evaluations"}
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-2 text-right font-mono text-[11px]">
+        <div className="grid grid-cols-2 gap-2 text-right font-mono text-[11px] sm:grid-cols-4">
           <GateStat label="cases" value={summary?.total ?? 0} />
           <GateStat label="pass" value={summary?.passed ?? 0} />
           <GateStat label="fail" value={summary?.failed ?? 0} />

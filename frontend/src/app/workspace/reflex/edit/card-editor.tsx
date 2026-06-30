@@ -434,6 +434,7 @@ function RuleCard({
             disabled={readOnly}
             onChange={(e) => onChange({ id: e.target.value })}
             placeholder={t.reflexEditor.cardField_id}
+            aria-label={t.reflexEditor.cardField_id}
             className="flex-1 rounded-md border border-border/60 bg-background px-3 py-1.5 font-mono text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
           />
           {readOnly && (
@@ -476,6 +477,7 @@ function RuleCard({
               value={card.trigger_text}
               disabled={readOnly}
               onChange={(e) => onChange({ trigger_text: e.target.value })}
+              aria-label={t.reflexEditor.cardField_trigger}
               placeholder={
                 card.trigger_mode === "regex"
                   ? "^开(灯|空调)$"
@@ -613,6 +615,7 @@ function RuleCard({
               disabled={readOnly}
               onChange={(e) => onChange({ reply_on_failure: e.target.value })}
               placeholder={t.reflexEditor.cardField_replyOnFailurePlaceholder}
+              aria-label={t.reflexEditor.cardField_replyOnFailure}
               className="rounded-md border border-border/60 bg-background px-3 py-1.5 text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
             />
           </div>
@@ -739,6 +742,7 @@ function WebhookFields({
           disabled={readOnly}
           onChange={(e) => onChange({ url: e.target.value })}
           placeholder="http://homeassistant.local:8123/api/services/light/turn_off"
+          aria-label="URL"
           className="flex-1 rounded-md border border-border/60 bg-background px-3 py-1.5 font-mono text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
         />
       </div>
@@ -759,6 +763,7 @@ function WebhookFields({
                   onChange({ headers: next });
                 }}
                 placeholder="Authorization"
+                aria-label="Header name"
                 className="w-44 rounded-md border border-border/60 bg-background px-2 py-1 font-mono text-xs outline-none disabled:cursor-not-allowed"
               />
               <input
@@ -768,28 +773,34 @@ function WebhookFields({
                   onChange({ headers: { ...cfg.headers, [k]: e.target.value } })
                 }
                 placeholder="Bearer ..."
+                aria-label="Header value"
                 className="flex-1 rounded-md border border-border/60 bg-background px-2 py-1 font-mono text-xs outline-none disabled:cursor-not-allowed"
               />
-              <button
+              <Button
+                size="sm"
+                variant="ghost"
                 disabled={readOnly}
                 onClick={() => {
                   const next = { ...cfg.headers };
                   delete next[k];
                   onChange({ headers: next });
                 }}
-                className="rounded-md px-2 text-xs text-rose-400 hover:bg-rose-500/10 disabled:cursor-not-allowed"
+                aria-label="Delete header"
+                className="rounded-md px-2 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 disabled:cursor-not-allowed"
               >
                 ×
-              </button>
+              </Button>
             </div>
           ))}
-          <button
+          <Button
+            size="sm"
+            variant="outline"
             disabled={readOnly}
             onClick={() => onChange({ headers: { ...cfg.headers, "": "" } })}
-            className="self-start rounded-md border border-dashed border-border/60 px-2 py-1 text-xs text-muted-foreground hover:bg-muted/30 disabled:cursor-not-allowed"
+            className="self-start border-dashed text-xs text-muted-foreground hover:bg-muted/30 disabled:cursor-not-allowed"
           >
             + {t.reflexEditor.cardField_addHeader}
-          </button>
+          </Button>
         </div>
       </div>
       <div className="grid gap-1">
@@ -838,6 +849,7 @@ function MqttFields({
           disabled={readOnly}
           onChange={(e) => onChange({ broker: e.target.value })}
           placeholder="192.168.1.10"
+          aria-label="MQTT broker"
           className="flex-1 rounded-md border border-border/60 bg-background px-3 py-1.5 font-mono text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
         />
         <input
@@ -845,6 +857,7 @@ function MqttFields({
           value={cfg.port}
           disabled={readOnly}
           onChange={(e) => onChange({ port: Number(e.target.value) || 1883 })}
+          aria-label="Port"
           className="w-24 rounded-md border border-border/60 bg-background px-2 py-1.5 font-mono text-xs outline-none disabled:cursor-not-allowed"
         />
       </div>
@@ -853,6 +866,7 @@ function MqttFields({
         disabled={readOnly}
         onChange={(e) => onChange({ topic: e.target.value })}
         placeholder="zigbee2mqtt/living_room_light/set"
+        aria-label="Topic"
         className="rounded-md border border-border/60 bg-background px-3 py-1.5 font-mono text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
       />
       <input
@@ -860,6 +874,7 @@ function MqttFields({
         disabled={readOnly}
         onChange={(e) => onChange({ payload: e.target.value })}
         placeholder='{"state":"OFF"} 或 OFF'
+        aria-label="Payload"
         className="rounded-md border border-border/60 bg-background px-3 py-1.5 font-mono text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
       />
       <div className="flex gap-3 text-xs text-muted-foreground">
@@ -882,6 +897,7 @@ function MqttFields({
             checked={cfg.retain}
             disabled={readOnly}
             onChange={(e) => onChange({ retain: e.target.checked })}
+            aria-label="Retain"
           />
           retain
         </label>

@@ -333,7 +333,7 @@ function ProgressRing({
         strokeDasharray={circumference}
         strokeDashoffset={circumference * (1 - successPct)}
         strokeLinecap="round"
-        className="text-green-500 transition-all duration-500"
+        className="text-green-500 transition-colors duration-500"
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
       />
       {/* Failed arc */}
@@ -348,7 +348,7 @@ function ProgressRing({
           strokeDasharray={circumference}
           strokeDashoffset={circumference * (1 - failPct)}
           strokeLinecap="round"
-          className="text-red-500 transition-all duration-500"
+          className="text-red-500 transition-colors duration-500"
           transform={`rotate(${-90 + successPct * 360} ${size / 2} ${size / 2})`}
         />
       )}
@@ -398,7 +398,7 @@ function AgentCard({
         type="button"
         onClick={onClick}
         className={cn(
-          "flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-all hover:shadow-sm",
+          "flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors transition-shadow hover:shadow-sm",
           STATUS_BG[task.status] ?? "bg-card",
         )}
       >
@@ -428,7 +428,7 @@ function AgentCard({
   return (
     <div
       className={cn(
-        "rounded-lg border transition-all",
+        "rounded-lg border transition-colors",
         STATUS_BG[task.status] ?? "bg-card",
       )}
     >

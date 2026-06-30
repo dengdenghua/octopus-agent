@@ -19,7 +19,7 @@ export const StreamingIndicator = memo(function StreamingIndicator({
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-2.5 rounded-lg border transition-all duration-300",
+        "inline-flex items-center gap-2.5 rounded-lg border transition-colors duration-300",
         isSm
           ? "border-primary/15 bg-primary/[0.03] px-3 py-1.5"
           : "border-primary/20 bg-primary/[0.05] px-4 py-2",

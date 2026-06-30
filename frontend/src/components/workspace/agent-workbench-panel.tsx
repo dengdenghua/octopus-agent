@@ -1012,11 +1012,11 @@ export function AgentWorkbenchPanel({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          {machineRail}
         </header>
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background/70">
           {emptyEmbeddedPage}
         </main>
+        {machineRail}
       </div>
     );
   }
@@ -1307,7 +1307,6 @@ export function AgentWorkbenchPanel({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        {machineRail}
       </header>
 
       {threadId ? (
@@ -1539,6 +1538,7 @@ export function AgentWorkbenchPanel({
           )}
         </main>
       )}
+      {machineRail}
     </div>
   );
 }
@@ -1573,7 +1573,10 @@ function MachineScopeRail({
       : leaderSeat?.name;
   const mainDockShowsPresence = Boolean(leaderSeat && hasCollaborators);
   return (
-    <div className="mt-1.5 flex min-w-0 items-center gap-2 border-t border-border/35 pt-1.5">
+    <div
+      className="flex min-w-0 shrink-0 items-center gap-2 border-t border-border/45 bg-background/80 px-3 py-1.5"
+      data-testid="workstation-bottom-rail"
+    >
       <MonitorIcon className="size-3.5 shrink-0 text-muted-foreground" />
       <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <WorkstationSeat

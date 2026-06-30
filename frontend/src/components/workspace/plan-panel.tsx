@@ -268,7 +268,7 @@ export function PlanButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium shadow-sm transition-all duration-200",
+        "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium shadow-sm transition-colors transition-shadow duration-200",
         isActive
           ? "border-primary/60 bg-primary/10 text-primary shadow-primary/10"
           : "border-border/60 bg-background/80 text-muted-foreground hover:text-foreground hover:border-foreground/20 hover:bg-muted/50",
@@ -365,7 +365,7 @@ export function PlanPanel({
       <div className="px-4 pt-2">
         <div className="h-1 overflow-hidden rounded-lg bg-muted">
           <div
-            className="bg-primary h-full rounded-lg transition-all duration-500"
+            className="bg-primary h-full rounded-lg transition-[width] duration-500"
             style={{ width: `${progressPct}%` }}
           />
         </div>

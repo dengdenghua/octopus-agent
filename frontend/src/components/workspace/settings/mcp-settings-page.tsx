@@ -167,12 +167,12 @@ export function McpSettingsPage() {
             return (
               <div
                 key={server.name}
-                className="flex items-center justify-between rounded-lg border p-3"
+                className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border p-3"
               >
                 <div className="flex items-center gap-3">
                   <ServerIcon className="size-4 text-muted-foreground" />
                   <div>
-                    <div className="font-medium flex items-center gap-2">
+                    <div className="font-medium flex flex-wrap items-center gap-2">
                       {server.name}
                       {trusted ? (
                         <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
@@ -186,7 +186,7 @@ export function McpSettingsPage() {
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-muted-foreground break-words">
                       {server.type}{" "}
                       {server.command
                         ? `· ${server.command}`
@@ -195,7 +195,7 @@ export function McpSettingsPage() {
                           : ""}
                     </div>
                     {server.description && (
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-muted-foreground break-words">
                         {server.description}
                       </div>
                     )}

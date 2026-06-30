@@ -97,7 +97,7 @@ export function ExecutionPanel({
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-all duration-300",
+        "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-colors duration-300",
         isLoading
           ? "border-primary/15 bg-primary/[0.03] text-primary/70"
           : "border-border/50 bg-muted/20 text-muted-foreground",

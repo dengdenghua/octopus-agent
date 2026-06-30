@@ -752,7 +752,7 @@ export default function NewAgentPage() {
           <div className="pointer-events-none absolute inset-0 opacity-[0.09] [background-image:radial-gradient(circle_at_76%_28%,rgba(244,232,111,0.1),transparent_30%),linear-gradient(to_right,rgba(255,255,255,0.032)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.024)_1px,transparent_1px)] [background-size:100%_100%,40px_40px,40px_40px]" />
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-[#f4e86f]/24 to-transparent" />
           <div className="pointer-events-none absolute inset-x-14 bottom-0 h-px bg-gradient-to-r from-transparent via-white/8 to-transparent" />
-          <div className="relative grid h-full grid-cols-[minmax(0,0.64fr)_minmax(260px,0.36fr)]">
+          <div className="relative grid h-full grid-cols-1 lg:grid-cols-[minmax(0,0.64fr)_minmax(260px,0.36fr)]">
             <section className="relative flex min-h-0 flex-col px-8 py-6 lg:px-10 lg:py-7">
               <div className="pointer-events-none absolute left-0 top-0 h-5 w-5 border-l border-t border-primary/60" />
               <div className="mb-6 flex shrink-0 items-center justify-between">

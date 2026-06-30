@@ -141,7 +141,13 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.getByText("群主")).toBeInTheDocument();
     expect(screen.queryByText("工位")).not.toBeInTheDocument();
     const workbenchHeader = screen.getByRole("banner");
-    const codexSeat = within(workbenchHeader).getByRole("button", {
+    expect(
+      within(workbenchHeader).queryByRole("button", {
+        name: "Codex CLI · 子电脑 · 在场",
+      }),
+    ).not.toBeInTheDocument();
+    const bottomRail = screen.getByTestId("workstation-bottom-rail");
+    const codexSeat = within(bottomRail).getByRole("button", {
       name: "Codex CLI · 子电脑 · 在场",
     });
     expect(codexSeat).toHaveAttribute("title", "Codex CLI · 子电脑 · 在场");

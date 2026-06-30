@@ -63,7 +63,7 @@ export default function DesktopOrganizerPage() {
       <WorkspaceHeader />
       <WorkspaceBody>
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 py-2">
-          <section className="workspace-panel flex flex-col gap-5 rounded-[1.75rem] p-6">
+          <section className="workspace-panel flex flex-col gap-5 rounded-[1.75rem] p-4 md:p-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-sm">
@@ -87,7 +87,7 @@ export default function DesktopOrganizerPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
               <InfoTile
                 icon={ShieldCheckIcon}
                 title="不接管系统桌面"

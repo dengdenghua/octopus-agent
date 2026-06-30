@@ -267,14 +267,14 @@ export default function ReplayPage() {
       <WorkspaceHeader />
       <WorkspaceBody className="px-4 pb-4">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-          <section className="workspace-panel rounded-[1.75rem] px-6 py-5">
+          <section className="workspace-panel rounded-[1.75rem] px-4 py-4 sm:px-6 sm:py-5">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="flex min-w-0 items-start gap-4 sm:items-center">
                 <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-sm">
                   <PlayCircleIcon className="size-5" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-2xl font-bold tracking-tight">
+                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
                     {t.sidebar.navReplay}
                   </h1>
                   <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
@@ -319,7 +319,7 @@ export default function ReplayPage() {
             )}
           </section>
 
-          <section className="workspace-panel rounded-[1.75rem] px-5 py-5">
+          <section className="workspace-panel rounded-[1.75rem] px-4 py-4 sm:px-5 sm:py-5">
             <ReplayGateCard gate={replayGate} />
             {replayEvidence && (
               <ReplayEvidenceDrilldownCard
@@ -345,7 +345,7 @@ export default function ReplayPage() {
             />
           </section>
 
-          <section className="workspace-panel rounded-[1.75rem] px-5 py-5">
+          <section className="workspace-panel rounded-[1.75rem] px-4 py-4 sm:px-5 sm:py-5">
             <Tabs defaultValue="cases" className="flex flex-col gap-4">
               <TabsList className="h-9 w-fit rounded-lg">
                 <TabsTrigger value="cases" className="h-8 gap-1.5 px-3 text-xs">

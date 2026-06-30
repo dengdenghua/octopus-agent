@@ -287,6 +287,16 @@
        1.5   = pill / friendly
      Controlled at runtime via <html data-corner-scale="…">. */
   --corner-radius-scale: 1;
+  --appearance-radius-xs: calc(0.25rem * var(--corner-radius-scale, 1));
+  --appearance-radius-sm: calc(0.375rem * var(--corner-radius-scale, 1));
+  --appearance-radius-md: calc(0.5rem * var(--corner-radius-scale, 1));
+  --appearance-radius-lg: calc(0.75rem * var(--corner-radius-scale, 1));
+  --appearance-radius-xl: calc(1rem * var(--corner-radius-scale, 1));
+  --appearance-radius-2xl: calc(1.25rem * var(--corner-radius-scale, 1));
+  --appearance-radius-3xl: calc(1.5rem * var(--corner-radius-scale, 1));
+  --appearance-radius-panel: calc(1.75rem * var(--corner-radius-scale, 1));
+  --appearance-radius-control: calc(0.75rem * var(--corner-radius-scale, 1));
+  --appearance-radius-pill: calc(999px * var(--corner-radius-scale, 1));
 
   /* Semantic design tokens. These map to existing theme vars
      but give components a stable surface to consume, so the
@@ -1336,6 +1346,7 @@
 
   .workspace-panel {
     border: 1px solid color-mix(in oklch, var(--border) 88%, transparent);
+    border-radius: var(--appearance-radius-panel);
     background: color-mix(in oklch, var(--card) 92%, var(--background) 8%);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -1356,6 +1367,7 @@
 
   .workspace-panel-subtle {
     border: 1px solid color-mix(in oklch, var(--border) 84%, transparent);
+    border-radius: var(--appearance-radius-2xl);
     background: color-mix(in oklch, var(--card) 84%, var(--background) 16%);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -1485,7 +1497,7 @@
     backdrop-filter: blur(24px) saturate(1.7);
     -webkit-backdrop-filter: blur(24px) saturate(1.7);
     box-shadow: var(--shadow-card);
-    border-radius: calc(var(--radius) * 1.35);
+    border-radius: var(--appearance-radius-panel);
   }
 
   .apple .workspace-panel:hover {
@@ -1498,7 +1510,7 @@
     background: color-mix(in oklch, var(--card) 62%, transparent);
     backdrop-filter: blur(22px) saturate(1.55);
     -webkit-backdrop-filter: blur(22px) saturate(1.55);
-    border-radius: calc(var(--radius) * 1.2);
+    border-radius: var(--appearance-radius-2xl);
   }
 
   .dark.apple .workspace-panel {
@@ -1532,7 +1544,7 @@
 
   .apple button,
   .apple [role="button"] {
-    border-radius: calc(var(--radius) * 1.05);
+    border-radius: var(--appearance-radius-control);
     transition:
       transform 0.15s cubic-bezier(0.4, 0, 0.2, 1),
       box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1),
@@ -1573,7 +1585,7 @@
   .apple [data-slot="select-trigger"] {
     border-color: color-mix(in oklch, var(--border) 82%, transparent);
     background: color-mix(in oklch, var(--card) 62%, transparent);
-    border-radius: calc(var(--radius) * 1.05);
+    border-radius: var(--appearance-radius-control);
     box-shadow: inset 0 1px 0 color-mix(in oklch, white 70%, transparent);
     backdrop-filter: blur(14px) saturate(1.35);
     -webkit-backdrop-filter: blur(14px) saturate(1.35);
@@ -1607,7 +1619,7 @@
     background: color-mix(in oklch, var(--card) 80%, transparent);
     backdrop-filter: blur(24px) saturate(1.65);
     -webkit-backdrop-filter: blur(24px) saturate(1.65);
-    border-radius: calc(var(--radius) * 1.35);
+    border-radius: var(--appearance-radius-2xl);
     box-shadow: var(--shadow-card);
   }
 
@@ -1644,14 +1656,14 @@
   .apple [data-slot="segmented-control"] {
     background: color-mix(in oklch, var(--muted) 86%, transparent);
     border: 1px solid color-mix(in oklch, var(--border) 66%, transparent);
-    border-radius: calc(var(--radius) * 1.05);
+    border-radius: var(--appearance-radius-control);
     padding: 3px;
   }
 
   .apple [data-slot="segmented-control-item"][data-state="active"] {
     background: color-mix(in oklch, var(--card) 88%, transparent);
     box-shadow: var(--shadow-card);
-    border-radius: calc(var(--radius) * 0.85);
+    border-radius: var(--appearance-radius-md);
   }
 
   .apple ::-webkit-scrollbar {
@@ -1676,41 +1688,80 @@
     background-clip: padding-box;
   }
 
+  :root :is(.workspace-panel, .workspace-panel-subtle) {
+    border-radius: var(--appearance-radius-panel) !important;
+  }
+
+  :root
+    :is(
+      [data-slot="card"],
+      [data-slot="dialog-content"],
+      [data-slot="sidebar-inner"],
+      [data-slot="sidebar-inset"]
+    ) {
+    border-radius: var(--appearance-radius-2xl) !important;
+  }
+
+  :root
+    :is(
+      [data-slot="dropdown-menu-content"],
+      [data-slot="select-content"],
+      [data-slot="popover-content"],
+      [data-slot="segmented-control"]
+    ) {
+    border-radius: var(--appearance-radius-xl) !important;
+  }
+
+  :root
+    :is(
+      [data-slot="button"],
+      [data-slot="input"],
+      [data-slot="textarea"],
+      [data-slot="select-trigger"],
+      [data-slot="dropdown-menu-item"],
+      [data-slot="dropdown-menu-checkbox-item"],
+      [data-slot="dropdown-menu-radio-item"],
+      [data-slot="select-item"],
+      [data-slot="segmented-control-item"]
+    ) {
+    border-radius: var(--appearance-radius-control) !important;
+  }
+
   :root[data-material-theme="liquid"] {
-    --global-glass-blur: 24px;
-    --global-glass-saturate: 1.58;
-    --global-glass-contrast: 1.045;
-    --global-glass-depth: 1;
-    --global-glass-field-opacity: 0.42;
-    --global-glass-field-saturate: 1.1;
-    --global-glass-control-blur: 16px;
-    --global-glass-surface: color-mix(in oklch, var(--card) 54%, transparent);
+    --global-glass-blur: 10px;
+    --global-glass-saturate: 1.08;
+    --global-glass-contrast: 1.006;
+    --global-glass-depth: 0.42;
+    --global-glass-field-opacity: 0;
+    --global-glass-field-saturate: 1;
+    --global-glass-control-blur: 7px;
+    --global-glass-surface: color-mix(in oklch, var(--card) 18%, transparent);
     --global-glass-surface-strong: color-mix(
       in oklch,
-      var(--card) 66%,
+      var(--card) 28%,
       transparent
     );
     --global-glass-surface-soft: color-mix(
       in oklch,
-      var(--card) 38%,
+      var(--card) 12%,
       transparent
     );
-    --global-glass-border: color-mix(in oklch, var(--border) 58%, white 18%);
-    --global-glass-highlight: color-mix(in oklch, white 62%, transparent);
+    --global-glass-border: color-mix(in oklch, var(--border) 26%, white 8%);
+    --global-glass-highlight: color-mix(in oklch, white 22%, transparent);
     --global-glass-shadow:
-      0 1px 1px color-mix(in oklch, white 40%, transparent) inset,
-      0 -1px 1px color-mix(in oklch, black 12%, transparent) inset,
-      0 18px 46px rgb(15 23 42 / 0.12);
-    --liquid-glass-bg: color-mix(in oklch, white 22%, transparent);
-    --liquid-glass-thin-bg: color-mix(in oklch, white 18%, transparent);
-    --liquid-glass-card-bg: color-mix(in oklch, white 22%, transparent);
-    --liquid-glass-dock-bg: color-mix(in oklch, white 21%, transparent);
-    --liquid-glass-sheet-bg: color-mix(in oklch, white 25%, transparent);
-    --liquid-glass-input-bg: color-mix(in oklch, white 30%, transparent);
-    --liquid-glass-border: color-mix(in oklch, white 64%, transparent);
-    --liquid-glass-noise: 0.016;
-    --liquid-glass-displacement: 1.5px;
-    --liquid-glass-shadow: 0 24px 70px rgb(15 23 42 / 0.13);
+      0 0.5px 0 color-mix(in oklch, white 22%, transparent) inset,
+      0 -0.5px 0 color-mix(in oklch, black 4%, transparent) inset,
+      0 8px 22px rgb(15 23 42 / 0.045);
+    --liquid-glass-bg: color-mix(in oklch, white 5%, transparent);
+    --liquid-glass-thin-bg: color-mix(in oklch, white 3%, transparent);
+    --liquid-glass-card-bg: color-mix(in oklch, white 5%, transparent);
+    --liquid-glass-dock-bg: color-mix(in oklch, white 5%, transparent);
+    --liquid-glass-sheet-bg: color-mix(in oklch, white 7%, transparent);
+    --liquid-glass-input-bg: color-mix(in oklch, white 9%, transparent);
+    --liquid-glass-border: color-mix(in oklch, white 28%, transparent);
+    --liquid-glass-noise: 0;
+    --liquid-glass-displacement: 0.25px;
+    --liquid-glass-shadow: 0 8px 24px rgb(15 23 42 / 0.045);
   }
 
   :root[data-material-theme="liquid"][data-material-intensity="crystal"] {
@@ -2133,30 +2184,30 @@
   }
 
   :root[data-material-theme="liquid"].apple {
-    --global-glass-blur: 24px;
-    --global-glass-saturate: 1.46;
-    --global-glass-contrast: 1.03;
-    --global-glass-field-opacity: 0.3;
+    --global-glass-blur: 10px;
+    --global-glass-saturate: 1.06;
+    --global-glass-contrast: 1.004;
+    --global-glass-field-opacity: 0;
     --global-glass-field-saturate: 1;
-    --global-glass-surface: color-mix(in oklch, var(--card) 48%, transparent);
+    --global-glass-surface: color-mix(in oklch, var(--card) 16%, transparent);
     --global-glass-surface-strong: color-mix(
       in oklch,
-      var(--card) 60%,
+      var(--card) 26%,
       transparent
     );
     --global-glass-surface-soft: color-mix(
       in oklch,
-      var(--card) 34%,
+      var(--card) 10%,
       transparent
     );
-    --global-glass-highlight: color-mix(in oklch, white 54%, transparent);
-    --liquid-glass-bg: color-mix(in oklch, white 18%, transparent);
-    --liquid-glass-thin-bg: color-mix(in oklch, white 14%, transparent);
-    --liquid-glass-card-bg: color-mix(in oklch, white 18%, transparent);
-    --liquid-glass-dock-bg: color-mix(in oklch, white 18%, transparent);
-    --liquid-glass-sheet-bg: color-mix(in oklch, white 22%, transparent);
-    --liquid-glass-input-bg: color-mix(in oklch, white 26%, transparent);
-    --liquid-glass-border: color-mix(in oklch, white 62%, transparent);
+    --global-glass-highlight: color-mix(in oklch, white 20%, transparent);
+    --liquid-glass-bg: color-mix(in oklch, white 4%, transparent);
+    --liquid-glass-thin-bg: color-mix(in oklch, white 2.5%, transparent);
+    --liquid-glass-card-bg: color-mix(in oklch, white 4%, transparent);
+    --liquid-glass-dock-bg: color-mix(in oklch, white 4%, transparent);
+    --liquid-glass-sheet-bg: color-mix(in oklch, white 6%, transparent);
+    --liquid-glass-input-bg: color-mix(in oklch, white 8%, transparent);
+    --liquid-glass-border: color-mix(in oklch, white 26%, transparent);
   }
 
   :root[data-material-theme="liquid"][data-material-intensity="crystal"].apple {
@@ -2711,14 +2762,14 @@
   .octo-liquid-glass {
     --glass-x: 50%;
     --glass-y: 28%;
-    --glass-blur: 24px;
-    --glass-saturate: 1.88;
-    --glass-contrast: 1.04;
-    --glass-depth: 1;
-    --glass-displacement: var(--liquid-glass-displacement, 1.5px);
+    --glass-blur: var(--global-glass-blur, 10px);
+    --glass-saturate: var(--global-glass-saturate, 1.08);
+    --glass-contrast: var(--global-glass-contrast, 1.006);
+    --glass-depth: var(--global-glass-depth, 0.42);
+    --glass-displacement: var(--liquid-glass-displacement, 0.25px);
     --glass-shift-x: 0px;
     --glass-shift-y: 0px;
-    --glass-noise: var(--liquid-glass-noise, 0.016);
+    --glass-noise: var(--liquid-glass-noise, 0);
     --glass-bg: var(
       --liquid-glass-bg,
       color-mix(in oklch, white 22%, transparent)
@@ -2727,11 +2778,8 @@
       --liquid-glass-border,
       color-mix(in oklch, white 64%, transparent)
     );
-    --glass-top: color-mix(in oklch, white 78%, transparent);
-    --glass-bottom: color-mix(in oklch, black 10%, transparent);
-    --glass-prism-cool: rgb(56 189 248 / 0.13);
-    --glass-prism-warm: rgb(251 113 133 / 0.08);
-    --glass-prism-fresh: rgb(52 211 153 / 0.1);
+    --glass-top: color-mix(in oklch, white 28%, transparent);
+    --glass-bottom: color-mix(in oklch, black 3%, transparent);
     --glass-shadow: var(
       --liquid-glass-shadow,
       0 24px 70px rgb(15 23 42 / 0.13)
@@ -2739,48 +2787,18 @@
     position: relative;
     isolation: isolate;
     overflow: visible;
-    border: 1px solid var(--glass-border);
+    border: 1px solid color-mix(in oklch, var(--glass-border) 78%, transparent);
     background:
-      radial-gradient(
-        circle at var(--glass-x) var(--glass-y),
-        rgb(255 255 255 / calc(0.26 + var(--glass-depth) * 0.07)),
-        rgb(255 255 255 / 0.08) 22%,
-        transparent 54%
-      ),
-      radial-gradient(
-        68% 160% at calc(var(--glass-x) + 12%) -28%,
-        rgb(255 255 255 / calc(0.13 + var(--glass-depth) * 0.07)),
-        transparent 48%
-      ),
-      radial-gradient(
-        70% 130% at 8% 0%,
-        var(--glass-prism-fresh),
-        transparent 46%
-      ),
-      radial-gradient(
-        78% 160% at 96% 14%,
-        var(--glass-prism-cool),
-        transparent 52%
-      ),
-      radial-gradient(
-        90% 150% at 82% 100%,
-        var(--glass-prism-warm),
-        transparent 54%
-      ),
       linear-gradient(
-        135deg,
-        rgb(255 255 255 / 0.32),
-        transparent 38%,
-        rgb(255 255 255 / 0.11)
+        180deg,
+        rgb(255 255 255 / calc(0.055 + var(--glass-depth) * 0.035)),
+        rgb(255 255 255 / 0.015) 48%,
+        rgb(0 0 0 / 0.012)
       ),
       var(--glass-bg);
     box-shadow:
-      inset 0 1px 1px rgb(255 255 255 / 0.82),
-      inset 0 -1px 1px var(--glass-bottom),
-      inset calc(var(--glass-displacement) * -1) 0
-        calc(var(--glass-displacement) * 3) rgb(255 255 255 / 0.18),
-      inset var(--glass-displacement) 0 calc(var(--glass-displacement) * 4)
-        rgb(56 189 248 / 0.09),
+      inset 0 0.5px 0 rgb(255 255 255 / 0.34),
+      inset 0 -0.5px 0 var(--glass-bottom),
       var(--glass-shadow);
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate))
       contrast(var(--glass-contrast));
@@ -2801,23 +2819,9 @@
 
   .octo-liquid-glass::before {
     background:
-      linear-gradient(180deg, var(--glass-top), transparent 28%),
-      radial-gradient(
-        circle at var(--glass-x) var(--glass-y),
-        rgb(255 255 255 / calc(0.2 + var(--glass-depth) * 0.1)),
-        transparent 36%
-      ),
-      conic-gradient(
-        from 210deg at var(--glass-x) var(--glass-y),
-        transparent 0deg,
-        rgb(255 255 255 / 0.14) 30deg,
-        transparent 68deg,
-        rgb(56 189 248 / 0.1) 118deg,
-        transparent 154deg,
-        rgb(52 211 153 / 0.08) 188deg,
-        transparent 224deg
-      );
-    opacity: 0.78;
+      linear-gradient(180deg, var(--glass-top), transparent 22%),
+      linear-gradient(105deg, rgb(255 255 255 / 0.055), transparent 34%);
+    opacity: 0.36;
     mix-blend-mode: screen;
   }
 
@@ -2827,8 +2831,8 @@
   }
 
   .octo-liquid-glass::after {
-    inset: 1px;
-    border: 1px solid rgb(255 255 255 / calc(0.24 + var(--glass-depth) * 0.07));
+    inset: 0.5px;
+    border: 1px solid rgb(255 255 255 / calc(0.1 + var(--glass-depth) * 0.035));
     background:
       repeating-radial-gradient(
         circle at 12% 18%,
@@ -2841,10 +2845,10 @@
         transparent 1px 14px
       ),
       linear-gradient(180deg, transparent 62%, var(--glass-bottom));
-    opacity: 0.46;
+    opacity: 0.16;
     box-shadow:
-      inset 0 0 0 0.5px rgb(255 255 255 / 0.38),
-      inset 0 0 calc(var(--glass-displacement) * 10) rgb(255 255 255 / 0.07);
+      inset 0 0 0 0.5px rgb(255 255 255 / 0.18),
+      inset 0 0 calc(var(--glass-displacement) * 8) rgb(255 255 255 / 0.035);
   }
 
   .octo-liquid-glass__lens {
@@ -2853,86 +2857,99 @@
     background:
       linear-gradient(
         90deg,
-        rgb(255 255 255 / 0.2),
+        rgb(255 255 255 / 0.045),
         transparent 18% 82%,
-        rgb(14 165 233 / 0.11)
+        rgb(255 255 255 / 0.024)
       ),
       radial-gradient(
         48% 100% at var(--glass-x) var(--glass-y),
-        rgb(255 255 255 / 0.22),
+        rgb(255 255 255 / 0.055),
         transparent 58%
       );
     filter: blur(calc(var(--glass-displacement) * 0.46));
-    opacity: calc(0.3 + var(--glass-depth) * 0.18);
+    opacity: calc(0.1 + var(--glass-depth) * 0.08);
     transform: translate3d(var(--glass-shift-x), var(--glass-shift-y), 0);
     mix-blend-mode: screen;
   }
 
   .octo-liquid-glass--thin {
-    --glass-blur: 16px;
-    --glass-depth: 0.72;
-    --glass-displacement: 0.8px;
+    --glass-blur: calc(var(--global-glass-blur, 10px) * 0.58);
+    --glass-depth: calc(var(--global-glass-depth, 0.42) * 0.66);
+    --glass-displacement: calc(var(--liquid-glass-displacement, 0.25px) * 0.8);
     --glass-noise: calc(var(--liquid-glass-noise, 0.016) * 0.75);
     --glass-bg: var(
       --liquid-glass-thin-bg,
       color-mix(in oklch, white 18%, transparent)
     );
-    --glass-border: color-mix(in oklch, white 58%, transparent);
-    --glass-shadow: 0 12px 34px rgb(15 23 42 / 0.12);
+    --glass-border: color-mix(in oklch, white 24%, transparent);
+    --glass-shadow: 0 4px 14px rgb(15 23 42 / 0.035);
   }
 
   .octo-liquid-glass--card {
-    --glass-blur: 24px;
-    --glass-depth: 1;
-    --glass-displacement: 1.4px;
-    --glass-noise: var(--liquid-glass-noise, 0.016);
+    --glass-blur: calc(var(--global-glass-blur, 10px) * 0.88);
+    --glass-depth: calc(var(--global-glass-depth, 0.42) * 0.9);
+    --glass-displacement: var(--liquid-glass-displacement, 0.25px);
+    --glass-noise: var(--liquid-glass-noise, 0);
     --glass-bg: var(
       --liquid-glass-card-bg,
       color-mix(in oklch, white 22%, transparent)
     );
-    --glass-border: color-mix(in oklch, white 64%, transparent);
+    --glass-border: color-mix(in oklch, white 28%, transparent);
   }
 
   .octo-liquid-glass--dock {
-    --glass-blur: 30px;
-    --glass-depth: 1.25;
-    --glass-displacement: 2.1px;
-    --glass-noise: var(--liquid-glass-noise, 0.016);
+    --glass-blur: var(--global-glass-blur, 10px);
+    --glass-depth: var(--global-glass-depth, 0.42);
+    --glass-displacement: calc(var(--liquid-glass-displacement, 0.25px) * 1.1);
+    --glass-noise: var(--liquid-glass-noise, 0);
     --glass-bg: var(
       --liquid-glass-dock-bg,
       color-mix(in oklch, white 21%, transparent)
     );
-    --glass-border: color-mix(in oklch, white 72%, transparent);
-    --glass-prism-cool: rgb(34 211 238 / 0.16);
-    --glass-prism-fresh: rgb(74 222 128 / 0.13);
-    --glass-prism-warm: rgb(251 146 60 / 0.08);
-    --glass-shadow: 0 28px 90px rgb(15 23 42 / 0.17);
+    --glass-border: color-mix(in oklch, white 30%, transparent);
+    --glass-shadow: 0 8px 24px rgb(15 23 42 / 0.045);
   }
 
   .octo-liquid-glass--sheet {
-    --glass-blur: 28px;
-    --glass-depth: 1.14;
-    --glass-displacement: 1.8px;
-    --glass-noise: var(--liquid-glass-noise, 0.016);
+    --glass-blur: calc(var(--global-glass-blur, 10px) * 1.02);
+    --glass-depth: calc(var(--global-glass-depth, 0.42) * 1.04);
+    --glass-displacement: calc(var(--liquid-glass-displacement, 0.25px) * 1.1);
+    --glass-noise: var(--liquid-glass-noise, 0);
     --glass-bg: var(
       --liquid-glass-sheet-bg,
       color-mix(in oklch, white 25%, transparent)
     );
-    --glass-border: color-mix(in oklch, white 68%, transparent);
-    --glass-shadow: 0 30px 90px rgb(15 23 42 / 0.18);
+    --glass-border: color-mix(in oklch, white 30%, transparent);
+    --glass-shadow: 0 10px 28px rgb(15 23 42 / 0.055);
   }
 
   .octo-liquid-glass--input {
-    --glass-blur: 18px;
-    --glass-depth: 0.84;
-    --glass-displacement: 1px;
-    --glass-noise: calc(var(--liquid-glass-noise, 0.016) * 0.7);
+    --glass-blur: calc(var(--global-glass-blur, 10px) * 0.7);
+    --glass-depth: calc(var(--global-glass-depth, 0.42) * 0.76);
+    --glass-displacement: calc(var(--liquid-glass-displacement, 0.25px) * 0.72);
+    --glass-noise: 0;
     --glass-bg: var(
       --liquid-glass-input-bg,
       color-mix(in oklch, white 30%, transparent)
     );
-    --glass-border: color-mix(in oklch, white 62%, transparent);
-    --glass-shadow: 0 10px 28px rgb(15 23 42 / 0.1);
+    --glass-border: color-mix(in oklch, white 26%, transparent);
+    --glass-shadow: 0 4px 14px rgb(15 23 42 / 0.035);
+  }
+
+  :root .octo-liquid-glass:not(.rounded-none) {
+    border-radius: var(--appearance-radius-2xl) !important;
+  }
+
+  :root .octo-liquid-glass--thin:not(.rounded-none) {
+    border-radius: var(--appearance-radius-lg) !important;
+  }
+
+  :root .octo-liquid-glass--dock:not(.rounded-none) {
+    border-radius: var(--appearance-radius-panel) !important;
+  }
+
+  :root .octo-liquid-glass--input:not(.rounded-none) {
+    border-radius: var(--appearance-radius-2xl) !important;
   }
 
   .octo-liquid-glass--interactive {

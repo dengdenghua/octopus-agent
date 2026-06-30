@@ -213,7 +213,7 @@ function PlanStepRow({
   return (
     <div
       className={cn(
-        "rounded-lg border px-3 py-2 transition-all duration-200",
+        "rounded-lg border px-3 py-2 transition-colors duration-200",
         statusCfg.bgColor,
         step.status === "in_progress" &&
           "border-primary/30 shadow-sm shadow-primary/5",
@@ -583,7 +583,7 @@ export function ExecutionPlanReview({
   return (
     <div
       className={cn(
-        "w-full rounded-lg border transition-all duration-300",
+        "w-full rounded-lg border transition-colors transition-shadow duration-300",
         isReviewable && "border-yellow-500/30 bg-yellow-500/[0.02] shadow-sm",
         (isExecuting || isApproved) && "border-primary/20 bg-primary/[0.02]",
         isCompleted && "border-green-500/20 bg-green-500/[0.02]",

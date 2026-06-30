@@ -19,7 +19,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type KeyboardEvent,
 } from "react";
 
@@ -711,14 +710,6 @@ export function CopilotPanel({ webviewHandle }: Props) {
         "relative flex h-full w-full min-w-[280px] flex-1 flex-col border-r border-white/24 bg-transparent",
         liquidGlassClass("sheet"),
       )}
-      style={
-        {
-          "--glass-blur": "40px",
-          "--glass-saturate": 1.78,
-          "--glass-depth": 1.18,
-          "--glass-displacement": "2px",
-        } as CSSProperties
-      }
     >
       {/* Implementation note. */}
       <div

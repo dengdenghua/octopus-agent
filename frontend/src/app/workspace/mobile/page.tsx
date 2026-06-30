@@ -772,7 +772,19 @@ function DeviceSwitcher({
 
   return (
     <>
-      <div className="absolute inset-0 z-40 bg-black/20" onClick={onClose} />
+      <div
+        className="absolute inset-0 z-40 bg-black/20"
+        role="button"
+        tabIndex={0}
+        aria-label="关闭设备选择"
+        onClick={onClose}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClose();
+          }
+        }}
+      />
       <div className="absolute left-3 right-3 top-[72px] z-50 overflow-hidden rounded-xl border border-border bg-white shadow-xl dark:border-border dark:bg-card">
         <div className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
           切换设备

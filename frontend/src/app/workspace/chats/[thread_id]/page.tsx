@@ -156,6 +156,8 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 function normalizeReasoningEffortForUi(
   effort: ReasoningEffort | undefined,
@@ -372,7 +374,7 @@ function RightPanelMenu({
   };
 
   return (
-    <button
+    <Button
       type="button"
       aria-label={activePage ? "关闭右侧窗口" : "打开右侧窗口"}
       title={activePage ? "关闭右侧窗口" : "打开右侧窗口"}
@@ -385,7 +387,7 @@ function RightPanelMenu({
       )}
     >
       <PanelRightIcon className="size-4" />
-    </button>
+    </Button>
   );
 }
 
@@ -808,11 +810,12 @@ function TaskCollaboratorControl({
         <div className="p-3">
           <label className="flex h-8 items-center gap-2 rounded-sm border border-border/50 bg-background/45 px-2">
             <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
-            <input
+            <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => event.stopPropagation()}
               placeholder={t.chatInputBox.collaboratorsSearchPlaceholder}
+              aria-label={t.chatInputBox.collaboratorsSearchPlaceholder}
               className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/45"
             />
           </label>
@@ -2519,7 +2522,7 @@ function ChatsPageContent({
             inputArea={
               <div
                 className={cn(
-                  "relative w-full transition-all duration-300",
+                  "relative w-full transition-[max-width,transform] duration-300",
                   isNewThread && "md:-translate-y-[calc(50vh-168px)]",
                   isNewThread ? "max-w-3xl" : "max-w-(--container-width-md)",
                 )}
@@ -2754,7 +2757,7 @@ function NewChatStarterGrid({ onPick }: { onPick: (prompt: string) => void }) {
             title={item.prompt}
             className={cn(
               "group inline-flex items-center gap-2 rounded-xl border border-border/60 bg-background/80 px-3.5 py-2.5 text-[13px] font-medium text-foreground shadow-sm",
-              "transition-all duration-150 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-card hover:shadow-md",
+              "transition-colors transition-shadow transition-transform duration-150 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-card hover:shadow-md",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:translate-y-0",
             )}
           >

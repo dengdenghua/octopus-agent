@@ -55,7 +55,7 @@ export function TabBar() {
 
   return (
     <div
-      className="flex h-8 min-w-0 flex-1 items-center gap-1 overflow-x-auto bg-transparent px-0"
+      className="flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto bg-transparent px-0"
       // Implementation note.
       // Implementation note.
       style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
@@ -81,8 +81,8 @@ export function TabBar() {
             onClick={() => activateTab(tab.id)}
             onAuxClick={(e) => handleAuxClick(e, tab.id)}
             className={cn(
-              "group relative flex h-8 min-w-[92px] max-w-[168px] cursor-pointer items-center gap-1.5 rounded-[14px] px-2 text-[12px] transition-[background-color,border-color,box-shadow,color,transform]",
-              isHomeTab && "min-w-[78px] max-w-[112px]",
+              "group relative flex h-7 min-w-[84px] max-w-[152px] cursor-pointer items-center gap-1 rounded-[12px] px-1.5 text-[11px] transition-[background-color,border-color,box-shadow,color,transform]",
+              isHomeTab && "min-w-[68px] max-w-[96px]",
               active
                 ? cn(liquidGlassClass("thin", true), "text-foreground")
                 : "border border-transparent bg-background/18 text-muted-foreground hover:border-border/35 hover:bg-background/42 hover:text-foreground",
@@ -92,7 +92,7 @@ export function TabBar() {
             // Implementation note.
             style={
               {
-                flex: isHomeTab ? "0 1 112px" : "0 1 168px",
+                flex: isHomeTab ? "0 1 96px" : "0 1 152px",
                 WebkitAppRegion: "no-drag",
               } as React.CSSProperties
             }
@@ -117,11 +117,11 @@ export function TabBar() {
                 e.stopPropagation();
                 closeTab(tab.id);
               }}
-              className="grid size-4 shrink-0 place-items-center rounded text-muted-foreground/60 opacity-0 transition-opacity hover:bg-foreground/10 hover:text-foreground group-hover:opacity-100 data-[active=true]:opacity-100"
+              className="grid size-3.5 shrink-0 place-items-center rounded text-muted-foreground/60 opacity-0 transition-opacity hover:bg-foreground/10 hover:text-foreground group-hover:opacity-100 data-[active=true]:opacity-100"
               data-active={active}
               title={tb.close}
             >
-              <XIcon className="size-3" />
+              <XIcon className="size-2.5" />
             </button>
           </div>
         );
@@ -130,13 +130,13 @@ export function TabBar() {
         type="button"
         onClick={() => openTab()}
         className={cn(
-          "ml-0.5 grid size-8 shrink-0 place-items-center rounded-[14px] text-muted-foreground hover:text-foreground",
+          "ml-0.5 grid size-7 shrink-0 place-items-center rounded-[12px] text-muted-foreground hover:text-foreground",
           liquidGlassClass("thin", true),
         )}
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         title={tb.newTab}
       >
-        <PlusIcon className="size-4" />
+        <PlusIcon className="size-3.5" />
       </button>
     </div>
   );

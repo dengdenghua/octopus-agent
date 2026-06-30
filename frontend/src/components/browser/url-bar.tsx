@@ -487,10 +487,6 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
   return (
     <LiquidGlass
       material="dock"
-      blur={44}
-      chroma={1.82}
-      depth={1.34}
-      displacement={2.5}
       className="flex h-14 min-w-0 items-center gap-1 rounded-none border-x-0 border-border/35 px-2 sm:gap-2 sm:px-3"
       style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
     >
@@ -539,10 +535,6 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
         <LiquidGlass
           material="input"
           interactive
-          blur={28}
-          chroma={1.74}
-          depth={0.95}
-          displacement={1.25}
           className="flex h-10 items-center gap-1 rounded-[18px] border-border/35 px-3 transition-colors focus-within:border-primary/25 focus-within:ring-2 focus-within:ring-primary/12"
         >
           <input

@@ -292,7 +292,7 @@ function CategorySection({
       </div>
       <div
         data-testid="skills-card-grid"
-        className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
       >
         {skills.map((s) => (
           <SkillCard key={s.name} skill={s} onToggle={onToggle} />

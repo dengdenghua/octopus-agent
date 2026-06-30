@@ -1270,6 +1270,7 @@ function PastRunRow({
           <button
             type="button"
             className="flex w-full items-center gap-2 text-left"
+            aria-expanded={evidenceOpen}
             onClick={() => setEvidenceOpen((value) => !value)}
           >
             <ShieldCheckIcon className="size-3 text-emerald-400" />
@@ -1489,6 +1490,7 @@ function NumberKnob({
       </span>
       <input
         type="number"
+        aria-label={label}
         className="w-20 rounded-md border border-border/60 bg-background/60 px-2 py-1 text-sm tabular-nums"
         value={value}
         min={min}

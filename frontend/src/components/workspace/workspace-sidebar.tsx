@@ -1066,7 +1066,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       {...props}
     >
       {/* Implementation note. */}
-      <SidebarHeader className="relative h-11 shrink-0 items-center justify-center border-b border-white/40 bg-transparent px-2.5 py-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:px-0 dark:border-white/10">
+      <SidebarHeader className="relative h-11 shrink-0 items-start justify-center border-b border-white/40 bg-transparent px-2.5 py-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:px-0 dark:border-white/10">
         <WorkspaceSurfaceSwitch
           active={browserSurfaceActive ? "browser" : "agent"}
         />
@@ -1469,13 +1469,14 @@ export function WorkspaceSurfaceSwitch({
   return (
     <div
       className={cn(
-        "grid min-w-0 grid-cols-[minmax(0,1fr)_30px] items-center gap-0.5 rounded-[14px] p-px",
+        "grid min-w-0 items-center gap-0.5 p-px",
+        placement === "sidebar" &&
+          "w-[120px] grid-cols-[minmax(0,1fr)_30px] rounded-[14px]",
+        placement === "topbar" &&
+          "w-[112px] grid-cols-[minmax(0,1fr)_28px] rounded-[12px]",
         materialTheme === "liquid"
           ? "octo-liquid-glass octo-liquid-glass--thin"
           : "border border-border/70 bg-muted/70 shadow-[0_1px_2px_rgba(15,23,42,0.06)]",
-        placement === "sidebar" && "w-[120px]",
-        placement === "topbar" && "w-[120px] translate-x-0",
-        placement === "sidebar" && "-translate-x-3",
         "group-data-[collapsible=icon]:hidden",
       )}
     >
@@ -1489,11 +1490,17 @@ export function WorkspaceSurfaceSwitch({
             aria-label={item.label}
             className={cn(
               "min-w-0 rounded-xl transition-[background-color,color,box-shadow,opacity] duration-150",
+              placement === "topbar"
+                ? "flex h-[26px] items-center justify-center rounded-[11px]"
+                : "flex h-7 items-center justify-center",
               item.active
-                ? "flex h-7 items-center justify-center bg-background text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.055)] ring-1 ring-border/50 hover:bg-background/90"
-                : "flex h-7 items-center justify-center text-muted-foreground hover:bg-background/55 hover:text-foreground",
+                ? "bg-background text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.055)] ring-1 ring-border/50 hover:bg-background/90"
+                : "text-muted-foreground hover:bg-background/55 hover:text-foreground",
               item.kind === "brand"
-                ? "px-1 text-[12px] font-bold tracking-[0.005em]"
+                ? cn(
+                    "px-1 font-bold tracking-[0.005em]",
+                    placement === "topbar" ? "text-[11px]" : "text-[12px]",
+                  )
                 : "px-0",
               "group-data-[collapsible=icon]:grid group-data-[collapsible=icon]:size-7 group-data-[collapsible=icon]:place-items-center group-data-[collapsible=icon]:px-0",
               item.active

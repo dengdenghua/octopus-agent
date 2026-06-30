@@ -16,7 +16,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CopilotPanel } from "@/components/browser/copilot-panel";
 import { LiquidGlass } from "@/components/browser/liquid-glass";
-import { LiquidGlassField } from "@/components/browser/liquid-glass-field";
 import { TabBar } from "@/components/browser/tab-bar";
 import { UrlBar } from "@/components/browser/url-bar";
 import {
@@ -32,7 +31,6 @@ import {
   type WebviewTabHandle,
 } from "@/components/browser/webview-tab";
 import { WorkspaceSurfaceSwitch } from "@/components/workspace/workspace-sidebar";
-import { useAppearance } from "@/hooks/use-appearance";
 
 const isWindows = (): boolean =>
   typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
@@ -70,7 +68,6 @@ const DEVICE_STAGE = {
 } as const;
 
 function BrowserShell() {
-  const { materialTheme } = useAppearance();
   const {
     state,
     activeTab,
@@ -369,7 +366,6 @@ function BrowserShell() {
 
   return (
     <div className="relative flex h-screen overflow-hidden bg-[linear-gradient(135deg,hsl(var(--muted))_0%,hsl(var(--background))_42%,hsl(var(--muted))_100%)]">
-      {materialTheme === "liquid" ? <LiquidGlassField /> : null}
       <BrowserSidePanel
         open={sidePanelOpen}
         pinned={sidePanelPinned}
@@ -381,21 +377,17 @@ function BrowserShell() {
         <div className="relative z-[80] shrink-0">
           <LiquidGlass
             material="dock"
-            blur={44}
-            chroma={1.82}
-            depth={1.34}
-            displacement={2.6}
-            className="flex h-11 shrink-0 items-center gap-1 rounded-none border-x-0 border-t-0 border-border/35 px-2"
+            className="flex h-9 shrink-0 items-center gap-0.5 rounded-none border-x-0 border-t-0 border-border/35 px-1.5"
             style={
               {
-                paddingLeft: 14.5,
-                paddingRight: isWindows() && electron ? 160 : 8,
+                paddingLeft: 10,
+                paddingRight: isWindows() && electron ? 154 : 6,
                 WebkitAppRegion: "drag",
               } as React.CSSProperties
             }
           >
             <div
-              className="flex h-8 w-[154px] shrink-0 items-center justify-start"
+              className="flex h-7 w-[112px] shrink-0 items-center justify-start"
               style={
                 {
                   WebkitAppRegion: "no-drag",
@@ -404,7 +396,7 @@ function BrowserShell() {
             >
               <WorkspaceSurfaceSwitch active="browser" placement="topbar" />
             </div>
-            <div className="flex h-8 min-w-0 flex-1 items-center">
+            <div className="flex h-7 min-w-0 flex-1 items-center">
               <TabBar />
             </div>
             <button
@@ -424,7 +416,7 @@ function BrowserShell() {
                 });
               }}
               className={cn(
-                "grid size-8 shrink-0 place-items-center rounded-[14px] border border-border/35 bg-background/55 text-muted-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.48),0_6px_16px_rgba(15,23,42,0.045)] transition-colors hover:bg-background/70 hover:text-foreground",
+                "grid size-7 shrink-0 place-items-center rounded-[12px] border border-border/35 bg-background/55 text-muted-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.48),0_6px_16px_rgba(15,23,42,0.045)] transition-colors hover:bg-background/70 hover:text-foreground",
                 sidePanelOpen && "bg-background text-foreground",
               )}
               style={
@@ -433,7 +425,7 @@ function BrowserShell() {
                 } as React.CSSProperties
               }
             >
-              <MenuIcon className="size-4" />
+              <MenuIcon className="size-3.5" />
             </button>
           </LiquidGlass>
 
@@ -444,15 +436,8 @@ function BrowserShell() {
           />
         </div>
 
-        <div className="relative z-0 flex min-h-0 flex-1 flex-col p-3">
-          <LiquidGlass
-            material="sheet"
-            blur={40}
-            chroma={1.76}
-            depth={1.22}
-            displacement={2}
-            className="flex min-h-0 flex-1 overflow-hidden rounded-xl border-border/35"
-          >
+        <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex min-h-0 flex-1 overflow-hidden">
             {state.copilotOpen && (
               <div
                 className="flex min-h-0 border-r border-border/35 bg-background"
@@ -518,7 +503,7 @@ function BrowserShell() {
                 ))}
               </div>
             </div>
-          </LiquidGlass>
+          </div>
         </div>
       </div>
     </div>
@@ -617,10 +602,6 @@ function BrowserSidePanel({
   return (
     <LiquidGlass
       material="sheet"
-      blur={42}
-      chroma={1.8}
-      depth={1.28}
-      displacement={2.2}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={cn(

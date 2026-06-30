@@ -761,7 +761,7 @@ export function IntelligencePanel() {
                     }
                     className="h-7 bg-background/75 text-xs"
                   />
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                     <Select
                       value={draft.cadence}
                       onValueChange={(value) =>
@@ -1287,7 +1287,7 @@ export function IntelligencePanel() {
           </div>
 
           <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.42fr)]">
-            <article className="min-w-0 border-r border-border/50 bg-background/70 px-4 py-5">
+            <article className="min-w-0 border-b border-border/50 bg-background/70 px-4 py-5 lg:border-b-0 lg:border-r lg:border-border/50">
               <div className="prose prose-sm max-w-none prose-headings:scroll-mt-24 prose-p:leading-7 prose-li:leading-7 prose-a:text-primary">
                 {reportBody ? (
                   <MarkdownContent

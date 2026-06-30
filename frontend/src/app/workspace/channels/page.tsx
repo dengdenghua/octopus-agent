@@ -452,7 +452,7 @@ export default function ChannelsPage() {
                     <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
                       {section.label}
                     </h2>
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                       {section.items.map((row, index) => (
                         <ChannelCard
                           key={row.channel_id || `${row.platform}-${index}`}
@@ -685,7 +685,7 @@ function ChannelCard({
       </div>
 
       {/* Implementation note. */}
-      <div className="mt-4 grid grid-cols-3 gap-2">
+      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
         <Metric
           label={t.channels.pairedUsers}
           value={row.metrics.pairings_count}

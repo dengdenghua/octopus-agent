@@ -355,7 +355,7 @@ function PhaseStepper({ currentPhase }: { currentPhase: QuestPhase }) {
           <div key={phase.key} className="flex items-center">
             <div
               className={cn(
-                "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all duration-300",
+                "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors duration-300",
                 isActive && "bg-primary/10 text-primary ring-1 ring-primary/30",
                 isComplete && "text-emerald-600 dark:text-emerald-400",
                 isFuture && "text-muted-foreground/40",
@@ -1117,7 +1117,7 @@ export function QuestButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium shadow-sm transition-all duration-200",
+        "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium shadow-sm transition-colors transition-shadow duration-200",
         isActive
           ? "bg-primary text-primary-foreground border-primary/60 shadow-primary/10"
           : "bg-background/80 text-muted-foreground hover:bg-muted/50 hover:text-foreground border-border/60",

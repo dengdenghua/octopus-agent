@@ -4,6 +4,7 @@ import {
   useCallback,
   useRef,
   useMemo,
+  type CSSProperties,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
@@ -88,6 +89,15 @@ interface Widget {
   size: "small" | "medium" | "large";
   title: string;
 }
+
+type DesktopBackdropId =
+  | "theme-mist"
+  | "theme-focus"
+  | "theme-clear"
+  | "wallpaper-sky"
+  | "wallpaper-aurora"
+  | "wallpaper-forest"
+  | "wallpaper-ember";
 
 interface ContextMenuState {
   visible: boolean;
@@ -450,6 +460,7 @@ const DOCK_APP_URLS_KEY = "octopus:browser:dock-app-urls";
 const QUICK_LINKS_KEY = "octopus:browser:quick-links";
 const FOLDERS_KEY = "octopus:browser:folders";
 const WIDGETS_KEY = "octopus:browser:widgets";
+const DESKTOP_BACKDROP_KEY = "octopus:browser:desktop-backdrop";
 const DEFAULT_DOCK_APP_URLS = [
   "https://gemini.google.com/app",
   "https://chat.deepseek.com/",
@@ -461,6 +472,98 @@ const DEFAULT_DOCK_APP_URLS = [
   "https://www.bilibili.com/",
   "https://github.com/",
   "https://www.perplexity.ai/",
+];
+const DEFAULT_DESKTOP_BACKDROP: DesktopBackdropId = "theme-mist";
+const BROWSER_WALLPAPER_IMAGE_BASE = "/images/browser-wallpapers";
+interface DesktopBackdropConfig {
+  className: string;
+  swatchClassName: string;
+  imageUrl?: string;
+}
+
+const DESKTOP_BACKDROPS: Record<
+  DesktopBackdropId,
+  DesktopBackdropConfig
+> = {
+  "theme-mist": {
+    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/mist-glass.png`,
+    className:
+      "bg-[radial-gradient(circle_at_16%_10%,rgba(236,253,245,0.72),transparent_27%),radial-gradient(circle_at_78%_6%,rgba(125,211,252,0.42),transparent_25%),radial-gradient(circle_at_88%_70%,rgba(251,207,232,0.38),transparent_31%),radial-gradient(circle_at_34%_88%,rgba(253,230,138,0.24),transparent_30%),linear-gradient(145deg,#5f8c91_0%,#8ea7bd_34%,#bba8b8_68%,#d1ad8f_100%)]",
+    swatchClassName:
+      "bg-gradient-to-br from-muted-foreground via-zinc-300 to-rose-300",
+  },
+  "theme-focus": {
+    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/focus-nocturne.png`,
+    className:
+      "bg-[radial-gradient(circle_at_18%_10%,rgba(59,130,246,0.34),transparent_28%),radial-gradient(circle_at_82%_14%,rgba(168,85,247,0.24),transparent_30%),radial-gradient(circle_at_76%_82%,rgba(14,165,233,0.18),transparent_32%),linear-gradient(145deg,#0f172a_0%,#1e293b_42%,#111827_100%)]",
+    swatchClassName: "bg-gradient-to-br from-background via-muted-foreground/30 to-primary",
+  },
+  "theme-clear": {
+    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/clear-productivity.png`,
+    className:
+      "bg-[radial-gradient(circle_at_18%_12%,rgba(191,219,254,0.86),transparent_28%),radial-gradient(circle_at_78%_18%,rgba(125,211,252,0.48),transparent_28%),radial-gradient(circle_at_82%_82%,rgba(224,242,254,0.82),transparent_34%),linear-gradient(145deg,#eff6ff_0%,#dbeafe_36%,#f8fafc_72%,#e0f2fe_100%)]",
+    swatchClassName: "bg-gradient-to-br from-sky-200 via-white to-blue-300",
+  },
+  "wallpaper-sky": {
+    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/sky-studio.png`,
+    className:
+      "bg-[radial-gradient(circle_at_22%_14%,rgba(219,234,254,0.92),transparent_26%),radial-gradient(circle_at_72%_16%,rgba(103,232,249,0.44),transparent_28%),linear-gradient(145deg,#60a5fa_0%,#93c5fd_45%,#f8fafc_100%)]",
+    swatchClassName: "bg-gradient-to-br from-sky-300 via-blue-300 to-white",
+  },
+  "wallpaper-aurora": {
+    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/aurora-lab.png`,
+    className:
+      "bg-[radial-gradient(circle_at_20%_12%,rgba(52,211,153,0.64),transparent_30%),radial-gradient(circle_at_76%_22%,rgba(129,140,248,0.62),transparent_34%),radial-gradient(circle_at_64%_84%,rgba(244,114,182,0.42),transparent_30%),linear-gradient(145deg,#0f766e_0%,#334155_46%,#581c87_100%)]",
+    swatchClassName: "bg-gradient-to-br from-emerald-300 via-indigo-400 to-fuchsia-400",
+  },
+  "wallpaper-forest": {
+    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/forest-calm.png`,
+    className:
+      "bg-[radial-gradient(circle_at_18%_12%,rgba(187,247,208,0.56),transparent_30%),radial-gradient(circle_at_78%_70%,rgba(45,212,191,0.28),transparent_34%),linear-gradient(145deg,#134e4a_0%,#3f6212_46%,#a7f3d0_100%)]",
+    swatchClassName: "bg-gradient-to-br from-emerald-300 via-teal-500 to-lime-700",
+  },
+  "wallpaper-ember": {
+    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/ember-dusk.png`,
+    className:
+      "bg-[radial-gradient(circle_at_20%_16%,rgba(254,215,170,0.66),transparent_30%),radial-gradient(circle_at_84%_76%,rgba(251,113,133,0.36),transparent_32%),linear-gradient(145deg,#44403c_0%,#a16207_50%,#fed7aa_100%)]",
+    swatchClassName: "bg-gradient-to-br from-stone-600 via-amber-500 to-orange-200",
+  },
+};
+
+function getBackdropImageStyle(
+  backdrop: DesktopBackdropConfig,
+  overlay = "linear-gradient(180deg,rgba(15,23,42,0.18),rgba(15,23,42,0.12))",
+): CSSProperties | undefined {
+  if (!backdrop.imageUrl) return undefined;
+  return {
+    backgroundImage: `${overlay},url(${backdrop.imageUrl})`,
+    backgroundPosition: "center",
+    backgroundRepeat: "no-repeat",
+    backgroundSize: "cover",
+  };
+}
+const DESKTOP_THEME_BACKDROPS: DesktopBackdropId[] = [
+  "theme-mist",
+  "theme-focus",
+  "theme-clear",
+];
+const DESKTOP_WALLPAPER_BACKDROPS: DesktopBackdropId[] = [
+  "wallpaper-sky",
+  "wallpaper-aurora",
+  "wallpaper-forest",
+  "wallpaper-ember",
+];
+const WIDGET_PANEL_TYPES: Widget["type"][] = [
+  "calendar",
+  "notes",
+  "weather",
+  "system",
+];
+const GAME_PANEL_URLS = [
+  "https://www.bilibili.com/",
+  "https://poki.com/",
+  "https://music.youtube.com/",
+  "https://www.youtube.com/",
 ];
 
 function loadDesktopAppOrder(): string[] {
@@ -501,6 +604,14 @@ function loadDockAppUrls(): string[] {
   }
 }
 
+function loadDesktopBackdrop(): DesktopBackdropId {
+  if (typeof window === "undefined") return DEFAULT_DESKTOP_BACKDROP;
+  const saved = localStorage.getItem(DESKTOP_BACKDROP_KEY);
+  return saved && saved in DESKTOP_BACKDROPS
+    ? (saved as DesktopBackdropId)
+    : DEFAULT_DESKTOP_BACKDROP;
+}
+
 function moveDesktopApp(
   order: string[],
   fromUrl: string,
@@ -531,6 +642,7 @@ function MenuItem({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className={cn(
         "w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors rounded-lg",
@@ -553,6 +665,10 @@ function ContextMenu({
   onEdit,
   onDelete,
   onResize,
+  onEditHome,
+  onAddWidget,
+  onAddIcon,
+  onOpenSettings,
   currentSize,
 }: {
   state: ContextMenuState;
@@ -560,6 +676,10 @@ function ContextMenu({
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onResize: (id: string, size: string) => void;
+  onEditHome: () => void;
+  onAddWidget: () => void;
+  onAddIcon: () => void;
+  onOpenSettings: () => void;
   currentSize?: string;
 }) {
   const { t } = useI18n();
@@ -594,34 +714,6 @@ function ContextMenu({
               danger
               onClick={() => {
                 onDelete(state.targetId!);
-                onClose();
-              }}
-            />
-            <div className="h-px bg-muted my-2" />
-            <MenuItem
-              icon={Minimize2}
-              label={wt.ctxSizeSmall}
-              active={currentSize === "small"}
-              onClick={() => {
-                onResize(state.targetId!, "small");
-                onClose();
-              }}
-            />
-            <MenuItem
-              icon={LayoutGridIcon}
-              label={wt.ctxSizeMedium}
-              active={currentSize === "medium"}
-              onClick={() => {
-                onResize(state.targetId!, "medium");
-                onClose();
-              }}
-            />
-            <MenuItem
-              icon={Maximize2}
-              label={wt.ctxSizeLarge}
-              active={currentSize === "large"}
-              onClick={() => {
-                onResize(state.targetId!, "large");
                 onClose();
               }}
             />
@@ -699,11 +791,39 @@ function ContextMenu({
         )}
         {state.targetType === "background" && (
           <>
-            <MenuItem icon={LayoutGridIcon} label={wt.ctxEditHome} />
-            <MenuItem icon={Plus} label={wt.ctxAddWidget} />
-            <MenuItem icon={Plus} label={wt.ctxAddIcon} />
+            <MenuItem
+              icon={LayoutGridIcon}
+              label={wt.ctxEditHome}
+              onClick={() => {
+                onEditHome();
+                onClose();
+              }}
+            />
+            <MenuItem
+              icon={Plus}
+              label={wt.ctxAddWidget}
+              onClick={() => {
+                onAddWidget();
+                onClose();
+              }}
+            />
+            <MenuItem
+              icon={Plus}
+              label={wt.ctxAddIcon}
+              onClick={() => {
+                onAddIcon();
+                onClose();
+              }}
+            />
             <div className="h-px bg-muted my-2" />
-            <MenuItem icon={SettingsIcon} label={wt.ctxSettings} />
+            <MenuItem
+              icon={SettingsIcon}
+              label={wt.ctxSettings}
+              onClick={() => {
+                onOpenSettings();
+                onClose();
+              }}
+            />
           </>
         )}
       </div>
@@ -783,6 +903,9 @@ export function BrowserHome({
   );
   const [dockAppUrls, setDockAppUrls] = useState<string[]>(() =>
     loadDockAppUrls(),
+  );
+  const [desktopBackdrop, setDesktopBackdrop] = useState<DesktopBackdropId>(
+    () => loadDesktopBackdrop(),
   );
   const [draggingUrl, setDraggingUrl] = useState<string | null>(null);
   const [searchFilter] = useState("");
@@ -987,6 +1110,11 @@ export function BrowserHome({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    localStorage.setItem(DESKTOP_BACKDROP_KEY, desktopBackdrop);
+  }, [desktopBackdrop]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     localStorage.setItem(QUICK_LINKS_KEY, JSON.stringify(quickLinks));
   }, [quickLinks]);
 
@@ -1082,8 +1210,15 @@ export function BrowserHome({
   const resetDesktopLayout = () => {
     setAppOrder(AI_DESKTOP_APPS.map((app) => app.url));
     setDockAppUrls(DEFAULT_DOCK_APP_URLS);
+    setDesktopBackdrop(DEFAULT_DESKTOP_BACKDROP);
     setDraggingUrl(null);
   };
+
+  const focusSearchFromPanel = useCallback(() => {
+    setActivePanel("home");
+    setEnginePickerOpen(false);
+    searchInputRef.current?.focus();
+  }, []);
 
   const handleContext = useCallback(
     (
@@ -1121,9 +1256,44 @@ export function BrowserHome({
           type: widget.type,
           size: widget.size,
         });
+        return;
+      }
+      const link = quickLinks.find((item) => item.id === id);
+      if (link) {
+        const name = prompt(wt.promptSiteName, link.name);
+        if (!name) return;
+        const url = prompt(wt.promptSiteUrl, link.url);
+        if (!url) return;
+        setQuickLinks((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  name,
+                  url: url.startsWith("http") ? url : `https://${url}`,
+                }
+              : item,
+          ),
+        );
+        return;
+      }
+      const folder = folders.find((item) => item.id === id);
+      if (folder) {
+        const name = prompt(wt.promptFolderName, folder.name);
+        if (!name) return;
+        setFolders((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, name } : item)),
+        );
       }
     },
-    [widgets],
+    [
+      folders,
+      quickLinks,
+      widgets,
+      wt.promptFolderName,
+      wt.promptSiteName,
+      wt.promptSiteUrl,
+    ],
   );
 
   const handleSaveWidget = useCallback(() => {
@@ -1152,17 +1322,28 @@ export function BrowserHome({
     );
   }, []);
 
-  const handleResize = useCallback((_id: string, _size: string) => {}, []);
+  const handleResize = useCallback((id: string, size: string) => {
+    setWidgets((prev) =>
+      prev.map((widget) =>
+        widget.id === id && ["small", "medium", "large"].includes(size)
+          ? { ...widget, size: size as Widget["size"] }
+          : widget,
+      ),
+    );
+  }, []);
 
-  const handleAddWidget = useCallback(() => {
-    const newWidget: Widget = {
-      id: `w-${Date.now()}`,
-      type: "notes",
-      size: "medium",
-      title: wt.newWidget,
-    };
-    setWidgets((prev) => [...prev, newWidget]);
-  }, [wt.newWidget]);
+  const handleAddWidget = useCallback(
+    (type: Widget["type"] = "notes", title = wt.newWidget) => {
+      const newWidget: Widget = {
+        id: `w-${Date.now()}`,
+        type,
+        size: "medium",
+        title,
+      };
+      setWidgets((prev) => [...prev, newWidget]);
+    },
+    [wt.newWidget],
+  );
 
   const handleAddIcon = useCallback(() => {
     const name = prompt(wt.promptSiteName);
@@ -1343,12 +1524,19 @@ export function BrowserHome({
     folder,
     links: quickLinks.filter((l) => folder.linkIds.includes(l.id)),
   }));
+  const activeBackdrop = DESKTOP_BACKDROPS[desktopBackdrop];
+  const activeBackdropStyle = getBackdropImageStyle(activeBackdrop);
 
   return (
     <div
       style={
         active
-          ? { display: "flex", width: "100%", height: "100%" }
+          ? {
+              display: "flex",
+              width: "100%",
+              height: "100%",
+              ...activeBackdropStyle,
+            }
           : {
               display: "flex",
               position: "absolute",
@@ -1358,7 +1546,10 @@ export function BrowserHome({
               pointerEvents: "none",
             }
       }
-      className="relative min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_16%_10%,rgba(236,253,245,0.72),transparent_27%),radial-gradient(circle_at_78%_6%,rgba(125,211,252,0.42),transparent_25%),radial-gradient(circle_at_88%_70%,rgba(251,207,232,0.38),transparent_31%),radial-gradient(circle_at_34%_88%,rgba(253,230,138,0.24),transparent_30%),linear-gradient(145deg,#5f8c91_0%,#8ea7bd_34%,#bba8b8_68%,#d1ad8f_100%)] text-white"
+      className={cn(
+        "relative min-h-0 flex-col overflow-hidden text-white",
+        activeBackdrop.className,
+      )}
       onContextMenu={handleBackgroundContext}
     >
       <div
@@ -1380,7 +1571,13 @@ export function BrowserHome({
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setActivePanel(item.id)}
+                onClick={() => {
+                  if (item.id === "home") {
+                    focusSearchFromPanel();
+                    return;
+                  }
+                  setActivePanel(item.id);
+                }}
                 className={cn(
                   "grid size-9 place-items-center rounded-2xl border border-transparent text-muted-foreground/90 transition hover:border-white/60 hover:bg-white/46 hover:text-foreground hover:shadow-sm",
                   selected &&
@@ -1555,7 +1752,7 @@ export function BrowserHome({
               </button>
               <button
                 type="button"
-                onClick={handleAddWidget}
+                onClick={() => handleAddWidget()}
                 className="rounded-full border border-white/50 bg-white/34 px-3 py-1.5 text-xs font-medium text-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_26px_rgba(15,23,42,0.10)] backdrop-blur-xl transition hover:bg-white/52"
               >
                 <PanelLeftIcon className="w-3 h-3 inline mr-1" />
@@ -1807,6 +2004,8 @@ export function BrowserHome({
                       className={cn(
                         "rounded-[24px] p-5 transition-all",
                         liquidGlassClass("card", true),
+                        widget.size === "large" && "col-span-2",
+                        widget.size === "small" && "p-4",
                         isDragging && "opacity-40 scale-95",
                         isDropTarget && "ring-2 ring-blue-400",
                       )}
@@ -2132,6 +2331,15 @@ export function BrowserHome({
         onEdit={handleEdit}
         onDelete={handleDelete}
         onResize={handleResize}
+        onEditHome={() => setEditMode(true)}
+        onAddWidget={() => handleAddWidget()}
+        onAddIcon={handleAddIcon}
+        onOpenSettings={() => setActivePanel("settings")}
+        currentSize={
+          contextMenu.targetType === "widget"
+            ? widgets.find((widget) => widget.id === contextMenu.targetId)?.size
+            : undefined
+        }
       />
 
       {editWidgetState.visible && (
@@ -2233,6 +2441,16 @@ export function BrowserHome({
           onOpen={onOpen}
           dockAppUrls={dockAppUrls}
           onAddToDock={addAppToDock}
+          selectedBackdrop={desktopBackdrop}
+          onSelectBackdrop={setDesktopBackdrop}
+          widgets={widgets}
+          onAddWidget={handleAddWidget}
+          onFocusSearch={focusSearchFromPanel}
+          onResetLayout={resetDesktopLayout}
+          onToggleEditMode={() => {
+            setEditMode((value) => !value);
+            setActivePanel("home");
+          }}
         />
       )}
     </div>
@@ -2245,12 +2463,26 @@ function DesktopControlPanel({
   onOpen,
   dockAppUrls,
   onAddToDock,
+  selectedBackdrop,
+  onSelectBackdrop,
+  widgets,
+  onAddWidget,
+  onFocusSearch,
+  onResetLayout,
+  onToggleEditMode,
 }: {
   panel: DesktopPanelId;
   onClose: () => void;
   onOpen: (url: string) => void;
   dockAppUrls: string[];
   onAddToDock: (url: string) => void;
+  selectedBackdrop: DesktopBackdropId;
+  onSelectBackdrop: (id: DesktopBackdropId) => void;
+  widgets: Widget[];
+  onAddWidget: (type?: Widget["type"], title?: string) => void;
+  onFocusSearch: () => void;
+  onResetLayout: () => void;
+  onToggleEditMode: () => void;
 }) {
   const { t } = useI18n();
   const wt = t.browser.webviewTab;
@@ -2284,6 +2516,30 @@ function DesktopControlPanel({
     (name: string) => appNameMap[name] ?? name,
     [appNameMap],
   );
+  const countWidgetsByType = useCallback(
+    (type: Widget["type"]) =>
+      widgets.filter((widget) => widget.type === type).length,
+    [widgets],
+  );
+  const runSettingAction = useCallback(
+    (index: number) => {
+      if (index === 0) {
+        onFocusSearch();
+        return;
+      }
+      if (index === 1) {
+        onToggleEditMode();
+        return;
+      }
+      if (index === 2) {
+        onClose();
+        onOpen("octopus://home");
+        return;
+      }
+      onResetLayout();
+    },
+    [onClose, onFocusSearch, onOpen, onResetLayout, onToggleEditMode],
+  );
 
   return (
     <div
@@ -2308,88 +2564,124 @@ function DesktopControlPanel({
       <div className="max-h-[calc(100%-72px)] overflow-y-auto p-5">
         {panel === "theme" && (
           <div className="space-y-4">
-            {wt.themeNames.map((name, index) => (
-              <button
-                key={name}
-                type="button"
-                className={cn(
-                  "flex w-full items-center gap-3 rounded-2xl border p-3 text-left shadow-[inset_0_1px_1px_rgba(255,255,255,0.58)] backdrop-blur-xl transition hover:bg-white/46",
-                  index === 0
-                    ? "border-blue-400/70 bg-white/48"
-                    : "border-white/42 bg-white/24",
-                )}
-              >
-                <span className="size-10 rounded-2xl bg-gradient-to-br from-muted-foreground via-zinc-300 to-rose-300 shadow-inner" />
-                <span>
-                  <span className="block text-sm font-semibold">{name}</span>
-                  <span className="block text-xs text-muted-foreground">
-                    {wt.themeDescs[index]}
+            {DESKTOP_THEME_BACKDROPS.map((backdropId, index) => {
+              const active = selectedBackdrop === backdropId;
+              const backdrop = DESKTOP_BACKDROPS[backdropId];
+              return (
+                <button
+                  key={backdropId}
+                  type="button"
+                  onClick={() => onSelectBackdrop(backdropId)}
+                  aria-pressed={active}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-2xl border p-3 text-left shadow-[inset_0_1px_1px_rgba(255,255,255,0.58)] backdrop-blur-xl transition hover:bg-white/46",
+                    active
+                      ? "border-blue-400/70 bg-white/48"
+                      : "border-white/42 bg-white/24",
+                  )}
+                >
+                  <span
+                    style={getBackdropImageStyle(
+                      backdrop,
+                      "linear-gradient(180deg,rgba(15,23,42,0.04),rgba(15,23,42,0.1))",
+                    )}
+                    className={cn(
+                      "size-10 rounded-xl shadow-inner",
+                      backdrop.swatchClassName,
+                    )}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold">
+                      {wt.themeNames[index]}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {wt.themeDescs[index]}
+                    </span>
                   </span>
-                </span>
-              </button>
-            ))}
+                  {active && <CheckIcon className="size-4 text-blue-600" />}
+                </button>
+              );
+            })}
           </div>
         )}
         {panel === "widgets" && (
           <div className="space-y-3">
             {[CalendarDaysIcon, FileTextIcon, Clock3Icon, LayoutGridIcon].map(
-              (Icon, index) => (
-                <div
-                  key={wt.widgetPanelNames[index]}
-                  className="flex items-center gap-3 rounded-2xl border border-white/38 bg-white/24 p-3 shadow-[inset_0_1px_1px_rgba(255,255,255,0.58)] backdrop-blur-xl"
-                >
-                  <span className="grid size-10 place-items-center rounded-2xl bg-blue-500 text-white">
-                    <Icon className="size-5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold">
-                      {wt.widgetPanelNames[index]}
+              (Icon, index) => {
+                const widgetType = WIDGET_PANEL_TYPES[index] ?? "notes";
+                const count = countWidgetsByType(widgetType);
+                return (
+                  <button
+                    key={wt.widgetPanelNames[index]}
+                    type="button"
+                    onClick={() =>
+                      onAddWidget(widgetType, wt.widgetPanelNames[index])
+                    }
+                    className="flex items-center gap-3 rounded-2xl border border-white/38 bg-white/24 p-3 shadow-[inset_0_1px_1px_rgba(255,255,255,0.58)] backdrop-blur-xl"
+                  >
+                    <span className="grid size-10 place-items-center rounded-2xl bg-blue-500 text-white">
+                      <Icon className="size-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold">
+                        {wt.widgetPanelNames[index]}
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {wt.widgetPanelDescs[index]}
+                      </div>
                     </div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {wt.widgetPanelDescs[index]}
-                    </div>
-                  </div>
-                  <span className="rounded-full bg-emerald-500/14 px-2 py-1 text-[10px] font-medium text-emerald-700">
-                    {wt.widgetEnabled}
-                  </span>
-                </div>
-              ),
+                    <span className="rounded-full bg-emerald-500/14 px-2 py-1 text-[10px] font-medium text-emerald-700">
+                      {count > 0 ? `${wt.widgetEnabled} ${count}` : bt.add}
+                    </span>
+                  </button>
+                );
+              },
             )}
           </div>
         )}
         {panel === "wallpaper" && (
           <div className="grid grid-cols-2 gap-3">
-            {[
-              "from-muted-foreground via-zinc-300 to-rose-300",
-              "from-sky-300 via-indigo-300 to-muted-foreground",
-              "from-emerald-300 via-teal-400 to-muted-foreground/80",
-              "from-stone-500 via-neutral-400 to-orange-200",
-            ].map((gradient, index) => (
-              <button
-                key={gradient}
-                type="button"
-                className={cn(
-                  "h-24 rounded-3xl border border-white/40 bg-gradient-to-br shadow-[inset_0_1px_2px_rgba(255,255,255,0.42),0_10px_28px_rgba(15,23,42,0.12)]",
-                  gradient,
-                )}
-                title={wt.wallpaperTitle(index + 1)}
-              />
-            ))}
+            {DESKTOP_WALLPAPER_BACKDROPS.map((backdropId, index) => {
+              const backdrop = DESKTOP_BACKDROPS[backdropId];
+              return (
+                <button
+                  key={backdropId}
+                  type="button"
+                  onClick={() => onSelectBackdrop(backdropId)}
+                  aria-pressed={selectedBackdrop === backdropId}
+                  style={getBackdropImageStyle(
+                    backdrop,
+                    "linear-gradient(180deg,rgba(15,23,42,0.02),rgba(15,23,42,0.12))",
+                  )}
+                  className={cn(
+                    "relative h-24 rounded-xl border border-white/40 shadow-[inset_0_1px_2px_rgba(255,255,255,0.42),0_10px_28px_rgba(15,23,42,0.12)] transition hover:scale-[1.01]",
+                    backdrop.swatchClassName,
+                    selectedBackdrop === backdropId &&
+                      "ring-2 ring-blue-500 ring-offset-2 ring-offset-white/40",
+                  )}
+                  title={wt.wallpaperTitle(index + 1)}
+                >
+                  {selectedBackdrop === backdropId && (
+                    <span className="absolute right-3 top-3 grid size-6 place-items-center rounded-md bg-white/82 text-blue-600 shadow-sm">
+                      <CheckIcon className="size-3.5" />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
         {panel === "games" && (
           <div className="space-y-3">
             {wt.gameNames.map((name, index) => {
               const Icon = index === 0 ? Gamepad2Icon : SparklesIcon;
+              const url = GAME_PANEL_URLS[index] ?? GAME_PANEL_URLS[0]!;
               return (
                 <button
                   key={name}
                   type="button"
                   className="flex w-full items-center gap-3 rounded-2xl border border-white/38 bg-white/24 p-3 text-left shadow-[inset_0_1px_1px_rgba(255,255,255,0.58)] backdrop-blur-xl transition hover:bg-white/46"
-                  onClick={() => {
-                    if (name === wt.gameNames[0])
-                      onOpen("https://www.bilibili.com/");
-                  }}
+                  onClick={() => onOpen(url)}
                 >
                   <span className="grid size-10 place-items-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 text-white">
                     <Icon className="size-5" />
@@ -2445,15 +2737,32 @@ function DesktopControlPanel({
         {panel === "settings" && (
           <div className="space-y-3">
             {wt.settingNames.map((name, index) => (
-              <div
+              <button
                 key={name}
+                type="button"
+                onClick={() => runSettingAction(index)}
                 className="rounded-2xl border border-white/38 bg-white/24 p-3 shadow-[inset_0_1px_1px_rgba(255,255,255,0.58)] backdrop-blur-xl"
               >
-                <div className="text-sm font-semibold">{name}</div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  {wt.settingDescs[index]}
+                <div className="flex items-start gap-3 text-left">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-foreground/85 text-white">
+                    {index === 0 ? (
+                      <SearchIcon className="size-4" />
+                    ) : index === 1 ? (
+                      <LayoutGridIcon className="size-4" />
+                    ) : index === 2 ? (
+                      <HomeIcon className="size-4" />
+                    ) : (
+                      <CheckIcon className="size-4" />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold">{name}</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {wt.settingDescs[index]}
+                    </span>
+                  </span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}

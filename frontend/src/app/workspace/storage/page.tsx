@@ -1783,6 +1783,7 @@ function SourcesView({
         directory=""
         multiple
         hidden
+        aria-label="选择文件夹"
         onChange={onFolderInputChange}
       />
     </main>
