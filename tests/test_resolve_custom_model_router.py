@@ -189,3 +189,43 @@ def test_no_custom_models_file_returns_unchanged(
     new_router, resolved = _resolve_custom_model_router("anything", sentinel)
     assert resolved == "anything"
     assert new_router is sentinel
+
+
+class TestBuildFallbackFromCustomModels:
+    """build_fallback_router_from_custom_models — self model as dispatch fallback
+    instead of the login-gated Molili."""
+
+    def test_prefers_entry_matching_planner_model(self, _custom_models_path: Path) -> None:
+        _write(_custom_models_path, {
+            "kimi-code": {
+                "id": "kimi-code", "provider": "openai",
+                "base_url": "https://api.kimi.com/coding/v1",
+                "api_key": "sk-x", "models": ["kimi-for-coding"],
+            },
+        })
+        from runtime.sensing.model_router.openai_router import (
+            OpenAIModelRouter,
+            build_fallback_router_from_custom_models,
+        )
+        r = build_fallback_router_from_custom_models("kimi-for-coding")
+        assert isinstance(r, OpenAIModelRouter)
+        assert getattr(r, "default_model", None) == "kimi-for-coding"
+
+    def test_falls_back_to_first_entry_when_no_match(self, _custom_models_path: Path) -> None:
+        _write(_custom_models_path, {
+            "a": {"id": "a", "provider": "openai",
+                  "base_url": "https://h/v1", "models": ["m1"]},
+        })
+        from runtime.sensing.model_router.openai_router import (
+            build_fallback_router_from_custom_models,
+        )
+        r = build_fallback_router_from_custom_models("nonexistent")
+        assert r is not None
+        assert getattr(r, "default_model", None) == "m1"
+
+    def test_none_when_no_custom_models(self, _custom_models_path: Path) -> None:
+        from runtime.sensing.model_router.openai_router import (
+            build_fallback_router_from_custom_models,
+        )
+        # tmp file not written → no entries → caller keeps Molili
+        assert build_fallback_router_from_custom_models("x") is None

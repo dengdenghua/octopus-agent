@@ -150,17 +150,24 @@ def _attach_molili_fallback_router(
         return
     try:
         from runtime.sensing.model_router.molili_router import MoliliModelRouter
+        from runtime.sensing.model_router.openai_router import (
+            build_fallback_router_from_custom_models,
+        )
 
+        planner_model = getattr(
+            getattr(stack, "planner", None), "planner_model", None,
+        )
+        # Prefer a self-configured model as the fallback (mirrors builder.py);
+        # only fall through to the login-gated Molili when none is configured.
+        self_fallback = build_fallback_router_from_custom_models(planner_model)
+        if self_fallback is not None:
+            dispatcher.set_fallback(self_fallback)
+            return
         dispatcher.set_fallback(
             MoliliModelRouter(
                 link_store=link_store,
                 base_url=molili_config.base_url,
-                default_model=getattr(
-                    getattr(stack, "planner", None),
-                    "planner_model",
-                    None,
-                )
-                or "molili",
+                default_model=planner_model or "molili",
                 timeout_seconds=molili_config.request_timeout_seconds,
             )
         )

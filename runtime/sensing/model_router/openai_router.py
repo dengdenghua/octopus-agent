@@ -667,6 +667,82 @@ def _entry_matches_model(entry: Any, model: str) -> bool:
     return target in candidates
 
 
+def build_fallback_router_from_custom_models(prefer: str | None = None) -> Any:
+    """Build a ModelRouter from the user's custom_models.json — a self-configured
+    upstream usable as the dispatch *fallback*.
+
+    Why: the default fallback is Molili, which requires a logged-in actor; any
+    unresolved / guest model request then dies with "no current_actor set".
+    Pointing the fallback at a self-configured model (e.g. the planner's own
+    model) keeps the runtime usable without a login.
+
+    Picks the entry matching ``prefer`` (the planner model), else the first
+    entry with a ``base_url``. Returns ``None`` when no usable entry exists, so
+    callers can keep Molili as the last-resort fallback.
+    """
+    models = _read_custom_models()
+    if not models:
+        return None
+    entry: dict[str, Any] | None = None
+    if prefer:
+        for candidate in models.values():
+            if _entry_matches_model(candidate, prefer):
+                entry = candidate
+                break
+    if entry is None:
+        for candidate in models.values():
+            if isinstance(candidate, dict) and candidate.get("base_url"):
+                entry = candidate
+                break
+    if not isinstance(entry, dict):
+        return None
+    base_url = entry.get("base_url")
+    if not base_url:
+        return None
+    raw_models = entry.get("models")
+    upstreams = (
+        [str(m).strip() for m in raw_models if str(m or "").strip()]
+        if isinstance(raw_models, list)
+        else []
+    )
+    primary = (
+        upstreams[0]
+        if upstreams
+        else str(entry.get("model") or entry.get("id") or "").strip()
+    )
+    if not primary:
+        return None
+    provider = str(entry.get("provider") or "openai").lower()
+    headers = entry.get("default_headers")
+    headers = headers if isinstance(headers, dict) else {}
+    try:
+        if provider in ("anthropic", "claude"):
+            from runtime.sensing.model_router.anthropic_router import AnthropicModelRouter
+
+            return AnthropicModelRouter(
+                api_key=entry.get("api_key") or "",
+                default_model=primary,
+                base_url=(base_url or None),
+            )
+        if provider in ("gemini", "google"):
+            from runtime.sensing.model_router.gemini_router import GeminiModelRouter
+
+            return GeminiModelRouter(
+                api_key=entry.get("api_key") or "",
+                default_model=primary,
+                base_url=base_url,
+                extra_headers=headers,
+            )
+        return OpenAIModelRouter(
+            base_url=base_url,
+            api_key=entry.get("api_key") or "dummy",
+            default_model=primary,
+            extra_headers=headers,
+        )
+    except Exception:  # noqa: BLE001 — fall back to Molili if the entry is malformed
+        return None
+
+
 def _redact_error_text(text: str) -> str:
     if not text:
         return text

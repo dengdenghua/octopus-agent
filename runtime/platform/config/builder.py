@@ -233,9 +233,18 @@ def _build_planner(
             from runtime.adapters.integrations.molili import MoliliLinkStore
             from runtime.sensing.model_router.dispatch_router import ModelDispatchRouter
             from runtime.sensing.model_router.molili_router import MoliliModelRouter
+            from runtime.sensing.model_router.openai_router import (
+                build_fallback_router_from_custom_models,
+            )
 
+            # Prefer a self-configured model (custom_models.json) as the
+            # fallback so unresolved / guest requests don't hit Molili's
+            # login gate ("no current_actor set"). Molili stays the
+            # last-resort fallback only when no self model is configured.
+            self_fallback = build_fallback_router_from_custom_models(p.model)
             router = ModelDispatchRouter(
-                fallback=MoliliModelRouter(
+                fallback=self_fallback
+                or MoliliModelRouter(
                     link_store=MoliliLinkStore(),
                     base_url=config.molili.base_url,
                     default_model=p.model or "molili",
