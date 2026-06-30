@@ -84,7 +84,7 @@ def full_project_state(project_store: ProjectStore, project_id: str) -> dict[str
     milestones = project_store.milestones_for(project_id)
     tasks_by_ms = {
         milestone.id: [
-            _task_read_model(task)
+            _task_read_model(project.id, task)
             for task in project_store.tasks_for_milestone(milestone.id)
         ]
         for milestone in milestones
@@ -158,10 +158,10 @@ def _project_action_specs(project_id: str, status: str) -> list[dict[str, Any]]:
     return [specs[action] for action in _project_available_actions(status)]
 
 
-def _task_read_model(task: Task) -> dict[str, Any]:
+def _task_read_model(project_id: str, task: Task) -> dict[str, Any]:
     raw = task.to_dict()
     raw["available_actions"] = _task_available_actions(task.status)
-    raw["action_specs"] = _task_action_specs(task)
+    raw["action_specs"] = _task_action_specs(project_id, task)
     return raw
 
 
@@ -177,14 +177,14 @@ def _task_available_actions(status: str) -> list[str]:
     return ["inspect"]
 
 
-def _task_action_specs(task: Task) -> list[dict[str, Any]]:
+def _task_action_specs(project_id: str, task: Task) -> list[dict[str, Any]]:
     specs = {
         "reassign": {
             "action": "reassign",
             "label": "Reassign",
             "api": {
                 "method": "POST",
-                "path": f"/api/projects/{{project_id}}/tasks/{task.id}/intervene",
+                "path": f"/api/projects/{project_id}/tasks/{task.id}/intervene",
                 "body": {"action": "reassign", "assigned_agent": ""},
             },
             "realtime_command": f"/project task {task.id} reassign agent=<agent-id>",
@@ -195,7 +195,7 @@ def _task_action_specs(task: Task) -> list[dict[str, Any]]:
             "label": "Reset",
             "api": {
                 "method": "POST",
-                "path": f"/api/projects/{{project_id}}/tasks/{task.id}/intervene",
+                "path": f"/api/projects/{project_id}/tasks/{task.id}/intervene",
                 "body": {"action": "reset", "cascade": True},
             },
             "realtime_command": f"/project task {task.id} reset",
@@ -205,7 +205,7 @@ def _task_action_specs(task: Task) -> list[dict[str, Any]]:
             "label": "Complete",
             "api": {
                 "method": "POST",
-                "path": f"/api/projects/{{project_id}}/tasks/{task.id}/intervene",
+                "path": f"/api/projects/{project_id}/tasks/{task.id}/intervene",
                 "body": {"action": "complete", "output": ""},
             },
             "realtime_command": f'/project task {task.id} complete output="<result>"',
@@ -216,7 +216,7 @@ def _task_action_specs(task: Task) -> list[dict[str, Any]]:
             "label": "Skip",
             "api": {
                 "method": "POST",
-                "path": f"/api/projects/{{project_id}}/tasks/{task.id}/intervene",
+                "path": f"/api/projects/{project_id}/tasks/{task.id}/intervene",
                 "body": {"action": "skip", "reason": ""},
             },
             "realtime_command": f'/project task {task.id} skip reason="<reason>"',

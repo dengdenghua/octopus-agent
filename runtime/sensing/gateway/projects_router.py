@@ -112,6 +112,13 @@ def create_projects_router(
     def list_projects() -> dict[str, Any]:
         return {"projects": [p.to_dict() for p in project_store.list_projects()]}
 
+    @router.get("/api/projects/by-thread/{thread_id}")
+    def get_project_by_thread(thread_id: str) -> dict[str, Any]:
+        project = project_store.project_for_thread(thread_id)
+        if project is None:
+            raise HTTPException(404, "project not found for thread")
+        return _full_state(project.id)
+
     @router.get("/api/projects/{project_id}")
     def get_project(project_id: str) -> dict[str, Any]:
         return _full_state(project_id)

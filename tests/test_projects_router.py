@@ -228,8 +228,21 @@ def test_project_state_exposes_action_hints(tmp_path) -> None:
     assert reassign_spec["action"] == "reassign"
     assert reassign_spec["requires"] == ["assigned_agent"]
     assert reassign_spec["api"]["path"] == (
-        "/api/projects/{project_id}/tasks/MS1-T1/intervene"
+        "/api/projects/P-actions/tasks/MS1-T1/intervene"
     )
     assert reassign_spec["realtime_command"] == (
         "/project task MS1-T1 reassign agent=<agent-id>"
     )
+
+
+def test_get_project_by_thread(tmp_path) -> None:
+    c, store = _client_with_store(tmp_path)
+    project = Project(id="P-thread", name="thread project", goal="g")
+    store.save_project(project)
+    store.bind_thread("thread-1", project.id)
+
+    body = c.get("/api/projects/by-thread/thread-1").json()
+
+    assert body["project"]["id"] == "P-thread"
+    assert body["action_specs"][0]["api"]["path"] == "/api/projects/P-thread/run"
+    assert c.get("/api/projects/by-thread/missing").status_code == 404
