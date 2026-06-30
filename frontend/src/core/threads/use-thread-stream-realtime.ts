@@ -133,6 +133,20 @@ function stripUndefinedValues(
   );
 }
 
+function activeConversationThreadId(
+  conv: Conversation,
+  fallbackThreadId: string,
+): string {
+  const lastTurnThreadId = conv.turns[conv.turns.length - 1]?.threadId;
+  if (lastTurnThreadId && lastTurnThreadId !== "new") {
+    return lastTurnThreadId;
+  }
+  if (conv.threadId && conv.threadId !== "new") {
+    return conv.threadId;
+  }
+  return fallbackThreadId;
+}
+
 function toMillis(value: string | null | undefined): number {
   return toOptionalMillis(value) ?? Date.now();
 }
@@ -715,6 +729,10 @@ export function useThreadStreamRealtime(
     () => conversationStreamingMessage(state),
     [state],
   );
+  const activeThreadId = useMemo(
+    () => activeConversationThreadId(state, threadId),
+    [state, threadId],
+  );
 
   // Lifecycle callbacks (onStart / onFinish / onToolEnd).
   const wasLoadingRef = useRef(false);
@@ -728,7 +746,7 @@ export function useThreadStreamRealtime(
     // Edge: idle -> busy -> call onStart with the active thread id.
     if (!wasLoadingRef.current && isLoading) {
       try {
-        callbacksRef.current.onStart?.(threadId || "");
+        callbacksRef.current.onStart?.(activeThreadId || "");
       } catch (e) {
         swallow(e);
       }
@@ -742,7 +760,7 @@ export function useThreadStreamRealtime(
       }
     }
     wasLoadingRef.current = isLoading;
-  }, [isLoading, threadId, mapped]);
+  }, [isLoading, activeThreadId, mapped]);
 
   useEffect(() => {
     // Walk all items; when we see a just-completed tool we haven't
@@ -805,7 +823,7 @@ export function useThreadStreamRealtime(
           // keeps the BaseStream contract satisfied for the few places
           // that might introspect the shape.
         },
-        threadId: threadId || null,
+        threadId: activeThreadId || null,
         compact,
       }) as ExposedRealtimeThread & { compact: typeof compact },
     [
@@ -815,7 +833,7 @@ export function useThreadStreamRealtime(
       error,
       stop,
       refresh,
-      threadId,
+      activeThreadId,
       compact,
     ],
   );

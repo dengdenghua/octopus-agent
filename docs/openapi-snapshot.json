@@ -1846,6 +1846,36 @@
         "title": "FeedbackPostResponse",
         "type": "object"
       },
+      "FromGroupBody": {
+        "properties": {
+          "goal": {
+            "minLength": 1,
+            "title": "Goal",
+            "type": "string"
+          },
+          "max_ticks": {
+            "default": 50,
+            "title": "Max Ticks",
+            "type": "integer"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "run": {
+            "default": true,
+            "title": "Run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "goal"
+        ],
+        "title": "FromGroupBody",
+        "type": "object"
+      },
       "FsImportDirectoryResponse": {
         "properties": {
           "files": {
@@ -3153,6 +3183,26 @@
         "title": "PauseTaskBody",
         "type": "object"
       },
+      "PlanBody": {
+        "properties": {
+          "goal": {
+            "minLength": 1,
+            "title": "Goal",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "goal"
+        ],
+        "title": "PlanBody",
+        "type": "object"
+      },
       "ProviderCapabilitiesWire": {
         "properties": {
           "default_model": {
@@ -3495,6 +3545,17 @@
           }
         },
         "title": "RoleModelsBody",
+        "type": "object"
+      },
+      "RunBody": {
+        "properties": {
+          "max_ticks": {
+            "default": 50,
+            "title": "Max Ticks",
+            "type": "integer"
+          }
+        },
+        "title": "RunBody",
         "type": "object"
       },
       "ScorecardGapQueueBody": {
@@ -15307,7 +15368,7 @@
     },
     "/api/cowork/{thread_id}/mode": {
       "post": {
-        "description": "Switch the collaboration mode (chat/cluster/swarm) — non-destructive.",
+        "description": "Switch the collaboration mode (chat/cluster/swarm/project) —\nnon-destructive. 'project' runs the milestone-driven Project OS over the\ngroup; there is no separate project entity.",
         "operationId": "set_mode_api_cowork__thread_id__mode_post",
         "parameters": [
           {
@@ -24778,14 +24839,14 @@
     },
     "/api/plugins": {
       "get": {
-        "operationId": "_plugins_api_plugins_get",
+        "operationId": "stub_list_plugins",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "items": {},
-                  "title": "Response  Plugins Api Plugins Get",
+                  "title": "Response Stub List Plugins",
                   "type": "array"
                 }
               }
@@ -24801,14 +24862,14 @@
     },
     "/api/plugins/capabilities": {
       "get": {
-        "operationId": "_plugin_caps_api_plugins_capabilities_get",
+        "operationId": "stub_plugin_capabilities",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "items": {},
-                  "title": "Response  Plugin Caps Api Plugins Capabilities Get",
+                  "title": "Response Stub Plugin Capabilities",
                   "type": "array"
                 }
               }
@@ -24944,7 +25005,7 @@
     },
     "/api/plugins/{plugin_id}": {
       "get": {
-        "operationId": "_plugin_get_api_plugins__plugin_id__get",
+        "operationId": "stub_get_plugin",
         "parameters": [
           {
             "in": "path",
@@ -24962,7 +25023,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response  Plugin Get Api Plugins  Plugin Id  Get",
+                  "title": "Response Stub Get Plugin",
                   "type": "object"
                 }
               }
@@ -25192,6 +25253,315 @@
         "summary": "Api Progress",
         "tags": [
           "observability"
+        ]
+      }
+    },
+    "/api/projects": {
+      "get": {
+        "operationId": "list_projects_api_projects_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Projects Api Projects Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Projects",
+        "tags": [
+          "projectos"
+        ]
+      },
+      "post": {
+        "description": "Turn a one-line goal into a project with generated milestones.",
+        "operationId": "plan_api_projects_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Plan Api Projects Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Plan",
+        "tags": [
+          "projectos"
+        ]
+      }
+    },
+    "/api/projects/from-group/{thread_id}": {
+      "post": {
+        "description": "Turn a custom cowork group into a project team: plan milestones and (by\ndefault) run them, routing each task to the group's ACTUAL members by\ncapability — not the fixed 4 roles. This is \"assemble a group → turn on\nproject mode\".",
+        "operationId": "from_group_api_projects_from_group__thread_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FromGroupBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response From Group Api Projects From Group  Thread Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "From Group",
+        "tags": [
+          "projectos"
+        ]
+      }
+    },
+    "/api/projects/{project_id}": {
+      "get": {
+        "operationId": "get_project_api_projects__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Project Api Projects  Project Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Project",
+        "tags": [
+          "projectos"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/report": {
+      "get": {
+        "description": "A milestone report: each milestone + its tasks' status/output.",
+        "operationId": "report_api_projects__project_id__report_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Report Api Projects  Project Id  Report Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report",
+        "tags": [
+          "projectos"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/run": {
+      "post": {
+        "description": "Drive the loop until the project is done/blocked or max_ticks.",
+        "operationId": "run_api_projects__project_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Api Projects  Project Id  Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run",
+        "tags": [
+          "projectos"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/tick": {
+      "post": {
+        "description": "Advance the project one loop iteration.",
+        "operationId": "tick_api_projects__project_id__tick_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Tick Api Projects  Project Id  Tick Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tick",
+        "tags": [
+          "projectos"
         ]
       }
     },

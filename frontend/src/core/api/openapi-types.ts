@@ -1239,6 +1239,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agents/parallel/batch/{batch_id}/recovery-snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Batch Recovery Snapshot */
+        get: operations["get_batch_recovery_snapshot_api_agents_parallel_batch__batch_id__recovery_snapshot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agents/parallel/cancel-all": {
         parameters: {
             query?: never;
@@ -3151,6 +3168,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/config/custom-models/compat-diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Api Custom Model Compat Diagnostics
+         * @description Dry-run OpenAI-compatible request shaping for custom models.
+         *
+         *     This endpoint does **not** call an upstream model and never
+         *     returns API keys. It shows the operator which compat profile
+         *     each custom model resolves to, which request fields are
+         *     removed/changed before dispatch, and which fallback retries
+         *     would be attempted for a representative strict-provider 400.
+         */
+        get: operations["api_custom_model_compat_diagnostics_api_config_custom_models_compat_diagnostics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/config/custom-models/test": {
         parameters: {
             query?: never;
@@ -3322,6 +3365,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/config/openai-compat-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Api Openai Compat Profiles
+         * @description List built-in OpenAI-compatible provider profiles.
+         *
+         *     This is a dry run over representative provider/model pairs: no
+         *     upstream request is made and no API key is required. It gives
+         *     operators a stable compatibility matrix before any custom model
+         *     is configured.
+         */
+        get: operations["api_openai_compat_profiles_api_config_openai_compat_profiles_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations": {
         parameters: {
             query?: never;
@@ -3388,6 +3456,301 @@ export interface paths {
          * @description Detected hardware + ranked recommendations + ollama availability.
          */
         get: operations["snapshot_api_cookbook_snapshot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Group
+         * @description Folded group state (roster + mode), the shared blackboard, the raw
+         *     membership timeline, and who would respond this turn under the mode.
+         *     ``until_seq`` replays the group as it was at that event (time-travel).
+         */
+        get: operations["get_group_api_cowork__thread_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}/blackboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write Board
+         * @description Write a key to the group's shared blackboard, attributed to the actor.
+         */
+        post: operations["write_board_api_cowork__thread_id__blackboard_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}/breakout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Breakout Fork
+         * @description Spin off a focused side-thread with a subset of members + a grant.
+         */
+        post: operations["breakout_fork_api_cowork__thread_id__breakout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}/breakout/{child_thread}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Breakout Merge
+         * @description Merge a breakout's conclusion back onto the parent's blackboard.
+         */
+        post: operations["breakout_merge_api_cowork__thread_id__breakout__child_thread__merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}/catchup/{member_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Catchup
+         * @description Catch-up brief for a member (roster + shared board + grant scope). The
+         *     realtime layer fills in recent messages via build_catchup in-process.
+         */
+        get: operations["catchup_api_cowork__thread_id__catchup__member_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Invite Member
+         * @description Pull a member (agent or human) into the thread, with a context grant.
+         */
+        post: operations["invite_member_api_cowork__thread_id__members_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}/members/{member_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Member
+         * @description Remove a member. Their past blackboard writes stay (attributed).
+         */
+        delete: operations["remove_member_api_cowork__thread_id__members__member_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}/mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Mode
+         * @description Switch the collaboration mode (chat/cluster/swarm/project) —
+         *     non-destructive. 'project' runs the milestone-driven Project OS over the
+         *     group; there is no separate project entity.
+         */
+        post: operations["set_mode_api_cowork__thread_id__mode_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}/nominate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Nominate Turn
+         * @description Self-nomination gate: of the participant agents, who is relevant enough
+         *     to speak for ``text`` — so a swarm doesn't pile on every turn.
+         */
+        get: operations["nominate_turn_api_cowork__thread_id__nominate_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Plan
+         * @description Given a draft message, who would act this turn and how (mode →
+         *     single / cluster / swarm), honouring @agent mentions. The realtime
+         *     driver reads this to dispatch without a manual mode switch.
+         */
+        get: operations["plan_api_cowork__thread_id__plan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tasks
+         * @description Background tasks in this thread (async coworkers).
+         */
+        get: operations["list_tasks_api_cowork__thread_id__tasks_get"];
+        put?: never;
+        /**
+         * Assign Task
+         * @description Give a member a task to work in the background; result lands on the
+         *     shared blackboard when complete.
+         */
+        post: operations["assign_task_api_cowork__thread_id__tasks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}/tasks/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tasks Summary
+         * @description Small operational summary for async cowork task badges/health.
+         */
+        get: operations["tasks_summary_api_cowork__thread_id__tasks_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}/tasks/{task_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete Task
+         * @description A runner reports a background task done — posts the result to the board.
+         */
+        post: operations["complete_task_api_cowork__thread_id__tasks__task_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}/view/{member_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Member View
+         * @description The history slice ``member_id`` is allowed to see at ``max_message``
+         *     (their context grant resolved). The context assembler uses this to bound
+         *     what reaches the agent's prompt — the enforcement half of the privacy seam.
+         */
+        get: operations["member_view_api_cowork__thread_id__view__member_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7028,7 +7391,7 @@ export interface paths {
             cookie?: never;
         };
         /** Plugins */
-        get: operations["_plugins_api_plugins_get"];
+        get: operations["stub_list_plugins"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7045,7 +7408,7 @@ export interface paths {
             cookie?: never;
         };
         /** Plugin Caps */
-        get: operations["_plugin_caps_api_plugins_capabilities_get"];
+        get: operations["stub_plugin_capabilities"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7130,7 +7493,7 @@ export interface paths {
             cookie?: never;
         };
         /** Plugin Get */
-        get: operations["_plugin_get_api_plugins__plugin_id__get"];
+        get: operations["stub_get_plugin"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7218,6 +7581,127 @@ export interface paths {
         get: operations["api_progress_api_progress_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Projects */
+        get: operations["list_projects_api_projects_get"];
+        put?: never;
+        /**
+         * Plan
+         * @description Turn a one-line goal into a project with generated milestones.
+         */
+        post: operations["plan_api_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/from-group/{thread_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From Group
+         * @description Turn a custom cowork group into a project team: plan milestones and (by
+         *     default) run them, routing each task to the group's ACTUAL members by
+         *     capability — not the fixed 4 roles. This is "assemble a group → turn on
+         *     project mode".
+         */
+        post: operations["from_group_api_projects_from_group__thread_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project */
+        get: operations["get_project_api_projects__project_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Report
+         * @description A milestone report: each milestone + its tasks' status/output.
+         */
+        get: operations["report_api_projects__project_id__report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run
+         * @description Drive the loop until the project is done/blocked or max_ticks.
+         */
+        post: operations["run_api_projects__project_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tick": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tick
+         * @description Advance the project one loop iteration.
+         */
+        post: operations["tick_api_projects__project_id__tick_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8295,6 +8779,23 @@ export interface paths {
         };
         /** Api Task Runs Overview */
         get: operations["api_task_runs_overview_api_task_runs_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-runs/recovery-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Api Task Runs Recovery Queue */
+        get: operations["api_task_runs_recovery_queue_api_task_runs_recovery_queue_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9897,6 +10398,13 @@ export interface components {
              */
             icon: string;
         };
+        /** AssignBody */
+        AssignBody: {
+            /** Assignee */
+            assignee: string;
+            /** Prompt */
+            prompt: string;
+        };
         /** AuthProvider */
         AuthProvider: {
             /** Id */
@@ -9926,6 +10434,13 @@ export interface components {
              */
             limit: number;
         };
+        /** BoardBody */
+        BoardBody: {
+            /** Key */
+            key: string;
+            /** Value */
+            value?: unknown;
+        };
         /** Body_api_fs_import_directory_api_fs_import_directory_post */
         Body_api_fs_import_directory_api_fs_import_directory_post: {
             /** Files */
@@ -9940,6 +10455,21 @@ export interface components {
         Body_api_thread_uploads_api_threads__thread_id__uploads_post: {
             /** Files */
             files: string[];
+        };
+        /** BreakoutBody */
+        BreakoutBody: {
+            /** At Message */
+            at_message?: number | null;
+            /** Child Thread */
+            child_thread: string;
+            /** Grant */
+            grant?: {
+                [key: string]: unknown;
+            } | null;
+            /** Members */
+            members?: {
+                [key: string]: unknown;
+            }[];
         };
         /** BrowserDesktopRepairRecipeEvidenceBody */
         BrowserDesktopRepairRecipeEvidenceBody: {
@@ -9989,7 +10519,7 @@ export interface components {
             actor: string;
             /**
              * Api Base Url
-             * @default http://127.0.0.1:8000
+             * @default
              */
             api_base_url: string;
             /**
@@ -10012,7 +10542,7 @@ export interface components {
             actor: string;
             /**
              * Api Base Url
-             * @default http://127.0.0.1:8000
+             * @default
              */
             api_base_url: string;
             /** Item Id */
@@ -10074,6 +10604,16 @@ export interface components {
             goal: string;
             /** Repo Root */
             repo_root?: string | null;
+        };
+        /** CompleteBody */
+        CompleteBody: {
+            /** Blackboard Key */
+            blackboard_key?: string | null;
+            /**
+             * Result
+             * @default
+             */
+            result: string;
         };
         /** ConstitutionProfileResponse */
         ConstitutionProfileResponse: {
@@ -10206,22 +10746,25 @@ export interface components {
             base_url: string;
             /** Compat Profile */
             compat_profile?: string | null;
-            /** Default Headers */
-            default_headers?: {
-                [key: string]: string;
-            } | null;
+            /** Default Header Names */
+            default_header_names?: string[];
             /** Display Name */
             display_name: string;
             /** Drop Tool Choice */
             drop_tool_choice?: boolean | null;
             /** Has Api Key */
             has_api_key: boolean;
+            /**
+             * Has Default Headers
+             * @default false
+             */
+            has_default_headers: boolean;
             /** Id */
             id: string;
-            /** Max Tokens */
-            max_tokens?: number | null;
             /** Max Temperature */
             max_temperature?: number | null;
+            /** Max Tokens */
+            max_tokens?: number | null;
             /** Models */
             models?: string[];
             /** Name */
@@ -10421,6 +10964,23 @@ export interface components {
             ok: boolean;
             recorded: components["schemas"]["FeedbackEntry"];
         };
+        /** FromGroupBody */
+        FromGroupBody: {
+            /** Goal */
+            goal: string;
+            /**
+             * Max Ticks
+             * @default 50
+             */
+            max_ticks: number;
+            /** Name */
+            name: string;
+            /**
+             * Run
+             * @default true
+             */
+            run: boolean;
+        };
         /** FsImportDirectoryResponse */
         FsImportDirectoryResponse: {
             /** Files */
@@ -10499,6 +11059,18 @@ export interface components {
              */
             style_prompt: string;
         };
+        /** GrantBody */
+        GrantBody: {
+            /** From Msg */
+            from_msg?: number | null;
+            /**
+             * Scope
+             * @default all
+             */
+            scope: string;
+            /** To Msg */
+            to_msg?: number | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -10540,6 +11112,24 @@ export interface components {
              * @default .
              */
             workspace: string;
+        };
+        /** InviteBody */
+        InviteBody: {
+            /** At Message */
+            at_message?: number | null;
+            grant?: components["schemas"]["GrantBody"];
+            /**
+             * Kind
+             * @default agent
+             */
+            kind: string;
+            /**
+             * Role
+             * @default participant
+             */
+            role: string;
+            /** Target Id */
+            target_id: string;
         };
         /** JoinInviteRequest */
         JoinInviteRequest: {
@@ -10920,6 +11510,19 @@ export interface components {
             /** Workspace */
             workspace?: string | null;
         };
+        /** MergeBody */
+        MergeBody: {
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+        };
+        /** ModeBody */
+        ModeBody: {
+            /** Mode */
+            mode: string;
+        };
         /** ModeInfo */
         ModeInfo: {
             /** Description */
@@ -10950,6 +11553,13 @@ export interface components {
              * @default user_request
              */
             reason: string;
+        };
+        /** PlanBody */
+        PlanBody: {
+            /** Goal */
+            goal: string;
+            /** Name */
+            name: string;
         };
         /** ProviderCapabilitiesWire */
         ProviderCapabilitiesWire: {
@@ -11097,6 +11707,14 @@ export interface components {
             overrides: {
                 [key: string]: string;
             };
+        };
+        /** RunBody */
+        RunBody: {
+            /**
+             * Max Ticks
+             * @default 50
+             */
+            max_ticks: number;
         };
         /** ScorecardGapQueueBody */
         ScorecardGapQueueBody: {
@@ -11257,13 +11875,19 @@ export interface components {
             extra_tools?: string[] | null;
             /** Name */
             name?: string | null;
+            /** Parent Task Id */
+            parent_task_id?: string | null;
             /** Prompt */
             prompt: string;
+            /** Run Id */
+            run_id?: string | null;
             /**
              * Share History
              * @default true
              */
             share_history: boolean;
+            /** Source */
+            source?: string | null;
             /** Subagent Type */
             subagent_type?: string | null;
             /** Thread Id */
@@ -11273,6 +11897,10 @@ export interface components {
              * @default 300
              */
             timeout_s: number;
+            /** Trace Id */
+            trace_id?: string | null;
+            /** Turn Id */
+            turn_id?: string | null;
         };
         /** SubagentPolicyDecisionBody */
         SubagentPolicyDecisionBody: {
@@ -14129,6 +14757,39 @@ export interface operations {
         };
     };
     get_batch_api_agents_parallel_batch__batch_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_batch_recovery_snapshot_api_agents_parallel_batch__batch_id__recovery_snapshot_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -17812,6 +18473,39 @@ export interface operations {
             };
         };
     };
+    api_custom_model_compat_diagnostics_api_config_custom_models_compat_diagnostics_get: {
+        parameters: {
+            query?: {
+                model_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     api_test_custom_model_api_config_custom_models_test_post: {
         parameters: {
             query?: never;
@@ -18042,6 +18736,28 @@ export interface operations {
             };
         };
     };
+    api_openai_compat_profiles_api_config_openai_compat_profiles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
     list_conversations_api_conversations_get: {
         parameters: {
             query?: {
@@ -18164,6 +18880,543 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    get_group_api_cowork__thread_id__get: {
+        parameters: {
+            query?: {
+                until_seq?: number | null;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_board_api_cowork__thread_id__blackboard_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BoardBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    breakout_fork_api_cowork__thread_id__breakout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BreakoutBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    breakout_merge_api_cowork__thread_id__breakout__child_thread__merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                child_thread: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MergeBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catchup_api_cowork__thread_id__catchup__member_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                member_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invite_member_api_cowork__thread_id__members_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_member_api_cowork__thread_id__members__member_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                member_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_mode_api_cowork__thread_id__mode_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModeBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    nominate_turn_api_cowork__thread_id__nominate_get: {
+        parameters: {
+            query?: {
+                text?: string;
+                threshold?: number;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plan_api_cowork__thread_id__plan_get: {
+        parameters: {
+            query?: {
+                text?: string;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tasks_api_cowork__thread_id__tasks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_task_api_cowork__thread_id__tasks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tasks_summary_api_cowork__thread_id__tasks_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_task_api_cowork__thread_id__tasks__task_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    member_view_api_cowork__thread_id__view__member_id__get: {
+        parameters: {
+            query?: {
+                max_message?: number;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+                member_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -24587,7 +25840,7 @@ export interface operations {
             };
         };
     };
-    _plugins_api_plugins_get: {
+    stub_list_plugins: {
         parameters: {
             query?: never;
             header?: never;
@@ -24607,7 +25860,7 @@ export interface operations {
             };
         };
     };
-    _plugin_caps_api_plugins_capabilities_get: {
+    stub_plugin_capabilities: {
         parameters: {
             query?: never;
             header?: never;
@@ -24730,7 +25983,7 @@ export interface operations {
             };
         };
     };
-    _plugin_get_api_plugins__plugin_id__get: {
+    stub_get_plugin: {
         parameters: {
             query?: never;
             header?: never;
@@ -24888,6 +26141,236 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_projects_api_projects_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    plan_api_projects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    from_group_api_projects_from_group__thread_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FromGroupBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_project_api_projects__project_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_api_projects__project_id__report_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_api_projects__project_id__run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tick_api_projects__project_id__tick_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -26684,6 +28167,44 @@ export interface operations {
         parameters: {
             query?: {
                 owner_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_task_runs_recovery_queue_api_task_runs_recovery_queue_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                kind?: string | null;
+                owner_id?: string | null;
+                thread_id?: string | null;
+                include_monitor?: boolean;
+                limit?: number;
             };
             header?: never;
             path?: never;

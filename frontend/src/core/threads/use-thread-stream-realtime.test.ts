@@ -562,6 +562,37 @@ describe("useThreadStreamRealtime permissions", () => {
     return startTurn;
   }
 
+  it("reports the server-created thread id when starting from the new-thread route", async () => {
+    const onStart = vi.fn();
+    const liveTurn: Turn = {
+      ...makeTurn([], "turn-live"),
+      threadId: "server-thread-1",
+      status: "inProgress",
+      completedAt: null,
+    };
+    vi.mocked(useRealtimeThread).mockReturnValue({
+      state: makeConversation([liveTurn]),
+      connected: true,
+      startTurn: vi.fn().mockResolvedValue(undefined),
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    });
+
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({
+        threadId: "new",
+        onStart,
+      }),
+    );
+
+    expect(result.current[0].threadId).toBe("server-thread-1");
+    await waitFor(() => expect(onStart).toHaveBeenCalledWith("server-thread-1"));
+    expect(onStart).not.toHaveBeenCalledWith("new");
+  });
+
   it("sends default sandbox permissions by default", async () => {
     const startTurn = mockRealtime();
     const { result } = renderHook(() =>

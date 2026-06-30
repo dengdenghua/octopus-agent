@@ -82,6 +82,7 @@ PYTHON_BIN="$(resolve_python)"
 export PYTHON="$PYTHON_BIN"
 
 backend_tests=(
+  tests/test_openapi_snapshot.py
   tests/test_openai_router.py
   tests/test_openai_compat_providers.py
   tests/test_app_config_endpoints.py::TestCustomModelCompatDiagnostics
