@@ -20,6 +20,14 @@ class AssetContent(BaseModel):
     checksum: str | None = None  # "sha256:<hex>"
 
 
+class BundleRef(BaseModel):
+    """full-bundle:技能整目录 tar.gz(带 scripts/refs/requirements)。None = body-only 足够。"""
+
+    ref: str | None = None
+    checksum: str | None = None  # "sha256:<hex>"
+    size: int | None = None
+
+
 class RegistryAsset(BaseModel):
     """registry 信封(轻量元数据;list 不含 body)。"""
 
@@ -35,6 +43,7 @@ class RegistryAsset(BaseModel):
     platforms: list[str] | None = None
     deps: list[str] | None = None
     content: AssetContent | None = None
+    bundle: BundleRef | None = None  # 有则该技能是整目录分发(full-bundle)
 
     @property
     def slug(self) -> str:
@@ -72,6 +81,19 @@ class RegistryClient:
         payload = AssetPayload.model_validate(d)
         self._verify(payload)
         return payload
+
+    def fetch_bundle(self, asset_id: str) -> bytes:
+        """下载技能 **full-bundle**(整目录 tar.gz)并校验 sha256(X-Checksum-Sha256 头)。
+        无 bundle → httpx 抛 404。"""
+        r = httpx.get(f"{self.base}{_API}/{asset_id}/bundle", timeout=self._timeout)
+        r.raise_for_status()
+        data = r.content
+        expected = r.headers.get("X-Checksum-Sha256")
+        if expected:
+            actual = hashlib.sha256(data).hexdigest()
+            if actual != expected:
+                raise ValueError(f"bundle checksum mismatch for {asset_id}: expected {expected} got {actual}")
+        return data
 
     @staticmethod
     def _verify(p: AssetPayload) -> None:
