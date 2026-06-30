@@ -40,6 +40,7 @@ function session(ids: string[]): CollaborationSession {
     presence: [],
     room_messages: [],
     room_participants: [],
+    room_tasks: [],
   };
 }
 

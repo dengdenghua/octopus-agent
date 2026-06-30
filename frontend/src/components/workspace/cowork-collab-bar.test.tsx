@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import { PresenceDots, SearchHitList } from "./cowork-collab-bar";
-import type { CoworkMemberPresence, CoworkSearchHit } from "@/core/cowork/types";
+import type {
+  CoworkMemberPresence,
+  CoworkSearchHit,
+} from "@/core/cowork/types";
 
 const t = {
   coworkCollab: {
@@ -15,6 +18,7 @@ const t = {
     kindTask: "Task",
     kindEvent: "Event",
     kindRoomMessage: "Room message",
+    kindRoomTask: "Room task",
     linkedRoom: "Linked room",
   },
 } as unknown as Parameters<typeof PresenceDots>[0]["t"];
@@ -47,7 +51,9 @@ describe("PresenceDots", () => {
       />,
     );
     expect(screen.getByText("1 online")).toBeTruthy();
-    expect(screen.getByTestId("cowork-unread-total").textContent).toBe("5 unread");
+    expect(screen.getByTestId("cowork-unread-total").textContent).toBe(
+      "5 unread",
+    );
   });
 
   it("hides the unread badge when everything is read", () => {
@@ -77,7 +83,10 @@ describe("SearchHitList", () => {
   it("renders a row per hit with its kind label", () => {
     render(
       <SearchHitList
-        hits={[hit({ title: "decision" }), hit({ kind: "task", title: "scan rivals" })]}
+        hits={[
+          hit({ title: "decision" }),
+          hit({ kind: "task", title: "scan rivals" }),
+        ]}
         t={t}
       />,
     );
@@ -91,11 +100,24 @@ describe("SearchHitList", () => {
   it("labels linked room transcript hits distinctly", () => {
     render(
       <SearchHitList
-        hits={[hit({ kind: "room_message", title: "Planner", snippet: "room note" })]}
+        hits={[
+          hit({ kind: "room_message", title: "Planner", snippet: "room note" }),
+        ]}
         t={t}
       />,
     );
     expect(screen.getByText("Room message")).toBeTruthy();
     expect(screen.getByText("Planner")).toBeTruthy();
+  });
+
+  it("labels linked room task hits distinctly", () => {
+    render(
+      <SearchHitList
+        hits={[hit({ kind: "room_task", title: "Draft launch plan" })]}
+        t={t}
+      />,
+    );
+    expect(screen.getByText("Room task")).toBeTruthy();
+    expect(screen.getByText("Draft launch plan")).toBeTruthy();
   });
 });
