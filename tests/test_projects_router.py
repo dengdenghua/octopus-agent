@@ -97,6 +97,9 @@ def test_recover_reopens_blocked_project_and_can_run(tmp_path) -> None:
     assert body["run"]["final_status"] == "done"
     assert body["project"]["status"] == "done"
     assert body["tasks"]["MS1"][0]["status"] == "done"
+    events = c.get("/api/projects/P-blocked/events").json()["events"]
+    assert [event["kind"] for event in events] == ["project.recover"]
+    assert events[0]["payload"]["events"] == body["recover"]["events"]
 
 
 def test_intervene_task_reassigns_and_runs(tmp_path) -> None:
@@ -145,6 +148,10 @@ def test_intervene_task_reassigns_and_runs(tmp_path) -> None:
     task = body["tasks"]["MS1"][0]
     assert task["assigned_agent"] == "new-agent"
     assert task["status"] == "done"
+    events = c.get("/api/projects/P-intervene/events").json()["events"]
+    assert [event["kind"] for event in events] == ["task.intervention"]
+    assert events[0]["payload"]["action"] == "reassign"
+    assert events[0]["payload"]["assigned_agent"] == "new-agent"
 
 
 def test_intervene_task_validates_missing_and_unknown_action(tmp_path) -> None:
@@ -165,3 +172,13 @@ def test_intervene_task_validates_missing_and_unknown_action(tmp_path) -> None:
         json={"action": "teleport"},
     )
     assert unknown.status_code == 400
+    events = c.get("/api/projects/P-errors/events").json()["events"]
+    assert [event["kind"] for event in events] == [
+        "task.intervention_rejected",
+        "task.intervention_rejected",
+    ]
+
+
+def test_project_events_404(tmp_path) -> None:
+    c = _client(tmp_path)
+    assert c.get("/api/projects/nope/events").status_code == 404

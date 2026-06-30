@@ -9,7 +9,9 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
 from pathlib import Path
+from uuid import uuid4
 
 from runtime.projectos.model import Milestone, Project, Task
 
@@ -25,8 +27,17 @@ CREATE TABLE IF NOT EXISTS thread_projects (
     thread_id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS project_events (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_ms_project ON milestones(project_id);
 CREATE INDEX IF NOT EXISTS idx_task_ms ON tasks(milestone_id);
+CREATE INDEX IF NOT EXISTS idx_project_events_project
+    ON project_events(project_id, created_at);
 """
 
 
@@ -67,6 +78,71 @@ class ProjectStore:
         with self._lock, self._conn() as conn:
             rows = conn.execute("SELECT doc FROM projects ORDER BY id").fetchall()
         return [Project.from_dict(json.loads(r[0])) for r in rows]
+
+    # ── audit events ────────────────────────────────────────────────────────
+    def append_event(
+        self,
+        project_id: str,
+        *,
+        kind: str,
+        payload: dict,
+        event_id: str | None = None,
+        created_at: float | None = None,
+    ) -> dict:
+        project = str(project_id or "").strip()
+        event_kind = str(kind or "").strip()
+        if not project or not event_kind:
+            raise ValueError("project_id and kind are required")
+        event = {
+            "id": event_id or f"EV-{uuid4().hex[:12]}",
+            "project_id": project,
+            "kind": event_kind,
+            "payload": dict(payload or {}),
+            "created_at": float(created_at if created_at is not None else time.time()),
+        }
+        with self._lock, self._conn() as conn:
+            conn.execute(
+                "INSERT INTO project_events(id, project_id, kind, payload, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    event["id"],
+                    event["project_id"],
+                    event["kind"],
+                    json.dumps(event["payload"], ensure_ascii=False),
+                    event["created_at"],
+                ),
+            )
+        return event
+
+    def events_for_project(
+        self,
+        project_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[dict]:
+        project = str(project_id or "").strip()
+        if not project:
+            return []
+        bounded_limit = max(1, min(int(limit or 100), 500))
+        with self._lock, self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, project_id, kind, payload, created_at "
+                "FROM project_events WHERE project_id=? "
+                "ORDER BY created_at DESC, id DESC LIMIT ?",
+                (project, bounded_limit),
+            ).fetchall()
+        events = [
+            {
+                "id": str(row[0]),
+                "project_id": str(row[1]),
+                "kind": str(row[2]),
+                "payload": json.loads(row[3]),
+                "created_at": float(row[4]),
+            }
+            for row in rows
+        ]
+        events.reverse()
+        return events
 
     # ── thread bindings ─────────────────────────────────────────────────────
     def bind_thread(self, thread_id: str, project_id: str) -> None:

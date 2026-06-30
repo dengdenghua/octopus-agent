@@ -135,6 +135,16 @@ def create_projects_router(
             })
         return {"project": project.name, "status": project.status, "milestones": out}
 
+    @router.get("/api/projects/{project_id}/events")
+    def events(project_id: str, limit: int = 100) -> dict[str, Any]:
+        """Project audit trail: recoveries, interventions, and future operator actions."""
+        if project_store.get_project(project_id) is None:
+            raise HTTPException(404, "project not found")
+        return {
+            "project_id": project_id,
+            "events": project_store.events_for_project(project_id, limit=limit),
+        }
+
     @router.post("/api/projects", dependencies=[Depends(_auth_dep)])
     def plan(body: PlanBody) -> dict[str, Any]:
         """Turn a one-line goal into a project with generated milestones."""

@@ -235,11 +235,22 @@ class ProjectEngine:
             events.append("nothing_to_recover")
 
         current = self.store.get_project(project_id)
-        return {
+        result = {
             "events": events,
             "project_status": current.status if current else "failed",
             "current_ms": current.current_ms if current else None,
         }
+        self._audit(
+            project_id,
+            "project.recover",
+            {
+                "task_ids": list(selected),
+                "reset_attempts": reset_attempts,
+                "clear_outputs": clear_outputs,
+                **result,
+            },
+        )
+        return result
 
     def intervene_task(
         self,
@@ -265,18 +276,30 @@ class ProjectEngine:
             return {"events": ["project_not_found"], "project_status": "failed"}
         task = self.store.get_task(task_id)
         if task is None:
-            return {
+            result = {
                 "events": [f"task_not_found:{task_id}"],
                 "project_status": project.status,
                 "current_ms": project.current_ms,
             }
+            self._audit(
+                project_id,
+                "task.intervention_rejected",
+                {"task_id": task_id, "action": action, **result},
+            )
+            return result
         ms = self.store.get_milestone(task.milestone_id)
         if ms is None:
-            return {
+            result = {
                 "events": [f"milestone_not_found:{task.milestone_id}"],
                 "project_status": project.status,
                 "current_ms": project.current_ms,
             }
+            self._audit(
+                project_id,
+                "task.intervention_rejected",
+                {"task_id": task_id, "action": action, **result},
+            )
+            return result
 
         action = str(action or "").strip().lower()
         events: list[str] = []
@@ -319,11 +342,17 @@ class ProjectEngine:
             self.store.save_task(task)
             events.append(f"task_skipped:{task.id}")
         else:
-            return {
+            result = {
                 "events": [f"unknown_task_action:{action or '<empty>'}"],
                 "project_status": project.status,
                 "current_ms": project.current_ms,
             }
+            self._audit(
+                project_id,
+                "task.intervention_rejected",
+                {"task_id": task_id, "action": action, **result},
+            )
+            return result
 
         if ms.status in {"blocked", "done"} or project.status == "blocked":
             ms.status = "in_progress"
@@ -335,11 +364,26 @@ class ProjectEngine:
             events.append("project_recovered")
 
         current = self.store.get_project(project_id)
-        return {
+        result = {
             "events": events,
             "project_status": current.status if current else "failed",
             "current_ms": current.current_ms if current else None,
         }
+        self._audit(
+            project_id,
+            "task.intervention",
+            {
+                "task_id": task_id,
+                "action": action,
+                "assigned_agent": assigned_agent,
+                "assigned_role": assigned_role,
+                "reason": reason,
+                "reset_attempts": reset_attempts,
+                "cascade": cascade,
+                **result,
+            },
+        )
+        return result
 
     # ── steps ────────────────────────────────────────────────────────────────
     def _ensure_active_milestone(self, project: Project, events: list[str]) -> Milestone | None:
@@ -485,6 +529,12 @@ class ProjectEngine:
             task.output = None
             task.qa_verdict = None
         self.store.save_task(task)
+
+    def _audit(self, project_id: str, kind: str, payload: dict) -> None:
+        try:
+            self.store.append_event(project_id, kind=kind, payload=payload)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _context(self, project: Project, ms: Milestone, tasks: list[Task]) -> dict[str, Any]:
         return {

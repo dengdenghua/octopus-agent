@@ -46,6 +46,19 @@ def test_store_binds_thread_to_project(tmp_path) -> None:
     assert s.project_for_thread("missing") is None
 
 
+def test_store_project_events_roundtrip_and_limit(tmp_path) -> None:
+    s = ProjectStore(base_dir=tmp_path)
+    s.save_project(Project(id="P1", name="x", goal="g"))
+    s.append_event("P1", kind="project.recover", payload={"n": 1}, created_at=1.0)
+    s.append_event("P1", kind="task.intervention", payload={"n": 2}, created_at=2.0)
+    s.append_event("P2", kind="task.intervention", payload={"n": 3}, created_at=3.0)
+
+    events = s.events_for_project("P1")
+    assert [event["kind"] for event in events] == ["project.recover", "task.intervention"]
+    assert [event["payload"]["n"] for event in events] == [1, 2]
+    assert [event["payload"]["n"] for event in s.events_for_project("P1", limit=1)] == [2]
+
+
 # ── engine ───────────────────────────────────────────────────────────────────
 def _stub_milestones(goal: str) -> list[Milestone]:
     return [
@@ -177,6 +190,9 @@ def test_recover_reopens_blocked_project_and_reruns_task(tmp_path) -> None:
     assert recovered["project_status"] == "running"
     assert "project_recovered" in recovered["events"]
     assert "task_recovered:MS1-T1" in recovered["events"]
+    audit = eng.store.events_for_project(p.id)
+    assert audit[-1]["kind"] == "project.recover"
+    assert audit[-1]["payload"]["events"] == recovered["events"]
     assert eng.store.get_task("MS1-T1").status == "pending"
     assert eng.store.get_task("MS1-T1").attempts == 0
 
@@ -244,6 +260,10 @@ def test_intervene_reassign_resets_blocked_task_and_reopens_project(tmp_path) ->
     assert result["project_status"] == "running"
     assert "task_reassigned:MS1-T1" in result["events"]
     assert "project_recovered" in result["events"]
+    audit = eng.store.events_for_project(p.id)
+    assert audit[-1]["kind"] == "task.intervention"
+    assert audit[-1]["payload"]["action"] == "reassign"
+    assert audit[-1]["payload"]["assigned_agent"] == "new-agent"
     assert updated.status == "pending"
     assert updated.assigned_agent == "new-agent"
     assert updated.attempts == 0
