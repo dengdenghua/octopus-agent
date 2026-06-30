@@ -105,6 +105,44 @@ def test_collab_endpoints(tmp_path) -> None:
     assert "presence" in sess and "tasks" in sess
 
 
+def test_post_room_message_requires_linked_room(tmp_path) -> None:
+    app = FastAPI()
+    app.include_router(create_cowork_group_router(
+        store=GroupStore(base_dir=tmp_path),
+        room_message_store=RoomMessageStore(base_dir=tmp_path / "rooms"),
+    ))
+    c = TestClient(app)
+    # No room linked yet → the write side refuses (409), pointing at /link-room.
+    r = c.post("/api/collab/t1/room-message", json={"text": "hello"})
+    assert r.status_code == 409
+
+
+def test_post_room_message_writes_into_session_transcript(tmp_path) -> None:
+    rms = RoomMessageStore(base_dir=tmp_path / "rooms")
+    app = FastAPI()
+    app.include_router(create_cowork_group_router(
+        store=GroupStore(base_dir=tmp_path), room_message_store=rms,
+    ))
+    c = TestClient(app)
+    t = "thread-write"
+    assert c.post(f"/api/collab/{t}/link-room", json={"room_id": "room-w"}).status_code == 200
+
+    r = c.post(
+        f"/api/collab/{t}/room-message",
+        json={"text": "summary from the group", "display_name": "Planner"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["room_id"] == "room-w" and body["seq"] == 1
+
+    # The write lands in the SAME transcript the unified read surfaces.
+    sess = c.get(f"/api/collab/{t}").json()
+    assert [m["text"] for m in sess["room_messages"]] == ["summary from the group"]
+    # …and is findable via session-wide search (room_message kind).
+    hits = c.get(f"/api/cowork/{t}/search", params={"q": "summary"}).json()["hits"]
+    assert any(h["kind"] == "room_message" for h in hits)
+
+
 def test_collab_endpoint_includes_room_participants(tmp_path) -> None:
     from runtime.sensing.gateway.team_rooms_router import (
         TeamParticipantWire,

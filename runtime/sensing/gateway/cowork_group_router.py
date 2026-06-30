@@ -81,6 +81,12 @@ class LinkRoomBody(BaseModel):
     room_id: str = Field(min_length=1)
 
 
+class RoomMessageBody(BaseModel):
+    text: str = Field(min_length=1)
+    participant_id: str = ""
+    display_name: str = ""
+
+
 def create_cowork_group_router(
     *,
     store: GroupStore | None = None,
@@ -200,6 +206,26 @@ def create_cowork_group_router(
 
         state = link_room(group_store, thread_id, body.room_id)
         return {"ok": True, "state": state.to_dict()}
+
+    @router.post("/api/collab/{thread_id}/room-message", dependencies=[Depends(_auth_dep)])
+    def post_room_message(thread_id: str, body: RoomMessageBody) -> dict[str, Any]:
+        """Write a line into the session's linked Team Room transcript.
+
+        The write side of the unified session: where ``get_session`` /search read
+        the linked room transcript, this lets the cowork thread *post* into it
+        through the same session — so an agent or summary in the group lands in
+        the room surface instead of a separate write path. 409 if no room is
+        linked (link it first via ``/link-room``)."""
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if not room_id:
+            raise HTTPException(409, "no room linked to this session — link one first")
+        seq = _room_message_store().append(
+            room_id,
+            text=body.text,
+            participant_id=body.participant_id,
+            display_name=body.display_name,
+        )
+        return {"ok": True, "room_id": room_id, "seq": seq}
 
     @router.get("/api/cowork/{thread_id}/nominate")
     def nominate_turn(thread_id: str, text: str = "", threshold: float = 0.5) -> dict[str, Any]:
