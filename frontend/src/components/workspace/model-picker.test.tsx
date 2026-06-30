@@ -17,10 +17,10 @@ const authState = vi.hoisted(() => ({
   isAuthenticated: true,
 }));
 
-// Stub useMoliliLink + useQueryClient consumers — picker now reads
-// `link.molili_user_id` to auto-enable unconfigured models.
-vi.mock("@/core/molili", () => ({
-  useMoliliLink: () => ({ data: null }),
+// Stub useOctLink — picker reads `link.oct_user_id` to auto-enable
+// unconfigured models.
+vi.mock("@/core/oct", () => ({
+  useOctLink: () => ({ data: null }),
 }));
 
 // Picker's `useAuth()` is for read-only identity · stub with a

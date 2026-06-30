@@ -24,9 +24,9 @@ const mockAuth = { current: null as AuthShape | null };
 vi.mock("@/providers/AuthProvider", () => ({
   useAuth: () => mockAuth.current,
 }));
-vi.mock("@/core/molili", () => ({
-  useMoliliLink: () => ({ data: null }),
-  useRefreshMoliliCredits: () => ({ mutateAsync: vi.fn() }),
+vi.mock("@/core/oct", () => ({
+  useOctLink: () => ({ data: null }),
+  useRefreshOctCredits: () => ({ mutateAsync: vi.fn() }),
 }));
 vi.mock("@/core/i18n/hooks", () => ({
   useI18n: () => ({
