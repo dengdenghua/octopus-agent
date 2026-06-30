@@ -147,6 +147,26 @@ def _inject_cowork_turn_plan(
             ],
         )
 
+    # Enforce the responder's context grant on the single-responder react path.
+    # A member pulled in with from_join/range/summary must not see history beyond
+    # their grant. The async runner already slices via context_view; this closes
+    # the realtime path. (Multi-responder fanout passes only the current message,
+    # not history, so there's nothing to leak there.)
+    if not plan.get("is_multi") and len(responders) == 1:
+        msgs = context.get("conversation_messages")
+        if isinstance(msgs, list) and msgs:
+            try:
+                from runtime.memory.cowork.context_view import (
+                    resolve_view,
+                    slice_messages,
+                )
+
+                view = resolve_view(store.state(thread_id), responders[0], len(msgs))
+                if view is not None and view.scope != "all":
+                    context["conversation_messages"] = slice_messages(view, msgs)
+            except Exception as exc:  # noqa: BLE001 — grant slice is best-effort
+                _logger.debug("cowork grant slice skipped: %s", exc, exc_info=True)
+
 
 async def _start_turn(
     runtime: CerebrumRuntime,
