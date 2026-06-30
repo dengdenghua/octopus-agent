@@ -747,6 +747,33 @@ export interface Translations {
     turns: (count: number) => string;
     lastStatus: (status: string) => string;
     updated: (date: string) => string;
+    chatStarters: {
+      label: string;
+      prompt: string;
+    }[];
+    panelToggle: {
+      close: string;
+      open: string;
+    };
+    finalArtifact: {
+      generated: string;
+      view: string;
+    };
+    recording: {
+      recording: (stepCount: number) => string;
+      idle: string;
+    };
+    replay: {
+      titleDefault: string;
+      footer: string;
+    };
+    composer: {
+      placeholderCode: string;
+      placeholderNew: string;
+    };
+    recorder: {
+      defaultName: string;
+    };
   };
 
   // Realtime item views
@@ -1987,6 +2014,48 @@ export interface Translations {
     agentCreated: string;
     startChatting: string;
     backToGallery: string;
+    agentNew: {
+      pageTitle: string;
+      pageSubtitle: string;
+      placeholder: string;
+      buttons: {
+        checking: string;
+        generate: string;
+        back: string;
+        autoConfig: string;
+        generateConfig: string;
+      };
+      labels: {
+        permissions: string;
+      };
+      roles: {
+        id: string;
+        label: string;
+        nameSuggestion: string;
+        brief: string;
+      }[];
+      scenarios: {
+        id: string;
+        label: string;
+        brief: string;
+        permissions: string[];
+      }[];
+      abilities: {
+        id: string;
+        label: string;
+        arms: string[];
+        skills: string[];
+        brief: string;
+      }[];
+      templates: {
+        id: string;
+        name: string;
+        nameSuggestion: string;
+        description: string;
+        integrations: string[];
+        capabilities: string[];
+      }[];
+    };
   };
 
   // Agent card
@@ -3511,6 +3580,37 @@ export interface Translations {
       addWidgetBtn: string;
       appNameDoubao: string;
     };
+    empty: {
+      noMatch: string;
+      noTabs: string;
+      noRecent: string;
+      noFavorites: string;
+    };
+    defaultTabTitle: string;
+    pageTitle: string;
+    pageSubtitle: (pinned: boolean) => string;
+    searchPlaceholder: string;
+    copy: {
+      link: string;
+      title: string;
+      copied: string;
+      tabMenuItem: string;
+    };
+    menu: {
+      closeOtherTabs: string;
+    };
+    tabs: {
+      label: string;
+      recent: string;
+      favorites: string;
+    };
+    newTab: string;
+    newTabPage: string;
+    closeTab: string;
+    sidePanel: {
+      unpin: string;
+      expand: string;
+    };
     tabBar: {
       close: string;
       newTab: string;
@@ -4132,6 +4232,85 @@ export interface Translations {
     copyFailed: string;
     // PresenceAvatars
     onlineCount: (count: number) => string;
+    defaultTeamName: string;
+    projectPrefix: (teamName: string) => string;
+    teamModes: Array<{
+      id: string;
+      label: string;
+      description: string;
+    }>;
+    common: {
+      online: string;
+      offline: string;
+      leader: string;
+      aiMember: string;
+      cancel: string;
+      create: string;
+      loading: string;
+    };
+    workbench: {
+      tabMembers: string;
+      tabTasks: string;
+      tabWorkspace: string;
+      title: string;
+      closeTitle: string;
+      leaderStandby: string;
+      standby: string;
+      memberNameWithRole: (name: string, isLeader: boolean) => string;
+      currentWorkspace: string;
+      noDirectorySelected: string;
+    };
+    roster: {
+      title: string;
+      noTeamSelected: string;
+      aiMembersCount: (count: number) => string;
+      onlineCount: (online: number, total: number) => string;
+      workstationGroup: string;
+      aiMemberDefault: string;
+      standby: string;
+      collaboratorsGroup: string;
+      emptyHint: string;
+      statusWithRole: (status: string, role: string) => string;
+    };
+    createTask: {
+      toastCreated: string;
+      toastFailed: string;
+      title: string;
+      description: string;
+      taskTitleLabel: string;
+      descriptionLabel: string;
+      sopLabel: string;
+      assigneeLabel: string;
+      titlePlaceholder: string;
+      descriptionPlaceholder: string;
+      autoMatchFreeform: string;
+      loadingPacks: string;
+      cancel: string;
+      create: string;
+    };
+    inviteAgents: {
+      toastAdded: (count: number) => string;
+      toastFailed: string;
+      roleMember: string;
+      roleMemberDesc: string;
+      roleViewer: string;
+      roleViewerDesc: string;
+      addAgentTitle: string;
+      countText: (inTeam: number, available: number) => string;
+      addFiltered: string;
+      searchPlaceholder: string;
+      loadingAgents: string;
+      noMatches: string;
+      inTeam: string;
+      add: string;
+    };
+    mobileJoin: {
+      title: string;
+      description: string;
+      connectCodeLabel: string;
+      manualFillPrefix: string;
+      manualFillCode: string;
+    };
   };
 
   // Workflow Editor
@@ -6060,14 +6239,17 @@ export interface Translations {
     };
     errors: {
       invalidPhone: string;
+      invalidEmail: string;
       sendFailed: string;
       fillRequired: string;
+      emailFillRequired: string;
       loginFailed: string;
       enterFailed: string;
       moliliNotEnabled: string;
     };
     success: {
       codeSent: string;
+      emailCodeSent: string;
       loginSuccess: string;
       guestEntered: string;
     };
@@ -6078,6 +6260,7 @@ export interface Translations {
     };
     terms: {
       autoRegister: string;
+      emailAutoRegister: string;
       agreeTo: string;
       userAgreement: string;
       privacyPolicy: string;
@@ -6087,6 +6270,7 @@ export interface Translations {
       subtitle: string;
       description: string;
       cardDescription: string;
+      emailCardDescription: string;
     };
     molili: {
       title: string;

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { authHeaders } from "@/core/auth/api";
 import { copyTextToClipboard } from "@/core/clipboard";
 import { getBackendBaseURL } from "@/core/config";
+import { useI18n } from "@/core/i18n/hooks";
 
 interface JoinInfo {
   lan_ip: string;
@@ -19,6 +20,7 @@ interface JoinInfo {
 /** "拉手机进群" — shows a scan-to-join QR + a paste-able 口令 so a phone running
  * octopus-mobile can connect to this gateway without typing an IP. */
 export function MobileJoinSection() {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const { data } = useQuery({
     queryKey: ["tentacle-join-info"],
@@ -58,10 +60,10 @@ export function MobileJoinSection() {
     <section className="min-w-0 rounded-lg border border-border/60 bg-muted/10 p-3">
       <div className="flex items-center gap-2 text-sm font-semibold">
         <SmartphoneIcon className="size-4 text-primary" />
-        拉手机进群
+        {t.collab.mobileJoin.title}
       </div>
       <div className="mt-0.5 text-xs text-muted-foreground">
-        手机装 octopus-mobile,扫码或粘贴口令即可连进群(需在同一 Wi-Fi)
+        {t.collab.mobileJoin.description}
       </div>
 
       <div className="mt-3 flex items-start gap-3">
@@ -71,7 +73,7 @@ export function MobileJoinSection() {
         <div className="min-w-0 flex-1 space-y-2">
           <div>
             <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              连接口令(手机设置里粘贴)
+              {t.collab.mobileJoin.connectCodeLabel}
             </div>
             <div className="flex gap-2">
               <code className="min-w-0 flex-1 truncate rounded-md border border-border/60 bg-background px-2 py-1.5 text-[11px]">
@@ -92,11 +94,13 @@ export function MobileJoinSection() {
             </div>
           </div>
           <div className="text-[11px] leading-relaxed text-muted-foreground">
-            或手动填:地址 <code className="text-foreground">{data.ws_url}</code>
+            {t.collab.mobileJoin.manualFillPrefix}{" "}
+            <code className="text-foreground">{data.ws_url}</code>
             {data.token ? (
               <>
                 {" "}
-                · 口令 <code className="text-foreground">{data.token}</code>
+                {t.collab.mobileJoin.manualFillCode}{" "}
+                <code className="text-foreground">{data.token}</code>
               </>
             ) : null}
           </div>

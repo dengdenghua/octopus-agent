@@ -3,7 +3,7 @@
 > 本表回答一个问题：**architecture.md / constitution.md 里的每个机制，今天在代码里处于什么状态？**
 > 状态分四档：**已接线**（默认路径在用）· **可选后端**（代码完整，按配置启用）· **休眠代码**（模块存在，无调用方）· **未实装**（仅文档）。
 > 每一行都给出代码证据；更新本表时请先核查代码，不要照搬旧文档或审查报告的结论。
-> 最后核查：2026-06-11。
+> 最后核查：2026-06-30。
 
 ## 安全治理
 
@@ -17,7 +17,7 @@
 | Immunity 自适应层（行为异常 z-score 评分） | **可选后端 · 已接线**（配置开启） | `runtime/safety/auth/adaptive_immunity.py`：每 sucker 滑动窗口基线 + z-score（取最异常轴，只收紧，I2 自旁路、I4 冷启动）。`runtime/execution/tool_engine/executor.py` 在调用方未提供 `ToolCall.predicted_cost` 时用 `adaptive.predict()` 的成熟 baseline 均值补齐；`runtime/safety/auth/trust_engine.py` 的 `check()` 也有同样 fallback。冷启动/样本不足仍按保守 cold-start；真实执行 outlier 由 `TrustEngine.learn()` 在写入新样本前用 observed latency/tokens 打分并临时 quarantine 后续调用。覆盖见 `tests/test_adaptive_immunity.py` 的 baseline prediction / observed quarantine 用例。`immunity.enable_adaptive` 开启 |
 | 预算熔断（三态 CircuitBreaker） | **已接线** | `runtime/safety/budget_breaker/breaker.py` |
 | 敏感路径守卫（含 macOS /private 符号链接） | **已接线** | `runtime/safety/auth/path_guard.py`（沙箱前缀校验）；`file_safety.py` 凭据文件名黑名单（`.env`/`id_rsa`/`~/.ssh/*` 等）由 `runtime/execution/tool_engine/executor.py` 写路径在调 handler 前经 `check_file_write` 强制（写作用域管"写哪"，本层管"绝不写这些名字"） |
-| 间接提示注入防御（不可信工具输出定界 + 注入启发式） | **已接线**（第一道，启发式非完备） | `runtime/safety/validation/prompt_injection.py`：`is_untrusted_tool`（web/browser 亲和或 `mcp_*` 前缀）+ `scan_for_injection`（override/role/exfil/control-token 等标记）+ `wrap_untrusted_observation`（围栏化为"数据非指令"并在命中时升级告警）；`react_loop.py` 单动作与并行两路在 observation 回灌 LLM 前对外部工具输出加固。**定界+标注，不改写内容**，是风险信号非保证；高危工具硬门控（taint→审批）仍待后续 |
+| 间接提示注入防御（不可信工具输出定界 + 注入启发式 + 高危门控） | **已接线**（第一道，启发式非完备） | `runtime/safety/validation/prompt_injection.py`：`is_untrusted_tool`（web/browser 亲和或 `mcp_*` 前缀）+ `scan_for_injection`（override/role/exfil/control-token 等标记）+ `wrap_untrusted_observation`（围栏化为"数据非指令"并在命中时升级告警）；`react_loop.py` 单动作与并行两路在 observation 回灌 LLM 前对外部工具输出加固。**定界+标注，不改写内容**，是风险信号非保证。高危工具硬门控已接线：`runtime/execution/tool_engine/executor.py` 的 `injection_taint_block` 是所有执行路径的 chokepoint；单步路径走 human approval round-trip（`set_injection_gate_handled(True)` 放行），并行派发路径无法 approval 故 executor 直接 fail-closed block |
 
 ## 分布式与编排
 
@@ -27,7 +27,7 @@
 | Nerves 消息总线（进程内 TypedEventBus） | **已接线** | `runtime/core/nerves/bus.py`；skill/agent registry 事件发布在用。跨进程的 NATS/Redis 总线曾是休眠代码（零消费者），已于路线收尾时删除 |
 | Chromatophores（信号广播 + Boids 仲裁） | **已接线** | `runtime/safety/chromatophores/`（signal_bus、boids）被 `runtime/execution/swarm/runtime.py`、`runtime/cli_run.py` 使用 |
 | SpinalCord 反射快路径 | **已接线** | `runtime/core/nerves/reflex/` + 前端 `/workspace/reflex` 管理页 |
-| 网状 Arm 直接互通（腕间 gossip 不经中枢） | **未实装**（按叙事口径） | Chromatophores 提供 pub/sub 原语，但 Arm↔Arm 直接协作路径未构建 |
+| 网状 Arm 直接互通（腕间 mailbox 不经中枢） | **已接线** | `runtime/execution/arms/base.py`：`Worker.__init__` 注入 `signal_bus` 时订阅主题 `arm.mailbox.<arm_id>`；`send_to_arm` 点对点投递到其它 Arm 邮箱；`_on_step` 在 GraphRuntime 每节点/层完成后回调 `drain_mailbox()` 处理对等消息。未注入 `signal_bus` 时退化为星状（隔离执行，所有协调经 SwarmRuntime 中心调度） |
 
 ## 自进化
 

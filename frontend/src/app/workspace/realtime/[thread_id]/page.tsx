@@ -70,7 +70,7 @@ import { ThreadTitle } from "@/components/workspace/thread-title";
 import { ShareMenu } from "@/components/workspace/share-menu";
 import { AgentAvatar } from "@/components/workspace/sidebar-footer";
 import {
-  TEAM_MODE_META,
+  useTeamModeMeta,
   TEAM_MODES,
   serveMeshForMode,
   type TeamMode,
@@ -130,6 +130,8 @@ import { collaborationRosterFromThread } from "@/core/collaboration/thread-colla
 import {
   buildCoworkSelectionSyncPlan,
   coworkGroupToCollaborationRoster,
+  coworkSessionToCollaborationRoster,
+  useCollabSession,
   useCoworkGroup,
   useInviteCoworkMember,
   useRemoveCoworkMember,
@@ -218,40 +220,12 @@ type CompactableThread = {
 };
 
 const URL_PATTERN = /https?:\/\/[^\s，,]+/gi;
-const NEW_CHAT_STARTERS: Array<{
-  label: string;
-  prompt: string;
-  icon: LucideIcon;
-  tone: string;
-}> = [
-  {
-    label: "调研一个方向",
-    prompt:
-      "调研一个值得进入的细分赛道，输出机会点、竞品格局、风险和下一步行动。",
-    icon: SearchIcon,
-    tone: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
-  },
-  {
-    label: "规划一项工作",
-    prompt:
-      "把这个目标拆成可执行计划，按优先级列出里程碑、风险和今天要做的第一步。",
-    icon: ListChecksIcon,
-    tone: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  },
-  {
-    label: "写一份文档",
-    prompt:
-      "帮我写一份清晰的项目说明，包含背景、目标、方案、时间线和验收标准。",
-    icon: FileTextIcon,
-    tone: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  },
-  {
-    label: "检查一段代码",
-    prompt:
-      "帮我审查这段代码，找出潜在 bug、边界情况、性能问题和可以直接修改的地方。",
-    icon: Code2Icon,
-    tone: "bg-rose-500/10 text-rose-700 dark:text-rose-300",
-  },
+
+const CHAT_STARTER_ICONS: LucideIcon[] = [
+  SearchIcon,
+  ListChecksIcon,
+  FileTextIcon,
+  Code2Icon,
 ];
 
 function extractResearchUrls(text: string): { topic: string; urls: string[] } {
@@ -340,6 +314,7 @@ function RightPanelMenu({
   onOpenResearch: () => void;
   onOpenResearchHistory: () => void;
 }) {
+  const { t } = useI18n();
   const hasAnyPanel =
     hasAgentWorkbench ||
     hasPlan ||
@@ -373,11 +348,15 @@ function RightPanelMenu({
     openDefaultPanel();
   };
 
+  const panelToggleLabel = activePage
+    ? t.realtime.panelToggle.close
+    : t.realtime.panelToggle.open;
+
   return (
     <Button
       type="button"
-      aria-label={activePage ? "关闭右侧窗口" : "打开右侧窗口"}
-      title={activePage ? "关闭右侧窗口" : "打开右侧窗口"}
+      aria-label={panelToggleLabel}
+      title={panelToggleLabel}
       onClick={handleTogglePanel}
       className={cn(
         "flex size-8 items-center justify-center rounded-md border transition-colors shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
@@ -398,6 +377,7 @@ function FinalArtifactCompletionNotice({
   entries: DiffEntry[];
   onOpen: () => void;
 }) {
+  const { t } = useI18n();
   const first = entries[0];
   if (!first) return null;
   const extraCount = Math.max(0, entries.length - 1);
@@ -409,7 +389,7 @@ function FinalArtifactCompletionNotice({
     >
       <FileTextIcon className="size-4 shrink-0" />
       <span className="min-w-0 flex-1">
-        <span className="font-medium">最终报告已生成</span>
+        <span className="font-medium">{t.realtime.finalArtifact.generated}</span>
         <span className="ml-2 font-mono text-[11px] text-emerald-700/80 dark:text-emerald-200/80">
           {first.path || first.title}
         </span>
@@ -420,7 +400,7 @@ function FinalArtifactCompletionNotice({
         )}
       </span>
       <span className="shrink-0 text-[11px] text-emerald-700/75 dark:text-emerald-200/75">
-        查看
+        {t.realtime.finalArtifact.view}
       </span>
     </button>
   );
@@ -500,6 +480,7 @@ function ChatHeaderRecButton({
   onOpen: () => void;
   isRecording: boolean;
 }) {
+  const { t } = useI18n();
   const [status, setStatus] = useState<RecordingStatus>({
     recording: false,
     step_count: 0,
@@ -529,16 +510,16 @@ function ChatHeaderRecButton({
     return () => window.clearInterval(timer);
   }, [refresh, recording]);
 
+  const recordingTitle = recording
+    ? t.realtime.recording.recording(status.step_count)
+    : t.realtime.recording.idle;
+
   return (
     <button
       type="button"
       onClick={onOpen}
       disabled={!threadId || threadId === "new"}
-      title={
-        recording
-          ? `录制中 · ${status.step_count} 步，点击打开录制器`
-          : "REC：录制本轮对话并学习为可复用回放技能"
-      }
+      title={recordingTitle}
       className={cn(
         "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-[11px] font-semibold transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
@@ -599,7 +580,8 @@ function TaskCollaboratorControl({
   const teamSize = isTeamDraft
     ? selectedAgents.length + (currentAgentName ? 1 : 0)
     : 1;
-  const activeMeta = isTeamDraft ? TEAM_MODE_META[teamMode] : null;
+  const teamModeMeta = useTeamModeMeta();
+  const activeMeta = isTeamDraft ? teamModeMeta[teamMode] : null;
   const ActiveIcon = activeMeta?.icon ?? UserPlusIcon;
   const displayRoster = roster.slice(0, 5);
   const extraRosterCount = Math.max(0, roster.length - displayRoster.length);
@@ -747,7 +729,7 @@ function TaskCollaboratorControl({
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {TEAM_MODES.map((mode) => {
-              const meta = TEAM_MODE_META[mode];
+              const meta = teamModeMeta[mode];
               const Icon = meta.icon;
               const active = isTeamDraft && teamMode === mode;
               return (
@@ -1011,6 +993,7 @@ function RealtimePageContent({
     retry: false,
   });
   const coworkGroupQuery = useCoworkGroup(isNewThread ? null : threadId);
+  const collabSessionQuery = useCollabSession(isNewThread ? null : threadId);
   const inviteCoworkMemberMutation = useInviteCoworkMember();
   const removeCoworkMemberMutation = useRemoveCoworkMember();
   const setCoworkModeMutation = useSetCoworkMode();
@@ -1179,13 +1162,21 @@ function RealtimePageContent({
     [allTaskCollaboratorAgents, composerDisplayAgent],
   );
   const coworkCollaborationRoster = useMemo(
-    () =>
-      coworkGroupToCollaborationRoster(
+    () => {
+      const sessionRoster = coworkSessionToCollaborationRoster(
+        collabSessionQuery.data,
+        currentTaskAgentName,
+        coworkCollaborationProfiles,
+      );
+      if (sessionRoster.length > 0) return sessionRoster;
+      return coworkGroupToCollaborationRoster(
         coworkGroupQuery.data,
         currentTaskAgentName,
         coworkCollaborationProfiles,
-      ),
+      );
+    },
     [
+      collabSessionQuery.data,
       coworkCollaborationProfiles,
       coworkGroupQuery.data,
       currentTaskAgentName,
@@ -1206,7 +1197,8 @@ function RealtimePageContent({
     [currentTaskAgentName, savedCollaborationRoster],
   );
   const persistedCollaboratorKey = persistedCollaboratorIds.join("\u0000");
-  const savedCollaborationMode = coworkGroupQuery.data?.state.mode;
+  const savedCollaborationMode =
+    collabSessionQuery.data?.mode ?? coworkGroupQuery.data?.state.mode;
   const applyTaskCollaboratorPreset = useCallback(
     (preset: TaskCollaboratorPreset) => {
       const nextIds = Array.from(
@@ -1275,7 +1267,24 @@ function RealtimePageContent({
     const matchesSavedRoster =
       selectedCollaboratorKey === persistedCollaboratorKey;
     if (!startedLocally && !userTouched && !matchesSavedRoster) return;
-    if (coworkGroupQuery.isPending && coworkGroupQuery.data === undefined) {
+    const sessionState = collabSessionQuery.data
+      ? {
+          roster: collabSessionQuery.data.roster,
+          mode: collabSessionQuery.data.mode,
+          event_count: coworkGroupQuery.data?.state.event_count ?? 0,
+          is_one_to_one:
+            collabSessionQuery.data.roster.filter((member) => member.kind === "agent")
+              .length <= 1 &&
+            collabSessionQuery.data.roster.filter((member) => member.kind === "human")
+              .length <= 1,
+          room_id: collabSessionQuery.data.room_id,
+        }
+      : null;
+    const currentCoworkState = sessionState ?? coworkGroupQuery.data?.state ?? null;
+    if (
+      currentCoworkState === null &&
+      (collabSessionQuery.isPending || coworkGroupQuery.isPending)
+    ) {
       return;
     }
 
@@ -1283,7 +1292,7 @@ function RealtimePageContent({
       leaderId: currentTaskAgentName,
       collaboratorIds: selectedCollaboratorIds,
       mode: teamModeIntent,
-      current: coworkGroupQuery.data?.state ?? null,
+      current: currentCoworkState,
     });
     if (!plan.hasWork) return;
 
@@ -1323,6 +1332,8 @@ function RealtimePageContent({
       );
     }
   }, [
+    collabSessionQuery.data,
+    collabSessionQuery.isPending,
     coworkGroupQuery.data?.state,
     coworkGroupQuery.data,
     coworkGroupQuery.isPending,
@@ -1405,7 +1416,7 @@ function RealtimePageContent({
   );
   const collaborationTeamName =
     firstString(threadIdentityQuery.data?.values?.title, initialPrompt) ||
-    "协作任务";
+    t.collab.defaultTeamName;
   const collaborationContext = useMemo(() => {
     if (!collaborationEnabled) return {};
     const isCoworkMode = teamModeIntent !== "chat";
@@ -1421,7 +1432,7 @@ function RealtimePageContent({
       team_leader: collaborationRoster[0]?.display_name ?? effectiveAgentId,
       team_id: `thread:${threadId}`,
       team_name: collaborationTeamName,
-      project: `协作 · ${collaborationTeamName}`,
+      project: t.collab.projectPrefix(collaborationTeamName),
       task_agent_refs: selectedCollaborators.map((agent) => agent.name),
       task_agent_names: selectedCollaborators.map(
         (agent) => agent.display_name ?? agent.name,
@@ -1433,6 +1444,7 @@ function RealtimePageContent({
     collaborationTeamName,
     effectiveAgentId,
     selectedCollaborators,
+    t,
     teamModeIntent,
     threadId,
   ]);
@@ -1834,16 +1846,17 @@ function RealtimePageContent({
   );
   const handleExportReplay = useCallback(() => {
     if (replayBlocks.length === 0) return;
-    const title = thread?.values?.title || initialPrompt || "Octopus 运行回放";
+    const title =
+      thread?.values?.title || initialPrompt || t.realtime.replay.titleDefault;
     const html = buildReplayHtml(
       buildReplayFromBlocks(replayBlocks, {
         title,
         brand: "Octopus Agent",
-        footer: `${new Date().toLocaleDateString()} · 自包含离线回放`,
+        footer: `${new Date().toLocaleDateString()} · ${t.realtime.replay.footer}`,
       }),
     );
     downloadTextFile(html, `octopus-replay-${shareSlug(title)}.html`);
-  }, [replayBlocks, thread, initialPrompt]);
+  }, [replayBlocks, thread, initialPrompt, t]);
   const latestArtifactFocusPath = useMemo(
     () => latestArtifactFocusPathFromEvents(agentDisplayEvents),
     [agentDisplayEvents],
@@ -2642,9 +2655,9 @@ function RealtimePageContent({
                       defaultValue={composerSeed}
                       placeholder={
                         isProjectCodeMode
-                          ? "描述要修改、排查或验证的项目任务..."
+                          ? t.realtime.composer.placeholderCode
                           : isNewThread
-                            ? "描述要实现、生成、排查或验证的任务..."
+                            ? t.realtime.composer.placeholderNew
                             : undefined
                       }
                       className={cn(
@@ -2747,7 +2760,9 @@ function RealtimePageContent({
         <RecRecorderOverlay
           open={recOverlayOpen}
           threadId={threadId}
-          defaultName={thread?.values?.title || initialPrompt || "对话回放学习"}
+          defaultName={
+            thread?.values?.title || initialPrompt || t.realtime.recorder.defaultName
+          }
           initiallyRecording={recIsRecording}
           onClose={() => setRecOverlayOpen(false)}
           onRecordingChange={setRecIsRecording}
@@ -2758,10 +2773,12 @@ function RealtimePageContent({
 }
 
 function NewChatStarterGrid({ onPick }: { onPick: (prompt: string) => void }) {
+  const { t } = useI18n();
+  const starters = t.realtime.chatStarters;
   return (
     <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
-      {NEW_CHAT_STARTERS.map((item) => {
-        const Icon = item.icon;
+      {starters.map((item, index) => {
+        const Icon = CHAT_STARTER_ICONS[index] ?? SearchIcon;
         return (
           <button
             key={item.label}

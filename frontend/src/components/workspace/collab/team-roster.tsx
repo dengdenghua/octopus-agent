@@ -1,6 +1,7 @@
 import { AtSignIcon, BotIcon } from "lucide-react";
 
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
+import { useI18n } from "@/core/i18n/hooks";
 import type { Team } from "@/core/teams/api";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ export function TeamRoster({
   onMention,
   className,
 }: TeamRosterProps) {
+  const { t } = useI18n();
   const humans = (team?.participants ?? []).filter(
     (p) => p.status !== "removed",
   );
@@ -37,10 +39,13 @@ export function TeamRoster({
   return (
     <div className={cn("min-h-0 flex-1 overflow-y-auto p-3", className)}>
       <div className="mb-3">
-        <div className="text-sm font-medium text-foreground">群成员</div>
+        <div className="text-sm font-medium text-foreground">
+          {t.collab.roster.title}
+        </div>
         <div className="mt-0.5 text-xs text-muted-foreground">
-          {team?.name ?? "未选择 Team"} · {agents.length} 位 AI 成员 ·{" "}
-          {onlineHumans}/{humans.length} 人在线
+          {team?.name ?? t.collab.roster.noTeamSelected} ·{" "}
+          {t.collab.roster.aiMembersCount(agents.length)} ·{" "}
+          {t.collab.roster.onlineCount(onlineHumans, humans.length)}
         </div>
       </div>
 
@@ -48,7 +53,7 @@ export function TeamRoster({
       {agents.length > 0 && (
         <div className="mb-3">
           <div className="mb-1.5 flex items-center gap-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            <BotIcon className="size-3" /> 工位 · 随时待命
+            <BotIcon className="size-3" /> {t.collab.roster.workstationGroup}
           </div>
           <div className="flex flex-wrap gap-1.5">
             {agents.map((agent) => {
@@ -73,13 +78,13 @@ export function TeamRoster({
                   avatar={agent.icon}
                   avatarUrl={avatarSrc}
                   showBotBadge
-                  title={agent.description || "AI 成员"}
+                  title={agent.description || t.collab.roster.aiMemberDefault}
                   dotClassName="bg-muted-foreground/40"
-                  dotLabel="随时待命"
+                  dotLabel={t.collab.roster.standby}
                   badge={
                     isLeader ? (
                       <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                        队长
+                        {t.collab.common.leader}
                       </span>
                     ) : undefined
                   }
@@ -103,40 +108,45 @@ export function TeamRoster({
       {/* Human collaborators */}
       <div>
         <div className="mb-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          协作者
+          {t.collab.roster.collaboratorsGroup}
         </div>
         {humans.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border/70 bg-muted/15 px-4 py-6 text-center text-xs text-muted-foreground">
-            还没有其他人 · 用上方「邀请」拉人进群
+            {t.collab.roster.emptyHint}
           </div>
         ) : (
           <div className="flex flex-wrap gap-1.5">
-            {humans.map((participant) => (
-              <WorkstationSeat
-                key={participant.id}
-                className="max-w-full"
-                name={participant.display_name}
-                fallbackInitial={participant.display_name.charAt(0)}
-                title={
-                  participant.status === "active"
-                    ? `在线 · ${participant.role}`
-                    : `离线 · ${participant.role}`
-                }
-                dotClassName={
-                  participant.status === "active"
-                    ? "bg-emerald-500"
-                    : "bg-muted-foreground/35"
-                }
-                dotLabel={participant.status === "active" ? "在线" : "离线"}
-                badge={
-                  participant.id === currentParticipantId ? (
-                    <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
-                      You
-                    </span>
-                  ) : undefined
-                }
-              />
-            ))}
+            {humans.map((participant) => {
+              const isOnline = participant.status === "active";
+              const statusText = isOnline
+                ? t.collab.common.online
+                : t.collab.common.offline;
+              return (
+                <WorkstationSeat
+                  key={participant.id}
+                  className="max-w-full"
+                  name={participant.display_name}
+                  fallbackInitial={participant.display_name.charAt(0)}
+                  title={t.collab.roster.statusWithRole(
+                    statusText,
+                    participant.role,
+                  )}
+                  dotClassName={
+                    isOnline
+                      ? "bg-emerald-500"
+                      : "bg-muted-foreground/35"
+                  }
+                  dotLabel={statusText}
+                  badge={
+                    participant.id === currentParticipantId ? (
+                      <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                        You
+                      </span>
+                    ) : undefined
+                  }
+                />
+              );
+            })}
           </div>
         )}
       </div>

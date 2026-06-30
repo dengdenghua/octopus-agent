@@ -11,7 +11,7 @@ import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
 import { PresenceDots } from "./cowork-collab-bar";
-import { TEAM_MODE_META, type TeamMode } from "./team-mode-picker";
+import { getTeamModeMeta, type TeamMode } from "./team-mode-picker";
 
 type T = ReturnType<typeof useI18n>["t"];
 
@@ -44,8 +44,9 @@ export function CollaborationSessionView({
   session: CollaborationSession;
   t: T;
 }) {
+  const teamModeMeta = getTeamModeMeta(t);
   const modeMeta =
-    TEAM_MODE_META[session.mode as TeamMode] ?? TEAM_MODE_META.chat;
+    teamModeMeta[session.mode as TeamMode] ?? teamModeMeta.chat;
   const ModeIcon = modeMeta.icon;
   return (
     <div

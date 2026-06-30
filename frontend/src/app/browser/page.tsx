@@ -1,6 +1,7 @@
 /* Implementation note. */
 
 import { swallow } from "@/core/utils/log";
+import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import {
   ClockIcon,
@@ -68,6 +69,7 @@ const DEVICE_STAGE = {
 } as const;
 
 function BrowserShell() {
+  const { t } = useI18n();
   const {
     state,
     activeTab,
@@ -401,9 +403,9 @@ function BrowserShell() {
             </div>
             <button
               type="button"
-              title={sidePanelPinned ? "取消固定标签工作区" : "展开标签工作区"}
+              title={sidePanelPinned ? t.browser.sidePanel.unpin : t.browser.sidePanel.expand}
               aria-label={
-                sidePanelPinned ? "取消固定标签工作区" : "展开标签工作区"
+                sidePanelPinned ? t.browser.sidePanel.unpin : t.browser.sidePanel.expand
               }
               onMouseEnter={showSidePanel}
               onMouseLeave={scheduleSidePanelClose}
@@ -521,6 +523,7 @@ function BrowserSidePanel({
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }) {
+  const { t } = useI18n();
   const {
     state,
     activeTab,
@@ -570,13 +573,13 @@ function BrowserSidePanel({
         : filteredBookmarks.length;
   const emptyLabel =
     query.trim().length > 0
-      ? "没有匹配的记录"
+      ? t.browser.empty.noMatch
       : panelMode === "tabs"
-        ? "暂无标签页"
+        ? t.browser.empty.noTabs
         : panelMode === "history"
-          ? "暂无最近访问"
-          : "暂无收藏";
-  const activeTabLabel = activeTab?.title || activeTab?.url || "AI 浏览器桌面";
+          ? t.browser.empty.noRecent
+          : t.browser.empty.noFavorites;
+  const activeTabLabel = activeTab?.title || activeTab?.url || t.browser.defaultTabTitle;
   const activeTabUrl = activeTab?.url ?? "";
   const canCopyActiveUrl =
     activeTabUrl.length > 0 && !activeTabUrl.startsWith("octopus:");
@@ -625,11 +628,11 @@ function BrowserSidePanel({
           <MenuIcon className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold">浏览器</div>
-          <div className="text-[11px] text-muted-foreground">
-            标签工作区{pinned ? " · 已固定" : ""}
+            <div className="text-sm font-semibold">{t.browser.pageTitle}</div>
+            <div className="text-[11px] text-muted-foreground">
+              {t.browser.pageSubtitle(pinned)}
+            </div>
           </div>
-        </div>
       </div>
 
       <div className="octo-liquid-glass octo-liquid-glass--input mt-4 flex h-9 items-center gap-2 rounded-full px-3 text-xs text-muted-foreground">
@@ -637,7 +640,7 @@ function BrowserSidePanel({
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索标签页..."
+          placeholder={t.browser.searchPlaceholder}
           className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
         />
       </div>
@@ -674,7 +677,7 @@ function BrowserSidePanel({
               className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-muted/60 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
             >
               <CopyIcon className="size-3.5" />
-              {copiedField === "url" ? "已复制" : "复制链接"}
+              {copiedField === "url" ? t.browser.copy.copied : t.browser.copy.link}
             </button>
             <button
               type="button"
@@ -682,7 +685,7 @@ function BrowserSidePanel({
               className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-muted/60 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <CopyIcon className="size-3.5" />
-              {copiedField === "title" ? "已复制" : "复制标题"}
+              {copiedField === "title" ? t.browser.copy.copied : t.browser.copy.title}
             </button>
             <button
               type="button"
@@ -690,7 +693,7 @@ function BrowserSidePanel({
               className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-muted/60 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <PlusIcon className="size-3.5" />
-              复制标签
+              {t.browser.copy.tabMenuItem}
             </button>
             <button
               type="button"
@@ -699,7 +702,7 @@ function BrowserSidePanel({
               className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-muted/60 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
             >
               <XIcon className="size-3.5" />
-              只保留当前
+              {t.browser.menu.closeOtherTabs}
             </button>
           </div>
         </div>
@@ -707,9 +710,9 @@ function BrowserSidePanel({
 
       <div className="octo-liquid-glass octo-liquid-glass--thin mt-3 grid grid-cols-3 rounded-xl p-1 text-[11px] font-medium text-muted-foreground">
         {[
-          { id: "tabs", label: "标签", icon: MenuIcon },
-          { id: "history", label: "最近", icon: ClockIcon },
-          { id: "bookmarks", label: "收藏", icon: StarIcon },
+          { id: "tabs", label: t.browser.tabs.label, icon: MenuIcon },
+          { id: "history", label: t.browser.tabs.recent, icon: ClockIcon },
+          { id: "bookmarks", label: t.browser.tabs.favorites, icon: StarIcon },
         ].map((item) => {
           const Icon = item.icon;
           const active = panelMode === item.id;
@@ -743,7 +746,7 @@ function BrowserSidePanel({
         className="mt-3 flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium text-foreground transition-colors hover:bg-background/70"
       >
         <PlusIcon className="size-4" />
-        新标签页
+        {t.browser.newTab}
       </button>
 
       <div className="mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
@@ -798,7 +801,7 @@ function BrowserSidePanel({
                   }}
                   className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground/70 opacity-0 transition-opacity hover:bg-foreground/10 hover:text-foreground group-hover:opacity-100 data-[active=true]:opacity-100"
                   data-active={active}
-                  title="关闭标签页"
+                  title={t.browser.closeTab}
                 >
                   <XIcon className="size-3.5" />
                 </button>
@@ -876,7 +879,7 @@ function BrowserSidePanel({
         className="octo-liquid-glass octo-liquid-glass--thin octo-liquid-glass--interactive mt-3 flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-medium text-foreground"
       >
         <PlusIcon className="size-4" />
-        新建标签页
+        {t.browser.newTabPage}
       </button>
     </LiquidGlass>
   );

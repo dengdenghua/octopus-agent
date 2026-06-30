@@ -12,6 +12,7 @@ import { FileTree } from "@/components/workspace/file-tree";
 import { WorkstationSeat } from "@/components/workspace/workstation-seat";
 import { WorkDirSelector } from "@/components/workspace/workdir-selector";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
+import { useI18n } from "@/core/i18n/hooks";
 import type { Team } from "@/core/teams";
 import { cn } from "@/lib/utils";
 
@@ -34,16 +35,6 @@ interface TeamWorkbenchPanelProps {
   className?: string;
 }
 
-const TABS: Array<{
-  id: TeamWorkbenchTabId;
-  label: string;
-  Icon: typeof ClipboardListIcon;
-}> = [
-  { id: "members", label: "群成员", Icon: UsersIcon },
-  { id: "tasks", label: "待办 plan", Icon: ClipboardListIcon },
-  { id: "workspace", label: "工作区", Icon: FolderIcon },
-];
-
 export function TeamWorkbenchPanel({
   activeTab,
   onSelectTab,
@@ -57,6 +48,18 @@ export function TeamWorkbenchPanel({
   onMention,
   className,
 }: TeamWorkbenchPanelProps) {
+  const { t } = useI18n();
+
+  const TABS: Array<{
+    id: TeamWorkbenchTabId;
+    label: string;
+    Icon: typeof ClipboardListIcon;
+  }> = [
+    { id: "members", label: t.collab.workbench.tabMembers, Icon: UsersIcon },
+    { id: "tasks", label: t.collab.workbench.tabTasks, Icon: ClipboardListIcon },
+    { id: "workspace", label: t.collab.workbench.tabWorkspace, Icon: FolderIcon },
+  ];
+
   return (
     <div
       data-testid="team-workbench-panel"
@@ -69,12 +72,12 @@ export function TeamWorkbenchPanel({
         <div className="flex min-w-0 items-end gap-1.5 sm:gap-2">
           <div className="mb-1.5 hidden h-8 shrink-0 items-center gap-2 rounded-lg border border-border/60 bg-background/85 px-2 text-xs font-medium text-muted-foreground shadow-sm min-[520px]:flex">
             <MonitorIcon className="size-4" />
-            <span>协作工作台</span>
+            <span>{t.collab.workbench.title}</span>
           </div>
           <div
             data-testid="team-workbench-tabs"
             role="tablist"
-            aria-label="协作工作台"
+            aria-label={t.collab.workbench.title}
             className="flex min-w-0 flex-1 items-end gap-0.5 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {TABS.map(({ id, label, Icon }) => {
@@ -111,7 +114,7 @@ export function TeamWorkbenchPanel({
               size="icon"
               className="mb-1 size-8 shrink-0 rounded-lg border border-transparent text-muted-foreground hover:border-border/60 hover:bg-muted/60 hover:text-foreground"
               onClick={onClose}
-              title="关闭工作台"
+              title={t.collab.workbench.closeTitle}
             >
               <XIcon className="size-4" />
             </Button>
@@ -163,6 +166,7 @@ function TeamMachineRail({
   onMention?: (name: string) => void;
   onSelectMembers: () => void;
 }) {
+  const { t } = useI18n();
   const humans = (team?.participants ?? []).filter(
     (participant) => participant.status !== "removed",
   );
@@ -199,15 +203,15 @@ function TeamMachineRail({
               showBotBadge
               fallbackInitial={name.charAt(0)}
               dotClassName="bg-muted-foreground/45"
-              dotLabel={isLeader ? "队长 · 随时待命" : "随时待命"}
+              dotLabel={isLeader ? t.collab.workbench.leaderStandby : t.collab.workbench.standby}
               title={
                 agent.description ||
-                `${name} · ${isLeader ? "队长" : "AI 成员"}`
+                t.collab.workbench.memberNameWithRole(name, isLeader)
               }
               ariaLabel={`@${name}`}
               selected={isLeader}
               iconOnly
-              iconCaption={isLeader ? "队长" : undefined}
+              iconCaption={isLeader ? t.collab.common.leader : undefined}
               onClick={() => {
                 onSelectMembers();
                 onMention?.(agent.name);
@@ -219,6 +223,7 @@ function TeamMachineRail({
         {humans.map((participant) => {
           const isSelf = participant.id === currentParticipantId;
           const isOnline = participant.status === "active";
+          const statusText = isOnline ? t.collab.common.online : t.collab.common.offline;
           return (
             <WorkstationSeat
               key={participant.id}
@@ -227,13 +232,9 @@ function TeamMachineRail({
               dotClassName={
                 isOnline ? "bg-emerald-500" : "bg-muted-foreground/35"
               }
-              dotLabel={isOnline ? "在线" : "离线"}
-              title={`${participant.display_name} · ${
-                isOnline ? "在线" : "离线"
-              } · ${participant.role}`}
-              ariaLabel={`${participant.display_name} · ${
-                isOnline ? "在线" : "离线"
-              }`}
+              dotLabel={statusText}
+              title={`${participant.display_name} · ${statusText} · ${participant.role}`}
+              ariaLabel={`${participant.display_name} · ${statusText}`}
               selected={isSelf}
               iconOnly
               iconCaption={isSelf ? "You" : undefined}
@@ -254,16 +255,17 @@ function WorkspacePathBar({
   workDir: string;
   onWorkDirChange: (path: string) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="mt-2 flex items-center gap-2 border-t border-border/45 py-2">
       <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border/60 bg-muted/25 px-2.5 py-1.5">
         <FolderIcon className="size-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
           <div className="text-[10px] font-medium text-muted-foreground">
-            当前工作区
+            {t.collab.workbench.currentWorkspace}
           </div>
           <div className="truncate font-mono text-[11px] text-foreground">
-            {workDir || "未选择目录"}
+            {workDir || t.collab.workbench.noDirectorySelected}
           </div>
         </div>
       </div>

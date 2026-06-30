@@ -816,6 +816,52 @@ export const zhCN: Translations = {
     turns: (count) => `${count} 轮`,
     lastStatus: (status) => `最后状态：${status}`,
     updated: (date) => `更新于：${date}`,
+    chatStarters: [
+      {
+        label: "调研一个方向",
+        prompt:
+          "调研一个值得进入的细分赛道，输出机会点、竞品格局、风险和下一步行动。",
+      },
+      {
+        label: "规划一项工作",
+        prompt:
+          "把这个目标拆成可执行计划，按优先级列出里程碑、风险和今天要做的第一步。",
+      },
+      {
+        label: "写一份文档",
+        prompt:
+          "帮我写一份清晰的项目说明，包含背景、目标、方案、时间线和验收标准。",
+      },
+      {
+        label: "检查一段代码",
+        prompt:
+          "帮我审查这段代码，找出潜在 bug、边界情况、性能问题和可以直接修改的地方。",
+      },
+    ],
+    panelToggle: {
+      close: "关闭右侧窗口",
+      open: "打开右侧窗口",
+    },
+    finalArtifact: {
+      generated: "最终报告已生成",
+      view: "查看",
+    },
+    recording: {
+      recording: (stepCount: number) =>
+        `录制中 · ${stepCount} 步，点击打开录制器`,
+      idle: "REC：录制本轮对话并学习为可复用回放技能",
+    },
+    replay: {
+      titleDefault: "Octopus 运行回放",
+      footer: "自包含离线回放",
+    },
+    composer: {
+      placeholderCode: "描述要修改、排查或验证的项目任务...",
+      placeholderNew: "描述要实现、生成、排查或验证的任务...",
+    },
+    recorder: {
+      defaultName: "对话回放学习",
+    },
   },
 
   realtimeItems: {
@@ -2215,6 +2261,179 @@ export const zhCN: Translations = {
     agentCreated: "智能体创建成功!",
     startChatting: "开始对话",
     backToGallery: "返回 Gallery",
+    agentNew: {
+      pageTitle: "新建 Agent",
+      pageSubtitle: "一句话描述目标，Agent Generator 自动补全配置",
+      placeholder: "例如：帮我做竞品调研，每周输出机会点、风险提醒和下一步行动。",
+      buttons: {
+        checking: "检查中...",
+        generate: "生成 Agent",
+        back: "返回",
+        autoConfig: "一键配置生成",
+        generateConfig: "生成配置描述",
+      },
+      labels: {
+        permissions: "权限",
+      },
+      roles: [
+        {
+          id: "operator",
+          label: "工作流执行者",
+          nameSuggestion: "workflow-operator",
+          brief: "负责把用户目标拆成步骤，调用工具执行，并在关键节点回报进展。",
+        },
+        {
+          id: "analyst",
+          label: "分析顾问",
+          nameSuggestion: "insight-analyst",
+          brief: "负责调研、分析、归纳证据，并输出结构化判断和下一步行动。",
+        },
+        {
+          id: "creator",
+          label: "内容创作",
+          nameSuggestion: "content-creator",
+          brief: "负责把模糊想法转成可发布内容、脚本、文案和视觉方向。",
+        },
+        {
+          id: "assistant",
+          label: "个人助理",
+          nameSuggestion: "personal-assistant",
+          brief: "负责整理日程、消息、文件和待办，帮助用户保持事务有序推进。",
+        },
+      ],
+      scenarios: [
+        {
+          id: "workspace",
+          label: "工作区协作",
+          brief: "主要在团队、知识库、项目资料和共享上下文中工作。",
+          permissions: ["读取工作区资料", "写入草案和任务", "高风险外部动作需确认"],
+        },
+        {
+          id: "research",
+          label: "深度调研",
+          brief: "需要搜索网页、比对来源、整理证据链并给出判断。",
+          permissions: ["允许联网搜索", "必须标注来源", "不确定结论需显式说明"],
+        },
+        {
+          id: "automation",
+          label: "自动化执行",
+          brief: "适合重复流程、表格处理、文件整理和跨工具串联。",
+          permissions: ["允许本地/工具操作", "写入前先预览", "删除和发送动作需确认"],
+        },
+        {
+          id: "chat",
+          label: "对话陪伴",
+          brief: "重视长期记忆、口吻一致性、角色设定和互动边界。",
+          permissions: ["遵循角色口吻", "保留安全边界", "不伪造真实身份"],
+        },
+      ],
+      abilities: [
+        {
+          id: "knowledge",
+          label: "知识库",
+          arms: ["knowledge", "files"],
+          skills: ["read_knowledge", "summarize_docs", "cite_sources"],
+          brief: "读取并归纳知识库、文件和历史上下文。",
+        },
+        {
+          id: "web",
+          label: "网页调研",
+          arms: ["browser", "search"],
+          skills: ["web_search", "open_url", "extract_evidence"],
+          brief: "联网搜索、打开网页、抽取来源和事实证据。",
+        },
+        {
+          id: "workspace-tools",
+          label: "工作区工具",
+          arms: ["tasks", "calendar", "team"],
+          skills: ["create_task", "read_calendar", "draft_update"],
+          brief: "处理任务、日程、团队消息和项目更新。",
+        },
+        {
+          id: "local",
+          label: "本机操作",
+          arms: ["computer", "filesystem"],
+          skills: ["inspect_files", "edit_file", "run_command"],
+          brief: "在用户确认下读取文件、修改草案或执行本地命令。",
+        },
+      ],
+      templates: [
+        {
+          id: "team-qa",
+          name: "团队聊天问答",
+          nameSuggestion: "team-qa",
+          description: "基于团队资料、群消息和共享文档回答问题。",
+          integrations: ["知识库", "团队消息", "Google Drive"],
+          capabilities: [
+            "整理团队文档并回答成员问题",
+            "回答时标注依据和缺口",
+            "把反复出现的问题沉淀成可复用知识",
+          ],
+        },
+        {
+          id: "morning-planner",
+          name: "晨间计划",
+          nameSuggestion: "morning-planner",
+          description: "根据日历、任务和未结束会话规划当天安排。",
+          integrations: ["Calendar", "Todos", "会话历史"],
+          capabilities: [
+            "把分散任务转成当天计划",
+            "识别截止日期和时间冲突",
+            "跟踪未完成事项并滚动调整",
+          ],
+        },
+        {
+          id: "defect-triage",
+          name: "缺陷分诊",
+          nameSuggestion: "defect-triage",
+          description: "审查新报缺陷、判断优先级并写入跟踪器。",
+          integrations: ["Linear", "Jira", "日志"],
+          capabilities: [
+            "补全复现步骤和影响范围",
+            "给出优先级和负责方向",
+            "把结论沉淀到缺陷跟踪器",
+          ],
+        },
+        {
+          id: "data-analyst",
+          name: "数据分析",
+          nameSuggestion: "data-analyst",
+          description: "围绕分析目标组织数据、SQL、图表和质量检查。",
+          integrations: ["Airtable", "Hex", "SQL"],
+          capabilities: [
+            "将模糊数据需求转化为分析计划",
+            "检查数据集结构和异常",
+            "编写或修复 SQL 和抽取逻辑",
+            "选择最清晰的图表或表格",
+            "分享前对分析进行压力测试",
+          ],
+        },
+        {
+          id: "exec-assistant",
+          name: "执行助理",
+          nameSuggestion: "exec-assistant",
+          description: "汇总日程、收件箱和项目进展，推动后续动作。",
+          integrations: ["Mail", "Calendar", "Docs"],
+          capabilities: [
+            "汇总关键信息和待决策事项",
+            "草拟回复和会议跟进",
+            "把承诺事项转成可追踪任务",
+          ],
+        },
+        {
+          id: "knowledge-search",
+          name: "知识搜索",
+          nameSuggestion: "knowledge-search",
+          description: "跨文档、网页和会话做可靠检索与答案归纳。",
+          integrations: ["Web", "Knowledge", "Files"],
+          capabilities: [
+            "跨来源检索并合并答案",
+            "区分事实、推断和不确定性",
+            "对时效性问题主动联网确认",
+          ],
+        },
+      ],
+    },
   },
 
   // Agent card
@@ -3866,6 +4085,38 @@ export const zhCN: Translations = {
       addWidgetBtn: "添加小组件",
       appNameDoubao: "豆包",
     },
+    empty: {
+      noMatch: "没有匹配的记录",
+      noTabs: "暂无标签页",
+      noRecent: "暂无最近访问",
+      noFavorites: "暂无收藏",
+    },
+    defaultTabTitle: "AI 浏览器桌面",
+    pageTitle: "浏览器",
+    pageSubtitle: (pinned: boolean) =>
+      pinned ? "标签工作区 · 已固定" : "标签工作区",
+    searchPlaceholder: "搜索标签页...",
+    copy: {
+      link: "复制链接",
+      title: "复制标题",
+      copied: "已复制",
+      tabMenuItem: "复制标签",
+    },
+    menu: {
+      closeOtherTabs: "只保留当前",
+    },
+    tabs: {
+      label: "标签",
+      recent: "最近",
+      favorites: "收藏",
+    },
+    newTab: "新标签页",
+    newTabPage: "新建标签页",
+    closeTab: "关闭标签页",
+    sidePanel: {
+      unpin: "取消固定标签工作区",
+      expand: "展开标签工作区",
+    },
     tabBar: {
       close: "关闭",
       newTab: "新标签页 · Ctrl+T",
@@ -4500,6 +4751,107 @@ export const zhCN: Translations = {
     linkCopied: "链接已复制",
     copyFailed: "复制失败",
     onlineCount: (count: number) => `${count} 人在线`,
+    defaultTeamName: "协作任务",
+    projectPrefix: (teamName: string) => `协作 · ${teamName}`,
+    teamModes: [
+      {
+        id: "chat",
+        label: "单聊",
+        description: "一个 agent 接话 · @谁就他，不@默认队长",
+      },
+      {
+        id: "cluster",
+        label: "集群",
+        description: "队长拆解 → 分派 → 各司其职 → 汇总（有分工、有中心）",
+      },
+      {
+        id: "swarm",
+        label: "蜂群",
+        description: "围一块黑板各自反应、并行涌现（无中心、自组织）",
+      },
+      {
+        id: "project",
+        label: "项目",
+        description: "里程碑驱动 · 交给 Project OS 拆任务 → 执行 → 验收",
+      },
+    ],
+    common: {
+      online: "在线",
+      offline: "离线",
+      leader: "队长",
+      aiMember: "AI 成员",
+      cancel: "取消",
+      create: "创建",
+      loading: "加载中...",
+    },
+    workbench: {
+      tabMembers: "群成员",
+      tabTasks: "待办 plan",
+      tabWorkspace: "工作区",
+      title: "协作工作台",
+      closeTitle: "关闭工作台",
+      leaderStandby: "队长 · 随时待命",
+      standby: "随时待命",
+      memberNameWithRole: (name: string, isLeader: boolean) =>
+        `${name} · ${isLeader ? "队长" : "AI 成员"}`,
+      currentWorkspace: "当前工作区",
+      noDirectorySelected: "未选择目录",
+    },
+    roster: {
+      title: "群成员",
+      noTeamSelected: "未选择 Team",
+      aiMembersCount: (count: number) => `${count} 位 AI 成员`,
+      onlineCount: (online: number, total: number) =>
+        `${online}/${total} 人在线`,
+      workstationGroup: "工位 · 随时待命",
+      aiMemberDefault: "AI 成员",
+      standby: "随时待命",
+      collaboratorsGroup: "协作者",
+      emptyHint: "还没有其他人 · 用上方「邀请」拉人进群",
+      statusWithRole: (status: string, role: string) =>
+        `${status} · ${role}`,
+    },
+    createTask: {
+      toastCreated: "任务已创建",
+      toastFailed: "创建任务失败",
+      title: "新建任务",
+      description: "把团队目标拆成可运行、可追踪、可产出结果的任务。",
+      taskTitleLabel: "任务标题",
+      descriptionLabel: "补充说明",
+      sopLabel: "能力包 / SOP",
+      assigneeLabel: "指派 Agent",
+      titlePlaceholder: "例如：调研一个值得进入的细分赛道",
+      descriptionPlaceholder: "范围、输出格式、约束、已有资料...",
+      autoMatchFreeform: "自动匹配或自由执行",
+      loadingPacks: "正在加载能力包",
+      cancel: "取消",
+      create: "创建",
+    },
+    inviteAgents: {
+      toastAdded: (count: number) => `已添加 ${count} 个 Agent`,
+      toastFailed: "添加 Agent 失败",
+      roleMember: "成员",
+      roleMemberDesc: "可发起 AI 任务和参与协作",
+      roleViewer: "旁观",
+      roleViewerDesc: "可看进展和留言，不启动任务",
+      addAgentTitle: "添加 Agent",
+      countText: (inTeam: number, available: number) =>
+        `已有 ${inTeam} 个 · 可选 ${available} 个`,
+      addFiltered: "添加当前筛选",
+      searchPlaceholder: "搜索 Agent 或角色",
+      loadingAgents: "加载 Agent 中...",
+      noMatches: "没有匹配的 Agent",
+      inTeam: "已在 Team",
+      add: "添加",
+    },
+    mobileJoin: {
+      title: "拉手机进群",
+      description:
+        "手机装 octopus-mobile,扫码或粘贴口令即可连进群(需在同一 Wi-Fi)",
+      connectCodeLabel: "连接口令(手机设置里粘贴)",
+      manualFillPrefix: "或手动填:地址",
+      manualFillCode: "· 口令",
+    },
   },
 
   // Workflow Editor
@@ -6576,14 +6928,17 @@ export const zhCN: Translations = {
     },
     errors: {
       invalidPhone: "请输入有效的手机号",
+      invalidEmail: "请输入有效的邮箱地址",
       sendFailed: "发送失败",
       fillRequired: "请填写手机号和验证码",
+      emailFillRequired: "请填写邮箱和验证码",
       loginFailed: "登录失败",
       enterFailed: "进入失败",
       moliliNotEnabled: "账号登录在此服务器未启用 · 可使用本地账号或自定义模型",
     },
     success: {
       codeSent: "验证码已发送，请查收短信",
+      emailCodeSent: "验证码已发送，请查收邮箱",
       loginSuccess: "登录成功",
       guestEntered: "已进入访客模式",
     },
@@ -6594,6 +6949,7 @@ export const zhCN: Translations = {
     },
     terms: {
       autoRegister: "未注册手机号将自动创建账号",
+      emailAutoRegister: "未注册邮箱将自动创建账号",
       agreeTo: "登录即视为同意",
       userAgreement: "用户协议",
       privacyPolicy: "隐私政策",
@@ -6604,6 +6960,7 @@ export const zhCN: Translations = {
       description:
         "继续你的研究、编码、协作与自动化任务，在统一工作区里管理上下文、技能与执行结果。",
       cardDescription: "手机号直接登录，自动绑定大模型与积分",
+      emailCardDescription: "邮箱验证码登录，自动绑定大模型与积分",
     },
     molili: {
       title: "登录以继续",

@@ -18,6 +18,14 @@ const t = {
     kindRoomTask: "Room task",
     linkedRoom: "Linked room",
   },
+  collab: {
+    teamModes: [
+      { id: "chat", label: "Solo", description: "One agent answers" },
+      { id: "cluster", label: "Cluster", description: "Leader decomposes" },
+      { id: "swarm", label: "Swarm", description: "Agents react in parallel" },
+      { id: "project", label: "Project", description: "Milestone-driven" },
+    ],
+  },
 } as unknown as Parameters<typeof CollaborationSessionView>[0]["t"];
 
 function session(
@@ -42,7 +50,7 @@ describe("CollaborationSessionView", () => {
   it("renders the mode label and core stats", () => {
     render(<CollaborationSessionView session={session()} t={t} />);
     expect(screen.getByTestId("collab-session-view")).toBeTruthy();
-    expect(screen.getByText("蜂群")).toBeTruthy(); // swarm mode label from TEAM_MODE_META
+    expect(screen.getByText("Swarm")).toBeTruthy(); // swarm mode label from teamModes
     expect(screen.getByText("2")).toBeTruthy(); // roster count
   });
 

@@ -847,6 +847,54 @@ export const enUS: Translations = {
     turns: (count) => `${count} turns`,
     lastStatus: (status) => `last status: ${status}`,
     updated: (date) => `updated: ${date}`,
+    chatStarters: [
+      {
+        label: "Research a direction",
+        prompt:
+          "Research a niche market worth entering, output opportunities, competitive landscape, risks, and next steps.",
+      },
+      {
+        label: "Plan a task",
+        prompt:
+          "Break this goal into an executable plan, list milestones, risks, and the first step to take today by priority.",
+      },
+      {
+        label: "Write a document",
+        prompt:
+          "Help me write a clear project brief, including background, goals, approach, timeline, and acceptance criteria.",
+      },
+      {
+        label: "Review some code",
+        prompt:
+          "Help me review this code, find potential bugs, edge cases, performance issues, and areas that can be directly improved.",
+      },
+    ],
+    panelToggle: {
+      close: "Close right panel",
+      open: "Open right panel",
+    },
+    finalArtifact: {
+      generated: "Final report generated",
+      view: "View",
+    },
+    recording: {
+      recording: (stepCount: number) =>
+        `Recording · ${stepCount} steps, click to open recorder`,
+      idle: "REC: Record this conversation and learn as a reusable replay skill",
+    },
+    replay: {
+      titleDefault: "Octopus Run Replay",
+      footer: "Self-contained offline replay",
+    },
+    composer: {
+      placeholderCode:
+        "Describe the project task to modify, debug, or verify...",
+      placeholderNew:
+        "Describe the task to implement, generate, debug, or verify...",
+    },
+    recorder: {
+      defaultName: "Conversation Replay Learning",
+    },
   },
 
   realtimeItems: {
@@ -2384,6 +2432,179 @@ export const enUS: Translations = {
     agentCreated: "Agent created!",
     startChatting: "Start chatting",
     backToGallery: "Back to Gallery",
+    agentNew: {
+      pageTitle: "Create Agent",
+      pageSubtitle: "Describe your goal in one sentence, Agent Generator auto-completes the config",
+      placeholder: "e.g. Help me do competitive research, output opportunities, risk alerts and next steps every week.",
+      buttons: {
+        checking: "Checking...",
+        generate: "Generate Agent",
+        back: "Back",
+        autoConfig: "Quick Config Generator",
+        generateConfig: "Generate Config Description",
+      },
+      labels: {
+        permissions: "Permissions",
+      },
+      roles: [
+        {
+          id: "operator",
+          label: "Workflow Operator",
+          nameSuggestion: "workflow-operator",
+          brief: "Breaks user goals into steps, executes with tools, and reports progress at key milestones.",
+        },
+        {
+          id: "analyst",
+          label: "Insight Analyst",
+          nameSuggestion: "insight-analyst",
+          brief: "Researches, analyzes, synthesizes evidence, and outputs structured judgments and next actions.",
+        },
+        {
+          id: "creator",
+          label: "Content Creator",
+          nameSuggestion: "content-creator",
+          brief: "Transforms vague ideas into publishable content, scripts, copy, and visual direction.",
+        },
+        {
+          id: "assistant",
+          label: "Personal Assistant",
+          nameSuggestion: "personal-assistant",
+          brief: "Organizes schedules, messages, files, and todos to help users stay on track.",
+        },
+      ],
+      scenarios: [
+        {
+          id: "workspace",
+          label: "Workspace Collaboration",
+          brief: "Works primarily within team, knowledge base, project materials, and shared context.",
+          permissions: ["Read workspace materials", "Write drafts and tasks", "Confirm high-risk external actions"],
+        },
+        {
+          id: "research",
+          label: "Deep Research",
+          brief: "Needs web search, source comparison, evidence chain organization, and judgment.",
+          permissions: ["Allow web search", "Must cite sources", "Explicitly state uncertain conclusions"],
+        },
+        {
+          id: "automation",
+          label: "Automation Execution",
+          brief: "Suitable for repetitive workflows, spreadsheet processing, file organization, and cross-tool orchestration.",
+          permissions: ["Allow local/tool operations", "Preview before writing", "Confirm delete and send actions"],
+        },
+        {
+          id: "chat",
+          label: "Conversational Companion",
+          brief: "Values long-term memory, tone consistency, character setting, and interaction boundaries.",
+          permissions: ["Follow character tone", "Maintain safety boundaries", "Do not fake real identity"],
+        },
+      ],
+      abilities: [
+        {
+          id: "knowledge",
+          label: "Knowledge Base",
+          arms: ["knowledge", "files"],
+          skills: ["read_knowledge", "summarize_docs", "cite_sources"],
+          brief: "Reads and synthesizes knowledge bases, files, and historical context.",
+        },
+        {
+          id: "web",
+          label: "Web Research",
+          arms: ["browser", "search"],
+          skills: ["web_search", "open_url", "extract_evidence"],
+          brief: "Searches the web, opens pages, extracts sources and factual evidence.",
+        },
+        {
+          id: "workspace-tools",
+          label: "Workspace Tools",
+          arms: ["tasks", "calendar", "team"],
+          skills: ["create_task", "read_calendar", "draft_update"],
+          brief: "Handles tasks, schedules, team messages, and project updates.",
+        },
+        {
+          id: "local",
+          label: "Local Operations",
+          arms: ["computer", "filesystem"],
+          skills: ["inspect_files", "edit_file", "run_command"],
+          brief: "Reads files, modifies drafts, or executes local commands with user confirmation.",
+        },
+      ],
+      templates: [
+        {
+          id: "team-qa",
+          name: "Team Q&A",
+          nameSuggestion: "team-qa",
+          description: "Answers questions based on team materials, group messages, and shared docs.",
+          integrations: ["Knowledge Base", "Team Messages", "Google Drive"],
+          capabilities: [
+            "Organize team docs and answer member questions",
+            "Cite sources and gaps in answers",
+            "Turn recurring questions into reusable knowledge",
+          ],
+        },
+        {
+          id: "morning-planner",
+          name: "Morning Planner",
+          nameSuggestion: "morning-planner",
+          description: "Plans daily schedule based on calendar, tasks, and open conversations.",
+          integrations: ["Calendar", "Todos", "Conversation History"],
+          capabilities: [
+            "Turn scattered tasks into daily plan",
+            "Identify deadlines and time conflicts",
+            "Track unfinished items and roll over",
+          ],
+        },
+        {
+          id: "defect-triage",
+          name: "Defect Triage",
+          nameSuggestion: "defect-triage",
+          description: "Reviews new defects, determines priority, and writes to tracker.",
+          integrations: ["Linear", "Jira", "Logs"],
+          capabilities: [
+            "Complete repro steps and impact scope",
+            "Assign priority and responsible direction",
+            "Sync conclusions to defect tracker",
+          ],
+        },
+        {
+          id: "data-analyst",
+          name: "Data Analyst",
+          nameSuggestion: "data-analyst",
+          description: "Organizes data, SQL, charts, and quality checks around analysis goals.",
+          integrations: ["Airtable", "Hex", "SQL"],
+          capabilities: [
+            "Turn vague data needs into analysis plans",
+            "Check dataset structure and anomalies",
+            "Write or fix SQL and extraction logic",
+            "Choose the clearest charts or tables",
+            "Stress-test analysis before sharing",
+          ],
+        },
+        {
+          id: "exec-assistant",
+          name: "Executive Assistant",
+          nameSuggestion: "exec-assistant",
+          description: "Summarizes schedule, inbox, and project progress to drive follow-ups.",
+          integrations: ["Mail", "Calendar", "Docs"],
+          capabilities: [
+            "Summarize key info and decisions needed",
+            "Draft replies and meeting follow-ups",
+            "Turn commitments into trackable tasks",
+          ],
+        },
+        {
+          id: "knowledge-search",
+          name: "Knowledge Search",
+          nameSuggestion: "knowledge-search",
+          description: "Reliable retrieval and answer synthesis across docs, web, and conversations.",
+          integrations: ["Web", "Knowledge", "Files"],
+          capabilities: [
+            "Cross-source retrieval and merged answers",
+            "Distinguish facts, inferences, and uncertainty",
+            "Proactively verify time-sensitive questions online",
+          ],
+        },
+      ],
+    },
   },
 
   // Agent card
@@ -4098,6 +4319,38 @@ Strategy:
       addWidgetBtn: "Add Widget",
       appNameDoubao: "Doubao",
     },
+    empty: {
+      noMatch: "No matching records",
+      noTabs: "No tabs yet",
+      noRecent: "No recent visits",
+      noFavorites: "No favorites yet",
+    },
+    defaultTabTitle: "AI Browser Desktop",
+    pageTitle: "Browser",
+    pageSubtitle: (pinned: boolean) =>
+      pinned ? "Tab Workspace · Pinned" : "Tab Workspace",
+    searchPlaceholder: "Search tabs...",
+    copy: {
+      link: "Copy Link",
+      title: "Copy Title",
+      copied: "Copied",
+      tabMenuItem: "Duplicate Tab",
+    },
+    menu: {
+      closeOtherTabs: "Close Other Tabs",
+    },
+    tabs: {
+      label: "Tabs",
+      recent: "Recent",
+      favorites: "Favorites",
+    },
+    newTab: "New Tab",
+    newTabPage: "New Tab Page",
+    closeTab: "Close Tab",
+    sidePanel: {
+      unpin: "Unpin tab workspace",
+      expand: "Expand tab workspace",
+    },
     tabBar: {
       close: "Close",
       newTab: "New Tab · Ctrl+T",
@@ -4754,6 +5007,109 @@ Strategy:
     linkCopied: "Link copied",
     copyFailed: "Copy failed",
     onlineCount: (count: number) => `${count} online`,
+    defaultTeamName: "Collaboration task",
+    projectPrefix: (teamName: string) => `Collab · ${teamName}`,
+    teamModes: [
+      {
+        id: "chat",
+        label: "Solo",
+        description: "One agent answers — @someone routes to them, else the leader.",
+      },
+      {
+        id: "cluster",
+        label: "Cluster",
+        description: "Leader decomposes → dispatches → each role works → merges (orchestrated, centralized).",
+      },
+      {
+        id: "swarm",
+        label: "Swarm",
+        description: "Agents react to a shared blackboard, parallel & leaderless (decentralized, self-organizing).",
+      },
+      {
+        id: "project",
+        label: "Project",
+        description: "Milestone-driven — handed to Project OS to break into tasks → execute → accept.",
+      },
+    ],
+    common: {
+      online: "Online",
+      offline: "Offline",
+      leader: "Leader",
+      aiMember: "AI Member",
+      cancel: "Cancel",
+      create: "Create",
+      loading: "Loading...",
+    },
+    workbench: {
+      tabMembers: "Members",
+      tabTasks: "Tasks",
+      tabWorkspace: "Workspace",
+      title: "Collaboration Workbench",
+      closeTitle: "Close workbench",
+      leaderStandby: "Leader · Standing by",
+      standby: "Standing by",
+      memberNameWithRole: (name: string, isLeader: boolean) =>
+        `${name} · ${isLeader ? "Leader" : "AI Member"}`,
+      currentWorkspace: "Current Workspace",
+      noDirectorySelected: "No directory selected",
+    },
+    roster: {
+      title: "Members",
+      noTeamSelected: "No team selected",
+      aiMembersCount: (count: number) => `${count} AI members`,
+      onlineCount: (online: number, total: number) =>
+        `${online}/${total} online`,
+      workstationGroup: "Workstations · Standing by",
+      aiMemberDefault: "AI Member",
+      standby: "Standing by",
+      collaboratorsGroup: "Collaborators",
+      emptyHint: "No one else yet · Invite people with the button above",
+      statusWithRole: (status: string, role: string) =>
+        `${status} · ${role}`,
+    },
+    createTask: {
+      toastCreated: "Task created",
+      toastFailed: "Failed to create task",
+      title: "New Task",
+      description:
+        "Break team goals into runnable, trackable tasks with deliverables.",
+      taskTitleLabel: "Task title",
+      descriptionLabel: "Details",
+      sopLabel: "Capability Pack / SOP",
+      assigneeLabel: "Assign Agent",
+      titlePlaceholder: "e.g. Research a niche market worth entering",
+      descriptionPlaceholder:
+        "Scope, output format, constraints, existing materials...",
+      autoMatchFreeform: "Auto-match or free execution",
+      loadingPacks: "Loading capability packs",
+      cancel: "Cancel",
+      create: "Create",
+    },
+    inviteAgents: {
+      toastAdded: (count: number) => `Added ${count} Agent(s)`,
+      toastFailed: "Failed to add Agent",
+      roleMember: "Member",
+      roleMemberDesc: "Can initiate AI tasks and collaborate",
+      roleViewer: "Viewer",
+      roleViewerDesc: "Can view progress and comment, no task initiation",
+      addAgentTitle: "Add Agent",
+      countText: (inTeam: number, available: number) =>
+        `${inTeam} in team · ${available} available`,
+      addFiltered: "Add filtered",
+      searchPlaceholder: "Search Agent or role",
+      loadingAgents: "Loading Agents...",
+      noMatches: "No matching Agents",
+      inTeam: "In Team",
+      add: "Add",
+    },
+    mobileJoin: {
+      title: "Connect mobile",
+      description:
+        "Install octopus-mobile on your phone, scan or paste the code to join (same Wi-Fi required)",
+      connectCodeLabel: "Connect code (paste in phone settings)",
+      manualFillPrefix: "Or enter manually: address",
+      manualFillCode: "· code",
+    },
   },
 
   // Workflow Editor
@@ -6904,8 +7260,10 @@ Strategy:
     },
     errors: {
       invalidPhone: "Please enter a valid phone number",
+      invalidEmail: "Please enter a valid email address",
       sendFailed: "Failed to send",
       fillRequired: "Please fill in phone number and verification code",
+      emailFillRequired: "Please fill in email and verification code",
       loginFailed: "Login failed",
       enterFailed: "Failed to enter",
       moliliNotEnabled:
@@ -6913,6 +7271,7 @@ Strategy:
     },
     success: {
       codeSent: "Verification code sent, please check your SMS",
+      emailCodeSent: "Verification code sent, please check your email",
       loginSuccess: "Login successful",
       guestEntered: "Entered guest mode",
     },
@@ -6924,6 +7283,8 @@ Strategy:
     terms: {
       autoRegister:
         "Unregistered phone numbers will be automatically registered",
+      emailAutoRegister:
+        "Unregistered email addresses will be automatically registered",
       agreeTo: "By logging in, you agree to",
       userAgreement: "User Agreement",
       privacyPolicy: "Privacy Policy",
@@ -6935,6 +7296,8 @@ Strategy:
         "Continue your research, coding, collaboration, and automation tasks in a unified workspace for managing context, skills, and execution results.",
       cardDescription:
         "Login with phone number, automatically bind to LLMs and credits",
+      emailCardDescription:
+        "Login with an email code, automatically bind to LLMs and credits",
     },
     molili: {
       title: "Login to Continue",

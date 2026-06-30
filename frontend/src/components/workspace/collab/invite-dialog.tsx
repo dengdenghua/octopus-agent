@@ -169,9 +169,9 @@ export function InviteDialog({
         leaderId: team.leaderId ?? members[0]?.name ?? null,
       });
       onTeamChange?.(updated);
-      toast.success(`已添加 ${additions.length} 个 Agent`);
+      toast.success(t.collab.inviteAgents.toastAdded(additions.length));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "添加 Agent 失败");
+      toast.error(error instanceof Error ? error.message : t.collab.inviteAgents.toastFailed);
     } finally {
       setAddingAgentIds(new Set());
     }
@@ -200,10 +200,10 @@ export function InviteDialog({
               >
                 <span className="mb-1 flex items-center gap-2 text-sm font-medium">
                   <ShieldCheckIcon className="size-4" />
-                  成员
+                  {t.collab.inviteAgents.roleMember}
                 </span>
                 <span className="block text-xs text-muted-foreground">
-                  可发起 AI 任务和参与协作
+                  {t.collab.inviteAgents.roleMemberDesc}
                 </span>
               </button>
               <button
@@ -218,10 +218,10 @@ export function InviteDialog({
               >
                 <span className="mb-1 flex items-center gap-2 text-sm font-medium">
                   <EyeIcon className="size-4" />
-                  旁观
+                  {t.collab.inviteAgents.roleViewer}
                 </span>
                 <span className="block text-xs text-muted-foreground">
-                  可看进展和留言，不启动任务
+                  {t.collab.inviteAgents.roleViewerDesc}
                 </span>
               </button>
             </div>
@@ -257,11 +257,13 @@ export function InviteDialog({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-sm font-semibold">
                     <BotIcon className="size-4 text-primary" />
-                    添加 Agent
+                    {t.collab.inviteAgents.addAgentTitle}
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
-                    已有 {team?.members.length ?? 0} 个 · 可选 {agents.length}{" "}
-                    个
+                    {t.collab.inviteAgents.countText(
+                      team?.members.length ?? 0,
+                      agents.length,
+                    )}
                   </div>
                 </div>
                 <Button
@@ -273,7 +275,7 @@ export function InviteDialog({
                   onClick={() => void handleAddAgents(addableFilteredAgents)}
                 >
                   <PlusIcon className="mr-1 size-3.5" />
-                  添加当前筛选
+                  {t.collab.inviteAgents.addFiltered}
                 </Button>
               </div>
 
@@ -282,7 +284,7 @@ export function InviteDialog({
                 <Input
                   value={agentQuery}
                   onChange={(event) => setAgentQuery(event.target.value)}
-                  placeholder="搜索 Agent 或角色"
+                  placeholder={t.collab.inviteAgents.searchPlaceholder}
                   className="h-8 rounded-lg border-border/60 bg-background/70 pl-8 text-xs"
                 />
               </div>
@@ -292,11 +294,11 @@ export function InviteDialog({
               {agentsLoading ? (
                 <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
                   <Loader2Icon className="size-4 animate-spin" />
-                  加载 Agent 中...
+                  {t.collab.inviteAgents.loadingAgents}
                 </div>
               ) : filteredAgents.length === 0 ? (
                 <div className="py-10 text-center text-sm text-muted-foreground">
-                  没有匹配的 Agent
+                  {t.collab.inviteAgents.noMatches}
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -347,9 +349,9 @@ export function InviteDialog({
                           {isAdding ? (
                             <Loader2Icon className="size-3.5 animate-spin" />
                           ) : inTeam ? (
-                            "已在 Team"
+                            t.collab.inviteAgents.inTeam
                           ) : (
-                            "添加"
+                            t.collab.inviteAgents.add
                           )}
                         </Button>
                       </div>

@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 
+import type { Translations } from "@/core/i18n/locales/types";
+import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
 /**
@@ -48,30 +50,11 @@ export function normalizeTeamMode(
   return "chat";
 }
 
-export const TEAM_MODE_META: Record<
-  TeamMode,
-  { label: string; description: string; icon: LucideIcon }
-> = {
-  chat: {
-    label: "单聊",
-    description: "一个 agent 接话 · @谁就他，不@默认队长",
-    icon: MessageCircleIcon,
-  },
-  cluster: {
-    label: "集群",
-    description: "队长拆解 → 分派 → 各司其职 → 汇总（有分工、有中心）",
-    icon: GitBranchIcon,
-  },
-  swarm: {
-    label: "蜂群",
-    description: "围一块黑板各自反应、并行涌现（无中心、自组织）",
-    icon: BoxesIcon,
-  },
-  project: {
-    label: "项目",
-    description: "里程碑驱动 · 交给 Project OS 拆任务 → 执行 → 验收",
-    icon: FlagIcon,
-  },
+const TEAM_MODE_ICONS: Record<TeamMode, LucideIcon> = {
+  chat: MessageCircleIcon,
+  cluster: GitBranchIcon,
+  swarm: BoxesIcon,
+  project: FlagIcon,
 };
 
 export const TEAM_MODES: TeamMode[] = ["chat", "cluster", "swarm", "project"];
@@ -83,6 +66,29 @@ export function serveMeshForMode(mode: TeamMode): "0" | "1" | undefined {
   return undefined;
 }
 
+export type TeamModeMeta = Record<
+  TeamMode,
+  { label: string; description: string; icon: LucideIcon }
+>;
+
+export function getTeamModeMeta(t: Translations): TeamModeMeta {
+  const meta = {} as TeamModeMeta;
+  for (const mode of TEAM_MODES) {
+    const translated = t.collab.teamModes.find((m) => m.id === mode);
+    meta[mode] = {
+      label: translated?.label ?? mode,
+      description: translated?.description ?? "",
+      icon: TEAM_MODE_ICONS[mode],
+    };
+  }
+  return meta;
+}
+
+export function useTeamModeMeta(): TeamModeMeta {
+  const { t } = useI18n();
+  return useMemo(() => getTeamModeMeta(t), [t]);
+}
+
 export function TeamModePicker({
   value,
   onChange,
@@ -92,6 +98,7 @@ export function TeamModePicker({
   onChange: (mode: TeamMode) => void;
   className?: string;
 }) {
+  const teamModeMeta = useTeamModeMeta();
   const activeIndex = useMemo(
     () => Math.max(0, TEAM_MODES.indexOf(value)),
     [value],
@@ -113,7 +120,7 @@ export function TeamModePicker({
         }}
       />
       {TEAM_MODES.map((mode) => {
-        const meta = TEAM_MODE_META[mode];
+        const meta = teamModeMeta[mode];
         const Icon = meta.icon;
         const active = value === mode;
         return (
@@ -144,9 +151,10 @@ export function TeamModeDescription({
   mode: TeamMode;
   className?: string;
 }) {
+  const teamModeMeta = useTeamModeMeta();
   return (
     <p className={cn("text-muted-foreground text-xs", className)}>
-      {TEAM_MODE_META[mode].description}
+      {teamModeMeta[mode].description}
     </p>
   );
 }
