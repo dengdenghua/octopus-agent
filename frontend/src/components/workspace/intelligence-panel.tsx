@@ -671,7 +671,7 @@ export function IntelligencePanel() {
   }
 
   return (
-    <div className="space-y-3.5">
+    <div data-testid="intelligence-panel" className="space-y-3.5">
       <section className="rounded-lg border border-border/50 bg-card/40">
         <button
           type="button"

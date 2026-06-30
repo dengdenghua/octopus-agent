@@ -134,6 +134,20 @@ test.describe("Full-stack golden smoke", () => {
           .filter(Boolean)
           .sort(),
       });
+
+      await page.goto(`${origin}/#/workspace/agents?surface=chat`);
+      await page.waitForLoadState("domcontentloaded");
+      await expect(
+        page
+          .getByTestId("agents-card-grid")
+          .or(page.getByTestId("agents-empty-state")),
+      ).toBeVisible({ timeout: 20_000 });
+
+      await page.goto(`${origin}/#/workspace/intelligence?surface=chat`);
+      await page.waitForLoadState("domcontentloaded");
+      await expect(page.getByTestId("intelligence-panel")).toBeVisible({
+        timeout: 20_000,
+      });
     }
     expect(originSnapshots).toHaveLength(2);
     expect(originSnapshots[1].status).toMatchObject({

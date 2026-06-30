@@ -275,3 +275,54 @@ class TestServePromptEvolution:
         assert "prompt A/B" in out
         assert "baseline" in out
         assert "careful" in out
+
+    def test_serve_mounts_one_openai_router_with_prompt_optimizer(
+        self, tmp_path, monkeypatch
+    ):
+        import uvicorn
+
+        from runtime.cli import run_serve
+
+        captured = {}
+
+        def capture_app(app, *args, **kwargs):
+            captured["app"] = app
+
+        monkeypatch.setattr(uvicorn, "run", capture_app)
+
+        rc = run_serve(
+            config_path=_write_cfg(tmp_path),
+            host="127.0.0.1",
+            port=8000,
+            learn_interval_s=0,
+            prompt_variants_path=_write_variants(tmp_path),
+            evolve_interval_s=0,
+            mutator_model="mock/m",
+            color=False,
+        )
+
+        assert rc == 0
+        app = captured["app"]
+        post_routes = [
+            route for route in app.routes
+            if getattr(route, "path", None) == "/v1/chat/completions"
+            and "POST" in getattr(route, "methods", set())
+        ]
+        assert len(post_routes) == 1
+
+        operation_ids = []
+        for path_item in app.openapi()["paths"].values():
+            for operation in path_item.values():
+                operation_id = operation.get("operationId")
+                if operation_id:
+                    operation_ids.append(operation_id)
+        assert len(operation_ids) == len(set(operation_ids))
+
+        client = TestClient(app)
+        response = client.post(
+            "/v1/chat/completions",
+            json={"messages": [{"role": "user", "content": "list"}]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["octopus"]["variant"] in {"baseline", "careful"}
