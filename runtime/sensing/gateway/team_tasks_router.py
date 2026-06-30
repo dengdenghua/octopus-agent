@@ -304,6 +304,51 @@ def create_team_tasks_router(
             _save()
             return updated
 
+    def _build_terminal_task(
+        task_id: str,
+        updates: dict[str, Any],
+        *,
+        status: str,
+        error: str = "",
+    ) -> TeamTaskWire | None:
+        with lock:
+            current = tasks.get(task_id)
+            if current is None:
+                return None
+            completed_at = str(updates.get("completed_at") or _now())
+            raw_metadata = updates.get("metadata")
+            metadata = (
+                dict(raw_metadata)
+                if isinstance(raw_metadata, dict)
+                else dict(current.metadata)
+            )
+            events = [
+                item for item in metadata.get("process_events", [])
+                if isinstance(item, dict)
+            ]
+            events.append(_jsonable({
+                "ts": completed_at,
+                "type": f"run_{status}",
+                "status": status,
+                "error": error,
+            }))
+            metadata["process_events"] = events[-300:]
+            return current.model_copy(update={
+                "updated_at": _now(),
+                **updates,
+                "status": status,
+                "completed_at": completed_at,
+                "metadata": metadata,
+            })
+
+    def _persist_prebuilt_task(task: TeamTaskWire) -> TeamTaskWire | None:
+        with lock:
+            if task.id not in tasks:
+                return None
+            tasks[task.id] = task
+            _save()
+            return task
+
     def _append_process_event(task_id: str, event: dict[str, Any]) -> None:
         with lock:
             current = tasks.get(task_id)
@@ -396,15 +441,6 @@ def create_team_tasks_router(
             error: str = "",
         ) -> None:
             event_type = f"run_{status}"
-            _append_process_event(
-                updated.id,
-                {
-                    "ts": updated.completed_at or _now(),
-                    "type": event_type,
-                    "status": status,
-                    "error": error,
-                },
-            )
             _broadcast_from_worker(
                 loop,
                 updated.room_id,
@@ -491,13 +527,19 @@ def create_team_tasks_router(
                 }
                 if final_status == "done":
                     updates["produced_artifacts"] = _mobile_artifacts(records)
-                updated = _persist_task(task.id, updates)
+                updated = _build_terminal_task(
+                    task.id,
+                    updates,
+                    status=final_status,
+                    error=str(metadata.get("error") or ""),
+                )
                 if updated is not None:
                     _record_terminal_event(
                         updated,
                         status=final_status,
                         error=str(metadata.get("error") or ""),
                     )
+                    _persist_prebuilt_task(updated)
                 return
 
             # ── CLI-team route ──────────────────────────────────
@@ -544,13 +586,19 @@ def create_team_tasks_router(
                 }
                 if final_status == "done":
                     updates["produced_artifacts"] = _cli_team_artifacts(cli_result)
-                updated = _persist_task(task.id, updates)
+                updated = _build_terminal_task(
+                    task.id,
+                    updates,
+                    status=final_status,
+                    error=str(metadata.get("error") or ""),
+                )
                 if updated is not None:
                     _record_terminal_event(
                         updated,
                         status=final_status,
                         error=str(metadata.get("error") or ""),
                     )
+                    _persist_prebuilt_task(updated)
                 return
             runner = _runner_instance(_emit_runner_event)
             with scoped_cancellation(source.token):
@@ -577,17 +625,23 @@ def create_team_tasks_router(
             }
             if final_status == "done":
                 updates["produced_artifacts"] = _runner_artifacts(result, prepared)
-            updated = _persist_task(task.id, updates)
+            updated = _build_terminal_task(
+                task.id,
+                updates,
+                status=final_status,
+                error=str(metadata.get("error") or ""),
+            )
             if updated is not None:
                 _record_terminal_event(
                     updated,
                     status=final_status,
                     error=str(metadata.get("error") or ""),
                 )
+                _persist_prebuilt_task(updated)
         except Exception as exc:  # noqa: BLE001
             _LOG.exception("team task runner failed for %s", task.id)
             error = f"{type(exc).__name__}: {exc}"
-            updated = _persist_task(
+            updated = _build_terminal_task(
                 task.id,
                 {
                     "status": "failed",
@@ -601,9 +655,12 @@ def create_team_tasks_router(
                         },
                     },
                 },
+                status="failed",
+                error=error,
             )
             if updated is not None:
                 _record_terminal_event(updated, status="failed", error=error)
+                _persist_prebuilt_task(updated)
         finally:
             with lock:
                 running.pop(task.id, None)

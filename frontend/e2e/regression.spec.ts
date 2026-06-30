@@ -1,9 +1,8 @@
 import {
-  test,
-  expect,
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /**
  * E2E regression lockdown · 2026-04-24

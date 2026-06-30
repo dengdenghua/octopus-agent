@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /**
  * E2E: public shell -> workspace chat surfaces.
@@ -11,7 +11,7 @@ test.describe("Chat golden path", () => {
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
 
-    await expect(page).toHaveTitle("Octopus");
+    await expect(page).toHaveTitle(/(?:^|\s-\s)Octopus$/);
     await expect(page.locator('a[aria-label="Octopus"]')).toBeVisible({
       timeout: 10_000,
     });

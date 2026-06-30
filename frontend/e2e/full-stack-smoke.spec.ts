@@ -1,6 +1,7 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { expect, test } from "./fixtures";
 
 const backendPort = process.env.GATEWAY_PORT || "18000";
 const backendBase = `http://127.0.0.1:${backendPort}`;

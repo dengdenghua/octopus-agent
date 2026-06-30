@@ -2139,6 +2139,20 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HeartbeatBody": {
+        "properties": {
+          "member_id": {
+            "minLength": 1,
+            "title": "Member Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id"
+        ],
+        "title": "HeartbeatBody",
+        "type": "object"
+      },
       "IdentityLockResponse": {
         "properties": {
           "locked": {
@@ -3321,6 +3335,31 @@
           "query"
         ],
         "title": "RankRequest",
+        "type": "object"
+      },
+      "ReadBody": {
+        "properties": {
+          "member_id": {
+            "minLength": 1,
+            "title": "Member Id",
+            "type": "string"
+          },
+          "seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seq"
+          }
+        },
+        "required": [
+          "member_id"
+        ],
+        "title": "ReadBody",
         "type": "object"
       },
       "RepairRoutePromotionQueueBody": {
@@ -15257,6 +15296,61 @@
         ]
       }
     },
+    "/api/cowork/{thread_id}/heartbeat": {
+      "post": {
+        "description": "Presence ping — refresh ``member_id``'s online status.",
+        "operationId": "heartbeat_api_cowork__thread_id__heartbeat_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Heartbeat Api Cowork  Thread Id  Heartbeat Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Heartbeat",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
     "/api/cowork/{thread_id}/members": {
       "post": {
         "description": "Pull a member (agent or human) into the thread, with a context grant.",
@@ -15536,6 +15630,116 @@
           }
         },
         "summary": "Plan",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/presence": {
+      "get": {
+        "description": "Per-member presence + unread for the thread's roster. Unread counts\ngroup events past each member's read marker (floored at their join).",
+        "operationId": "presence_api_cowork__thread_id__presence_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "online_window_s",
+            "required": false,
+            "schema": {
+              "default": 60,
+              "title": "Online Window S",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Presence Api Cowork  Thread Id  Presence Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Presence",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/read": {
+      "post": {
+        "description": "Mark ``member_id`` caught up to ``seq`` (default: the current event\nhead). The marker is monotonic — it never rewinds.",
+        "operationId": "mark_read_api_cowork__thread_id__read_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Mark Read Api Cowork  Thread Id  Read Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mark Read",
         "tags": [
           "cowork"
         ]
