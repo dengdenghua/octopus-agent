@@ -783,6 +783,19 @@ def test_project_os_control_parser() -> None:
         "run": True,
         "cascade": True,
     }
+    assert _parse_project_os_control(
+        '/project task MS1-T1 complete output="manual result" reason="manual review"'
+    ) == {
+        "type": "task",
+        "task_id": "MS1-T1",
+        "action": "complete",
+        "assigned_agent": None,
+        "assigned_role": None,
+        "reason": "manual review",
+        "output": "manual result",
+        "run": False,
+        "cascade": True,
+    }
 
 
 def test_cowork_project_mode_accepts_task_control_command(
@@ -861,6 +874,70 @@ def test_cowork_project_mode_accepts_task_control_command(
     trace = json.loads(trace_items[-1]["content"])
     assert trace["control"]["action"] == "reassign"
     assert trace["audit_events"][-1]["kind"] == "task.intervention"
+
+
+def test_cowork_project_mode_reports_failed_task_control_command(
+    tmp_path: Path,
+) -> None:
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.projectos.store import ProjectStore
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    invite_member(store, "th-project-control-fail", actor="u", target_id="agent-a", kind="agent")
+    set_mode(store, "th-project-control-fail", actor="u", mode="project")
+    project_store = ProjectStore(base_dir=tmp_path / "projectos")
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=store,
+        project_store=project_store,
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        _drive(
+            ws,
+            {
+                "threadId": "th-project-control-fail",
+                "input": [
+                    {
+                        "type": "text",
+                        "text": "启动项目",
+                        "metadata": {"context": {"project_os_max_ticks": 1}},
+                    }
+                ],
+                "approvalPolicy": "never",
+            },
+        )
+        project_id = project_store.project_for_thread("th-project-control-fail").id
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-project-control-fail",
+                "input": [{"type": "text", "text": "/project task MS1-T1 teleport"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    events = project_store.events_for_project(project_id)
+    assert events[-1]["kind"] == "task.intervention_rejected"
+    turn = out["response"].result["turn"]
+    agent_text = "\n".join(
+        item["text"] for item in turn["items"] if item["type"] == "agentMessage"
+    )
+    assert "Project OS 任务控制命令未执行" in agent_text
+    assert "unknown_task_action:teleport" in agent_text
+    assert not [
+        item for item in turn["items"]
+        if item["type"] == "reasoning"
+        and "octopus.projectos.control_trace.v1" in item.get("content", "")
+    ]
 
 
 def test_blocked_topology_id_falls_back_to_react(

@@ -38,6 +38,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -171,7 +172,10 @@ def _parse_project_os_control(text: str) -> dict[str, Any] | None:
     raw = str(text or "").strip()
     if not raw.startswith("/project"):
         return None
-    parts = raw.split()
+    try:
+        parts = shlex.split(raw)
+    except ValueError:
+        return {"type": "help"}
     if len(parts) < 2:
         return {"type": "help"}
     command = parts[1].lower()
@@ -1270,6 +1274,28 @@ class CerebrumRuntime:
                         reason=str(control.get("reason") or ""),
                         cascade=bool(control.get("cascade", True)),
                     )
+                    intervention_events = [
+                        str(event) for event in (intervention.get("events") or [])
+                    ]
+                    if any(
+                        event.startswith((
+                            "task_not_found:",
+                            "milestone_not_found:",
+                            "unknown_task_action:",
+                        ))
+                        for event in intervention_events
+                    ):
+                        state = full_project_state(self._project_store, project.id) or {}
+                        return {
+                            "ok": False,
+                            "error": "project_task_intervention_failed",
+                            "message": "Project OS 任务控制命令未执行：" + ", ".join(
+                                intervention_events
+                            ),
+                            "control": control,
+                            "intervention": intervention,
+                            **state,
+                        }
                     result = (
                         engine.run(project.id, max_ticks=max_ticks)
                         if control.get("run")
