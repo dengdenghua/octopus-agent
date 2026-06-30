@@ -14,10 +14,14 @@ const t = {
     kindBlackboard: "Blackboard",
     kindTask: "Task",
     kindEvent: "Event",
+    kindRoomMessage: "Room message",
+    linkedRoom: "Linked room",
   },
 } as unknown as Parameters<typeof CollaborationSessionView>[0]["t"];
 
-function session(over: Partial<CollaborationSession> = {}): CollaborationSession {
+function session(
+  over: Partial<CollaborationSession> = {},
+): CollaborationSession {
   return {
     session_id: "t1",
     room_id: null,
