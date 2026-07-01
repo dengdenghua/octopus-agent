@@ -213,7 +213,28 @@ def test_ci_runs_production_readiness_gate_with_isolated_state() -> None:
     )
 
     assert "Production readiness gate" in workflow
-    assert "python scripts/production_readiness_gate.py" in workflow
-    assert "--review-queue-path" in workflow
+    assert "run: make production-readiness" in workflow
     assert "runner.temp" in workflow
-    assert "OCTOPUS_DATA_DIR" in workflow
+    assert "OCTOPUS_READINESS_DATA_DIR" in workflow
+
+
+def test_makefile_exposes_isolated_production_readiness_target() -> None:
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "production-readiness:" in makefile
+    assert "OCTOPUS_READINESS_HOME" in makefile
+    assert "OCTOPUS_READINESS_DATA_DIR" in makefile
+    assert "OCTOPUS_READINESS_REVIEW_QUEUE" in makefile
+    assert ".venv/bin/python" in makefile
+    assert "$${PYTHON:-" in makefile
+    assert "-m scripts.production_readiness_gate" in makefile
+    assert "--review-queue-path" in makefile
+
+
+def test_pr_template_points_reviewers_to_make_production_readiness() -> None:
+    template = (REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "make production-readiness" in template
+    assert "python scripts/production_readiness_gate.py" not in template

@@ -96,11 +96,9 @@ jobs:
 
       - name: Production readiness gate
         env:
-          OCTOPUS_HOME: ${{ runner.temp }}/octopus-readiness
-          OCTOPUS_DATA_DIR: ${{ runner.temp }}/octopus-readiness/data
-        run: |
-          python scripts/production_readiness_gate.py \
-            --review-queue-path "${OCTOPUS_DATA_DIR}/review_queue.json"
+          OCTOPUS_READINESS_HOME: ${{ runner.temp }}/octopus-readiness
+          OCTOPUS_READINESS_DATA_DIR: ${{ runner.temp }}/octopus-readiness/data
+        run: make production-readiness
 
       - name: Golden-path gate (plan→execute→replan→verify, incl. parallel/recovery)
         run: pytest tests/test_golden_path_e2e.py tests/test_ganglia_runtime.py -v --tb=short

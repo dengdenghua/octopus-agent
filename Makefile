@@ -1,4 +1,4 @@
-.PHONY: install install-all quickstart quickstart-serve test test-fast test-unit test-integration verify-local verify-full-stack lint lint-invariants lint-ruff format fix clean tree \
+.PHONY: install install-all quickstart quickstart-serve test test-fast test-unit test-integration production-readiness verify-local verify-full-stack lint lint-invariants lint-ruff format fix clean tree \
         security \
         dev bootstrap-skills \
         up up-full down logs restart ps rebuild \
@@ -32,6 +32,13 @@ test-unit:  ## Run unit tests excluding slow and integration tests
 
 test-integration:  ## Run integration tests
 	pytest -m integration -v
+
+production-readiness:  ## Run the production readiness gate with isolated runtime state
+	@mkdir -p $${OCTOPUS_READINESS_DATA_DIR:-test-results/production-readiness/data}
+	OCTOPUS_HOME=$${OCTOPUS_READINESS_HOME:-test-results/production-readiness} \
+	OCTOPUS_DATA_DIR=$${OCTOPUS_READINESS_DATA_DIR:-test-results/production-readiness/data} \
+	$${PYTHON:-$$(if [ -x .venv/bin/python ]; then printf '%s' .venv/bin/python; else printf '%s' python; fi)} -m scripts.production_readiness_gate \
+		--review-queue-path "$${OCTOPUS_READINESS_REVIEW_QUEUE:-test-results/production-readiness/data/review_queue.json}"
 
 verify-local:  ## Run backend/frontend/full-stack local stability gates
 	bash scripts/verify_local.sh
