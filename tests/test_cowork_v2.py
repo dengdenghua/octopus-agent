@@ -88,6 +88,47 @@ def test_async_task_result_lands_on_shared_board(tmp_path) -> None:
     assert any("db-expert" in w for w in audit.values())
 
 
+def test_async_task_terminal_transitions_require_working_state(tmp_path) -> None:
+    gs = GroupStore(base_dir=tmp_path)
+    aw = async_work.AsyncWorkStore(base_dir=tmp_path, group_store=gs)
+    task = aw.assign("t", "db-expert", "find the slow query", actor="user")
+
+    assert aw.complete(task.task_id, "too early") is False
+    assert aw.fail(task.task_id, "too early") is False
+    assert aw.get(task.task_id).status == "pending"
+    assert gs.blackboard_snapshot("t") == {}
+
+
+def test_async_task_late_complete_cannot_overwrite_failed_task(tmp_path) -> None:
+    gs = GroupStore(base_dir=tmp_path)
+    aw = async_work.AsyncWorkStore(base_dir=tmp_path, group_store=gs)
+    task = aw.assign("t", "db-expert", "find the slow query", actor="user")
+
+    assert aw.claim(task.task_id) is True
+    assert aw.fail(task.task_id, "RuntimeError: model down") is True
+    assert aw.complete(task.task_id, "stale success") is False
+
+    stored = aw.get(task.task_id)
+    assert stored.status == "failed"
+    assert stored.result == "RuntimeError: model down"
+    assert gs.blackboard_snapshot("t") == {}
+
+
+def test_async_task_late_fail_cannot_overwrite_done_task(tmp_path) -> None:
+    gs = GroupStore(base_dir=tmp_path)
+    aw = async_work.AsyncWorkStore(base_dir=tmp_path, group_store=gs)
+    task = aw.assign("t", "db-expert", "find the slow query", actor="user")
+
+    assert aw.claim(task.task_id) is True
+    assert aw.complete(task.task_id, "good result") is True
+    assert aw.fail(task.task_id, "stale failure") is False
+
+    stored = aw.get(task.task_id)
+    assert stored.status == "done"
+    assert stored.result == "good result"
+    assert any(v == "good result" for v in gs.blackboard_snapshot("t").values())
+
+
 def test_async_work_reads_self_heal_missing_schema(tmp_path) -> None:
     gs = GroupStore(base_dir=tmp_path)
     aw = async_work.AsyncWorkStore(base_dir=tmp_path, group_store=gs)

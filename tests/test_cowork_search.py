@@ -46,6 +46,7 @@ def test_task_match_on_prompt_and_result(tmp_path) -> None:
     store = GroupStore(base_dir=tmp_path)
     async_store = AsyncWorkStore(base_dir=store.base_dir, group_store=store)
     task = async_store.assign("t1", "researcher", "scan competitor pricing", actor="u")
+    assert async_store.claim(task.task_id)
     async_store.complete(task.task_id, "found three rivals undercutting us")
 
     by_prompt = search_group(store, "t1", "competitor", async_store=async_store)

@@ -12,6 +12,7 @@ static AgentGroupRegistry of agent-team *templates*, a different concept).
 from __future__ import annotations
 
 import inspect
+from contextlib import suppress
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -481,15 +482,13 @@ def create_cowork_group_router(
             participant_id=body.participant_id,
             display_name=body.display_name,
         )
-        try:
+        with suppress(Exception):  # legacy transcript projection is best-effort
             _room_message_store().append(
                 room_id,
                 text=body.text,
                 participant_id=body.participant_id,
                 display_name=body.display_name,
             )
-        except Exception:  # noqa: BLE001 — legacy transcript projection is best-effort
-            pass
         return {"ok": True, "room_id": room_id, "seq": seq}
 
     @router.get("/api/cowork/{thread_id}/nominate")
@@ -651,9 +650,15 @@ def create_cowork_group_router(
     )
     def complete_task(thread_id: str, task_id: str, body: CompleteBody) -> dict[str, Any]:
         """A runner reports a background task done — posts the result to the board."""
-        ok = _async_store().complete(task_id, body.result, blackboard_key=body.blackboard_key)
-        if not ok:
+        async_store = _async_store()
+        task = async_store.get(task_id)
+        if task is None or task.thread_id != thread_id:
             raise HTTPException(404, "task not found")
+        if task.status == "pending":
+            async_store.claim(task_id)
+        ok = async_store.complete(task_id, body.result, blackboard_key=body.blackboard_key)
+        if not ok:
+            raise HTTPException(409, "task is not claimable")
         return {"ok": True, "blackboard": group_store.blackboard_snapshot(thread_id)}
 
     @router.post("/api/cowork/{thread_id}/breakout", dependencies=[Depends(_auth_dep)])

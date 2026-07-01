@@ -219,6 +219,7 @@ def test_health_endpoint_aggregates_runner_tasks_presence(tmp_path) -> None:
     # Seed a failed task via the same-dir store the router reads.
     aw = AsyncWorkStore(base_dir=store.base_dir, group_store=store)
     task = aw.assign(t, "alice", "do x", actor="user")
+    assert aw.claim(task.task_id)
     aw.fail(task.task_id, "boom")
 
     h = c.get(f"/api/cowork/{t}/health").json()

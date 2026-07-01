@@ -121,13 +121,27 @@ class AsyncWorkStore:
             )
         return task
 
-    def _set_status(self, task_id: str, status: str, *, result: str | None = None) -> bool:
+    def _set_status(
+        self,
+        task_id: str,
+        status: str,
+        *,
+        result: str | None = None,
+        expected_status: str | None = None,
+    ) -> bool:
+        where = "WHERE task_id=?"
+        params: tuple[str, ...]
+        if expected_status is None:
+            params = (status, result, _now(), task_id)
+        else:
+            where = "WHERE task_id=? AND status=?"
+            params = (status, result, _now(), task_id, expected_status)
         with self._lock, sqlite3.connect(str(self._db)) as conn:
             self._ensure_schema(conn)
             cur = conn.execute(
                 "UPDATE async_tasks SET status=?, result=COALESCE(?, result), updated_at=? "
-                "WHERE task_id=?",
-                (status, result, _now(), task_id),
+                f"{where}",
+                params,
             )
             return cur.rowcount > 0
 
@@ -149,14 +163,24 @@ class AsyncWorkStore:
         task = self.get(task_id)
         if task is None:
             return False
-        ok = self._set_status(task_id, "done", result=result)
+        ok = self._set_status(
+            task_id,
+            "done",
+            result=result,
+            expected_status="working",
+        )
         if ok:
             key = blackboard_key or f"task:{task.assignee}:{task_id[:8]}"
             self._groups.blackboard(task.thread_id).write(key, result, writer=task.assignee)
         return ok
 
     def fail(self, task_id: str, error: str) -> bool:
-        return self._set_status(task_id, "failed", result=error)
+        return self._set_status(
+            task_id,
+            "failed",
+            result=error,
+            expected_status="working",
+        )
 
     def recover_stale_working(
         self,
@@ -181,7 +205,7 @@ class AsyncWorkStore:
                 (now, "task abandoned after repeated worker restarts", cutoff, max_attempts),
             ).rowcount
             requeued = conn.execute(
-                "UPDATE async_tasks SET status='pending', updated_at=? "
+                "UPDATE async_tasks SET status='pending', result=NULL, updated_at=? "
                 "WHERE status='working' AND COALESCE(updated_at, created_at) <= ? "
                 "AND COALESCE(attempts, 0) < ?",
                 (now, cutoff, max_attempts),
