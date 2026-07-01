@@ -2207,9 +2207,11 @@ function RealtimePageContent({
   }, [setArtifactsOpen]);
 
   const handleSubmit = useCallback(
-    (message: { text: string; images?: File[] }) => {
+    (message: { text: string; images?: File[]; files?: File[] }) => {
       const images = message.images ?? [];
-      if (images.length === 0) {
+      const attachedFiles = message.files ?? [];
+      const browserFiles = [...attachedFiles, ...images];
+      if (browserFiles.length === 0) {
         void sendMessage(threadId, { text: message.text, files: [] });
         return;
       }
@@ -2218,16 +2220,27 @@ function RealtimePageContent({
       // attached so the upload path can re-use the bytes without
       // re-decoding.
       void Promise.all(
-        images.map(
+        browserFiles.map(
           (file) =>
             new Promise<PromptInputFilePart>((resolve, reject) => {
+              const mediaType = file.type || "application/octet-stream";
+              if (!mediaType.toLowerCase().startsWith("image/")) {
+                resolve({
+                  type: "file",
+                  mediaType,
+                  filename: file.name,
+                  url: "",
+                  file,
+                });
+                return;
+              }
               const reader = new FileReader();
               reader.onload = () => {
                 const url =
                   typeof reader.result === "string" ? reader.result : "";
                 resolve({
                   type: "file",
-                  mediaType: file.type || "image/png",
+                  mediaType,
                   filename: file.name,
                   url,
                   file,

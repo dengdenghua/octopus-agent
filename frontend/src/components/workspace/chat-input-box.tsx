@@ -1,6 +1,7 @@
 import type { ChatStatus } from "ai";
 import {
   ArrowUpIcon,
+  FileIcon,
   FileTextIcon,
   ImageIcon,
   LinkIcon,
@@ -148,7 +149,11 @@ export interface ChatInputBoxProps {
     topic: string,
     options?: DeepResearchComposerOptions,
   ) => void | boolean | Promise<void | boolean>;
-  onSubmit?: (message: { text: string; images?: File[] }) => void;
+  onSubmit?: (message: {
+    text: string;
+    images?: File[];
+    files?: File[];
+  }) => void;
   onStop?: () => void;
   className?: string;
 }
@@ -174,8 +179,58 @@ interface ComposerImageInjectionDetail {
   sourceLabel?: string | null;
 }
 
+interface WorkspaceFileInjectionDetail {
+  threadId?: string | null;
+  path?: string | null;
+  workDir?: string | null;
+  sourceLabel?: string | null;
+}
+
+interface PendingContextFile {
+  id: string;
+  name: string;
+  path: string;
+  workDir?: string | null;
+  sourceLabel?: string | null;
+  file?: File;
+}
+
 function imageFileKey(file: File): string {
   return `${file.name}|${file.size}`;
+}
+
+function fileBasename(path: string): string {
+  const parts = path.replace(/\\/g, "/").split("/");
+  return parts[parts.length - 1]?.trim() || path;
+}
+
+function pendingFileKey(path: string, workDir?: string | null): string {
+  return `${workDir ?? ""}|${path}`.replace(/\\/g, "/").toLowerCase();
+}
+
+function uploadFileKey(file: File): string {
+  return `upload|${file.name}|${file.size}|${file.lastModified}`;
+}
+
+function referencedFilesBlock(files: PendingContextFile[]): string {
+  if (files.length === 0) return "";
+  const lines = files.map((file) => {
+    const prefix = file.file ? "upload" : "path";
+    const location = file.file ? file.name : file.path;
+    const workspace = file.workDir ? ` workspace=${file.workDir}` : "";
+    return `- ${prefix}=${location}${workspace}`;
+  });
+  return `<referenced_files>\n${lines.join("\n")}\n</referenced_files>`;
+}
+
+function appendReferencedFiles(
+  text: string,
+  files: PendingContextFile[],
+): string {
+  const block = referencedFilesBlock(files);
+  if (!block) return text;
+  const body = text.trim();
+  return body ? `${body}\n\n${block}` : block;
 }
 
 async function dataUrlToFile(
@@ -304,6 +359,8 @@ export function ChatInputBox({
   const [pendingImageSources, setPendingImageSources] = useState<
     Record<string, string>
   >({});
+  const [pendingFiles, setPendingFiles] = useState<PendingContextFile[]>([]);
+  const contextFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Slash-command typeahead · shared hook (see use-slash-typeahead).
   // Returns the picker JSX + a keydown handler that we call FIRST in
@@ -481,11 +538,52 @@ export function ChatInputBox({
     };
   }, [threadId]);
 
+  const addPendingWorkspaceFile = useCallback(
+    (detail: WorkspaceFileInjectionDetail) => {
+      const rawPath = detail.path?.trim();
+      if (!rawPath) return;
+      const normalizedWorkDir =
+        detail.workDir?.trim() || workDir?.trim() || null;
+      const nextFile: PendingContextFile = {
+        id: pendingFileKey(rawPath, normalizedWorkDir),
+        name: fileBasename(rawPath),
+        path: rawPath,
+        workDir: normalizedWorkDir,
+        sourceLabel: detail.sourceLabel?.trim() || null,
+      };
+      setPendingFiles((current) => {
+        if (current.some((file) => file.id === nextFile.id)) return current;
+        return [...current, nextFile];
+      });
+      window.setTimeout(() => textareaRef.current?.focus(), 0);
+    },
+    [workDir],
+  );
+
+  useEffect(() => {
+    const handler = (event: CustomEvent<WorkspaceFileInjectionDetail>) => {
+      const detail = event.detail;
+      if (detail?.threadId && threadId && detail.threadId !== threadId) {
+        return;
+      }
+      addPendingWorkspaceFile(detail ?? {});
+    };
+    window.addEventListener("octopus:open-file", handler as EventListener);
+    return () => {
+      window.removeEventListener("octopus:open-file", handler as EventListener);
+    };
+  }, [addPendingWorkspaceFile, threadId]);
+
   const handleSubmit = useCallback(async () => {
     const text = draft.trim();
     const sendableText = parseCodexComposerModeMarker(text).text.trim();
     const hasImages = pendingImages.length > 0;
-    if ((!sendableText && !hasImages) || isBusy || status === "streaming") {
+    const hasFiles = pendingFiles.length > 0;
+    if (
+      (!sendableText && !hasImages && !hasFiles) ||
+      isBusy ||
+      status === "streaming"
+    ) {
       return;
     }
     // Fast path: client-side slash commands (mode/model/permission/
@@ -507,22 +605,77 @@ export function ChatInputBox({
       return;
     }
     if (isDeepResearchMode) {
-      const result = await onDeepResearch(text, {
-        urls: parsedResearchUrls,
-        materials: researchMaterials
-          .filter((item) => item.enabled)
-          .map((item) => item.material),
-        sourceKinds: researchSources,
-        maxSearches,
-      });
-      if (result !== false) setDraft("");
+      const localFileMaterials = pendingFiles
+        .filter((file) => !file.file)
+        .map((file) => ({
+          kind: "file" as const,
+          title: file.name,
+          path: file.path,
+          notes: file.workDir ? `workspace: ${file.workDir}` : undefined,
+        }));
+      const pendingBrowserFiles = pendingFiles
+        .map((file) => file.file)
+        .filter((file): file is File => file instanceof File);
+      let uploadedFileMaterials: Partial<ResearchMaterial>[] = [];
+      if (pendingBrowserFiles.length > 0) {
+        if (!threadId) {
+          setMaterialError(t.chatInputBox.startThreadBeforeUpload);
+          return;
+        }
+        setUploadingMaterials(true);
+        setMaterialError(null);
+        try {
+          const result = await uploadFiles(threadId, pendingBrowserFiles);
+          uploadedFileMaterials = result.files.map((file) => ({
+            kind: "file" as const,
+            title: file.filename,
+            path: file.path,
+            notes: `uploaded file · ${file.size} bytes`,
+          }));
+        } catch (err) {
+          swallow(err);
+          setMaterialError(
+            err instanceof Error ? err.message : t.chatInputBox.uploadFailed,
+          );
+          return;
+        } finally {
+          setUploadingMaterials(false);
+        }
+      }
+      const result = await onDeepResearch(
+        appendReferencedFiles(text, pendingFiles),
+        {
+          urls: parsedResearchUrls,
+          materials: [
+            ...researchMaterials
+              .filter((item) => item.enabled)
+              .map((item) => item.material),
+            ...localFileMaterials,
+            ...uploadedFileMaterials,
+          ],
+          sourceKinds: researchSources,
+          maxSearches,
+        },
+      );
+      if (result !== false) {
+        setDraft("");
+        setPendingFiles([]);
+      }
       return;
     }
+    const browserUploadFiles = pendingFiles
+      .map((file) => file.file)
+      .filter((file): file is File => file instanceof File);
     onSubmit?.({
-      text,
+      text: appendReferencedFiles(text, pendingFiles),
       images: pendingImages.length > 0 ? pendingImages : undefined,
+      files: browserUploadFiles.length > 0 ? browserUploadFiles : undefined,
     });
     setDraft("");
+    if (pendingFiles.length > 0) {
+      setPendingFiles([]);
+      if (contextFileInputRef.current) contextFileInputRef.current.value = "";
+    }
     if (pendingImages.length > 0) {
       setPendingImages([]);
       setPendingImagePreviews({});
@@ -544,6 +697,9 @@ export function ChatInputBox({
     onPermissionModeChange,
     onCompressContext,
     pendingImages,
+    pendingFiles,
+    t,
+    threadId,
   ]);
 
   const addMaterial = useCallback((material: Partial<ResearchMaterial>) => {
@@ -720,6 +876,38 @@ export function ChatInputBox({
       return current.filter((_, i) => i !== index);
     });
   }, []);
+
+  const addPendingUploadFiles = useCallback(
+    (files: File[] | FileList | null | undefined) => {
+      if (!files) return;
+      const arr = Array.from(files);
+      if (arr.length === 0) return;
+      setPendingFiles((current) => {
+        const known = new Set(current.map((file) => file.id));
+        const next = [...current];
+        for (const file of arr) {
+          const id = uploadFileKey(file);
+          if (known.has(id)) continue;
+          next.push({
+            id,
+            name: file.name || "upload.bin",
+            path: file.name || "upload.bin",
+            sourceLabel: "Upload",
+            file,
+          });
+          known.add(id);
+        }
+        return next;
+      });
+      window.setTimeout(() => textareaRef.current?.focus(), 0);
+    },
+    [],
+  );
+
+  const removePendingFile = useCallback((id: string) => {
+    setPendingFiles((current) => current.filter((file) => file.id !== id));
+  }, []);
+
   useEffect(() => {
     // Free any leftover object URLs when the component unmounts.
     return () => {
@@ -812,18 +1000,23 @@ export function ChatInputBox({
     },
     [addPendingImages],
   );
-  const handleDropImages = useCallback(
+  const handleDropFiles = useCallback(
     (event: React.DragEvent<HTMLTextAreaElement>) => {
       const files = event.dataTransfer?.files;
       if (!files || files.length === 0) return;
-      const imageFiles = Array.from(files).filter((file) =>
+      const dropped = Array.from(files);
+      const imageFiles = dropped.filter((file) =>
         file.type.toLowerCase().startsWith("image/"),
       );
-      if (imageFiles.length === 0) return;
+      const otherFiles = dropped.filter(
+        (file) => !file.type.toLowerCase().startsWith("image/"),
+      );
+      if (imageFiles.length === 0 && otherFiles.length === 0) return;
       event.preventDefault();
-      addPendingImages(imageFiles);
+      if (imageFiles.length > 0) addPendingImages(imageFiles);
+      if (otherFiles.length > 0) addPendingUploadFiles(otherFiles);
     },
-    [addPendingImages],
+    [addPendingImages, addPendingUploadFiles],
   );
 
   const onKeyDown = useCallback(
@@ -874,8 +1067,41 @@ export function ChatInputBox({
             />
           )}
         </div>
-        {pendingImages.length > 0 && (
+        {(pendingFiles.length > 0 || pendingImages.length > 0) && (
           <div className="flex gap-2 overflow-x-auto px-3 pb-2 pt-1">
+            {pendingFiles.map((file) => (
+              <div
+                key={file.id}
+                className="group flex h-16 min-w-[150px] max-w-[240px] items-center gap-2 rounded-md border border-border/55 bg-muted/20 px-2.5"
+                title={
+                  file.workDir ? `${file.path}\n${file.workDir}` : file.path
+                }
+              >
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground">
+                  {file.file ? (
+                    <PaperclipIcon className="size-4" />
+                  ) : (
+                    <FileIcon className="size-4" />
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12px] font-medium text-foreground">
+                    {file.name}
+                  </span>
+                  <span className="block truncate text-[10px] text-muted-foreground">
+                    {file.sourceLabel || (file.file ? "Upload" : file.path)}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removePendingFile(file.id)}
+                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-60 transition-colors hover:bg-muted/70 hover:text-foreground hover:opacity-100"
+                  title={t.chatInputBox.removeImage}
+                >
+                  <Trash2Icon className="size-3.5" />
+                </button>
+              </div>
+            ))}
             {pendingImages.map((file, index) => {
               const key = imageFileKey(file);
               const url = pendingImagePreviews[key];
@@ -920,7 +1146,7 @@ export function ChatInputBox({
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
           onPaste={handlePasteImages}
-          onDrop={handleDropImages}
+          onDrop={handleDropFiles}
           onDragOver={(e) => {
             if (e.dataTransfer?.types?.includes("Files")) e.preventDefault();
           }}
@@ -1131,6 +1357,18 @@ export function ChatInputBox({
             if (imageInputRef.current) imageInputRef.current.value = "";
           }}
         />
+        <input
+          ref={contextFileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            addPendingUploadFiles(event.target.files);
+            if (contextFileInputRef.current) {
+              contextFileInputRef.current.value = "";
+            }
+          }}
+        />
         <div className="composer-footer flex items-center justify-between gap-2 border-t border-transparent px-2 py-1 transition-colors duration-200 group-hover:border-border/25">
           <div className="flex items-center gap-1">
             <DropdownMenu>
@@ -1202,6 +1440,13 @@ export function ChatInputBox({
                     {t.chatInputBox.addResearchMaterial}
                   </DropdownMenuItem>
                 )}
+                <DropdownMenuItem
+                  onClick={() => contextFileInputRef.current?.click()}
+                  className="gap-2 rounded-md text-[13px]"
+                >
+                  <PaperclipIcon className="size-4" />
+                  {t.chatInputBox.file}
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => imageInputRef.current?.click()}
                   className="gap-2 rounded-md text-[13px]"
@@ -1298,7 +1543,10 @@ export function ChatInputBox({
                 onClick={handleSubmit}
                 data-testid="chat-send-button"
                 disabled={
-                  (!sendableDraftText && pendingImages.length === 0) || isBusy
+                  (!sendableDraftText &&
+                    pendingImages.length === 0 &&
+                    pendingFiles.length === 0) ||
+                  isBusy
                 }
                 className={cn(
                   "flex size-7 items-center justify-center rounded-lg transition-[background-color,transform] duration-150",

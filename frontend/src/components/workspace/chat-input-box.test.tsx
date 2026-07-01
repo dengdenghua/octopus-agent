@@ -222,6 +222,66 @@ describe("<ChatInputBox /> cowork materials", () => {
     );
   });
 
+  it("adds clicked workspace files to the composer and sends them as turn context", async () => {
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-1"
+        workDir="/repo/octopus"
+        onSubmit={onSubmit}
+      />,
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("octopus:open-file", {
+          detail: {
+            threadId: "thread-1",
+            path: "src/app.tsx",
+            workDir: "/repo/octopus",
+          },
+        }),
+      );
+    });
+
+    expect(await screen.findByText("app.tsx")).toBeInTheDocument();
+    expect(screen.getByTitle("Send")).toBeEnabled();
+    fireEvent.click(screen.getByTitle("Send"));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith({
+        text: expect.stringContaining(
+          "path=src/app.tsx workspace=/repo/octopus",
+        ),
+      }),
+    );
+  });
+
+  it("sends selected local files through the normal attachment path", async () => {
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <ChatInputBox mode="react" threadId="thread-1" onSubmit={onSubmit} />,
+    );
+
+    const file = new File(["brief"], "brief.md", { type: "text/markdown" });
+    const inputs = document.querySelectorAll('input[type="file"]');
+    const contextInput = inputs[inputs.length - 1] as HTMLInputElement;
+    fireEvent.change(contextInput, {
+      target: { files: [file] },
+    });
+
+    expect(await screen.findByText("brief.md")).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("Send"));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith({
+        text: expect.stringContaining("upload=brief.md"),
+        files: [file],
+      }),
+    );
+  });
+
   it("treats legacy deep Agent state as a normal message until research settings open", async () => {
     const onSubmit = vi.fn();
     const onDeepResearch = vi.fn().mockResolvedValue(true);

@@ -33,6 +33,7 @@ import {
 
 import { SettingsDialog } from "./settings";
 import { AgentFooter } from "./sidebar-footer";
+import { FileTree } from "./file-tree";
 
 import {
   Collapsible,
@@ -913,6 +914,38 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   // workspace folder, so multi-agent work sits with the project instead of
   // falling back to loose chat recents.
   const activeTaskRoomId = activeTaskRoomIdFromPathname(pathname);
+
+  const activeThread = useMemo(() => {
+    if (!activeTaskRoomId) return null;
+    return (
+      mergedConversationRaw.find((t) => t.thread_id === activeTaskRoomId) ||
+      mergedProjectRaw.find((t) => t.thread_id === activeTaskRoomId) ||
+      null
+    );
+  }, [activeTaskRoomId, mergedConversationRaw, mergedProjectRaw]);
+
+  const activeWorkDir = useMemo(() => {
+    if (activeThread) {
+      const path =
+        activeThread.metadata?.["workspace_path"] ??
+        activeThread.values?.["workspace_path"];
+      if (typeof path === "string" && path) return path;
+    }
+    // Fallback: use the most-recent workdir from localStorage so the
+    // file explorer is visible even on the "new task" page.
+    try {
+      const raw = window.localStorage.getItem(RECENT_WORKDIRS_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const first = parsed[0];
+        if (typeof first === "string" && first) return first;
+      }
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }, [activeThread]);
+
   const activeTeamTasksQuery = useTeamTasks(activeTaskRoomId);
   const activeTeamTasks = useMemo(
     () => activeTeamTasksQuery.data ?? [],
@@ -1090,6 +1123,11 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
           items={nasLibraryItems}
           pathname={pathname}
           search={search}
+        />
+        <FileExplorerSection
+          workDir={activeWorkDir}
+          threadId={activeTaskRoomId}
+          pathname={pathname}
         />
         <ProjectsSection
           groups={projectOrder}
@@ -1410,6 +1448,127 @@ function isAgentSurfaceActive(pathname: string, search = "") {
       (params.get("surface") === "chat" ||
         params.get("hud") === "1" ||
         params.get("return") === "hud"))
+  );
+}
+
+function FileExplorerSection({
+  workDir: propWorkDir,
+  threadId,
+  pathname,
+}: {
+  workDir: string | null;
+  threadId: string | null;
+  pathname: string;
+}) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [eventWorkDir, setEventWorkDir] = useState<string | null>(null);
+  const active = pathname.startsWith("/workspace/realtime/");
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as
+        | { path?: string }
+        | undefined;
+      if (detail?.path && typeof detail.path === "string") {
+        setEventWorkDir(detail.path);
+      }
+    };
+    window.addEventListener("octopus:workdir-selected", handler);
+    return () => window.removeEventListener("octopus:workdir-selected", handler);
+  }, []);
+
+  const resolvedWorkDir =
+    propWorkDir ??
+    eventWorkDir ??
+    (() => {
+      try {
+        const raw = window.localStorage.getItem(RECENT_WORKDIRS_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const first = parsed[0];
+          if (typeof first === "string" && first) return first;
+        }
+      } catch {
+        /* ignore */
+      }
+      return null;
+    })();
+
+  const hasWorkDir = Boolean(resolvedWorkDir);
+
+  return (
+    <SidebarGroup className="p-0 px-1 group-data-[collapsible=icon]:px-0">
+      <SidebarMenu className="gap-0.5">
+        <SidebarMenuItem className="justify-center">
+          <SidebarMenuButton
+            isActive={active}
+            tooltip={t.codeMode.explorer}
+            aria-expanded={open}
+            aria-label={
+              open
+                ? t.sidebar.ariaCollapseLocalDatabase
+                : t.sidebar.ariaExpandLocalDatabase
+            }
+            onClick={() => setOpen((v) => !v)}
+            className={cn(
+              "group/nav relative h-9 w-full rounded-lg opacity-76 transition-[opacity,background-color,border-color] duration-150 text-[13px]",
+              "border border-transparent hover:border-border/45 hover:bg-muted/32 hover:opacity-100",
+              "data-[active=true]:opacity-100",
+              "data-[active=true]:border-primary/14 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_76%,transparent)]",
+              "data-[active=true]:shadow-sm data-[active=true]:shadow-black/[0.025]",
+              "data-[active=true]:before:absolute data-[active=true]:before:left-0 data-[active=true]:before:top-1.5 data-[active=true]:before:bottom-1.5 data-[active=true]:before:w-[2px] data-[active=true]:before:rounded-r data-[active=true]:before:bg-primary/75",
+              "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0",
+            )}
+          >
+            <span
+              className={cn(
+                "flex size-6 shrink-0 items-center justify-center rounded-md transition-colors",
+                active
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground group-hover/nav:text-foreground",
+              )}
+            >
+              <FolderIcon className="size-[16px]" />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-left group-data-[collapsible=icon]:hidden">
+              {t.codeMode.explorer}
+            </span>
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors group-hover/nav:bg-muted/60 group-hover/nav:text-foreground group-data-[collapsible=icon]:hidden">
+              <ChevronRightIcon
+                className={cn(
+                  "size-3.5 transition-transform",
+                  open && "rotate-90",
+                )}
+              />
+            </span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        {open && (
+          <div className="overflow-hidden rounded-lg border border-border/40 bg-background/60 group-data-[collapsible=icon]:hidden">
+            {hasWorkDir && resolvedWorkDir ? (
+              <FileTree
+                workDir={resolvedWorkDir}
+                threadId={threadId}
+                className="max-h-[40vh]"
+                onFileClick={(path) => {
+                  window.dispatchEvent(
+                    new CustomEvent("octopus:open-file", {
+                      detail: { path, workDir: resolvedWorkDir },
+                    }),
+                  );
+                }}
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-2 p-4 text-center text-xs text-muted-foreground">
+                <FolderIcon className="size-8 opacity-40" />
+                <p>{t.agentWorkbenchPages.noWorkDirDescription}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </SidebarMenu>
+    </SidebarGroup>
   );
 }
 
