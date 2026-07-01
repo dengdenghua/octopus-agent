@@ -128,6 +128,27 @@ class TestKanbanDispatcher:
         # Lease was renewed — should NOT have been released.
         assert "t1" not in fired
 
+    def test_dispatcher_fails_stale_synthesis(self, store):
+        from runtime.memory.cowork.store import KanbanDispatcher
+
+        store.advance_phase("sess-1", "synthesize")
+
+        d = KanbanDispatcher(
+            store,
+            tick_seconds=0.05,
+            synthesis_timeout_seconds=0,
+        )
+        d.start()
+        time.sleep(0.3)
+        d.stop(timeout=2.0)
+
+        plan = store.read_plan("sess-1")
+        assert plan is not None
+        assert plan.phase == "failed"
+        final = store.read_artifacts("sess-1")["__final__"]
+        assert final["agent_id"] == "system"
+        assert "timed out" in final["output"]["reason"]
+
 
 # ═══════════════════════════════════════════════════════════════
 # 2. SOUL.md hot-reload (smoke test — watcher already implemented)
@@ -320,9 +341,7 @@ class TestCapabilityProbe:
         from runtime.sensing.model_router.capability_probe import probe_provider
         from runtime.sensing.model_router.models import MockModelRouter
 
-        monkeypatch.setattr(
-            _mod, "_disk_cache_path", lambda: tmp_path / "provider_caps.json"
-        )
+        monkeypatch.setattr(_mod, "_disk_cache_path", lambda: tmp_path / "provider_caps.json")
 
         router = MockModelRouter(response="ok")
         probe_provider(router, model="mock/disk")

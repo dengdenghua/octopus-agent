@@ -6,6 +6,7 @@ Public surface (see ``__init__.py`` for the why):
     create_plan(session_id, created_by, tasks)   → Plan
     read_plan(session_id)                        → Plan | None
     advance_phase(session_id, target)            → Plan
+    fail_stale_synthesis(session_id, ...)        → bool
     claim_task(session_id, task_id, agent_id)    → bool
     release_expired_leases(session_id)           → list[str]  ← NEW
     update_assignment_status(...)                → bool
@@ -60,6 +61,7 @@ _LOG = logging.getLogger("octopus.memory.cowork")
 # ``update_assignment_status`` to keep the lease alive (or complete
 # the task). Expired leases are reset by ``KanbanDispatcher``.
 DEFAULT_LEASE_SECONDS = 600  # 10 minutes
+DEFAULT_SYNTHESIS_TIMEOUT_SECONDS = 1800  # 30 minutes
 
 
 # ─── Phase model ────────────────────────────────────────────
@@ -70,9 +72,7 @@ PHASE_SYNTHESIZE = "synthesize"
 PHASE_COMPLETE = "complete"
 PHASE_FAILED = "failed"
 
-VALID_PHASES = frozenset(
-    {PHASE_PLAN, PHASE_WORK, PHASE_SYNTHESIZE, PHASE_COMPLETE, PHASE_FAILED}
-)
+VALID_PHASES = frozenset({PHASE_PLAN, PHASE_WORK, PHASE_SYNTHESIZE, PHASE_COMPLETE, PHASE_FAILED})
 
 # Allowed forward transitions. ``failed`` is reachable from any
 # phase as a manual irreversible escape hatch and is added below.
@@ -81,16 +81,14 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     PHASE_WORK: frozenset({PHASE_SYNTHESIZE, PHASE_FAILED}),
     PHASE_SYNTHESIZE: frozenset({PHASE_COMPLETE, PHASE_FAILED}),
     PHASE_COMPLETE: frozenset(),  # terminal
-    PHASE_FAILED: frozenset(),    # terminal
+    PHASE_FAILED: frozenset(),  # terminal
 }
 
 # Assignment status values. We don't enforce a strict status machine
 # here — agents may legitimately go claimed → in_progress → done, or
 # straight to failed — but we DO validate the literal value to catch
 # typos that would otherwise silently corrupt the on-disk JSON.
-_VALID_ASSIGN_STATUS = frozenset(
-    {"claimed", "in_progress", "done", "failed"}
-)
+_VALID_ASSIGN_STATUS = frozenset({"claimed", "in_progress", "done", "failed"})
 
 _FINAL_TASK_ID = "__final__"
 
@@ -121,9 +119,7 @@ class Task:
             id=str(raw["id"]),
             title=str(raw.get("title") or ""),
             description=str(raw.get("description") or ""),
-            required_capabilities=[
-                str(c) for c in (raw.get("required_capabilities") or [])
-            ],
+            required_capabilities=[str(c) for c in (raw.get("required_capabilities") or [])],
         )
 
 
@@ -136,6 +132,7 @@ class Plan:
     created_by: str
     phase: str
     tasks: list[Task] = field(default_factory=list)
+    phase_updated_at: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -144,6 +141,7 @@ class Plan:
             "created_by": self.created_by,
             "phase": self.phase,
             "tasks": [t.to_dict() for t in self.tasks],
+            "phase_updated_at": self.phase_updated_at or self.created_at,
         }
 
     @classmethod
@@ -157,11 +155,8 @@ class Plan:
             created_at=str(raw.get("created_at") or ""),
             created_by=str(raw.get("created_by") or ""),
             phase=phase,
-            tasks=[
-                Task.from_dict(t)
-                for t in tasks_raw
-                if isinstance(t, dict) and t.get("id")
-            ],
+            tasks=[Task.from_dict(t) for t in tasks_raw if isinstance(t, dict) and t.get("id")],
+            phase_updated_at=str(raw.get("phase_updated_at") or raw.get("created_at") or ""),
         )
 
 
@@ -198,19 +193,13 @@ class Assignment:
             claimed_at=str(raw.get("claimed_at") or ""),
             status=status,
             artifact_ref=(
-                str(raw["artifact_ref"])
-                if raw.get("artifact_ref") is not None
-                else None
+                str(raw["artifact_ref"]) if raw.get("artifact_ref") is not None else None
             ),
             completed_at=(
-                str(raw["completed_at"])
-                if raw.get("completed_at") is not None
-                else None
+                str(raw["completed_at"]) if raw.get("completed_at") is not None else None
             ),
             lease_expires_at=(
-                str(raw["lease_expires_at"])
-                if raw.get("lease_expires_at") is not None
-                else None
+                str(raw["lease_expires_at"]) if raw.get("lease_expires_at") is not None else None
             ),
         )
 
@@ -336,20 +325,21 @@ class CoworkStore:
                     title=str(entry.get("title") or ""),
                     description=str(entry.get("description") or ""),
                     required_capabilities=[
-                        str(c)
-                        for c in (entry.get("required_capabilities") or [])
+                        str(c) for c in (entry.get("required_capabilities") or [])
                     ],
                 )
             else:
                 raise TypeError(f"unexpected task entry type: {type(entry)!r}")
             materialized.append(t)
 
+        now = _now_iso()
         plan = Plan(
             session_id=session_id,
-            created_at=_now_iso(),
+            created_at=now,
             created_by=created_by,
             phase=PHASE_PLAN,
             tasks=materialized,
+            phase_updated_at=now,
         )
 
         path = self._plan_path(session_id)
@@ -397,25 +387,18 @@ class CoworkStore:
 
         plan = self.read_plan(session_id)
         if plan is None:
-            raise ValueError(
-                f"no plan for session_id={session_id!r}; "
-                "call create_plan first"
-            )
+            raise ValueError(f"no plan for session_id={session_id!r}; call create_plan first")
 
         if plan.phase == target_phase:
             return plan
 
         allowed = _ALLOWED_TRANSITIONS.get(plan.phase, frozenset())
         if target_phase not in allowed:
-            raise ValueError(
-                f"invalid phase transition {plan.phase!r} → {target_phase!r}"
-            )
+            raise ValueError(f"invalid phase transition {plan.phase!r} → {target_phase!r}")
 
         # Phase-specific preconditions.
         if plan.phase == PHASE_PLAN and target_phase == PHASE_WORK and not plan.tasks:
-            raise ValueError(
-                "cannot advance to 'work': plan has 0 tasks"
-            )
+            raise ValueError("cannot advance to 'work': plan has 0 tasks")
         if plan.phase == PHASE_SYNTHESIZE and target_phase == PHASE_COMPLETE:
             final_path = self._artifact_path(session_id, _FINAL_TASK_ID)
             if not final_path.exists():
@@ -426,8 +409,67 @@ class CoworkStore:
                 )
 
         plan.phase = target_phase
+        plan.phase_updated_at = _now_iso()
         atomic_write_json(self._plan_path(session_id), plan.to_dict())
         return plan
+
+    def fail_stale_synthesis(
+        self,
+        session_id: str,
+        *,
+        max_age_seconds: float = DEFAULT_SYNTHESIS_TIMEOUT_SECONDS,
+        reason: str | None = None,
+    ) -> bool:
+        """Fail a synthesize-phase plan that has no final artifact past its TTL.
+
+        The normal successful exit from ``synthesize`` is writing the
+        ``__final__`` artifact and advancing to ``complete``. If the synthesizer
+        crashes or never writes that artifact, the session otherwise remains
+        stuck forever. This method is the recovery hatch used by
+        ``KanbanDispatcher``: after the synthesize lease expires, mark the plan
+        failed and write a diagnostic final artifact that UI/API callers can
+        surface instead of waiting indefinitely.
+        """
+        plan = self.read_plan(session_id)
+        if plan is None or plan.phase != PHASE_SYNTHESIZE:
+            return False
+        if self._artifact_path(session_id, _FINAL_TASK_ID).exists():
+            return False
+
+        ts_raw = plan.phase_updated_at or plan.created_at
+        try:
+            phase_updated_at = datetime.fromisoformat(ts_raw)
+            if phase_updated_at.tzinfo is None:
+                phase_updated_at = phase_updated_at.replace(tzinfo=UTC)
+        except (TypeError, ValueError):
+            phase_updated_at = datetime.now(UTC)
+
+        age = (datetime.now(UTC) - phase_updated_at).total_seconds()
+        if age < max(0.0, float(max_age_seconds)):
+            return False
+
+        message = reason or ("synthesis timed out before __final__ artifact was written")
+        self.write_artifact(
+            session_id,
+            _FINAL_TASK_ID,
+            "system",
+            {
+                "status": PHASE_FAILED,
+                "reason": message,
+                "phase": PHASE_SYNTHESIZE,
+                "age_seconds": round(age, 3),
+            },
+        )
+        plan.phase = PHASE_FAILED
+        plan.phase_updated_at = _now_iso()
+        atomic_write_json(self._plan_path(session_id), plan.to_dict())
+        _LOG.warning(
+            "cowork: session %s failed stale synthesis after %.1fs: %s",
+            session_id,
+            age,
+            message,
+        )
+        return True
 
     # ─── Assignments ────────────────────────────────────────
 
@@ -478,10 +520,7 @@ class CoworkStore:
         if plan is None:
             raise ValueError(f"no plan for session_id={session_id!r}")
         if not any(t.id == task_id for t in plan.tasks):
-            raise ValueError(
-                f"task_id {task_id!r} not in plan for session "
-                f"{session_id!r}"
-            )
+            raise ValueError(f"task_id {task_id!r} not in plan for session {session_id!r}")
 
         path = self._assignments_path(session_id)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -548,9 +587,10 @@ class CoworkStore:
                     released.append(task_id)
                     changed = True
                     _LOG.info(
-                        "cowork: lease expired for task %s in session %s "
-                        "(was held by %s)",
-                        task_id, session_id, raw.get("agent_id", "?"),
+                        "cowork: lease expired for task %s in session %s (was held by %s)",
+                        task_id,
+                        session_id,
+                        raw.get("agent_id", "?"),
                     )
 
             if changed:
@@ -586,9 +626,7 @@ class CoworkStore:
                 return False
             if existing.get("status") in ("done", "failed"):
                 return False
-            new_expires = (
-                datetime.now(UTC) + timedelta(seconds=lease_seconds)
-            ).isoformat()
+            new_expires = (datetime.now(UTC) + timedelta(seconds=lease_seconds)).isoformat()
             existing["lease_expires_at"] = new_expires
             assignments[task_id] = existing
             data["assignments"] = assignments
@@ -775,10 +813,12 @@ class KanbanDispatcher:
         store: CoworkStore,
         *,
         tick_seconds: float = 60.0,
+        synthesis_timeout_seconds: float = DEFAULT_SYNTHESIS_TIMEOUT_SECONDS,
         on_task_available: Callable[[str, list[str]], None] | None = None,
     ) -> None:
         self._store = store
         self._tick = tick_seconds
+        self._synthesis_timeout = synthesis_timeout_seconds
         self._on_task_available = on_task_available
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -826,23 +866,35 @@ class KanbanDispatcher:
         for session_id in sessions:
             try:
                 released = self._store.release_expired_leases(session_id)
+                failed_synthesis = self._store.fail_stale_synthesis(
+                    session_id,
+                    max_age_seconds=self._synthesis_timeout,
+                )
                 if released:
                     _LOG.info(
                         "KanbanDispatcher: released %d task(s) in session %s: %s",
-                        len(released), session_id, released,
+                        len(released),
+                        session_id,
+                        released,
                     )
                     if self._on_task_available is not None:
                         try:
                             self._on_task_available(session_id, released)
                         except Exception as cb_exc:  # noqa: BLE001
                             _LOG.warning(
-                                "KanbanDispatcher: on_task_available callback "
-                                "raised: %s", cb_exc,
+                                "KanbanDispatcher: on_task_available callback raised: %s",
+                                cb_exc,
                             )
+                if failed_synthesis:
+                    _LOG.warning(
+                        "KanbanDispatcher: failed stale synthesis in session %s",
+                        session_id,
+                    )
             except Exception as exc:  # noqa: BLE001
                 _LOG.warning(
                     "KanbanDispatcher: error processing session %s: %s",
-                    session_id, exc,
+                    session_id,
+                    exc,
                 )
 
 
@@ -850,6 +902,7 @@ __all__ = [
     "Assignment",
     "CoworkStore",
     "DEFAULT_LEASE_SECONDS",
+    "DEFAULT_SYNTHESIS_TIMEOUT_SECONDS",
     "KanbanDispatcher",
     "PHASE_COMPLETE",
     "PHASE_FAILED",
