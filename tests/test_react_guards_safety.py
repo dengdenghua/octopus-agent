@@ -120,7 +120,7 @@ class TestStepIntroducesDestructiveCall:
 
 
 class TestNewDestructiveCallGuard:
-    def test_non_code_mode_silent(self) -> None:
+    def test_non_code_mode_still_blocks_destructive_call(self) -> None:
         steps = [
             _step(
                 1,
@@ -131,9 +131,12 @@ class TestNewDestructiveCallGuard:
                 ),
             ),
         ]
-        assert _new_destructive_call_guard(
+        msg = _new_destructive_call_guard(
             steps, "done", is_code_mode=False,
-        ) is None
+        )
+        assert msg is not None
+        assert "destructive" in msg.lower()
+        assert "runtime/foo.py" in msg
 
     def test_no_destructive_silent(self) -> None:
         steps = [_step(1, action='edit_file({"path": "runtime/foo.py", "old_string": "x", "new_string": "y"})')]

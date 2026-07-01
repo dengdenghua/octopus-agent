@@ -44,3 +44,29 @@ def test_write_file_rejects_workspace_escape() -> None:
 
     assert result["exit_code"] == -1
     assert "invalid sandbox path" in result["error"]
+
+
+def test_container_name_is_safe_for_arbitrary_thread_id() -> None:
+    sandbox = ContainerSandbox(
+        thread_id="../thread with spaces;$()",
+        workspace_path="/tmp/workspace",
+    )
+
+    assert sandbox.container_name.startswith("octopus-sandbox-")
+    suffix = sandbox.container_name.removeprefix("octopus-sandbox-")
+    assert len(suffix) == 16
+    assert suffix.isalnum()
+    assert suffix == suffix.lower()
+
+
+def test_container_name_avoids_truncated_prefix_collisions() -> None:
+    first = ContainerSandbox(
+        thread_id="thread-prefix-that-used-to-collide-A",
+        workspace_path="/tmp/workspace",
+    )
+    second = ContainerSandbox(
+        thread_id="thread-prefix-that-used-to-collide-B",
+        workspace_path="/tmp/workspace",
+    )
+
+    assert first.container_name != second.container_name

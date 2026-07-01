@@ -10,6 +10,7 @@ MVP: single shared image, per-thread container, volume-mounted workspace.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import logging
 import shutil
 import subprocess
@@ -43,7 +44,7 @@ class ContainerSandbox:
 
     @property
     def container_name(self) -> str:
-        safe_id = self.thread_id.replace("-", "")[:16]
+        safe_id = hashlib.sha256(self.thread_id.encode("utf-8")).hexdigest()[:16]
         return f"{CONTAINER_PREFIX}{safe_id}"
 
     @property
