@@ -1616,6 +1616,14 @@ export const zhCN: Translations = {
     artifactCount: (count) => `${count} 个产物`,
     rolesCompleted: (completed, total) => ` · ${completed}/${total} 角色完成`,
     statusPending: "待运行",
+    timeline: {
+      evidenceToggle: "流程证据",
+      processCount: (count) => `流程 ${count}`,
+      artifactCount: (count) => `产物 ${count}`,
+      rawState: (included) => `raw ${included ? "included" : "hidden"}`,
+      refreshing: "刷新中",
+      empty: "暂无持久流程证据",
+    },
     toast: {
       runStarted: "任务已开始运行",
       runFailed: "运行任务失败",
@@ -2284,7 +2292,8 @@ export const zhCN: Translations = {
     agentNew: {
       pageTitle: "新建 Agent",
       pageSubtitle: "一句话描述目标，Agent Generator 自动补全配置",
-      placeholder: "例如：帮我做竞品调研，每周输出机会点、风险提醒和下一步行动。",
+      placeholder:
+        "例如：帮我做竞品调研，每周输出机会点、风险提醒和下一步行动。",
       buttons: {
         checking: "检查中...",
         generate: "生成 Agent",
@@ -2326,7 +2335,11 @@ export const zhCN: Translations = {
           id: "workspace",
           label: "工作区协作",
           brief: "主要在团队、知识库、项目资料和共享上下文中工作。",
-          permissions: ["读取工作区资料", "写入草案和任务", "高风险外部动作需确认"],
+          permissions: [
+            "读取工作区资料",
+            "写入草案和任务",
+            "高风险外部动作需确认",
+          ],
         },
         {
           id: "research",
@@ -2338,7 +2351,11 @@ export const zhCN: Translations = {
           id: "automation",
           label: "自动化执行",
           brief: "适合重复流程、表格处理、文件整理和跨工具串联。",
-          permissions: ["允许本地/工具操作", "写入前先预览", "删除和发送动作需确认"],
+          permissions: [
+            "允许本地/工具操作",
+            "写入前先预览",
+            "删除和发送动作需确认",
+          ],
         },
         {
           id: "chat",
@@ -4842,8 +4859,7 @@ export const zhCN: Translations = {
       standby: "随时待命",
       collaboratorsGroup: "协作者",
       emptyHint: "还没有其他人 · 用上方「邀请」拉人进群",
-      statusWithRole: (status: string, role: string) =>
-        `${status} · ${role}`,
+      statusWithRole: (status: string, role: string) => `${status} · ${role}`,
     },
     createTask: {
       toastCreated: "任务已创建",
@@ -5868,8 +5884,7 @@ export const zhCN: Translations = {
     avatarTooLarge: "头像文件不能大于 5MB",
     sessionExpired: (reason: string) => `账号会话已失效（${reason}）`,
     sessionExpiredDefaultReason: "账号在其他设备登录",
-    sessionCacheHint:
-      "下方显示的是缓存积分。请退出后重新用手机号登录以刷新。",
+    sessionCacheHint: "下方显示的是缓存积分。请退出后重新用手机号登录以刷新。",
     cachedSuffix: "（缓存）",
     expiredTooltip: "账面与可用余额的差额（已过期或冻结的部分）",
   },
@@ -6968,7 +6983,8 @@ export const zhCN: Translations = {
       emailFillRequired: "请填写邮箱和验证码",
       loginFailed: "登录失败",
       enterFailed: "进入失败",
-      gatewayNotEnabled: "账号登录在此服务器未启用 · 可使用本地账号或自定义模型",
+      gatewayNotEnabled:
+        "账号登录在此服务器未启用 · 可使用本地账号或自定义模型",
     },
     success: {
       codeSent: "验证码已发送，请查收短信",

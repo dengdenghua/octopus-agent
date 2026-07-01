@@ -1460,6 +1460,14 @@ export interface Translations {
     artifactCount: (count: number) => string;
     rolesCompleted: (completed: number, total: number) => string;
     statusPending: string;
+    timeline: {
+      evidenceToggle: string;
+      processCount: (count: number) => string;
+      artifactCount: (count: number) => string;
+      rawState: (included: boolean) => string;
+      refreshing: string;
+      empty: string;
+    };
     toast: {
       runStarted: string;
       runFailed: string;

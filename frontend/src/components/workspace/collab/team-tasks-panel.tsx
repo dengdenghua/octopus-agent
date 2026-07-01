@@ -401,7 +401,7 @@ export function TeamTasksPanel({
                   ) : (
                     <ChevronRightIcon className="size-3" />
                   )}
-                  流程证据
+                  {t.teamTasksPanel.timeline.evidenceToggle}
                 </button>
               )}
             </div>
@@ -447,6 +447,7 @@ export function TeamTasksPanel({
             timeline={timelineQuery.data ?? null}
             loading={timelineQuery.isLoading || timelineQuery.isFetching}
             error={timelineQuery.error}
+            labels={t.teamTasksPanel.timeline}
           />
         )}
 
@@ -513,28 +514,36 @@ function TeamTaskTimelinePreview({
   timeline,
   loading,
   error,
+  labels,
 }: {
   timeline: TeamTaskProcessTimeline | null;
   loading: boolean;
   error: unknown;
+  labels: {
+    processCount: (count: number) => string;
+    artifactCount: (count: number) => string;
+    rawState: (included: boolean) => string;
+    refreshing: string;
+    empty: string;
+  };
 }) {
   const nodes = (timeline?.timeline ?? []).slice(-8);
   return (
     <div className="border-t border-border/45 px-3 py-2">
       <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
         <span className="rounded-md bg-muted/60 px-1.5 py-0.5">
-          流程 {timeline?.overview.event_count ?? 0}
+          {labels.processCount(timeline?.overview.event_count ?? 0)}
         </span>
         <span className="rounded-md bg-muted/60 px-1.5 py-0.5">
-          产物 {timeline?.overview.artifact_count ?? 0}
+          {labels.artifactCount(timeline?.overview.artifact_count ?? 0)}
         </span>
         <span className="rounded-md bg-muted/60 px-1.5 py-0.5">
-          raw {timeline?.safety.raw_messages_included ? "included" : "hidden"}
+          {labels.rawState(Boolean(timeline?.safety.raw_messages_included))}
         </span>
         {loading && (
           <span className="inline-flex items-center gap-1 text-primary">
             <Loader2Icon className="size-3 animate-spin" />
-            刷新中
+            {labels.refreshing}
           </span>
         )}
       </div>
@@ -544,7 +553,7 @@ function TeamTaskTimelinePreview({
         </div>
       ) : nodes.length === 0 ? (
         <div className="mt-2 rounded-md border border-dashed border-border/70 bg-muted/15 px-2 py-3 text-center text-[11px] text-muted-foreground">
-          暂无持久流程证据
+          {labels.empty}
         </div>
       ) : (
         <div className="mt-2 space-y-1.5">

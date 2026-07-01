@@ -1667,6 +1667,14 @@ export const koKR: Translations = {
     rolesCompleted: (completed, total) =>
       ` · ${completed}/${total} roles completed`,
     statusPending: "Pending",
+    timeline: {
+      evidenceToggle: "Process evidence",
+      processCount: (count) => `${count} event${count === 1 ? "" : "s"}`,
+      artifactCount: (count) => `${count} artifact${count === 1 ? "" : "s"}`,
+      rawState: (included) => `raw ${included ? "included" : "hidden"}`,
+      refreshing: "Refreshing",
+      empty: "No persisted process evidence yet",
+    },
     toast: {
       runStarted: "Task started",
       runFailed: "Failed to run task",
@@ -2446,8 +2454,10 @@ export const koKR: Translations = {
     backToGallery: "Back to Gallery",
     agentNew: {
       pageTitle: "Create Agent",
-      pageSubtitle: "Describe your goal in one sentence, Agent Generator auto-completes the config",
-      placeholder: "e.g. Help me do competitive research, output opportunities, risk alerts and next steps every week.",
+      pageSubtitle:
+        "Describe your goal in one sentence, Agent Generator auto-completes the config",
+      placeholder:
+        "e.g. Help me do competitive research, output opportunities, risk alerts and next steps every week.",
       buttons: {
         checking: "Checking...",
         generate: "Generate Agent",
@@ -2463,51 +2473,75 @@ export const koKR: Translations = {
           id: "operator",
           label: "Workflow Operator",
           nameSuggestion: "workflow-operator",
-          brief: "Breaks user goals into steps, executes with tools, and reports progress at key milestones.",
+          brief:
+            "Breaks user goals into steps, executes with tools, and reports progress at key milestones.",
         },
         {
           id: "analyst",
           label: "Insight Analyst",
           nameSuggestion: "insight-analyst",
-          brief: "Researches, analyzes, synthesizes evidence, and outputs structured judgments and next actions.",
+          brief:
+            "Researches, analyzes, synthesizes evidence, and outputs structured judgments and next actions.",
         },
         {
           id: "creator",
           label: "Content Creator",
           nameSuggestion: "content-creator",
-          brief: "Transforms vague ideas into publishable content, scripts, copy, and visual direction.",
+          brief:
+            "Transforms vague ideas into publishable content, scripts, copy, and visual direction.",
         },
         {
           id: "assistant",
           label: "Personal Assistant",
           nameSuggestion: "personal-assistant",
-          brief: "Organizes schedules, messages, files, and todos to help users stay on track.",
+          brief:
+            "Organizes schedules, messages, files, and todos to help users stay on track.",
         },
       ],
       scenarios: [
         {
           id: "workspace",
           label: "Workspace Collaboration",
-          brief: "Works primarily within team, knowledge base, project materials, and shared context.",
-          permissions: ["Read workspace materials", "Write drafts and tasks", "Confirm high-risk external actions"],
+          brief:
+            "Works primarily within team, knowledge base, project materials, and shared context.",
+          permissions: [
+            "Read workspace materials",
+            "Write drafts and tasks",
+            "Confirm high-risk external actions",
+          ],
         },
         {
           id: "research",
           label: "Deep Research",
-          brief: "Needs web search, source comparison, evidence chain organization, and judgment.",
-          permissions: ["Allow web search", "Must cite sources", "Explicitly state uncertain conclusions"],
+          brief:
+            "Needs web search, source comparison, evidence chain organization, and judgment.",
+          permissions: [
+            "Allow web search",
+            "Must cite sources",
+            "Explicitly state uncertain conclusions",
+          ],
         },
         {
           id: "automation",
           label: "Automation Execution",
-          brief: "Suitable for repetitive workflows, spreadsheet processing, file organization, and cross-tool orchestration.",
-          permissions: ["Allow local/tool operations", "Preview before writing", "Confirm delete and send actions"],
+          brief:
+            "Suitable for repetitive workflows, spreadsheet processing, file organization, and cross-tool orchestration.",
+          permissions: [
+            "Allow local/tool operations",
+            "Preview before writing",
+            "Confirm delete and send actions",
+          ],
         },
         {
           id: "chat",
           label: "Conversational Companion",
-          brief: "Values long-term memory, tone consistency, character setting, and interaction boundaries.",
-          permissions: ["Follow character tone", "Maintain safety boundaries", "Do not fake real identity"],
+          brief:
+            "Values long-term memory, tone consistency, character setting, and interaction boundaries.",
+          permissions: [
+            "Follow character tone",
+            "Maintain safety boundaries",
+            "Do not fake real identity",
+          ],
         },
       ],
       abilities: [
@@ -2516,28 +2550,32 @@ export const koKR: Translations = {
           label: "Knowledge Base",
           arms: ["knowledge", "files"],
           skills: ["read_knowledge", "summarize_docs", "cite_sources"],
-          brief: "Reads and synthesizes knowledge bases, files, and historical context.",
+          brief:
+            "Reads and synthesizes knowledge bases, files, and historical context.",
         },
         {
           id: "web",
           label: "Web Research",
           arms: ["browser", "search"],
           skills: ["web_search", "open_url", "extract_evidence"],
-          brief: "Searches the web, opens pages, extracts sources and factual evidence.",
+          brief:
+            "Searches the web, opens pages, extracts sources and factual evidence.",
         },
         {
           id: "workspace-tools",
           label: "Workspace Tools",
           arms: ["tasks", "calendar", "team"],
           skills: ["create_task", "read_calendar", "draft_update"],
-          brief: "Handles tasks, schedules, team messages, and project updates.",
+          brief:
+            "Handles tasks, schedules, team messages, and project updates.",
         },
         {
           id: "local",
           label: "Local Operations",
           arms: ["computer", "filesystem"],
           skills: ["inspect_files", "edit_file", "run_command"],
-          brief: "Reads files, modifies drafts, or executes local commands with user confirmation.",
+          brief:
+            "Reads files, modifies drafts, or executes local commands with user confirmation.",
         },
       ],
       templates: [
@@ -2545,7 +2583,8 @@ export const koKR: Translations = {
           id: "team-qa",
           name: "Team Q&A",
           nameSuggestion: "team-qa",
-          description: "Answers questions based on team materials, group messages, and shared docs.",
+          description:
+            "Answers questions based on team materials, group messages, and shared docs.",
           integrations: ["Knowledge Base", "Team Messages", "Google Drive"],
           capabilities: [
             "Organize team docs and answer member questions",
@@ -2557,7 +2596,8 @@ export const koKR: Translations = {
           id: "morning-planner",
           name: "Morning Planner",
           nameSuggestion: "morning-planner",
-          description: "Plans daily schedule based on calendar, tasks, and open conversations.",
+          description:
+            "Plans daily schedule based on calendar, tasks, and open conversations.",
           integrations: ["Calendar", "Todos", "Conversation History"],
           capabilities: [
             "Turn scattered tasks into daily plan",
@@ -2569,7 +2609,8 @@ export const koKR: Translations = {
           id: "defect-triage",
           name: "Defect Triage",
           nameSuggestion: "defect-triage",
-          description: "Reviews new defects, determines priority, and writes to tracker.",
+          description:
+            "Reviews new defects, determines priority, and writes to tracker.",
           integrations: ["Linear", "Jira", "Logs"],
           capabilities: [
             "Complete repro steps and impact scope",
@@ -2581,7 +2622,8 @@ export const koKR: Translations = {
           id: "data-analyst",
           name: "Data Analyst",
           nameSuggestion: "data-analyst",
-          description: "Organizes data, SQL, charts, and quality checks around analysis goals.",
+          description:
+            "Organizes data, SQL, charts, and quality checks around analysis goals.",
           integrations: ["Airtable", "Hex", "SQL"],
           capabilities: [
             "Turn vague data needs into analysis plans",
@@ -2595,7 +2637,8 @@ export const koKR: Translations = {
           id: "exec-assistant",
           name: "Executive Assistant",
           nameSuggestion: "exec-assistant",
-          description: "Summarizes schedule, inbox, and project progress to drive follow-ups.",
+          description:
+            "Summarizes schedule, inbox, and project progress to drive follow-ups.",
           integrations: ["Mail", "Calendar", "Docs"],
           capabilities: [
             "Summarize key info and decisions needed",
@@ -2607,7 +2650,8 @@ export const koKR: Translations = {
           id: "knowledge-search",
           name: "Knowledge Search",
           nameSuggestion: "knowledge-search",
-          description: "Reliable retrieval and answer synthesis across docs, web, and conversations.",
+          description:
+            "Reliable retrieval and answer synthesis across docs, web, and conversations.",
           integrations: ["Web", "Knowledge", "Files"],
           capabilities: [
             "Cross-source retrieval and merged answers",
@@ -5060,15 +5104,13 @@ Strategy:
       title: "Members",
       noTeamSelected: "No team selected",
       aiMembersCount: (count) => `${count} AI members`,
-      onlineCount: (online, total) =>
-        `${online}/${total} online`,
+      onlineCount: (online, total) => `${online}/${total} online`,
       workstationGroup: "Workstations · Standing by",
       aiMemberDefault: "AI Member",
       standby: "Standing by",
       collaboratorsGroup: "Collaborators",
       emptyHint: "No one else yet · Invite people with the button above",
-      statusWithRole: (status, role) =>
-        `${status} · ${role}`,
+      statusWithRole: (status, role) => `${status} · ${role}`,
     },
     createTask: {
       toastCreated: "Task created",
@@ -5117,22 +5159,26 @@ Strategy:
       {
         id: "chat",
         label: "Solo",
-        description: "One agent answers — @someone routes to them, else the leader.",
+        description:
+          "One agent answers — @someone routes to them, else the leader.",
       },
       {
         id: "cluster",
         label: "Cluster",
-        description: "Leader decomposes → dispatches → each role works → merges (orchestrated, centralized).",
+        description:
+          "Leader decomposes → dispatches → each role works → merges (orchestrated, centralized).",
       },
       {
         id: "swarm",
         label: "Swarm",
-        description: "Agents react to a shared blackboard, parallel & leaderless (decentralized, self-organizing).",
+        description:
+          "Agents react to a shared blackboard, parallel & leaderless (decentralized, self-organizing).",
       },
       {
         id: "project",
         label: "Project",
-        description: "Milestone-driven — handed to Project OS to break into tasks → execute → accept.",
+        description:
+          "Milestone-driven — handed to Project OS to break into tasks → execute → accept.",
       },
     ],
   },
@@ -6157,8 +6203,7 @@ Strategy:
     factoryResetPending: "Clearing...",
     factoryResetConfirm: "Confirm reset",
     avatarTooLarge: "Avatar must be smaller than 5MB",
-    sessionExpired: (reason: string) =>
-      `Account session expired (${reason})`,
+    sessionExpired: (reason: string) => `Account session expired (${reason})`,
     sessionExpiredDefaultReason: "Logged in from another device",
     sessionCacheHint:
       "The credits shown below are cached. Please log out and log in again with your phone number to refresh.",
