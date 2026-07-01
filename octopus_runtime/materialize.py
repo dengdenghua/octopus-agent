@@ -61,6 +61,37 @@ def _verify_bundle_checksum(p: AssetPayload, data: bytes) -> None:
         raise ValueError(f"bundle checksum mismatch for {p.id}: expected {expected} got {actual}")
 
 
+def _verify_body_checksum(p: AssetPayload) -> None:
+    expected = p.content.checksum if p.content else None
+    if not expected:
+        return
+    expected = expected.removeprefix("sha256:")
+    actual = hashlib.sha256(p.body.encode("utf-8")).hexdigest()
+    if actual != expected:
+        raise ValueError(f"checksum mismatch for {p.id}: expected {expected} got {actual}")
+
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp: Path | None = None
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        delete=False,
+    ) as f:
+        tmp = Path(f.name)
+        f.write(content)
+        f.flush()
+    try:
+        tmp.replace(path)
+    except Exception:
+        if tmp is not None and tmp.exists():
+            tmp.unlink()
+        raise
+
+
 def _validate_skill_bundle(tar: tarfile.TarFile, skills_dir: Path, slug: str) -> None:
     """Validate that a full-bundle only writes ``<slug>/...`` and contains SKILL.md."""
     dest = skills_dir.resolve()
@@ -130,9 +161,9 @@ def materialize_skill(p: AssetPayload, skills_dir: Path, *, client: RegistryClie
         with tarfile.open(fileobj=io.BytesIO(data)) as tar:
             return _extract_skill_bundle(tar, skills_dir, slug)
     dest = skills_dir / slug
-    dest.mkdir(parents=True, exist_ok=True)
     md = dest / "SKILL.md"
-    md.write_text(_skill_md(p), encoding="utf-8")
+    _verify_body_checksum(p)
+    _atomic_write_text(md, _skill_md(p))
     return md
 
 

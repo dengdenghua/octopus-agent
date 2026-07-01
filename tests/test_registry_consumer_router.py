@@ -12,7 +12,12 @@ fastapi = pytest.importorskip("fastapi")
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from octopus_runtime.client import AssetPayload, BundleRef, RegistryAsset  # noqa: E402
+from octopus_runtime.client import (  # noqa: E402
+    AssetContent,
+    AssetPayload,
+    BundleRef,
+    RegistryAsset,
+)
 from octopus_runtime.materialize import materialize_skill  # noqa: E402
 from runtime.sensing.gateway.registry_consumer_router import (  # noqa: E402
     create_registry_consumer_router,
@@ -335,3 +340,76 @@ def test_materialize_skill_restores_existing_bundle_when_replace_fails(
         materialize_skill(payload, tmp_path / "skills", client=FakeBundleClient(bundle))
 
     assert (existing / "SKILL.md").read_text(encoding="utf-8") == "old safe version"
+
+
+def test_materialize_skill_verifies_body_checksum_without_clobbering(tmp_path) -> None:
+    existing = tmp_path / "skills" / "research-pack"
+    existing.mkdir(parents=True)
+    (existing / "SKILL.md").write_text("old safe version", encoding="utf-8")
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        description="body only",
+        body="new instructions",
+        content=AssetContent(checksum="sha256:" + ("0" * 64)),
+    )
+
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        materialize_skill(payload, tmp_path / "skills")
+
+    assert (existing / "SKILL.md").read_text(encoding="utf-8") == "old safe version"
+
+
+def test_materialize_skill_writes_body_only_atomically_after_checksum_match(
+    tmp_path,
+) -> None:
+    body = "new instructions"
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        description="body only",
+        body=body,
+        content=AssetContent(checksum="sha256:" + hashlib.sha256(body.encode()).hexdigest()),
+    )
+
+    md = materialize_skill(payload, tmp_path / "skills")
+
+    assert md == tmp_path / "skills" / "research-pack" / "SKILL.md"
+    text = md.read_text(encoding="utf-8")
+    assert "source: registry" in text
+    assert text.endswith("new instructions\n")
+
+
+def test_materialize_skill_keeps_existing_body_only_file_when_replace_fails(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    existing = tmp_path / "skills" / "research-pack"
+    existing.mkdir(parents=True)
+    md = existing / "SKILL.md"
+    md.write_text("old safe version", encoding="utf-8")
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        description="body only",
+        body="new instructions",
+    )
+    original_replace = Path.replace
+
+    def fail_temp_replace(self: Path, target: Path) -> Path:
+        if self.name.startswith(".SKILL.md.") and target.name == "SKILL.md":
+            raise OSError("atomic replace failed")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", fail_temp_replace)
+
+    with pytest.raises(OSError, match="atomic replace failed"):
+        materialize_skill(payload, tmp_path / "skills")
+
+    assert md.read_text(encoding="utf-8") == "old safe version"
+    assert list(existing.glob(".SKILL.md.*")) == []
