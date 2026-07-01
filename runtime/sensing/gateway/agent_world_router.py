@@ -1008,7 +1008,10 @@ def create_agent_world_router(
 
     @router.post("/api/agent-market/packs/import-agent")
     def api_agent_pack_import_agent(body: dict[str, Any]) -> dict[str, Any]:
-        from runtime.execution.misc.agent_packs import import_agent_from_pack
+        from runtime.execution.misc.agent_packs import (
+            AgentPackAgentNotFound,
+            import_agent_from_pack,
+        )
 
         path = str(body.get("path") or "").strip()
         agent_name = str(body.get("agent_name") or body.get("agentId") or body.get("agent_id") or "").strip()
@@ -1027,8 +1030,12 @@ def create_agent_world_router(
             raise HTTPException(404, str(exc)) from exc
         except NotADirectoryError as exc:
             raise HTTPException(400, str(exc)) from exc
-        except ValueError as exc:
+        except AgentPackAgentNotFound as exc:
             raise HTTPException(404, str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         return result.to_dict()
 
     @router.get("/api/agent-market/social/{agent_name}/relationships")

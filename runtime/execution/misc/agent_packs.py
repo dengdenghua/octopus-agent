@@ -20,9 +20,16 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None  # type: ignore[assignment]
 
-from runtime.execution.misc.agent_avatar import write_pixel_agent_avatar
+from runtime.execution.misc.agent_avatar import pixel_agent_avatar_svg
+from runtime.platform.io import atomic_write_json, atomic_write_text
 
 _FRONTMATTER_RE = re.compile(r"\A\s*---\s*\n(.*?)\n---\s*(?:\n|$)", re.DOTALL)
+_SAFE_PACK_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+_PACK_IMPORT_SOURCE = "agent-pack-import"
+
+
+class AgentPackAgentNotFound(ValueError):
+    """Raised when a requested agent is not present in a scanned pack."""
 
 
 @dataclass(frozen=True)
@@ -120,17 +127,22 @@ def import_agent_from_pack(
     preview = scan_agent_pack(root)
     module = next((agent for agent in preview.agents if agent.name == agent_name or agent.id == agent_name), None)
     if module is None:
-        raise ValueError(f"agent not found in pack: {agent_name}")
+        raise AgentPackAgentNotFound(f"agent not found in pack: {agent_name}")
 
-    source_path = Path(module.path)
+    pack_root = Path(preview.root)
+    source_path = _require_real_file_under(Path(module.path), pack_root, "agent markdown")
     plugin_dir = source_path.parent.parent
     plugin = next((item for item in preview.plugins if item.id == module.source_plugin), None)
     plugin_name = plugin.name if plugin else str(module.source_plugin or plugin_dir.name)
     plugin_version = str((plugin.metadata.get("version") if plugin else "") or "0.1.0")
     agent_id = _slugify_agent_id(module.name)
-    agent_dir = Path(agents_root).expanduser().resolve() / agent_id
+    agents_base = _ensure_real_directory(Path(agents_root).expanduser(), "agents root")
+    skills_base = Path(skills_root).expanduser().resolve()
+    agent_dir = agents_base / agent_id
     warnings = list(preview.warnings)
 
+    if agent_dir.is_symlink() or (agent_dir.exists() and not agent_dir.is_dir()):
+        raise FileExistsError(f"agent path already exists but is not a real directory: {agent_dir}")
     if agent_dir.exists():
         return AgentPackImportResult(
             agent_id=agent_id,
@@ -151,48 +163,62 @@ def import_agent_from_pack(
 
     plugin_skills = [skill for skill in preview.skills if skill.source_plugin == module.source_plugin]
     selected_skills = _select_agent_skills(body, plugin_skills)
-    copied_skills, skipped_skills = _copy_pack_skills(selected_skills, Path(skills_root).expanduser().resolve())
+    copied_skills: list[str] = []
+    skipped_skills: list[str] = []
+    created_agent = False
+    try:
+        copied_skills, skipped_skills = _copy_pack_skills(
+            selected_skills,
+            skills_base,
+            pack_root=pack_root,
+        )
 
-    core_dir = agent_dir / "agent-core"
-    core_dir.mkdir(parents=True, exist_ok=True)
-    profile = {
-        "id": agent_id,
-        "templateId": f"{plugin_name}:{module.name}",
-        "templateVersion": plugin_version,
-        "name": _titleize(module.name),
-        "icon": "Agent",
-        "description": module.description,
-        "avatar": "avatar.svg",
-        "model": {"provider": "auto", "name": "auto"},
-        "runtime": "local",
-        "creator": f"pack:{plugin_name}",
-        "category": "researcher",
-        "tags": ["finance", "research", "market", "analysis"],
-    }
-    (agent_dir / "profile.jsonc").write_text(
-        json.dumps(profile, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    (core_dir / "SOUL.md").write_text(
-        (
-            f"# Imported Agent: {_titleize(module.name)}\n\n"
-            f"Source pack: {plugin_name} ({plugin_version}).\n"
-            "External MCP connectors from the source pack are not enabled by default. "
-            "Use only locally available tools and copied skills unless the user explicitly configures trusted connectors.\n\n"
-            f"{body}\n"
-        ),
-        encoding="utf-8",
-    )
-    (core_dir / "IDENTITY.md").write_text(
-        (
-            f"- Name: {_titleize(module.name)}\n"
-            "- Role: Financial research agent\n"
-            f"- Source: {plugin_name}\n"
-        ),
-        encoding="utf-8",
-    )
-    (core_dir / "tool-registry.jsonc").write_text(
-        json.dumps(
+        core_dir = agent_dir / "agent-core"
+        agent_dir.mkdir(parents=True)
+        created_agent = True
+        core_dir.mkdir()
+        profile = {
+            "id": agent_id,
+            "templateId": f"{plugin_name}:{module.name}",
+            "templateVersion": plugin_version,
+            "source_kind": _PACK_IMPORT_SOURCE,
+            "managed_by": "agent-pack",
+            "source_pack_root": preview.root,
+            "source_plugin": module.source_plugin,
+            "source_agent_path": str(source_path),
+            "name": _titleize(module.name),
+            "icon": "Agent",
+            "description": module.description,
+            "avatar": "avatar.svg",
+            "model": {"provider": "auto", "name": "auto"},
+            "runtime": "local",
+            "creator": f"pack:{plugin_name}",
+            "category": "researcher",
+            "tags": ["finance", "research", "market", "analysis"],
+        }
+        atomic_write_json(agent_dir / "profile.jsonc", profile, ensure_ascii=False, indent=2)
+        atomic_write_text(
+            core_dir / "SOUL.md",
+            (
+                f"# Imported Agent: {_titleize(module.name)}\n\n"
+                f"Source pack: {plugin_name} ({plugin_version}).\n"
+                "External MCP connectors from the source pack are not enabled by default. "
+                "Use only locally available tools and copied skills unless the user explicitly configures trusted connectors.\n\n"
+                f"{body}\n"
+            ),
+            newline=None,
+        )
+        atomic_write_text(
+            core_dir / "IDENTITY.md",
+            (
+                f"- Name: {_titleize(module.name)}\n"
+                "- Role: Financial research agent\n"
+                f"- Source: {plugin_name}\n"
+            ),
+            newline=None,
+        )
+        atomic_write_json(
+            core_dir / "tool-registry.jsonc",
             {
                 "arms": ["web_read", "fs_writer"],
                 "extra_affinity": ["finance", "research", "market", "sector", "comps", "analysis"],
@@ -201,10 +227,13 @@ def import_agent_from_pack(
             },
             ensure_ascii=False,
             indent=2,
-        ),
-        encoding="utf-8",
-    )
-    _write_agent_avatar(agent_dir / "avatar.svg", _titleize(module.name))
+        )
+        _write_agent_avatar(agent_dir / "avatar.svg", _titleize(module.name))
+    except Exception:
+        if created_agent and agent_dir.is_dir() and not agent_dir.is_symlink():
+            shutil.rmtree(agent_dir, ignore_errors=True)
+        _cleanup_copied_skill_dirs(skills_base, copied_skills)
+        raise
 
     return AgentPackImportResult(
         agent_id=agent_id,
@@ -804,6 +833,69 @@ def _slugify_agent_id(value: str) -> str:
     return slug or "imported_agent"
 
 
+def _require_safe_pack_name(value: str, *, label: str) -> str:
+    name = str(value or "").strip()
+    if not _SAFE_PACK_NAME_RE.fullmatch(name):
+        raise ValueError(
+            f"invalid {label}: only alphanumeric characters, hyphens, and underscores are allowed"
+        )
+    return name
+
+
+def _ensure_real_directory(path: Path, label: str) -> Path:
+    if path.is_symlink():
+        raise ValueError(f"{label} must be a real directory: {path}")
+    if path.exists() and not path.is_dir():
+        raise ValueError(f"{label} must be a directory: {path}")
+    path.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink() or not path.is_dir():
+        raise ValueError(f"{label} must be a real directory: {path}")
+    return path.resolve()
+
+
+def _require_under(path: Path, root: Path, label: str) -> Path:
+    resolved = path.expanduser().resolve()
+    root_resolved = root.expanduser().resolve()
+    try:
+        resolved.relative_to(root_resolved)
+    except ValueError as exc:
+        raise ValueError(f"{label} must stay inside pack root: {resolved}") from exc
+    return resolved
+
+
+def _require_real_file_under(path: Path, root: Path, label: str) -> Path:
+    if path.is_symlink():
+        raise ValueError(f"{label} must not be a symlink: {path}")
+    resolved = _require_under(path, root, label)
+    if not resolved.is_file():
+        raise FileNotFoundError(f"{label} not found: {resolved}")
+    return resolved
+
+
+def _require_real_dir_under(path: Path, root: Path, label: str) -> Path:
+    if path.is_symlink():
+        raise ValueError(f"{label} must not be a symlink: {path}")
+    resolved = _require_under(path, root, label)
+    if not resolved.is_dir():
+        raise NotADirectoryError(f"{label} is not a directory: {resolved}")
+    return resolved
+
+
+def _contains_symlink(directory: Path) -> bool:
+    return any(child.is_symlink() for child in directory.rglob("*"))
+
+
+def _cleanup_copied_skill_dirs(skills_root: Path, copied_skills: list[str]) -> None:
+    for skill_name in copied_skills:
+        try:
+            safe_name = _require_safe_pack_name(skill_name, label="skill name")
+        except ValueError:
+            continue
+        target = skills_root / safe_name
+        if target.is_dir() and not target.is_symlink():
+            shutil.rmtree(target, ignore_errors=True)
+
+
 def _titleize(value: str) -> str:
     return " ".join(part.capitalize() for part in re.split(r"[-_\s]+", value.strip()) if part) or value
 
@@ -816,23 +908,44 @@ def _select_agent_skills(body: str, plugin_skills: list[PackModule]) -> list[Pac
     return plugin_skills
 
 
-def _copy_pack_skills(skills: list[PackModule], skills_root: Path) -> tuple[list[str], list[str]]:
+def _copy_pack_skills(
+    skills: list[PackModule],
+    skills_root: Path,
+    *,
+    pack_root: Path,
+) -> tuple[list[str], list[str]]:
     copied: list[str] = []
     skipped: list[str] = []
-    skills_root.mkdir(parents=True, exist_ok=True)
-    for skill in skills:
-        source = Path(skill.path)
-        target = skills_root / skill.name
-        if target.exists():
-            skipped.append(skill.name)
-            continue
-        shutil.copytree(source, target)
-        copied.append(skill.name)
-    return copied, skipped
+    skills_base = _ensure_real_directory(skills_root, "skills root")
+    try:
+        for skill in skills:
+            skill_name = _require_safe_pack_name(skill.name, label="skill name")
+            source = _require_real_dir_under(Path(skill.path), pack_root, "skill source")
+            if _contains_symlink(source):
+                raise ValueError(f"skill source must not contain symlinks: {source}")
+            if not (source / "SKILL.md").is_file():
+                raise FileNotFoundError(f"skill source missing SKILL.md: {source}")
+            target = skills_base / skill_name
+            if target.exists() or target.is_symlink():
+                skipped.append(skill_name)
+                continue
+            shutil.copytree(source, target)
+            copied.append(skill_name)
+        return copied, skipped
+    except Exception:
+        _cleanup_copied_skill_dirs(skills_base, copied)
+        raise
 
 
 def _write_agent_avatar(path: Path, label: str) -> None:
-    write_pixel_agent_avatar(path, label)
+    atomic_write_text(path, pixel_agent_avatar_svg(label), newline=None)
 
 
-__all__ = ["AgentPackImportResult", "AgentPackPreview", "PackModule", "import_agent_from_pack", "scan_agent_pack"]
+__all__ = [
+    "AgentPackAgentNotFound",
+    "AgentPackImportResult",
+    "AgentPackPreview",
+    "PackModule",
+    "import_agent_from_pack",
+    "scan_agent_pack",
+]

@@ -11,6 +11,55 @@ def write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def write_importable_market_research_pack(pack_root: Path) -> None:
+    write(
+        pack_root / "plugins" / "agent-plugins" / "market-researcher" / ".claude-plugin" / "plugin.json",
+        json.dumps(
+            {
+                "name": "market-researcher",
+                "version": "0.1.1",
+                "description": "Market research workflow",
+                "author": {"name": "Example"},
+            }
+        ),
+    )
+    write(
+        pack_root / "plugins" / "agent-plugins" / "market-researcher" / "agents" / "market-researcher.md",
+        """---
+name: market-researcher
+description: Produces sector market research
+tools: Read, Write, mcp__capiq__*
+---
+
+Use sector-overview and competitive-analysis to produce a short report.
+""",
+    )
+    write(
+        pack_root / "plugins" / "agent-plugins" / "market-researcher" / "skills" / "sector-overview" / "SKILL.md",
+        """---
+name: sector-overview
+description: Build a sector overview
+---
+
+# Sector Overview
+""",
+    )
+    write(
+        pack_root / "plugins" / "agent-plugins" / "market-researcher" / "skills" / "competitive-analysis" / "SKILL.md",
+        """---
+name: competitive-analysis
+description: Compare competitors
+---
+
+# Competitive Analysis
+""",
+    )
+    write(
+        pack_root / "plugins" / "agent-plugins" / "market-researcher" / ".mcp.json",
+        json.dumps({"mcpServers": {"capiq": {"url": "https://example.invalid/mcp"}}}),
+    )
+
+
 def test_scan_agent_pack_discovers_claude_plugin_shapes(tmp_path: Path) -> None:
     write(
         tmp_path / ".claude-plugin" / "marketplace.json",
@@ -246,61 +295,161 @@ def test_import_agent_from_pack_creates_local_agent_without_enabling_mcp(tmp_pat
     pack_root = tmp_path / "pack"
     agents_root = tmp_path / "agents"
     skills_root = tmp_path / "skills" / "public"
-    write(
-        pack_root / "plugins" / "agent-plugins" / "market-researcher" / ".claude-plugin" / "plugin.json",
-        json.dumps(
-            {
-                "name": "market-researcher",
-                "version": "0.1.1",
-                "description": "Market research workflow",
-                "author": {"name": "Example"},
-            }
-        ),
-    )
-    write(
-        pack_root / "plugins" / "agent-plugins" / "market-researcher" / "agents" / "market-researcher.md",
-        """---
-name: market-researcher
-description: Produces sector market research
-tools: Read, Write, mcp__capiq__*
----
-
-Use sector-overview and competitive-analysis to produce a short report.
-""",
-    )
-    write(
-        pack_root / "plugins" / "agent-plugins" / "market-researcher" / "skills" / "sector-overview" / "SKILL.md",
-        """---
-name: sector-overview
-description: Build a sector overview
----
-
-# Sector Overview
-""",
-    )
-    write(
-        pack_root / "plugins" / "agent-plugins" / "market-researcher" / "skills" / "competitive-analysis" / "SKILL.md",
-        """---
-name: competitive-analysis
-description: Compare competitors
----
-
-# Competitive Analysis
-""",
-    )
-    write(
-        pack_root / "plugins" / "agent-plugins" / "market-researcher" / ".mcp.json",
-        json.dumps({"mcpServers": {"capiq": {"url": "https://example.invalid/mcp"}}}),
-    )
+    write_importable_market_research_pack(pack_root)
 
     result = import_agent_from_pack(pack_root, "market-researcher", agents_root, skills_root)
 
     agent_root = agents_root / "market_researcher"
     registry = json.loads((agent_root / "agent-core" / "tool-registry.jsonc").read_text(encoding="utf-8"))
+    profile = json.loads((agent_root / "profile.jsonc").read_text(encoding="utf-8"))
     assert result.agent_id == "market_researcher"
     assert result.copied_skills == ["competitive-analysis", "sector-overview"]
+    assert profile["source_kind"] == "agent-pack-import"
+    assert profile["managed_by"] == "agent-pack"
     assert "mcp__capiq__*" in registry["disabled_source_tools"]
     assert registry["arms"] == ["web_read", "fs_writer"]
     assert registry["private_skills"] == ["competitive-analysis", "sector-overview"]
     assert (skills_root / "sector-overview" / "SKILL.md").is_file()
     assert (agent_root / "profile.jsonc").is_file()
+
+
+def test_import_agent_from_pack_rejects_unsafe_skill_name_and_cleans_up(
+    tmp_path: Path,
+) -> None:
+    pack_root = tmp_path / "pack"
+    agents_root = tmp_path / "agents"
+    skills_root = tmp_path / "skills" / "public"
+    write_importable_market_research_pack(pack_root)
+    skill_file = (
+        pack_root
+        / "plugins"
+        / "agent-plugins"
+        / "market-researcher"
+        / "skills"
+        / "sector-overview"
+        / "SKILL.md"
+    )
+    skill_file.write_text(
+        """---
+name: ../escape
+description: Unsafe skill name
+---
+
+# Unsafe
+""",
+        encoding="utf-8",
+    )
+    agent_file = (
+        pack_root
+        / "plugins"
+        / "agent-plugins"
+        / "market-researcher"
+        / "agents"
+        / "market-researcher.md"
+    )
+    agent_file.write_text(
+        """---
+name: market-researcher
+description: Produces sector market research
+tools: Read, Write
+---
+
+Use ../escape to produce a short report.
+""",
+        encoding="utf-8",
+    )
+
+    try:
+        import_agent_from_pack(pack_root, "market-researcher", agents_root, skills_root)
+    except ValueError as exc:
+        assert "invalid skill name" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("unsafe skill name should be rejected")
+
+    assert not (agents_root / "market_researcher").exists()
+    assert not (tmp_path / "skills" / "escape").exists()
+
+
+def test_import_agent_from_pack_rejects_existing_agent_symlink(tmp_path: Path) -> None:
+    pack_root = tmp_path / "pack"
+    agents_root = tmp_path / "agents"
+    skills_root = tmp_path / "skills" / "public"
+    write_importable_market_research_pack(pack_root)
+    agents_root.mkdir()
+    outside = tmp_path / "outside-agent"
+    outside.mkdir()
+    (agents_root / "market_researcher").symlink_to(outside, target_is_directory=True)
+
+    try:
+        import_agent_from_pack(pack_root, "market-researcher", agents_root, skills_root)
+    except FileExistsError as exc:
+        assert "not a real directory" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("existing symlink should be rejected")
+
+    assert outside.exists()
+    assert not (skills_root / "sector-overview").exists()
+
+
+def test_import_agent_from_pack_rejects_symlinked_agent_markdown(tmp_path: Path) -> None:
+    pack_root = tmp_path / "pack"
+    agents_root = tmp_path / "agents"
+    skills_root = tmp_path / "skills" / "public"
+    write_importable_market_research_pack(pack_root)
+    outside_agent = tmp_path / "outside-agent.md"
+    outside_agent.write_text(
+        """---
+name: market-researcher
+description: Outside agent
+---
+
+Outside.
+""",
+        encoding="utf-8",
+    )
+    agent_file = (
+        pack_root
+        / "plugins"
+        / "agent-plugins"
+        / "market-researcher"
+        / "agents"
+        / "market-researcher.md"
+    )
+    agent_file.unlink()
+    agent_file.symlink_to(outside_agent)
+
+    try:
+        import_agent_from_pack(pack_root, "market-researcher", agents_root, skills_root)
+    except ValueError as exc:
+        assert "must not be a symlink" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("symlinked agent markdown should be rejected")
+
+    assert not (agents_root / "market_researcher").exists()
+    assert not (skills_root / "sector-overview").exists()
+
+
+def test_import_agent_from_pack_rejects_symlinked_skill_asset(tmp_path: Path) -> None:
+    pack_root = tmp_path / "pack"
+    agents_root = tmp_path / "agents"
+    skills_root = tmp_path / "skills" / "public"
+    write_importable_market_research_pack(pack_root)
+    skill_dir = (
+        pack_root
+        / "plugins"
+        / "agent-plugins"
+        / "market-researcher"
+        / "skills"
+        / "sector-overview"
+    )
+    (skill_dir / "reference.md").symlink_to(tmp_path / "outside-reference.md")
+
+    try:
+        import_agent_from_pack(pack_root, "market-researcher", agents_root, skills_root)
+    except ValueError as exc:
+        assert "must not contain symlinks" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("symlinked skill asset should be rejected")
+
+    assert not (agents_root / "market_researcher").exists()
+    assert not (skills_root / "sector-overview").exists()
