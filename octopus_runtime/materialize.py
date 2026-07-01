@@ -71,8 +71,16 @@ def _verify_body_checksum(p: AssetPayload) -> None:
         raise ValueError(f"checksum mismatch for {p.id}: expected {expected} got {actual}")
 
 
+def _ensure_safe_skill_dir(path: Path) -> None:
+    if path.is_symlink():
+        raise ValueError(f"skill dir must not be a symlink: {path}")
+    if path.exists() and not path.is_dir():
+        raise ValueError(f"skill dir must be a directory: {path}")
+    path.mkdir(parents=True, exist_ok=True)
+
+
 def _atomic_write_text(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_safe_skill_dir(path.parent)
     tmp: Path | None = None
     with tempfile.NamedTemporaryFile(
         "w",

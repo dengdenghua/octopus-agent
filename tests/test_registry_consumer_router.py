@@ -413,3 +413,43 @@ def test_materialize_skill_keeps_existing_body_only_file_when_replace_fails(
 
     assert md.read_text(encoding="utf-8") == "old safe version"
     assert list(existing.glob(".SKILL.md.*")) == []
+
+
+def test_materialize_skill_rejects_body_only_symlink_skill_dir(tmp_path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    skills = tmp_path / "skills"
+    skills.mkdir()
+    (skills / "research-pack").symlink_to(outside, target_is_directory=True)
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        description="body only",
+        body="new instructions",
+    )
+
+    with pytest.raises(ValueError, match="must not be a symlink"):
+        materialize_skill(payload, skills)
+
+    assert not (outside / "SKILL.md").exists()
+
+
+def test_materialize_skill_rejects_body_only_non_directory_skill_path(tmp_path) -> None:
+    skills = tmp_path / "skills"
+    skills.mkdir()
+    (skills / "research-pack").write_text("not a directory", encoding="utf-8")
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        description="body only",
+        body="new instructions",
+    )
+
+    with pytest.raises(ValueError, match="must be a directory"):
+        materialize_skill(payload, skills)
+
+    assert (skills / "research-pack").read_text(encoding="utf-8") == "not a directory"
