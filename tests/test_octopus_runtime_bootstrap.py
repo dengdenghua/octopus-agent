@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
-from octopus_runtime.bootstrap import bootstrap_skills, read_lockfile
+from octopus_runtime.bootstrap import bootstrap_skills, read_lockfile, write_lockfile
 
 
 def test_read_lockfile_missing_file_returns_empty(tmp_path) -> None:
@@ -58,3 +59,48 @@ def test_bootstrap_marks_present_for_bare_slug_and_asset_id(tmp_path) -> None:
     assert synced == []
     assert present == ["research-pack", "research-pack"]
     assert errors == []
+
+
+def test_write_lockfile_only_includes_real_safe_skill_dirs(tmp_path) -> None:
+    skills = tmp_path / "skills"
+    (skills / "research-pack").mkdir(parents=True)
+    (skills / "research-pack" / "SKILL.md").write_text("ok", encoding="utf-8")
+    (skills / "bad/name").mkdir(parents=True)
+    (skills / "bad:name").mkdir()
+    (skills / "bad:name" / "SKILL.md").write_text("bad", encoding="utf-8")
+    (skills / "not-a-skill").mkdir()
+    (skills / "plain-file").write_text("not a dir", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "SKILL.md").write_text("outside", encoding="utf-8")
+    (skills / "linked-pack").symlink_to(outside, target_is_directory=True)
+    out = tmp_path / "skills.lock.json"
+
+    slugs = write_lockfile(skills, out)
+
+    assert slugs == ["research-pack"]
+    assert json.loads(out.read_text(encoding="utf-8")) == {"skills": ["research-pack"]}
+
+
+def test_write_lockfile_is_atomic_on_replace_failure(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skills = tmp_path / "skills"
+    (skills / "research-pack").mkdir(parents=True)
+    (skills / "research-pack" / "SKILL.md").write_text("ok", encoding="utf-8")
+    out = tmp_path / "skills.lock.json"
+    out.write_text('{"skills": ["old"]}\n', encoding="utf-8")
+    original_replace = Path.replace
+
+    def fail_temp_replace(self: Path, target: Path) -> Path:
+        if self.name.startswith(".skills.lock.json.") and target.name == "skills.lock.json":
+            raise OSError("replace failed")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", fail_temp_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        write_lockfile(skills, out)
+
+    assert out.read_text(encoding="utf-8") == '{"skills": ["old"]}\n'
+    assert list(tmp_path.glob(".skills.lock.json.*")) == []

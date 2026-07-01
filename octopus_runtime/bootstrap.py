@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +50,27 @@ def _lock_slugs(lock: dict) -> list[str]:
     return out
 
 
+def _atomic_write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp: Path | None = None
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        delete=False,
+    ) as f:
+        tmp = Path(f.name)
+        f.write(content)
+        f.flush()
+    try:
+        tmp.replace(path)
+    except Exception:
+        if tmp is not None and tmp.exists():
+            tmp.unlink()
+        raise
+
+
 def bootstrap_skills(
     lockfile: Path | str,
     skills_dir: Path | str,
@@ -77,8 +99,14 @@ def bootstrap_skills(
 def write_lockfile(skills_dir: Path | str, out_path: Path | str) -> list[str]:
     """从现有 skills_dir 生成 lockfile(迁移辅助:把已打包技能列成 lockfile,以便停止打包)。"""
     skills_dir = Path(skills_dir)
-    slugs = sorted(d.name for d in skills_dir.iterdir() if (d / "SKILL.md").is_file())
-    Path(out_path).write_text(
-        json.dumps({"skills": slugs}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    slugs = []
+    for d in skills_dir.iterdir():
+        if d.is_symlink() or not d.is_dir() or not (d / "SKILL.md").is_file():
+            continue
+        try:
+            slugs.append(safe_registry_skill_slug(d.name))
+        except ValueError:
+            continue
+    slugs = sorted(slugs)
+    _atomic_write_text(Path(out_path), json.dumps({"skills": slugs}, ensure_ascii=False, indent=2) + "\n")
     return slugs
