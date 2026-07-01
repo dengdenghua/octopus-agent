@@ -622,6 +622,17 @@ def register_all(registry: SkillRegistry) -> int:
     _market_skills_dir = (
         _external_skills_dir if _external_skills_dir.is_dir() else _legacy_skills_dir
     )
+    # 停止打包(registry 为单一事实源):仓库根有 skills.lock.json 时,启动先从 registry 同步缺失
+    # 的 prompt-skill 到 skills/public,再扫描注册。**additive + 容错**:registry 不可达只跳过、
+    # 用磁盘已有的,绝不阻断启动(octopus_runtime 读/解析层不 import 本 runtime)。
+    _skills_lockfile = resources_root() / "skills.lock.json"
+    if _skills_lockfile.is_file():
+        try:
+            from octopus_runtime import bootstrap_skills
+
+            bootstrap_skills(_skills_lockfile, _market_skills_dir)
+        except Exception:  # noqa: BLE001 - registry 同步失败不阻断启动
+            pass
     market_count = register_market_skills(registry, all_skills_dir=_market_skills_dir)
     # AST-aware code editing · tree-sitter powered · 2026-04-26
     from .code_edit_skills import register_code_edit_skills

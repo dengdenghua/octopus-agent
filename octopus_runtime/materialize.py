@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import io
+import tarfile
 from pathlib import Path
 
 from .client import DEFAULT_BASE, AssetPayload, RegistryClient
@@ -30,9 +32,29 @@ def _skill_md(p: AssetPayload) -> str:
     return f"---\nname: {name}\ndescription: {desc}\nsource: registry\n---\n\n{p.body.strip()}\n"
 
 
-def materialize_skill(p: AssetPayload, skills_dir: Path) -> Path:
-    """落地一个 prompt-skill 到 ``<skills_dir>/<slug>/SKILL.md``,返回写入路径。"""
-    dest = Path(skills_dir) / p.slug
+def _safe_extract(tar: tarfile.TarFile, dest: Path) -> None:
+    """防穿越 / 防 symlink 的 tar 解压(bundle 来自可信 registry,仍做基本校验)。"""
+    dest = dest.resolve()
+    for m in tar.getmembers():
+        target = (dest / m.name).resolve()
+        if target != dest and dest not in target.parents:
+            raise ValueError(f"unsafe path in bundle: {m.name}")
+        if m.issym() or m.islnk():
+            raise ValueError(f"link not allowed in bundle: {m.name}")
+    tar.extractall(dest)  # noqa: S202 - 成员已逐个校验在 dest 内、无 link
+
+
+def materialize_skill(p: AssetPayload, skills_dir: Path, *, client: RegistryClient | None = None) -> Path:
+    """落地一个技能到 ``<skills_dir>/<slug>/``。**有 full-bundle 则取整目录 tar.gz 解压**(带
+    scripts/refs/requirements);否则只写 ``SKILL.md``(body-only)。返回 SKILL.md 路径。"""
+    skills_dir = Path(skills_dir)
+    if p.bundle and p.bundle.ref:
+        c = client or RegistryClient(DEFAULT_BASE)
+        data = c.fetch_bundle(p.id)
+        with tarfile.open(fileobj=io.BytesIO(data)) as tar:
+            _safe_extract(tar, skills_dir)
+        return skills_dir / p.slug / "SKILL.md"
+    dest = skills_dir / p.slug
     dest.mkdir(parents=True, exist_ok=True)
     md = dest / "SKILL.md"
     md.write_text(_skill_md(p), encoding="utf-8")
@@ -59,7 +81,7 @@ def sync_skills(
             if not _is_prompt_pack(p) and not allow_code:
                 skipped.append((slug, f"type={p.type or '?'}/kind={p.kind or '?'}:可执行资产默认不落地(--allow-code 放开)"))
                 continue
-            md = materialize_skill(p, skills_dir)
+            md = materialize_skill(p, skills_dir, client=client)
             ok.append((slug, str(md)))
         except Exception as exc:  # noqa: BLE001 — 单个坏不影响整批
             errors.append((slug, str(exc)))
