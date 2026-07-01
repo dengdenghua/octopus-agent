@@ -1,7 +1,4 @@
-import {
-  type APIRequestContext,
-  type Page,
-} from "@playwright/test";
+import { type APIRequestContext, type Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
 /**
@@ -109,14 +106,43 @@ async function sendChatMessage(page: Page, text: string): Promise<void> {
 // ═══════════════════════════════════════════════════════════
 
 test.describe("Bug#2 regression · Cost tab reflects real chat cost", () => {
-  test.skip(
-    !RUN_REAL_LLM_REGRESSIONS,
-    "requires a real model/provider and writes non-zero budget commits",
-  );
+  test("offline probe run writes non-zero budget summary", async ({
+    request,
+  }) => {
+    const before = await request.get(`${BACKEND}/api/budget/summary?limit=5`);
+    expect(before.ok()).toBeTruthy();
+    const beforeBody = await before.json();
+    const beforeCommits = Number(beforeBody.commit_count ?? 0);
+    const beforeTokens = Number(beforeBody.total_tokens ?? 0);
+
+    const run = await request.post(`${BACKEND}/api/run`, {
+      data: { goal: `offline budget probe ${Date.now()}` },
+    });
+    expect(run.ok()).toBeTruthy();
+    const runBody = await run.json();
+    expect(runBody.success).toBeTruthy();
+    expect(Number(runBody.tokens_spent ?? 0)).toBeGreaterThan(0);
+
+    const after = await request.get(`${BACKEND}/api/budget/summary?limit=5`);
+    expect(after.ok()).toBeTruthy();
+    const afterBody = await after.json();
+    expect(Number(afterBody.commit_count ?? 0)).toBeGreaterThan(beforeCommits);
+    expect(Number(afterBody.total_tokens ?? 0)).toBeGreaterThan(beforeTokens);
+    expect(
+      afterBody.tasks.some(
+        (task: { tokens?: number; commit_count?: number }) =>
+          Number(task.tokens ?? 0) > 0 && Number(task.commit_count ?? 0) > 0,
+      ),
+    ).toBeTruthy();
+  });
 
   test("chat then observability/cost shows non-zero tokens", async ({
     page,
   }) => {
+    test.skip(
+      !RUN_REAL_LLM_REGRESSIONS,
+      "requires a real model/provider and writes non-zero budget commits",
+    );
     test.setTimeout(60_000); // real LLM call · give it room
     await sendChatMessage(page, "Answer with one short sentence: 2+2=?");
 

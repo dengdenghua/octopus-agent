@@ -16,7 +16,7 @@ def test_e2e_smoke_proof_records_desktop_and_mobile_suites(tmp_path: Path) -> No
             "full-stack-desktop",
             tmp_path / "desktop",
             "full-stack-smoke.spec.ts",
-            {"expected": 12, "skipped": 1, "unexpected": 0, "flaky": 0},
+            {"expected": 13, "skipped": 1, "unexpected": 0, "flaky": 0},
         ),
         (
             "full-stack-mobile",
@@ -64,8 +64,8 @@ def test_e2e_smoke_proof_records_desktop_and_mobile_suites(tmp_path: Path) -> No
     assert data["suite_count"] == 2
     assert data["passed_count"] == 2
     assert data["test_file_count"] == 2
-    assert data["test_case_count"] == 16
-    assert data["passed_test_count"] == 15
+    assert data["test_case_count"] == 17
+    assert data["passed_test_count"] == 16
     assert data["skipped_test_count"] == 1
     assert data["failed_test_count"] == 0
     assert data["failed_suites"] == []
@@ -77,8 +77,8 @@ def test_e2e_smoke_proof_records_desktop_and_mobile_suites(tmp_path: Path) -> No
     assert data["suites"][0]["test_match"] == ["full-stack-smoke.spec.ts"]
     assert data["suites"][0]["test_file_count"] == 1
     assert data["suites"][0]["playwright_report_present"] is True
-    assert data["suites"][0]["test_case_count"] == 13
-    assert data["suites"][0]["passed_test_count"] == 12
+    assert data["suites"][0]["test_case_count"] == 14
+    assert data["suites"][0]["passed_test_count"] == 13
 
 
 def test_e2e_smoke_proof_reports_failed_suite(tmp_path: Path) -> None:

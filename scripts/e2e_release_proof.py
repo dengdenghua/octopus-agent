@@ -17,7 +17,7 @@ MIN_TEST_FILES_BY_SUITE = {
     "full-stack-mobile": 1,
 }
 MIN_PASSED_TESTS_BY_SUITE = {
-    "full-stack-desktop": 12,
+    "full-stack-desktop": 13,
     "full-stack-mobile": 3,
 }
 

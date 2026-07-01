@@ -49,14 +49,14 @@ def test_e2e_release_proof_merges_readiness_and_full_stack(tmp_path: Path) -> No
     assert data["summary"]["coverage_gap_domains"] == 0
     assert data["summary"]["full_stack_suite_count"] == 2
     assert data["summary"]["full_stack_test_file_count"] == 5
-    assert data["summary"]["full_stack_test_case_count"] == 16
-    assert data["summary"]["full_stack_passed_test_count"] == 15
+    assert data["summary"]["full_stack_test_case_count"] == 17
+    assert data["summary"]["full_stack_passed_test_count"] == 16
     assert data["summary"]["required_suite_test_file_counts"] == {
         "full-stack-desktop": 4,
         "full-stack-mobile": 1,
     }
     assert data["summary"]["required_suite_passed_test_counts"] == {
-        "full-stack-desktop": 12,
+        "full-stack-desktop": 13,
         "full-stack-mobile": 3,
     }
     assert data["summary"]["required_suite_failed_test_counts"] == {
@@ -241,7 +241,7 @@ def test_e2e_release_proof_rejects_weak_required_passed_test_count(
         json.dumps(
             _full_stack(
                 suite_passed_counts={
-                    "full-stack-desktop": 11,
+                    "full-stack-desktop": 12,
                     "full-stack-mobile": 3,
                 },
             )
@@ -360,7 +360,7 @@ def _full_stack(
     }
     test_matches_by_suite = suite_test_matches or default_test_matches
     passed_counts = suite_passed_counts or {
-        "full-stack-desktop": 12,
+        "full-stack-desktop": 13,
         "full-stack-mobile": 3,
     }
     failed_counts = suite_failed_counts or {
