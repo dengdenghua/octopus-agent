@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from runtime.projectos.engine import HARD_MAX_RUN_TICKS, ProjectEngine, normalize_run_ticks
 from runtime.projectos.model import Milestone, Project, Task, ready_tasks
 from runtime.projectos.store import ProjectStore
@@ -57,6 +59,52 @@ def test_store_project_events_roundtrip_and_limit(tmp_path) -> None:
     assert [event["kind"] for event in events] == ["project.recover", "task.intervention"]
     assert [event["payload"]["n"] for event in events] == [1, 2]
     assert [event["payload"]["n"] for event in s.events_for_project("P1", limit=1)] == [2]
+
+
+def test_store_rejects_unsafe_ids_and_oversized_payloads(tmp_path) -> None:
+    s = ProjectStore(base_dir=tmp_path)
+    with pytest.raises(ValueError, match="project_id"):
+        s.save_project(Project(id="../bad", name="x", goal="g"))
+
+    s.save_project(Project(id="P1", name="x", goal="g"))
+
+    with pytest.raises(ValueError, match="thread_id"):
+        s.bind_thread("../bad", "P1")
+    with pytest.raises(ValueError, match="event kind"):
+        s.append_event("P1", kind="../bad", payload={})
+    with pytest.raises(ValueError, match="task_id"):
+        s.save_task(Task(id="../bad", milestone_id="MS1", type="code", goal="g"))
+    with pytest.raises(ValueError, match="task output"):
+        s.save_task(
+            Task(
+                id="T-big",
+                milestone_id="MS1",
+                type="code",
+                goal="g",
+                output="x" * (1024 * 1024 + 1),
+            )
+        )
+
+
+def test_store_skips_corrupt_rows_instead_of_crashing(tmp_path) -> None:
+    s = ProjectStore(base_dir=tmp_path)
+    with s._lock, s._conn() as conn:  # noqa: SLF001
+        conn.execute("INSERT INTO projects(id, doc) VALUES (?, ?)", ("P-bad", "{not-json"))
+        conn.execute(
+            "INSERT INTO milestones(id, project_id, doc) VALUES (?, ?, ?)",
+            ("MS-bad", "P-bad", "{not-json"),
+        )
+        conn.execute(
+            "INSERT INTO tasks(id, milestone_id, doc) VALUES (?, ?, ?)",
+            ("T-bad", "MS-bad", "{not-json"),
+        )
+
+    assert s.get_project("P-bad") is None
+    assert s.get_milestone("MS-bad") is None
+    assert s.get_task("T-bad") is None
+    assert s.list_projects() == []
+    assert s.milestones_for("P-bad") == []
+    assert s.tasks_for_milestone("MS-bad") == []
 
 
 def test_store_task_terminal_status_is_immutable_by_default(tmp_path) -> None:
