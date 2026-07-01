@@ -31,6 +31,7 @@ class CapabilityActivation:
     pinned_plugins: tuple[str, ...] = ()
     pinned_agents: tuple[str, ...] = ()
     pinned_packs: tuple[str, ...] = ()
+    pinned_surfaces: tuple[str, ...] = ()
 
     @property
     def active(self) -> bool:
@@ -38,7 +39,8 @@ class CapabilityActivation:
             self.pinned_skills
             or self.pinned_plugins
             or self.pinned_agents
-            or self.pinned_packs,
+            or self.pinned_packs
+            or self.pinned_surfaces
         )
 
     def render_prompt(self) -> str:
@@ -65,6 +67,7 @@ class CapabilityActivation:
             or self.pinned_plugins
             or self.pinned_agents
             or self.pinned_packs
+            or self.pinned_surfaces
         ):
             pin_lines = ["<input-mentions>"]
             if self.pinned_skills:
@@ -94,6 +97,13 @@ class CapabilityActivation:
                     + ", ".join(f"`{n}`" for n in self.pinned_agents)
                     + ". When delegation fits, call them via `call_agent` "
                     "/ `call_agent_parallel` first.",
+                )
+            if self.pinned_surfaces:
+                pin_lines.append(
+                    "User invoked these runtime surfaces via @Surface: "
+                    + ", ".join(f"`{n}`" for n in self.pinned_surfaces)
+                    + ". Treat this as explicit permission and intent to use "
+                    "that UI surface when it is relevant.",
                 )
             pin_lines.append(
                 "These pins are strong routing preferences. If a pinned "
@@ -162,8 +172,13 @@ _RULES: tuple[dict[str, Any], ...] = (
             "对齐", "侧边栏", "按钮", "输入框", "流式",
         ),
         "skills": (
-            "browser_state", "browser_navigate", "browser_get",
-            "browser_extract", "browser_screenshot", "browser_click",
+            "live_browser_state", "live_browser_current_url",
+            "live_browser_navigate", "live_browser_extract",
+            "live_browser_find", "live_browser_click", "live_browser_type",
+            "live_browser_wait", "live_browser_scroll",
+            "live_browser_screenshot", "browser_state", "browser_navigate",
+            "browser_get", "browser_extract", "browser_screenshot",
+            "browser_click",
             "screen_capture", "screen_info",
         ),
     },
@@ -251,6 +266,7 @@ def activate_capabilities(
     pinned_plugins: tuple[str, ...] = ()
     pinned_agents: tuple[str, ...] = ()
     pinned_packs: tuple[str, ...] = ()
+    pinned_surfaces: tuple[str, ...] = ()
     pack_expanded_skills: list[str] = []
     try:
         from runtime.core.cerebrum.input_mentions import (
@@ -261,6 +277,7 @@ def activate_capabilities(
         pinned_plugins = mentions.plugins
         pinned_agents = mentions.agents
         pinned_packs = mentions.packs
+        pinned_surfaces = mentions.surfaces
     except (ImportError, AttributeError):
         pass
 
@@ -295,6 +312,27 @@ def activate_capabilities(
             "list_cwd", "read_file", "write_text_file",
             "edit_file", "git_diff",
         ))
+
+    if "browser" in pinned_surfaces:
+        labels.append("browser-ui")
+        terms.append("@Browser")
+        leading_browser_skills = (
+            "live_browser_state",
+            "live_browser_current_url",
+            "live_browser_navigate",
+            "live_browser_extract",
+            "live_browser_find",
+            "live_browser_click",
+            "live_browser_type",
+            "live_browser_wait",
+            "live_browser_scroll",
+            "live_browser_screenshot",
+            "browser_state",
+            "browser_navigate",
+            "browser_extract",
+            "browser_screenshot",
+        )
+        skills = [*leading_browser_skills, *skills]
 
     # Pinned skills + pack-expanded skills always lead the priority list
     # (they're an explicit user signal, stronger than keyword inference).
@@ -338,6 +376,7 @@ def activate_capabilities(
         pinned_plugins=pinned_plugins,
         pinned_agents=pinned_agents,
         pinned_packs=pinned_packs,
+        pinned_surfaces=pinned_surfaces,
     )
 
 

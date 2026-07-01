@@ -351,6 +351,7 @@ export const koKR: Translations = {
     insertCodexPlan: "Insert Plan marker",
     insertCodexSpec: "Insert Spec marker",
     insertCodexGoal: "Insert Goal marker",
+    insertBrowserSurface: "Insert Browser marker",
     workflow: "Workflow",
     deepResearchConfig: "Research settings",
     roles: "Subagents",

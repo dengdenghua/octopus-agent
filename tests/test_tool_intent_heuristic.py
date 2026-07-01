@@ -52,6 +52,11 @@ def test_tool_meta_followup_matches_without_history() -> None:
     assert looks_like_contextual_tool_followup("为什么看不到过程 进度")
 
 
+def test_runtime_surface_marker_matches_tool_intent() -> None:
+    assert looks_like_tool_intent("@Browser")
+    assert looks_like_contextual_tool_followup("@Browser")
+
+
 def test_plain_chat_stays_plain() -> None:
     assert looks_like_plain_chat("2+2等于几？")
     assert not looks_like_plain_chat("AI 家庭机器人（扫地/陪伴/安防）")

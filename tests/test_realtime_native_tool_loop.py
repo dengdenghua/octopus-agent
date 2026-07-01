@@ -144,6 +144,30 @@ def test_native_tool_loop_disabled_for_chat_and_planning():
     assert not _should_use_native_tool_loop(stack, react, planning_mode=True)
 
 
+def test_browser_surface_marker_promotes_chat_turn_to_tool_mode():
+    from runtime.sensing.gateway.realtime_cerebrum import _build_intent
+
+    params = TurnParams(
+        threadId="thread-browser",
+        input=[
+            {
+                "type": "input_text",
+                "text": "@Browser inspect the current page",
+                "metadata": {"context": {"mode": "chat"}},
+            },
+        ],
+    )
+
+    intent = _build_intent("@Browser inspect the current page", params)
+    context = intent.user_context or {}
+
+    assert context["mode"] == "browser"
+    assert context["capability_mode"] == "browser"
+    assert context["browser_operation_mode"] is True
+    assert context["browser_session_policy"] == "thread_native"
+    assert context["native_tool_loop"] is True
+
+
 def test_complex_turn_defaults_to_planning_mode_when_not_explicit():
     from runtime.protocol.items import TurnParams
 
@@ -209,3 +233,38 @@ def test_agentic_session_metadata_preserves_code_permission_context():
     assert metadata["code_mode"] == "solo"
     assert metadata["agent_mode"] == "architect"
     assert metadata["project_signals"] == {"recommended_mode": "architect"}
+
+
+def test_agentic_session_metadata_preserves_browser_surface_context():
+    from runtime.sensing.gateway.tool_bridge import (
+        _browser_operation_guidance,
+        _session_metadata_from_intent,
+    )
+
+    intent = ParsedIntent(
+        raw="@Browser check page",
+        intent_type="task",
+        normalized_goal="@Browser check page",
+        user_context={
+            "mode": "browser",
+            "capability_mode": "browser",
+            "runtime_surfaces": ["browser"],
+            "tool_surface": "browser",
+            "browser_operation_mode": True,
+            "browser_surface": "browser",
+            "browser_session_policy": "thread_native",
+            "browser_evidence_policy": (
+                "state_first_screenshot_only_for_visual_evidence"
+            ),
+        },
+    )
+
+    metadata = _session_metadata_from_intent(intent)
+    guidance = _browser_operation_guidance(intent.user_context or {})
+
+    assert metadata["mode"] == "browser"
+    assert metadata["runtime_surfaces"] == ["browser"]
+    assert metadata["browser_operation_mode"] is True
+    assert metadata["browser_session_policy"] == "thread_native"
+    assert "thread-native browser operation" in guidance
+    assert "live_browser_state" in guidance

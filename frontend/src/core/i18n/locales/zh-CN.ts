@@ -338,6 +338,7 @@ export const zhCN: Translations = {
     insertCodexPlan: "插入 Plan 标识",
     insertCodexSpec: "插入 Spec 标识",
     insertCodexGoal: "插入 Goal 标识",
+    insertBrowserSurface: "插入 Browser 标识",
     workflow: "工作流",
     deepResearchConfig: "调研设置",
     roles: "子 Agent",

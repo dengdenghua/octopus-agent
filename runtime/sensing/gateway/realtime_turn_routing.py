@@ -100,6 +100,11 @@ _TOOL_META_RE = re.compile(
     re.IGNORECASE,
 )
 
+_RUNTIME_SURFACE_RE = re.compile(
+    r"@(browser|chrome|computer)\b",
+    re.IGNORECASE,
+)
+
 _CONTEXT_CONFIRM_RE = re.compile(
     r"^\s*(?:好|好的|可以|行|要|需要|开始|启动|继续|就这个|选这个|对|嗯|ok|yes|go)\s*[。.!！?？]*\s*$",
     re.IGNORECASE,
@@ -145,6 +150,8 @@ def looks_like_tool_intent(goal: str) -> bool:
         return False
     if looks_like_plain_chat(g):
         return False
+    if _RUNTIME_SURFACE_RE.search(g):
+        return True
     if _TOOL_META_RE.search(g):
         return True
     return bool(_TOOL_INTENT_RE.search(g))

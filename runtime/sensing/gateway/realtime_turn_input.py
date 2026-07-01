@@ -562,6 +562,48 @@ def _context_requests_code_workspace(context: dict[str, Any]) -> bool:
     )
 
 
+def _apply_runtime_surface_context(
+    text: str,
+    context_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Promote explicit @Surface tokens into runtime context.
+
+    The frontend may insert markers like ``@Browser`` into the input box,
+    mirroring Codex's native browser invocation. Treat those as stronger than a
+    stale chat/react mode because the user is explicitly asking for a tool
+    surface, not casual conversation.
+    """
+    try:
+        from runtime.core.cerebrum.input_mentions import parse_input_mentions
+
+        surfaces = parse_input_mentions(text).surfaces
+    except Exception:  # noqa: BLE001 - mention parsing must not block a turn
+        surfaces = ()
+    if not surfaces:
+        return context_payload
+
+    out = dict(context_payload)
+    out.setdefault("runtime_surfaces", list(surfaces))
+    out.setdefault("tool_surface", surfaces[0])
+
+    if "browser" in surfaces:
+        current_mode = str(out.get("mode") or "").strip().lower()
+        if current_mode in {"", "chat", "react", "flash", "conversation", "discuss"}:
+            out["mode"] = "browser"
+        out.setdefault("capability_mode", "browser")
+        out.setdefault("mode_preset", "codex.browser")
+        out.setdefault("workflow_preset", "codex.browser")
+        out["browser_operation_mode"] = True
+        out.setdefault("browser_surface", "browser")
+        out.setdefault("browser_session_policy", "thread_native")
+        out.setdefault(
+            "browser_evidence_policy",
+            "state_first_screenshot_only_for_visual_evidence",
+        )
+        out.setdefault("native_tool_loop", True)
+    return out
+
+
 def _turn_mode(params: TurnParams) -> str:
     metadata = _input_metadata(params)
     context = metadata.get("context")
@@ -605,6 +647,7 @@ def _build_intent(
         context_payload.setdefault("workflow_preset", f"codex.{marker_mode}")
         if marker_mode == "goal":
             context_payload.setdefault("goal_mode", True)
+    context_payload = _apply_runtime_surface_context(text, context_payload)
     actor_id = metadata.get("actor_id") or metadata.get("actorId")
     if isinstance(actor_id, str) and actor_id.strip():
         context_payload.setdefault("owner_actor_id", actor_id.strip())
@@ -646,7 +689,7 @@ def _build_intent(
             "approval_policy": approval_policy,
             "auto_approve": approval_policy == "never",
             "cwd": cwd,
-            "mode": _turn_mode(params) or context_payload.get("mode"),
+            "mode": context_payload.get("mode") or _turn_mode(params),
             "planning_mode": bool(getattr(params, "planning_mode", False)),
             # Pass attachments through so react_loop can fold image-typed
             # ones into the user message as OpenAI image_url content

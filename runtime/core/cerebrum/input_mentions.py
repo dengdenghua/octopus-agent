@@ -1,4 +1,4 @@
-"""Parse @plugin/@skill/@agent mention tokens from user prompts.
+"""Parse @plugin/@skill/@agent and runtime surface mentions from prompts.
 
 The chat input box's mention autocomplete (frontend/src/components/
 workspace/mention-autocomplete.tsx) inserts tokens like::
@@ -6,6 +6,7 @@ workspace/mention-autocomplete.tsx) inserts tokens like::
     @plugin:web-search
     @skill:deep-research
     @agent:researcher_v1
+    @Browser
 
 These survive the wire round-trip into ReAct's user goal text. Rather
 than relying on the model to pick them up by accident, this module
@@ -31,14 +32,24 @@ _MENTION_RE = re.compile(
     r"@(?P<type>plugin|skill|agent|pack):(?P<id>[A-Za-z0-9][A-Za-z0-9._/\-]*)",
 )
 
+_SURFACE_RE = re.compile(
+    r"@(?P<id>browser|chrome|computer)\b",
+    re.IGNORECASE,
+)
+
 _VALID_TYPES = ("plugin", "skill", "agent", "pack")
+_VALID_SURFACES = {
+    "browser": "browser",
+    "chrome": "chrome",
+    "computer": "computer",
+}
 
 
 @dataclass(frozen=True)
 class InputMention:
     """A single @-mention extracted from user input."""
 
-    type: str  # one of "plugin" | "skill" | "agent" | "pack"
+    type: str  # one of "plugin" | "skill" | "agent" | "pack" | "surface"
     id: str
     raw: str  # the matched token, e.g. "@skill:deep-research"
     span: tuple[int, int]  # (start, end) char offsets in the source text
@@ -53,11 +64,16 @@ class InputMentions:
     agents: tuple[str, ...]
     packs: tuple[str, ...]
     raw_mentions: tuple[InputMention, ...]
+    surfaces: tuple[str, ...] = ()
 
     @property
     def has_any(self) -> bool:
         return bool(
-            self.plugins or self.skills or self.agents or self.packs,
+            self.plugins
+            or self.skills
+            or self.agents
+            or self.packs
+            or self.surfaces,
         )
 
     def render_hint(self) -> str:
@@ -98,6 +114,13 @@ class InputMentions:
                 + ". When delegation is appropriate, route to these "
                 "agents via `call_agent` / `call_agent_parallel` first.",
             )
+        if self.surfaces:
+            lines.append(
+                "User invoked these runtime surfaces via @Surface: "
+                + ", ".join(f"`{name}`" for name in self.surfaces)
+                + ". Treat this as an explicit request to use that surface "
+                "when it fits the next action.",
+            )
         lines.append(
             "These pins are strong routing preferences. If a pinned "
             "capability cannot be used, say why before falling back.",
@@ -107,7 +130,7 @@ class InputMentions:
 
 
 def parse_input_mentions(text: str) -> InputMentions:
-    """Extract @plugin/@skill/@agent/@pack mentions from a prompt string.
+    """Extract typed mentions and known runtime surface mentions.
 
     Duplicates within a single bucket are removed while preserving
     first-seen order. Mentions in code fences or inline code spans are
@@ -125,6 +148,7 @@ def parse_input_mentions(text: str) -> InputMentions:
     skills: list[str] = []
     agents: list[str] = []
     packs: list[str] = []
+    surfaces: list[str] = []
     seen_per_bucket: dict[str, set[str]] = {
         "plugin": set(),
         "skill": set(),
@@ -157,12 +181,32 @@ def parse_input_mentions(text: str) -> InputMentions:
         else:
             agents.append(ident)
 
+    seen_surfaces: set[str] = set()
+    occupied_spans = [mention.span for mention in raw]
+    for match in _SURFACE_RE.finditer(text):
+        if any(start <= match.start() < end for start, end in occupied_spans):
+            continue
+        normalized = _VALID_SURFACES.get(match.group("id").lower())
+        if not normalized or normalized in seen_surfaces:
+            continue
+        seen_surfaces.add(normalized)
+        surfaces.append(normalized)
+        raw.append(
+            InputMention(
+                type="surface",
+                id=normalized,
+                raw=match.group(0),
+                span=(match.start(), match.end()),
+            ),
+        )
+
     return InputMentions(
         plugins=tuple(plugins),
         skills=tuple(skills),
         agents=tuple(agents),
         packs=tuple(packs),
         raw_mentions=tuple(raw),
+        surfaces=tuple(surfaces),
     )
 
 

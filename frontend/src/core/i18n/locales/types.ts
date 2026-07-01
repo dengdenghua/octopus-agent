@@ -287,6 +287,7 @@ export interface Translations {
     insertCodexPlan: string;
     insertCodexSpec: string;
     insertCodexGoal: string;
+    insertBrowserSurface: string;
     workflow: string;
     deepResearchConfig: string;
     roles: string;

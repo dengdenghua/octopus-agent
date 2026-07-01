@@ -9,6 +9,7 @@ import {
   Loader2Icon,
   ZapIcon,
   MapIcon,
+  MonitorIcon,
   PaperclipIcon,
   PlusIcon,
   SearchIcon,
@@ -800,6 +801,15 @@ export function ChatInputBox({
     window.setTimeout(() => textareaRef.current?.focus(), 0);
   }, []);
 
+  const insertBrowserSurfaceMarker = useCallback(() => {
+    const marker = "@Browser";
+    setDraft((current) => {
+      const body = current.replace(/^@Browser(?:\s+|$)/i, "").trimStart();
+      return body ? `${marker}\n${body}` : `${marker}\n`;
+    });
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
+  }, []);
+
   const toggleResearchSource = useCallback((kind: ResearchSourceKind) => {
     setResearchSources((current) => {
       if (current.includes(kind)) {
@@ -1417,6 +1427,14 @@ export function ChatInputBox({
                 >
                   <TargetIcon className="size-4" />
                   {t.chatInputBox.insertCodexGoal}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  data-testid="chat-insert-browser-surface"
+                  onClick={insertBrowserSurfaceMarker}
+                  className="gap-2 rounded-md text-[13px]"
+                >
+                  <MonitorIcon className="size-4" />
+                  {t.chatInputBox.insertBrowserSurface}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {canUseDeepResearch && (

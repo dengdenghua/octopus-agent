@@ -94,6 +94,21 @@ DIMENSIONS: tuple[AutomationRadarDimension, ...] = (
         ),
     ),
     AutomationRadarDimension(
+        id="thread_native_browser_mode",
+        title="Thread-native browser mode",
+        weight=3,
+        why=(
+            "Let the user invoke browser operation directly from a chat turn "
+            "with @Browser, then route the same turn through browser tools, "
+            "state evidence, and artifacts."
+        ),
+        scores={"codex": 96, "claude_code": 86, "cursor": 82, "octopus": 97},
+        evidence_check_ids=("thread_native_browser_activation",),
+        next_actions=(
+            "Keep @Browser activation wired through input, turn context, tool prompts, and quality gates.",
+        ),
+    ),
+    AutomationRadarDimension(
         id="automation_safety",
         title="Automation safety",
         weight=12,

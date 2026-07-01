@@ -54,6 +54,15 @@ def test_parse_input_mentions_ignores_at_without_colon() -> None:
     assert not result.has_any
 
 
+def test_parse_input_mentions_extracts_known_runtime_surface() -> None:
+    result = parse_input_mentions("@Browser inspect localhost")
+
+    assert result.surfaces == ("browser",)
+    assert result.has_any
+    assert result.raw_mentions[0].type == "surface"
+    assert result.raw_mentions[0].raw == "@Browser"
+
+
 def test_parse_input_mentions_records_span() -> None:
     text = "Hi @skill:foo there"
     result = parse_input_mentions(text)
@@ -127,3 +136,26 @@ def test_capability_router_pin_only_activates_even_without_keywords() -> None:
     assert activation.active
     assert activation.pinned_plugins == ("my-tool",)
     assert "input-mentions" in activation.render_prompt()
+
+
+def test_capability_router_promotes_browser_surface_tools() -> None:
+    from runtime.core.cerebrum.capability_router import activate_capabilities
+
+    class _Registry:
+        def has(self, _name: str) -> bool:
+            return True
+
+        def is_enabled(self, _name: str) -> bool:
+            return True
+
+    activation = activate_capabilities("@Browser check the current page", registry=_Registry())
+
+    assert activation.pinned_surfaces == ("browser",)
+    assert "browser-ui" in activation.labels
+    assert activation.priority_skills[:4] == (
+        "live_browser_state",
+        "live_browser_current_url",
+        "live_browser_navigate",
+        "live_browser_extract",
+    )
+    assert "runtime surfaces" in activation.render_prompt()

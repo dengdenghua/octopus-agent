@@ -27,6 +27,7 @@ def test_browser_desktop_quality_reports_all_local_checks() -> None:
     assert {row["id"] for row in report["checks"]} == {
         "browser_session_lifecycle",
         "browser_pixel_replay_gate",
+        "thread_native_browser_activation",
         "desktop_preview_execute_lease",
         "desktop_uia_grounding",
         "operator_visibility",
@@ -167,6 +168,7 @@ def test_automation_radar_reports_browser_desktop_advantage() -> None:
         "desktop_preview_execute",
         "visual_replay_validation",
         "repair_recipe_learning",
+        "thread_native_browser_mode",
         "automation_safety",
         "productized_api_bridge",
     }
