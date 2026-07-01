@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -11,6 +12,48 @@ from typing import Any
 _LOG = logging.getLogger("octopus.evolution.federation")
 
 _LOCK = threading.Lock()
+_SAFE_FEDERATION_ID_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,239}$")
+
+
+def _require_safe_id(value: str, *, label: str) -> str:
+    identifier = str(value or "").strip()
+    if not _SAFE_FEDERATION_ID_RE.fullmatch(identifier):
+        raise ValueError(
+            f"invalid federation {label}: use letters, numbers, dot, underscore, or hyphen"
+        )
+    return identifier
+
+
+def _ensure_child_dir(root: Path, child: str, *, label: str) -> Path:
+    name = _require_safe_id(child, label=label)
+    path = root / name
+    root_resolved = root.resolve()
+    resolved = path.resolve()
+    if root_resolved not in resolved.parents:
+        raise ValueError(f"federation {label} path escapes shared directory")
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _ensure_nested_dir(root: Path, path: Path, *, label: str) -> Path:
+    root_resolved = root.resolve()
+    resolved = path.resolve()
+    if root_resolved not in resolved.parents:
+        raise ValueError(f"federation {label} path escapes shared directory")
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _json_child_path(root: Path, directory: Path, identifier: str, *, label: str) -> Path:
+    safe_id = _require_safe_id(identifier, label=label)
+    path = directory / f"{safe_id}.json"
+    if path.is_symlink():
+        raise ValueError(f"federation {label} path must not be a symlink")
+    root_resolved = root.resolve()
+    resolved = path.resolve()
+    if root_resolved not in resolved.parents:
+        raise ValueError(f"federation {label} path escapes shared directory")
+    return path
 
 
 @dataclass
@@ -40,9 +83,9 @@ class FederationHub:
         self._last_adopt_ts: dict[str, float] = {}
 
     def publish(self, agent_id: str, proposal: SharedProposal) -> Path:
-        agent_dir = self._dir / agent_id
-        agent_dir.mkdir(parents=True, exist_ok=True)
-        path = agent_dir / f"{proposal.proposal_id}.json"
+        agent_id = _require_safe_id(agent_id, label="agent id")
+        agent_dir = _ensure_child_dir(self._dir, agent_id, label="agent id")
+        path = _json_child_path(self._dir, agent_dir, proposal.proposal_id, label="proposal id")
         with _LOCK:
             path.write_text(
                 json.dumps(asdict(proposal), ensure_ascii=False, default=str, indent=2),
@@ -103,6 +146,7 @@ class FederationHub:
     ) -> bool:
         import time as _time
 
+        target_agent = _require_safe_id(target_agent, label="target agent")
         key = f"{target_agent}:{proposal.source_agent}:{proposal.kind}"
         now = _time.time()
         last = self._last_adopt_ts.get(key, 0)
@@ -115,8 +159,8 @@ class FederationHub:
                        proposal.fitness_delta, self.config.adoption_threshold)
             return False
 
-        adopt_dir = self._dir / target_agent / "adopted"
-        adopt_dir.mkdir(parents=True, exist_ok=True)
+        target_dir = _ensure_child_dir(self._dir, target_agent, label="target agent")
+        adopt_dir = _ensure_nested_dir(self._dir, target_dir / "adopted", label="adopted")
         record = {
             "adopted_ts": datetime.now().isoformat(timespec="seconds"),
             "source_agent": proposal.source_agent,
@@ -125,7 +169,7 @@ class FederationHub:
             "description": proposal.description,
             "fitness_delta": proposal.fitness_delta,
         }
-        path = adopt_dir / f"{proposal.proposal_id}.json"
+        path = _json_child_path(self._dir, adopt_dir, proposal.proposal_id, label="proposal id")
         with _LOCK:
             path.write_text(
                 json.dumps(record, ensure_ascii=False, indent=2),

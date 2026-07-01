@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
+import pytest
+
 from runtime.platform.config.schema import EvolveConfig, PlannerConfig, _pick_cheaper
 from runtime.safety.evolution.canary import (
     CanaryConfig,
@@ -1624,6 +1626,44 @@ class TestFederationHub:
         assert len(discovered) == 1
         assert discovered[0].source_agent == "agent_a"
 
+    def test_publish_rejects_path_traversal_ids(self, tmp_path):
+        hub = FederationHub(FederationConfig(shared_dir=str(tmp_path / "fed")))
+        proposal = SharedProposal(
+            proposal_id="../escape", source_agent="agent_a",
+            kind="add_lesson", description="test lesson",
+            fitness_delta=0.15, ts="2026-01-01T00:00:00",
+        )
+
+        with pytest.raises(ValueError, match="invalid federation agent id"):
+            hub.publish("../agent", proposal)
+        with pytest.raises(ValueError, match="invalid federation proposal id"):
+            hub.publish("agent_a", proposal)
+
+        assert not (tmp_path / "escape.json").exists()
+
+    def test_publish_rejects_symlinked_proposal_file(self, tmp_path):
+        fed = tmp_path / "fed"
+        outside = tmp_path / "outside.json"
+        outside.write_text("keep", encoding="utf-8")
+        agent_dir = fed / "agent_a"
+        agent_dir.mkdir(parents=True)
+        link = agent_dir / "p1.json"
+        try:
+            link.symlink_to(outside)
+        except OSError as exc:
+            pytest.skip(f"symlink unavailable: {exc}")
+        hub = FederationHub(FederationConfig(shared_dir=str(fed)))
+        proposal = SharedProposal(
+            proposal_id="p1", source_agent="agent_a",
+            kind="add_lesson", description="test lesson",
+            fitness_delta=0.15, ts="2026-01-01T00:00:00",
+        )
+
+        with pytest.raises(ValueError, match="must not be a symlink"):
+            hub.publish("agent_a", proposal)
+
+        assert outside.read_text(encoding="utf-8") == "keep"
+
     def test_agent_does_not_discover_own(self, tmp_path):
         hub = FederationHub(FederationConfig(shared_dir=str(tmp_path / "fed")))
         proposal = SharedProposal(
@@ -1646,6 +1686,29 @@ class TestFederationHub:
         discovered = hub.discover("agent_b")
         result = hub.adopt("agent_b", discovered[0])
         assert result is True
+
+    def test_adopt_rejects_symlinked_adopted_dir(self, tmp_path):
+        fed = tmp_path / "fed"
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        target = fed / "agent_b"
+        target.mkdir(parents=True)
+        link = target / "adopted"
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except OSError as exc:
+            pytest.skip(f"symlink unavailable: {exc}")
+        hub = FederationHub(FederationConfig(shared_dir=str(fed)))
+        proposal = SharedProposal(
+            proposal_id="p3", source_agent="agent_a",
+            kind="add_lesson", description="good lesson",
+            fitness_delta=0.2, ts="2026-01-01T00:00:00",
+        )
+
+        with pytest.raises(ValueError, match="escapes shared directory"):
+            hub.adopt("agent_b", proposal)
+
+        assert not (outside / "p3.json").exists()
 
     def test_adopt_rejects_low_fitness_delta(self, tmp_path):
         hub = FederationHub(FederationConfig(
