@@ -99,8 +99,33 @@ def test_agent_scorecard_endpoint() -> None:
     assert data["ecosystem_readiness"]["score"] == 1.0
     assert data["parity_certification"]["ready"] is True
     assert data["parity_certification"]["passed"] == 17
-    assert data["parity_certification"]["by_kind"]["operational_excellence"]["passed"] == 4
+    assert data["parity_certification"]["by_kind"]["operational_excellence"][
+        "passed"
+    ] == 4
     assert data["parity_certification"]["by_kind"]["advantage"]["passed"] == 7
+
+
+def test_e2e_surpass_certification_endpoint() -> None:
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.get("/api/evolution/e2e-surpass-certification?target_score=95")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["schema"] == "octopus.e2e_surpass_certification.v1"
+    assert data["ready"] is True
+    assert data["verdict"] == "surpassed"
+    assert data["summary"]["scorecard_octopus"] == 97
+    assert data["summary"]["automation_octopus"] == 95
+    assert data["summary"]["quality_ready"] == data["summary"]["quality_total"]
+    assert any(
+        check["id"] == "scorecard_all_dimensions_surpassed"
+        and check["passed"] is True
+        for check in data["checks"]
+    )
 
 
 def test_agent_scorecard_gaps_can_queue_real_baseline_backlog(

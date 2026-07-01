@@ -84,6 +84,39 @@ def test_production_readiness_gate_blocks_scorecard_regression(
     )
 
 
+def test_production_readiness_gate_blocks_e2e_certification_regression(
+    monkeypatch,
+    review_queue_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        gate,
+        "compute_e2e_surpass_certification",
+        lambda **_: {
+            "schema": "octopus.e2e_surpass_certification.v1",
+            "ready": False,
+            "checks": [
+                {
+                    "id": "scorecard_all_dimensions_surpassed",
+                    "passed": False,
+                },
+            ],
+            "next_actions": ["Restore all-dimension surpass evidence."],
+        },
+    )
+
+    result = gate.run_gate(min_score=95, review_queue_path=review_queue_path)
+
+    assert any(
+        "e2e surpass certification is not ready" in item
+        for item in result.failures
+    )
+    assert any(
+        "e2e surpass certification checks: scorecard_all_dimensions_surpassed"
+        in item
+        for item in result.failures
+    )
+
+
 def test_production_readiness_gate_allows_scored_automation_focus_without_evidence_gap(
     monkeypatch,
     review_queue_path: Path,

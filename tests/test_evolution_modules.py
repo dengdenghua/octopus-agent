@@ -813,6 +813,36 @@ class TestAgentCompetitorScorecard:
         assert len(report["octopus_strengths"]) == 14
         assert report["next_focus"] == []
 
+    def test_e2e_surpass_certification_unifies_release_evidence(self):
+        from runtime.safety.evolution.e2e_surpass_certification import (
+            compute_e2e_surpass_certification,
+        )
+
+        report = compute_e2e_surpass_certification(target_score=95)
+
+        assert report["schema"] == "octopus.e2e_surpass_certification.v1"
+        assert report["ready"] is True
+        assert report["verdict"] == "surpassed"
+        assert report["summary"] == {
+            "scorecard_octopus": 97,
+            "scorecard_best_external": 87,
+            "scorecard_evidence_adjusted_octopus": 97,
+            "automation_octopus": 95,
+            "automation_codex": 93,
+            "quality_ready": 6,
+            "quality_total": 6,
+            "all_dimensions_surpassed": True,
+            "scorecard_gap_dimensions": 0,
+            "automation_gap_dimensions": 0,
+        }
+        assert all(check["passed"] for check in report["checks"])
+        assert {
+            "scorecard_all_dimensions_surpassed",
+            "automation_no_gaps",
+            "octopus.digital_employee_quality.v1:ready",
+        } <= {check["id"] for check in report["checks"]}
+        assert report["next_actions"] == []
+
     def test_repo_context_quality_reports_release_evidence(self):
         from runtime.safety.evolution.repo_context_quality import (
             compute_repo_context_quality,

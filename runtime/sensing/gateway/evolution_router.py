@@ -108,6 +108,22 @@ def create_evolution_router() -> Any:
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
+    @router.get("/e2e-surpass-certification")
+    def get_e2e_surpass_certification(
+        target_score: int = Query(default=95, ge=1, le=100),
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.e2e_surpass_certification import (
+                compute_e2e_surpass_certification,
+            )
+
+            return {
+                "ok": True,
+                **compute_e2e_surpass_certification(target_score=target_score),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
     @router.post("/agent-scorecard/gaps/queue")
     def queue_agent_scorecard_gaps(
         body: ScorecardGapQueueBody | None = None,

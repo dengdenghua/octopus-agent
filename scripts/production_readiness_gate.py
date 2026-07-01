@@ -25,6 +25,9 @@ from runtime.safety.evolution.browser_desktop_quality import (
 from runtime.safety.evolution.digital_employee_quality import (
     compute_digital_employee_quality,
 )
+from runtime.safety.evolution.e2e_surpass_certification import (
+    compute_e2e_surpass_certification,
+)
 from runtime.safety.evolution.permission_sandbox_quality import (
     compute_permission_sandbox_quality,
 )
@@ -106,6 +109,10 @@ def run_gate(
         target_score=min_score,
         review_queue_path=review_queue_path,
     )
+    e2e_certification = compute_e2e_surpass_certification(
+        target_score=min_score,
+        review_queue_path=review_queue_path,
+    )
     quality_reports = [
         compute_repo_context_quality(),
         compute_permission_sandbox_quality(),
@@ -159,6 +166,16 @@ def run_gate(
         failures,
         "automation radar evidence gaps",
         automation.get("octopus_gaps"),
+    )
+    _require_ready(
+        failures,
+        "e2e surpass certification",
+        e2e_certification,
+    )
+    _require_no_failed_checks(
+        failures,
+        "e2e surpass certification checks",
+        e2e_certification.get("checks"),
     )
 
     for report in quality_reports:
@@ -253,6 +270,24 @@ def _require_no_evidence_gaps(
     ]
     if blocking:
         failures.append(f"{label}: {_row_ids(blocking)}")
+
+
+def _require_no_failed_checks(
+    failures: list[str],
+    label: str,
+    rows: Any,
+) -> None:
+    if not isinstance(rows, Sequence) or isinstance(rows, str):
+        failures.append(f"{label} are unavailable")
+        return
+    failed = [
+        row
+        for row in rows
+        if isinstance(row, Mapping)
+        and row.get("passed") is not True
+    ]
+    if failed:
+        failures.append(f"{label}: {_row_ids(failed)}")
 
 
 def _require_browser_desktop_replay_trends(
