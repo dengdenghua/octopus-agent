@@ -48,6 +48,7 @@ def test_e2e_release_proof_merges_readiness_and_full_stack(tmp_path: Path) -> No
     assert data["summary"]["coverage_ready"] == 7
     assert data["summary"]["coverage_total"] == 7
     assert data["summary"]["coverage_gap_domains"] == 0
+    assert data["summary"]["full_stack_run_id"] == "proof-run-1"
     assert data["summary"]["full_stack_suite_count"] == 2
     assert data["summary"]["full_stack_test_file_count"] == 5
     assert data["summary"]["full_stack_test_case_count"] == 17
@@ -63,6 +64,14 @@ def test_e2e_release_proof_merges_readiness_and_full_stack(tmp_path: Path) -> No
     assert data["summary"]["required_suite_failed_test_counts"] == {
         "full-stack-desktop": 0,
         "full-stack-mobile": 0,
+    }
+    assert data["summary"]["required_suite_run_ids"] == {
+        "full-stack-desktop": "proof-run-1",
+        "full-stack-mobile": "proof-run-1",
+    }
+    assert data["summary"]["required_suite_state_root_present"] == {
+        "full-stack-desktop": True,
+        "full-stack-mobile": True,
     }
     assert data["summary"]["required_suite_playwright_report_present"] == {
         "full-stack-desktop": True,
@@ -432,6 +441,88 @@ def test_e2e_release_proof_rejects_mismatched_playwright_report_hash(
     ]
 
 
+def test_e2e_release_proof_rejects_mismatched_suite_run_id(
+    tmp_path: Path,
+) -> None:
+    readiness = tmp_path / "readiness.json"
+    full_stack = tmp_path / "full_stack.json"
+    output = tmp_path / "release.json"
+    readiness.write_text(json.dumps(_readiness()), encoding="utf-8")
+    full_stack.write_text(
+        json.dumps(
+            _full_stack(
+                report_root=tmp_path,
+                suite_run_ids={"full-stack-mobile": "old-run"},
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/e2e_release_proof.py",
+            "--readiness",
+            str(readiness),
+            "--full-stack",
+            str(full_stack),
+            "--output",
+            str(output),
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert result.returncode == 1
+    assert data["ready"] is False
+    assert "full_stack_suite_run_ids_match" in data["failed_checks"]
+    assert data["summary"]["suites_with_mismatched_run_ids"] == ["full-stack-mobile"]
+
+
+def test_e2e_release_proof_rejects_missing_required_state_root(
+    tmp_path: Path,
+) -> None:
+    readiness = tmp_path / "readiness.json"
+    full_stack = tmp_path / "full_stack.json"
+    output = tmp_path / "release.json"
+    readiness.write_text(json.dumps(_readiness()), encoding="utf-8")
+    full_stack.write_text(
+        json.dumps(
+            _full_stack(
+                report_root=tmp_path,
+                create_state_roots={"full-stack-desktop": False},
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/e2e_release_proof.py",
+            "--readiness",
+            str(readiness),
+            "--full-stack",
+            str(full_stack),
+            "--output",
+            str(output),
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert result.returncode == 1
+    assert data["ready"] is False
+    assert "full_stack_required_suites_have_state_roots" in data["failed_checks"]
+    assert data["summary"]["suites_missing_state_roots"] == ["full-stack-desktop"]
+
+
 def test_e2e_release_proof_rejects_weak_required_passed_test_count(
     tmp_path: Path,
 ) -> None:
@@ -547,15 +638,18 @@ def _readiness(
 def _full_stack(
     *,
     report_root: Path,
+    run_id: str = "proof-run-1",
     suites: tuple[str, ...] = ("full-stack-desktop", "full-stack-mobile"),
     suite_count: int | None = None,
     passed_count: int | None = None,
     suite_test_matches: dict[str, tuple[str, ...]] | None = None,
     suite_passed_counts: dict[str, int] | None = None,
     suite_failed_counts: dict[str, int] | None = None,
+    suite_run_ids: dict[str, str] | None = None,
     suite_report_presence: dict[str, bool] | None = None,
     suite_report_stats: dict[str, dict[str, int]] | None = None,
     suite_report_hash_overrides: dict[str, str] | None = None,
+    create_state_roots: dict[str, bool] | None = None,
     write_report_files: dict[str, bool] | None = None,
 ) -> dict[str, object]:
     default_test_matches = {
@@ -580,16 +674,21 @@ def _full_stack(
         "full-stack-desktop": 1,
         "full-stack-mobile": 0,
     }
+    run_ids = suite_run_ids or {}
     report_presence = suite_report_presence or {
         "full-stack-desktop": True,
         "full-stack-mobile": True,
     }
     report_stats = suite_report_stats or {}
     report_hash_overrides = suite_report_hash_overrides or {}
+    state_roots = create_state_roots or {}
     write_reports = write_report_files or {}
     report_root.mkdir(parents=True, exist_ok=True)
     rows = []
     for suite in suites:
+        state_root = report_root / suite
+        if state_roots.get(suite, True):
+            state_root.mkdir(parents=True, exist_ok=True)
         report_path = report_root / f"{suite}-playwright-report.json"
         should_write_report = write_reports.get(
             suite,
@@ -615,7 +714,8 @@ def _full_stack(
             {
                 "suite": suite,
                 "status": "passed",
-                "state_root": f"test-results/{suite}",
+                "state_root": str(state_root),
+                "run_id": run_ids.get(suite, run_id),
                 "playwright_report": str(report_path),
                 "playwright_report_present": bool(report_presence.get(suite, False)),
                 "playwright_report_sha256": report_hash_overrides.get(
@@ -638,6 +738,9 @@ def _full_stack(
         )
     return {
         "schema": "octopus.full_stack_smoke_proof.v1",
+        "run_id": run_id,
+        "started_at": "2026-07-01T00:00:00+00:00",
+        "updated_at": "2026-07-01T00:00:10+00:00",
         "ready": True,
         "suite_count": len(rows) if suite_count is None else suite_count,
         "passed_count": len(rows) if passed_count is None else passed_count,

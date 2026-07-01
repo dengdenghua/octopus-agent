@@ -26,9 +26,18 @@ def main() -> int:
     parser.add_argument("--backend-port", default="")
     parser.add_argument("--test-match", default="")
     parser.add_argument("--playwright-report", type=Path)
+    parser.add_argument("--run-id", default="")
     args = parser.parse_args()
 
     proof = _read_proof(args.output)
+    now = datetime.now(UTC).isoformat()
+    incoming_run_id = str(args.run_id or "").strip()
+    existing_run_id = str(proof.get("run_id") or "").strip()
+    if incoming_run_id and existing_run_id and incoming_run_id != existing_run_id:
+        proof = {"schema": SCHEMA, "suites": []}
+        existing_run_id = ""
+    run_id = incoming_run_id or existing_run_id or _fallback_run_id(now)
+    started_at = str(proof.get("started_at") or now)
     suites = [
         suite
         for suite in proof.get("suites", [])
@@ -50,12 +59,13 @@ def main() -> int:
             "playwright_report_present": bool(playwright.get("present")),
             "playwright_report_sha256": str(playwright.get("sha256") or ""),
             "playwright_report_bytes": int(playwright.get("bytes") or 0),
+            "run_id": run_id,
             "test_case_count": int(playwright.get("test_case_count") or 0),
             "passed_test_count": int(playwright.get("passed_test_count") or 0),
             "skipped_test_count": int(playwright.get("skipped_test_count") or 0),
             "failed_test_count": int(playwright.get("failed_test_count") or 0),
             "flaky_test_count": int(playwright.get("flaky_test_count") or 0),
-            "recorded_at": datetime.now(UTC).isoformat(),
+            "recorded_at": now,
         }
     )
     ready = bool(suites) and all(suite.get("status") == "passed" for suite in suites)
@@ -67,6 +77,9 @@ def main() -> int:
     total_flaky_tests = sum(_count_field(suite, "flaky_test_count") for suite in suites)
     report = {
         "schema": SCHEMA,
+        "run_id": run_id,
+        "started_at": started_at,
+        "updated_at": now,
         "ready": ready,
         "suite_count": len(suites),
         "passed_count": sum(1 for suite in suites if suite.get("status") == "passed"),
@@ -143,6 +156,10 @@ def _empty_playwright_report() -> dict[str, int | bool | str]:
         "failed_test_count": 0,
         "flaky_test_count": 0,
     }
+
+
+def _fallback_run_id(recorded_at: str) -> str:
+    return "local-" + recorded_at.replace(":", "").replace("+", "Z")
 
 
 def _count_playwright_tests(data: object) -> tuple[int, int, int, int, int]:

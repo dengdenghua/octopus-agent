@@ -66,10 +66,14 @@ def build_release_proof(
         suite for suite in required if suite in suite_status and suite_status[suite] != "passed"
     ]
     suite_rows = _suite_rows(full_stack)
+    proof_root = full_stack_path.parent.resolve()
+    full_stack_run_id = str(full_stack.get("run_id") or "").strip()
+    suite_run_ids = _suite_run_ids(suite_rows)
+    suite_state_roots = _suite_state_roots(suite_rows, base_dir=proof_root)
     suite_report_presence = _suite_report_presence(suite_rows)
     suite_report_counts = _suite_playwright_report_counts(
         suite_rows,
-        base_dir=full_stack_path.parent,
+        base_dir=proof_root,
     )
     suite_report_valid = {
         suite: bool(counts.get("valid")) for suite, counts in suite_report_counts.items()
@@ -123,6 +127,23 @@ def build_release_proof(
         suite
         for suite in required
         if suite in suite_failed_test_counts and suite_failed_test_counts[suite] > 0
+    ]
+    suites_with_mismatched_run_ids = [
+        suite
+        for suite in required
+        if suite in suite_status and suite_run_ids.get(suite, "") != full_stack_run_id
+    ]
+    suites_missing_state_roots = [
+        suite
+        for suite in required
+        if suite in suite_status and not _path_is_existing_dir(suite_state_roots.get(suite))
+    ]
+    suites_with_external_state_roots = [
+        suite
+        for suite in required
+        if suite in suite_status
+        and _path_is_existing_dir(suite_state_roots.get(suite))
+        and not _path_is_relative_to(suite_state_roots[suite], proof_root)
     ]
     passed_suite_count = sum(1 for row in suite_rows if row.get("status") == "passed")
     declared_suite_count = _as_int(full_stack.get("suite_count"))
@@ -182,6 +203,19 @@ def build_release_proof(
             "next_action": "Run full-stack Playwright smoke and fix failures.",
         },
         {
+            "id": "full_stack_run_identity_present",
+            "passed": bool(full_stack_run_id),
+            "next_action": "Regenerate full-stack smoke proof with a non-empty run_id.",
+        },
+        {
+            "id": "full_stack_suite_run_ids_match",
+            "passed": bool(full_stack_run_id) and not suites_with_mismatched_run_ids,
+            "next_action": (
+                "Regenerate full-stack smoke proof in one run; suite run_ids "
+                f"do not match for suites: {', '.join(suites_with_mismatched_run_ids)}"
+            ),
+        },
+        {
             "id": "full_stack_suite_counts_consistent",
             "passed": (
                 declared_suite_count == len(suite_rows)
@@ -213,6 +247,23 @@ def build_release_proof(
             "next_action": (
                 "Restore readable Playwright JSON reports for suites: "
                 f"{', '.join(suites_missing_playwright_report_files)}"
+            ),
+        },
+        {
+            "id": "full_stack_required_suites_have_state_roots",
+            "passed": not suites_missing_state_roots,
+            "next_action": (
+                "Regenerate full-stack smoke proof with persisted state roots for suites: "
+                f"{', '.join(suites_missing_state_roots)}"
+            ),
+        },
+        {
+            "id": "full_stack_required_suite_state_roots_scoped",
+            "passed": not suites_with_external_state_roots,
+            "next_action": (
+                "Regenerate full-stack smoke proof in the same verify state root; "
+                "external state roots found for suites: "
+                f"{', '.join(suites_with_external_state_roots)}"
             ),
         },
         {
@@ -294,6 +345,7 @@ def build_release_proof(
             "coverage_gap_domains": _as_int(
                 _nested(readiness, "e2e", "summary", "coverage_gap_domains"),
             ),
+            "full_stack_run_id": full_stack_run_id,
             "full_stack_suite_count": declared_suite_count,
             "full_stack_passed_count": declared_passed_count,
             "full_stack_test_file_count": declared_test_file_count,
@@ -307,6 +359,13 @@ def build_release_proof(
             },
             "required_suite_failed_test_counts": {
                 suite: suite_failed_test_counts.get(suite, 0) for suite in required
+            },
+            "required_suite_run_ids": {suite: suite_run_ids.get(suite, "") for suite in required},
+            "required_suite_state_roots": {
+                suite: str(suite_state_roots.get(suite) or "") for suite in required
+            },
+            "required_suite_state_root_present": {
+                suite: _path_is_existing_dir(suite_state_roots.get(suite)) for suite in required
             },
             "required_suite_playwright_report_present": {
                 suite: bool(suite_report_presence.get(suite, False)) for suite in required
@@ -323,6 +382,9 @@ def build_release_proof(
             "required_suites": required,
             "missing_suites": missing_suites,
             "failed_suites": failed_suites,
+            "suites_with_mismatched_run_ids": suites_with_mismatched_run_ids,
+            "suites_missing_state_roots": suites_missing_state_roots,
+            "suites_with_external_state_roots": suites_with_external_state_roots,
             "suites_missing_playwright_reports": suites_missing_playwright_reports,
             "suites_missing_playwright_report_files": (suites_missing_playwright_report_files),
             "suites_with_mismatched_playwright_report_counts": (
@@ -348,6 +410,9 @@ def build_release_proof(
         },
         "full_stack": {
             "schema": full_stack.get("schema"),
+            "run_id": full_stack.get("run_id"),
+            "started_at": full_stack.get("started_at"),
+            "updated_at": full_stack.get("updated_at"),
             "ready": full_stack.get("ready"),
             "suite_count": full_stack.get("suite_count"),
             "passed_count": full_stack.get("passed_count"),
@@ -413,6 +478,32 @@ def _suite_test_counts(suite_rows: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+def _suite_run_ids(suite_rows: list[dict[str, Any]]) -> dict[str, str]:
+    run_ids: dict[str, str] = {}
+    for row in suite_rows:
+        suite = str(row.get("suite") or "").strip()
+        if suite:
+            run_ids[suite] = str(row.get("run_id") or "").strip()
+    return run_ids
+
+
+def _suite_state_roots(
+    suite_rows: list[dict[str, Any]],
+    *,
+    base_dir: Path,
+) -> dict[str, Path]:
+    roots: dict[str, Path] = {}
+    for row in suite_rows:
+        suite = str(row.get("suite") or "").strip()
+        if not suite:
+            continue
+        raw_path = str(row.get("state_root") or "").strip()
+        path = _resolve_state_root(raw_path, base_dir=base_dir)
+        if path is not None:
+            roots[suite] = path
+    return roots
+
+
 def _suite_report_presence(suite_rows: list[dict[str, Any]]) -> dict[str, bool]:
     presence: dict[str, bool] = {}
     for row in suite_rows:
@@ -445,6 +536,18 @@ def _resolve_report_path(raw_path: str, *, base_dir: Path) -> Path | None:
     if path.is_absolute():
         return path
     return (base_dir / path).resolve()
+
+
+def _resolve_state_root(raw_path: str, *, base_dir: Path) -> Path | None:
+    if not raw_path:
+        return None
+    path = Path(raw_path)
+    if path.is_absolute():
+        return path.resolve()
+    base_candidate = (base_dir / path).resolve()
+    if base_candidate.exists():
+        return base_candidate
+    return path.resolve()
 
 
 def _read_playwright_report_counts(path: Path | None) -> dict[str, int | bool | str]:
@@ -560,6 +663,18 @@ def _coverage_complete(readiness: dict[str, Any]) -> bool:
     ready = _as_int(_nested(readiness, "e2e", "summary", "coverage_ready"))
     total = _as_int(_nested(readiness, "e2e", "summary", "coverage_total"))
     return total > 0 and ready == total
+
+
+def _path_is_existing_dir(path: Path | None) -> bool:
+    return path is not None and path.is_dir()
+
+
+def _path_is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve().relative_to(parent.resolve())
+    except ValueError:
+        return False
+    return True
 
 
 def _as_int(value: Any) -> int:

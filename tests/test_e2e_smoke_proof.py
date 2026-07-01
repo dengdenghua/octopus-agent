@@ -48,6 +48,8 @@ def test_e2e_smoke_proof_records_desktop_and_mobile_suites(tmp_path: Path) -> No
                 "18000",
                 "--playwright-report",
                 str(playwright_report),
+                "--run-id",
+                "proof-run-1",
                 "--test-match",
                 test_match,
             ],
@@ -61,6 +63,9 @@ def test_e2e_smoke_proof_records_desktop_and_mobile_suites(tmp_path: Path) -> No
     data = json.loads(output.read_text(encoding="utf-8"))
 
     assert data["schema"] == "octopus.full_stack_smoke_proof.v1"
+    assert data["run_id"] == "proof-run-1"
+    assert data["started_at"]
+    assert data["updated_at"]
     assert data["ready"] is True
     assert data["suite_count"] == 2
     assert data["passed_count"] == 2
@@ -75,6 +80,7 @@ def test_e2e_smoke_proof_records_desktop_and_mobile_suites(tmp_path: Path) -> No
         "full-stack-mobile",
     ]
     assert data["suites"][0]["backend_host"] == "127.0.0.1"
+    assert data["suites"][0]["run_id"] == "proof-run-1"
     assert data["suites"][0]["test_match"] == ["full-stack-smoke.spec.ts"]
     assert data["suites"][0]["test_file_count"] == 1
     assert data["suites"][0]["playwright_report_present"] is True

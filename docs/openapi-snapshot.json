@@ -1959,6 +1959,8 @@
           },
           "max_ticks": {
             "default": 50,
+            "maximum": 200.0,
+            "minimum": 1.0,
             "title": "Max Ticks",
             "type": "integer"
           },
@@ -3489,6 +3491,8 @@
           },
           "max_ticks": {
             "default": 50,
+            "maximum": 200.0,
+            "minimum": 1.0,
             "title": "Max Ticks",
             "type": "integer"
           },
@@ -3765,6 +3769,8 @@
         "properties": {
           "max_ticks": {
             "default": 50,
+            "maximum": 200.0,
+            "minimum": 1.0,
             "title": "Max Ticks",
             "type": "integer"
           }
@@ -3792,7 +3798,7 @@
             "type": "string"
           },
           "target_score": {
-            "default": 90,
+            "default": 95,
             "maximum": 100.0,
             "minimum": 1.0,
             "title": "Target Score",
@@ -4349,6 +4355,8 @@
           },
           "max_ticks": {
             "default": 50,
+            "maximum": 200.0,
+            "minimum": 1.0,
             "title": "Max Ticks",
             "type": "integer"
           },
@@ -17297,7 +17305,7 @@
             "name": "target_score",
             "required": false,
             "schema": {
-              "default": 90,
+              "default": 95,
               "maximum": 100,
               "minimum": 1,
               "title": "Target Score",
@@ -18411,6 +18419,53 @@
           }
         },
         "summary": "Get Drift",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/e2e-surpass-certification": {
+      "get": {
+        "operationId": "get_e2e_surpass_certification_api_evolution_e2e_surpass_certification_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target_score",
+            "required": false,
+            "schema": {
+              "default": 95,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Target Score",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get E2E Surpass Certification Api Evolution E2E Surpass Certification Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get E2E Surpass Certification",
         "tags": [
           "evolution"
         ]
@@ -27044,6 +27099,334 @@
         "summary": "Api Regeneration Summary",
         "tags": [
           "observability"
+        ]
+      }
+    },
+    "/api/registry/plugins": {
+      "get": {
+        "operationId": "list_registry_plugins_api_registry_plugins_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Registry Plugins Api Registry Plugins Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Registry Plugins",
+        "tags": [
+          "registry"
+        ]
+      }
+    },
+    "/api/registry/plugins/{slug}": {
+      "get": {
+        "operationId": "registry_plugin_detail_api_registry_plugins__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Registry Plugin Detail Api Registry Plugins  Slug  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Registry Plugin Detail",
+        "tags": [
+          "registry"
+        ]
+      }
+    },
+    "/api/registry/roles": {
+      "get": {
+        "operationId": "list_registry_roles_api_registry_roles_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Registry Roles Api Registry Roles Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Registry Roles",
+        "tags": [
+          "registry"
+        ]
+      }
+    },
+    "/api/registry/roles/{asset_id}": {
+      "get": {
+        "operationId": "registry_role_detail_api_registry_roles__asset_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Registry Role Detail Api Registry Roles  Asset Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Registry Role Detail",
+        "tags": [
+          "registry"
+        ]
+      }
+    },
+    "/api/registry/roles/{asset_id}/install": {
+      "post": {
+        "operationId": "install_registry_role_api_registry_roles__asset_id__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Install Registry Role Api Registry Roles  Asset Id  Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Install Registry Role",
+        "tags": [
+          "registry"
         ]
       }
     },

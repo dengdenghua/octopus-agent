@@ -90,6 +90,7 @@ PYTHON_BIN="$(resolve_python)"
 export PYTHON="$PYTHON_BIN"
 mkdir -p "$VERIFY_DATA_DIR"
 VERIFY_STATE_ROOT_ABS="$(cd "$VERIFY_STATE_ROOT" && pwd)"
+VERIFY_RUN_ID="${OCTOPUS_VERIFY_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 VERIFY_DESKTOP_PLAYWRIGHT_REPORT="$VERIFY_STATE_ROOT_ABS/full-stack-playwright-report.json"
 VERIFY_MOBILE_PLAYWRIGHT_REPORT="$VERIFY_STATE_ROOT_ABS/full-stack-mobile-playwright-report.json"
 
@@ -156,7 +157,7 @@ if [[ "$run_full_stack" != "1" ]]; then
   (
     cd frontend
     PYTHON="$PYTHON_BIN" \
-    OCTOPUS_E2E_STATE_ROOT="$VERIFY_STATE_ROOT/full-stack" \
+    OCTOPUS_E2E_STATE_ROOT="$VERIFY_STATE_ROOT_ABS/full-stack" \
     OCTOPUS_E2E_JSON_REPORT="$VERIFY_DESKTOP_PLAYWRIGHT_REPORT" \
     pnpm e2e:full
   )
@@ -164,11 +165,12 @@ if [[ "$run_full_stack" != "1" ]]; then
     --output "$VERIFY_FULL_STACK_PROOF" \
     --suite full-stack-desktop \
     --status passed \
-    --state-root "$VERIFY_STATE_ROOT/full-stack" \
+    --state-root "$VERIFY_STATE_ROOT_ABS/full-stack" \
     --frontend-port "${FRONTEND_PORT:-13000}" \
     --backend-host "${GATEWAY_HOST:-127.0.0.1}" \
     --backend-port "${GATEWAY_PORT:-18000}" \
     --playwright-report "$VERIFY_DESKTOP_PLAYWRIGHT_REPORT" \
+    --run-id "$VERIFY_RUN_ID" \
     --test-match "full-stack-smoke.spec.ts,chat.spec.ts,regression.spec.ts,workflow-editor.spec.ts"
 
   if [[ "$run_full_stack_mobile" != "1" ]]; then
@@ -176,7 +178,7 @@ if [[ "$run_full_stack" != "1" ]]; then
     (
       cd frontend
       PYTHON="$PYTHON_BIN" \
-      OCTOPUS_E2E_STATE_ROOT="$VERIFY_STATE_ROOT/full-stack-mobile" \
+      OCTOPUS_E2E_STATE_ROOT="$VERIFY_STATE_ROOT_ABS/full-stack-mobile" \
       OCTOPUS_E2E_JSON_REPORT="$VERIFY_MOBILE_PLAYWRIGHT_REPORT" \
       pnpm e2e:full:mobile
     )
@@ -184,11 +186,12 @@ if [[ "$run_full_stack" != "1" ]]; then
       --output "$VERIFY_FULL_STACK_PROOF" \
       --suite full-stack-mobile \
       --status passed \
-      --state-root "$VERIFY_STATE_ROOT/full-stack-mobile" \
+      --state-root "$VERIFY_STATE_ROOT_ABS/full-stack-mobile" \
       --frontend-port "${FRONTEND_PORT:-13000}" \
       --backend-host "${GATEWAY_HOST:-127.0.0.1}" \
       --backend-port "${GATEWAY_PORT:-18000}" \
       --playwright-report "$VERIFY_MOBILE_PLAYWRIGHT_REPORT" \
+      --run-id "$VERIFY_RUN_ID" \
       --test-match "mobile-smoke.spec.ts"
   fi
   echo "full-stack smoke proof: $VERIFY_FULL_STACK_PROOF"
