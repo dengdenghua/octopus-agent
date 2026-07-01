@@ -1506,7 +1506,7 @@ export const zhCN: Translations = {
     navEvolution: "自进化",
     navReplay: "回放",
     navPlugins: "插件",
-    navHR: "角色库",
+    navHR: "Hub",
     navComputer: "本机助手",
     navDesktopOrganizer: "桌面助手",
     navMobile: "移动设备",
