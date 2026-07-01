@@ -1,10 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
-import {
-  Navigate,
-  Route,
-  Routes,
-  useLocation,
-} from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
@@ -14,13 +9,6 @@ function StorageRedirect() {
     ? window.location.hash.slice(window.location.hash.indexOf("?"))
     : "?surface=company";
   return <Navigate to={`/workspace/storage${search}`} replace />;
-}
-
-function HashRedirect({ to }: { to: string }) {
-  useEffect(() => {
-    window.location.replace(`${window.location.pathname}#${to}`);
-  }, [to]);
-  return null;
 }
 
 const LoginPage = lazy(() => import("./app/login/page"));

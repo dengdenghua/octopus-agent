@@ -3,6 +3,8 @@ competence, async work, breakout, replay."""
 
 from __future__ import annotations
 
+import sqlite3
+
 from runtime.memory.cowork import async_work, breakout, catchup, nominate, service
 from runtime.memory.cowork.group import ContextGrant
 from runtime.memory.cowork.group_store import GroupStore
@@ -84,6 +86,17 @@ def test_async_task_result_lands_on_shared_board(tmp_path) -> None:
     assert any(v == "it's the N+1 on orders" for v in board.values())
     audit = gs.blackboard("t").audit()["writers_by_key"]
     assert any("db-expert" in w for w in audit.values())
+
+
+def test_async_work_reads_self_heal_missing_schema(tmp_path) -> None:
+    gs = GroupStore(base_dir=tmp_path)
+    aw = async_work.AsyncWorkStore(base_dir=tmp_path, group_store=gs)
+    with sqlite3.connect(str(tmp_path / "async_work.db")) as conn:
+        conn.execute("DROP TABLE async_tasks")
+
+    assert aw.list("t") == []
+    task = aw.assign("t", "db-expert", "recover schema", actor="user")
+    assert [x.task_id for x in aw.pending("t")] == [task.task_id]
 
 
 # ── breakout threads ─────────────────────────────────────────────────────────

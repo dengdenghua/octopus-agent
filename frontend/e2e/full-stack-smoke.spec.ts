@@ -204,7 +204,7 @@ test.describe("Full-stack golden smoke", () => {
     await page.waitForLoadState("domcontentloaded");
     await expect(page).toHaveURL(
       new RegExp(
-        `^http://localhost:${frontendPort}/#\\/workspace\\/realtime\\/new\\?agent=general`,
+        `^http://localhost:${frontendPort}/#\\/workspace\\/realtime\\/new$`,
       ),
     );
     await expect(page.getByTestId("chat-composer-input")).toBeVisible({

@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useI18n } from "@/core/i18n/hooks";
-import { useClaimDailyCredits, useDailyClaimInfo } from "@/core/oct";
+import { useClaimDailyCredits, useDailyClaimInfo } from "@/core/oct/hooks";
 import { cn } from "@/lib/utils";
 
 type ClaimInfoData = {

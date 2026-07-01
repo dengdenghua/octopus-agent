@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useI18n } from "@/core/i18n/hooks";
-import { octApi } from "@/core/oct";
+import { octApi } from "@/core/oct/api";
 
 const POLL_INTERVAL_MS = 2_000;
 const POLL_MAX_ATTEMPTS = 30; // 30 * 2s = 60s window

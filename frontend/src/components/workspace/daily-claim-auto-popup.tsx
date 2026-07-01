@@ -9,7 +9,7 @@
 import { swallow } from "@/core/utils/log";
 import { useEffect, useState } from "react";
 
-import { useDailyClaimInfo, useOctLink } from "@/core/oct";
+import { useDailyClaimInfo, useOctLink } from "@/core/oct/hooks";
 import { useAuth } from "@/providers/AuthProvider";
 
 import { DailyClaimDialog } from "./daily-claim-dialog";

@@ -35,7 +35,7 @@ import {
   useUpdatePrivacySettings,
 } from "@/core/account";
 import { useI18n } from "@/core/i18n/hooks";
-import { useOctLink, useRefreshOctCredits } from "@/core/oct";
+import { useOctLink, useRefreshOctCredits } from "@/core/oct/hooks";
 
 function formatCredits(
   n: number | undefined | null,

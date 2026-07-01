@@ -24,8 +24,8 @@ import {
   useCreateOrder,
   useOctGoods,
   useOctLink,
-  type OctGoods,
-} from "@/core/oct";
+} from "@/core/oct/hooks";
+import type { OctGoods } from "@/core/oct/api";
 import { PayOrderDialog } from "@/components/workspace/pay-order-dialog";
 
 export default function SubscriptionSettingsPage() {

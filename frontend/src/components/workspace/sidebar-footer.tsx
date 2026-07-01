@@ -33,7 +33,7 @@ import {
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
-import { useOctLink } from "@/core/oct";
+import { useOctLink } from "@/core/oct/hooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { cn } from "@/lib/utils";
 

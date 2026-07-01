@@ -26,7 +26,7 @@ import {
   type AuthProviderInfo,
   getAuthProviderInfo,
 } from "@/core/auth/api";
-import { octAuthApi, OctApiError } from "@/core/oct";
+import { octAuthApi, OctApiError } from "@/core/oct/api";
 import { useI18n } from "@/core/i18n/hooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "sonner";

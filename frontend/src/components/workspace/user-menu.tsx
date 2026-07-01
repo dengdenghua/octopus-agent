@@ -15,11 +15,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import {
-  useOctLink,
-  useRefreshOctCredits,
-  type OctBalance,
-} from "@/core/oct";
+import type { OctBalance } from "@/core/oct/api";
+import { useOctLink, useRefreshOctCredits } from "@/core/oct/hooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "sonner";
 import { useI18n } from "@/core/i18n/hooks";

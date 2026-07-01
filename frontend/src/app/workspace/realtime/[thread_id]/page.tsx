@@ -2279,6 +2279,7 @@ function RealtimePageContent({
     [
       effectiveMode,
       isAgentRoute,
+      isCodingWorkspaceMode,
       navigate,
       newThreadRouteForMode,
       setSettings,

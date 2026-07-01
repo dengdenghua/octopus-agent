@@ -20,7 +20,7 @@ import {
   _writeToken,
   _clearTokens,
 } from "@/core/auth/api";
-import { octAuthApi } from "@/core/oct";
+import { octAuthApi } from "@/core/oct/api";
 
 import { swallow } from "@/core/utils/log";
 import type {

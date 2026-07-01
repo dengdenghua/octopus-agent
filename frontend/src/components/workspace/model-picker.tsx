@@ -16,7 +16,7 @@ import { jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
-import { useOctLink } from "@/core/oct";
+import { useOctLink } from "@/core/oct/hooks";
 import type { ReasoningEffort } from "@/core/threads";
 import { cn } from "@/lib/utils";
 

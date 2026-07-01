@@ -1,6 +1,6 @@
 import { Coins } from "lucide-react";
 
-import { useOctLink } from "@/core/oct";
+import { useOctLink } from "@/core/oct/hooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
