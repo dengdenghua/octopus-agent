@@ -9,8 +9,13 @@ covers the hard logic.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
-from runtime.core.cerebrum.react_context import _compress_context, _estimate_messages_tokens
+from runtime.core.cerebrum.react_context import (
+    _compress_context,
+    _content_to_text,
+    _estimate_messages_tokens,
+)
 from runtime.core.cerebrum.react_loop import _estimate_context_fullness
 
 
@@ -22,7 +27,7 @@ class _Msg:
     enough to drive every branch of the budget math.
     """
 
-    content: str
+    content: Any
     role: str = "user"
 
 
@@ -111,6 +116,35 @@ def test_chinese_text_uses_token_proxy_not_raw_chars() -> None:
     assert abs(ratio - 0.4) < 0.01
 
 
+def test_structured_content_blocks_are_counted() -> None:
+    msg = _Msg(
+        content=[
+            {"type": "text", "text": "hello world"},
+            {"type": "tool_result", "content": "工具返回：" + ("中" * 300)},
+            {"type": "image_url", "image_url": {"url": "https://example.test/a.png"}},
+        ]
+    )
+
+    text = _content_to_text(msg.content)
+
+    assert "hello world" in text
+    assert "工具返回" in text
+    assert "https://example.test/a.png" in text
+    assert _estimate_messages_tokens([msg]) > 200
+
+
+def test_structured_content_pressure_not_treated_as_empty() -> None:
+    msg = _Msg(
+        content=[
+            {"type": "tool_result", "content": "x" * 90_000},
+        ]
+    )
+
+    ratio = _estimate_context_fullness([msg], "unknown-model")
+
+    assert ratio > 0.8
+
+
 def test_ratio_always_within_bounds_for_varied_inputs() -> None:
     cases = [
         ([], "anything"),
@@ -172,6 +206,21 @@ def test_compress_context_trims_oversized_chinese_tail() -> None:
     messages = [
         _Msg(role="system", content="system prompt"),
         _Msg(role="user", content="中" * 30_000),
+    ]
+
+    compressed = _compress_context(messages, max_tokens=2_000, router=None)
+
+    assert _estimate_messages_tokens(compressed) <= 2_000
+    assert compressed[-1].content.startswith("[前文因上下文预算已截断]")
+
+
+def test_compress_context_trims_oversized_structured_tail() -> None:
+    messages = [
+        _Msg(role="system", content="system prompt"),
+        _Msg(
+            role="user",
+            content=[{"type": "tool_result", "content": "x" * 40_000}],
+        ),
     ]
 
     compressed = _compress_context(messages, max_tokens=2_000, router=None)

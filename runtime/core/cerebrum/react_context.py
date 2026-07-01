@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -12,7 +13,39 @@ from runtime.core.cerebrum.capability_router import (
 _logger = logging.getLogger(__name__)
 
 
-def _estimate_tokens(text: str) -> int:
+def _content_to_text(content: Any) -> str:
+    """Best-effort text projection for string or structured LLM content blocks."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(
+            part
+            for part in (_content_to_text(item) for item in content)
+            if part
+        )
+    if isinstance(content, dict):
+        text = content.get("text")
+        if isinstance(text, str):
+            return text
+        nested = content.get("content")
+        if nested is not None:
+            return _content_to_text(nested)
+        image_url = content.get("image_url")
+        if isinstance(image_url, str):
+            return image_url
+        if isinstance(image_url, dict):
+            return str(image_url.get("url") or "")
+        try:
+            return json.dumps(content, ensure_ascii=False, sort_keys=True)
+        except (TypeError, ValueError):
+            return str(content)
+    return str(content)
+
+
+def _estimate_tokens(text: Any) -> int:
+    text = _content_to_text(text)
     cn = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
     en = len(text) - cn
     return int(cn / 1.5 + en / 4)
@@ -192,10 +225,8 @@ def _ensure_context_budget(messages: list, *, max_tokens: int) -> list:
 
 
 def _trim_message_to_budget(message: Any, *, head_tokens: int, max_tokens: int) -> Any:
-    content = getattr(message, "content", "") or ""
+    content = _content_to_text(getattr(message, "content", "") or "")
     role = getattr(message, "role", "")
-    if not isinstance(content, str):
-        content = str(content)
     remaining_tokens = max(1, max_tokens - head_tokens)
     prefix = "[前文因上下文预算已截断]\n"
     prefix_tokens = _estimate_tokens(prefix)
@@ -231,7 +262,7 @@ def _summarize_messages(messages: list, router: Any, model: str) -> str:
         content_parts = []
         for m in messages:
             role = getattr(m, "role", "")
-            text = (getattr(m, "content", "") or "")[:300]
+            text = _content_to_text(getattr(m, "content", "") or "")[:300]
             if text.strip():
                 content_parts.append(f"[{role}] {text}")
         if not content_parts:
