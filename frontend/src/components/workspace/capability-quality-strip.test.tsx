@@ -6,6 +6,7 @@ import { renderWithProviders } from "@/test/harness";
 import { CapabilityQualityStrip } from "./capability-quality-strip";
 
 const api = vi.hoisted(() => ({
+  E2E_SURPASS_TARGET_SCORE: 95,
   fetchAgentCompetitorScorecard: vi.fn(),
   fetchBrowserDesktopQuality: vi.fn(),
 }));
@@ -17,14 +18,14 @@ describe("<CapabilityQualityStrip />", () => {
     vi.clearAllMocks();
     api.fetchAgentCompetitorScorecard.mockResolvedValue({
       schema: "octopus.agent_competitor_scorecard.v1",
-      target_score: 90,
+      target_score: 95,
       competitors: ["codex", "octopus"],
-      overall: { codex: 93, octopus: 92 },
+      overall: { codex: 93, octopus: 97 },
       ranking: [],
-      verdict: "competitive",
-      evidence_adjusted_overall: { codex: 93, octopus: 91 },
+      verdict: "leading",
+      evidence_adjusted_overall: { codex: 93, octopus: 97 },
       evidence_adjusted_ranking: [],
-      evidence_adjusted_verdict: "competitive",
+      evidence_adjusted_verdict: "leading",
       dimensions: [],
       octopus_below_target: [],
       octopus_strengths: [],
@@ -70,6 +71,7 @@ describe("<CapabilityQualityStrip />", () => {
     );
 
     expect(await screen.findByText("浏览器与桌面能力")).toBeInTheDocument();
+    expect(api.fetchAgentCompetitorScorecard).toHaveBeenCalledWith(95);
     expect(await screen.findByText("Overall")).toBeInTheDocument();
     expect(await screen.findByText("Evidence")).toBeInTheDocument();
     expect(await screen.findByText("Eco")).toBeInTheDocument();

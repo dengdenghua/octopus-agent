@@ -61,6 +61,7 @@ CHECKS: tuple[ProductExperienceCheck, ...] = (
         ),
         required_terms=(
             "fetchE2ESurpassCertification",
+            "E2E_SURPASS_TARGET_SCORE",
             "E2E surpass certification",
             "octopus.e2e_surpass_certification.v1",
             "scorecard_best_external",
@@ -94,6 +95,7 @@ CHECKS: tuple[ProductExperienceCheck, ...] = (
         ),
         required_terms=(
             "fetchAgentCompetitorScorecard",
+            "E2E_SURPASS_TARGET_SCORE",
             "fetchBrowserDesktopQuality",
             "evidence_adjusted_overall",
             "octopus_below_target",

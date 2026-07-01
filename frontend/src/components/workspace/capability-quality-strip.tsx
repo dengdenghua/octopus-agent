@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 
 import {
+  E2E_SURPASS_TARGET_SCORE,
   fetchAgentCompetitorScorecard,
   fetchBrowserDesktopQuality,
   type AgentCompetitorScorecard,
@@ -62,7 +63,7 @@ export function CapabilityQualityStrip({
     async function load() {
       try {
         const [scorecardResult, browserResult] = await Promise.all([
-          fetchAgentCompetitorScorecard(),
+          fetchAgentCompetitorScorecard(E2E_SURPASS_TARGET_SCORE),
           includeBrowserDesktop
             ? fetchBrowserDesktopQuality()
             : Promise.resolve(null),
@@ -93,6 +94,7 @@ export function CapabilityQualityStrip({
       scorecard.evidence_adjusted_overall?.octopus ?? overall,
     );
     const belowTarget = scorecard.octopus_below_target?.length ?? 0;
+    const targetScore = scorecard.target_score || E2E_SURPASS_TARGET_SCORE;
     const ecosystem = scorecard.ecosystem_readiness
       ? Math.round(scorecard.ecosystem_readiness.score * 100)
       : null;
@@ -105,13 +107,20 @@ export function CapabilityQualityStrip({
           ),
         }
       : null;
-    return { overall, evidenceAdjusted, belowTarget, ecosystem, browser };
+    return {
+      overall,
+      evidenceAdjusted,
+      belowTarget,
+      ecosystem,
+      browser,
+      targetScore,
+    };
   }, [browserQuality, scorecard]);
 
   const copy = SURFACE_COPY[surface];
   const ready =
     summary &&
-    summary.evidenceAdjusted >= 90 &&
+    summary.evidenceAdjusted >= summary.targetScore &&
     summary.belowTarget === 0 &&
     (!summary.browser || summary.browser.stale === 0);
 

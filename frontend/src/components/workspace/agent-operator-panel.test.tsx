@@ -6,6 +6,7 @@ import { renderWithProviders } from "@/test/harness";
 import { AgentOperatorPanel } from "./agent-operator-panel";
 
 const api = vi.hoisted(() => ({
+  E2E_SURPASS_TARGET_SCORE: 95,
   AgentTraceRequestError: class AgentTraceRequestError extends Error {
     status: number;
     detail: unknown;
@@ -1288,6 +1289,9 @@ describe("<AgentOperatorPanel />", () => {
     ).toBeInTheDocument();
     expect(await screen.findByText("lease expired")).toBeInTheDocument();
     expect(await screen.findByText("Competitor scorecard")).toBeInTheDocument();
+    expect(api.fetchAgentCompetitorScorecard).toHaveBeenCalledWith(95);
+    expect(api.fetchAutomationRadar).toHaveBeenCalledWith(95);
+    expect(api.fetchE2ESurpassCertification).toHaveBeenCalledWith(95);
     expect(
       await screen.findByText("E2E surpass certification"),
     ).toBeInTheDocument();

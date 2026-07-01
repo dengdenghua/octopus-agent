@@ -1,6 +1,8 @@
 import { authHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 
+export const E2E_SURPASS_TARGET_SCORE = 95;
+
 export interface AgentTraceTokenTotals {
   input_tokens: number;
   output_tokens: number;
@@ -1491,7 +1493,7 @@ export async function fetchBrowserDesktopQuality(): Promise<BrowserDesktopQualit
 }
 
 export async function fetchAutomationRadar(
-  targetScore = 95,
+  targetScore = E2E_SURPASS_TARGET_SCORE,
 ): Promise<AutomationRadarReport> {
   const params = new URLSearchParams({ target_score: String(targetScore) });
   return fetchJson<AutomationRadarReport>(
@@ -1500,7 +1502,7 @@ export async function fetchAutomationRadar(
 }
 
 export async function fetchE2ESurpassCertification(
-  targetScore = 95,
+  targetScore = E2E_SURPASS_TARGET_SCORE,
 ): Promise<E2ESurpassCertification> {
   const params = new URLSearchParams({ target_score: String(targetScore) });
   return fetchJson<E2ESurpassCertification>(
@@ -1866,7 +1868,7 @@ export async function fetchAutoVerifierMetrics(
 }
 
 export async function fetchAgentCompetitorScorecard(
-  targetScore = 90,
+  targetScore = E2E_SURPASS_TARGET_SCORE,
 ): Promise<AgentCompetitorScorecard> {
   const params = new URLSearchParams({ target_score: String(targetScore) });
   return fetchJson<AgentCompetitorScorecard>(

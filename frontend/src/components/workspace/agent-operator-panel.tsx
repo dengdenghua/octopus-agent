@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  E2E_SURPASS_TARGET_SCORE,
   AgentTraceRequestError,
   applyAgentTraceReviewQueuePromotions,
   decideAgentTraceReviewQueueItem,
@@ -215,7 +216,7 @@ const EMPTY_BROWSER_DESKTOP_QUALITY: BrowserDesktopQualityReport = {
 
 const EMPTY_AUTOMATION_RADAR: AutomationRadarReport = {
   schema: "octopus.automation_radar.v1",
-  target_score: 95,
+  target_score: E2E_SURPASS_TARGET_SCORE,
   scope: "browser_desktop_visual_automation",
   competitors: ["codex", "claude_code", "cursor", "octopus"],
   overall: {},
@@ -331,7 +332,7 @@ const EMPTY_POLICY_REVIEW_RULE_DRAFTS: AgentTracePolicyReviewRuleDrafts = {
 
 const EMPTY_AGENT_SCORECARD: AgentCompetitorScorecard = {
   schema: "octopus.agent_competitor_scorecard.v1",
-  target_score: 90,
+  target_score: E2E_SURPASS_TARGET_SCORE,
   surpass_margin: 1,
   competitors: ["codex", "claude_code", "openclaw", "hermes", "octopus"],
   external_competitors: ["codex", "claude_code", "openclaw", "hermes"],
@@ -348,7 +349,7 @@ const EMPTY_AGENT_SCORECARD: AgentCompetitorScorecard = {
 
 const EMPTY_E2E_SURPASS_CERTIFICATION: E2ESurpassCertification = {
   schema: "octopus.e2e_surpass_certification.v1",
-  target_score: 95,
+  target_score: E2E_SURPASS_TARGET_SCORE,
   ready: false,
   verdict: "needs_work",
   summary: {
@@ -498,7 +499,7 @@ export function AgentOperatorPanel() {
       fetchOrganizationTopologyLift(),
       fetchAutoVerifierMetrics(),
       fetchBrowserDesktopQuality(),
-      fetchAutomationRadar(),
+      fetchAutomationRadar(E2E_SURPASS_TARGET_SCORE),
       fetchAutomationPolicyRuleDrafts(),
       fetchBrowserDesktopRepairRecipes(),
       fetchBrowserDesktopRepairRecipeVerifications(),
@@ -506,7 +507,7 @@ export function AgentOperatorPanel() {
       fetchPluginSmokeSummary(),
       fetchAgentTraceTrustDenialSummary(),
       fetchAgentTracePolicyReviewRuleDrafts(),
-      fetchAgentCompetitorScorecard()
+      fetchAgentCompetitorScorecard(E2E_SURPASS_TARGET_SCORE)
         .then((scorecard) => ({ scorecard, error: null as string | null }))
         .catch((err: unknown) => {
           swallow(err);
@@ -515,7 +516,7 @@ export function AgentOperatorPanel() {
             error: err instanceof Error ? err.message : String(err),
           };
         }),
-      fetchE2ESurpassCertification()
+      fetchE2ESurpassCertification(E2E_SURPASS_TARGET_SCORE)
         .then((certification) => ({
           certification,
           error: null as string | null,
