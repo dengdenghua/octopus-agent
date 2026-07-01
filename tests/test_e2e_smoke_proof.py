@@ -49,6 +49,7 @@ def test_e2e_smoke_proof_records_desktop_and_mobile_suites(tmp_path: Path) -> No
     assert data["ready"] is True
     assert data["suite_count"] == 2
     assert data["passed_count"] == 2
+    assert data["test_file_count"] == 2
     assert data["failed_suites"] == []
     assert [suite["suite"] for suite in data["suites"]] == [
         "full-stack-desktop",
@@ -56,6 +57,7 @@ def test_e2e_smoke_proof_records_desktop_and_mobile_suites(tmp_path: Path) -> No
     ]
     assert data["suites"][0]["backend_host"] == "127.0.0.1"
     assert data["suites"][0]["test_match"] == ["full-stack-smoke.spec.ts"]
+    assert data["suites"][0]["test_file_count"] == 1
 
 
 def test_e2e_smoke_proof_reports_failed_suite(tmp_path: Path) -> None:

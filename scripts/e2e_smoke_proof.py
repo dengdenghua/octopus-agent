@@ -32,6 +32,7 @@ def main() -> int:
         for suite in proof.get("suites", [])
         if isinstance(suite, dict) and suite.get("suite") != args.suite
     ]
+    test_match = [item.strip() for item in str(args.test_match).split(",") if item.strip()]
     suites.append(
         {
             "suite": args.suite,
@@ -40,18 +41,19 @@ def main() -> int:
             "frontend_port": str(args.frontend_port),
             "backend_host": str(args.backend_host),
             "backend_port": str(args.backend_port),
-            "test_match": [
-                item.strip() for item in str(args.test_match).split(",") if item.strip()
-            ],
+            "test_match": test_match,
+            "test_file_count": len(test_match),
             "recorded_at": datetime.now(UTC).isoformat(),
         }
     )
     ready = bool(suites) and all(suite.get("status") == "passed" for suite in suites)
+    total_test_files = sum(_test_file_count(suite) for suite in suites)
     report = {
         "schema": SCHEMA,
         "ready": ready,
         "suite_count": len(suites),
         "passed_count": sum(1 for suite in suites if suite.get("status") == "passed"),
+        "test_file_count": total_test_files,
         "failed_suites": [
             str(suite.get("suite")) for suite in suites if suite.get("status") != "passed"
         ],
@@ -76,6 +78,16 @@ def _read_proof(path: Path) -> dict[str, Any]:
     if not isinstance(suites, list):
         data["suites"] = []
     return data
+
+
+def _test_file_count(suite: dict[str, Any]) -> int:
+    count = suite.get("test_file_count")
+    if isinstance(count, int):
+        return max(0, count)
+    test_match = suite.get("test_match")
+    if isinstance(test_match, list):
+        return len([item for item in test_match if str(item).strip()])
+    return 0
 
 
 if __name__ == "__main__":

@@ -12,6 +12,10 @@ SCHEMA = "octopus.e2e_release_proof.v1"
 READINESS_SCHEMA = "octopus.production_readiness_gate.v1"
 FULL_STACK_SCHEMA = "octopus.full_stack_smoke_proof.v1"
 MIN_SCORE = 95
+MIN_TEST_FILES_BY_SUITE = {
+    "full-stack-desktop": 4,
+    "full-stack-mobile": 1,
+}
 
 
 def main() -> int:
@@ -57,9 +61,18 @@ def build_release_proof(
         suite for suite in required if suite in suite_status and suite_status[suite] != "passed"
     ]
     suite_rows = _suite_rows(full_stack)
+    suite_test_counts = _suite_test_counts(suite_rows)
+    weak_suite_test_coverage = [
+        suite
+        for suite in required
+        if suite in suite_test_counts
+        and suite_test_counts[suite] < MIN_TEST_FILES_BY_SUITE.get(suite, 1)
+    ]
     passed_suite_count = sum(1 for row in suite_rows if row.get("status") == "passed")
     declared_suite_count = _as_int(full_stack.get("suite_count"))
     declared_passed_count = _as_int(full_stack.get("passed_count"))
+    declared_test_file_count = _as_int(full_stack.get("test_file_count"))
+    observed_test_file_count = sum(suite_test_counts.values())
     scorecard_score = _as_int(readiness.get("scorecard_score"))
     automation_score = _as_int(readiness.get("automation_score"))
     checks = [
@@ -126,6 +139,21 @@ def build_release_proof(
             "passed": not failed_suites,
             "next_action": f"Fix failing full-stack suites: {', '.join(failed_suites)}",
         },
+        {
+            "id": "full_stack_test_file_counts_consistent",
+            "passed": declared_test_file_count == observed_test_file_count,
+            "next_action": (
+                "Regenerate full-stack smoke proof; test file counts are inconsistent."
+            ),
+        },
+        {
+            "id": "full_stack_required_suites_have_test_coverage",
+            "passed": not weak_suite_test_coverage,
+            "next_action": (
+                "Restore required full-stack test files for suites: "
+                f"{', '.join(weak_suite_test_coverage)}"
+            ),
+        },
     ]
     ready = all(bool(check["passed"]) for check in checks)
     return {
@@ -149,9 +177,14 @@ def build_release_proof(
             ),
             "full_stack_suite_count": declared_suite_count,
             "full_stack_passed_count": declared_passed_count,
+            "full_stack_test_file_count": declared_test_file_count,
+            "required_suite_test_file_counts": {
+                suite: suite_test_counts.get(suite, 0) for suite in required
+            },
             "required_suites": required,
             "missing_suites": missing_suites,
             "failed_suites": failed_suites,
+            "weak_suite_test_coverage": weak_suite_test_coverage,
         },
         "inputs": {
             "readiness": str(readiness_path),
@@ -169,6 +202,7 @@ def build_release_proof(
             "ready": full_stack.get("ready"),
             "suite_count": full_stack.get("suite_count"),
             "passed_count": full_stack.get("passed_count"),
+            "test_file_count": full_stack.get("test_file_count"),
             "failed_suites": full_stack.get("failed_suites"),
             "suites": full_stack.get("suites"),
         },
@@ -202,6 +236,21 @@ def _suite_rows(full_stack: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(suites, list):
         return []
     return [row for row in suites if isinstance(row, dict)]
+
+
+def _suite_test_counts(suite_rows: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in suite_rows:
+        suite = str(row.get("suite") or "").strip()
+        if not suite:
+            continue
+        count = _as_int(row.get("test_file_count"))
+        if count <= 0:
+            test_match = row.get("test_match")
+            if isinstance(test_match, list):
+                count = len([item for item in test_match if str(item).strip()])
+        counts[suite] = count
+    return counts
 
 
 def _coverage_complete(readiness: dict[str, Any]) -> bool:
