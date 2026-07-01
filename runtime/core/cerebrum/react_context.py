@@ -160,7 +160,7 @@ def _summarize_messages(messages: list, router: Any, model: str) -> str:
             return ""
         conversation = "\n".join(content_parts[-20:])
         req = ModelRequest(
-            model=model or "molili",
+            model=model or "auto",
             messages=[
                 Message(
                     role="system",

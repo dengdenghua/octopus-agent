@@ -14,7 +14,7 @@ import { useAuth } from "@/providers/AuthProvider";
 
 import { DailyClaimDialog } from "./daily-claim-dialog";
 
-const DISMISS_KEY_PREFIX = "molili:dailyClaimDismissed:";
+const DISMISS_KEY_PREFIX = "oct:dailyClaimDismissed:";
 
 function todayKey(): string {
   // Match the user's local day boundary — dismissing in the evening

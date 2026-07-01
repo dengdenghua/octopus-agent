@@ -1439,11 +1439,9 @@ function CompatDiagnosticSummary({
 
 // Official models from the account-backed gateway.
 //
-// Reads from the OpenAI-compat shim (/api/molili/openai/v1/models)
-// when the official gateway is enabled. When the bridge is disabled
-// (503) or the user hasn't linked their account yet (404), hide the
-// section entirely: there's nothing
-// for them to do here, and the empty card would be confusing.
+// Reads from the oct gateway model list when the official gateway is enabled.
+// When the bridge is disabled (503) or the user hasn't linked their account
+// yet (404), hides the section entirely.
 //
 interface UpstreamModel {
   id: string;
@@ -1466,17 +1464,17 @@ function OfficialModelsSection() {
     (async () => {
       try {
         const r = await fetch(
-          `${getBackendBaseURL()}/api/molili/openai/v1/models`,
+          `${getBackendBaseURL()}/api/oct/openai/v1/models`,
           { headers: authHeaders() },
         );
         if (cancelled) return;
         if (r.status === 404) {
-          setUnavailableReason(t.settings.model.moliliNotLinked);
+          setUnavailableReason(t.settings.model.accountNotLinked);
           setModels([]);
           return;
         }
         if (r.status === 503) {
-          setUnavailableReason(t.settings.model.moliliNotEnabled);
+          setUnavailableReason(t.settings.model.gatewayNotEnabled);
           setModels([]);
           return;
         }
@@ -1502,7 +1500,7 @@ function OfficialModelsSection() {
     return () => {
       cancelled = true;
     };
-  }, [t.settings.model.moliliNotEnabled, t.settings.model.moliliNotLinked]);
+  }, [t.settings.model.gatewayNotEnabled, t.settings.model.accountNotLinked]);
 
   if (loading) {
     return (
@@ -1523,7 +1521,7 @@ function OfficialModelsSection() {
   // Build rows from the backend catalog. Skip the synthetic "auto"
   // / "molili" pseudo-model the gateway advertises.
   const rows = (models ?? [])
-    .filter((m) => !/^(molili|auto)$/i.test(m.id))
+    .filter((m) => !/^auto$/i.test(m.id))
     .map((m) => ({ upstream: m }));
 
   return (
@@ -1557,7 +1555,7 @@ function OfficialModelsSection() {
                 {upstream.multiplier ?? "1.0x"}
               </span>
               <span className="text-[10px] text-muted-foreground">
-                {t.settings.model.moliliHosted}
+                {t.settings.model.gatewayHosted}
               </span>
             </div>
           </div>

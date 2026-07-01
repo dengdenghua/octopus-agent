@@ -3,7 +3,6 @@ import {
   CoinsIcon,
   LogOutIcon,
   SettingsIcon,
-  ShieldCheckIcon,
   UsersRoundIcon,
   UserCircleIcon,
 } from "lucide-react";
@@ -31,7 +30,6 @@ import {
   LOCAL_AGENT_IDS,
   LOCAL_AGENT_RANK,
 } from "@/components/workspace/agents/agent-world-data";
-import { getAuthProviders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
@@ -137,9 +135,9 @@ export function AgentFooter() {
   const { user, isGuest, logout } = useAuth();
   const _navigate = useNavigate();
   const { pathname, search } = useLocation();
-  const moliliLink = useOctLink();
+  const octLink = useOctLink();
   const { t } = useI18n();
-  const credits = moliliLink.data?.credits?.surplusCredits;
+  const credits = octLink.data?.credits?.surplusCredits;
   const [activeName, setActiveName] = useState<string | null>(() =>
     readActiveAgentName(),
   );
@@ -148,18 +146,6 @@ export function AgentFooter() {
       setActiveName(name);
     });
   }, []);
-
-  const [authProviders, setAuthProviders] = useState<string[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    getAuthProviders().then((list) => {
-      if (!cancelled) setAuthProviders(list);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  const moliliEnabled = authProviders.includes("molili");
 
   const lock = ROUTE_LOCKS.find((r) => pathname.startsWith(r.prefix));
   const surfaceParam = new URLSearchParams(search).get("surface");
@@ -365,17 +351,7 @@ export function AgentFooter() {
               <DropdownMenuSeparator />
             </>
           ) : null}
-          {isGuest && moliliEnabled ? (
-            <DropdownMenuItem
-              onSelect={() => {
-                _navigate("/login");
-              }}
-              className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs opacity-80 focus:bg-muted/60 focus:opacity-100"
-            >
-              <ShieldCheckIcon className="size-4 shrink-0 text-muted-foreground" />
-              <span>{t.sidebar.loginMolili}</span>
-            </DropdownMenuItem>
-          ) : isGuest ? null : (
+          {isGuest ? null : (
             <>
               <div className="flex items-center gap-2 px-2.5 py-2 text-xs text-muted-foreground">
                 <UserCircleIcon className="size-4 shrink-0 opacity-70" />

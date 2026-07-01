@@ -61,7 +61,7 @@ function getAccountDisplayName(user: {
 export function UserMenu() {
   const navigate = useNavigate();
   const { user, logout, authStatus, isLoading } = useAuth();
-  const moliliQuery = useOctLink();
+  const octQuery = useOctLink();
   const refresh = useRefreshOctCredits();
   const { t } = useI18n();
 
@@ -93,7 +93,7 @@ export function UserMenu() {
   // "Rendered more hooks than during the previous render." Reads
   // account data which is always defined (the hook itself
   // runs earlier) · defensively handles ``undefined`` inside.
-  const credits: OctBalance | undefined = moliliQuery.data?.credits;
+  const credits: OctBalance | undefined = octQuery.data?.credits;
   const remaining = credits?.surplusCredits;
   const summary = credits?.creditsSummary;
   const accountName = user ? getAccountDisplayName(user) : "";
@@ -168,7 +168,7 @@ export function UserMenu() {
               </div>
             </DropdownMenuLabel>
 
-            {moliliQuery.data && (
+            {octQuery.data && (
               <>
                 <DropdownMenuSeparator />
                 <div className="px-2 pb-2 pt-1.5 text-xs">

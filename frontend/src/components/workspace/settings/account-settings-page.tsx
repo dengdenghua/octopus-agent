@@ -569,13 +569,13 @@ function OfficialCreditsCard() {
             <AlertTriangleIcon className="size-4 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="font-medium">
-                {t.accountSettings.moliliSessionExpired(
+                {t.accountSettings.sessionExpired(
                   tokenInvalidReason ||
-                    t.accountSettings.moliliSessionExpiredDefaultReason,
+                    t.accountSettings.sessionExpiredDefaultReason,
                 )}
               </p>
               <p className="mt-0.5 opacity-80">
-                {t.accountSettings.moliliSessionCacheHint}
+                {t.accountSettings.sessionCacheHint}
               </p>
             </div>
           </div>
@@ -601,7 +601,7 @@ function OfficialCreditsCard() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {credits.plan ? credits.plan : t.accountSettings.moliliAccount}
+                {credits.plan ? credits.plan : t.accountSettings.octAccount}
                 {credits.modelDisplayName
                   ? ` · ${credits.modelDisplayName}`
                   : ""}

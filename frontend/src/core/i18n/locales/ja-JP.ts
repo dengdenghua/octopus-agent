@@ -1572,9 +1572,6 @@ export const jaJP: Translations = {
     groupSystem: "System",
     // Agent / team footer
     noAgents: "No agents available",
-    loginMolili: "Log in",
-    loginMoliliReason:
-      "Log in to unlock official models, credits and Page Agent",
     remainingCredits: "Credits balance",
     logout: "Log out",
     noTeams: "No groups yet",
@@ -3494,9 +3491,9 @@ export const jaJP: Translations = {
       systemDefault: "System Default",
       setAsDefault: "Set as Default",
       noOfficialModels: "No official models found",
-      moliliHosted: "Hosted by the official model gateway",
-      moliliNotLinked: "Account not linked",
-      moliliNotEnabled: "Official model gateway not enabled",
+      gatewayHosted: "Hosted by the official model gateway",
+      accountNotLinked: "Account not linked",
+      gatewayNotEnabled: "Official model gateway not enabled",
       officialModels: "公式モデル",
       officialModelsHint:
         "公式モデルはシステム側でホスティングされており、APIキーの設定は不要です",
@@ -6113,8 +6110,8 @@ Strategy:
     enabling: "Enabling...",
     clickToEnable: "Disabled · Click to enable",
     recommended: "Recommended",
-    bindMoliliFirst: "Please log in first",
-    bindMoliliDesc: "Log in with your phone number to enable official models.",
+    bindAccountFirst: "Please log in first",
+    bindAccountDesc: "Log in with your phone number to enable official models.",
     modelEnabled: (name: string) => `${name} enabled`,
     enableFailed: "Enable failed",
     enableFailedWithMessage: (msg: string) => `Enable failed: ${msg}`,
@@ -6126,7 +6123,7 @@ Strategy:
   // Account Settings
   accountSettings: {
     creditsBalance: "Credits Balance",
-    moliliAccount: "Official Account",
+    octAccount: "Official Account",
     available: "Available",
     refreshing: "Refreshing",
     refresh: "Refresh",
@@ -6162,10 +6159,10 @@ Strategy:
     factoryResetPending: "Clearing...",
     factoryResetConfirm: "Confirm reset",
     avatarTooLarge: "Avatar must be smaller than 5MB",
-    moliliSessionExpired: (reason: string) =>
+    sessionExpired: (reason: string) =>
       `Account session expired (${reason})`,
-    moliliSessionExpiredDefaultReason: "Logged in from another device",
-    moliliSessionCacheHint:
+    sessionExpiredDefaultReason: "Logged in from another device",
+    sessionCacheHint:
       "The credits shown below are cached. Please log out and log in again with your phone number to refresh.",
     cachedSuffix: " (cached)",
     expiredTooltip:
@@ -7296,7 +7293,7 @@ Strategy:
       emailFillRequired: "Please fill in email and verification code",
       loginFailed: "Login failed",
       enterFailed: "Failed to enter",
-      moliliNotEnabled:
+      gatewayNotEnabled:
         "Account login is not enabled on this server · use local auth or a custom model instead",
     },
     success: {
@@ -7328,12 +7325,6 @@ Strategy:
         "Login with phone number, automatically bind to LLMs and credits",
       emailCardDescription:
         "Login with an email code, automatically bind to LLMs and credits",
-    },
-    molili: {
-      title: "Login to Continue",
-      reason: "Official models, credits, and subscriptions require an account.",
-      autoRegister:
-        "Unregistered phone numbers will be automatically registered.",
     },
   },
 

@@ -257,11 +257,10 @@ export function SettingsDialog(props: SettingsDialogProps) {
       // download + Suspense fallback each time.
       preloadSettingsPages();
 
-      // The generic /api/account/* routes are compatibility stubs in local
-      // no-account mode. Only prefetch the real Molili bridge; individual
-      // account tabs can fetch their own optional data when opened.
+      // Prefetch the oct account bridge; individual account tabs can fetch
+      // their own optional data when opened.
       queryClient.prefetchQuery({
-        queryKey: ["account", "molili"],
+        queryKey: ["account", "oct"],
         queryFn: () => octApi.get().catch(() => null),
         staleTime: 30_000,
       });

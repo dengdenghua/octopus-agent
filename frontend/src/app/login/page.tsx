@@ -98,7 +98,7 @@ function EmailLoginForm() {
       setCooldown(SMS_COOLDOWN_SECONDS);
     } catch (err) {
       if (err instanceof OctApiError && err.status === 503) {
-        toast.error(t.auth.errors.moliliNotEnabled);
+        toast.error(t.auth.errors.gatewayNotEnabled);
       } else {
         toast.error(
           err instanceof Error ? err.message : t.auth.errors.sendFailed,

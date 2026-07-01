@@ -1365,8 +1365,6 @@ export interface Translations {
     groupSystem: string;
     // Agent / team footer
     noAgents: string;
-    loginMolili: string;
-    loginMoliliReason: string;
     remainingCredits: string;
     logout: string;
     noTeams: string;
@@ -2890,9 +2888,9 @@ export interface Translations {
       systemDefault: string;
       setAsDefault: string;
       noOfficialModels: string;
-      moliliHosted: string;
-      moliliNotLinked: string;
-      moliliNotEnabled: string;
+      gatewayHosted: string;
+      accountNotLinked: string;
+      gatewayNotEnabled: string;
       officialModels: string;
       officialModelsHint: string;
       modelCount: (count: number) => string;
@@ -5228,8 +5226,8 @@ export interface Translations {
     enabling: string;
     clickToEnable: string;
     recommended: string;
-    bindMoliliFirst: string;
-    bindMoliliDesc: string;
+    bindAccountFirst: string;
+    bindAccountDesc: string;
     modelEnabled: (name: string) => string;
     enableFailed: string;
     enableFailedWithMessage: (msg: string) => string;
@@ -5242,7 +5240,7 @@ export interface Translations {
   // Account Settings
   accountSettings: {
     creditsBalance: string;
-    moliliAccount: string;
+    octAccount: string;
     available: string;
     refreshing: string;
     refresh: string;
@@ -5274,9 +5272,9 @@ export interface Translations {
     factoryResetConfirm: string;
     // Avatar / account session hints
     avatarTooLarge: string;
-    moliliSessionExpired: (reason: string) => string;
-    moliliSessionExpiredDefaultReason: string;
-    moliliSessionCacheHint: string;
+    sessionExpired: (reason: string) => string;
+    sessionExpiredDefaultReason: string;
+    sessionCacheHint: string;
     cachedSuffix: string;
     expiredTooltip: string;
   };
@@ -6278,7 +6276,7 @@ export interface Translations {
       emailFillRequired: string;
       loginFailed: string;
       enterFailed: string;
-      moliliNotEnabled: string;
+      gatewayNotEnabled: string;
     };
     success: {
       codeSent: string;
@@ -6304,11 +6302,6 @@ export interface Translations {
       description: string;
       cardDescription: string;
       emailCardDescription: string;
-    };
-    molili: {
-      title: string;
-      reason: string;
-      autoRegister: string;
     };
   };
 

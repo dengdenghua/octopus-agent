@@ -62,11 +62,7 @@ function userFromJwt(token: string | null): Partial<User> | null {
       provider?: string;
     };
     const actorId = json.sub;
-    const mobile =
-      json.mobile ||
-      (actorId?.startsWith("molili:")
-        ? actorId.slice("molili:".length)
-        : undefined);
+    const mobile = json.mobile;
     if (!actorId && !mobile) return null;
     return {
       user_id: actorId || mobile,

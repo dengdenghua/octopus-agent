@@ -1519,8 +1519,6 @@ export const zhCN: Translations = {
     groupSystem: "系统",
     // Agent / team footer
     noAgents: "暂无可用智能体",
-    loginMolili: "登录账号",
-    loginMoliliReason: "登录后可使用官方模型、积分和 Page Agent",
     remainingCredits: "剩余积分",
     logout: "退出登录",
     noTeams: "暂无协作组",
@@ -3299,9 +3297,9 @@ export const zhCN: Translations = {
       systemDefault: "系统默认",
       setAsDefault: "设为默认",
       noOfficialModels: "未发现官方模型",
-      moliliHosted: "由官方模型网关托管",
-      moliliNotLinked: "账号未关联",
-      moliliNotEnabled: "官方模型网关未启用",
+      gatewayHosted: "由官方模型网关托管",
+      accountNotLinked: "账号未关联",
+      gatewayNotEnabled: "官方模型网关未启用",
       officialModels: "官方模型",
       officialModelsHint: "官方模型由系统托管，无需配置 API 密钥",
       modelCount: (count: number) => `${count} 个模型`,
@@ -5819,8 +5817,8 @@ export const zhCN: Translations = {
     enabling: "启用中…",
     clickToEnable: "未启用 · 点击启用",
     recommended: "推荐",
-    bindMoliliFirst: "请先登录账号",
-    bindMoliliDesc: "在登录页用手机号登录后即可一键启用官方模型。",
+    bindAccountFirst: "请先登录账号",
+    bindAccountDesc: "在登录页用手机号登录后即可一键启用官方模型。",
     modelEnabled: (name: string) => `${name} 已启用`,
     enableFailed: "启用失败",
     enableFailedWithMessage: (msg: string) => `启用失败：${msg}`,
@@ -5832,7 +5830,7 @@ export const zhCN: Translations = {
   // Account Settings
   accountSettings: {
     creditsBalance: "积分余额",
-    moliliAccount: "官方账号",
+    octAccount: "官方账号",
     available: "可用",
     refreshing: "刷新中",
     refresh: "刷新",
@@ -5866,9 +5864,9 @@ export const zhCN: Translations = {
     factoryResetPending: "正在清除...",
     factoryResetConfirm: "确认恢复",
     avatarTooLarge: "头像文件不能大于 5MB",
-    moliliSessionExpired: (reason: string) => `账号会话已失效（${reason}）`,
-    moliliSessionExpiredDefaultReason: "账号在其他设备登录",
-    moliliSessionCacheHint:
+    sessionExpired: (reason: string) => `账号会话已失效（${reason}）`,
+    sessionExpiredDefaultReason: "账号在其他设备登录",
+    sessionCacheHint:
       "下方显示的是缓存积分。请退出后重新用手机号登录以刷新。",
     cachedSuffix: "（缓存）",
     expiredTooltip: "账面与可用余额的差额（已过期或冻结的部分）",
@@ -6968,7 +6966,7 @@ export const zhCN: Translations = {
       emailFillRequired: "请填写邮箱和验证码",
       loginFailed: "登录失败",
       enterFailed: "进入失败",
-      moliliNotEnabled: "账号登录在此服务器未启用 · 可使用本地账号或自定义模型",
+      gatewayNotEnabled: "账号登录在此服务器未启用 · 可使用本地账号或自定义模型",
     },
     success: {
       codeSent: "验证码已发送，请查收短信",
@@ -6995,11 +6993,6 @@ export const zhCN: Translations = {
         "继续你的研究、编码、协作与自动化任务，在统一工作区里管理上下文、技能与执行结果。",
       cardDescription: "手机号直接登录，自动绑定大模型与积分",
       emailCardDescription: "邮箱验证码登录，自动绑定大模型与积分",
-    },
-    molili: {
-      title: "登录以继续",
-      reason: "官方模型、积分与订阅需要登录账号后使用。",
-      autoRegister: "未注册手机号将自动创建账号。",
     },
   },
 

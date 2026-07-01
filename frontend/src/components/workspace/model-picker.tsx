@@ -20,12 +20,6 @@ import { useOctLink } from "@/core/oct";
 import type { ReasoningEffort } from "@/core/threads";
 import { cn } from "@/lib/utils";
 
-/**
- * Official LLM endpoint baked in here as a fallback for one-click enabling.
- * The visible official model catalog itself comes from the backend.
- */
-const MOLILI_LLM_BASE_URL = "https://molili.8kbl.com/molili-agi/chatApi/v1";
-
 /** Minimal slice of the backend model shape used by the picker. */
 export interface PickerModel {
   name: string;
@@ -45,29 +39,9 @@ interface OfficialMeta {
   recommended: boolean;
 }
 
-interface OfficialCatalogModel {
-  id: string;
-  display_name?: string | null;
-  multiplier?: string | null;
-  recommended?: boolean;
-}
-
-function metaFromCatalog(m: OfficialCatalogModel): OfficialMeta {
-  return {
-    key: m.id,
-    id: m.id,
-    displayName: m.display_name || m.id,
-    multiplier: m.multiplier || "1.0x",
-    recommended: Boolean(m.recommended),
-  };
-}
-
 /**
- * Octopus Mix — the built-in mixture-of-agents virtual model. It's
- * octopus-native (not in the molili catalog), so inject a synthetic
- * "official" meta to surface it in the Official tab instead of letting it
- * fall through to Custom. The backend advertises ``octopus-mix`` via
- * /api/llm-models, so it resolves to a configured (selectable) row.
+ * Octopus Mix — the built-in mixture-of-agents virtual model. Surfaces in the
+ * Official tab when the backend advertises ``octopus-mix`` via /api/llm-models.
  */
 const MIX_META: OfficialMeta = {
   key: "octopus-mix",
@@ -287,49 +261,14 @@ export function ModelPicker({
     ],
   );
 
-  const [moliliPack, setMoliliPack] = useState<OfficialCatalogModel[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await fetch(
-          `${getBackendBaseURL()}/api/molili/openai/v1/catalog`,
-        );
-        if (!r.ok) return;
-        const j = (await r.json()) as { data?: OfficialCatalogModel[] };
-        if (cancelled) return;
-        const data = Array.isArray(j?.data) ? j.data : [];
-        setMoliliPack(
-          data.filter(
-            (m): m is OfficialCatalogModel =>
-              !!m.id && !/^(auto|molili)$/i.test(m.id),
-          ),
-        );
-      } catch (err) {
-        if (!cancelled) {
-          console.warn(
-            "[model-picker] official model catalog unavailable:",
-            err,
-          );
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const officialMetas = useMemo(() => {
-    const base = moliliPack.map(metaFromCatalog);
     // Surface the built-in Mix model in the Official tab only when the
-    // backend actually advertises it (via /api/llm-models). Keeps it out of
-    // deployments where it isn't present and preserves the "no official
-    // models → fall back to Custom" behaviour.
+    // backend actually advertises it (via /api/llm-models).
     const hasMix = models.some(
       (m) => m.name === MIX_META.id || m.model === MIX_META.id,
     );
-    return hasMix ? [MIX_META, ...base] : base;
-  }, [moliliPack, models]);
+    return hasMix ? [MIX_META] : [];
+  }, [models]);
 
   const selectedMeta = useMemo(() => {
     if (!selected) return null;
@@ -400,7 +339,7 @@ export function ModelPicker({
     }
   }, [customEntries, isGuest, onChange, selected, selectedMeta]);
 
-  const moliliLink = useOctLink();
+  const octLink = useOctLink();
   const queryClient = useQueryClient();
   const [enabling, setEnabling] = useState<string | null>(null);
 
@@ -409,11 +348,11 @@ export function ModelPicker({
     meta: OfficialMeta,
     upstreamId: string,
   ) => {
-    const moliliUserId = moliliLink.data?.oct_user_id;
-    if (!moliliUserId) {
+    const octUserId = octLink.data?.oct_user_id;
+    if (!octUserId) {
       setOpen(false);
-      toast.message(t.modelPicker.bindMoliliFirst, {
-        description: t.modelPicker.bindMoliliDesc,
+      toast.message(t.modelPicker.bindAccountFirst, {
+        description: t.modelPicker.bindAccountDesc,
       });
       navigate("/login");
       return;
@@ -427,8 +366,6 @@ export function ModelPicker({
           name: upstreamId,
           model: upstreamId,
           display_name: meta.displayName,
-          api_key: moliliUserId,
-          base_url: MOLILI_LLM_BASE_URL,
           max_tokens: 8192,
           temperature: 0.7,
           supports_thinking: false,

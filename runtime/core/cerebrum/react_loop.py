@@ -695,7 +695,7 @@ def stream_react_loop(
     effective_model = (
         model
         if model and model not in ("octopus-agent", "")
-        else getattr(stack.planner, "planner_model", None) or "molili"
+        else getattr(stack.planner, "planner_model", None) or "auto"
     )
 
     # ── Native tool-use gate (Phase 0) ─────────────────────────────────
