@@ -470,3 +470,47 @@ class TestBreakerModelRouter:
         with pytest.raises(CircuitOpen):
             list(router.call_stream(_req()))
         assert inner.stream_count == 1
+
+    def test_call_stream_abandon_before_done_counts_as_failure(self, patched_time):
+        inner = _StreamingInner()
+        breaker = CircuitBreaker(
+            window_seconds=60.0,
+            max_errors_per_window=0,
+            cooldown_seconds=5.0,
+        )
+        router = BreakerModelRouter(inner=inner, breaker=breaker)
+
+        stream = router.call_stream(_req())
+        first = next(stream)
+        assert first.type == "text_delta"
+        stream.close()
+
+        assert breaker.state == "open"
+        with pytest.raises(CircuitOpen):
+            list(router.call_stream(_req()))
+        assert inner.stream_count == 1
+
+        patched_time.advance(6.0)
+        probe = router.call_stream(_req())
+        assert next(probe).type == "text_delta"
+        probe.close()
+        assert breaker.state == "open"
+
+    def test_call_stream_close_after_done_records_success_once(self, patched_time):
+        inner = _StreamingInner()
+        breaker = CircuitBreaker(
+            window_seconds=60.0,
+            max_cost_usd_per_window=0.20,
+            cooldown_seconds=10.0,
+        )
+        router = BreakerModelRouter(inner=inner, breaker=breaker)
+
+        stream = router.call_stream(_req())
+        events = [next(stream), next(stream), next(stream)]
+        assert [event.type for event in events] == ["text_delta", "text_delta", "done"]
+        stream.close()
+
+        snap = breaker.snapshot()
+        assert snap["calls_in_window"] == 1
+        assert snap["cost_in_window_usd"] == 0.25
+        assert breaker.state == "open"
