@@ -39,6 +39,10 @@ MilestoneGate = Callable[[Milestone, list[Task]], dict[str, Any]]  # -> {"met", 
 MAX_TASK_ATTEMPTS = 2
 
 
+def _error_text(exc: BaseException) -> str:
+    return f"{type(exc).__name__}: {exc}"
+
+
 def stub_generate_milestones(goal: str) -> list[Milestone]:
     """No-LLM fallback: a generic Plan → Build → Verify phasing that fits almost
     any project, so the engine/CLI runs deterministically without a model router
@@ -109,7 +113,12 @@ class ProjectEngine:
     def plan(self, name: str, goal: str) -> Project:
         """Turn a one-line goal into a project with generated milestones."""
         pid = f"P-{uuid4().hex[:8]}"
-        milestones = self._generate(goal)
+        try:
+            milestones = self._generate(goal)
+        except Exception:  # noqa: BLE001 — planning hooks are external intelligence adapters
+            milestones = stub_generate_milestones(goal)
+        if not milestones:
+            milestones = stub_generate_milestones(goal)
         for ms in milestones:
             self.store.save_milestone(pid, ms)
         project = Project(
@@ -421,7 +430,33 @@ class ProjectEngine:
     def _ensure_tasks(self, project_id: str, ms: Milestone, events: list[str]) -> None:
         if self.store.tasks_for_milestone(ms.id):
             return
-        new_tasks = self._decompose(ms)
+        project = self.store.get_project(project_id)
+        try:
+            new_tasks = self._decompose(ms)
+        except Exception as exc:  # noqa: BLE001 — decompose hook failure should block, not crash tick
+            events.append(f"tasks_decompose_failed:{ms.id}")
+            ms.status = "blocked"
+            self.store.save_milestone(project_id, ms)
+            if project is not None:
+                self._block_project(project, ms.id, events, reason="decompose_failed")
+            self._audit(
+                project_id,
+                "project.decompose_failed",
+                {"milestone_id": ms.id, "error": _error_text(exc)},
+            )
+            return
+        if not new_tasks:
+            events.append(f"tasks_decompose_empty:{ms.id}")
+            ms.status = "blocked"
+            self.store.save_milestone(project_id, ms)
+            if project is not None:
+                self._block_project(project, ms.id, events, reason="decompose_empty")
+            self._audit(
+                project_id,
+                "project.decompose_empty",
+                {"milestone_id": ms.id},
+            )
+            return
         for t in new_tasks:
             t.milestone_id = ms.id
             t.assigned_role = t.assigned_role or ROLE_FOR_TASK.get(t.type, "engineer")
@@ -437,7 +472,19 @@ class ProjectEngine:
             task.assigned_role = ROLE_FOR_TASK.get(task.type, task.assigned_role or "engineer")
             # Operator reassignment wins; otherwise pick a concrete group member
             # or fallback role for this execution.
-            task.assigned_agent = task.assigned_agent or self._assign(task)
+            try:
+                task.assigned_agent = task.assigned_agent or self._assign(task)
+            except Exception as exc:  # noqa: BLE001 — assignment is an injected hook
+                task.attempts += 1
+                task.output = f"assignment error: {_error_text(exc)}"
+                if task.attempts >= MAX_TASK_ATTEMPTS:
+                    task.status = "failed"
+                    events.append(f"task_failed_assignment:{task.id}")
+                else:
+                    task.status = "pending"
+                    events.append(f"task_assignment_error_retry:{task.id}")
+                self.store.save_task(task)
+                continue
             task.status = "running"
             task.attempts += 1
             claimed = self.store.save_task(task)
@@ -457,7 +504,21 @@ class ProjectEngine:
                     events.append(f"task_error_retry:{task.id}")
                 self.store.save_task(task)
                 continue
-            verdict = self._qa(task, ms)
+            try:
+                verdict = self._qa(task, ms)
+            except Exception as exc:  # noqa: BLE001 — QA is an injected hook
+                task.qa_verdict = {
+                    "approved": False,
+                    "reason": f"qa error: {_error_text(exc)}",
+                }
+                if task.attempts >= MAX_TASK_ATTEMPTS:
+                    task.status = "failed"
+                    events.append(f"task_failed_qa_error:{task.id}")
+                else:
+                    task.status = "pending"
+                    events.append(f"task_qa_error_retry:{task.id}")
+                self.store.save_task(task)
+                continue
             task.qa_verdict = verdict
             if verdict.get("approved"):
                 task.status = "done"
@@ -478,8 +539,25 @@ class ProjectEngine:
                 self.store.save_milestone(project.id, ms)
                 events.append(f"milestone_blocked:{ms.id}")
                 self._block_project(project, ms.id, events, reason="task_failed")
+            elif tasks and not any(t.status == "running" for t in tasks) and not ready_tasks(tasks):
+                ms.status = "blocked"
+                self.store.save_milestone(project.id, ms)
+                events.append(f"milestone_blocked_dag:{ms.id}")
+                self._block_project(project, ms.id, events, reason="task_dag_blocked")
             return
-        gate = self._gate(ms, tasks)
+        try:
+            gate = self._gate(ms, tasks)
+        except Exception as exc:  # noqa: BLE001 — milestone gate is an injected hook
+            ms.status = "blocked"
+            self.store.save_milestone(project.id, ms)
+            events.append(f"milestone_gate_error:{ms.id}")
+            self._block_project(project, ms.id, events, reason="gate_error")
+            self._audit(
+                project.id,
+                "project.gate_failed",
+                {"milestone_id": ms.id, "error": _error_text(exc)},
+            )
+            return
         if gate.get("met"):
             ms.status = "done"
             self.store.save_milestone(project.id, ms)

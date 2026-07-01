@@ -117,10 +117,12 @@ def _stub_decompose(ms: Milestone) -> list[Task]:
 
 
 def _engine(tmp_path, **hooks) -> ProjectEngine:
+    generate_milestones = hooks.pop("generate_milestones", _stub_milestones)
+    decompose_tasks = hooks.pop("decompose_tasks", _stub_decompose)
     return ProjectEngine(
         ProjectStore(base_dir=tmp_path),
-        generate_milestones=_stub_milestones,
-        decompose_tasks=_stub_decompose,
+        generate_milestones=generate_milestones,
+        decompose_tasks=decompose_tasks,
         **hooks,
     )
 
@@ -128,6 +130,18 @@ def _engine(tmp_path, **hooks) -> ProjectEngine:
 def test_plan_generates_milestones(tmp_path) -> None:
     eng = _engine(tmp_path)
     p = eng.plan("sleep sys", "make a smart sleep system")
+    assert p.status == "running"
+    assert [m.id for m in eng.store.milestones_for(p.id)] == ["MS1", "MS2", "MS3"]
+
+
+def test_plan_falls_back_when_milestone_generation_fails(tmp_path) -> None:
+    def broken_generate(goal: str) -> list[Milestone]:
+        raise RuntimeError(f"planner unavailable for {goal}")
+
+    eng = _engine(tmp_path, generate_milestones=broken_generate)
+
+    p = eng.plan("fallback", "ship despite planner outage")
+
     assert p.status == "running"
     assert [m.id for m in eng.store.milestones_for(p.id)] == ["MS1", "MS2", "MS3"]
 
@@ -404,3 +418,116 @@ def test_milestone_gate_blocks_when_criteria_unmet(tmp_path) -> None:
     assert eng.store.get_milestone("MS1").status == "blocked"
     events = [event for tick in result["history"] for event in tick["events"]]
     assert "project_blocked:gate_failed" in events
+
+
+def test_decompose_exception_blocks_project_instead_of_crashing_tick(tmp_path) -> None:
+    def broken_decompose(ms: Milestone) -> list[Task]:
+        raise RuntimeError(f"cannot decompose {ms.id}")
+
+    eng = _engine(tmp_path, decompose_tasks=broken_decompose)
+    p = eng.plan("x", "g")
+
+    tick = eng.tick(p.id)
+
+    assert "tasks_decompose_failed:MS1" in tick["events"]
+    assert "project_blocked:decompose_failed" in tick["events"]
+    assert tick["project_status"] == "blocked"
+    assert eng.store.get_project(p.id).status == "blocked"
+    assert eng.store.get_milestone("MS1").status == "blocked"
+    audit = eng.store.events_for_project(p.id)
+    assert audit[-1]["kind"] == "project.decompose_failed"
+    assert "RuntimeError" in audit[-1]["payload"]["error"]
+
+
+def test_empty_decompose_blocks_project_instead_of_spinning(tmp_path) -> None:
+    eng = _engine(tmp_path, decompose_tasks=lambda _ms: [])
+    p = eng.plan("x", "g")
+
+    result = eng.run(p.id, max_ticks=5)
+
+    assert result["final_status"] == "blocked"
+    events = [event for tick in result["history"] for event in tick["events"]]
+    assert "tasks_decompose_empty:MS1" in events
+    assert "project_blocked:decompose_empty" in events
+    assert eng.store.tasks_for_milestone("MS1") == []
+
+
+def test_unreachable_task_dependency_blocks_project_instead_of_spinning(tmp_path) -> None:
+    def bad_dag(ms: Milestone) -> list[Task]:
+        return [
+            Task(
+                id=f"{ms.id}-T1",
+                milestone_id=ms.id,
+                type="code",
+                goal="blocked forever",
+                depends_on=["missing-task"],
+            )
+        ]
+
+    eng = _engine(tmp_path, decompose_tasks=bad_dag)
+    p = eng.plan("x", "g")
+
+    result = eng.run(p.id, max_ticks=5)
+
+    assert result["final_status"] == "blocked"
+    events = [event for tick in result["history"] for event in tick["events"]]
+    assert "milestone_blocked_dag:MS1" in events
+    assert "project_blocked:task_dag_blocked" in events
+    assert eng.store.get_project(p.id).current_ms == "MS1"
+
+
+def test_assigner_exception_retries_then_blocks_project(tmp_path) -> None:
+    def broken_assign(task: Task) -> str:
+        raise RuntimeError(f"no assignee for {task.id}")
+
+    eng = _engine(tmp_path, assign_agent=broken_assign)
+    p = eng.plan("x", "g")
+
+    result = eng.run(p.id, max_ticks=10)
+
+    assert result["final_status"] == "blocked"
+    task = eng.store.get_task("MS1-T1")
+    assert task.status == "failed"
+    assert task.attempts == 2
+    assert "assignment error: RuntimeError" in task.output
+    events = [event for tick in result["history"] for event in tick["events"]]
+    assert "task_assignment_error_retry:MS1-T1" in events
+    assert "task_failed_assignment:MS1-T1" in events
+
+
+def test_qa_exception_retries_then_blocks_project(tmp_path) -> None:
+    def broken_qa(task: Task, ms: Milestone) -> dict:
+        raise RuntimeError(f"qa unavailable for {task.id}")
+
+    eng = _engine(tmp_path, qa_task=broken_qa)
+    p = eng.plan("x", "g")
+
+    result = eng.run(p.id, max_ticks=10)
+
+    assert result["final_status"] == "blocked"
+    task = eng.store.get_task("MS1-T1")
+    assert task.status == "failed"
+    assert task.attempts == 2
+    assert "qa error: RuntimeError" in task.qa_verdict["reason"]
+    events = [event for tick in result["history"] for event in tick["events"]]
+    assert "task_qa_error_retry:MS1-T1" in events
+    assert "task_failed_qa_error:MS1-T1" in events
+
+
+def test_gate_exception_blocks_project_instead_of_crashing_tick(tmp_path) -> None:
+    def broken_gate(ms: Milestone, tasks: list[Task]) -> dict:
+        raise RuntimeError(f"gate unavailable for {ms.id}")
+
+    eng = _engine(tmp_path, gate_milestone=broken_gate)
+    p = eng.plan("x", "g")
+
+    result = eng.run(p.id, max_ticks=10)
+
+    assert result["final_status"] == "blocked"
+    assert eng.store.get_milestone("MS1").status == "blocked"
+    events = [event for tick in result["history"] for event in tick["events"]]
+    assert "milestone_gate_error:MS1" in events
+    assert "project_blocked:gate_error" in events
+    audit = eng.store.events_for_project(p.id)
+    assert audit[-1]["kind"] == "project.gate_failed"
+    assert "RuntimeError" in audit[-1]["payload"]["error"]
