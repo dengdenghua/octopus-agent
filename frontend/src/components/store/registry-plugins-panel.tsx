@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { Cloud, Info, Loader2, RefreshCw } from "lucide-react";
+import { Info, Loader2, LockIcon, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { listRegistryPlugins, type RegistryPlugin } from "@/core/registry/api";
 import { cn } from "@/lib/utils";
 
+import { RegistryAssetCard } from "./registry-asset-card";
+
 // 云端插件:从公网 registry 浏览插件资产(kind=code · codex-plugin 集成说明)。
 // 只读——沿用 octopus_runtime.materialize.SAFE_TYPES 的安全边界(只有声明式
-// prompt-pack 才可一键落地),插件类暂不提供一键安装,先可见可查。
+// prompt-pack 才可一键落地),插件类暂不提供一键安装,先可见可查。卡片排版对齐
+// 云端角色/技能面板(RegistryAssetCard),保持三个云端面板观感统一。
 export function RegistryPluginsPanel() {
   const [plugins, setPlugins] = useState<RegistryPlugin[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,14 +45,13 @@ export function RegistryPluginsPanel() {
     : plugins;
 
   return (
-    <div className="min-h-[400px] p-4">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Cloud className="size-4 text-primary" />
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <span className="text-sm font-medium">云端插件 · registry 浏览</span>
-        <span className="text-xs text-muted-foreground">
-          {filtered.length}/{plugins.length}
-        </span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">
+            {filtered.length}/{plugins.length}
+          </span>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -67,7 +69,7 @@ export function RegistryPluginsPanel() {
         </div>
       </div>
 
-      <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-500/25 bg-amber-500/8 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+      <div className="flex items-start gap-2 rounded-md border border-amber-500/25 bg-amber-500/8 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
         <Info className="mt-0.5 size-3.5 shrink-0" />
         <span>
           插件类资产标记为可执行集成(kind=code),为安全暂不支持一键安装，先供浏览了解。
@@ -75,7 +77,7 @@ export function RegistryPluginsPanel() {
       </div>
 
       {error ? (
-        <div className="mb-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
           {error}
         </div>
       ) : null}
@@ -85,28 +87,27 @@ export function RegistryPluginsPanel() {
           <Loader2 className="size-5 animate-spin" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {filtered.map((plugin) => (
-            <div
+            <RegistryAssetCard
               key={plugin.id}
-              className="rounded-lg border border-border/60 bg-card/40 p-3"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">
-                    {plugin.name}
-                  </div>
-                  {plugin.category ? (
-                    <div className="mt-0.5 text-xs text-primary">
-                      {plugin.category}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-              <p className="mt-1.5 line-clamp-3 text-xs text-muted-foreground">
-                {plugin.description}
-              </p>
-            </div>
+              name={plugin.name}
+              description={plugin.description}
+              category={null}
+              categoryLabel={plugin.category ?? undefined}
+              typeLabel="云端插件"
+              actionSlot={
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 rounded-sm px-3 text-xs"
+                  disabled
+                >
+                  <LockIcon className="mr-1 h-3 w-3" />
+                  仅浏览
+                </Button>
+              }
+            />
           ))}
         </div>
       )}

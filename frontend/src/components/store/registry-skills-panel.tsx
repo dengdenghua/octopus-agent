@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Check, Cloud, Download, Loader2, RefreshCw } from "lucide-react";
+import { Check, Download, Loader2, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -10,8 +10,11 @@ import {
 } from "@/core/registry/api";
 import { cn } from "@/lib/utils";
 
-// 云端技能商城:从公网 registry 浏览 / 安装 prompt-skill(母体接 registry)。
-// 文案暂硬编码(i18n locales 处于活跃 WIP,避开冲突;后续再 i18n 化)。
+import { RegistryAssetCard } from "./registry-asset-card";
+
+// 云端技能商城:从公网 registry 浏览 / 安装 prompt-skill(母体接 registry)。卡片排版
+// 对齐云端角色/插件面板(RegistryAssetCard),保持三个云端面板观感统一。文案暂硬编码
+// (i18n locales 处于活跃 WIP,避开冲突;后续再 i18n 化)。
 export function RegistrySkillsPanel() {
   const [skills, setSkills] = useState<RegistrySkill[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,28 +65,34 @@ export function RegistrySkillsPanel() {
   };
 
   return (
-    <div className="min-h-[560px] p-4">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Cloud className="size-4 text-primary" />
-        <span className="text-sm font-medium">云端技能 · 从 registry 按需安装</span>
-        <span className="text-xs text-muted-foreground">
-          {filtered.length}/{skills.length}
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <span className="text-sm font-medium">
+          云端技能 · 从 registry 按需安装
         </span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">
+            {filtered.length}/{skills.length}
+          </span>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜索技能"
             className="h-8 w-44 rounded-md border border-border/70 bg-background px-2 text-sm outline-none focus:border-primary/50"
           />
-          <Button size="sm" variant="ghost" disabled={loading} onClick={() => void load()}>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={loading}
+            onClick={() => void load()}
+          >
             <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
           </Button>
         </div>
       </div>
 
       {error ? (
-        <div className="mb-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
           {error}
         </div>
       ) : null}
@@ -93,43 +102,38 @@ export function RegistrySkillsPanel() {
           <Loader2 className="size-5 animate-spin" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {filtered.map((skill) => {
             const slug = registrySlug(skill.id);
             const done = installed[slug];
             const busy = installing[slug];
             return (
-              <div
+              <RegistryAssetCard
                 key={skill.id}
-                className="rounded-lg border border-border/60 bg-card/40 p-3"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{skill.name}</div>
-                    {skill.category ? (
-                      <div className="mt-0.5 text-xs text-primary">{skill.category}</div>
-                    ) : null}
-                  </div>
+                name={skill.name}
+                description={skill.description}
+                category={null}
+                categoryLabel={skill.category ?? undefined}
+                typeLabel="云端技能"
+                actionSlot={
                   <Button
                     size="sm"
-                    variant={done ? "secondary" : "default"}
+                    variant={done ? "outline" : "default"}
+                    className="h-7 rounded-sm px-3 text-xs"
                     disabled={busy || done}
                     onClick={() => void onInstall(skill)}
                   >
                     {busy ? (
-                      <Loader2 className="size-3.5 animate-spin" />
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                     ) : done ? (
-                      <Check className="size-3.5" />
+                      <Check className="mr-1 h-3 w-3" />
                     ) : (
-                      <Download className="size-3.5" />
+                      <Download className="mr-1 h-3 w-3" />
                     )}
-                    <span className="ml-1">{busy ? "安装中" : done ? "已安装" : "安装"}</span>
+                    {busy ? "安装中" : done ? "已安装" : "安装"}
                   </Button>
-                </div>
-                <p className="mt-1.5 line-clamp-3 text-xs text-muted-foreground">
-                  {skill.description}
-                </p>
-              </div>
+                }
+              />
             );
           })}
         </div>

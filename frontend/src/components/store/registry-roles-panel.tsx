@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { Check, Cloud, Download, Loader2, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Check, Download, Loader2, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -8,15 +8,37 @@ import {
   type RegistryRole,
 } from "@/core/registry/api";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/core/i18n/hooks";
+
+import { RegistryAssetCard } from "./registry-asset-card";
 
 // 云端角色:从公网 registry 浏览 / 安装角色资产(role + twin-role · 数字分身岗位模板)。
 // 安装即在本地 scaffold 一个可用 agent(profile.jsonc + agent-core/SOUL.md),下次刷新
-// 角色库即可见。文案暂硬编码(i18n locales 处于活跃 WIP,避开冲突;后续再 i18n 化)。
+// 角色库即可见。卡片 + 分类筛选栏对齐本地角色库(agent-world-unified 的 AgentsTab)的
+// 排版,保持云端/本地观感一致。文案暂硬编码(i18n locales 处于活跃 WIP,避开冲突)。
+
+const CATEGORY_FILTERS = [
+  "all",
+  "assistant",
+  "coder",
+  "researcher",
+  "creative",
+  "automation",
+  "specialist",
+  "financial",
+  "digital-twin",
+] as const;
+
+const DIGITAL_TWIN_LABEL = "数字分身";
+
 export function RegistryRolesPanel() {
+  const { t } = useI18n();
   const [roles, setRoles] = useState<RegistryRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [activeCategory, setActiveCategory] =
+    useState<(typeof CATEGORY_FILTERS)[number]>("all");
   const [installing, setInstalling] = useState<Record<string, boolean>>({});
   const [installed, setInstalled] = useState<Record<string, boolean>>({});
 
@@ -37,15 +59,29 @@ export function RegistryRolesPanel() {
     void load();
   }, [load]);
 
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string, number>([["all", roles.length]]);
+    for (const role of roles) {
+      const key = role.category || "specialist";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [roles]);
+
   const q = query.trim().toLowerCase();
-  const filtered = q
-    ? roles.filter(
-        (r) =>
-          r.name.toLowerCase().includes(q) ||
-          r.description.toLowerCase().includes(q) ||
-          r.id.toLowerCase().includes(q),
-      )
-    : roles;
+  const filtered = roles.filter((r) => {
+    if (
+      activeCategory !== "all" &&
+      (r.category || "specialist") !== activeCategory
+    )
+      return false;
+    if (!q) return true;
+    return (
+      r.name.toLowerCase().includes(q) ||
+      r.description.toLowerCase().includes(q) ||
+      r.id.toLowerCase().includes(q)
+    );
+  });
 
   const onInstall = async (role: RegistryRole) => {
     setInstalling((m) => ({ ...m, [role.id]: true }));
@@ -61,16 +97,48 @@ export function RegistryRolesPanel() {
   };
 
   return (
-    <div className="min-h-[560px] p-4">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Cloud className="size-4 text-primary" />
-        <span className="text-sm font-medium">
-          云端角色 · 从 registry 按需安装
-        </span>
-        <span className="text-xs text-muted-foreground">
-          {filtered.length}/{roles.length}
-        </span>
-        <div className="ml-auto flex items-center gap-2">
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div
+          data-testid="registry-roles-category-scroll"
+          className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 pr-1 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
+        >
+          {CATEGORY_FILTERS.map((category) => {
+            const count = categoryCounts.get(category) ?? 0;
+            const label =
+              category === "all"
+                ? t.agentWorld.categories.all
+                : category === "digital-twin"
+                  ? DIGITAL_TWIN_LABEL
+                  : (t.agentWorld.categories[category] ?? category);
+            return (
+              <Button
+                key={category}
+                type="button"
+                variant={activeCategory === category ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setActiveCategory(category)}
+                className={cn(
+                  "h-8 shrink-0 rounded-lg px-2.5 text-xs",
+                  activeCategory === category &&
+                    "border-primary/35 bg-primary/10 text-foreground",
+                )}
+              >
+                {label}
+                {category !== "all" && (
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    {count}
+                  </span>
+                )}
+              </Button>
+            );
+          })}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">
+            {filtered.length}/{roles.length}
+          </span>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -89,7 +157,7 @@ export function RegistryRolesPanel() {
       </div>
 
       {error ? (
-        <div className="mb-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
           {error}
         </div>
       ) : null}
@@ -99,53 +167,49 @@ export function RegistryRolesPanel() {
           <Loader2 className="size-5 animate-spin" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {filtered.map((role) => {
             const done = installed[role.id];
             const busy = installing[role.id];
             return (
-              <div
+              <RegistryAssetCard
                 key={role.id}
-                className="rounded-lg border border-border/60 bg-card/40 p-3"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">
-                      {role.name}
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap gap-1">
-                      {role.category ? (
-                        <span className="text-xs text-primary">
-                          {role.category}
-                        </span>
-                      ) : null}
-                      <span className="text-xs text-muted-foreground">
-                        {role.type === "twin-role" ? "数字分身" : "角色"}
-                      </span>
-                    </div>
-                  </div>
+                name={role.name}
+                description={role.description}
+                category={role.category}
+                categoryLabel={
+                  role.type === "twin-role"
+                    ? DIGITAL_TWIN_LABEL
+                    : (t.agentWorld.categories[
+                        role.category as keyof typeof t.agentWorld.categories
+                      ] ??
+                      role.category ??
+                      undefined)
+                }
+                typeLabel={
+                  role.type === "twin-role"
+                    ? "云端 · 数字分身岗位模板"
+                    : "云端角色"
+                }
+                actionSlot={
                   <Button
                     size="sm"
-                    variant={done ? "secondary" : "default"}
+                    variant={done ? "outline" : "default"}
+                    className="h-7 rounded-sm px-3 text-xs"
                     disabled={busy || done}
                     onClick={() => void onInstall(role)}
                   >
                     {busy ? (
-                      <Loader2 className="size-3.5 animate-spin" />
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                     ) : done ? (
-                      <Check className="size-3.5" />
+                      <Check className="mr-1 h-3 w-3" />
                     ) : (
-                      <Download className="size-3.5" />
+                      <Download className="mr-1 h-3 w-3" />
                     )}
-                    <span className="ml-1">
-                      {busy ? "安装中" : done ? "已安装" : "安装"}
-                    </span>
+                    {busy ? "安装中" : done ? "已安装" : "安装"}
                   </Button>
-                </div>
-                <p className="mt-1.5 line-clamp-3 text-xs text-muted-foreground">
-                  {role.description}
-                </p>
-              </div>
+                }
+              />
             );
           })}
         </div>
