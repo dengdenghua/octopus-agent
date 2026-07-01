@@ -67,6 +67,7 @@ import { AgentCard } from "./agent-card";
 import { AgentRoleProfileDialog } from "./agent-role-profile-dialog";
 import { AgentWorldCard } from "./agent-world-card";
 import { LocalAgentConnectDialog } from "./local-agent-connect-dialog";
+import { LocalSkillDirectoryPanel } from "@/components/store/local-skill-directory-panel";
 import { RegistrySkillsPanel } from "@/components/store/registry-skills-panel";
 import { RegistryRolesPanel } from "@/components/store/registry-roles-panel";
 import { RegistryPluginsPanel } from "@/components/store/registry-plugins-panel";
@@ -1240,7 +1241,31 @@ export function AgentWorldUnified() {
             </TabsContent>
 
             <TabsContent value="skills" className="mt-0">
-              <RegistrySkillsPanel />
+              <Tabs defaultValue="local">
+                <TabsList variant="line" className="mb-3">
+                  <TabsTrigger
+                    value="local"
+                    className="h-8 gap-1.5 px-3 text-xs"
+                  >
+                    已启用
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="registry"
+                    className="h-8 gap-1.5 px-3 text-xs"
+                  >
+                    <StoreIcon className="h-3.5 w-3.5" />
+                    商城
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="local" className="mt-0">
+                  <LocalSkillDirectoryPanel searchQuery={searchQuery} />
+                </TabsContent>
+
+                <TabsContent value="registry" className="mt-0">
+                  <RegistrySkillsPanel />
+                </TabsContent>
+              </Tabs>
             </TabsContent>
 
             <TabsContent value="enterprise" className="mt-0">
