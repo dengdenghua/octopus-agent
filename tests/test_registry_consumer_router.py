@@ -129,6 +129,19 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
     return TestClient(app)
 
 
+@pytest.fixture
+def no_raise_client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
+    import octopus_runtime
+    from runtime.execution.agents import loader
+
+    monkeypatch.setattr(octopus_runtime, "RegistryClient", FakeRegistryClient)
+    monkeypatch.setattr(loader, "default_agents_root", lambda: tmp_path / "agents")
+
+    app = FastAPI()
+    app.include_router(create_registry_consumer_router(registry_base="https://registry.test"))
+    return TestClient(app, raise_server_exceptions=False)
+
+
 def test_lists_registry_roles(client: TestClient) -> None:
     data = client.get("/api/registry/roles").json()
 
@@ -152,6 +165,55 @@ def test_installs_registry_role_as_local_agent(client: TestClient, tmp_path) -> 
     assert (agent_root / "agent-core" / "SOUL.md").read_text(
         encoding="utf-8"
     ) == "You are a careful researcher."
+
+
+def test_rejects_registry_role_install_when_agent_root_is_symlink(
+    no_raise_client: TestClient, tmp_path
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    agents = tmp_path / "agents"
+    agents.mkdir()
+    (agents / "registry_researcher").symlink_to(outside, target_is_directory=True)
+
+    resp = no_raise_client.post("/api/registry/roles/role/researcher/install")
+
+    assert resp.status_code == 500
+    assert not (outside / "profile.jsonc").exists()
+
+
+def test_rejects_registry_role_install_when_agent_core_is_symlink(
+    no_raise_client: TestClient, tmp_path
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    agent_root = tmp_path / "agents" / "registry_researcher"
+    agent_root.mkdir(parents=True)
+    (agent_root / "agent-core").symlink_to(outside, target_is_directory=True)
+
+    resp = no_raise_client.post("/api/registry/roles/role/researcher/install")
+
+    assert resp.status_code == 500
+    assert not (outside / "SOUL.md").exists()
+
+
+def test_registry_role_install_cleans_temp_file_when_atomic_write_fails(
+    no_raise_client: TestClient, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_replace = Path.replace
+
+    def fail_profile_replace(self: Path, target: Path) -> Path:
+        if self.name.startswith(".profile.jsonc.") and target.name == "profile.jsonc":
+            raise OSError("replace failed")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", fail_profile_replace)
+
+    resp = no_raise_client.post("/api/registry/roles/role/researcher/install")
+
+    assert resp.status_code == 500
+    agent_root = tmp_path / "agents" / "registry_researcher"
+    assert list(agent_root.glob(".profile.jsonc.*")) == []
 
 
 def test_rejects_role_install_for_non_role_asset(client: TestClient) -> None:
