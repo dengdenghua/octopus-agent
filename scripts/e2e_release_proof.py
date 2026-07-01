@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA = "octopus.e2e_release_proof.v1"
+READINESS_SCHEMA = "octopus.production_readiness_gate.v1"
+FULL_STACK_SCHEMA = "octopus.full_stack_smoke_proof.v1"
+MIN_SCORE = 95
 
 
 def main() -> int:
@@ -53,11 +56,32 @@ def build_release_proof(
     failed_suites = [
         suite for suite in required if suite in suite_status and suite_status[suite] != "passed"
     ]
+    suite_rows = _suite_rows(full_stack)
+    passed_suite_count = sum(1 for row in suite_rows if row.get("status") == "passed")
+    declared_suite_count = _as_int(full_stack.get("suite_count"))
+    declared_passed_count = _as_int(full_stack.get("passed_count"))
+    scorecard_score = _as_int(readiness.get("scorecard_score"))
+    automation_score = _as_int(readiness.get("automation_score"))
     checks = [
+        {
+            "id": "production_readiness_schema",
+            "passed": readiness.get("schema") == READINESS_SCHEMA,
+            "next_action": "Regenerate production readiness proof with the current gate.",
+        },
         {
             "id": "production_readiness_ready",
             "passed": bool(readiness.get("ready")),
             "next_action": "Run production readiness gate and fix reported failures.",
+        },
+        {
+            "id": "production_readiness_scores_clear_target",
+            "passed": scorecard_score >= MIN_SCORE and automation_score >= MIN_SCORE,
+            "next_action": "Restore scorecard and automation scores to the E2E target.",
+        },
+        {
+            "id": "production_readiness_e2e_ready",
+            "passed": bool(_nested(readiness, "e2e", "ready")),
+            "next_action": "Restore E2E surpass certification readiness.",
         },
         {
             "id": "production_readiness_e2e_surpassed",
@@ -70,9 +94,27 @@ def build_release_proof(
             "next_action": "Restore all required E2E coverage domains.",
         },
         {
+            "id": "production_readiness_coverage_has_no_gaps",
+            "passed": _as_int(_nested(readiness, "e2e", "summary", "coverage_gap_domains")) == 0,
+            "next_action": "Clear E2E coverage gap domains before release.",
+        },
+        {
+            "id": "full_stack_smoke_schema",
+            "passed": full_stack.get("schema") == FULL_STACK_SCHEMA,
+            "next_action": "Regenerate full-stack smoke proof with the current script.",
+        },
+        {
             "id": "full_stack_smoke_ready",
             "passed": bool(full_stack.get("ready")),
             "next_action": "Run full-stack Playwright smoke and fix failures.",
+        },
+        {
+            "id": "full_stack_suite_counts_consistent",
+            "passed": (
+                declared_suite_count == len(suite_rows)
+                and declared_passed_count == passed_suite_count
+            ),
+            "next_action": "Regenerate full-stack smoke proof; suite counts are inconsistent.",
         },
         {
             "id": "full_stack_required_suites_present",
@@ -93,17 +135,20 @@ def build_release_proof(
         "checks": checks,
         "failed_checks": [str(check["id"]) for check in checks if not bool(check["passed"])],
         "summary": {
-            "scorecard_score": int(readiness.get("scorecard_score") or 0),
-            "automation_score": int(readiness.get("automation_score") or 0),
+            "scorecard_score": scorecard_score,
+            "automation_score": automation_score,
             "e2e_verdict": str(_nested(readiness, "e2e", "verdict") or "unknown"),
-            "coverage_ready": int(
-                _nested(readiness, "e2e", "summary", "coverage_ready") or 0,
+            "coverage_ready": _as_int(
+                _nested(readiness, "e2e", "summary", "coverage_ready"),
             ),
-            "coverage_total": int(
-                _nested(readiness, "e2e", "summary", "coverage_total") or 0,
+            "coverage_total": _as_int(
+                _nested(readiness, "e2e", "summary", "coverage_total"),
             ),
-            "full_stack_suite_count": int(full_stack.get("suite_count") or 0),
-            "full_stack_passed_count": int(full_stack.get("passed_count") or 0),
+            "coverage_gap_domains": _as_int(
+                _nested(readiness, "e2e", "summary", "coverage_gap_domains"),
+            ),
+            "full_stack_suite_count": declared_suite_count,
+            "full_stack_passed_count": declared_passed_count,
             "required_suites": required,
             "missing_suites": missing_suites,
             "failed_suites": failed_suites,
@@ -145,22 +190,31 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 def _suite_status(full_stack: dict[str, Any]) -> dict[str, str]:
     statuses: dict[str, str] = {}
-    suites = full_stack.get("suites")
-    if not isinstance(suites, list):
-        return statuses
-    for row in suites:
-        if not isinstance(row, dict):
-            continue
+    for row in _suite_rows(full_stack):
         suite = str(row.get("suite") or "").strip()
         if suite:
             statuses[suite] = str(row.get("status") or "")
     return statuses
 
 
+def _suite_rows(full_stack: dict[str, Any]) -> list[dict[str, Any]]:
+    suites = full_stack.get("suites")
+    if not isinstance(suites, list):
+        return []
+    return [row for row in suites if isinstance(row, dict)]
+
+
 def _coverage_complete(readiness: dict[str, Any]) -> bool:
-    ready = int(_nested(readiness, "e2e", "summary", "coverage_ready") or 0)
-    total = int(_nested(readiness, "e2e", "summary", "coverage_total") or 0)
+    ready = _as_int(_nested(readiness, "e2e", "summary", "coverage_ready"))
+    total = _as_int(_nested(readiness, "e2e", "summary", "coverage_total"))
     return total > 0 and ready == total
+
+
+def _as_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _nested(data: dict[str, Any], *keys: str) -> Any:
