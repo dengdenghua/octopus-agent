@@ -63,6 +63,27 @@ class TestCanaryRollback:
         updated = cm.get_state("ts_skill")
         assert updated.entered_ts != original_ts
 
+    def test_force_rollback_persists_reason_metadata(self, tmp_path):
+        state_dir = tmp_path / "canary"
+        cm = CanaryManager(CanaryConfig(state_dir=str(state_dir)))
+        cm.register("reason_skill")
+
+        state = cm.force_rollback(
+            "reason_skill",
+            reason="operator rejected metrics",
+            metadata={"last_rollback_id": "rb_123"},
+        )
+
+        assert state is not None
+        assert state.metadata["last_rollback_reason"] == "operator rejected metrics"
+        assert state.metadata["last_rollback_id"] == "rb_123"
+
+        reloaded = CanaryManager(CanaryConfig(state_dir=str(state_dir))).get_state("reason_skill")
+        assert reloaded is not None
+        assert reloaded.phase == CanaryPhase.ROLLED_BACK
+        assert reloaded.metadata["last_rollback_reason"] == "operator rejected metrics"
+        assert reloaded.metadata["last_rollback_id"] == "rb_123"
+
 
 class TestCanaryPromotion:
     def test_shadow_promotion_on_high_success(self, tmp_path):
@@ -81,6 +102,22 @@ class TestCanaryPromotion:
             CanaryPhase.CANARY_50,
             CanaryPhase.FULL,
         )
+
+    def test_shadow_promotion_honors_shadow_pass_rate(self, tmp_path):
+        cm = CanaryManager(CanaryConfig(
+            state_dir=str(tmp_path / "canary"),
+            shadow_pass_rate=0.70,
+            rollback_threshold=0.20,
+        ))
+        cm.register("shadow_threshold_skill")
+
+        outcomes = [True, True, True, True, True, True, True, False, False, False]
+        for outcome in outcomes:
+            cm.record_outcome("shadow_threshold_skill", outcome)
+
+        state = cm.get_state("shadow_threshold_skill")
+        assert state is not None
+        assert state.phase == CanaryPhase.CANARY_5
 
     def test_promotion_resets_sample_count(self, tmp_path):
         cm = CanaryManager(CanaryConfig(state_dir=str(tmp_path / "canary")))

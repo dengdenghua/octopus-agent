@@ -863,7 +863,7 @@ def create_evolution_router() -> Any:
         try:
             from runtime.safety.evolution.canary import CanaryManager
             cm = CanaryManager()
-            state = cm.force_rollback(skill_name)
+            state = cm.force_rollback(skill_name, reason="manual API rollback")
             if state is None:
                 return {"ok": False, "error": "skill not in canary"}
             return {"ok": True, "skill_name": skill_name, "phase": state.phase.value}

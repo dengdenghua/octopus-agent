@@ -258,6 +258,18 @@ class TestRollbackCoordinatorVerification:
 
         state = coord._canary.get_state("verify_skill")
         assert state is not None
+        assert state.metadata["last_rollback_reason"] == "test"
+        assert state.metadata["last_rollback_id"] == result.rollback_id
+
+        reloaded_coord = RollbackCoordinator(
+            canary_config=CanaryConfig(state_dir=str(tmp_path / "canary")),
+            ledger_path=str(tmp_path / "ledger.jsonl"),
+            state_dir=str(tmp_path / "rollback"),
+        )
+        reloaded = reloaded_coord._canary.get_state("verify_skill")
+        assert reloaded is not None
+        assert reloaded.metadata["last_rollback_reason"] == "test"
+        assert reloaded.metadata["last_rollback_id"] == result.rollback_id
         state.phase = CanaryPhase.SHADOW
 
         verification = coord.verify_rollback(result.rollback_id)

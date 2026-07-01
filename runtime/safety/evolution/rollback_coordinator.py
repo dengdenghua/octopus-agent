@@ -88,7 +88,11 @@ class RollbackCoordinator:
             if state is not None:
                 fitness_before = state.current_rate
                 details["phase_before"] = state.phase.value
-            rolled = self._canary.force_rollback(skill_name)
+            rolled = self._canary.force_rollback(
+                skill_name,
+                reason=reason,
+                metadata={"last_rollback_id": rollback_id},
+            )
             if rolled is not None:
                 success = True
                 fitness_after = rolled.current_rate
@@ -96,8 +100,6 @@ class RollbackCoordinator:
                 source_proposal_id = None
                 if isinstance(rolled.metadata, dict):
                     source_proposal_id = str(rolled.metadata.get("proposal_id") or "").strip() or None
-                    rolled.metadata["last_rollback_reason"] = reason
-                    rolled.metadata["last_rollback_id"] = rollback_id
                 ledger_record = self._ledger.propose(
                     kind="canary_rollback",
                     description=f"Rollback canary for {skill_name}: {reason}",

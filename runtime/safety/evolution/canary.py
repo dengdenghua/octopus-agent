@@ -124,8 +124,7 @@ class CanaryManager:
                         _LOG.warning("canary rollback handler failed for %s: %s", skill_name, exc)
                 return state
 
-            threshold_key = state.phase.value
-            threshold = self.config.promotion_thresholds.get(threshold_key, 0.80)
+            threshold = self._promotion_threshold(state.phase)
             if state.current_rate >= threshold and state.sample_count >= self._min_samples(state.phase):
                 self._promote(state)
 
@@ -161,13 +160,26 @@ class CanaryManager:
         with self._lock:
             return list(self._states.values())
 
-    def force_rollback(self, skill_name: str) -> CanaryState | None:
+    def force_rollback(
+        self,
+        skill_name: str,
+        *,
+        reason: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> CanaryState | None:
         with self._lock:
             state = self._states.get(skill_name)
             if state is None:
                 return None
             state.phase = CanaryPhase.ROLLED_BACK
             state.entered_ts = datetime.now().isoformat(timespec="seconds")
+            state.metadata["last_rollback_reason"] = (
+                reason
+                or state.metadata.get("last_rollback_reason")
+                or "operator rollback"
+            )
+            if metadata:
+                state.metadata.update(metadata)
             self._persist_state(state)
             return state
 
@@ -207,6 +219,11 @@ class CanaryManager:
             CanaryPhase.CANARY_50: 60,
         }
         return minimums.get(phase, 10)
+
+    def _promotion_threshold(self, phase: CanaryPhase) -> float:
+        if phase == CanaryPhase.SHADOW:
+            return self.config.shadow_pass_rate
+        return self.config.promotion_thresholds.get(phase.value, 0.80)
 
     def _persist_state(self, state: CanaryState) -> None:
         path = self._state_dir / f"{state.skill_name}.json"
