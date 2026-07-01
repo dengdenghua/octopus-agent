@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import httpx
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -107,6 +110,66 @@ def test_scaffold_writes_minimal_agent(monkeypatch, tmp_path):
     assert "Observe cultures" in soul  # persona body 进了 SOUL
     assert (agent_root / "agent-core" / "IDENTITY.md").is_file()
     assert (agent_root / "agent-core" / "tool-registry.jsonc").is_file()
+
+
+def test_scaffold_rejects_symlink_agent_root(monkeypatch, tmp_path):
+    import runtime.execution.agents.loader as loader
+
+    monkeypatch.setattr(loader, "default_agents_root", lambda: tmp_path / "agents")
+    from runtime.sensing.gateway.enterprise_assets_router import _scaffold_local_agent
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    agents = tmp_path / "agents"
+    agents.mkdir()
+    (agents / "coder").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="must not be a symlink"):
+        _scaffold_local_agent({"id": "coder", "name": "Coder", "body": "You code."})
+
+    assert not (outside / "profile.jsonc").exists()
+
+
+def test_scaffold_rejects_symlink_agent_core(monkeypatch, tmp_path):
+    import runtime.execution.agents.loader as loader
+
+    monkeypatch.setattr(loader, "default_agents_root", lambda: tmp_path / "agents")
+    from runtime.sensing.gateway.enterprise_assets_router import _scaffold_local_agent
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    agent_root = tmp_path / "agents" / "coder"
+    agent_root.mkdir(parents=True)
+    (agent_root / "agent-core").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="must not be a symlink"):
+        _scaffold_local_agent({"id": "coder", "name": "Coder", "body": "You code."})
+
+    assert not (outside / "SOUL.md").exists()
+
+
+def test_scaffold_cleans_temp_file_when_atomic_write_fails(
+    monkeypatch, tmp_path
+):
+    import runtime.execution.agents.loader as loader
+
+    monkeypatch.setattr(loader, "default_agents_root", lambda: tmp_path / "agents")
+    from runtime.sensing.gateway.enterprise_assets_router import _scaffold_local_agent
+
+    original_replace = Path.replace
+
+    def fail_profile_replace(self: Path, target: Path) -> Path:
+        if self.name.startswith(".profile.jsonc.") and target.name == "profile.jsonc":
+            raise OSError("replace failed")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", fail_profile_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        _scaffold_local_agent({"id": "coder", "name": "Coder", "body": "You code."})
+
+    agent_root = tmp_path / "agents" / "coder"
+    assert list(agent_root.glob(".profile.jsonc.*")) == []
 
 
 def test_install_endpoint_scaffolds(monkeypatch, tmp_path):

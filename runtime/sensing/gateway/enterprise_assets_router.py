@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +65,35 @@ def _unwrap(body: Any, key: str) -> Any:
     return body if body is not None else ([] if key == "items" else None)
 
 
+def _ensure_safe_dir(path: Path) -> None:
+    if path.is_symlink():
+        raise ValueError(f"agent scaffold path must not be a symlink: {path}")
+    if path.exists() and not path.is_dir():
+        raise ValueError(f"agent scaffold path must be a directory: {path}")
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    _ensure_safe_dir(path.parent)
+    tmp: Path | None = None
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        delete=False,
+    ) as f:
+        tmp = Path(f.name)
+        f.write(content)
+        f.flush()
+    try:
+        tmp.replace(path)
+    except Exception:
+        if tmp is not None and tmp.exists():
+            tmp.unlink()
+        raise
+
+
 def _scaffold_local_agent(asset: dict[str, Any]) -> tuple[str, Path]:
     """从企业版角色资产 dict 在本地 scaffold 一个 agent。返回 (agent_id, agent_root)。
 
@@ -82,7 +112,8 @@ def _scaffold_local_agent(asset: dict[str, Any]) -> tuple[str, Path]:
 
     agent_root = default_agents_root() / agent_id
     core = agent_root / "agent-core"
-    core.mkdir(parents=True, exist_ok=True)
+    _ensure_safe_dir(agent_root)
+    _ensure_safe_dir(core)
 
     profile = {
         "id": agent_id,
@@ -96,20 +127,21 @@ def _scaffold_local_agent(asset: dict[str, Any]) -> tuple[str, Path]:
         "runtime": "local",
         "source": "enterprise",
     }
-    (agent_root / "profile.jsonc").write_text(
-        json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8"
+    _atomic_write_text(
+        agent_root / "profile.jsonc", json.dumps(profile, ensure_ascii=False, indent=2)
     )
     soul = body or (
         f"You are {name}.\n\nPrimary mission: {description}\n\n"
         f"Specialties: {', '.join(tags)}.\nBe concise, action-oriented, and precise."
     )
-    (core / "SOUL.md").write_text(soul, encoding="utf-8")
-    (core / "IDENTITY.md").write_text(
+    _atomic_write_text(core / "SOUL.md", soul)
+    _atomic_write_text(
+        core / "IDENTITY.md",
         f"- Name: {name}\n- Role: {category} specialist\n"
         "- Source: enterprise asset library\n",
-        encoding="utf-8",
     )
-    (core / "tool-registry.jsonc").write_text(
+    _atomic_write_text(
+        core / "tool-registry.jsonc",
         json.dumps(
             {
                 "arms": ["fs_writer", "git", "shell"],
@@ -119,7 +151,6 @@ def _scaffold_local_agent(asset: dict[str, Any]) -> tuple[str, Path]:
             ensure_ascii=False,
             indent=2,
         ),
-        encoding="utf-8",
     )
     return agent_id, agent_root
 
