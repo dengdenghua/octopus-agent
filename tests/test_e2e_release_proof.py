@@ -13,7 +13,7 @@ def test_e2e_release_proof_merges_readiness_and_full_stack(tmp_path: Path) -> No
     full_stack = tmp_path / "full_stack.json"
     output = tmp_path / "release.json"
     readiness.write_text(json.dumps(_readiness()), encoding="utf-8")
-    full_stack.write_text(json.dumps(_full_stack()), encoding="utf-8")
+    full_stack.write_text(json.dumps(_full_stack(report_root=tmp_path)), encoding="utf-8")
 
     result = subprocess.run(
         [
@@ -67,6 +67,10 @@ def test_e2e_release_proof_merges_readiness_and_full_stack(tmp_path: Path) -> No
         "full-stack-desktop": True,
         "full-stack-mobile": True,
     }
+    assert data["summary"]["required_suite_playwright_report_valid"] == {
+        "full-stack-desktop": True,
+        "full-stack-mobile": True,
+    }
 
 
 def test_e2e_release_proof_requires_all_named_full_stack_suites(
@@ -77,7 +81,7 @@ def test_e2e_release_proof_requires_all_named_full_stack_suites(
     output = tmp_path / "release.json"
     readiness.write_text(json.dumps(_readiness()), encoding="utf-8")
     full_stack.write_text(
-        json.dumps(_full_stack(suites=("full-stack-desktop",))),
+        json.dumps(_full_stack(report_root=tmp_path, suites=("full-stack-desktop",))),
         encoding="utf-8",
     )
 
@@ -127,7 +131,7 @@ def test_e2e_release_proof_rejects_weak_readiness_artifact(
         ),
         encoding="utf-8",
     )
-    full_stack.write_text(json.dumps(_full_stack()), encoding="utf-8")
+    full_stack.write_text(json.dumps(_full_stack(report_root=tmp_path)), encoding="utf-8")
 
     result = subprocess.run(
         [
@@ -164,7 +168,7 @@ def test_e2e_release_proof_rejects_inconsistent_full_stack_counts(
     output = tmp_path / "release.json"
     readiness.write_text(json.dumps(_readiness()), encoding="utf-8")
     full_stack.write_text(
-        json.dumps(_full_stack(suite_count=5, passed_count=1)),
+        json.dumps(_full_stack(report_root=tmp_path, suite_count=5, passed_count=1)),
         encoding="utf-8",
     )
 
@@ -201,6 +205,7 @@ def test_e2e_release_proof_rejects_weak_required_suite_coverage(
     full_stack.write_text(
         json.dumps(
             _full_stack(
+                report_root=tmp_path,
                 suite_test_matches={
                     "full-stack-desktop": ("full-stack-smoke.spec.ts",),
                     "full-stack-mobile": ("mobile-smoke.spec.ts",),
@@ -244,6 +249,7 @@ def test_e2e_release_proof_rejects_missing_required_playwright_report(
     full_stack.write_text(
         json.dumps(
             _full_stack(
+                report_root=tmp_path,
                 suite_report_presence={
                     "full-stack-desktop": False,
                     "full-stack-mobile": True,
@@ -277,6 +283,106 @@ def test_e2e_release_proof_rejects_missing_required_playwright_report(
     assert data["summary"]["suites_missing_playwright_reports"] == ["full-stack-desktop"]
 
 
+def test_e2e_release_proof_rejects_missing_required_playwright_report_file(
+    tmp_path: Path,
+) -> None:
+    readiness = tmp_path / "readiness.json"
+    full_stack = tmp_path / "full_stack.json"
+    output = tmp_path / "release.json"
+    readiness.write_text(json.dumps(_readiness()), encoding="utf-8")
+    full_stack.write_text(
+        json.dumps(
+            _full_stack(
+                report_root=tmp_path,
+                write_report_files={
+                    "full-stack-desktop": False,
+                    "full-stack-mobile": True,
+                },
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/e2e_release_proof.py",
+            "--readiness",
+            str(readiness),
+            "--full-stack",
+            str(full_stack),
+            "--output",
+            str(output),
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert result.returncode == 1
+    assert data["ready"] is False
+    assert "full_stack_required_suites_have_playwright_report_files" in data["failed_checks"]
+    assert data["summary"]["suites_missing_playwright_report_files"] == ["full-stack-desktop"]
+
+
+def test_e2e_release_proof_rejects_mismatched_playwright_report_counts(
+    tmp_path: Path,
+) -> None:
+    readiness = tmp_path / "readiness.json"
+    full_stack = tmp_path / "full_stack.json"
+    output = tmp_path / "release.json"
+    readiness.write_text(json.dumps(_readiness()), encoding="utf-8")
+    full_stack.write_text(
+        json.dumps(
+            _full_stack(
+                report_root=tmp_path,
+                suite_report_stats={
+                    "full-stack-desktop": {
+                        "expected": 12,
+                        "skipped": 1,
+                        "unexpected": 0,
+                        "flaky": 0,
+                    },
+                    "full-stack-mobile": {
+                        "expected": 3,
+                        "skipped": 0,
+                        "unexpected": 0,
+                        "flaky": 0,
+                    },
+                },
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/e2e_release_proof.py",
+            "--readiness",
+            str(readiness),
+            "--full-stack",
+            str(full_stack),
+            "--output",
+            str(output),
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert result.returncode == 1
+    assert data["ready"] is False
+    assert "full_stack_playwright_report_counts_match" in data["failed_checks"]
+    assert data["summary"]["suites_with_mismatched_playwright_report_counts"] == [
+        "full-stack-desktop"
+    ]
+
+
 def test_e2e_release_proof_rejects_weak_required_passed_test_count(
     tmp_path: Path,
 ) -> None:
@@ -287,6 +393,7 @@ def test_e2e_release_proof_rejects_weak_required_passed_test_count(
     full_stack.write_text(
         json.dumps(
             _full_stack(
+                report_root=tmp_path,
                 suite_passed_counts={
                     "full-stack-desktop": 12,
                     "full-stack-mobile": 3,
@@ -330,6 +437,7 @@ def test_e2e_release_proof_rejects_failed_required_tests(
     full_stack.write_text(
         json.dumps(
             _full_stack(
+                report_root=tmp_path,
                 suite_failed_counts={
                     "full-stack-desktop": 1,
                     "full-stack-mobile": 0,
@@ -389,6 +497,7 @@ def _readiness(
 
 def _full_stack(
     *,
+    report_root: Path,
     suites: tuple[str, ...] = ("full-stack-desktop", "full-stack-mobile"),
     suite_count: int | None = None,
     passed_count: int | None = None,
@@ -396,6 +505,8 @@ def _full_stack(
     suite_passed_counts: dict[str, int] | None = None,
     suite_failed_counts: dict[str, int] | None = None,
     suite_report_presence: dict[str, bool] | None = None,
+    suite_report_stats: dict[str, dict[str, int]] | None = None,
+    write_report_files: dict[str, bool] | None = None,
 ) -> dict[str, object]:
     default_test_matches = {
         "full-stack-desktop": (
@@ -423,27 +534,47 @@ def _full_stack(
         "full-stack-desktop": True,
         "full-stack-mobile": True,
     }
-    rows = [
-        {
-            "suite": suite,
-            "status": "passed",
-            "state_root": f"test-results/{suite}",
-            "playwright_report": f"test-results/{suite}/playwright-report.json",
-            "playwright_report_present": bool(report_presence.get(suite, False)),
-            "test_match": list(test_matches_by_suite.get(suite, ())),
-            "test_file_count": len(test_matches_by_suite.get(suite, ())),
-            "test_case_count": (
-                passed_counts.get(suite, 0)
-                + failed_counts.get(suite, 0)
-                + skipped_counts.get(suite, 0)
-            ),
-            "passed_test_count": passed_counts.get(suite, 0),
-            "skipped_test_count": skipped_counts.get(suite, 0),
-            "failed_test_count": failed_counts.get(suite, 0),
-            "flaky_test_count": 0,
-        }
-        for suite in suites
-    ]
+    report_stats = suite_report_stats or {}
+    write_reports = write_report_files or {}
+    report_root.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for suite in suites:
+        report_path = report_root / f"{suite}-playwright-report.json"
+        should_write_report = write_reports.get(
+            suite,
+            bool(report_presence.get(suite, False)),
+        )
+        if should_write_report:
+            stats = report_stats.get(suite) or {
+                "expected": passed_counts.get(suite, 0),
+                "skipped": skipped_counts.get(suite, 0),
+                "unexpected": failed_counts.get(suite, 0),
+                "flaky": 0,
+            }
+            report_path.write_text(
+                json.dumps({"stats": stats, "suites": []}),
+                encoding="utf-8",
+            )
+        rows.append(
+            {
+                "suite": suite,
+                "status": "passed",
+                "state_root": f"test-results/{suite}",
+                "playwright_report": str(report_path),
+                "playwright_report_present": bool(report_presence.get(suite, False)),
+                "test_match": list(test_matches_by_suite.get(suite, ())),
+                "test_file_count": len(test_matches_by_suite.get(suite, ())),
+                "test_case_count": (
+                    passed_counts.get(suite, 0)
+                    + failed_counts.get(suite, 0)
+                    + skipped_counts.get(suite, 0)
+                ),
+                "passed_test_count": passed_counts.get(suite, 0),
+                "skipped_test_count": skipped_counts.get(suite, 0),
+                "failed_test_count": failed_counts.get(suite, 0),
+                "flaky_test_count": 0,
+            }
+        )
     return {
         "schema": "octopus.full_stack_smoke_proof.v1",
         "ready": True,

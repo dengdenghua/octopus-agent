@@ -66,6 +66,13 @@ def build_release_proof(
     ]
     suite_rows = _suite_rows(full_stack)
     suite_report_presence = _suite_report_presence(suite_rows)
+    suite_report_counts = _suite_playwright_report_counts(
+        suite_rows,
+        base_dir=full_stack_path.parent,
+    )
+    suite_report_valid = {
+        suite: bool(counts.get("valid")) for suite, counts in suite_report_counts.items()
+    }
     suite_test_counts = _suite_test_counts(suite_rows)
     suite_passed_test_counts = _suite_counts(suite_rows, "passed_test_count")
     suite_failed_test_counts = _suite_counts(suite_rows, "failed_test_count")
@@ -73,6 +80,21 @@ def build_release_proof(
         suite
         for suite in required
         if suite in suite_status and not suite_report_presence.get(suite, False)
+    ]
+    suites_missing_playwright_report_files = [
+        suite
+        for suite in required
+        if suite in suite_status and not suite_report_valid.get(suite, False)
+    ]
+    suites_with_mismatched_playwright_report_counts = [
+        suite
+        for suite in required
+        if suite in suite_report_counts
+        and suite_report_valid.get(suite, False)
+        and not _suite_counts_match_playwright_report(
+            row=_suite_row_by_name(suite_rows, suite),
+            report_counts=suite_report_counts[suite],
+        )
     ]
     weak_suite_test_coverage = [
         suite
@@ -175,6 +197,23 @@ def build_release_proof(
             ),
         },
         {
+            "id": "full_stack_required_suites_have_playwright_report_files",
+            "passed": not suites_missing_playwright_report_files,
+            "next_action": (
+                "Restore readable Playwright JSON reports for suites: "
+                f"{', '.join(suites_missing_playwright_report_files)}"
+            ),
+        },
+        {
+            "id": "full_stack_playwright_report_counts_match",
+            "passed": not suites_with_mismatched_playwright_report_counts,
+            "next_action": (
+                "Regenerate full-stack smoke proof; Playwright report counts "
+                "do not match proof rows for suites: "
+                f"{', '.join(suites_with_mismatched_playwright_report_counts)}"
+            ),
+        },
+        {
             "id": "full_stack_test_file_counts_consistent",
             "passed": declared_test_file_count == observed_test_file_count,
             "next_action": (
@@ -252,10 +291,17 @@ def build_release_proof(
             "required_suite_playwright_report_present": {
                 suite: bool(suite_report_presence.get(suite, False)) for suite in required
             },
+            "required_suite_playwright_report_valid": {
+                suite: bool(suite_report_valid.get(suite, False)) for suite in required
+            },
             "required_suites": required,
             "missing_suites": missing_suites,
             "failed_suites": failed_suites,
             "suites_missing_playwright_reports": suites_missing_playwright_reports,
+            "suites_missing_playwright_report_files": (suites_missing_playwright_report_files),
+            "suites_with_mismatched_playwright_report_counts": (
+                suites_with_mismatched_playwright_report_counts
+            ),
             "weak_suite_test_coverage": weak_suite_test_coverage,
             "weak_suite_passed_tests": weak_suite_passed_tests,
             "suites_with_failed_tests": suites_with_failed_tests,
@@ -316,6 +362,13 @@ def _suite_rows(full_stack: dict[str, Any]) -> list[dict[str, Any]]:
     return [row for row in suites if isinstance(row, dict)]
 
 
+def _suite_row_by_name(suite_rows: list[dict[str, Any]], suite: str) -> dict[str, Any]:
+    for row in suite_rows:
+        if str(row.get("suite") or "").strip() == suite:
+            return row
+    return {}
+
+
 def _suite_test_counts(suite_rows: list[dict[str, Any]]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for row in suite_rows:
@@ -340,6 +393,114 @@ def _suite_report_presence(suite_rows: list[dict[str, Any]]) -> dict[str, bool]:
     return presence
 
 
+def _suite_playwright_report_counts(
+    suite_rows: list[dict[str, Any]],
+    *,
+    base_dir: Path,
+) -> dict[str, dict[str, int | bool]]:
+    counts: dict[str, dict[str, int | bool]] = {}
+    for row in suite_rows:
+        suite = str(row.get("suite") or "").strip()
+        if not suite:
+            continue
+        raw_path = str(row.get("playwright_report") or "").strip()
+        path = _resolve_report_path(raw_path, base_dir=base_dir)
+        counts[suite] = _read_playwright_report_counts(path)
+    return counts
+
+
+def _resolve_report_path(raw_path: str, *, base_dir: Path) -> Path | None:
+    if not raw_path:
+        return None
+    path = Path(raw_path)
+    if path.is_absolute():
+        return path
+    return (base_dir / path).resolve()
+
+
+def _read_playwright_report_counts(path: Path | None) -> dict[str, int | bool]:
+    empty = {
+        "valid": False,
+        "test_case_count": 0,
+        "passed_test_count": 0,
+        "skipped_test_count": 0,
+        "failed_test_count": 0,
+        "flaky_test_count": 0,
+    }
+    if path is None:
+        return empty
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return empty
+    if not isinstance(data, dict):
+        return empty
+    stats = data.get("stats")
+    if not isinstance(stats, dict):
+        stats = {}
+    passed = _as_nonnegative_int(stats.get("expected")) + _as_nonnegative_int(
+        stats.get("flaky"),
+    )
+    skipped = _as_nonnegative_int(stats.get("skipped"))
+    failed = _as_nonnegative_int(stats.get("unexpected"))
+    flaky = _as_nonnegative_int(stats.get("flaky"))
+    total = passed + skipped + failed
+    if total == 0:
+        total, passed, skipped, failed, flaky = _count_playwright_tests(data)
+    return {
+        "valid": total > 0,
+        "test_case_count": total,
+        "passed_test_count": passed,
+        "skipped_test_count": skipped,
+        "failed_test_count": failed,
+        "flaky_test_count": flaky,
+    }
+
+
+def _count_playwright_tests(data: object) -> tuple[int, int, int, int, int]:
+    total = passed = skipped = failed = flaky = 0
+    stack: list[object] = [data]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            tests = item.get("tests")
+            if isinstance(tests, list):
+                for test in tests:
+                    if not isinstance(test, dict):
+                        continue
+                    total += 1
+                    status = str(test.get("status") or "")
+                    if status in {"expected", "passed"}:
+                        passed += 1
+                    elif status == "skipped":
+                        skipped += 1
+                    elif status == "flaky":
+                        passed += 1
+                        flaky += 1
+                    else:
+                        failed += 1
+            stack.extend(item.values())
+        elif isinstance(item, list):
+            stack.extend(item)
+    return total, passed, skipped, failed, flaky
+
+
+def _suite_counts_match_playwright_report(
+    *,
+    row: dict[str, Any],
+    report_counts: dict[str, int | bool],
+) -> bool:
+    return (
+        _as_int(row.get("test_case_count")) == int(report_counts.get("test_case_count") or 0)
+        and _as_int(row.get("passed_test_count"))
+        == int(report_counts.get("passed_test_count") or 0)
+        and _as_int(row.get("skipped_test_count"))
+        == int(report_counts.get("skipped_test_count") or 0)
+        and _as_int(row.get("failed_test_count"))
+        == int(report_counts.get("failed_test_count") or 0)
+    )
+
+
 def _suite_counts(suite_rows: list[dict[str, Any]], field: str) -> dict[str, int]:
     counts: dict[str, int] = {}
     for row in suite_rows:
@@ -360,6 +521,10 @@ def _as_int(value: Any) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+def _as_nonnegative_int(value: Any) -> int:
+    return max(0, _as_int(value))
 
 
 def _nested(data: dict[str, Any], *keys: str) -> Any:
