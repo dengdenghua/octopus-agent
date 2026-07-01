@@ -149,6 +149,102 @@ class TestKanbanDispatcher:
         assert final["agent_id"] == "system"
         assert "timed out" in final["output"]["reason"]
 
+    def test_dispatcher_status_tracks_successful_tick(self, store):
+        from runtime.memory.cowork.store import KanbanDispatcher
+
+        store.claim_task("sess-1", "t1", "agent-x", lease_seconds=0)
+        d = KanbanDispatcher(store, tick_seconds=60)
+
+        d._tick_once()
+
+        status = d.status()
+        assert status["total_ticks"] == 1
+        assert status["total_failures"] == 0
+        assert status["consecutive_failures"] == 0
+        assert status["last_error"] is None
+        assert status["last_released_count"] == 1
+        assert status["last_success_at"]
+
+    def test_dispatcher_status_records_list_sessions_failure(self, store, monkeypatch):
+        from runtime.memory.cowork.store import KanbanDispatcher
+
+        d = KanbanDispatcher(store, tick_seconds=60)
+        monkeypatch.setattr(store, "list_sessions", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+
+        d._tick_once()
+
+        status = d.status()
+        assert status["total_ticks"] == 1
+        assert status["total_failures"] == 1
+        assert status["consecutive_failures"] == 1
+        assert status["last_error"] == "list_sessions: RuntimeError: boom"
+        assert status["last_failure_at"]
+
+    def test_dispatcher_status_records_session_failure_and_continues(
+        self,
+        store,
+        monkeypatch,
+    ):
+        from runtime.memory.cowork.store import KanbanDispatcher
+
+        store.create_plan("sess-2", created_by="test", tasks=[])
+        original_release = store.release_expired_leases
+
+        def flaky_release(session_id: str) -> list[str]:
+            if session_id == "sess-1":
+                raise RuntimeError("session broke")
+            return original_release(session_id)
+
+        monkeypatch.setattr(store, "release_expired_leases", flaky_release)
+        d = KanbanDispatcher(store, tick_seconds=60)
+
+        d._tick_once()
+
+        status = d.status()
+        assert status["total_ticks"] == 1
+        assert status["total_failures"] == 1
+        assert status["consecutive_failures"] == 1
+        assert "session:sess-1: RuntimeError: session broke" in status["last_error"]
+
+    def test_dispatcher_status_resets_failure_streak_after_success(self, store, monkeypatch):
+        from runtime.memory.cowork.store import KanbanDispatcher
+
+        d = KanbanDispatcher(store, tick_seconds=60)
+        monkeypatch.setattr(store, "list_sessions", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+        d._tick_once()
+        monkeypatch.setattr(store, "list_sessions", lambda: [])
+
+        d._tick_once()
+
+        status = d.status()
+        assert status["total_ticks"] == 2
+        assert status["total_failures"] == 1
+        assert status["consecutive_failures"] == 0
+        assert status["last_error"] is None
+        assert status["last_success_at"]
+
+    def test_dispatcher_status_records_callback_failure(self, store):
+        from runtime.memory.cowork.store import KanbanDispatcher
+
+        store.claim_task("sess-1", "t1", "agent-x", lease_seconds=0)
+
+        def on_available(_session_id: str, _task_ids: list[str]) -> None:
+            raise RuntimeError("callback broke")
+
+        d = KanbanDispatcher(
+            store,
+            tick_seconds=60,
+            on_task_available=on_available,
+        )
+
+        d._tick_once()
+
+        status = d.status()
+        assert status["total_ticks"] == 1
+        assert status["total_failures"] == 1
+        assert status["last_released_count"] == 1
+        assert "callback:sess-1: RuntimeError: callback broke" in status["last_error"]
+
 
 # ═══════════════════════════════════════════════════════════════
 # 2. SOUL.md hot-reload (smoke test — watcher already implemented)

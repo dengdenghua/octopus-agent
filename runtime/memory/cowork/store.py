@@ -822,6 +822,16 @@ class KanbanDispatcher:
         self._on_task_available = on_task_available
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+        self._state_lock = threading.Lock()
+        self._total_ticks = 0
+        self._total_failures = 0
+        self._consecutive_failures = 0
+        self._last_tick_at: str | None = None
+        self._last_success_at: str | None = None
+        self._last_failure_at: str | None = None
+        self._last_error: str | None = None
+        self._last_released_count = 0
+        self._last_failed_synthesis_count = 0
 
     # ── lifecycle ───────────────────────────────────────────
 
@@ -850,17 +860,68 @@ class KanbanDispatcher:
     def running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
+    def status(self) -> dict[str, Any]:
+        """Operational health snapshot for observability endpoints/tests."""
+        with self._state_lock:
+            return {
+                "running": self.running,
+                "tick_seconds": self._tick,
+                "synthesis_timeout_seconds": self._synthesis_timeout,
+                "total_ticks": self._total_ticks,
+                "total_failures": self._total_failures,
+                "consecutive_failures": self._consecutive_failures,
+                "last_tick_at": self._last_tick_at,
+                "last_success_at": self._last_success_at,
+                "last_failure_at": self._last_failure_at,
+                "last_error": self._last_error,
+                "last_released_count": self._last_released_count,
+                "last_failed_synthesis_count": self._last_failed_synthesis_count,
+            }
+
     # ── internal ────────────────────────────────────────────
 
     def _run(self) -> None:
         while not self._stop_event.wait(timeout=self._tick):
             self._tick_once()
 
+    def _record_tick_result(
+        self,
+        *,
+        success: bool,
+        released_count: int = 0,
+        failed_synthesis_count: int = 0,
+        error: str | None = None,
+    ) -> None:
+        now = _now_iso()
+        with self._state_lock:
+            self._total_ticks += 1
+            self._last_tick_at = now
+            self._last_released_count = released_count
+            self._last_failed_synthesis_count = failed_synthesis_count
+            if success:
+                self._consecutive_failures = 0
+                self._last_error = None
+                self._last_success_at = now
+                return
+            self._total_failures += 1
+            self._consecutive_failures += 1
+            self._last_error = error or "tick failed"
+            self._last_failure_at = now
+
+    @staticmethod
+    def _format_error(scope: str, exc: BaseException) -> str:
+        return f"{scope}: {type(exc).__name__}: {exc}"
+
     def _tick_once(self) -> None:
+        released_count = 0
+        failed_synthesis_count = 0
+        errors: list[str] = []
         try:
             sessions = self._store.list_sessions()
         except Exception as exc:  # noqa: BLE001
-            _LOG.warning("KanbanDispatcher: list_sessions failed: %s", exc)
+            error = self._format_error("list_sessions", exc)
+            _LOG.warning("KanbanDispatcher: list_sessions failed: %s", exc, exc_info=True)
+            self._record_tick_result(success=False, error=error)
             return
 
         for session_id in sessions:
@@ -870,6 +931,9 @@ class KanbanDispatcher:
                     session_id,
                     max_age_seconds=self._synthesis_timeout,
                 )
+                released_count += len(released)
+                if failed_synthesis:
+                    failed_synthesis_count += 1
                 if released:
                     _LOG.info(
                         "KanbanDispatcher: released %d task(s) in session %s: %s",
@@ -881,9 +945,11 @@ class KanbanDispatcher:
                         try:
                             self._on_task_available(session_id, released)
                         except Exception as cb_exc:  # noqa: BLE001
+                            errors.append(self._format_error(f"callback:{session_id}", cb_exc))
                             _LOG.warning(
                                 "KanbanDispatcher: on_task_available callback raised: %s",
                                 cb_exc,
+                                exc_info=True,
                             )
                 if failed_synthesis:
                     _LOG.warning(
@@ -891,11 +957,19 @@ class KanbanDispatcher:
                         session_id,
                     )
             except Exception as exc:  # noqa: BLE001
+                errors.append(self._format_error(f"session:{session_id}", exc))
                 _LOG.warning(
                     "KanbanDispatcher: error processing session %s: %s",
                     session_id,
                     exc,
+                    exc_info=True,
                 )
+        self._record_tick_result(
+            success=not errors,
+            released_count=released_count,
+            failed_synthesis_count=failed_synthesis_count,
+            error="; ".join(errors) if errors else None,
+        )
 
 
 __all__ = [
