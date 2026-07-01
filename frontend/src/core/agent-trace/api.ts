@@ -1196,6 +1196,7 @@ export interface E2ESurpassCertification {
   checks: E2ESurpassCertificationCheck[];
   scorecard?: {
     schema?: string;
+    target_score?: number;
     overall?: Record<string, number>;
     evidence_adjusted_overall?: Record<string, number>;
     verdict?: string;
@@ -1205,6 +1206,7 @@ export interface E2ESurpassCertification {
   };
   automation?: {
     schema?: string;
+    target_score?: number;
     overall?: Record<string, number>;
     verdict?: string;
     next_focus?: string[];

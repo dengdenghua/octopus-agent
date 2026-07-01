@@ -837,10 +837,14 @@ class TestAgentCompetitorScorecard:
         }
         assert all(check["passed"] for check in report["checks"])
         assert {
+            "scorecard_target_aligned",
+            "automation_target_aligned",
             "scorecard_all_dimensions_surpassed",
             "automation_no_gaps",
             "octopus.digital_employee_quality.v1:ready",
         } <= {check["id"] for check in report["checks"]}
+        assert report["scorecard"]["target_score"] == 95
+        assert report["automation"]["target_score"] == 95
         assert report["next_actions"] == []
 
     def test_repo_context_quality_reports_release_evidence(self):

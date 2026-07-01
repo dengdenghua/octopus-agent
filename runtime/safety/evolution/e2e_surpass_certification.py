@@ -62,7 +62,25 @@ def compute_e2e_surpass_certification(
         "octopus",
     )
     automation_octopus = _nested_int(automation, "overall", "octopus")
+    scorecard_target_score = int(scorecard.get("target_score") or 0)
+    automation_target_score = int(automation.get("target_score") or 0)
     checks = [
+        {
+            "id": "scorecard_target_aligned",
+            "title": "Agent scorecard target matches E2E target",
+            "passed": scorecard_target_score == target_score,
+            "score": scorecard_target_score,
+            "target": target_score,
+            "next_action": "Align agent scorecard target_score with E2E certification.",
+        },
+        {
+            "id": "automation_target_aligned",
+            "title": "Automation radar target matches E2E target",
+            "passed": automation_target_score == target_score,
+            "score": automation_target_score,
+            "target": target_score,
+            "next_action": "Align automation radar target_score with E2E certification.",
+        },
         {
             "id": "scorecard_overall",
             "title": "Agent scorecard overall clears target",
@@ -137,6 +155,7 @@ def compute_e2e_surpass_certification(
         "checks": checks,
         "scorecard": {
             "schema": scorecard.get("schema"),
+            "target_score": scorecard.get("target_score"),
             "overall": scorecard.get("overall"),
             "evidence_adjusted_overall": scorecard.get(
                 "evidence_adjusted_overall",
@@ -150,6 +169,7 @@ def compute_e2e_surpass_certification(
         },
         "automation": {
             "schema": automation.get("schema"),
+            "target_score": automation.get("target_score"),
             "overall": automation.get("overall"),
             "verdict": automation.get("verdict"),
             "next_focus": automation.get("next_focus") or [],
