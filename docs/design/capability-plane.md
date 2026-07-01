@@ -66,6 +66,33 @@
 - social/ratings/memory stub 端点 — 返回 `[]`。
 - 不要为了 `SkillSpec` 去 import `tentacle.llm`(会拖进 LLM/chat 层)——重新实现那个小 dataclass。
 
+### ⚠️ 两个同名 `register_all`,别测错(2026-07-01 registry 消费端调查实证)
+仓库里有 **两个不同的 `register_all(registry)`**,名字一样、行为完全不同:
+
+- `runtime.execution.suckers.builtins.register_all` —— 手测/脚本常 import 这个(名字直觉)。
+  内部 `_market_skills_dir = skills/public if 存在 else all_skills`(**二选一**,skills/public 优先)。
+- `runtime.execution.all_skills.register_all` —— **`builder.py` 的 `build_from_config`(真实
+  `octopus serve` 走的路)用的是这个**,不是上面那个。它按 `_GROUP_REGISTRARS` 逐组注册(builtin/
+  fs_search/web/git/shell/computer/browser/…),其中 `"market"` 组调用
+  `register_market_skills(registry, respect_enabled_flag=False)`**不传 `all_skills_dir`** →
+  落到 `market_skills.py` 里的默认值 `runtime/execution/all_skills/`;**注册完这一组之后**,函数末尾
+  **再额外调一次** `register_market_skills(..., all_skills_dir=skills/public, ...)`。
+
+**结果:生产环境两个目录都会被注册,不是二选一,是叠加**(`skills/public` 里跟 `all_skills` 同名的会被
+`register_market_skills` 内部的 `if registry.has(name): continue` 去重逻辑跳过,只净增新名字)。
+
+**含义**:
+1. `runtime/execution/all_skills/`(136 个目录、约 227 个技能名含 `aliases:` 展开)是**内置技能层**,
+   跟 `browser_skills`/`git_skills`/`computer_skills` 同档次,**从设计上就不经 registry 分发**——
+   不是"该同步没同步"的缺口,是分类不同。
+2. `skills/public/` 才是"停止打包/registry 消费"这条线要处理的**外置层**,registry 与它精确 1:1
+   镜像(实测:registry 技能数 == `skills/public` 目录数,零缺口)。
+3. **手测 skill 注册数时,务必 import `runtime.execution.all_skills.register_all`**,否则数出来的
+   总数(以及 `has(x)`/`trusted_source` 归属)跟真实 `octopus serve` 环境对不上。
+4. 活 server 判断技能来源看 `trusted_source` 字段:`skill://all_skills/<name>` vs
+   `skill://public/<name>`(经 `/api/skills` 暴露)。**已跑的 server 进程只在启动那一刻注册一次**——
+   之后 `skills/public/` 再怎么变,不重启就不会反映到这个进程的内存注册表里。
+
 ---
 
 ## 3. 推荐架构(评分 20 vs 19/19 胜出)
