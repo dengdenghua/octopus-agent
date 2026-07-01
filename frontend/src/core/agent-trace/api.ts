@@ -1164,6 +1164,61 @@ export interface AutomationRadarReport {
   next_focus: string[];
 }
 
+export interface E2ESurpassCertificationCheck {
+  id: string;
+  title: string;
+  passed: boolean;
+  score: number;
+  target: number;
+  next_action?: string;
+}
+
+export interface E2ESurpassCertification {
+  ok?: boolean;
+  schema: "octopus.e2e_surpass_certification.v1" | string;
+  target_score: number;
+  ready: boolean;
+  verdict: "surpassed" | "needs_work" | string;
+  summary: {
+    scorecard_octopus: number;
+    scorecard_best_external: number;
+    scorecard_evidence_adjusted_octopus: number;
+    automation_octopus: number;
+    automation_codex: number;
+    quality_ready: number;
+    quality_total: number;
+    all_dimensions_surpassed: boolean;
+    scorecard_gap_dimensions: number;
+    automation_gap_dimensions: number;
+  };
+  checks: E2ESurpassCertificationCheck[];
+  scorecard?: {
+    schema?: string;
+    overall?: Record<string, number>;
+    evidence_adjusted_overall?: Record<string, number>;
+    verdict?: string;
+    evidence_adjusted_verdict?: string;
+    surpass_summary?: Record<string, unknown>;
+    next_focus?: string[];
+  };
+  automation?: {
+    schema?: string;
+    overall?: Record<string, number>;
+    verdict?: string;
+    next_focus?: string[];
+    gap_count?: number;
+  };
+  quality?: Array<{
+    schema?: string;
+    ready?: boolean;
+    score?: number;
+    passed?: number;
+    total?: number;
+    next_actions?: string[];
+  }>;
+  next_actions: string[];
+}
+
 export interface AutomationPolicyRuleInstallResult {
   ok?: boolean;
   schema: "octopus.policy_review_rule_install.v1" | string;
@@ -1441,6 +1496,15 @@ export async function fetchAutomationRadar(
   const params = new URLSearchParams({ target_score: String(targetScore) });
   return fetchJson<AutomationRadarReport>(
     `/api/evolution/automation-radar?${params.toString()}`,
+  );
+}
+
+export async function fetchE2ESurpassCertification(
+  targetScore = 95,
+): Promise<E2ESurpassCertification> {
+  const params = new URLSearchParams({ target_score: String(targetScore) });
+  return fetchJson<E2ESurpassCertification>(
+    `/api/evolution/e2e-surpass-certification?${params.toString()}`,
   );
 }
 

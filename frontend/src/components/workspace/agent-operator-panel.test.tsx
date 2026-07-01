@@ -37,6 +37,7 @@ const api = vi.hoisted(() => ({
   fetchBrowserDesktopQuality: vi.fn(),
   fetchBrowserDesktopRepairRecipeVerifications: vi.fn(),
   fetchBrowserDesktopRepairRecipes: vi.fn(),
+  fetchE2ESurpassCertification: vi.fn(),
   fetchRepairRouteQuality: vi.fn(),
   fetchOrganizationTopologyLift: vi.fn(),
   fetchOrganizationTopologyProposals: vi.fn(),
@@ -983,6 +984,65 @@ describe("<AgentOperatorPanel />", () => {
         next_focus: [],
       },
     });
+    api.fetchE2ESurpassCertification.mockResolvedValue({
+      schema: "octopus.e2e_surpass_certification.v1",
+      target_score: 95,
+      ready: true,
+      verdict: "surpassed",
+      summary: {
+        scorecard_octopus: 97,
+        scorecard_best_external: 87,
+        scorecard_evidence_adjusted_octopus: 97,
+        automation_octopus: 95,
+        automation_codex: 93,
+        quality_ready: 6,
+        quality_total: 6,
+        all_dimensions_surpassed: true,
+        scorecard_gap_dimensions: 0,
+        automation_gap_dimensions: 0,
+      },
+      checks: [
+        {
+          id: "scorecard_overall",
+          title: "Agent scorecard overall clears target",
+          passed: true,
+          score: 97,
+          target: 95,
+        },
+        {
+          id: "automation_overall",
+          title: "Automation radar clears target",
+          passed: true,
+          score: 95,
+          target: 95,
+        },
+        {
+          id: "quality_ready",
+          title: "Quality reports are ready",
+          passed: true,
+          score: 6,
+          target: 6,
+        },
+      ],
+      scorecard: {
+        schema: "octopus.agent_competitor_scorecard.v1",
+        overall: { codex: 87, octopus: 97 },
+        evidence_adjusted_overall: { codex: 87, octopus: 97 },
+        verdict: "leading",
+        evidence_adjusted_verdict: "leading",
+        surpass_summary: { all_dimensions_surpassed: true },
+        next_focus: [],
+      },
+      automation: {
+        schema: "octopus.automation_radar.v1",
+        overall: { codex: 93, octopus: 95 },
+        verdict: "leading",
+        next_focus: [],
+        gap_count: 0,
+      },
+      quality: [],
+      next_actions: [],
+    });
     pluginApi.fetchPluginSmokeSummary.mockResolvedValue({
       schema: "octopus.codex_plugin_smoke_summary.v1",
       total: 2,
@@ -1229,6 +1289,16 @@ describe("<AgentOperatorPanel />", () => {
     expect(await screen.findByText("lease expired")).toBeInTheDocument();
     expect(await screen.findByText("Competitor scorecard")).toBeInTheDocument();
     expect(
+      await screen.findByText("E2E surpass certification"),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("quality 6/6")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        /scorecard 97 vs best external 87 .* automation 95 vs Codex 93/,
+      ),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("all checks passed")).toBeInTheDocument();
+    expect(
       await screen.findByText("Browser/Desktop replay review"),
     ).toBeInTheDocument();
     expect(
@@ -1251,7 +1321,7 @@ describe("<AgentOperatorPanel />", () => {
     expect(
       await screen.findByText("IDE and product experience gap 1 vs effective target"),
     ).toBeInTheDocument();
-    expect(await screen.findByText("Evidence")).toBeInTheDocument();
+    expect((await screen.findAllByText("Evidence")).length).toBeGreaterThan(0);
     expect(await screen.findByText("OpenClaw")).toBeInTheDocument();
     expect(await screen.findByText("Hermes")).toBeInTheDocument();
     const ecosystemGapButton = await screen.findByRole("button", {

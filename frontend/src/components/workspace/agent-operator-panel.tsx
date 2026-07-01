@@ -44,6 +44,7 @@ import {
   fetchBrowserDesktopQuality,
   fetchBrowserDesktopRepairRecipeVerifications,
   fetchBrowserDesktopRepairRecipes,
+  fetchE2ESurpassCertification,
   fetchRepairRouteQuality,
   fetchOrganizationTopologyLift,
   fetchOrganizationTopologyProposals,
@@ -78,6 +79,7 @@ import {
   type BrowserDesktopQualityReport,
   type BrowserDesktopRepairRecipesReport,
   type BrowserDesktopRepairRecipeVerificationsReport,
+  type E2ESurpassCertification,
   type RepairRouteQualityReport,
   type ReplayEvidenceHint,
   type OrganizationTopology,
@@ -344,6 +346,27 @@ const EMPTY_AGENT_SCORECARD: AgentCompetitorScorecard = {
   next_focus: [],
 };
 
+const EMPTY_E2E_SURPASS_CERTIFICATION: E2ESurpassCertification = {
+  schema: "octopus.e2e_surpass_certification.v1",
+  target_score: 95,
+  ready: false,
+  verdict: "needs_work",
+  summary: {
+    scorecard_octopus: 0,
+    scorecard_best_external: 0,
+    scorecard_evidence_adjusted_octopus: 0,
+    automation_octopus: 0,
+    automation_codex: 0,
+    quality_ready: 0,
+    quality_total: 0,
+    all_dimensions_surpassed: false,
+    scorecard_gap_dimensions: 0,
+    automation_gap_dimensions: 0,
+  },
+  checks: [],
+  next_actions: [],
+};
+
 interface ReplayGateOverridePrompt {
   gate: AgentTraceReplayGate;
   message: string;
@@ -410,6 +433,11 @@ export function AgentOperatorPanel() {
   const [agentScorecard, setAgentScorecard] =
     useState<AgentCompetitorScorecard>(EMPTY_AGENT_SCORECARD);
   const [scorecardError, setScorecardError] = useState<string | null>(null);
+  const [e2eCertification, setE2eCertification] =
+    useState<E2ESurpassCertification>(EMPTY_E2E_SURPASS_CERTIFICATION);
+  const [e2eCertificationError, setE2eCertificationError] = useState<
+    string | null
+  >(null);
   const [replayGate, setReplayGate] = useState<AgentTraceReplayGate | null>(
     null,
   );
@@ -448,6 +476,7 @@ export function AgentOperatorPanel() {
       trustDenials,
       ruleDrafts,
       scorecardResult,
+      e2eCertificationResult,
     ] = await Promise.all([
       fetchAgentTraceReviewQueue(12, 0, { status: "pending" }),
       fetchAgentTraceReviewQueue(6, 0, {
@@ -486,6 +515,18 @@ export function AgentOperatorPanel() {
             error: err instanceof Error ? err.message : String(err),
           };
         }),
+      fetchE2ESurpassCertification()
+        .then((certification) => ({
+          certification,
+          error: null as string | null,
+        }))
+        .catch((err: unknown) => {
+          swallow(err);
+          return {
+            certification: null,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }),
     ]);
     setQueueItems(items);
     setBrowserDesktopQueueItems(browserDesktopItems);
@@ -511,6 +552,10 @@ export function AgentOperatorPanel() {
     setPolicyRuleDrafts(ruleDrafts);
     if (scorecardResult.scorecard) setAgentScorecard(scorecardResult.scorecard);
     setScorecardError(scorecardResult.error);
+    if (e2eCertificationResult.certification) {
+      setE2eCertification(e2eCertificationResult.certification);
+    }
+    setE2eCertificationError(e2eCertificationResult.error);
   }, []);
 
   const refreshTaskRuns = useCallback(async () => {
@@ -974,6 +1019,10 @@ export function AgentOperatorPanel() {
         onQueueRealGaps={() => void onQueueRealScorecardGaps()}
         onQueueGap={(dimensionId) => void onQueueScorecardGap(dimensionId)}
         onApplyPromoted={() => void onApplyPromoted()}
+      />
+      <E2ESurpassCertificationCard
+        certification={e2eCertification}
+        error={e2eCertificationError}
       />
       <AutomationRadarCard
         radar={automationRadar}
@@ -1568,6 +1617,139 @@ function CompetitorScorecardCard({
             <span className="truncate">{item}</span>
           </Badge>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function E2ESurpassCertificationCard({
+  certification,
+  error,
+}: {
+  certification: E2ESurpassCertification;
+  error?: string | null;
+}) {
+  const summary = certification.summary;
+  const failedChecks = certification.checks.filter((check) => !check.passed);
+  const passedChecks = certification.checks.length - failedChecks.length;
+  const ready = !error && certification.ready;
+  const focusText = error
+    ? error
+    : ready
+      ? "scorecard, automation, and quality gates all clear the Codex bar"
+      : failedChecks[0]?.title ||
+        certification.next_actions[0] ||
+        "waiting for E2E certification evidence";
+  return (
+    <div
+      className={cn(
+        "mt-3 rounded-lg border px-3 py-2",
+        ready
+          ? "border-emerald-500/25 bg-emerald-500/10"
+          : "border-amber-500/30 bg-amber-500/10",
+      )}
+    >
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            {ready ? (
+              <CheckCircle2Icon className="size-4 text-emerald-700 dark:text-emerald-300" />
+            ) : (
+              <XCircleIcon className="size-4 text-amber-700 dark:text-amber-300" />
+            )}
+            E2E surpass certification
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[10px]",
+                ready
+                  ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+              )}
+            >
+              {error ? "degraded" : certification.verdict.replaceAll("_", " ")}
+            </Badge>
+            <Badge variant="outline" className="text-[10px]">
+              quality {summary.quality_ready}/{summary.quality_total}
+            </Badge>
+          </div>
+          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+            {focusText}
+          </div>
+          {!error && (
+            <div className="mt-1 truncate text-[11px] text-muted-foreground">
+              scorecard {summary.scorecard_octopus} vs best external{" "}
+              {summary.scorecard_best_external} · automation{" "}
+              {summary.automation_octopus} vs Codex {summary.automation_codex}
+            </div>
+          )}
+        </div>
+        <div className="grid shrink-0 grid-cols-4 gap-2 text-right font-mono text-[11px]">
+          <GateStat label="Scorecard" value={summary.scorecard_octopus} />
+          <GateStat
+            label="Evidence"
+            value={summary.scorecard_evidence_adjusted_octopus}
+          />
+          <GateStat label="Automation" value={summary.automation_octopus} />
+          <GateStat label="Quality" value={summary.quality_ready} />
+        </div>
+      </div>
+
+      <div className="mt-2 grid gap-2 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="rounded-md border border-background/70 bg-background/60 px-2 py-1.5">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <div className="min-w-0 truncate text-[11px] font-medium text-muted-foreground">
+              Certification checks
+            </div>
+            <Badge variant="outline" className="shrink-0 text-[10px]">
+              {passedChecks}/{certification.checks.length}
+            </Badge>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {failedChecks.length === 0 && certification.checks.length > 0 ? (
+              <Badge
+                variant="outline"
+                className="border-emerald-500/25 bg-emerald-500/10 text-[10px] text-emerald-700 dark:text-emerald-300"
+              >
+                all checks passed
+              </Badge>
+            ) : (
+              failedChecks.slice(0, 3).map((check) => (
+                <Badge
+                  key={check.id}
+                  variant="outline"
+                  className="border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-700 dark:text-amber-300"
+                >
+                  {check.title} {check.score}/{check.target}
+                </Badge>
+              ))
+            )}
+          </div>
+        </div>
+        <div className="rounded-md border border-background/70 bg-background/60 px-2 py-1.5">
+          <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+            Gap counters
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <Badge variant="outline" className="text-[10px]">
+              scorecard gaps {summary.scorecard_gap_dimensions}
+            </Badge>
+            <Badge variant="outline" className="text-[10px]">
+              automation gaps {summary.automation_gap_dimensions}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[10px]",
+                summary.all_dimensions_surpassed &&
+                  "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+              )}
+            >
+              dimensions{" "}
+              {summary.all_dimensions_surpassed ? "surpassed" : "open"}
+            </Badge>
+          </div>
+        </div>
       </div>
     </div>
   );
