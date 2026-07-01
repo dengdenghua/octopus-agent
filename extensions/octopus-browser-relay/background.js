@@ -76,6 +76,10 @@ function recordHumanActivity(tabId, activity = {}) {
   };
   recentHumanActivityByTab.set(String(tabId), event);
   if (activeLease && String(tabId) === leaseTabId(activeLease)) {
+    void setPageControlIndicator(tabId, "paused", {
+      reason: event.kind,
+      lease: activeLease,
+    });
     void reportControlEvent({
       type: "human_interrupt",
       reason: event.kind,
@@ -108,6 +112,17 @@ async function relayControl(action, reason = "") {
       source: "chrome_side_panel",
     }),
   });
+}
+
+async function setPageControlIndicator(tabId, mode, detail = {}) {
+  if (!tabId) return;
+  await chrome.tabs
+    .sendMessage(tabId, {
+      type: "octopus.controlIndicator",
+      mode,
+      ...detail,
+    })
+    .catch(() => null);
 }
 
 function waitForTabComplete(tabId, timeoutMs = 10000) {
@@ -274,6 +289,10 @@ async function validateCommandLease(command) {
   const tabId = String(tab.id);
   const expectedTabId = leaseTabId(lease);
   if (lease.require_same_tab !== false && expectedTabId && tabId !== expectedTabId) {
+    await setPageControlIndicator(tab.id, "paused", {
+      reason: "active_tab_changed",
+      lease,
+    });
     await reportControlEvent({
       type: "human_interrupt",
       reason: "active_tab_changed",
@@ -294,6 +313,10 @@ async function validateCommandLease(command) {
   const expectedUrl = leaseTabUrl(lease);
   const actualUrl = comparableUrl(tab.url);
   if (lease.require_same_url !== false && expectedUrl && actualUrl !== expectedUrl) {
+    await setPageControlIndicator(tab.id, "paused", {
+      reason: "tab_url_changed",
+      lease,
+    });
     await reportControlEvent({
       type: "human_interrupt",
       reason: "tab_url_changed",
@@ -315,6 +338,10 @@ async function validateCommandLease(command) {
     Number(recentActivity.at || 0) >= issuedAt &&
     !READ_ONLY_ACTIONS.has(String(command.action || ""))
   ) {
+    await setPageControlIndicator(tab.id, "paused", {
+      reason: recentActivity.kind,
+      lease,
+    });
     await reportControlEvent({
       type: "human_interrupt",
       reason: recentActivity.kind,
@@ -336,6 +363,10 @@ async function executeCommand(command) {
 
   activeLease = lease;
   try {
+    await setPageControlIndicator(tabId, "action", {
+      action,
+      lease,
+    });
     if (action === "navigate") {
       const url = String(params.url || "");
       if (!url) throw new Error("url is required");
@@ -365,6 +396,9 @@ async function executeCommand(command) {
     return { ok: true, url: next.url || "", title: next.title || "" };
   } finally {
     activeLease = null;
+    await setPageControlIndicator(tabId, "idle", {
+      action,
+    });
   }
 }
 
@@ -524,6 +558,10 @@ chrome.tabs.onActivated.addListener(() => {
       .then((tab) => {
         const expectedTabId = leaseTabId(activeLease);
         if (expectedTabId && String(tab.id) !== expectedTabId) {
+          void setPageControlIndicator(tab.id, "paused", {
+            reason: "active_tab_changed",
+            lease: activeLease,
+          });
           return reportControlEvent({
             type: "human_interrupt",
             reason: "active_tab_changed",

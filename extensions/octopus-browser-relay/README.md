@@ -26,6 +26,8 @@ The Chrome Side Panel is the recommended external-browser experience:
 - The Agent chat, approvals, current task, and action log stay in the side panel.
 - Page overlays are avoided by default; use the `页面轻面板` button only as a fallback.
 - `@Chrome` turns prefer the extension relay, so signed-in pages and browser extensions stay available.
+- While Agent owns a tab lease, the controlled page gets a thin edge light only;
+  it is non-interactive, non-blocking, and avoids aurora/gradient effects.
 
 ## Bookmarklet mode
 

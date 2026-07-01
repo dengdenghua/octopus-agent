@@ -66,6 +66,8 @@ def test_background_enforces_tab_control_lease() -> None:
 
     assert "validateCommandLease" in js
     assert "browser_relay_control_interrupted" in js
+    assert "setPageControlIndicator" in js
+    assert '"octopus.controlIndicator"' in js
     assert "active_tab_changed" in js
     assert "tab_url_changed" in js
     assert 'type === "octopus.control"' in js
@@ -80,3 +82,17 @@ def test_content_script_reports_trusted_user_activity() -> None:
     assert 'type: "octopus.userActivity"' in js
     assert '"pointerdown"' in js
     assert '"input"' in js
+
+
+def test_content_script_renders_nonblocking_edge_light_not_aurora_overlay() -> None:
+    js = (EXTENSION / "content.js").read_text(encoding="utf-8")
+
+    assert "octopus-browser-control-indicator" in js
+    assert "pointer-events: none" in js
+    assert "position: fixed" in js
+    assert "inset: 0" in js
+    assert "box-shadow:" in js
+    assert "octopus-control-edge-pulse" in js
+    assert "prefers-reduced-motion" in js
+    assert "aurora" not in js.lower()
+    assert "linear-gradient" not in js.lower()
