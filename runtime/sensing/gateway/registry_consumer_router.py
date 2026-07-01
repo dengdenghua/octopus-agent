@@ -98,6 +98,10 @@ def _scaffold_local_agent_from_registry_asset(asset: Any) -> tuple[str, Path]:
     return agent_id, agent_root
 
 
+def _asset_type(asset_id: str) -> str:
+    return asset_id.split("/", 1)[0]
+
+
 def _register_runtime(skill_registry: Any, skills_root: Path) -> int:
     """把 skills_root 下的 prompt-skill 注册进**活 registry**(无需重启)。
     已注册的同名会被 register_market_skills 自身跳过,故只净增新装的。"""
@@ -282,7 +286,7 @@ def create_registry_consumer_router(
 
         if "/" not in asset_id:
             asset_id = f"role/{asset_id}"
-        if not asset_id.startswith(_ROLE_ASSET_TYPES):
+        if _asset_type(asset_id) not in _ROLE_ASSET_TYPES:
             raise HTTPException(400, f"not a role asset: {asset_id}")
         try:
             asset = RegistryClient(base).fetch(asset_id)

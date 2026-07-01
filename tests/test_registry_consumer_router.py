@@ -1,0 +1,134 @@
+from __future__ import annotations
+
+import json
+
+import pytest
+
+fastapi = pytest.importorskip("fastapi")
+from fastapi import FastAPI  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from octopus_runtime.client import AssetPayload, RegistryAsset  # noqa: E402
+from runtime.sensing.gateway.registry_consumer_router import (  # noqa: E402
+    create_registry_consumer_router,
+)
+
+
+class FakeRegistryClient:
+    def __init__(self, _base_url: str) -> None:
+        pass
+
+    def list_assets(self, type_: str | None = None) -> list[RegistryAsset]:
+        assets = [
+            RegistryAsset(
+                id="role/researcher",
+                type="role",
+                kind="data",
+                name="Researcher",
+                description="Research role",
+                category="research",
+                tags=["analysis"],
+            ),
+            RegistryAsset(
+                id="twin-role/operator",
+                type="twin-role",
+                kind="data",
+                name="Operator",
+                description="Operator role",
+                category="ops",
+                tags=["ops"],
+            ),
+            RegistryAsset(
+                id="plugin/browser-tool",
+                type="plugin",
+                kind="code",
+                name="Browser Tool",
+                description="Executable plugin",
+                category="browser",
+            ),
+        ]
+        return [asset for asset in assets if type_ is None or asset.type == type_]
+
+    def list_skills(self) -> list[RegistryAsset]:
+        return []
+
+    def fetch(self, asset_id: str) -> AssetPayload:
+        if asset_id == "role/researcher":
+            return AssetPayload(
+                id="role/researcher",
+                type="role",
+                kind="data",
+                name="Researcher",
+                description="Research role",
+                category="research",
+                tags=["analysis"],
+                body="You are a careful researcher.",
+            )
+        if asset_id == "plugin/browser-tool":
+            return AssetPayload(
+                id="plugin/browser-tool",
+                type="plugin",
+                kind="code",
+                name="Browser Tool",
+                description="Executable plugin",
+                category="browser",
+                body="plugin manifest",
+            )
+        raise KeyError(asset_id)
+
+
+@pytest.fixture
+def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
+    import octopus_runtime
+    from runtime.execution.agents import loader
+
+    monkeypatch.setattr(octopus_runtime, "RegistryClient", FakeRegistryClient)
+    monkeypatch.setattr(loader, "default_agents_root", lambda: tmp_path / "agents")
+
+    app = FastAPI()
+    app.include_router(create_registry_consumer_router(registry_base="https://registry.test"))
+    return TestClient(app)
+
+
+def test_lists_registry_roles(client: TestClient) -> None:
+    data = client.get("/api/registry/roles").json()
+
+    assert data["source"] == "https://registry.test"
+    assert data["total"] == 2
+    assert {role["id"] for role in data["roles"]} == {
+        "role/researcher",
+        "twin-role/operator",
+    }
+
+
+def test_installs_registry_role_as_local_agent(client: TestClient, tmp_path) -> None:
+    data = client.post("/api/registry/roles/role/researcher/install").json()
+
+    assert data["installed"] is True
+    assert data["agent_id"] == "registry_researcher"
+    agent_root = tmp_path / "agents" / "registry_researcher"
+    profile = json.loads((agent_root / "profile.jsonc").read_text(encoding="utf-8"))
+    assert profile["source"] == "registry"
+    assert profile["name"] == "Researcher"
+    assert (agent_root / "agent-core" / "SOUL.md").read_text(
+        encoding="utf-8"
+    ) == "You are a careful researcher."
+
+
+def test_rejects_role_install_for_non_role_asset(client: TestClient) -> None:
+    resp = client.post("/api/registry/roles/roleplay/fake/install")
+
+    assert resp.status_code == 400
+    assert "not a role asset" in resp.json()["detail"]
+
+
+def test_plugins_are_browsable_but_not_installable(client: TestClient) -> None:
+    data = client.get("/api/registry/plugins").json()
+
+    assert data["installable"] is False
+    assert data["total"] == 1
+    assert data["plugins"][0]["id"] == "plugin/browser-tool"
+
+    detail = client.get("/api/registry/plugins/browser-tool").json()
+    assert detail["installable"] is False
+    assert detail["body_preview"] == "plugin manifest"
