@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import sqlite3
 
 from runtime.memory.cowork import service
@@ -134,7 +135,9 @@ def test_tick_once_records_failure_health(tmp_path, monkeypatch) -> None:
     gs, aw = _setup(tmp_path)
     runner = AsyncWorkRunner(aw, gs, lambda t, c: "r")
 
-    monkeypatch.setattr(aw, "threads_with_pending", lambda: (_ for _ in ()).throw(RuntimeError("db down")))
+    monkeypatch.setattr(
+        aw, "threads_with_pending", lambda: (_ for _ in ()).throw(RuntimeError("db down"))
+    )
 
     assert runner.tick_once() == 0
 
@@ -144,6 +147,23 @@ def test_tick_once_records_failure_health(tmp_path, monkeypatch) -> None:
     assert status["consecutive_failures"] == 1
     assert status["last_error"] == "RuntimeError: db down"
     assert status["last_failure_at"]
+
+
+def test_tick_once_self_heals_missing_async_work_directory(tmp_path) -> None:
+    base_dir = tmp_path / "cowork"
+    gs = GroupStore(base_dir=base_dir)
+    aw = AsyncWorkStore(base_dir=base_dir, group_store=gs)
+    runner = AsyncWorkRunner(aw, gs, lambda t, c: "r")
+
+    shutil.rmtree(base_dir)
+
+    assert runner.tick_once() == 0
+    assert base_dir.exists()
+    assert aw._db.exists()  # noqa: SLF001 - verifies storage self-heal path
+    status = runner.status()
+    assert status["total_ticks"] == 1
+    assert status["total_failures"] == 0
+    assert status["last_error"] is None
 
 
 def test_drain_all_recovers_stale_working_before_polling(tmp_path) -> None:

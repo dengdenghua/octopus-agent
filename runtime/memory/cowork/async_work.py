@@ -89,8 +89,12 @@ class AsyncWorkStore:
         self._db = d / "async_work.db"
         self._lock = threading.Lock()
         self._groups = group_store or GroupStore(base_dir=d)
-        with self._lock, sqlite3.connect(str(self._db)) as conn:
+        with self._lock, self._connect() as conn:
             self._ensure_schema(conn)
+
+    def _connect(self) -> sqlite3.Connection:
+        self._db.parent.mkdir(parents=True, exist_ok=True)
+        return sqlite3.connect(str(self._db), timeout=10.0)
 
     def _ensure_schema(self, conn: sqlite3.Connection) -> None:
         conn.execute(
@@ -104,10 +108,7 @@ class AsyncWorkStore:
         )
 
     def _migrate_schema(self, conn: sqlite3.Connection) -> None:
-        columns = {
-            row[1]
-            for row in conn.execute("PRAGMA table_info(async_tasks)").fetchall()
-        }
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(async_tasks)").fetchall()}
         if "updated_at" not in columns:
             conn.execute("ALTER TABLE async_tasks ADD COLUMN updated_at TEXT")
             conn.execute("UPDATE async_tasks SET updated_at = COALESCE(created_at, ?)", (_now(),))
@@ -117,9 +118,16 @@ class AsyncWorkStore:
 
     def _row_to_task(self, row) -> AsyncTask:
         return AsyncTask(
-            task_id=row[0], thread_id=row[1], assignee=row[2], prompt=row[3],
-            status=row[4], result=row[5], created_by=row[6], created_at=row[7],
-            updated_at=row[8] or row[7], attempts=int(row[9] or 0),
+            task_id=row[0],
+            thread_id=row[1],
+            assignee=row[2],
+            prompt=row[3],
+            status=row[4],
+            result=row[5],
+            created_by=row[6],
+            created_at=row[7],
+            updated_at=row[8] or row[7],
+            attempts=int(row[9] or 0),
         )
 
     def assign(self, thread_id: str, assignee: str, prompt: str, *, actor: str) -> AsyncTask:
@@ -130,17 +138,28 @@ class AsyncWorkStore:
         if not assignee:
             raise ValueError("assignee is required")
         now = _now()
-        task = AsyncTask(uuid4().hex, thread_id, assignee, prompt, "pending", None,
-                         actor, now, now, 0)
-        with self._lock, sqlite3.connect(str(self._db)) as conn:
+        task = AsyncTask(
+            uuid4().hex, thread_id, assignee, prompt, "pending", None, actor, now, now, 0
+        )
+        with self._lock, self._connect() as conn:
             self._ensure_schema(conn)
             conn.execute(
                 "INSERT INTO async_tasks("
                 "task_id, thread_id, assignee, prompt, status, result, "
                 "created_by, created_at, updated_at, attempts"
                 ") VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (task.task_id, thread_id, assignee, prompt, "pending", None,
-                 task.created_by, task.created_at, task.updated_at, task.attempts),
+                (
+                    task.task_id,
+                    thread_id,
+                    assignee,
+                    prompt,
+                    "pending",
+                    None,
+                    task.created_by,
+                    task.created_at,
+                    task.updated_at,
+                    task.attempts,
+                ),
             )
         return task
 
@@ -164,7 +183,7 @@ class AsyncWorkStore:
         else:
             where = "WHERE task_id=? AND status=?"
             params = (status, result, _now(), task_id, expected_status)
-        with self._lock, sqlite3.connect(str(self._db)) as conn:
+        with self._lock, self._connect() as conn:
             self._ensure_schema(conn)
             cur = conn.execute(
                 "UPDATE async_tasks SET status=?, result=COALESCE(?, result), updated_at=? "
@@ -176,7 +195,7 @@ class AsyncWorkStore:
     def claim(self, task_id: str) -> bool:
         """A runner takes the task (pending → working). False if not pending."""
         task_id = require_cowork_id(task_id, label="task_id")
-        with self._lock, sqlite3.connect(str(self._db)) as conn:
+        with self._lock, self._connect() as conn:
             self._ensure_schema(conn)
             cur = conn.execute(
                 "UPDATE async_tasks SET status='working', updated_at=?, "
@@ -238,7 +257,7 @@ class AsyncWorkStore:
             max_attempts = 3
         cutoff = (datetime.now(UTC) - timedelta(seconds=max_age_seconds)).isoformat()
         now = _now()
-        with self._lock, sqlite3.connect(str(self._db)) as conn:
+        with self._lock, self._connect() as conn:
             self._ensure_schema(conn)
             failed = conn.execute(
                 "UPDATE async_tasks SET status='failed', updated_at=?, "
@@ -257,7 +276,7 @@ class AsyncWorkStore:
 
     def get(self, task_id: str) -> AsyncTask | None:
         task_id = require_cowork_id(task_id, label="task_id")
-        with self._lock, sqlite3.connect(str(self._db)) as conn:
+        with self._lock, self._connect() as conn:
             self._ensure_schema(conn)
             row = conn.execute("SELECT * FROM async_tasks WHERE task_id=?", (task_id,)).fetchone()
         return self._row_to_task(row) if row else None
@@ -268,7 +287,7 @@ class AsyncWorkStore:
 
     def threads_with_pending(self) -> list[str]:
         """Distinct threads that have at least one pending task (for a runner)."""
-        with self._lock, sqlite3.connect(str(self._db)) as conn:
+        with self._lock, self._connect() as conn:
             self._ensure_schema(conn)
             rows = conn.execute(
                 "SELECT DISTINCT thread_id FROM async_tasks WHERE status='pending'"
@@ -288,12 +307,9 @@ class AsyncWorkStore:
             args: tuple[str, ...] = ()
         else:
             thread_id = require_cowork_id(thread_id, label="thread_id")
-            sql = (
-                "SELECT status, COUNT(*) FROM async_tasks "
-                "WHERE thread_id=? GROUP BY status"
-            )
+            sql = "SELECT status, COUNT(*) FROM async_tasks WHERE thread_id=? GROUP BY status"
             args = (thread_id,)
-        with self._lock, sqlite3.connect(str(self._db)) as conn:
+        with self._lock, self._connect() as conn:
             self._ensure_schema(conn)
             rows = conn.execute(sql, args).fetchall()
         out = {status: 0 for status in _STATUSES}
@@ -304,7 +320,7 @@ class AsyncWorkStore:
 
     def list(self, thread_id: str) -> list[AsyncTask]:
         thread_id = require_cowork_id(thread_id, label="thread_id")
-        with self._lock, sqlite3.connect(str(self._db)) as conn:
+        with self._lock, self._connect() as conn:
             self._ensure_schema(conn)
             rows = conn.execute(
                 "SELECT * FROM async_tasks WHERE thread_id=? ORDER BY created_at", (thread_id,)
@@ -315,7 +331,7 @@ class AsyncWorkStore:
         thread_id = require_cowork_id(thread_id, label="thread_id")
         if status not in _STATUSES:
             raise ValueError(f"invalid status: {status!r}")
-        with self._lock, sqlite3.connect(str(self._db)) as conn:
+        with self._lock, self._connect() as conn:
             self._ensure_schema(conn)
             rows = conn.execute(
                 "SELECT * FROM async_tasks WHERE thread_id=? AND status=? ORDER BY created_at",
