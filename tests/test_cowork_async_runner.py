@@ -40,8 +40,15 @@ def test_runner_executes_and_posts_to_board(tmp_path) -> None:
 def test_runner_passes_grant_sliced_history(tmp_path) -> None:
     gs, aw = _setup(tmp_path)
     # worker joined at message 5 with from_join → should only see messages 5..
-    service.invite_member(gs, "t", actor="u", target_id="worker", kind="agent",
-                          grant=ContextGrant(scope="from_join"), at_message=5)
+    service.invite_member(
+        gs,
+        "t",
+        actor="u",
+        target_id="worker",
+        kind="agent",
+        grant=ContextGrant(scope="from_join"),
+        at_message=5,
+    )
     captured = {}
 
     def execute(task, context):
@@ -49,7 +56,9 @@ def test_runner_passes_grant_sliced_history(tmp_path) -> None:
         captured["scope"] = context["grant_scope"]
         return "ok"
 
-    runner = AsyncWorkRunner(aw, gs, execute, history_provider=lambda _t: [f"m{i}" for i in range(10)])
+    runner = AsyncWorkRunner(
+        aw, gs, execute, history_provider=lambda _t: [f"m{i}" for i in range(10)]
+    )
     aw.assign("t", "worker", "summarize", actor="u")
     runner.drain("t")
     assert captured["scope"] == "from_join"
@@ -84,6 +93,30 @@ def test_drain_all_across_threads(tmp_path) -> None:
     assert aw.threads_with_pending() == []
 
 
+def test_drain_all_recovers_stale_working_before_polling(tmp_path) -> None:
+    gs, aw = _setup(tmp_path)
+    task = aw.assign("t", "worker", "recover during drain", actor="u")
+    assert aw.claim(task.task_id) is True
+    with aw._lock, sqlite3.connect(str(aw._db)) as conn:  # noqa: SLF001
+        conn.execute(
+            "UPDATE async_tasks SET updated_at='2000-01-01T00:00:00+00:00' WHERE task_id=?",
+            (task.task_id,),
+        )
+
+    runner = AsyncWorkRunner(
+        aw,
+        gs,
+        lambda t, c: f"rerun: {t.prompt}",
+        recover_stale_seconds=1,
+    )
+
+    assert runner.drain_all() == 1
+    finished = aw.get(task.task_id)
+    assert finished.status == "done"
+    assert finished.attempts == 2
+    assert finished.result == "rerun: recover during drain"
+
+
 def test_stale_working_tasks_are_recovered_or_failed(tmp_path) -> None:
     gs, aw = _setup(tmp_path)
     retry = aw.assign("t", "worker", "retry me", actor="u")
@@ -93,8 +126,7 @@ def test_stale_working_tasks_are_recovered_or_failed(tmp_path) -> None:
 
     with aw._lock, sqlite3.connect(str(aw._db)) as conn:  # noqa: SLF001
         conn.execute(
-            "UPDATE async_tasks SET updated_at='2000-01-01T00:00:00+00:00' "
-            "WHERE task_id=?",
+            "UPDATE async_tasks SET updated_at='2000-01-01T00:00:00+00:00' WHERE task_id=?",
             (retry.task_id,),
         )
         conn.execute(

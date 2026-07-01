@@ -42,12 +42,16 @@ class AsyncWorkRunner:
         *,
         competence: CompetenceStore | None = None,
         history_provider: HistoryProvider | None = None,
+        recover_stale_seconds: float = 900.0,
+        max_attempts: int = 3,
     ) -> None:
         self._store = store
         self._groups = group_store
         self._execute = execute
         self._competence = competence
         self._history = history_provider or (lambda _tid: [])
+        self._recover_stale_seconds = max(0.0, float(recover_stale_seconds))
+        self._max_attempts = max(1, int(max_attempts))
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -92,7 +96,18 @@ class AsyncWorkRunner:
                 ran += 1
         return ran
 
+    def recover_stale(self) -> dict[str, int]:
+        """Requeue abandoned working tasks before polling pending work."""
+        recovered = self._store.recover_stale_working(
+            max_age_seconds=self._recover_stale_seconds,
+            max_attempts=self._max_attempts,
+        )
+        if recovered.get("requeued") or recovered.get("failed"):
+            _LOG.warning("async runner recovered stale tasks: %s", recovered)
+        return recovered
+
     def drain_all(self) -> int:
+        self.recover_stale()
         return sum(self.drain(tid) for tid in self._store.threads_with_pending())
 
     # ── background daemon ────────────────────────────────────────────────────
