@@ -11,6 +11,7 @@ const state = {
   streaming: false,
   threadId: localStorage.getItem(THREAD_KEY) || makeThreadId(),
   activeTab: null,
+  control: null,
   assistantItems: new Map(),
 };
 
@@ -19,6 +20,9 @@ const el = {
   relayDot: document.getElementById("relayDot"),
   tabTitle: document.getElementById("tabTitle"),
   tabUrl: document.getElementById("tabUrl"),
+  controlTitle: document.getElementById("controlTitle"),
+  controlDetail: document.getElementById("controlDetail"),
+  stopButton: document.getElementById("stopButton"),
   approvalDock: document.getElementById("approvalDock"),
   messages: document.getElementById("messages"),
   composer: document.getElementById("composer"),
@@ -65,6 +69,9 @@ function wireUi() {
     )}`;
     chrome.tabs.create({ url });
   });
+  el.stopButton.addEventListener("click", () => {
+    void toggleControlStop();
+  });
 }
 
 function makeThreadId() {
@@ -89,10 +96,12 @@ async function refreshRelayStatus() {
   }
   state.apiBase = status.base_url || state.apiBase;
   state.activeTab = status.active_tab || status.relay?.active_tab || null;
+  state.control = status.relay?.control || null;
   const relayConnected = status.relay?.connected === true;
   el.relayDot.className = `status-dot ${relayConnected ? "connected" : ""}`;
   el.tabTitle.textContent = state.activeTab?.title || "No active tab";
   el.tabUrl.textContent = state.activeTab?.url || "Waiting for Chrome relay";
+  renderControl();
   setConnectionText(
     state.connected
       ? relayConnected
@@ -107,6 +116,56 @@ async function refreshRelayStatus() {
 function setConnectionText(text) {
   el.connectionText.textContent = text;
   el.sendButton.disabled = !state.connected || state.streaming;
+}
+
+function renderControl() {
+  const control = state.control || {};
+  const mode = String(control.mode || "idle");
+  if (mode === "agent_active") {
+    const lease = control.lease || {};
+    el.controlTitle.textContent = "Agent 正在接管当前标签页";
+    el.controlDetail.textContent = `${lease.action || "browser"} · 切换标签或手动输入会自动暂停`;
+    el.stopButton.textContent = "停止";
+    el.stopButton.disabled = false;
+    return;
+  }
+  if (mode === "interrupted") {
+    const interrupt = control.human_interrupt || {};
+    el.controlTitle.textContent = "已暂停 Agent 页面操作";
+    el.controlDetail.textContent = interrupt.reason || "检测到人工介入";
+    el.stopButton.textContent = "恢复";
+    el.stopButton.disabled = false;
+    return;
+  }
+  el.controlTitle.textContent = state.streaming ? "Agent 正在思考" : "控制权空闲";
+  el.controlDetail.textContent = state.streaming
+    ? "如需打断后续页面操作，可点停止。"
+    : "你可以随时操作页面。";
+  el.stopButton.textContent = "停止";
+  el.stopButton.disabled = !state.streaming;
+}
+
+async function toggleControlStop() {
+  const mode = String(state.control?.mode || "idle");
+  const action = mode === "interrupted" ? "resume" : "stop";
+  const result = await runtimeMessage({
+    type: "octopus.control",
+    action,
+    reason: action === "stop" ? "operator_stop" : "operator_resume",
+  });
+  if (!result?.ok) {
+    appendSystem(`控制权切换失败: ${result?.error || "unknown error"}`, true);
+    return;
+  }
+  state.control = result.control || null;
+  if (action === "stop") {
+    state.streaming = false;
+    appendSystem("已停止后续 Chrome 页面操作。");
+  } else {
+    appendSystem("已恢复 Chrome 页面操作。");
+  }
+  renderControl();
+  setConnectionText(state.connected ? "Realtime connected" : "Connecting");
 }
 
 function connectRealtime() {
@@ -226,6 +285,11 @@ async function sendPrompt() {
   el.promptInput.value = "";
   state.streaming = true;
   setConnectionText("Agent working");
+  await runtimeMessage({
+    type: "octopus.control",
+    action: "resume",
+    reason: "new_chrome_turn",
+  });
   const prompt = text.toLowerCase().startsWith("@chrome")
     ? text
     : `@Chrome\n${text}`;

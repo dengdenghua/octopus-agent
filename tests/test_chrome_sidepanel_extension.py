@@ -29,6 +29,8 @@ def test_sidepanel_is_extension_native_not_page_overlay() -> None:
     assert "<script>" not in html
     assert "Octopus Chrome Sidecar" in html
     assert "页面轻面板" in html
+    assert 'id="controlTitle"' in html
+    assert 'id="stopButton"' in html
 
 
 def test_sidepanel_sends_chrome_turns_over_realtime() -> None:
@@ -44,6 +46,8 @@ def test_sidepanel_sends_chrome_turns_over_realtime() -> None:
     assert "showApprovalRequest" in js
     assert 'action: "accept"' in js
     assert 'action: "decline"' in js
+    assert 'type: "octopus.control"' in js
+    assert "toggleControlStop" in js
 
 
 def test_background_opens_sidepanel_and_keeps_bookmarklet_fallback() -> None:
@@ -55,3 +59,24 @@ def test_background_opens_sidepanel_and_keeps_bookmarklet_fallback() -> None:
     assert "openPageAgent" in js
     assert 'type === "octopus.status"' in js
     assert 'type === "octopus.openPageAgent"' in js
+
+
+def test_background_enforces_tab_control_lease() -> None:
+    js = (EXTENSION / "background.js").read_text(encoding="utf-8")
+
+    assert "validateCommandLease" in js
+    assert "browser_relay_control_interrupted" in js
+    assert "active_tab_changed" in js
+    assert "tab_url_changed" in js
+    assert 'type === "octopus.control"' in js
+    assert 'type === "octopus.userActivity"' in js
+
+
+def test_content_script_reports_trusted_user_activity() -> None:
+    js = (EXTENSION / "content.js").read_text(encoding="utf-8")
+
+    assert "reportUserActivity" in js
+    assert "event?.isTrusted" in js
+    assert 'type: "octopus.userActivity"' in js
+    assert '"pointerdown"' in js
+    assert '"input"' in js

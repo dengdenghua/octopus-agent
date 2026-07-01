@@ -291,6 +291,103 @@ def test_browser_relay_command_includes_site_policy(client: TestClient) -> None:
     assert response.json()["site_policy"]["target_host"] == "example.test"
 
 
+def test_browser_relay_command_carries_tab_control_lease(client: TestClient) -> None:
+    client.post(
+        "/api/browser/relay/heartbeat",
+        json={
+            "extension_version": "test",
+            "active_tab": {"id": 7, "url": "https://example.test", "title": "Example"},
+        },
+    )
+    holder: dict[str, object] = {}
+
+    def send_command() -> None:
+        holder["response"] = client.post(
+            "/api/browser/relay/command",
+            json={"action": "click", "selector": "#go", "timeout_seconds": 1},
+        )
+
+    thread = threading.Thread(target=send_command)
+    thread.start()
+    command = None
+    deadline = time.time() + 1
+    while time.time() < deadline and command is None:
+        heartbeat = client.post("/api/browser/relay/heartbeat", json={})
+        commands = heartbeat.json()["commands"]
+        command = commands[0] if commands else None
+        if command is None:
+            time.sleep(0.02)
+
+    assert command is not None
+    assert command["lease"]["schema"] == "octopus.browser_relay_tab_lease.v1"
+    assert command["lease"]["tab"]["id"] == 7
+    assert command["lease"]["require_same_tab"] is True
+
+    status = client.get("/api/browser/relay/status").json()
+    assert status["control"]["mode"] == "agent_active"
+
+    client.post(
+        "/api/browser/relay/result",
+        json={"id": command["id"], "result": {"ok": True}},
+    )
+    thread.join(timeout=2)
+
+    assert holder["response"].status_code == 200
+    assert holder["response"].json()["control"]["mode"] == "idle"
+
+
+def test_browser_relay_stop_interrupts_active_lease(client: TestClient) -> None:
+    client.post(
+        "/api/browser/relay/heartbeat",
+        json={
+            "extension_version": "test",
+            "active_tab": {"id": 7, "url": "https://example.test", "title": "Example"},
+        },
+    )
+    holder: dict[str, object] = {}
+
+    def send_command() -> None:
+        holder["response"] = client.post(
+            "/api/browser/relay/command",
+            json={"action": "type", "selector": "#q", "text": "hello", "timeout_seconds": 2},
+        )
+
+    thread = threading.Thread(target=send_command)
+    thread.start()
+    command = None
+    deadline = time.time() + 1
+    while time.time() < deadline and command is None:
+        heartbeat = client.post("/api/browser/relay/heartbeat", json={})
+        commands = heartbeat.json()["commands"]
+        command = commands[0] if commands else None
+        if command is None:
+            time.sleep(0.02)
+
+    assert command is not None
+
+    stopped = client.post(
+        "/api/browser/relay/control",
+        json={"action": "stop", "reason": "operator_stop"},
+    )
+    thread.join(timeout=2)
+
+    assert stopped.status_code == 200
+    assert stopped.json()["control"]["mode"] == "interrupted"
+    assert holder["response"].status_code == 500
+    assert "interrupted" in holder["response"].text
+
+    blocked = client.post(
+        "/api/browser/relay/command",
+        json={"action": "extract", "timeout_seconds": 0.1},
+    )
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"]["control"]["mode"] == "interrupted"
+
+    resumed = client.post("/api/browser/relay/control", json={"action": "resume"})
+    assert resumed.status_code == 200
+    assert resumed.json()["control"]["mode"] == "idle"
+
+
 def test_browser_relay_blocklist_blocks_navigation(client: TestClient) -> None:
     client.post(
         "/api/browser/relay/heartbeat",

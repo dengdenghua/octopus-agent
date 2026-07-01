@@ -120,7 +120,10 @@ def create_browser_router(
         "active_tab": None,
         "pending_commands": [],
         "command_results": {},
+        "control_lease": None,
+        "human_interrupt": None,
     }
+    relay_read_only_actions = {"extract", "aria", "screenshot", "wait"}
 
     def _normalize_relay_host_patterns(value: Any) -> list[str]:
         raw_items: list[Any]
@@ -263,6 +266,123 @@ def create_browser_router(
             target_host=target_host,
             target_url=target_url,
         )
+
+    def _relay_active_tab_snapshot() -> dict[str, Any] | None:
+        active_tab = browser_relay_state.get("active_tab")
+        if not isinstance(active_tab, dict):
+            return None
+        return {
+            "id": active_tab.get("id"),
+            "url": str(active_tab.get("url") or ""),
+            "title": str(active_tab.get("title") or ""),
+        }
+
+    def _relay_control_lease() -> dict[str, Any] | None:
+        lease = browser_relay_state.get("control_lease")
+        if not isinstance(lease, dict):
+            return None
+        expires_at = int(lease.get("expires_at") or 0)
+        if expires_at and expires_at <= _now_ts():
+            browser_relay_state["control_lease"] = None
+            return None
+        return lease
+
+    def _relay_control_snapshot() -> dict[str, Any]:
+        lease = _relay_control_lease()
+        interrupt = browser_relay_state.get("human_interrupt")
+        interrupt = interrupt if isinstance(interrupt, dict) else None
+        if interrupt:
+            mode = "interrupted"
+        elif lease:
+            mode = "agent_active"
+        else:
+            mode = "idle"
+        return {
+            "schema": "octopus.browser_relay_control.v1",
+            "mode": mode,
+            "lease": lease,
+            "human_interrupt": interrupt,
+            "blocked": bool(interrupt),
+            "pending_commands": len(browser_relay_state.get("pending_commands") or []),
+        }
+
+    def _record_relay_interrupt(
+        *,
+        reason: str,
+        source: str,
+        detail: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        interrupt = {
+            "schema": "octopus.browser_relay_human_interrupt.v1",
+            "reason": reason,
+            "source": source,
+            "at": _now_ts(),
+            "active_tab": _relay_active_tab_snapshot(),
+            "detail": detail or {},
+        }
+        results = browser_relay_state.setdefault("command_results", {})
+        for item in browser_relay_state.get("pending_commands") or []:
+            command_id = str(item.get("id") or "").strip()
+            if command_id:
+                results[command_id] = {
+                    "ok": False,
+                    "id": command_id,
+                    "error": f"browser relay interrupted: {reason}",
+                    "control": {
+                        "schema": "octopus.browser_relay_control.v1",
+                        "mode": "interrupted",
+                        "human_interrupt": interrupt,
+                        "blocked": True,
+                    },
+                }
+        active_lease = browser_relay_state.get("control_lease")
+        if isinstance(active_lease, dict):
+            command_id = str(active_lease.get("command_id") or "").strip()
+            if command_id:
+                results[command_id] = {
+                    "ok": False,
+                    "id": command_id,
+                    "error": f"browser relay interrupted: {reason}",
+                    "control": {
+                        "schema": "octopus.browser_relay_control.v1",
+                        "mode": "interrupted",
+                        "human_interrupt": interrupt,
+                        "blocked": True,
+                    },
+                }
+        browser_relay_state["human_interrupt"] = interrupt
+        browser_relay_state["control_lease"] = None
+        browser_relay_state["pending_commands"] = []
+        return interrupt
+
+    def _clear_relay_interrupt() -> None:
+        browser_relay_state["human_interrupt"] = None
+
+    def _make_relay_lease(
+        *,
+        command_id: str,
+        action: str,
+        body: dict[str, Any],
+        site_policy: dict[str, Any],
+    ) -> dict[str, Any]:
+        timeout_seconds = float(body.get("timeout_seconds") or 8)
+        lease_seconds = float(body.get("lease_seconds") or max(5.0, timeout_seconds + 2.0))
+        lease_seconds = max(3.0, min(60.0, lease_seconds))
+        active_tab = _relay_active_tab_snapshot()
+        return {
+            "schema": "octopus.browser_relay_tab_lease.v1",
+            "id": f"lease-{command_id}",
+            "command_id": command_id,
+            "owner": "agent",
+            "action": action,
+            "read_only": action in relay_read_only_actions,
+            "issued_at": _now_ts(),
+            "expires_at": _now_ts() + int(lease_seconds),
+            "tab": active_tab,
+            "require_same_tab": active_tab is not None,
+            "require_same_url": bool(active_tab and active_tab.get("url")),
+            "site_policy": site_policy,
+        }
 
     def _resolve_browser_extension_path() -> Path:
         """Locate the companion browser-relay extension on disk.
@@ -1396,6 +1516,7 @@ def create_browser_router(
             "extension_path": str(extension_path),
             "manifest_exists": manifest.exists(),
             "site_policy": _relay_policy_snapshot(),
+            "control": _relay_control_snapshot(),
         }
 
     @router.post("/api/browser/relay/heartbeat")
@@ -1410,13 +1531,45 @@ def create_browser_router(
                 "url": active_tab.get("url"),
                 "title": active_tab.get("title"),
             }
+        control_event = body.get("control_event")
+        if isinstance(control_event, dict):
+            event_type = str(control_event.get("type") or "").strip()
+            if event_type == "human_interrupt":
+                _record_relay_interrupt(
+                    reason=str(control_event.get("reason") or "human_activity"),
+                    source=str(control_event.get("source") or "chrome_extension"),
+                    detail={
+                        "activity": control_event.get("activity"),
+                        "lease": control_event.get("lease"),
+                    },
+                )
+            elif event_type == "clear_interrupt":
+                _clear_relay_interrupt()
         pending = list(browser_relay_state.get("pending_commands") or [])
         browser_relay_state["pending_commands"] = []
         return {
             "ok": True,
             "pending_commands": len(pending),
             "commands": pending,
+            "control": _relay_control_snapshot(),
         }
+
+    @router.post("/api/browser/relay/control")
+    def api_browser_relay_control(body: dict[str, Any]) -> dict[str, Any]:
+        action = str(body.get("action") or "").strip()
+        if action in {"stop", "interrupt"}:
+            interrupt = _record_relay_interrupt(
+                reason=str(body.get("reason") or "operator_stop"),
+                source=str(body.get("source") or "side_panel"),
+                detail={"active_tab": _relay_active_tab_snapshot()},
+            )
+            return {"ok": True, "interrupt": interrupt, "control": _relay_control_snapshot()}
+        if action in {"resume", "clear_interrupt"}:
+            _clear_relay_interrupt()
+            return {"ok": True, "control": _relay_control_snapshot()}
+        if action == "status":
+            return {"ok": True, "control": _relay_control_snapshot()}
+        raise HTTPException(400, "action must be one of stop, interrupt, resume, clear_interrupt")
 
     @router.post("/api/browser/relay/command")
     def api_browser_relay_command(body: dict[str, Any]) -> dict[str, Any]:
@@ -1426,6 +1579,24 @@ def create_browser_router(
         action = str(body.get("action") or "").strip()
         if not action:
             raise HTTPException(400, "action is required")
+        control = _relay_control_snapshot()
+        if control["blocked"]:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "browser relay paused by human interrupt",
+                    "control": control,
+                },
+            )
+        active_lease = _relay_control_lease()
+        if active_lease:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "browser relay tab lease is already active",
+                    "control": _relay_control_snapshot(),
+                },
+            )
         site_policy = _relay_site_policy_decision(action, body)
         if site_policy["decision"] == "block":
             raise HTTPException(
@@ -1436,13 +1607,21 @@ def create_browser_router(
                 },
             )
         command_id = str(uuid.uuid4())
+        lease = _make_relay_lease(
+            command_id=command_id,
+            action=action,
+            body=body,
+            site_policy=site_policy,
+        )
         command = {
             "id": command_id,
             "action": action,
             "params": {k: v for k, v in body.items() if k not in {"id", "action"}},
             "site_policy": site_policy,
+            "lease": lease,
             "created_at": _now_ts(),
         }
+        browser_relay_state["control_lease"] = lease
         pending = list(browser_relay_state.get("pending_commands") or [])
         pending.append(command)
         browser_relay_state["pending_commands"] = pending
@@ -1452,9 +1631,12 @@ def create_browser_router(
         while time.time() < deadline:
             result = results.pop(command_id, None)
             if result is not None:
+                if (browser_relay_state.get("control_lease") or {}).get("command_id") == command_id:
+                    browser_relay_state["control_lease"] = None
                 if result.get("ok") is False:
                     raise HTTPException(500, str(result.get("error") or "relay command failed"))
                 result.setdefault("site_policy", site_policy)
+                result["control"] = _relay_control_snapshot()
                 return result
             time.sleep(0.1)
 
@@ -1463,6 +1645,8 @@ def create_browser_router(
             for item in (browser_relay_state.get("pending_commands") or [])
             if item.get("id") != command_id
         ]
+        if (browser_relay_state.get("control_lease") or {}).get("command_id") == command_id:
+            browser_relay_state["control_lease"] = None
         raise HTTPException(504, "browser relay command timed out")
 
     @router.post("/api/browser/relay/result")
@@ -1483,6 +1667,9 @@ def create_browser_router(
             result = {"ok": False, "error": "missing relay result"}
         result.setdefault("ok", True)
         result.setdefault("id", command_id)
+        if (browser_relay_state.get("control_lease") or {}).get("command_id") == command_id:
+            browser_relay_state["control_lease"] = None
+        result["control"] = _relay_control_snapshot()
         browser_relay_state.setdefault("command_results", {})[command_id] = result
         return {"ok": True}
 
