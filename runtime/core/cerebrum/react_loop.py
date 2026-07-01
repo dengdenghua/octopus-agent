@@ -56,7 +56,6 @@ from runtime.core.cerebrum.react_execution import (
 from runtime.core.cerebrum.react_guards import (
     _code_mode_completion_guard,
     _completion_phrase_without_todo_guard,
-    _path_verification_policy_guard,
     _unverified_write_followup_guard,
 )
 from runtime.core.cerebrum.react_loop_controls import (
@@ -82,8 +81,8 @@ from runtime.core.cerebrum.react_parsing import (
     _FINAL_RE,
     _THOUGHT_RE,
     _detect_destructive_calls_in_payload,
-    _detect_secrets_in_payload,
     _detect_dynamic_exec_in_payload,
+    _detect_secrets_in_payload,
     _detect_shell_injection_in_payload,
     _detect_unsafe_deser_in_payload,
     _escape_md_brackets,

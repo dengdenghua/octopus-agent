@@ -14,8 +14,7 @@ import logging
 import shutil
 import subprocess
 from dataclasses import dataclass, field
-from pathlib import Path
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 _logger = logging.getLogger(__name__)

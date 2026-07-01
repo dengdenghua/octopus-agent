@@ -2448,6 +2448,55 @@ def test_unsafe_final_answer_is_guarded_before_streaming() -> None:
     assert "subprocess.run" not in visible
 
 
+def test_unsafe_chat_style_markdown_is_guarded_before_streaming() -> None:
+    """Plain markdown answers must not bypass final-answer security guards."""
+    from runtime.sensing.model_router.models import (
+        CostEntry,
+        ModelResponse,
+        ModelStreamEvent,
+    )
+
+    chunks = [
+        "Here is a quick helper you can paste into your script.\n\n",
+        "It keeps the explanation long enough to cross the chat-style ",
+        "early streaming threshold before the code block is complete, ",
+        "which is the risky path this test pins down.\n\n",
+        "```python\n",
+        "import subprocess\nsubprocess.run(user_cmd, shell=True)\n",
+        "```\n",
+    ]
+    full = "".join(chunks)
+    assert len(full) >= 120
+
+    class _UnsafeChatStyleRouter:
+        def call(self, req: Any) -> _FakeResponse:  # noqa: ARG002
+            return _FakeResponse(text=full)
+
+        def call_stream(self, req: Any):  # noqa: ARG002
+            for c in chunks:
+                yield ModelStreamEvent(type="text_delta", delta=c)
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(
+                    text=full, model="test-model", cost=CostEntry(),
+                ),
+            )
+
+    events, result = _drain(
+        stream_react_loop(
+            _build_stack_with_executor(_UnsafeChatStyleRouter()),
+            _intent("show unsafe markdown"),
+            agent=None,
+            max_iterations=1,
+        )
+    )
+
+    visible = "".join(e["delta"] for e in events if e["type"] == "text_delta")
+    assert "subprocess.run" not in visible
+    assert "shell=True" not in visible
+    assert result is None or "shell-injection guard" in result.final_answer
+
+
 def test_chat_style_zero_anchor_streams_live_after_120_chars() -> None:
     """When the model writes plain markdown without Final Answer/
     Thought/Action markers, the loop must NOT wait for two

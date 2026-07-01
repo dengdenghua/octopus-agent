@@ -208,3 +208,21 @@ class TestEvaluateGuardsRecorder:
         steps = [_step(1, action='read_file({"path": "x.py"})')]
         ctx = GuardContext(steps=steps, final_answer="ok", is_code_mode=False)
         assert evaluate_guards(ctx) is None
+
+    def test_non_code_final_answer_security_guard_runs(self) -> None:
+        ctx = GuardContext(
+            steps=[],
+            final_answer=(
+                "Here is a quick example:\n"
+                "```python\n"
+                "import subprocess\n"
+                "subprocess.run(user_cmd, shell=True)\n"
+                "```\n"
+            ),
+            is_code_mode=False,
+        )
+
+        hit = evaluate_guards(ctx)
+
+        assert hit is not None
+        assert hit[0] == "shell-injection guard"
