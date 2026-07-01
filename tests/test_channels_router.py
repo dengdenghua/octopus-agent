@@ -208,6 +208,21 @@ class TestChannelAssignment:
         r2 = c.post("/api/channels/slack/assistant", json={})
         assert r2.status_code == 400
 
+    def test_assignment_rejects_unsafe_ids(self, tmp_path: Path):
+        app, _, _ = _build_app(tmp_path)
+        c = TestClient(app)
+        r = c.post(
+            f"/api/channels/{'a' * 129}/assistant",
+            json={"agent_id": "coder"},
+        )
+        assert r.status_code == 400
+
+        r2 = c.post(
+            "/api/channels/slack/assistant",
+            json={"agent_id": "a" * 161},
+        )
+        assert r2.status_code == 400
+
     def test_delete_assignment(self, tmp_path: Path):
         app, _, _ = _build_app(tmp_path)
         c = TestClient(app)
@@ -417,6 +432,62 @@ class TestPairings:
         # Implementation note.
         assert r.json()["agent_id"] is None
 
+    def test_state_restore_filters_invalid_and_caps_entries(
+        self, tmp_path: Path,
+    ):
+        from runtime.sensing.gateway import channels_router as mod
+
+        state_file = tmp_path / "dirty.json"
+        assignments = {
+            "slack": "coder",
+            "../bad": "general",
+            "too_long_agent": "a" * 161,
+        }
+        for i in range(mod._MAX_ASSIGNMENTS + 20):
+            assignments[f"chan{i}"] = "general"
+        state_file.write_text(
+            json.dumps({
+                "version": 1,
+                "assignments": assignments,
+                "users": {
+                    "slack": ["U_ALICE", "\x00bad"]
+                    + [f"U{i}" for i in range(mod._MAX_PAIRINGS_PER_CHANNEL + 20)],
+                    "bad/channel": ["U_BAD"],
+                },
+                "groups": {
+                    "slack": ["C_TEAM"],
+                    "bad/channel": ["C_BAD"],
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        _, mgr, _ = _build_app(tmp_path, state_path=state_file)
+        restored_assignments = mgr._channel_assignments  # noqa: SLF001
+        assert restored_assignments["slack"] == "coder"
+        assert "../bad" not in restored_assignments
+        assert "too_long_agent" not in restored_assignments
+        assert len(restored_assignments) == mod._MAX_ASSIGNMENTS
+
+        pairings = mgr._channel_pairings  # noqa: SLF001
+        assert "bad/channel" not in pairings.users
+        assert "\x00bad" not in pairings.users["slack"]
+        assert len(pairings.users["slack"]) == mod._MAX_PAIRINGS_PER_CHANNEL
+        assert pairings.groups["slack"] == {"C_TEAM"}
+
+    def test_oversized_state_file_is_ignored(self, tmp_path: Path):
+        from runtime.sensing.gateway import channels_router as mod
+
+        state_file = tmp_path / "too-large.json"
+        state_file.write_text(
+            " " * (mod._MAX_STATE_FILE_BYTES + 1),
+            encoding="utf-8",
+        )
+        app, _, _ = _build_app(tmp_path, state_path=state_file)
+        r = TestClient(app).get("/api/channels/slack/assistant")
+        assert r.status_code == 200
+        assert r.json()["agent_id"] is None
+
 
 class TestCredentials:
     """Implementation note."""
@@ -508,6 +579,43 @@ class TestCredentials:
             json={"bot_token": "only"},  # Implementation note.
         )
         assert r.status_code == 400
+
+    def test_invalid_credential_channel_id_rejected(self, tmp_path: Path):
+        state_file = tmp_path / "s.json"
+        app, _ = self._build_empty(tmp_path, state_file)
+        r = TestClient(app).post(
+            "/api/channels/credentials/slack",
+            json={
+                "bot_token": "xoxb-test",
+                "signing_secret": "secret",
+                "channel_id": "../bad",
+            },
+        )
+        assert r.status_code == 400
+
+    def test_invalid_legacy_credentials_do_not_pollute_cache(
+        self, tmp_path: Path,
+    ):
+        state_file = tmp_path / "s.json"
+        creds_file = tmp_path / "s.credentials.json"
+        creds_file.write_text(
+            json.dumps({
+                "mars": {"bot_token": "x", "signing_secret": "y"},
+                "slack": {"bot_token": "missing-signing-secret"},
+                "discord": {
+                    "bot_token": "x",
+                    "public_key": "00" * 32,
+                    "channel_id": "../bad",
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        _app, mgr = self._build_empty(tmp_path, state_file)
+        assert not mgr.has("slack")
+        assert not mgr.has("discord")
+        restored = mgr._channel_credentials  # noqa: SLF001
+        assert restored == {}
 
     def test_not_yet_supported_platform_defensive(self, tmp_path: Path):
         """Implementation note."""

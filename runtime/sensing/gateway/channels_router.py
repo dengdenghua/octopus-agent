@@ -5,6 +5,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -216,8 +217,11 @@ def create_channels_router(
         channel_id: str, request: Request,
     ) -> dict[str, Any]:
         _auth(request)  # AUTH-OK: actor-agnostic — assignments are server-global
-        return {"channel_id": channel_id,
-                "agent_id": _assignments().get(channel_id)}
+        safe_channel_id = _normalize_channel_id(channel_id)
+        if safe_channel_id is None:
+            raise HTTPException(400, "invalid channel_id")
+        return {"channel_id": safe_channel_id,
+                "agent_id": _assignments().get(safe_channel_id)}
 
     @router.post("/api/channels/{channel_id}/assistant")
     async def set_channel_assignment(
@@ -229,13 +233,17 @@ def create_channels_router(
         except (json.JSONDecodeError, TypeError, ValueError) as e:
             raise HTTPException(400, f"body: {e}") from e
         agent_id = (body or {}).get("agent_id")
-        if not isinstance(agent_id, str) or not agent_id.strip():
-            raise HTTPException(400, "agent_id required (non-empty string)")
-        _assignments()[channel_id] = agent_id.strip()
+        safe_channel_id = _normalize_channel_id(channel_id)
+        safe_agent_id = _normalize_agent_id(agent_id)
+        if safe_channel_id is None:
+            raise HTTPException(400, "invalid channel_id")
+        if safe_agent_id is None:
+            raise HTTPException(400, "invalid agent_id")
+        _assignments()[safe_channel_id] = safe_agent_id
         _save_state(manager, _state_file)
         return {
-            "channel_id": channel_id,
-            "agent_id": agent_id.strip(),
+            "channel_id": safe_channel_id,
+            "agent_id": safe_agent_id,
             "ok": True,
         }
 
@@ -244,9 +252,12 @@ def create_channels_router(
         channel_id: str, request: Request,
     ) -> dict[str, Any]:
         _require_admin(request)  # Mutation: removes agent assignment
-        dropped = _assignments().pop(channel_id, None)
+        safe_channel_id = _normalize_channel_id(channel_id)
+        if safe_channel_id is None:
+            raise HTTPException(400, "invalid channel_id")
+        dropped = _assignments().pop(safe_channel_id, None)
         _save_state(manager, _state_file)
-        return {"channel_id": channel_id, "dropped": dropped, "ok": True}
+        return {"channel_id": safe_channel_id, "dropped": dropped, "ok": True}
 
     #
     #
@@ -275,35 +286,41 @@ def create_channels_router(
         if not isinstance(body, dict):
             raise HTTPException(400, "credentials must be a JSON object")
 
-        platform = platform.lower().strip()
-        if platform not in _PLATFORM_META:
+        safe_platform = _normalize_platform_id(platform)
+        if safe_platform is None:
             raise HTTPException(
                 404, f"unknown platform: {platform!r}",
             )
 
         try:
-            channel = _construct_channel(platform, body)
+            clean_body = _sanitize_credentials_body(body)
+            channel = _construct_channel(safe_platform, clean_body)
         except _UnsupportedPlatformError as e:
             raise HTTPException(
                 400,
-                f"platform {platform!r} not yet supported for "
+                f"platform {safe_platform!r} not yet supported for "
                 f"interactive credential setup: {e}",
             ) from e
         except (ValueError, TypeError, KeyError) as e:
             raise HTTPException(
                 400, f"invalid credentials: {e}",
             ) from e
+        safe_channel_id = _normalize_channel_id(
+            getattr(channel, "channel_id", None),
+        )
+        if safe_channel_id is None:
+            raise HTTPException(400, "invalid channel_id")
 
-        if manager.has(channel.channel_id):
+        if manager.has(safe_channel_id):
             with contextlib.suppress(AttributeError):
-                manager._channels.pop(channel.channel_id, None)  # noqa: SLF001
+                manager._channels.pop(safe_channel_id, None)  # noqa: SLF001
         manager.register(channel)
 
-        _credentials_on(manager)[platform] = dict(body)
+        _credentials_on(manager)[safe_platform] = clean_body
         _save_credentials(manager, _creds_file)
         return {
-            "platform": platform,
-            "channel_id": channel.channel_id,
+            "platform": safe_platform,
+            "channel_id": safe_channel_id,
             "connected": True,
             "ok": True,
         }
@@ -313,19 +330,23 @@ def create_channels_router(
         platform: str, request: Request,
     ) -> dict[str, Any]:
         _require_admin(request)  # Mutation: deletes IM credentials, disconnects channels
-        platform = platform.lower().strip()
+        safe_platform = _normalize_platform_id(platform)
+        if safe_platform is None:
+            raise HTTPException(
+                404, f"unknown platform: {platform!r}",
+            )
         creds = _credentials_on(manager)
-        dropped = creds.pop(platform, None)
+        dropped = creds.pop(safe_platform, None)
         try:
             for cid in list(manager.channel_ids()):
                 cls_name = type(manager.get(cid)).__name__
-                if _guess_platform(cid, cls_name) == platform:
+                if _guess_platform(cid, cls_name) == safe_platform:
                     manager._channels.pop(cid, None)  # noqa: SLF001
         except (AttributeError, TypeError):
             pass
         _save_credentials(manager, _creds_file)
         return {
-            "platform": platform,
+            "platform": safe_platform,
             "dropped": dropped is not None,
             "ok": True,
         }
@@ -414,13 +435,16 @@ def create_channels_router(
         channel_id: str, request: Request,
     ) -> dict[str, Any]:
         _auth(request)  # AUTH-OK: actor-agnostic — pairing lists are server-global
+        safe_channel_id = _normalize_channel_id(channel_id)
+        if safe_channel_id is None:
+            raise HTTPException(400, "invalid channel_id")
         p = _pairings(manager)
         return {
-            "channel_id": channel_id,
-            "users": p.users_list(channel_id),
-            "groups": p.groups_list(channel_id),
-            "pending": list(p.pending.get(channel_id, [])),
-            "metrics": p.metrics(channel_id),
+            "channel_id": safe_channel_id,
+            "users": p.users_list(safe_channel_id),
+            "groups": p.groups_list(safe_channel_id),
+            "pending": list(p.pending.get(safe_channel_id, [])),
+            "metrics": p.metrics(safe_channel_id),
         }
 
     @router.get("/api/channels/detail")
@@ -470,10 +494,13 @@ def create_channels_router(
         pairing_id: str, request: Request,
     ) -> dict[str, Any]:
         _require_admin(request)  # Mutation: authorizes external user to access the bot
+        safe_pairing_id = _normalize_pairing_ref(pairing_id)
+        if safe_pairing_id is None:
+            raise HTTPException(400, "invalid pairing_id")
         for cid, pending_list in _pairings(manager).pending.items():
             for entry in pending_list:
                 eid = entry.get("sender_id", "") or str(id(entry))
-                if eid == pairing_id:
+                if eid == safe_pairing_id:
                     pending_list.remove(entry)
                     _pairings(manager).record(
                         cid,
@@ -481,22 +508,25 @@ def create_channels_router(
                         thread_id=entry.get("thread_id"),
                     )
                     _save_state(manager, _state_file)
-                    return {"ok": True, "pairing_id": pairing_id}
-        raise HTTPException(404, f"pairing {pairing_id!r} not found")
+                    return {"ok": True, "pairing_id": safe_pairing_id}
+        raise HTTPException(404, f"pairing {safe_pairing_id!r} not found")
 
     @router.post("/api/channels/pairing/{pairing_id}/reject")
     def reject_pairing(
         pairing_id: str, request: Request,
     ) -> dict[str, Any]:
         _require_admin(request)  # Mutation: denies external user access
+        safe_pairing_id = _normalize_pairing_ref(pairing_id)
+        if safe_pairing_id is None:
+            raise HTTPException(400, "invalid pairing_id")
         for _cid, pending_list in _pairings(manager).pending.items():
             for entry in pending_list:
                 eid = entry.get("sender_id", "") or str(id(entry))
-                if eid == pairing_id:
+                if eid == safe_pairing_id:
                     pending_list.remove(entry)
                     _save_state(manager, _state_file)
-                    return {"ok": True, "pairing_id": pairing_id}
-        raise HTTPException(404, f"pairing {pairing_id!r} not found")
+                    return {"ok": True, "pairing_id": safe_pairing_id}
+        raise HTTPException(404, f"pairing {safe_pairing_id!r} not found")
 
 
     @router.post("/api/channels/{channel_id}/inbound")
@@ -508,9 +538,12 @@ def create_channels_router(
         # handle_webhook() via platform-specific signature checks
         # (Discord's X-Signature-Ed25519, Slack's X-Slack-Signature, etc).
 
-        if not manager.has(channel_id):
+        safe_channel_id = _normalize_channel_id(channel_id)
+        if safe_channel_id is None:
+            raise HTTPException(400, "invalid channel_id")
+        if not manager.has(safe_channel_id):
             raise HTTPException(404, f"unknown channel: {channel_id}")
-        channel = manager.get(channel_id)
+        channel = manager.get(safe_channel_id)
 
         try:
             body = await request.body()
@@ -556,7 +589,7 @@ def create_channels_router(
 
         try:
             _pairings(manager).record(
-                channel_id,
+                safe_channel_id,
                 sender_id=getattr(result, "sender_id", None),
                 thread_id=getattr(result, "thread_id", None),
                 is_group=_is_group_message(result),
@@ -763,10 +796,19 @@ class _PairingStore:
         thread_id: str | None = None,
         is_group: bool = False,
     ) -> None:
-        if is_group and thread_id:
-            self.groups.setdefault(channel_id, set()).add(thread_id)
-        if sender_id:
-            self.users.setdefault(channel_id, set()).add(sender_id)
+        safe_channel_id = _normalize_channel_id(channel_id)
+        if safe_channel_id is None:
+            return
+        safe_thread_id = _normalize_pairing_ref(thread_id)
+        safe_sender_id = _normalize_pairing_ref(sender_id)
+        if is_group and safe_thread_id:
+            bucket = self.groups.setdefault(safe_channel_id, set())
+            if len(bucket) < _MAX_PAIRINGS_PER_CHANNEL:
+                bucket.add(safe_thread_id)
+        if safe_sender_id:
+            bucket = self.users.setdefault(safe_channel_id, set())
+            if len(bucket) < _MAX_PAIRINGS_PER_CHANNEL:
+                bucket.add(safe_sender_id)
 
     def _gc_pending(self, channel_id: str) -> None:
         """Drop expired entries and cap the queue length."""
@@ -785,14 +827,19 @@ class _PairingStore:
         self, channel_id: str, msg: Any,
     ) -> None:
         import time as _t
+        safe_channel_id = _normalize_channel_id(channel_id)
+        if safe_channel_id is None:
+            return
+        sender_id = _normalize_pairing_ref(getattr(msg, "sender_id", "") or "")
+        thread_id = _normalize_pairing_ref(getattr(msg, "thread_id", "") or "")
         entry = {
-            "sender_id": getattr(msg, "sender_id", "") or "",
-            "thread_id": getattr(msg, "thread_id", "") or "",
+            "sender_id": sender_id or "",
+            "thread_id": thread_id or "",
             "content": (getattr(msg, "content", "") or "")[:500],
             "ts": _t.time(),
         }
-        self.pending.setdefault(channel_id, []).append(entry)
-        self._gc_pending(channel_id)
+        self.pending.setdefault(safe_channel_id, []).append(entry)
+        self._gc_pending(safe_channel_id)
 
     def drain_pending(self, channel_id: str) -> list[dict[str, Any]]:
         self._gc_pending(channel_id)
@@ -839,10 +886,156 @@ def _pairings(manager: Any) -> _PairingStore:
 
 
 _STATE_SCHEMA_VERSION = 1
+_MAX_STATE_FILE_BYTES = 2 * 1024 * 1024
+_MAX_CREDENTIALS_FILE_BYTES = 1024 * 1024
+_MAX_ASSIGNMENTS = 512
+_MAX_PAIRING_CHANNELS = 256
+_MAX_PAIRINGS_PER_CHANNEL = 5_000
+_MAX_CREDENTIAL_KEYS = 64
+_MAX_CREDENTIAL_TOTAL_BYTES = 256 * 1024
+_MAX_CREDENTIAL_VALUE_BYTES = 64 * 1024
+_CHANNEL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_AGENT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$")
+_PLATFORM_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _is_oversized_file(path: Path, max_bytes: int) -> bool:
+    try:
+        return path.stat().st_size > max_bytes
+    except OSError:
+        return False
+
+
+def _normalize_channel_id(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text if _CHANNEL_ID_RE.fullmatch(text) else None
+
+
+def _normalize_agent_id(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text if _AGENT_ID_RE.fullmatch(text) else None
+
+
+def _normalize_platform_id(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip().lower()
+    if not _PLATFORM_RE.fullmatch(text) or text not in _PLATFORM_META:
+        return None
+    return text
+
+
+def _normalize_pairing_ref(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or len(text) > 256 or "\x00" in text:
+        return None
+    return text
+
+
+def _clean_assignments(raw: Any) -> dict[str, str]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, str] = {}
+    for channel_id, agent_id in raw.items():
+        if len(out) >= _MAX_ASSIGNMENTS:
+            break
+        safe_channel_id = _normalize_channel_id(channel_id)
+        safe_agent_id = _normalize_agent_id(agent_id)
+        if safe_channel_id and safe_agent_id:
+            out[safe_channel_id] = safe_agent_id
+    return out
+
+
+def _clean_pairing_map(raw: Any) -> dict[str, set[str]]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, set[str]] = {}
+    for channel_id, ids in raw.items():
+        if len(out) >= _MAX_PAIRING_CHANNELS:
+            break
+        safe_channel_id = _normalize_channel_id(channel_id)
+        if not safe_channel_id or not isinstance(ids, (list, set, tuple)):
+            continue
+        clean_ids: set[str] = set()
+        for raw_id in ids:
+            if len(clean_ids) >= _MAX_PAIRINGS_PER_CHANNEL:
+                break
+            safe_id = _normalize_pairing_ref(raw_id)
+            if safe_id:
+                clean_ids.add(safe_id)
+        if clean_ids:
+            out[safe_channel_id] = clean_ids
+    return out
+
+
+def _sanitize_credentials_body(body: dict[str, Any]) -> dict[str, Any]:
+    if len(body) > _MAX_CREDENTIAL_KEYS:
+        raise ValueError(f"too many credential fields (max {_MAX_CREDENTIAL_KEYS})")
+    out: dict[str, Any] = {}
+    total_bytes = 0
+    for key, value in body.items():
+        if (
+            not isinstance(key, str)
+            or not key
+            or len(key) > 96
+            or _CONTROL_RE.search(key)
+        ):
+            raise ValueError("invalid credential field name")
+        if isinstance(value, str):
+            value_bytes = len(value.encode("utf-8"))
+            if value_bytes > _MAX_CREDENTIAL_VALUE_BYTES or "\x00" in value:
+                raise ValueError(f"credential field {key!r} is too large or invalid")
+            total_bytes += value_bytes
+            if key == "channel_id":
+                safe_channel_id = _normalize_channel_id(value)
+                if safe_channel_id is None:
+                    raise ValueError("invalid channel_id")
+                out[key] = safe_channel_id
+            else:
+                out[key] = value
+        elif value is None or isinstance(value, (bool, int, float)):
+            total_bytes += len(str(value).encode("utf-8"))
+            out[key] = value
+        else:
+            raise ValueError(f"credential field {key!r} must be scalar")
+        total_bytes += len(key.encode("utf-8"))
+        if total_bytes > _MAX_CREDENTIAL_TOTAL_BYTES:
+            raise ValueError(
+                f"credentials payload too large (max {_MAX_CREDENTIAL_TOTAL_BYTES} bytes)",
+            )
+    return out
+
+
+def _clean_credentials_map(raw: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for platform, body in raw.items():
+        safe_platform = _normalize_platform_id(platform)
+        if safe_platform is None or not isinstance(body, dict):
+            continue
+        try:
+            out[safe_platform] = _sanitize_credentials_body(body)
+        except ValueError:
+            continue
+    return out
 
 
 def _load_state(manager: Any, state_file: Path | None) -> None:
     if state_file is None or not state_file.exists():
+        return
+    if _is_oversized_file(state_file, _MAX_STATE_FILE_BYTES):
+        logger.warning(
+            "channel state load skipped: file too large (> %s bytes)",
+            _MAX_STATE_FILE_BYTES,
+        )
         return
     try:
         raw = state_file.read_text(encoding="utf-8")
@@ -864,24 +1057,15 @@ def _load_state(manager: Any, state_file: Path | None) -> None:
         return
 
     try:
-        assigns = data.get("assignments") or {}
         target = _assignments_on(manager)
-        for k, v in assigns.items():
-            if isinstance(k, str) and isinstance(v, str):
-                target[k] = v
+        target.update(_clean_assignments(data.get("assignments") or {}))
     except (AttributeError, TypeError, ValueError):
         logger.exception("channel state: failed to restore assignments")
 
     try:
         store = _pairings(manager)
-        users = data.get("users") or {}
-        groups = data.get("groups") or {}
-        for cid, ids in users.items():
-            if isinstance(cid, str) and isinstance(ids, list):
-                store.users[cid] = {s for s in ids if isinstance(s, str)}
-        for cid, ids in groups.items():
-            if isinstance(cid, str) and isinstance(ids, list):
-                store.groups[cid] = {s for s in ids if isinstance(s, str)}
+        store.users.update(_clean_pairing_map(data.get("users") or {}))
+        store.groups.update(_clean_pairing_map(data.get("groups") or {}))
     except (AttributeError, TypeError, ValueError):
         logger.exception("channel state: failed to restore pairings")
 
@@ -894,9 +1078,15 @@ def _save_state(manager: Any, state_file: Path | None) -> None:
         store = _pairings(manager)
         payload = {
             "version": _STATE_SCHEMA_VERSION,
-            "assignments": dict(assigns),
-            "users": {k: sorted(v) for k, v in store.users.items()},
-            "groups": {k: sorted(v) for k, v in store.groups.items()},
+            "assignments": _clean_assignments(assigns),
+            "users": {
+                k: sorted(v)
+                for k, v in _clean_pairing_map(store.users).items()
+            },
+            "groups": {
+                k: sorted(v)
+                for k, v in _clean_pairing_map(store.groups).items()
+            },
         }
         state_file.parent.mkdir(parents=True, exist_ok=True)
         tmp = state_file.with_suffix(state_file.suffix + ".tmp")
@@ -1235,6 +1425,12 @@ def _load_credentials_and_bootstrap(
 ) -> None:
     if creds_file is None or not creds_file.exists():
         return
+    if _is_oversized_file(creds_file, _MAX_CREDENTIALS_FILE_BYTES):
+        logger.warning(
+            "channel credentials load skipped: file too large (> %s bytes)",
+            _MAX_CREDENTIALS_FILE_BYTES,
+        )
+        return
     try:
         raw = creds_file.read_text(encoding="utf-8")
         data = json.loads(raw)
@@ -1257,26 +1453,37 @@ def _load_credentials_and_bootstrap(
         data = decrypted
     target = _credentials_on(manager)
     for platform, body in data.items():
-        if not isinstance(platform, str) or not isinstance(body, dict):
+        safe_platform = _normalize_platform_id(platform)
+        if safe_platform is None or not isinstance(body, dict):
             continue
-        target[platform] = dict(body)
         try:
-            channel = _construct_channel(platform, body)
+            clean_body = _sanitize_credentials_body(body)
+            channel = _construct_channel(safe_platform, clean_body)
         except _UnsupportedPlatformError:
             continue
         except (ValueError, TypeError, KeyError) as e:
             logger.warning(
                 "channel credentials for %s invalid · skipping: %s",
-                platform, e,
+                safe_platform, e,
             )
             continue
-        if manager.has(channel.channel_id):
+        safe_channel_id = _normalize_channel_id(
+            getattr(channel, "channel_id", None),
+        )
+        if safe_channel_id is None:
+            logger.warning(
+                "channel credentials for %s invalid · unsafe channel_id",
+                safe_platform,
+            )
+            continue
+        target[safe_platform] = clean_body
+        if manager.has(safe_channel_id):
             continue  # Implementation note.
         try:
             manager.register(channel)
         except (ConnectionError, TimeoutError, OSError) as e:
             logger.warning(
-                "re-register %s failed: %s", platform, e,
+                "re-register %s failed: %s", safe_platform, e,
             )
 
 
@@ -1284,7 +1491,7 @@ def _save_credentials(manager: Any, creds_file: Path | None) -> None:
     if creds_file is None:
         return
     try:
-        data = dict(_credentials_on(manager))
+        data = _clean_credentials_map(_credentials_on(manager))
         creds_file.parent.mkdir(parents=True, exist_ok=True)
         tmp = creds_file.with_suffix(creds_file.suffix + ".tmp")
         encrypted = _try_encrypt_payload(data, creds_file.parent)
