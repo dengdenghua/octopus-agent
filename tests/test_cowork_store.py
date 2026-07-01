@@ -61,6 +61,17 @@ def test_create_plan_writes_plan_json_atomically(store: CoworkStore, tmp_path: P
     assert {t.id for t in re_read.tasks} == {"t1", "t2"}
 
 
+def test_create_plan_rejects_unsafe_task_id(store: CoworkStore, tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="invalid task_id"):
+        store.create_plan(
+            session_id="sess-unsafe-task",
+            created_by="agent-A",
+            tasks=[{"id": "../escape", "title": "bad"}],
+        )
+
+    assert not (tmp_path / "escape.json").exists()
+
+
 # ─── 2. read_plan returns None for unknown session ──────────
 
 
@@ -236,6 +247,41 @@ def test_write_artifact_creates_file_and_updates_assignment(
     assert a.completed_at is not None
 
 
+def test_write_artifact_rejects_unsafe_task_id(store: CoworkStore, tmp_path: Path) -> None:
+    store.create_plan(
+        session_id="sess-artifact-unsafe",
+        created_by="coord",
+        tasks=_sample_tasks(),
+    )
+
+    with pytest.raises(ValueError, match="invalid task_id"):
+        store.write_artifact("sess-artifact-unsafe", "../escape", "agent-A", {"bad": True})
+
+    assert not (store._artifacts_dir("sess-artifact-unsafe").parent / "escape.json").exists()
+    assert not (tmp_path / "escape.json").exists()
+
+
+def test_write_artifact_rejects_symlinked_artifacts_dir(store: CoworkStore, tmp_path: Path) -> None:
+    store.create_plan(
+        session_id="sess-artifact-symlink",
+        created_by="coord",
+        tasks=_sample_tasks(),
+    )
+    outside = tmp_path / "outside-artifacts"
+    outside.mkdir()
+    artifacts = store._artifacts_dir("sess-artifact-symlink")
+    artifacts.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        artifacts.symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink unavailable: {exc}")
+
+    with pytest.raises(ValueError, match="escapes cowork session directory"):
+        store.write_artifact("sess-artifact-symlink", "t1", "agent-A", {"bad": True})
+
+    assert not (outside / "t1.json").exists()
+
+
 def test_assignment_terminal_status_is_not_overwritten_by_late_failure(
     store: CoworkStore,
 ) -> None:
@@ -334,6 +380,28 @@ def test_read_artifacts_returns_all_for_session(
     assert arts["t2"]["output"] == {"k": "v2"}
     assert arts["t1"]["agent_id"] == "agent-A"
     assert arts["t2"]["agent_id"] == "agent-B"
+
+
+def test_read_artifacts_ignores_symlinked_artifacts_dir(store: CoworkStore, tmp_path: Path) -> None:
+    store.create_plan(
+        session_id="sess-read-artifact-symlink",
+        created_by="coord",
+        tasks=_sample_tasks(),
+    )
+    outside = tmp_path / "outside-read"
+    outside.mkdir()
+    (outside / "t1.json").write_text(
+        '{"task_id":"t1","agent_id":"external","output":{"leak":true}}',
+        encoding="utf-8",
+    )
+    artifacts = store._artifacts_dir("sess-read-artifact-symlink")
+    artifacts.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        artifacts.symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink unavailable: {exc}")
+
+    assert store.read_artifacts("sess-read-artifact-symlink") == {}
 
 
 # ─── 8. Sessions are isolated ───────────────────────────────

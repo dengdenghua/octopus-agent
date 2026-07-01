@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -91,6 +92,16 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
 _VALID_ASSIGN_STATUS = frozenset({"claimed", "in_progress", "done", "failed"})
 
 _FINAL_TASK_ID = "__final__"
+_SAFE_TASK_ID_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,239}$")
+
+
+def _require_task_id(value: str, *, label: str = "task_id") -> str:
+    task_id = str(value or "").strip()
+    if not _SAFE_TASK_ID_RE.fullmatch(task_id):
+        raise ValueError(
+            f"invalid {label}: use letters, numbers, dot, underscore, or hyphen"
+        )
+    return task_id
 
 
 # ─── Data classes ───────────────────────────────────────────
@@ -116,7 +127,7 @@ class Task:
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> Task:
         return cls(
-            id=str(raw["id"]),
+            id=_require_task_id(str(raw["id"])),
             title=str(raw.get("title") or ""),
             description=str(raw.get("description") or ""),
             required_capabilities=[str(c) for c in (raw.get("required_capabilities") or [])],
@@ -285,7 +296,13 @@ class CoworkStore:
         return self._session_dir(session_id) / "artifacts"
 
     def _artifact_path(self, session_id: str, task_id: str) -> Path:
-        return self._artifacts_dir(session_id) / f"{task_id}.json"
+        safe_task_id = _require_task_id(task_id)
+        path = self._artifacts_dir(session_id) / f"{safe_task_id}.json"
+        session_root = self._session_dir(session_id).resolve()
+        resolved = path.resolve()
+        if session_root not in resolved.parents:
+            raise ValueError("artifact path escapes cowork session directory")
+        return path
 
     # ─── Plan ───────────────────────────────────────────────
 
@@ -321,7 +338,7 @@ class CoworkStore:
                     )
             elif isinstance(entry, dict):
                 t = Task(
-                    id=str(entry.get("id") or uuid4().hex),
+                    id=_require_task_id(str(entry.get("id") or uuid4().hex)),
                     title=str(entry.get("title") or ""),
                     description=str(entry.get("description") or ""),
                     required_capabilities=[
@@ -330,6 +347,14 @@ class CoworkStore:
                 )
             else:
                 raise TypeError(f"unexpected task entry type: {type(entry)!r}")
+            safe_id = _require_task_id(t.id)
+            if safe_id != t.id:
+                t = Task(
+                    id=safe_id,
+                    title=t.title,
+                    description=t.description,
+                    required_capabilities=list(t.required_capabilities),
+                )
             materialized.append(t)
 
         now = _now_iso()
@@ -515,6 +540,7 @@ class CoworkStore:
             raise ValueError("task_id is required")
         if not agent_id:
             raise ValueError("agent_id is required")
+        task_id = _require_task_id(task_id)
 
         plan = self.read_plan(session_id)
         if plan is None:
@@ -615,6 +641,7 @@ class CoworkStore:
         """
         path = self._assignments_path(session_id)
         lock = _PathLockRegistry.for_path(path)
+        task_id = _require_task_id(task_id)
 
         with lock:
             data = self._read_assignments_raw(session_id)
@@ -653,6 +680,7 @@ class CoworkStore:
         """
         if status not in _VALID_ASSIGN_STATUS:
             raise ValueError(f"invalid status {status!r}")
+        task_id = _require_task_id(task_id)
 
         path = self._assignments_path(session_id)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -713,6 +741,7 @@ class CoworkStore:
             raise ValueError("task_id is required")
         if not agent_id:
             raise ValueError("agent_id is required")
+        task_id = _require_task_id(task_id)
 
         artifact_path = self._artifact_path(session_id, task_id)
         artifact_path.parent.mkdir(parents=True, exist_ok=True)
@@ -750,18 +779,27 @@ class CoworkStore:
         artifacts_dir = self._artifacts_dir(session_id)
         if not artifacts_dir.is_dir():
             return out
+        session_root = self._session_dir(session_id).resolve()
+        resolved_dir = artifacts_dir.resolve()
+        if session_root not in resolved_dir.parents:
+            _LOG.warning("cowork: refusing to read artifact directory outside session")
+            return out
         for entry in sorted(artifacts_dir.iterdir()):
-            if not entry.is_file() or not entry.name.endswith(".json"):
+            if entry.is_symlink() or not entry.is_file() or not entry.name.endswith(".json"):
                 continue
             # Skip .bak siblings — read_json_with_backup will pick
             # them up automatically when the primary is unreadable.
             if entry.name.endswith(".json.bak"):
                 continue
+            task_key = entry.name[: -len(".json")]
+            if not _SAFE_TASK_ID_RE.fullmatch(task_key):
+                continue
             raw = read_json_with_backup(entry, default=None)
             if not isinstance(raw, dict):
                 continue
-            task_id = str(raw.get("task_id") or entry.stem)
-            out[task_id] = raw
+            task_id = str(raw.get("task_id") or task_key)
+            if _SAFE_TASK_ID_RE.fullmatch(task_id):
+                out[task_id] = raw
         return out
 
     # ─── Discovery ──────────────────────────────────────────
