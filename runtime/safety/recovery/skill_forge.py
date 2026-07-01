@@ -252,6 +252,13 @@ class SkillForge:
         reports: dict[str, SkillTestReport] = {}
 
         for cand in candidates:
+            if self._has_existing_quarantine_decision(cand):
+                # The same deterministic candidate was already routed to
+                # human review on an earlier tick. Re-running shadow tests and
+                # appending another quarantine decision only pollutes the
+                # review queue; keep the tick idempotent.
+                retired.append(cand.name)
+                continue
             passed, shadow_report = self.shadow_validate(cand)
             reports[cand.name] = shadow_report
             if not passed:
@@ -316,6 +323,21 @@ class SkillForge:
             quarantined=quarantined,
             reports=reports,
         )
+
+    def _has_existing_quarantine_decision(self, candidate: ForgedSkillCandidate) -> bool:
+        try:
+            events = self.journal.read_by_type("skill_proposal_decision")
+        except Exception as exc:  # noqa: BLE001 — journal lookup must not break forge.
+            _LOG.debug("forge quarantine dedupe skipped: %s", exc)
+            return False
+        for event in events:
+            if getattr(event, "proposal_kind", "") != "skill_forge":
+                continue
+            if getattr(event, "candidate_id", "") != candidate.candidate_id:
+                continue
+            if str(getattr(event, "decision", "")).lower() == "quarantined":
+                return True
+        return False
 
     def _record_quarantine_decision(
         self,

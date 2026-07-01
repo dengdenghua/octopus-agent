@@ -162,6 +162,40 @@ def test_recorded_gui_macro_is_quarantined_not_promoted() -> None:
     assert "mouse_click" in (decisions[0].details or {}).get("dangerous_underlying", [])
 
 
+def test_recorded_gui_macro_quarantine_is_idempotent() -> None:
+    journal = InMemoryJournal()
+    registry = _gui_registry()
+
+    run = _success([
+        {"action": "click", "x": 100, "y": 200},
+        {"action": "type", "text": "report"},
+    ])
+    for _ in range(3):
+        record_successful_loop(journal, run)
+
+    forge = SkillForge(
+        journal=journal,
+        registry=registry,
+        config=ForgeConfig(
+            min_hits=3,
+            min_success_rate=0.0,
+            shadow_runs=1,
+            shadow_success_threshold=0.0,
+        ),
+    )
+
+    first = forge.run()
+    second = forge.run()
+
+    assert first.quarantined
+    assert second.quarantined == []
+    decisions = [
+        e for e in journal.read_by_type("skill_proposal_decision")
+        if getattr(e, "decision", "") == "quarantined"
+    ]
+    assert len(decisions) == 1
+
+
 # ── failure side: loop failure → review queue → repair recipe ────────
 
 
