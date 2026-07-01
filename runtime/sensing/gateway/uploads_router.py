@@ -26,6 +26,7 @@ Covered by ``test_filename_path_traversal_stripped``.
 from __future__ import annotations
 
 import contextlib
+import os
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,11 @@ except ImportError:  # pragma: no cover
 
 from runtime.platform.process.paths import app_paths
 from runtime.platform.runtime_policy.workspaces import WorkspaceManager
+
+MAX_UPLOAD_FILES = 20
+MAX_UPLOAD_FILE_BYTES = 50 * 1024 * 1024
+_UPLOAD_READ_CHUNK_BYTES = 1024 * 1024
+_MAX_UPLOAD_FILENAME_LENGTH = 255
 
 # ═══════════════════════════════════════════════════════════
 # Response models
@@ -116,18 +122,63 @@ def create_uploads_router(
     legacy_root = legacy_upload_root or upload_root
     workspace_manager = WorkspaceManager(workspace_root) if workspace_root else None
 
+    def _has_control_chars(value: str) -> bool:
+        return any(ord(ch) < 32 or ord(ch) == 127 for ch in value)
+
+    def _safe_upload_filename(filename: str | None) -> str:
+        raw = (filename or "upload.bin").replace("\\", "/")
+        safe_name = Path(raw).name.strip()
+        if (
+            not safe_name
+            or safe_name in {".", ".."}
+            or "/" in safe_name
+            or "\\" in safe_name
+            or _has_control_chars(safe_name)
+            or len(safe_name.encode("utf-8")) > _MAX_UPLOAD_FILENAME_LENGTH
+        ):
+            raise HTTPException(400, "invalid upload filename")
+        return safe_name
+
+    def _legacy_dir_for_root(root: Path, thread_id: str, *, create: bool) -> Path:
+        if (
+            not thread_id
+            or thread_id in {".", ".."}
+            or "/" in thread_id
+            or "\\" in thread_id
+            or _has_control_chars(thread_id)
+        ):
+            raise HTTPException(400, "invalid thread_id")
+        root_resolved = Path(root).expanduser().resolve()
+        candidate = (root_resolved / thread_id).resolve(strict=False)
+        with contextlib.suppress(ValueError):
+            candidate.relative_to(root_resolved)
+            if candidate.exists() and candidate.is_symlink():
+                raise HTTPException(409, "upload directory is not a real directory")
+            if create:
+                candidate.mkdir(parents=True, exist_ok=True)
+                if candidate.is_symlink() or not candidate.is_dir():
+                    raise HTTPException(409, "upload directory is not a real directory")
+            return candidate
+        raise HTTPException(400, "invalid thread_id")
+
+    def _ensure_real_upload_dir(path: Path) -> Path:
+        if path.exists() and path.is_symlink():
+            raise HTTPException(409, "upload directory is not a real directory")
+        path.mkdir(parents=True, exist_ok=True)
+        if path.is_symlink() or not path.is_dir():
+            raise HTTPException(409, "upload directory is not a real directory")
+        return path
+
     def _upload_dir(thread_id: str) -> Path:
         if workspace_manager is not None:
-            return workspace_manager.layout(thread_id).upload
+            return _ensure_real_upload_dir(workspace_manager.layout(thread_id).upload)
         root = legacy_root or (app_paths().data_dir / "thread_uploads")
-        path = root / thread_id
-        path.mkdir(parents=True, exist_ok=True)
-        return path
+        return _legacy_dir_for_root(root, thread_id, create=True)
 
     def _legacy_upload_dir(thread_id: str) -> Path | None:
         if legacy_root is None:
             return None
-        return legacy_root / thread_id
+        return _legacy_dir_for_root(legacy_root, thread_id, create=False)
 
     def _upload_dirs_for_read(thread_id: str) -> list[Path]:
         dirs = [_upload_dir(thread_id)]
@@ -137,7 +188,11 @@ def create_uploads_router(
         return dirs
 
     def _absolute_artifact_candidate(thread_id: str, raw_path: Path) -> Path | None:
-        if not raw_path.exists() or not raw_path.is_file():
+        if (
+            not raw_path.exists()
+            or raw_path.is_symlink()
+            or not raw_path.is_file()
+        ):
             return None
         try:
             resolved = raw_path.resolve()
@@ -149,18 +204,52 @@ def create_uploads_router(
                 return resolved
         return None
 
+    def _safe_file_candidate(path: Path) -> Path | None:
+        if not path.exists() or path.is_symlink() or not path.is_file():
+            return None
+        return path
+
+    def _write_upload_bytes(target: Path, data: bytes) -> None:
+        if target.is_symlink() or (target.exists() and not target.is_file()):
+            raise HTTPException(409, "upload target is not a real file")
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            fd = os.open(target, flags, 0o600)
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+        except OSError as exc:
+            raise HTTPException(
+                500, f"failed to store upload: {exc}",
+            ) from exc
+
+    async def _read_upload_limited(upload: UploadFile) -> bytes:
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = await upload.read(_UPLOAD_READ_CHUNK_BYTES)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_UPLOAD_FILE_BYTES:
+                raise HTTPException(413, "upload file too large")
+            chunks.append(chunk)
+        return b"".join(chunks)
+
     def _metadata(thread_id: str, file_path: Path) -> dict[str, Any]:
         rel_name = file_path.name
+        stat = file_path.stat()
         return {
             "filename": rel_name,
-            "size": file_path.stat().st_size,
+            "size": stat.st_size,
             "path": str(file_path),
             "virtual_path": str(file_path),
             "artifact_url": (
                 f"/api/threads/{thread_id}/artifacts/{rel_name}"
             ),
             "extension": file_path.suffix.lstrip(".") or None,
-            "modified": int(file_path.stat().st_mtime),
+            "modified": int(stat.st_mtime),
         }
 
     def _require_store() -> None:
@@ -217,20 +306,17 @@ def create_uploads_router(
         _require_store()
         _require_thread_access(request, thread_id, allow_create=True)
         upload_dir = _upload_dir(thread_id)
+        if not files or len(files) > MAX_UPLOAD_FILES:
+            raise HTTPException(413, f"upload file count must be 1-{MAX_UPLOAD_FILES}")
         uploaded: list[dict[str, Any]] = []
         for upload in files:
             # Sanitize: strip any path traversal segments. Relying
             # on Path(...).name gives us the basename only · a
             # malicious "../../evil" collapses to "evil".
-            safe_name = Path(upload.filename or "upload.bin").name
+            safe_name = _safe_upload_filename(upload.filename)
             target = upload_dir / safe_name
-            data = await upload.read()
-            try:
-                target.write_bytes(data)
-            except OSError as exc:
-                raise HTTPException(
-                    500, f"failed to store upload: {exc}",
-                ) from exc
+            data = await _read_upload_limited(upload)
+            _write_upload_bytes(target, data)
             uploaded.append(_metadata(thread_id, target))
         return {
             "success": True,
@@ -251,7 +337,7 @@ def create_uploads_router(
             if not upload_dir.exists() or not upload_dir.is_dir():
                 continue
             for path in sorted(upload_dir.iterdir(), key=lambda p: p.name.lower()):
-                if not path.is_file() or path.name in seen:
+                if path.is_symlink() or not path.is_file() or path.name in seen:
                     continue
                 seen.add(path.name)
                 files.append(_metadata(thread_id, path))
@@ -271,12 +357,13 @@ def create_uploads_router(
         # Sanitize the incoming filename the same way we did on
         # upload · don't trust URL path params more than we'd
         # trust a multipart field.
-        safe_name = Path(filename).name
+        safe_name = _safe_upload_filename(filename)
         target = next(
             (
                 upload_dir / safe_name
                 for upload_dir in _upload_dirs_for_read(thread_id)
                 if (upload_dir / safe_name).exists()
+                and not (upload_dir / safe_name).is_symlink()
                 and (upload_dir / safe_name).is_file()
             ),
             None,
@@ -314,9 +401,9 @@ def create_uploads_router(
             if absolute is not None:
                 candidates.append(absolute)
         for upload_dir in _upload_dirs_for_read(thread_id):
-            candidates.append(upload_dir / Path(artifact_path).name)
+            candidates.append(upload_dir / _safe_upload_filename(artifact_path))
         target = next(
-            (c for c in candidates if c.exists() and c.is_file()),
+            (c for c in candidates if _safe_file_candidate(c) is not None),
             None,
         )
         if target is None:
