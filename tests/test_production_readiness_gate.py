@@ -428,6 +428,9 @@ def test_ci_runs_production_readiness_gate_with_isolated_state() -> None:
     assert "Upload full-stack smoke proof" in workflow
     assert "full-stack-smoke-proof" in workflow
     assert "full_stack_smoke_proof.json" in workflow
+    assert "Upload E2E release proof" in workflow
+    assert "e2e-release-proof" in workflow
+    assert "e2e_release_proof.json" in workflow
 
 
 def test_makefile_exposes_isolated_production_readiness_target() -> None:
@@ -452,14 +455,20 @@ def test_verify_local_persists_production_readiness_report() -> None:
 
     assert "VERIFY_READINESS_REPORT" in script
     assert "VERIFY_FULL_STACK_PROOF" in script
+    assert "VERIFY_E2E_RELEASE_PROOF" in script
     assert "production_readiness_gate.json" in script
     assert "full_stack_smoke_proof.json" in script
+    assert "e2e_release_proof.json" in script
     assert '--json-output "$VERIFY_READINESS_REPORT"' in script
     assert "readiness report: $VERIFY_READINESS_REPORT" in script
     assert "scripts/e2e_smoke_proof.py" in script
+    assert "scripts/e2e_release_proof.py" in script
+    assert "tests/test_e2e_smoke_proof.py" in script
+    assert "tests/test_e2e_release_proof.py" in script
     assert "full-stack-desktop" in script
     assert "full-stack-mobile" in script
     assert "full-stack smoke proof: $VERIFY_FULL_STACK_PROOF" in script
+    assert "e2e release proof: $VERIFY_E2E_RELEASE_PROOF" in script
 
 
 def test_pr_template_points_reviewers_to_make_production_readiness() -> None:

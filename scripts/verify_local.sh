@@ -16,6 +16,7 @@ VERIFY_DATA_DIR="$VERIFY_STATE_ROOT/data"
 VERIFY_REVIEW_QUEUE="$VERIFY_DATA_DIR/review_queue.json"
 VERIFY_READINESS_REPORT="$VERIFY_STATE_ROOT/production_readiness_gate.json"
 VERIFY_FULL_STACK_PROOF="$VERIFY_STATE_ROOT/full_stack_smoke_proof.json"
+VERIFY_E2E_RELEASE_PROOF="$VERIFY_STATE_ROOT/e2e_release_proof.json"
 
 usage() {
   cat <<'EOF'
@@ -102,6 +103,8 @@ backend_tests=(
   tests/test_cowork_search.py
   tests/test_cowork_turn_plan.py
   tests/test_cowork_advanced.py
+  tests/test_e2e_smoke_proof.py
+  tests/test_e2e_release_proof.py
   tests/test_production_readiness_gate.py
 )
 
@@ -182,4 +185,20 @@ if [[ "$run_full_stack" != "1" ]]; then
       --test-match "mobile-smoke.spec.ts"
   fi
   echo "full-stack smoke proof: $VERIFY_FULL_STACK_PROOF"
+  if [[ -f "$VERIFY_READINESS_REPORT" ]]; then
+    release_proof_args=(
+      scripts/e2e_release_proof.py
+      --readiness "$VERIFY_READINESS_REPORT"
+      --full-stack "$VERIFY_FULL_STACK_PROOF"
+      --output "$VERIFY_E2E_RELEASE_PROOF"
+      --required-suite full-stack-desktop
+    )
+    if [[ "$run_full_stack_mobile" != "1" ]]; then
+      release_proof_args+=(--required-suite full-stack-mobile)
+    fi
+    "$PYTHON_BIN" "${release_proof_args[@]}"
+    echo "e2e release proof: $VERIFY_E2E_RELEASE_PROOF"
+  else
+    echo "e2e release proof skipped: readiness report missing"
+  fi
 fi
