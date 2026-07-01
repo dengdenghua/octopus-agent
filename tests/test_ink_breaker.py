@@ -6,6 +6,8 @@ from contextlib import contextmanager
 
 import pytest
 
+from runtime.platform.models import CostEntry
+from runtime.platform.models.llm import ModelStreamEvent
 from runtime.safety.budget_breaker import BreakerModelRouter, CircuitBreaker, CircuitOpen
 from runtime.sensing.model_router import (
     Message,
@@ -256,6 +258,31 @@ class _FailingInner(ModelRouter):
         raise RuntimeError("always fails")
 
 
+class _StreamingInner(ModelRouter):
+    def __init__(self, *, fail_after_first_delta: bool = False) -> None:
+        self.call_count = 0
+        self.stream_count = 0
+        self.fail_after_first_delta = fail_after_first_delta
+
+    def call(self, request: ModelRequest) -> ModelResponse:  # noqa: ARG002
+        self.call_count += 1
+        return ModelResponse(text="non-stream fallback")
+
+    def call_stream(self, request: ModelRequest):  # noqa: ARG002
+        self.stream_count += 1
+        yield ModelStreamEvent(type="text_delta", delta="hello")
+        if self.fail_after_first_delta:
+            raise RuntimeError("stream failed")
+        yield ModelStreamEvent(type="text_delta", delta=" world")
+        yield ModelStreamEvent(
+            type="done",
+            final=ModelResponse(
+                text="hello world",
+                cost=CostEntry(usd=0.25),
+            ),
+        )
+
+
 def _req() -> ModelRequest:
     return ModelRequest(
         model="x",
@@ -336,6 +363,36 @@ class TestBreakerModelRouter:
         assert "max_errors" in str(rejected["octopus.breaker.reject_reason"])
         assert inner.call_count == 1
 
+    def test_inner_failure_records_trace_state_after(self, patched_time, monkeypatch):
+        spans: list[_SpanRecorder] = []
+
+        @contextmanager
+        def fake_trace_stage(_name: str):
+            span = _SpanRecorder()
+            spans.append(span)
+            yield span
+
+        monkeypatch.setattr(
+            "runtime.safety.budget_breaker.breaker_router.trace_stage",
+            fake_trace_stage,
+        )
+        inner = _FailingInner()
+        breaker = CircuitBreaker(
+            window_seconds=60.0,
+            max_errors_per_window=0,
+            cooldown_seconds=10.0,
+        )
+        router = BreakerModelRouter(inner=inner, breaker=breaker)
+
+        with pytest.raises(RuntimeError, match="always fails"):
+            router.call(_req())
+
+        attrs = spans[-1].attributes
+        assert attrs["octopus.breaker.state_before_check"] == "closed"
+        assert attrs["octopus.breaker.state_on_entry"] == "closed"
+        assert attrs["octopus.breaker.inner_error"] == "RuntimeError"
+        assert attrs["octopus.breaker.state_after"] == "open"
+
     def test_cost_accumulates_from_response(self, patched_time):
         inner = MockModelRouter(response="x" * 100)
         breaker = CircuitBreaker(
@@ -376,3 +433,40 @@ class TestBreakerModelRouter:
         resp = router.call(_req())
         assert resp.text == "ok"
         assert breaker.state == "closed"
+
+    def test_call_stream_preserves_inner_streaming_and_records_cost(self, patched_time):
+        inner = _StreamingInner()
+        breaker = CircuitBreaker(
+            window_seconds=60.0,
+            max_cost_usd_per_window=0.20,
+            cooldown_seconds=10.0,
+        )
+        router = BreakerModelRouter(inner=inner, breaker=breaker)
+
+        events = list(router.call_stream(_req()))
+
+        assert [e.type for e in events] == ["text_delta", "text_delta", "done"]
+        assert "".join(e.delta for e in events if e.type == "text_delta") == "hello world"
+        assert inner.stream_count == 1
+        assert inner.call_count == 0
+        assert breaker.snapshot()["cost_in_window_usd"] == 0.25
+        assert breaker.state == "open"
+
+    def test_call_stream_failure_counts_toward_breaker(self, patched_time):
+        inner = _StreamingInner(fail_after_first_delta=True)
+        breaker = CircuitBreaker(
+            window_seconds=60.0,
+            max_errors_per_window=0,
+            cooldown_seconds=10.0,
+        )
+        router = BreakerModelRouter(inner=inner, breaker=breaker)
+
+        with pytest.raises(RuntimeError, match="stream failed"):
+            list(router.call_stream(_req()))
+
+        assert inner.stream_count == 1
+        assert inner.call_count == 0
+        assert breaker.state == "open"
+        with pytest.raises(CircuitOpen):
+            list(router.call_stream(_req()))
+        assert inner.stream_count == 1
