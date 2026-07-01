@@ -51,6 +51,23 @@ CHECKS: tuple[ProductExperienceCheck, ...] = (
         ),
     ),
     ProductExperienceCheck(
+        id="e2e_surpass_operator_surface",
+        title="E2E surpass operator surface",
+        paths=(
+            "frontend/src/components/workspace/agent-operator-panel.tsx",
+            "frontend/src/components/workspace/agent-operator-panel.test.tsx",
+            "frontend/src/core/agent-trace/api.ts",
+            "runtime/safety/evolution/e2e_surpass_certification.py",
+        ),
+        required_terms=(
+            "fetchE2ESurpassCertification",
+            "E2E surpass certification",
+            "octopus.e2e_surpass_certification.v1",
+            "scorecard_best_external",
+            "all checks passed",
+        ),
+    ),
+    ProductExperienceCheck(
         id="ecosystem_operator_surface",
         title="Ecosystem operator surface",
         paths=(

@@ -888,6 +888,8 @@ class TestAgentCompetitorScorecard:
         assert report["ready"] is True
         assert report["score"] == 1.0
         assert report["passed"] == report["total"]
+        checks = {check["id"]: check for check in report["checks"]}
+        assert checks["e2e_surpass_operator_surface"]["passed"] is True
 
     def test_agent_loop_quality_reports_runtime_trace_contracts(self):
         from runtime.safety.evolution.agent_loop_quality import (
