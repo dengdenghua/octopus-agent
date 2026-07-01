@@ -42,7 +42,7 @@ vi.mock("@/providers/AuthProvider", () => ({
   }),
 }));
 
-vi.mock("@/core/oct", () => ({
+vi.mock("@/core/oct/api", () => ({
   octAuthApi: {
     emailSend: (email: string) => emailSendMock(email),
   },
@@ -182,7 +182,7 @@ describe("LoginPage", () => {
     expect(sendBtn).not.toBeDisabled();
     await user.click(sendBtn);
 
-    // API hit with the trimmed phone.
+    // API hit with the trimmed email.
     await waitFor(() =>
       expect(emailSendMock).toHaveBeenCalledWith("alice@example.com"),
     );

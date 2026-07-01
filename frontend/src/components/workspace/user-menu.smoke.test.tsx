@@ -24,7 +24,7 @@ const mockAuth = { current: null as AuthShape | null };
 vi.mock("@/providers/AuthProvider", () => ({
   useAuth: () => mockAuth.current,
 }));
-vi.mock("@/core/oct", () => ({
+vi.mock("@/core/oct/hooks", () => ({
   useOctLink: () => ({ data: null }),
   useRefreshOctCredits: () => ({ mutateAsync: vi.fn() }),
 }));
