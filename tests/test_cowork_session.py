@@ -273,9 +273,9 @@ def test_collab_room_endpoint_creates_and_links_persistent_room(tmp_path) -> Non
 
 
 def test_collab_task_endpoint_auto_creates_room_and_folds_task(tmp_path) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
     from runtime.sensing.gateway.team_rooms_router import create_team_rooms_router
     from runtime.sensing.gateway.team_tasks_router import create_team_tasks_router
-    from runtime.memory.cowork.collaboration_store import CollaborationStore
 
     store = GroupStore(base_dir=tmp_path / "cowork")
     collab_store = CollaborationStore(base_dir=tmp_path / "cowork")
