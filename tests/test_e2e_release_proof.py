@@ -63,6 +63,10 @@ def test_e2e_release_proof_merges_readiness_and_full_stack(tmp_path: Path) -> No
         "full-stack-desktop": 0,
         "full-stack-mobile": 0,
     }
+    assert data["summary"]["required_suite_playwright_report_present"] == {
+        "full-stack-desktop": True,
+        "full-stack-mobile": True,
+    }
 
 
 def test_e2e_release_proof_requires_all_named_full_stack_suites(
@@ -230,6 +234,49 @@ def test_e2e_release_proof_rejects_weak_required_suite_coverage(
     assert data["summary"]["weak_suite_test_coverage"] == ["full-stack-desktop"]
 
 
+def test_e2e_release_proof_rejects_missing_required_playwright_report(
+    tmp_path: Path,
+) -> None:
+    readiness = tmp_path / "readiness.json"
+    full_stack = tmp_path / "full_stack.json"
+    output = tmp_path / "release.json"
+    readiness.write_text(json.dumps(_readiness()), encoding="utf-8")
+    full_stack.write_text(
+        json.dumps(
+            _full_stack(
+                suite_report_presence={
+                    "full-stack-desktop": False,
+                    "full-stack-mobile": True,
+                },
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/e2e_release_proof.py",
+            "--readiness",
+            str(readiness),
+            "--full-stack",
+            str(full_stack),
+            "--output",
+            str(output),
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert result.returncode == 1
+    assert data["ready"] is False
+    assert "full_stack_required_suites_have_playwright_reports" in data["failed_checks"]
+    assert data["summary"]["suites_missing_playwright_reports"] == ["full-stack-desktop"]
+
+
 def test_e2e_release_proof_rejects_weak_required_passed_test_count(
     tmp_path: Path,
 ) -> None:
@@ -348,6 +395,7 @@ def _full_stack(
     suite_test_matches: dict[str, tuple[str, ...]] | None = None,
     suite_passed_counts: dict[str, int] | None = None,
     suite_failed_counts: dict[str, int] | None = None,
+    suite_report_presence: dict[str, bool] | None = None,
 ) -> dict[str, object]:
     default_test_matches = {
         "full-stack-desktop": (
@@ -371,11 +419,17 @@ def _full_stack(
         "full-stack-desktop": 1,
         "full-stack-mobile": 0,
     }
+    report_presence = suite_report_presence or {
+        "full-stack-desktop": True,
+        "full-stack-mobile": True,
+    }
     rows = [
         {
             "suite": suite,
             "status": "passed",
             "state_root": f"test-results/{suite}",
+            "playwright_report": f"test-results/{suite}/playwright-report.json",
+            "playwright_report_present": bool(report_presence.get(suite, False)),
             "test_match": list(test_matches_by_suite.get(suite, ())),
             "test_file_count": len(test_matches_by_suite.get(suite, ())),
             "test_case_count": (

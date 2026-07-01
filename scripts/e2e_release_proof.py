@@ -65,9 +65,15 @@ def build_release_proof(
         suite for suite in required if suite in suite_status and suite_status[suite] != "passed"
     ]
     suite_rows = _suite_rows(full_stack)
+    suite_report_presence = _suite_report_presence(suite_rows)
     suite_test_counts = _suite_test_counts(suite_rows)
     suite_passed_test_counts = _suite_counts(suite_rows, "passed_test_count")
     suite_failed_test_counts = _suite_counts(suite_rows, "failed_test_count")
+    suites_missing_playwright_reports = [
+        suite
+        for suite in required
+        if suite in suite_status and not suite_report_presence.get(suite, False)
+    ]
     weak_suite_test_coverage = [
         suite
         for suite in required
@@ -161,6 +167,14 @@ def build_release_proof(
             "next_action": f"Fix failing full-stack suites: {', '.join(failed_suites)}",
         },
         {
+            "id": "full_stack_required_suites_have_playwright_reports",
+            "passed": not suites_missing_playwright_reports,
+            "next_action": (
+                "Regenerate full-stack smoke proof with Playwright JSON reports for suites: "
+                f"{', '.join(suites_missing_playwright_reports)}"
+            ),
+        },
+        {
             "id": "full_stack_test_file_counts_consistent",
             "passed": declared_test_file_count == observed_test_file_count,
             "next_action": (
@@ -235,9 +249,13 @@ def build_release_proof(
             "required_suite_failed_test_counts": {
                 suite: suite_failed_test_counts.get(suite, 0) for suite in required
             },
+            "required_suite_playwright_report_present": {
+                suite: bool(suite_report_presence.get(suite, False)) for suite in required
+            },
             "required_suites": required,
             "missing_suites": missing_suites,
             "failed_suites": failed_suites,
+            "suites_missing_playwright_reports": suites_missing_playwright_reports,
             "weak_suite_test_coverage": weak_suite_test_coverage,
             "weak_suite_passed_tests": weak_suite_passed_tests,
             "suites_with_failed_tests": suites_with_failed_tests,
@@ -311,6 +329,15 @@ def _suite_test_counts(suite_rows: list[dict[str, Any]]) -> dict[str, int]:
                 count = len([item for item in test_match if str(item).strip()])
         counts[suite] = count
     return counts
+
+
+def _suite_report_presence(suite_rows: list[dict[str, Any]]) -> dict[str, bool]:
+    presence: dict[str, bool] = {}
+    for row in suite_rows:
+        suite = str(row.get("suite") or "").strip()
+        if suite:
+            presence[suite] = bool(row.get("playwright_report_present"))
+    return presence
 
 
 def _suite_counts(suite_rows: list[dict[str, Any]], field: str) -> dict[str, int]:
