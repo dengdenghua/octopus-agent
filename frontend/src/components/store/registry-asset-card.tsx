@@ -11,10 +11,10 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-// 云端资产(角色/插件/技能)卡片——视觉语言对齐本地角色库的 AgentCard /
+// 商城资产(角色/插件/技能)卡片——视觉语言对齐本地角色库的 AgentCard /
 // AgentWorldCard(同尺寸图标框、同 Card/Badge 排版),差异只在没有真实
 // avatar_url/rating/downloads(registry 信封不带这些字段),用渐变图标
-// 占位替代头像。三个云端面板(角色/插件/技能)共用本组件,保证观感统一。
+// 占位替代头像。三个商城面板(角色/插件/技能)共用本组件,保证观感统一。
 
 const CATEGORY_STYLE_MAP: Record<
   string,

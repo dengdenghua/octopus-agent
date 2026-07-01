@@ -8,7 +8,6 @@ import {
   BotIcon,
   Building2Icon,
   ChevronDownIcon,
-  CloudIcon,
   ImportIcon,
   Loader2Icon,
   PlusIcon,
@@ -852,8 +851,8 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
             已启用
           </TabsTrigger>
           <TabsTrigger value="registry" className="h-8 gap-1.5 px-3 text-xs">
-            <CloudIcon className="h-3.5 w-3.5" />
-            云端插件
+            <StoreIcon className="h-3.5 w-3.5" />
+            商城
           </TabsTrigger>
         </TabsList>
 
@@ -1212,8 +1211,8 @@ export function AgentWorldUnified() {
                     value="registry"
                     className="h-8 gap-1.5 px-3 text-xs"
                   >
-                    <CloudIcon className="h-3.5 w-3.5" />
-                    云端角色
+                    <StoreIcon className="h-3.5 w-3.5" />
+                    商城
                   </TabsTrigger>
                 </TabsList>
 

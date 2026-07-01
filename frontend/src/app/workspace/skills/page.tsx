@@ -457,7 +457,7 @@ export default function SkillsPage() {
               <TabsTrigger value="installed">
                 {t.skillsPage.tabInstalled}
               </TabsTrigger>
-              <TabsTrigger value="registry">云端商城</TabsTrigger>
+              <TabsTrigger value="registry">商城</TabsTrigger>
             </TabsList>
 
             <div className="mt-3 flex-1 w-full">

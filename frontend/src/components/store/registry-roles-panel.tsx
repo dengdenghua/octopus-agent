@@ -12,10 +12,10 @@ import { useI18n } from "@/core/i18n/hooks";
 
 import { RegistryAssetCard } from "./registry-asset-card";
 
-// 云端角色:从公网 registry 浏览 / 安装角色资产(role + twin-role · 数字分身岗位模板)。
+// 角色商城:从公网 registry 浏览 / 安装角色资产(role + twin-role · 数字分身岗位模板)。
 // 安装即在本地 scaffold 一个可用 agent(profile.jsonc + agent-core/SOUL.md),下次刷新
 // 角色库即可见。卡片 + 分类筛选栏对齐本地角色库(agent-world-unified 的 AgentsTab)的
-// 排版,保持云端/本地观感一致。文案暂硬编码(i18n locales 处于活跃 WIP,避开冲突)。
+// 排版,保持商城/本地观感一致。文案暂硬编码(i18n locales 处于活跃 WIP,避开冲突)。
 
 const CATEGORY_FILTERS = [
   "all",
@@ -187,9 +187,7 @@ export function RegistryRolesPanel() {
                       undefined)
                 }
                 typeLabel={
-                  role.type === "twin-role"
-                    ? "云端 · 数字分身岗位模板"
-                    : "云端角色"
+                  role.type === "twin-role" ? "商城 · 数字分身岗位模板" : "商城"
                 }
                 actionSlot={
                   <Button

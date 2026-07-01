@@ -12,8 +12,8 @@ import { cn } from "@/lib/utils";
 
 import { RegistryAssetCard } from "./registry-asset-card";
 
-// 云端技能商城:从公网 registry 浏览 / 安装 prompt-skill(母体接 registry)。卡片排版
-// 对齐云端角色/插件面板(RegistryAssetCard),保持三个云端面板观感统一。文案暂硬编码
+// 技能商城:从公网 registry 浏览 / 安装 prompt-skill(母体接 registry)。卡片排版
+// 对齐角色/插件商城面板(RegistryAssetCard),保持三个商城面板观感统一。文案暂硬编码
 // (i18n locales 处于活跃 WIP,避开冲突;后续再 i18n 化)。
 export function RegistrySkillsPanel() {
   const [skills, setSkills] = useState<RegistrySkill[]>([]);
@@ -67,9 +67,7 @@ export function RegistrySkillsPanel() {
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <span className="text-sm font-medium">
-          云端技能 · 从 registry 按需安装
-        </span>
+        <span className="text-sm font-medium">技能商城 · 从 registry 按需安装</span>
         <div className="flex shrink-0 items-center gap-1.5">
           <span className="text-xs text-muted-foreground">
             {filtered.length}/{skills.length}
@@ -114,7 +112,7 @@ export function RegistrySkillsPanel() {
                 description={skill.description}
                 category={null}
                 categoryLabel={skill.category ?? undefined}
-                typeLabel="云端技能"
+                typeLabel="商城"
                 actionSlot={
                   <Button
                     size="sm"

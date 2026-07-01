@@ -7,10 +7,10 @@ import { cn } from "@/lib/utils";
 
 import { RegistryAssetCard } from "./registry-asset-card";
 
-// 云端插件:从公网 registry 浏览插件资产(kind=code · codex-plugin 集成说明)。
+// 插件商城:从公网 registry 浏览插件资产(kind=code · codex-plugin 集成说明)。
 // 只读——沿用 octopus_runtime.materialize.SAFE_TYPES 的安全边界(只有声明式
 // prompt-pack 才可一键落地),插件类暂不提供一键安装,先可见可查。卡片排版对齐
-// 云端角色/技能面板(RegistryAssetCard),保持三个云端面板观感统一。
+// 角色/技能商城面板(RegistryAssetCard),保持三个商城面板观感统一。
 export function RegistryPluginsPanel() {
   const [plugins, setPlugins] = useState<RegistryPlugin[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,7 +47,7 @@ export function RegistryPluginsPanel() {
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <span className="text-sm font-medium">云端插件 · registry 浏览</span>
+        <span className="text-sm font-medium">插件商城 · registry 浏览</span>
         <div className="flex shrink-0 items-center gap-1.5">
           <span className="text-xs text-muted-foreground">
             {filtered.length}/{plugins.length}
@@ -95,7 +95,7 @@ export function RegistryPluginsPanel() {
               description={plugin.description}
               category={null}
               categoryLabel={plugin.category ?? undefined}
-              typeLabel="云端插件"
+              typeLabel="商城"
               actionSlot={
                 <Button
                   size="sm"
