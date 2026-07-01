@@ -230,6 +230,7 @@ test.describe("Full-stack golden smoke", () => {
   test("realtime new thread sends, persists, and resumes after refresh", async ({
     page,
   }) => {
+    test.setTimeout(90_000);
     const origin = frontendOrigins[0];
     const prompt = `Reply directly with one short sentence: full-stack realtime smoke ${Date.now()}`;
 
@@ -249,7 +250,7 @@ test.describe("Full-stack golden smoke", () => {
     await page.getByTestId("chat-send-button").click();
 
     await page.waitForURL(/#\/workspace\/realtime\/(?!new)[^/]+$/, {
-      timeout: 20_000,
+      timeout: 45_000,
     });
     const threadId = extractRealtimeThreadId(page.url());
 

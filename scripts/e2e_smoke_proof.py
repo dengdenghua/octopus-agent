@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,6 +48,8 @@ def main() -> int:
             "test_file_count": len(test_match),
             "playwright_report": str(args.playwright_report or ""),
             "playwright_report_present": bool(playwright.get("present")),
+            "playwright_report_sha256": str(playwright.get("sha256") or ""),
+            "playwright_report_bytes": int(playwright.get("bytes") or 0),
             "test_case_count": int(playwright.get("test_case_count") or 0),
             "passed_test_count": int(playwright.get("passed_test_count") or 0),
             "skipped_test_count": int(playwright.get("skipped_test_count") or 0),
@@ -99,27 +102,14 @@ def _read_proof(path: Path) -> dict[str, Any]:
     return data
 
 
-def _read_playwright_report(path: Path | None) -> dict[str, int | bool]:
+def _read_playwright_report(path: Path | None) -> dict[str, int | bool | str]:
     if path is None:
-        return {
-            "present": False,
-            "test_case_count": 0,
-            "passed_test_count": 0,
-            "skipped_test_count": 0,
-            "failed_test_count": 0,
-            "flaky_test_count": 0,
-        }
+        return _empty_playwright_report()
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {
-            "present": False,
-            "test_case_count": 0,
-            "passed_test_count": 0,
-            "skipped_test_count": 0,
-            "failed_test_count": 0,
-            "flaky_test_count": 0,
-        }
+        raw = path.read_bytes()
+        data = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return _empty_playwright_report()
     stats = data.get("stats") if isinstance(data, dict) else {}
     if not isinstance(stats, dict):
         stats = {}
@@ -132,11 +122,26 @@ def _read_playwright_report(path: Path | None) -> dict[str, int | bool]:
         total, passed, skipped, failed, flaky = _count_playwright_tests(data)
     return {
         "present": True,
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "bytes": len(raw),
         "test_case_count": total,
         "passed_test_count": passed,
         "skipped_test_count": skipped,
         "failed_test_count": failed,
         "flaky_test_count": flaky,
+    }
+
+
+def _empty_playwright_report() -> dict[str, int | bool | str]:
+    return {
+        "present": False,
+        "sha256": "",
+        "bytes": 0,
+        "test_case_count": 0,
+        "passed_test_count": 0,
+        "skipped_test_count": 0,
+        "failed_test_count": 0,
+        "flaky_test_count": 0,
     }
 
 

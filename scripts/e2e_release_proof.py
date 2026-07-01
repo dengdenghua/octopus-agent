@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -92,6 +93,16 @@ def build_release_proof(
         if suite in suite_report_counts
         and suite_report_valid.get(suite, False)
         and not _suite_counts_match_playwright_report(
+            row=_suite_row_by_name(suite_rows, suite),
+            report_counts=suite_report_counts[suite],
+        )
+    ]
+    suites_with_mismatched_playwright_report_hashes = [
+        suite
+        for suite in required
+        if suite in suite_report_counts
+        and suite_report_valid.get(suite, False)
+        and not _suite_hash_matches_playwright_report(
             row=_suite_row_by_name(suite_rows, suite),
             report_counts=suite_report_counts[suite],
         )
@@ -214,6 +225,15 @@ def build_release_proof(
             ),
         },
         {
+            "id": "full_stack_playwright_report_hashes_match",
+            "passed": not suites_with_mismatched_playwright_report_hashes,
+            "next_action": (
+                "Regenerate full-stack smoke proof; Playwright report hashes "
+                "do not match proof rows for suites: "
+                f"{', '.join(suites_with_mismatched_playwright_report_hashes)}"
+            ),
+        },
+        {
             "id": "full_stack_test_file_counts_consistent",
             "passed": declared_test_file_count == observed_test_file_count,
             "next_action": (
@@ -294,6 +314,12 @@ def build_release_proof(
             "required_suite_playwright_report_valid": {
                 suite: bool(suite_report_valid.get(suite, False)) for suite in required
             },
+            "required_suite_playwright_report_sha256": {
+                suite: str(
+                    suite_report_counts.get(suite, {}).get("sha256") or "",
+                )
+                for suite in required
+            },
             "required_suites": required,
             "missing_suites": missing_suites,
             "failed_suites": failed_suites,
@@ -301,6 +327,9 @@ def build_release_proof(
             "suites_missing_playwright_report_files": (suites_missing_playwright_report_files),
             "suites_with_mismatched_playwright_report_counts": (
                 suites_with_mismatched_playwright_report_counts
+            ),
+            "suites_with_mismatched_playwright_report_hashes": (
+                suites_with_mismatched_playwright_report_hashes
             ),
             "weak_suite_test_coverage": weak_suite_test_coverage,
             "weak_suite_passed_tests": weak_suite_passed_tests,
@@ -397,8 +426,8 @@ def _suite_playwright_report_counts(
     suite_rows: list[dict[str, Any]],
     *,
     base_dir: Path,
-) -> dict[str, dict[str, int | bool]]:
-    counts: dict[str, dict[str, int | bool]] = {}
+) -> dict[str, dict[str, int | bool | str]]:
+    counts: dict[str, dict[str, int | bool | str]] = {}
     for row in suite_rows:
         suite = str(row.get("suite") or "").strip()
         if not suite:
@@ -418,9 +447,11 @@ def _resolve_report_path(raw_path: str, *, base_dir: Path) -> Path | None:
     return (base_dir / path).resolve()
 
 
-def _read_playwright_report_counts(path: Path | None) -> dict[str, int | bool]:
+def _read_playwright_report_counts(path: Path | None) -> dict[str, int | bool | str]:
     empty = {
         "valid": False,
+        "sha256": "",
+        "bytes": 0,
         "test_case_count": 0,
         "passed_test_count": 0,
         "skipped_test_count": 0,
@@ -430,8 +461,9 @@ def _read_playwright_report_counts(path: Path | None) -> dict[str, int | bool]:
     if path is None:
         return empty
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        raw = path.read_bytes()
+        data = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return empty
     if not isinstance(data, dict):
         return empty
@@ -449,6 +481,8 @@ def _read_playwright_report_counts(path: Path | None) -> dict[str, int | bool]:
         total, passed, skipped, failed, flaky = _count_playwright_tests(data)
     return {
         "valid": total > 0,
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "bytes": len(raw),
         "test_case_count": total,
         "passed_test_count": passed,
         "skipped_test_count": skipped,
@@ -488,7 +522,7 @@ def _count_playwright_tests(data: object) -> tuple[int, int, int, int, int]:
 def _suite_counts_match_playwright_report(
     *,
     row: dict[str, Any],
-    report_counts: dict[str, int | bool],
+    report_counts: dict[str, int | bool | str],
 ) -> bool:
     return (
         _as_int(row.get("test_case_count")) == int(report_counts.get("test_case_count") or 0)
@@ -499,6 +533,18 @@ def _suite_counts_match_playwright_report(
         and _as_int(row.get("failed_test_count"))
         == int(report_counts.get("failed_test_count") or 0)
     )
+
+
+def _suite_hash_matches_playwright_report(
+    *,
+    row: dict[str, Any],
+    report_counts: dict[str, int | bool | str],
+) -> bool:
+    expected_sha = str(row.get("playwright_report_sha256") or "").strip()
+    expected_bytes = _as_int(row.get("playwright_report_bytes"))
+    actual_sha = str(report_counts.get("sha256") or "").strip()
+    actual_bytes = int(report_counts.get("bytes") or 0)
+    return bool(expected_sha) and expected_sha == actual_sha and expected_bytes == actual_bytes
 
 
 def _suite_counts(suite_rows: list[dict[str, Any]], field: str) -> dict[str, int]:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -71,6 +72,9 @@ def test_e2e_release_proof_merges_readiness_and_full_stack(tmp_path: Path) -> No
         "full-stack-desktop": True,
         "full-stack-mobile": True,
     }
+    assert (
+        len(data["summary"]["required_suite_playwright_report_sha256"]["full-stack-desktop"]) == 64
+    )
 
 
 def test_e2e_release_proof_requires_all_named_full_stack_suites(
@@ -383,6 +387,51 @@ def test_e2e_release_proof_rejects_mismatched_playwright_report_counts(
     ]
 
 
+def test_e2e_release_proof_rejects_mismatched_playwright_report_hash(
+    tmp_path: Path,
+) -> None:
+    readiness = tmp_path / "readiness.json"
+    full_stack = tmp_path / "full_stack.json"
+    output = tmp_path / "release.json"
+    readiness.write_text(json.dumps(_readiness()), encoding="utf-8")
+    full_stack.write_text(
+        json.dumps(
+            _full_stack(
+                report_root=tmp_path,
+                suite_report_hash_overrides={
+                    "full-stack-desktop": "0" * 64,
+                },
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/e2e_release_proof.py",
+            "--readiness",
+            str(readiness),
+            "--full-stack",
+            str(full_stack),
+            "--output",
+            str(output),
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert result.returncode == 1
+    assert data["ready"] is False
+    assert "full_stack_playwright_report_hashes_match" in data["failed_checks"]
+    assert data["summary"]["suites_with_mismatched_playwright_report_hashes"] == [
+        "full-stack-desktop"
+    ]
+
+
 def test_e2e_release_proof_rejects_weak_required_passed_test_count(
     tmp_path: Path,
 ) -> None:
@@ -506,6 +555,7 @@ def _full_stack(
     suite_failed_counts: dict[str, int] | None = None,
     suite_report_presence: dict[str, bool] | None = None,
     suite_report_stats: dict[str, dict[str, int]] | None = None,
+    suite_report_hash_overrides: dict[str, str] | None = None,
     write_report_files: dict[str, bool] | None = None,
 ) -> dict[str, object]:
     default_test_matches = {
@@ -535,6 +585,7 @@ def _full_stack(
         "full-stack-mobile": True,
     }
     report_stats = suite_report_stats or {}
+    report_hash_overrides = suite_report_hash_overrides or {}
     write_reports = write_report_files or {}
     report_root.mkdir(parents=True, exist_ok=True)
     rows = []
@@ -555,6 +606,11 @@ def _full_stack(
                 json.dumps({"stats": stats, "suites": []}),
                 encoding="utf-8",
             )
+        try:
+            report_bytes = report_path.read_bytes()
+        except OSError:
+            report_bytes = b""
+        report_sha = hashlib.sha256(report_bytes).hexdigest() if report_bytes else ""
         rows.append(
             {
                 "suite": suite,
@@ -562,6 +618,11 @@ def _full_stack(
                 "state_root": f"test-results/{suite}",
                 "playwright_report": str(report_path),
                 "playwright_report_present": bool(report_presence.get(suite, False)),
+                "playwright_report_sha256": report_hash_overrides.get(
+                    suite,
+                    report_sha,
+                ),
+                "playwright_report_bytes": len(report_bytes),
                 "test_match": list(test_matches_by_suite.get(suite, ())),
                 "test_file_count": len(test_matches_by_suite.get(suite, ())),
                 "test_case_count": (

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -77,6 +78,11 @@ def test_e2e_smoke_proof_records_desktop_and_mobile_suites(tmp_path: Path) -> No
     assert data["suites"][0]["test_match"] == ["full-stack-smoke.spec.ts"]
     assert data["suites"][0]["test_file_count"] == 1
     assert data["suites"][0]["playwright_report_present"] is True
+    assert data["suites"][0]["playwright_report_bytes"] > 0
+    assert (
+        data["suites"][0]["playwright_report_sha256"]
+        == hashlib.sha256((tmp_path / "full-stack-desktop.json").read_bytes()).hexdigest()
+    )
     assert data["suites"][0]["test_case_count"] == 14
     assert data["suites"][0]["passed_test_count"] == 13
 
