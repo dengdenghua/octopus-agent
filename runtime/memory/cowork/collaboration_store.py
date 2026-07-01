@@ -24,6 +24,10 @@ from runtime.memory.cowork.ids import (
     require_message_text,
 )
 
+_MAX_JSON_BYTES = 512 * 1024
+_MAX_LIST_ITEMS = 512
+_TASK_STATUSES = frozenset({"pending", "running", "done", "failed", "cancelled"})
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS collaboration_rooms (
     session_id TEXT PRIMARY KEY,
@@ -71,16 +75,87 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _dump(data: dict[str, Any]) -> str:
-    return json.dumps(data, ensure_ascii=False, default=str)
+def _normalize_json_dict(data: Any, *, label: str) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        return {}
+    try:
+        blob = json.dumps(data, ensure_ascii=False, default=str)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid {label}: not JSON serializable") from exc
+    if len(blob.encode("utf-8")) > _MAX_JSON_BYTES:
+        raise ValueError(f"invalid {label}: JSON payload exceeds {_MAX_JSON_BYTES} bytes")
+    normalized = json.loads(blob)
+    return normalized if isinstance(normalized, dict) else {}
 
 
-def _load(text: str) -> dict[str, Any]:
+def _dump(data: dict[str, Any], *, label: str = "payload") -> str:
+    return json.dumps(_normalize_json_dict(data, label=label), ensure_ascii=False)
+
+
+def _load(text: str) -> dict[str, Any] | None:
+    if len(str(text).encode("utf-8")) > _MAX_JSON_BYTES:
+        return None
     try:
         data = json.loads(text)
     except (TypeError, json.JSONDecodeError):
-        return {}
-    return data if isinstance(data, dict) else {}
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _compact_dict_list(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in value[:_MAX_LIST_ITEMS]:
+        if isinstance(item, dict):
+            out.append(_normalize_json_dict(item, label="list item"))
+    return out
+
+
+def _normalize_room_payload(payload: dict[str, Any], *, room_id: str) -> dict[str, Any]:
+    payload = _normalize_json_dict(payload, label="room")
+    payload["id"] = room_id
+    if "name" in payload:
+        payload["name"] = normalize_display_name(payload.get("name"), label="room name")
+    if "members" in payload:
+        payload["members"] = _compact_dict_list(payload.get("members"))
+    if "participants" in payload:
+        payload["participants"] = _compact_dict_list(payload.get("participants"))
+    return payload
+
+
+def _normalize_task_payload(
+    payload: dict[str, Any],
+    *,
+    task_id: str,
+    room_id: str,
+    session_id: str,
+) -> dict[str, Any]:
+    payload = _normalize_json_dict(payload, label="task")
+    payload["id"] = task_id
+    payload["room_id"] = room_id
+    status = str(payload.get("status") or "pending").strip().lower()
+    payload["status"] = status if status in _TASK_STATUSES else "pending"
+    if "title" in payload:
+        payload["title"] = require_message_text(payload.get("title"), label="task title")
+    if "description" in payload and str(payload.get("description") or "").strip():
+        payload["description"] = require_message_text(
+            payload.get("description"), label="task description",
+        )
+    elif "description" in payload:
+        payload["description"] = ""
+    if "assignees" in payload:
+        payload["assignees"] = _compact_dict_list(payload.get("assignees"))
+    if "produced_artifacts" in payload:
+        payload["produced_artifacts"] = _compact_dict_list(payload.get("produced_artifacts"))
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    metadata = _normalize_json_dict(metadata, label="task metadata")
+    metadata.setdefault("collab_session_id", session_id)
+    metadata.setdefault("source", "collab_session")
+    payload["metadata"] = metadata
+    return payload
 
 
 class CollaborationStore:
@@ -145,7 +220,7 @@ class CollaborationStore:
             payload.get("id") or payload.get("room_id") or f"collab-{session_id}",
             label="room_id",
         )
-        payload["id"] = room_id
+        payload = _normalize_room_payload(payload, room_id=room_id)
         now = _now()
         with self._lock, self._connect() as conn:
             row = conn.execute(
@@ -177,7 +252,7 @@ class CollaborationStore:
                 "VALUES (?, ?, ?, ?, ?) "
                 "ON CONFLICT(session_id) DO UPDATE SET "
                 "room_id = excluded.room_id, room_json = excluded.room_json, updated_at = excluded.updated_at",
-                (session_id, room_id, _dump(payload), created_at, payload["updated_at"]),
+                (session_id, room_id, _dump(payload, label="room"), created_at, payload["updated_at"]),
             )
         return payload
 
@@ -187,7 +262,7 @@ class CollaborationStore:
             payload.get("id") or payload.get("room_id") or "",
             label="room_id",
         )
-        payload["id"] = room_id
+        payload = _normalize_room_payload(payload, room_id=room_id)
         with self._lock, self._connect() as conn:
             row = conn.execute(
                 "SELECT session_id FROM collaboration_rooms WHERE room_id = ?",
@@ -207,7 +282,7 @@ class CollaborationStore:
                 "ORDER BY updated_at DESC, created_at DESC",
                 (session_id,),
             ).fetchall()
-        return [_load(row[0]) for row in rows]
+        return [item for row in rows if (item := _load(row[0])) is not None]
 
     def tasks_for_room(self, room_id: str) -> list[dict[str, Any]]:
         if not room_id:
@@ -219,21 +294,19 @@ class CollaborationStore:
                 "ORDER BY updated_at DESC, created_at DESC",
                 (room_id,),
             ).fetchall()
-        return [_load(row[0]) for row in rows]
+        return [item for row in rows if (item := _load(row[0])) is not None]
 
     def upsert_task(self, session_id: str, task: dict[str, Any]) -> dict[str, Any]:
         session_id = require_cowork_id(session_id, label="session_id")
         payload = dict(task or {})
         task_id = require_cowork_id(payload.get("id") or payload.get("task_id") or "", label="task_id")
         room_id = require_cowork_id(payload.get("room_id") or "", label="room_id")
-        payload["id"] = task_id
-        payload["room_id"] = room_id
-        metadata = payload.get("metadata")
-        if not isinstance(metadata, dict):
-            metadata = {}
-        metadata.setdefault("collab_session_id", session_id)
-        metadata.setdefault("source", "collab_session")
-        payload["metadata"] = metadata
+        payload = _normalize_task_payload(
+            payload,
+            task_id=task_id,
+            room_id=room_id,
+            session_id=session_id,
+        )
         now = _now()
         created_at = str(payload.get("created_at") or now)
         updated_at = str(payload.get("updated_at") or now)
@@ -247,7 +320,7 @@ class CollaborationStore:
                 "session_id = excluded.session_id, room_id = excluded.room_id, "
                 "status = excluded.status, task_json = excluded.task_json, "
                 "updated_at = excluded.updated_at",
-                (task_id, session_id, room_id, status, _dump(payload), created_at, updated_at),
+                (task_id, session_id, room_id, status, _dump(payload, label="task"), created_at, updated_at),
             )
         return payload
 
