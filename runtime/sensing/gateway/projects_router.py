@@ -104,8 +104,23 @@ def create_projects_router(
 
     router = APIRouter(tags=["projectos"])
 
+    def _bad_request(exc: ValueError) -> HTTPException:
+        return HTTPException(400, str(exc))
+
+    def _project_or_404(project_id: str):
+        try:
+            project = project_store.get_project(project_id)
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
+        if project is None:
+            raise HTTPException(404, "project not found")
+        return project
+
     def _full_state(project_id: str) -> dict[str, Any]:
-        state = full_project_state(project_store, project_id)
+        try:
+            state = full_project_state(project_store, project_id)
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
         if state is None:
             raise HTTPException(404, "project not found")
         return state
@@ -116,7 +131,10 @@ def create_projects_router(
 
     @router.get("/api/projects/by-thread/{thread_id}")
     def get_project_by_thread(thread_id: str) -> dict[str, Any]:
-        project = project_store.project_for_thread(thread_id)
+        try:
+            project = project_store.project_for_thread(thread_id)
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
         if project is None:
             raise HTTPException(404, "project not found for thread")
         return _full_state(project.id)
@@ -128,11 +146,13 @@ def create_projects_router(
     @router.get("/api/projects/{project_id}/report")
     def report(project_id: str) -> dict[str, Any]:
         """A milestone report: each milestone + its tasks' status/output."""
-        project = project_store.get_project(project_id)
-        if project is None:
-            raise HTTPException(404, "project not found")
+        project = _project_or_404(project_id)
         out = []
-        for m in project_store.milestones_for(project_id):
+        try:
+            milestones = project_store.milestones_for(project_id)
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
+        for m in milestones:
             out.append({
                 "id": m.id, "name": m.name, "status": m.status,
                 "success_criteria": m.success_criteria,
@@ -147,17 +167,23 @@ def create_projects_router(
     @router.get("/api/projects/{project_id}/events")
     def events(project_id: str, limit: int = 100) -> dict[str, Any]:
         """Project audit trail: recoveries, interventions, and future operator actions."""
-        if project_store.get_project(project_id) is None:
-            raise HTTPException(404, "project not found")
+        _project_or_404(project_id)
+        try:
+            audit_events = project_store.events_for_project(project_id, limit=limit)
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
         return {
             "project_id": project_id,
-            "events": project_store.events_for_project(project_id, limit=limit),
+            "events": audit_events,
         }
 
     @router.post("/api/projects", dependencies=[Depends(_auth_dep)])
     def plan(body: PlanBody) -> dict[str, Any]:
         """Turn a one-line goal into a project with generated milestones."""
-        project = _engine().plan(body.name, body.goal)
+        try:
+            project = _engine().plan(body.name, body.goal)
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
         return {"ok": True, **_full_state(project.id)}
 
     @router.post("/api/projects/from-group/{thread_id}", dependencies=[Depends(_auth_dep)])
@@ -178,46 +204,48 @@ def create_projects_router(
                 max_ticks=body.max_ticks,
             )
         except ValueError as exc:
-            raise HTTPException(
-                400,
-                "group has no participant agents to staff the project",
-            ) from exc
+            raise _bad_request(exc) from exc
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(500, f"project run failed: {exc}") from exc
 
     @router.post("/api/projects/{project_id}/tick", dependencies=[Depends(_auth_dep)])
     def tick(project_id: str) -> dict[str, Any]:
         """Advance the project one loop iteration."""
-        if project_store.get_project(project_id) is None:
-            raise HTTPException(404, "project not found")
-        return _engine().tick(project_id)
+        _project_or_404(project_id)
+        try:
+            return _engine().tick(project_id)
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
 
     @router.post("/api/projects/{project_id}/run", dependencies=[Depends(_auth_dep)])
     def run(project_id: str, body: RunBody) -> dict[str, Any]:
         """Drive the loop until the project is done/blocked or max_ticks."""
-        if project_store.get_project(project_id) is None:
-            raise HTTPException(404, "project not found")
-        return _engine().run(project_id, max_ticks=body.max_ticks)
+        _project_or_404(project_id)
+        try:
+            return _engine().run(project_id, max_ticks=body.max_ticks)
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
 
     @router.post("/api/projects/{project_id}/recover", dependencies=[Depends(_auth_dep)])
     def recover(project_id: str, body: RecoverBody) -> dict[str, Any]:
         """Reopen blocked project work after an operator fixes the cause."""
-        if project_store.get_project(project_id) is None:
-            raise HTTPException(404, "project not found")
+        _project_or_404(project_id)
         engine = _engine()
-        recovered = engine.recover(
-            project_id,
-            task_ids=body.task_ids,
-            reset_attempts=body.reset_attempts,
-            clear_outputs=body.clear_outputs,
-        )
+        try:
+            recovered = engine.recover(
+                project_id,
+                task_ids=body.task_ids,
+                reset_attempts=body.reset_attempts,
+                clear_outputs=body.clear_outputs,
+            )
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
         if body.run:
-            return {
-                "ok": True,
-                "recover": recovered,
-                "run": engine.run(project_id, max_ticks=body.max_ticks),
-                **_full_state(project_id),
-            }
+            try:
+                run_result = engine.run(project_id, max_ticks=body.max_ticks)
+            except ValueError as exc:
+                raise _bad_request(exc) from exc
+            return {"ok": True, "recover": recovered, "run": run_result, **_full_state(project_id)}
         return {"ok": True, "recover": recovered, **_full_state(project_id)}
 
     @router.post(
@@ -226,31 +254,32 @@ def create_projects_router(
     )
     def intervene_task(project_id: str, task_id: str, body: TaskInterventionBody) -> dict[str, Any]:
         """Manually reassign, reset, complete, or skip a task."""
-        if project_store.get_project(project_id) is None:
-            raise HTTPException(404, "project not found")
+        _project_or_404(project_id)
         engine = _engine()
-        intervention = engine.intervene_task(
-            project_id,
-            task_id,
-            action=body.action,
-            assigned_agent=body.assigned_agent,
-            assigned_role=body.assigned_role,
-            output=body.output,
-            reason=body.reason,
-            reset_attempts=body.reset_attempts,
-            cascade=body.cascade,
-        )
+        try:
+            intervention = engine.intervene_task(
+                project_id,
+                task_id,
+                action=body.action,
+                assigned_agent=body.assigned_agent,
+                assigned_role=body.assigned_role,
+                output=body.output,
+                reason=body.reason,
+                reset_attempts=body.reset_attempts,
+                cascade=body.cascade,
+            )
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
         if any(str(event).startswith("task_not_found:") for event in intervention["events"]):
             raise HTTPException(404, "task not found")
         if any(str(event).startswith("unknown_task_action:") for event in intervention["events"]):
             raise HTTPException(400, "unknown task intervention action")
         if body.run:
-            return {
-                "ok": True,
-                "intervention": intervention,
-                "run": engine.run(project_id, max_ticks=body.max_ticks),
-                **_full_state(project_id),
-            }
+            try:
+                run_result = engine.run(project_id, max_ticks=body.max_ticks)
+            except ValueError as exc:
+                raise _bad_request(exc) from exc
+            return {"ok": True, "intervention": intervention, "run": run_result, **_full_state(project_id)}
         return {"ok": True, "intervention": intervention, **_full_state(project_id)}
 
     return router

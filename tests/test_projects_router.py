@@ -71,6 +71,25 @@ def test_404s(tmp_path) -> None:
     assert c.get("/api/projects/nope/report").status_code == 404
 
 
+def test_invalid_ids_return_400_instead_of_server_error(tmp_path) -> None:
+    c, store = _client_with_store(tmp_path)
+    project = Project(id="P-valid", name="valid", goal="g", milestone_ids=["MS1"])
+    store.save_project(project)
+    store.save_milestone(project.id, Milestone(id="MS1", name="build", goal="build it"))
+
+    assert c.get("/api/projects/bad!").status_code == 400
+    assert c.post("/api/projects/bad!/tick").status_code == 400
+    assert c.get("/api/projects/bad!/report").status_code == 400
+    assert c.get("/api/projects/bad!/events").status_code == 400
+    assert c.get("/api/projects/by-thread/bad!").status_code == 400
+
+    invalid_task = c.post(
+        "/api/projects/P-valid/tasks/bad!/intervene",
+        json={"action": "reset"},
+    )
+    assert invalid_task.status_code == 400
+
+
 def test_recover_reopens_blocked_project_and_can_run(tmp_path) -> None:
     c, store = _client_with_store(tmp_path)
     project = Project(
