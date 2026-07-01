@@ -8,7 +8,14 @@ thin client:**拉取 → 验签 → 落地到产品现有磁盘布局**,再绑�
 """
 
 from .bootstrap import bootstrap_skills, read_lockfile, write_lockfile
-from .client import AssetContent, AssetPayload, RegistryAsset, RegistryClient
+from .client import (
+    AssetContent,
+    AssetPayload,
+    RegistryAsset,
+    RegistryClient,
+    safe_registry_asset_id,
+    safe_registry_skill_slug,
+)
 from .materialize import SAFE_TYPES, materialize_skill, sync_skills
 
 __all__ = [
@@ -22,4 +29,6 @@ __all__ = [
     "bootstrap_skills",
     "read_lockfile",
     "write_lockfile",
+    "safe_registry_asset_id",
+    "safe_registry_skill_slug",
 ]

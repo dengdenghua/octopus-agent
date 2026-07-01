@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
-from .client import DEFAULT_BASE
+from .client import DEFAULT_BASE, safe_registry_skill_slug
 from .materialize import sync_skills
 
 
@@ -20,18 +21,31 @@ def read_lockfile(path: Path | str) -> dict:
     p = Path(path)
     if not p.is_file():
         return {"skills": []}
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {"skills": []}
+    data = json.loads(p.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"lockfile must contain a JSON object: {p}")
+    skills = data.get("skills", [])
+    if skills is None:
+        data["skills"] = []
+    elif not isinstance(skills, list):
+        raise ValueError(f"lockfile skills must be a list: {p}")
+    return data
+
+
+def _lock_slug(entry: Any) -> str | None:
+    slug = entry if isinstance(entry, str) else (entry or {}).get("slug")
+    if not slug:
+        return None
+    text = str(slug)
+    return text if "/" in text else safe_registry_skill_slug(text)
 
 
 def _lock_slugs(lock: dict) -> list[str]:
     out: list[str] = []
     for entry in lock.get("skills", []) or []:
-        slug = entry if isinstance(entry, str) else (entry or {}).get("slug")
+        slug = _lock_slug(entry)
         if slug:
-            out.append(str(slug))
+            out.append(slug)
     return out
 
 
@@ -49,7 +63,7 @@ def bootstrap_skills(
     todo: list[str] = []
     present: list[str] = []
     for slug in slugs:
-        bare = slug.split("/")[-1]
+        bare = safe_registry_skill_slug(slug)
         if not force and (skills_dir / bare / "SKILL.md").is_file():
             present.append(bare)
         else:

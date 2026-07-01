@@ -33,6 +33,16 @@ def _safe_asset_id(asset_id: str) -> str:
     return asset_id
 
 
+def safe_registry_asset_id(value: str) -> str:
+    return _safe_asset_id(value)
+
+
+def safe_registry_skill_slug(value: str) -> str:
+    asset_id = value if "/" in value else f"skill/{value}"
+    safe = _safe_asset_id(asset_id)
+    return safe.split("/", 1)[1]
+
+
 class AssetContent(BaseModel):
     ref: str | None = None
     checksum: str | None = None  # "sha256:<hex>"
