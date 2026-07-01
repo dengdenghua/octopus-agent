@@ -9,6 +9,7 @@ print the exact degraded signal and its next action.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -60,12 +61,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             "Defaults to the active OCTOPUS_DATA_DIR/OCTOPUS_HOME runtime queue."
         ),
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a machine-readable readiness report instead of text.",
+    )
     args = parser.parse_args(argv)
 
     result = run_gate(
         min_score=args.min_score,
         review_queue_path=args.review_queue_path,
     )
+    if args.json:
+        print(json.dumps(result.to_dict(), sort_keys=True))
+        return 1 if result.failures else 0
+
     if result.failures:
         print("production readiness gate failed:", file=sys.stderr)
         for failure in result.failures:
@@ -114,6 +124,25 @@ class GateResult:
             f"e2e_quality={_nested_int(self.e2e_summary, 'quality_ready')}/"
             f"{_nested_int(self.e2e_summary, 'quality_total')}"
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema": "octopus.production_readiness_gate.v1",
+            "ready": not self.failures,
+            "failures": list(self.failures),
+            "scorecard_score": self.scorecard_score,
+            "scorecard_evidence_adjusted_score": (
+                self.scorecard_evidence_adjusted_score
+            ),
+            "automation_score": self.automation_score,
+            "e2e": {
+                "ready": self.e2e_ready,
+                "verdict": self.e2e_verdict,
+                "summary": dict(self.e2e_summary),
+                "failed_checks": list(self.e2e_failed_checks),
+            },
+            "quality_summary": self.quality_summary,
+        }
 
 
 def run_gate(

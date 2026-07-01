@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -55,6 +56,65 @@ def test_production_readiness_gate_prints_e2e_summary(
     assert "e2e_best_external=87" in captured.out
     assert "e2e_automation=95" in captured.out
     assert "e2e_quality=6/6" in captured.out
+
+
+def test_production_readiness_gate_can_emit_json_summary(
+    capsys,
+    review_queue_path: Path,
+) -> None:
+    code = gate.main([
+        "--review-queue-path",
+        str(review_queue_path),
+        "--json",
+    ])
+
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert code == 0
+    assert data["schema"] == "octopus.production_readiness_gate.v1"
+    assert data["ready"] is True
+    assert data["failures"] == []
+    assert data["scorecard_score"] == 97
+    assert data["automation_score"] == 95
+    assert data["e2e"]["ready"] is True
+    assert data["e2e"]["verdict"] == "surpassed"
+    assert data["e2e"]["summary"]["scorecard_best_external"] == 87
+    assert data["e2e"]["failed_checks"] == []
+
+
+def test_production_readiness_gate_json_reports_failures(
+    capsys,
+    monkeypatch,
+    review_queue_path: Path,
+) -> None:
+    real_e2e = gate.compute_e2e_surpass_certification
+
+    def drifted_e2e(**kwargs):
+        report = real_e2e(**kwargs)
+        report["summary"] = {
+            **report["summary"],
+            "scorecard_best_external": 1,
+        }
+        return report
+
+    monkeypatch.setattr(gate, "compute_e2e_surpass_certification", drifted_e2e)
+
+    code = gate.main([
+        "--review-queue-path",
+        str(review_queue_path),
+        "--json",
+    ])
+
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert code == 1
+    assert data["ready"] is False
+    assert any(
+        "e2e summary mismatch: scorecard_best_external=1, expected 87" in item
+        for item in data["failures"]
+    )
 
 
 def test_production_readiness_gate_reports_not_ready_quality(
