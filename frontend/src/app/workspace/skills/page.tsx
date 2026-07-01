@@ -1,5 +1,6 @@
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
+import { RegistrySkillsPanel } from "@/components/store/registry-skills-panel";
 import {
   CheckCircle2Icon,
   PuzzleIcon,
@@ -456,6 +457,7 @@ export default function SkillsPage() {
               <TabsTrigger value="installed">
                 {t.skillsPage.tabInstalled}
               </TabsTrigger>
+              <TabsTrigger value="registry">云端商城</TabsTrigger>
             </TabsList>
 
             <div className="mt-3 flex-1 w-full">
@@ -464,6 +466,12 @@ export default function SkillsPage() {
                 className="workspace-panel w-full rounded-lg p-4 shadow-sm border border-border/50 min-h-[500px] outline-none"
               >
                 <InstalledSkillsPanel />
+              </TabsContent>
+              <TabsContent
+                value="registry"
+                className="workspace-panel w-full rounded-lg shadow-sm border border-border/50 min-h-[500px] outline-none"
+              >
+                <RegistrySkillsPanel />
               </TabsContent>
             </div>
           </Tabs>

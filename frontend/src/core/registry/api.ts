@@ -1,5 +1,6 @@
 // 资产 Registry 消费端 API(母体接 registry · octopus-runtime)。
 // 走后端 /api/registry/* 路由(registry_consumer_router),浏览/安装公网 registry 技能。
+import { authHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 
 export interface RegistrySkill {
@@ -42,7 +43,9 @@ export async function listRegistrySkills(params?: {
   if (params?.search) q.set("search", params.search);
   if (params?.category) q.set("category", params.category);
   q.set("limit", String(params?.limit ?? 300));
-  const res = await fetch(`${getBackendBaseURL()}/api/registry/skills?${q.toString()}`);
+  const res = await fetch(`${getBackendBaseURL()}/api/registry/skills?${q.toString()}`, {
+    headers: authHeaders(),
+  });
   if (!res.ok) throw new Error(`registry list failed: HTTP ${res.status}`);
   return (await res.json()) as RegistrySkillsResponse;
 }
@@ -51,7 +54,7 @@ export async function installRegistrySkill(slug: string): Promise<InstallResult>
   const bare = registrySlug(slug);
   const res = await fetch(
     `${getBackendBaseURL()}/api/registry/skills/${encodeURIComponent(bare)}/install`,
-    { method: "POST" },
+    { method: "POST", headers: authHeaders() },
   );
   if (!res.ok) {
     const txt = await res.text().catch(() => "");

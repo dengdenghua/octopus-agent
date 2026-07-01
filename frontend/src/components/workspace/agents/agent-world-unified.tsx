@@ -67,8 +67,7 @@ import { AgentCard } from "./agent-card";
 import { AgentRoleProfileDialog } from "./agent-role-profile-dialog";
 import { AgentWorldCard } from "./agent-world-card";
 import { LocalAgentConnectDialog } from "./local-agent-connect-dialog";
-import { LocalSkillDirectoryPanel } from "@/components/store/local-skill-directory-panel";
-import { SkillPacksTab } from "@/components/workspace/agents/skill-packs-tab";
+import { RegistrySkillsPanel } from "@/components/store/registry-skills-panel";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -965,9 +964,6 @@ export function AgentWorldUnified() {
     if (tab === "skills") return "skills";
     return "agents";
   });
-  const [skillView, setSkillView] = useState<"directory" | "packs">(
-    "directory",
-  );
   const [activeCategory, setActiveCategory] =
     useState<AgentCategoryFilter>("all");
   const [importOpen, setImportOpen] = useState(false);
@@ -1009,7 +1005,6 @@ export function AgentWorldUnified() {
       setActiveTab("plugins");
     } else if (tab === "skills" || tab === "packs" || tab === "skill-packs") {
       setActiveTab("skills");
-      setSkillView(tab === "skill-packs" ? "packs" : "directory");
     } else if (tab === "agents" || tab === "enterprise") {
       setActiveTab("agents");
     }
@@ -1193,14 +1188,7 @@ export function AgentWorldUnified() {
             </TabsContent>
 
             <TabsContent value="skills" className="mt-0">
-              <LocalSkillDirectoryPanel
-                searchQuery={searchQuery}
-                allButtonPosition="end"
-                onDirectorySelect={() => setSkillView("directory")}
-                onSkillPacksSelect={() => setSkillView("packs")}
-                skillPacksContent={<SkillPacksTab variant="embedded" />}
-                skillPacksSelected={skillView === "packs"}
-              />
+              <RegistrySkillsPanel />
             </TabsContent>
 
             <TabsContent value="enterprise" className="mt-0">
