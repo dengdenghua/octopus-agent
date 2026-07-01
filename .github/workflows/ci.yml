@@ -193,6 +193,9 @@ jobs:
       - name: Typecheck
         working-directory: frontend
         run: pnpm typecheck
+      - name: Unit tests
+        working-directory: frontend
+        run: pnpm test
       - name: Build
         working-directory: frontend
         run: pnpm build

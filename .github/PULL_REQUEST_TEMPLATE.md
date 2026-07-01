@@ -23,6 +23,8 @@
 # 我复核用的命令
 python -m pytest tests/ -q
 python -m tools.lint.invariant_check runtime/ tests/
+cd frontend && pnpm test && pnpm typecheck
+python scripts/production_readiness_gate.py
 ```
 
 ---
@@ -33,6 +35,8 @@ python -m tools.lint.invariant_check runtime/ tests/
 
 - [ ] `python -m pytest tests/` 绿(不跳过 · 3800+ 基线)
 - [ ] `python -m tools.lint.invariant_check runtime/ tests/` 0 issue
+- [ ] `cd frontend && pnpm test && pnpm typecheck` 绿
+- [ ] `python scripts/production_readiness_gate.py` 绿
 - [ ] 新逻辑有新测试(unit 或 integration)· 否则给说法
 - [ ] 不加新强依赖(新 soft-dep 走 `[project.optional-dependencies]` · 在 PR 说明动机)
 - [ ] 违反不变量的改动同步更新 [invariants.md](../docs/invariants.md)

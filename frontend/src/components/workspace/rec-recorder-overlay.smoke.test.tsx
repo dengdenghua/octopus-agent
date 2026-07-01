@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
+
+import { renderWithProviders } from "@/test/harness";
 
 vi.mock("@/core/teach-repeat/api", () => ({
   startRecording: vi.fn(() =>
@@ -21,8 +24,11 @@ vi.mock("sonner", () => ({
 import { RecRecorderOverlay } from "./rec-recorder-overlay";
 
 describe("RecRecorderOverlay", () => {
+  const renderRecorder = (ui: ReactElement) =>
+    renderWithProviders(ui, { locale: "zh-CN" });
+
   it("renders nothing when closed", () => {
-    const { container } = render(
+    const { container } = renderRecorder(
       <RecRecorderOverlay
         open={false}
         threadId="t1"
@@ -34,7 +40,7 @@ describe("RecRecorderOverlay", () => {
   });
 
   it("shows the pre-record form when opened idle", () => {
-    render(
+    renderRecorder(
       <RecRecorderOverlay
         open
         threadId="t1"
@@ -50,7 +56,7 @@ describe("RecRecorderOverlay", () => {
 
   it("enters the countdown after pressing start", async () => {
     const user = userEvent.setup();
-    render(
+    renderRecorder(
       <RecRecorderOverlay
         open
         threadId="t1"
@@ -63,7 +69,7 @@ describe("RecRecorderOverlay", () => {
   });
 
   it("shows the stop control when opened mid-recording", async () => {
-    render(
+    renderRecorder(
       <RecRecorderOverlay
         open
         threadId="t1"

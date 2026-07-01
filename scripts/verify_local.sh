@@ -131,7 +131,8 @@ if [[ "$run_frontend_static" == "1" ]]; then
     section "frontend production unit tests"
     (cd frontend && pnpm exec vitest run \
       src/core/i18n/translations.test.ts \
-      src/components/workspace/settings/appearance-settings-page.test.tsx)
+      src/components/workspace/settings/appearance-settings-page.test.tsx \
+      src/components/workspace/rec-recorder-overlay.smoke.test.tsx)
   fi
 fi
 
