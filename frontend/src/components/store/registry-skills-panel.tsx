@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Download, Loader2, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import {
   registrySlug,
   type RegistrySkill,
 } from "@/core/registry/api";
+import { useSkills } from "@/core/skills/hooks";
 import { cn } from "@/lib/utils";
 
 import { RegistryAssetCard } from "./registry-asset-card";
@@ -22,6 +23,13 @@ export function RegistrySkillsPanel() {
   const [query, setQuery] = useState("");
   const [installing, setInstalling] = useState<Record<string, boolean>>({});
   const [installed, setInstalled] = useState<Record<string, boolean>>({});
+  // 本地已注册的技能名(all_skills/skills-public 里已有的)→ 去重:云端商城里同名的
+  // 直接显示"已安装",不让用户误以为要重新装一份(名字即 slug,两边约定一致)。
+  const { skills: localSkills } = useSkills();
+  const localSkillSlugs = useMemo(
+    () => new Set(localSkills.map((s) => s.name.toLowerCase())),
+    [localSkills],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,7 +111,8 @@ export function RegistrySkillsPanel() {
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {filtered.map((skill) => {
             const slug = registrySlug(skill.id);
-            const done = installed[slug];
+            const alreadyLocal = localSkillSlugs.has(slug.toLowerCase());
+            const done = installed[slug] || alreadyLocal;
             const busy = installing[slug];
             return (
               <RegistryAssetCard
