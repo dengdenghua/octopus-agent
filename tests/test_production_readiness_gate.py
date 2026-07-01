@@ -7,6 +7,8 @@ import pytest
 from runtime.memory.learning.review_queue import ReviewQueue
 from scripts import production_readiness_gate as gate
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 @pytest.fixture
 def review_queue_path(tmp_path: Path) -> Path:
@@ -203,3 +205,15 @@ def test_production_readiness_gate_uses_explicit_review_queue_path(
         "browser/desktop replay stale source artifacts: 1" in item
         for item in result.failures
     )
+
+
+def test_ci_runs_production_readiness_gate_with_isolated_state() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8",
+    )
+
+    assert "Production readiness gate" in workflow
+    assert "python scripts/production_readiness_gate.py" in workflow
+    assert "--review-queue-path" in workflow
+    assert "runner.temp" in workflow
+    assert "OCTOPUS_DATA_DIR" in workflow
