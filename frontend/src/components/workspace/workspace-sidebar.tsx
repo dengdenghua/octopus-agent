@@ -1,4 +1,5 @@
 import {
+  ArrowLeftIcon,
   ArrowUpDownIcon,
   AppWindowIcon,
   BotIcon,
@@ -13,6 +14,7 @@ import {
   FolderPlusIcon,
   GlobeIcon,
   HardDriveIcon,
+  ListTodoIcon,
   MessageSquarePlusIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
@@ -162,6 +164,14 @@ type ThreadSummary = {
   /** Agent ids associated with this thread · drives the WeChat-style
    *  avatar (single big avatar OR 2×2 / 3×3 grid for team threads). */
   agents: string[];
+};
+
+type SidebarFileExplorerTarget = {
+  project: string;
+  title: string;
+  threadId: string | null;
+  workDir: string | null;
+  href?: string;
 };
 
 type ThreadRunStatus = Extract<
@@ -946,6 +956,23 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     return null;
   }, [activeThread]);
 
+  const [fileExplorerTarget, setFileExplorerTarget] =
+    useState<SidebarFileExplorerTarget | null>(null);
+  const openThreadFiles = useCallback(
+    (thread: ThreadSummary, project: string) => {
+      const workDir = thread.workspacePath ?? activeWorkDir;
+      setFileExplorerTarget({
+        project,
+        title: thread.title,
+        threadId: thread.id,
+        workDir: workDir ?? null,
+        href: thread.href,
+      });
+      if (workDir) emitWorkDirSelected(workDir);
+    },
+    [activeWorkDir],
+  );
+
   const activeTeamTasksQuery = useTeamTasks(activeTaskRoomId);
   const activeTeamTasks = useMemo(
     () => activeTeamTasksQuery.data ?? [],
@@ -1124,31 +1151,37 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
           pathname={pathname}
           search={search}
         />
-        <FileExplorerSection
-          workDir={activeWorkDir}
-          threadId={activeTaskRoomId}
-          pathname={pathname}
-        />
-        <ProjectsSection
-          groups={projectOrder}
-          byProject={byProject}
-          pathname={pathname}
-          draftOpen={projectDraftOpen}
-          deletableProjects={deletableProjects}
-          deletingProject={deletingProject}
-          groupingEnabled={projectGroupingEnabled}
-          runStatusByHref={runStatusByHref}
-          onDraftCommit={saveProjectName}
-          onDraftCancel={() => setProjectDraftOpen(false)}
-          onDeleteProject={deleteProject}
-          onToggleGrouping={toggleProjectGrouping}
-        />
-        <ChatsSection
-          threads={allHistoryThreads}
-          pathname={pathname}
-          label={t.sidebar.sectionChats}
-          runStatusByHref={runStatusByHref}
-        />
+        {fileExplorerTarget ? (
+          <ProjectFileExplorerView
+            target={fileExplorerTarget}
+            fallbackWorkDir={activeWorkDir}
+            onBack={() => setFileExplorerTarget(null)}
+          />
+        ) : (
+          <>
+            <ProjectsSection
+              groups={projectOrder}
+              byProject={byProject}
+              pathname={pathname}
+              draftOpen={projectDraftOpen}
+              deletableProjects={deletableProjects}
+              deletingProject={deletingProject}
+              groupingEnabled={projectGroupingEnabled}
+              runStatusByHref={runStatusByHref}
+              onDraftCommit={saveProjectName}
+              onDraftCancel={() => setProjectDraftOpen(false)}
+              onDeleteProject={deleteProject}
+              onToggleGrouping={toggleProjectGrouping}
+              onOpenFiles={openThreadFiles}
+            />
+            <ChatsSection
+              threads={allHistoryThreads}
+              pathname={pathname}
+              label={t.sidebar.sectionChats}
+              runStatusByHref={runStatusByHref}
+            />
+          </>
+        )}
         {/* Hidden directory input — used as the Safari/Firefox fallback
             when showDirectoryPicker is unavailable. webkitdirectory
             forces a folder selection instead of a single file. */}
@@ -1451,19 +1484,17 @@ function isAgentSurfaceActive(pathname: string, search = "") {
   );
 }
 
-function FileExplorerSection({
-  workDir: propWorkDir,
-  threadId,
-  pathname,
+function ProjectFileExplorerView({
+  target,
+  fallbackWorkDir,
+  onBack,
 }: {
-  workDir: string | null;
-  threadId: string | null;
-  pathname: string;
+  target: SidebarFileExplorerTarget;
+  fallbackWorkDir: string | null;
+  onBack: () => void;
 }) {
   const { t } = useI18n();
-  const [open, setOpen] = useState(false);
   const [eventWorkDir, setEventWorkDir] = useState<string | null>(null);
-  const active = pathname.startsWith("/workspace/realtime/");
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -1479,7 +1510,8 @@ function FileExplorerSection({
   }, []);
 
   const resolvedWorkDir =
-    propWorkDir ??
+    target.workDir ??
+    fallbackWorkDir ??
     eventWorkDir ??
     (() => {
       try {
@@ -1498,77 +1530,60 @@ function FileExplorerSection({
   const hasWorkDir = Boolean(resolvedWorkDir);
 
   return (
-    <SidebarGroup className="p-0 px-1 group-data-[collapsible=icon]:px-0">
-      <SidebarMenu className="gap-0.5">
-        <SidebarMenuItem className="justify-center">
-          <SidebarMenuButton
-            isActive={active}
-            tooltip={t.codeMode.explorer}
-            aria-expanded={open}
-            aria-label={
-              open
-                ? t.sidebar.ariaCollapseLocalDatabase
-                : t.sidebar.ariaExpandLocalDatabase
-            }
-            onClick={() => setOpen((v) => !v)}
-            className={cn(
-              "group/nav relative h-9 w-full rounded-lg opacity-76 transition-[opacity,background-color,border-color] duration-150 text-[13px]",
-              "border border-transparent hover:border-border/45 hover:bg-muted/32 hover:opacity-100",
-              "data-[active=true]:opacity-100",
-              "data-[active=true]:border-primary/14 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_76%,transparent)]",
-              "data-[active=true]:shadow-sm data-[active=true]:shadow-black/[0.025]",
-              "data-[active=true]:before:absolute data-[active=true]:before:left-0 data-[active=true]:before:top-1.5 data-[active=true]:before:bottom-1.5 data-[active=true]:before:w-[2px] data-[active=true]:before:rounded-r data-[active=true]:before:bg-primary/75",
-              "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0",
-            )}
+    <div className="mt-2 min-h-0 group-data-[collapsible=icon]:hidden">
+      <SidebarGroup className="p-0 px-2 pb-1">
+        <div className="flex h-9 items-center gap-2 px-1 text-sm">
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left text-foreground/85 transition-colors hover:text-foreground"
           >
-            <span
-              className={cn(
-                "flex size-6 shrink-0 items-center justify-center rounded-md transition-colors",
-                active
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground group-hover/nav:text-foreground",
-              )}
-            >
-              <FolderIcon className="size-[16px]" />
-            </span>
-            <span className="min-w-0 flex-1 truncate text-left group-data-[collapsible=icon]:hidden">
-              {t.codeMode.explorer}
-            </span>
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors group-hover/nav:bg-muted/60 group-hover/nav:text-foreground group-data-[collapsible=icon]:hidden">
-              <ChevronRightIcon
-                className={cn(
-                  "size-3.5 transition-transform",
-                  open && "rotate-90",
-                )}
-              />
-            </span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        {open && (
-          <div className="overflow-hidden rounded-lg border border-border/40 bg-background/60 group-data-[collapsible=icon]:hidden">
-            {hasWorkDir && resolvedWorkDir ? (
-              <FileTree
-                workDir={resolvedWorkDir}
-                threadId={threadId}
-                className="max-h-[40vh]"
-                onFileClick={(path) => {
-                  window.dispatchEvent(
-                    new CustomEvent("octopus:open-file", {
-                      detail: { path, workDir: resolvedWorkDir },
-                    }),
-                  );
-                }}
-              />
-            ) : (
-              <div className="flex flex-col items-center gap-2 p-4 text-center text-xs text-muted-foreground">
-                <FolderIcon className="size-8 opacity-40" />
-                <p>{t.agentWorkbenchPages.noWorkDirDescription}</p>
-              </div>
-            )}
-          </div>
-        )}
-      </SidebarMenu>
-    </SidebarGroup>
+            <ArrowLeftIcon className="size-4 shrink-0" />
+            <span className="truncate">{t.sidebar.backToProjectList}</span>
+          </button>
+          <button
+            type="button"
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground/75 transition-colors hover:bg-muted/55 hover:text-foreground"
+            title={t.codeMode.explorer}
+            aria-label={t.codeMode.explorer}
+          >
+            <ListTodoIcon className="size-3.5" />
+          </button>
+        </div>
+        <div className="mt-1 flex h-8 items-center gap-2 rounded-md px-1 text-sm text-muted-foreground">
+          <FolderIcon className="size-4 shrink-0 opacity-75" />
+          <span className="min-w-0 flex-1 truncate">
+            {resolvedWorkDir ? basename(resolvedWorkDir) : target.project}
+          </span>
+        </div>
+        <div className="mt-0.5 overflow-hidden rounded-md">
+          {hasWorkDir && resolvedWorkDir ? (
+            <FileTree
+              workDir={resolvedWorkDir}
+              threadId={target.threadId}
+              className="max-h-[calc(100vh-18rem)]"
+              onFileClick={(path) => {
+                window.dispatchEvent(
+                  new CustomEvent("octopus:open-file", {
+                    detail: {
+                      path,
+                      workDir: resolvedWorkDir,
+                      threadId: target.threadId,
+                      sourceLabel: target.title,
+                    },
+                  }),
+                );
+              }}
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-2 p-4 text-center text-xs text-muted-foreground">
+              <FolderIcon className="size-8 opacity-40" />
+              <p>{t.agentWorkbenchPages.noWorkDirDescription}</p>
+            </div>
+          )}
+        </div>
+      </SidebarGroup>
+    </div>
   );
 }
 
@@ -1998,6 +2013,7 @@ function ProjectGroup({
   deleting,
   runStatusByHref,
   onDeleteProject,
+  onOpenFiles,
 }: {
   project: string;
   threads: ThreadSummary[];
@@ -2006,6 +2022,7 @@ function ProjectGroup({
   deleting: boolean;
   runStatusByHref: Map<string, ThreadRunStatus>;
   onDeleteProject: (project: string) => void | Promise<void>;
+  onOpenFiles: (thread: ThreadSummary, project: string) => void;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(true);
@@ -2087,7 +2104,7 @@ function ProjectGroup({
                     onMouseDown={() => syncThreadAgentSelection(thread.agents)}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "flex min-h-8 items-center gap-2 rounded-md py-1 pl-2 pr-7 text-[13px] opacity-75 transition-[opacity,background-color] duration-150",
+                      "flex min-h-8 items-center gap-2 rounded-md py-1 pl-2 pr-14 text-[13px] opacity-75 transition-[opacity,background-color] duration-150",
                       "hover:opacity-100 hover:bg-muted/40",
                       active &&
                         "opacity-100 bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)]",
@@ -2110,6 +2127,23 @@ function ProjectGroup({
                       {formatRelativeTimestamp(thread.updatedAt)}
                     </span>
                   </Link>
+                  <button
+                    type="button"
+                    title={t.sidebar.openThreadFilesTooltip}
+                    aria-label={t.sidebar.openThreadFilesTooltip}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onOpenFiles(thread, project);
+                    }}
+                    className={cn(
+                      "absolute right-7 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md border border-transparent bg-background/70 text-muted-foreground/75 shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-[opacity,background-color,border-color,color] duration-150",
+                      "hover:border-border/65 hover:bg-background hover:text-foreground",
+                      active ? "opacity-100" : "opacity-0 group-hover/thread:opacity-100",
+                    )}
+                  >
+                    <ListTodoIcon className="size-3.5" />
+                  </button>
                   <button
                     type="button"
                     title={t.sidebar.deleteThreadTooltip}
@@ -2297,6 +2331,7 @@ function ProjectsSection({
   onDraftCancel,
   onDeleteProject,
   onToggleGrouping,
+  onOpenFiles,
 }: {
   groups: string[];
   byProject: Record<string, ThreadSummary[]>;
@@ -2310,6 +2345,7 @@ function ProjectsSection({
   onDraftCancel: () => void;
   onDeleteProject: (project: string) => void | Promise<void>;
   onToggleGrouping: () => void;
+  onOpenFiles: (thread: ThreadSummary, project: string) => void;
 }) {
   const { t } = useI18n();
   // Persist the open/closed state in localStorage so it stays
@@ -2389,6 +2425,7 @@ function ProjectsSection({
                 deleting={deletingProject === project}
                 runStatusByHref={runStatusByHref}
                 onDeleteProject={onDeleteProject}
+                onOpenFiles={onOpenFiles}
               />
             ))}
           </div>

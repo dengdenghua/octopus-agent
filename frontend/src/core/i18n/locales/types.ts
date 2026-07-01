@@ -1406,6 +1406,8 @@ export interface Translations {
     collapseSidebar: string;
     expandSidebar: string;
     projectNamePlaceholder: string;
+    backToProjectList: string;
+    openThreadFilesTooltip: string;
     // Surface switch + task statuses
     navBrowserSurface: string;
     sectionOngoing: string;

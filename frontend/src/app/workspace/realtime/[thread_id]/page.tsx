@@ -2090,15 +2090,13 @@ function RealtimePageContent({
     collaborationEnabled ||
     hasRenderableAgentWorkbench ||
     !!previewBlocks ||
-    // Coding workspace docks the workbench (file tree / diff / terminal) like
-    // an IDE — available from the first turn, even on a fresh personal thread.
+    // Coding workspace keeps the workbench available from the first turn, but
+    // the file tree now lives in the left project pane until the user opens
+    // the right workbench explicitly.
     isCodingWorkspaceMode;
   const showAgentWorkbench =
     canOpenAgentWorkbench &&
     (agentWorkbenchManuallyOpened ||
-      // Coding workspace keeps the workbench docked by default (still closable —
-      // honored via agentWorkbenchDismissed).
-      (isCodingWorkspaceMode && !agentWorkbenchDismissed) ||
       (collaborationEnabled && !agentWorkbenchDismissed) ||
       (hasRenderableAgentWorkbench &&
         (!agentWorkbenchDismissed || artifactsOpen || showAgentPlan))) &&
@@ -2813,17 +2811,7 @@ function RealtimePageContent({
                 </div>
               ) : showAgentWorkbench ? (
                 <AgentWorkbenchPanel
-                  activeTab={
-                    // Fresh code-mode open with no run yet → land on the file
-                    // tree so the panel reads like an IDE explorer, not an
-                    // empty agent tab. Once touched / once a run produces
-                    // content, defer to the normal tab state.
-                    !agentWorkbenchTabTouched &&
-                    isCodingWorkspaceMode &&
-                    !hasRenderableAgentWorkbench
-                      ? "files"
-                      : agentWorkbenchTab
-                  }
+                  activeTab={agentWorkbenchTab}
                   events={agentDisplayEvents}
                   focusedAgentId={focusedWorkbenchAgentId}
                   hasAnswer={hasCompletedAgentOutput}

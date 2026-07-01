@@ -1611,6 +1611,8 @@ export const koKR: Translations = {
     collapseSidebar: "Collapse sidebar (⌘B)",
     expandSidebar: "Expand sidebar (⌘B)",
     projectNamePlaceholder: "Project name",
+    backToProjectList: "프로젝트 목록으로 돌아가기",
+    openThreadFilesTooltip: "프로젝트 파일 열기",
     // Surface switch + task statuses
     navBrowserSurface: "Browser",
     sectionOngoing: "Ongoing",

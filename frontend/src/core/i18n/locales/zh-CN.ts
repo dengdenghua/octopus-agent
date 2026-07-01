@@ -1561,6 +1561,8 @@ export const zhCN: Translations = {
     collapseSidebar: "收起侧栏 (⌘B)",
     expandSidebar: "展开侧栏 (⌘B)",
     projectNamePlaceholder: "项目名称",
+    backToProjectList: "返回项目列表",
+    openThreadFilesTooltip: "打开项目文件",
     // Surface switch + task statuses
     navBrowserSurface: "浏览器",
     sectionOngoing: "进行中",

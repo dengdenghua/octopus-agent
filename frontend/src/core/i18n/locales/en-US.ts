@@ -1617,6 +1617,8 @@ export const enUS: Translations = {
     collapseSidebar: "Collapse sidebar (⌘B)",
     expandSidebar: "Expand sidebar (⌘B)",
     projectNamePlaceholder: "Project name",
+    backToProjectList: "Back to projects",
+    openThreadFilesTooltip: "Open project files",
     // Surface switch + task statuses
     navBrowserSurface: "Browser",
     sectionOngoing: "Ongoing",

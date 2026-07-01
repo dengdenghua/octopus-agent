@@ -1614,6 +1614,8 @@ export const jaJP: Translations = {
     collapseSidebar: "Collapse sidebar (⌘B)",
     expandSidebar: "Expand sidebar (⌘B)",
     projectNamePlaceholder: "Project name",
+    backToProjectList: "プロジェクト一覧に戻る",
+    openThreadFilesTooltip: "プロジェクトファイルを開く",
     // Surface switch + task statuses
     navBrowserSurface: "Browser",
     sectionOngoing: "Ongoing",
