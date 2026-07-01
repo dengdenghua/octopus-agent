@@ -73,6 +73,44 @@ def test_get_asset_unwraps_body(monkeypatch):
     assert body["asset"]["body"] == "soul"
 
 
+def test_get_asset_rejects_unsafe_asset_id_before_http(monkeypatch):
+    monkeypatch.setenv("OCTOPUS_ENTERPRISE_URL", "http://ent:8000")
+    called = False
+
+    def fake_get(url, **kwargs):
+        nonlocal called
+        called = True
+        return _FakeResp({})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    resp = _client().get("/api/agent-market/enterprise/bad:secret")
+
+    assert resp.status_code == 400
+    assert called is False
+
+
+def test_get_asset_allows_safe_asset_id_variants(monkeypatch):
+    monkeypatch.setenv("OCTOPUS_ENTERPRISE_URL", "http://ent:8000")
+    captured: dict = {}
+
+    def fake_get(url, **kwargs):
+        captured["url"] = url
+        return _FakeResp(
+            {
+                "success": True,
+                "data": {"id": "coder.v2-prod_1", "name": "Coder"},
+            }
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    body = _client().get("/api/agent-market/enterprise/coder.v2-prod_1").json()
+
+    assert body["asset"]["id"] == "coder.v2-prod_1"
+    assert captured["url"] == "http://ent:8000/api/v1/agent-assets/coder.v2-prod_1"
+
+
 def test_network_error_graceful(monkeypatch):
     monkeypatch.setenv("OCTOPUS_ENTERPRISE_URL", "http://ent:8000")
 
@@ -202,3 +240,24 @@ def test_install_endpoint_scaffolds(monkeypatch, tmp_path):
     assert (tmp_path / "coder" / "agent-core" / "SOUL.md").read_text(
         encoding="utf-8"
     ) == "You code."
+
+
+def test_install_rejects_unsafe_asset_id_before_http(monkeypatch, tmp_path):
+    import runtime.execution.agents.loader as loader
+
+    monkeypatch.setattr(loader, "default_agents_root", lambda: tmp_path)
+    monkeypatch.setenv("OCTOPUS_ENTERPRISE_URL", "http://ent:8000")
+    called = False
+
+    def fake_get(url, **kwargs):
+        nonlocal called
+        called = True
+        return _FakeResp({})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    resp = _client().post("/api/agent-market/enterprise/bad:secret/install")
+
+    assert resp.status_code == 400
+    assert called is False
+    assert not any(tmp_path.iterdir())

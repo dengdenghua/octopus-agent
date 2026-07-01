@@ -20,6 +20,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
+_ENTERPRISE_ASSET_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
 
 def _enterprise_base() -> str:
     return (os.environ.get("OCTOPUS_ENTERPRISE_URL") or "").rstrip("/")
@@ -56,6 +58,12 @@ def _enterprise_get(path: str, params: dict[str, Any] | None = None) -> dict[str
         return {"available": True, "error": f"enterprise http {exc.response.status_code}"}
     except Exception as exc:  # noqa: BLE001 — 网络/解析错误统一回错,不抛
         return {"available": True, "error": str(exc)}
+
+
+def _safe_enterprise_asset_id(asset_id: str) -> str:
+    if not _ENTERPRISE_ASSET_ID_RE.fullmatch(asset_id):
+        raise HTTPException(400, f"unsafe enterprise asset id: {asset_id!r}")
+    return asset_id
 
 
 def _unwrap(body: Any, key: str) -> Any:
@@ -201,6 +209,7 @@ def create_enterprise_assets_router(
     @router.get("/api/agent-market/enterprise/{asset_id}")
     def get_enterprise_asset(request: Request, asset_id: str) -> dict[str, Any]:
         _auth(request)
+        asset_id = _safe_enterprise_asset_id(asset_id)
         res = _enterprise_get(f"/api/v1/agent-assets/{asset_id}")
         if not res.get("available"):
             return {"available": False, "asset": None, "error": res.get("error")}
@@ -214,6 +223,7 @@ def create_enterprise_assets_router(
     def install_enterprise_asset(request: Request, asset_id: str) -> dict[str, Any]:
         _auth(request)
         """把企业版角色资产导入本地:取 body → scaffold → load+register。"""
+        asset_id = _safe_enterprise_asset_id(asset_id)
         res = _enterprise_get(f"/api/v1/agent-assets/{asset_id}")
         if not res.get("available"):
             raise HTTPException(503, res.get("error") or "enterprise not configured")
