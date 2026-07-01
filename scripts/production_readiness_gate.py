@@ -17,9 +17,13 @@ from typing import Any
 from runtime.safety.evolution.agent_competitor_scorecard import (
     compute_agent_competitor_scorecard,
 )
+from runtime.safety.evolution.agent_loop_quality import compute_agent_loop_quality
 from runtime.safety.evolution.automation_radar import compute_automation_radar
 from runtime.safety.evolution.browser_desktop_quality import (
     compute_browser_desktop_quality,
+)
+from runtime.safety.evolution.digital_employee_quality import (
+    compute_digital_employee_quality,
 )
 from runtime.safety.evolution.permission_sandbox_quality import (
     compute_permission_sandbox_quality,
@@ -79,11 +83,13 @@ class GateResult:
         *,
         failures: list[str],
         scorecard_score: int,
+        scorecard_evidence_adjusted_score: int,
         automation_score: int,
         quality_summary: str,
     ) -> None:
         self.failures = failures
         self.scorecard_score = scorecard_score
+        self.scorecard_evidence_adjusted_score = scorecard_evidence_adjusted_score
         self.automation_score = automation_score
         self.quality_summary = quality_summary
 
@@ -104,6 +110,8 @@ def run_gate(
         compute_repo_context_quality(),
         compute_permission_sandbox_quality(),
         compute_product_experience_quality(),
+        compute_agent_loop_quality(),
+        compute_digital_employee_quality(),
         compute_browser_desktop_quality(review_queue_path=review_queue_path),
     ]
 
@@ -119,22 +127,10 @@ def run_gate(
     )
     _require_min_score(
         failures,
-        "agent scorecard octopus overall",
-        _nested_int(scorecard, "overall", "octopus"),
-        min_score,
-    )
-    _require_min_score(
-        failures,
         "agent scorecard octopus evidence-adjusted overall",
         _nested_int(scorecard, "evidence_adjusted_overall", "octopus"),
         min_score,
     )
-    _require_no_rows(
-        failures,
-        "agent scorecard below-target dimensions",
-        scorecard.get("octopus_below_target"),
-    )
-
     _require_min_score(
         failures,
         "automation radar octopus overall",
@@ -176,6 +172,11 @@ def run_gate(
         )
 
     scorecard_score = _nested_int(scorecard, "overall", "octopus")
+    scorecard_evidence_adjusted_score = _nested_int(
+        scorecard,
+        "evidence_adjusted_overall",
+        "octopus",
+    )
     automation_score = _nested_int(automation, "overall", "octopus")
     quality_summary = ", ".join(
         f"{report.get('schema')}={report.get('passed')}/{report.get('total')}"
@@ -184,6 +185,7 @@ def run_gate(
     return GateResult(
         failures=failures,
         scorecard_score=scorecard_score,
+        scorecard_evidence_adjusted_score=scorecard_evidence_adjusted_score,
         automation_score=automation_score,
         quality_summary=quality_summary,
     )

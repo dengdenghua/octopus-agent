@@ -225,7 +225,7 @@ def _build_planner(
         if p.model.startswith("mock/") or p.mock_response is not None:
             router = MockModelRouter(response=p.mock_response)
         elif (
-            (config.molili.enabled or getattr(config, "oct", None) and config.oct.enabled)
+            (getattr(config, "oct", None) and config.oct.enabled)
             and not p.anthropic_api_key
             and not os.environ.get("ANTHROPIC_API_KEY")
             and not os.environ.get("ANTHROPIC_AUTH_TOKEN")

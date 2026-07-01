@@ -330,13 +330,17 @@ const EMPTY_POLICY_REVIEW_RULE_DRAFTS: AgentTracePolicyReviewRuleDrafts = {
 const EMPTY_AGENT_SCORECARD: AgentCompetitorScorecard = {
   schema: "octopus.agent_competitor_scorecard.v1",
   target_score: 90,
-  competitors: ["codex", "claude_code", "cursor", "octopus"],
+  surpass_margin: 1,
+  competitors: ["codex", "claude_code", "openclaw", "hermes", "octopus"],
+  external_competitors: ["codex", "claude_code", "openclaw", "hermes"],
   overall: {},
   ranking: [],
   verdict: "behind",
   dimensions: [],
   octopus_below_target: [],
   octopus_strengths: [],
+  octopus_external_gap_dimensions: [],
+  octopus_focus_gaps: [],
   next_focus: [],
 };
 
@@ -1364,15 +1368,26 @@ function CompetitorScorecardCard({
   const evidenceAdjustedOctopusScore =
     report.evidence_adjusted_overall?.octopus ?? octopusScore;
   const belowTarget = report.octopus_below_target ?? [];
+  const focusGaps = report.octopus_focus_gaps ?? belowTarget;
+  const externalGaps =
+    report.octopus_external_gap_dimensions ??
+    report.octopus_external_leaders ??
+    [];
   const strengths = report.octopus_strengths ?? [];
   const certification = report.parity_certification;
-  const topGap = belowTarget
+  const topGap = focusGaps
     .slice()
     .sort(
-      (lhs, rhs) => rhs.octopus_gap_to_target - lhs.octopus_gap_to_target,
+      (lhs, rhs) =>
+        (rhs.octopus_gap_to_effective_target ?? rhs.octopus_gap_to_target) -
+        (lhs.octopus_gap_to_effective_target ?? lhs.octopus_gap_to_target),
     )[0];
-  const selectedGap =
-    belowTarget.find((dimension) => dimension.id === selectedGapId) ?? topGap;
+  const selectedGapCandidate =
+    focusGaps.find((dimension) => dimension.id === selectedGapId) ?? topGap;
+  const selectedGap = selectedGapCandidate
+    ? (belowTarget.find((dimension) => dimension.id === selectedGapCandidate.id) ??
+      selectedGapCandidate)
+    : undefined;
   const selectedGapChecklist = selectedGap?.octopus_evidence_checklist ?? [];
   const selectedGapQueueItem = selectedGap
     ? scorecardGapQueueItemForDimension(queueItems, selectedGap.id)
@@ -1409,29 +1424,33 @@ function CompetitorScorecardCard({
             {error
               ? error
               : topGap
-                ? `${topGap.title} is ${topGap.octopus_gap_to_target} point(s) under target`
+                ? `${topGap.title} gap ${
+                    topGap.octopus_gap_to_effective_target ??
+                    topGap.octopus_gap_to_target
+                  } vs effective target`
                 : certification?.ready
                   ? `Certification passed ${certification.passed}/${certification.total}`
-                  : "Octopus is at or above the target across tracked dimensions"}
+                  : "Octopus has no tracked effective scorecard gaps"}
           </div>
           <div className="mt-1 text-[11px] text-muted-foreground">
             Overall is external-calibrated baseline; evidence score is shown
-            separately.
+            separately. External gaps track per-dimension leaders.
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          <div className="grid grid-cols-5 gap-2 text-right font-mono text-[11px]">
+          <div className="grid grid-cols-3 gap-2 text-right font-mono text-[11px] xl:grid-cols-6">
             <GateStat label="Octo real" value={octopusScore} />
             <GateStat label="Evidence" value={evidenceAdjustedOctopusScore} />
             <GateStat label="Codex" value={report.overall.codex ?? 0} />
             <GateStat label="Claude" value={report.overall.claude_code ?? 0} />
-            <GateStat label="Cursor" value={report.overall.cursor ?? 0} />
+            <GateStat label="OpenClaw" value={report.overall.openclaw ?? 0} />
+            <GateStat label="Hermes" value={report.overall.hermes ?? 0} />
           </div>
           <Button
             variant="outline"
             size="sm"
             className="h-7 px-2 text-[11px]"
-            disabled={queueBusy || belowTarget.length === 0}
+            disabled={queueBusy || focusGaps.length === 0}
             onClick={onQueueRealGaps}
           >
             <ListChecksIcon
@@ -1465,10 +1484,10 @@ function CompetitorScorecardCard({
         </div>
         <div className="rounded-md border border-background/70 bg-background/60 px-2 py-1.5">
           <div className="mb-1 text-[11px] font-medium text-muted-foreground">
-            Below 90 real baseline
+            Effective focus gaps
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {belowTarget.length === 0 ? (
+            {focusGaps.length === 0 ? (
               <>
                 <Badge variant="outline" className="text-[10px]">
                   clear
@@ -1488,7 +1507,7 @@ function CompetitorScorecardCard({
                 )}
               </>
             ) : (
-              belowTarget.slice(0, 5).map((dimension) => (
+              focusGaps.slice(0, 5).map((dimension) => (
                 <button
                   key={dimension.id}
                   type="button"
@@ -1502,11 +1521,18 @@ function CompetitorScorecardCard({
                   )}
                   onClick={() => setSelectedGapId(dimension.id)}
                 >
-                  {dimension.title} {dimension.scores.octopus}
+                  {dimension.title}{" "}
+                  {dimension.octopus_gap_to_effective_target ??
+                    dimension.octopus_gap_to_target}
                 </button>
               ))
             )}
           </div>
+          {externalGaps.length > 0 && (
+            <div className="mt-1 truncate text-[10px] text-muted-foreground">
+              external leader gaps: {externalGaps.length}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1606,8 +1632,18 @@ function ScorecardGapDrilldown({
             evidence {evidenceScore}
           </Badge>
           <Badge variant="outline" className="text-[10px]">
-            gap {gap.octopus_gap_to_target}
+            effective gap{" "}
+            {gap.octopus_gap_to_effective_target ?? gap.octopus_gap_to_target}
           </Badge>
+          <Badge variant="outline" className="text-[10px]">
+            surpass gap {gap.octopus_gap_to_surpass ?? 0}
+          </Badge>
+          {gap.best_external_competitor && (
+            <Badge variant="outline" className="text-[10px]">
+              best {competitorLabel(gap.best_external_competitor)}{" "}
+              {gap.best_external_score ?? 0}
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -2998,6 +3034,8 @@ function competitorLabel(id: string) {
   if (id === "claude_code") return "Claude";
   if (id === "octopus") return "Octopus";
   if (id === "codex") return "Codex";
+  if (id === "openclaw") return "OpenClaw";
+  if (id === "hermes") return "Hermes";
   if (id === "cursor") return "Cursor";
   return id;
 }

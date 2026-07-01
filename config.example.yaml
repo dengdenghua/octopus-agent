@@ -201,7 +201,7 @@ default_arm_id: code_arm
 # auth.mobile_path:    响应中手机号的 JSONPath
 # auth.credits_path:   响应中积分/配额信息的 JSONPath
 # ─────────────── oct 账号网关(推荐)─────────────────
-# octopus 自己的账号网关(octopus-mobile server)· 替代 molili
+# octopus 自己的账号网关(octopus-mobile server)
 # 邮箱验证码登录 + 积分/会员/用量/商品/订单 + LLM 中转计费(/v1)
 #
 # enabled:               是否启用(⚠️ 启用时 jwt_secret 必填)

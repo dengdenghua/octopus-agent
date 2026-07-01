@@ -515,6 +515,23 @@ def create_agent_trace_router(
             experience_ledger_path=experience_ledger_path,
         ).quality_summary(limit=limit)
 
+    @router.get("/api/agent-trace/experience-ledger/recall")
+    def api_agent_trace_experience_recall(
+        q: str = Query(default=""),
+        bucket: str | None = Query(default=None),
+        min_reliability: float = Query(default=0.0, ge=0.0, le=1.0),
+        limit: int = Query(default=10, ge=1, le=50),
+    ) -> dict[str, Any]:
+        return _get_experience_ledger(
+            experience_ledger=experience_ledger,
+            experience_ledger_path=experience_ledger_path,
+        ).recall(
+            q,
+            bucket=bucket,
+            min_reliability=min_reliability,
+            limit=limit,
+        )
+
     @router.get("/api/agent-trace/review-queue")
     def api_agent_trace_review_queue(
         status: str | None = Query(default=None),

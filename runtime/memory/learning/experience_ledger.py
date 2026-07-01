@@ -15,6 +15,7 @@ _SUMMARY_SCHEMA = "octopus.experience_weekly_summary.v1"
 _QUALITY_SUMMARY_SCHEMA = "octopus.experience_memory_quality_summary.v1"
 _QUALITY_SCHEMA = "octopus.experience_memory_quality.v1"
 _CONTRADICTION_SCHEMA = "octopus.experience_contradiction.v1"
+_RECALL_SCHEMA = "octopus.experience_recall.v1"
 _VALID_STATUSES = {"active", "archived", "promoted"}
 _PRIORITY_RANK = {"P0": 0, "P1": 1, "P2": 2}
 
@@ -132,6 +133,70 @@ class ExperienceLedger:
                 continue
             rows.append(enriched)
         return sorted(rows, key=_record_recall_sort_key)[:limit]
+
+    def recall(
+        self,
+        query: str,
+        *,
+        min_reliability: float = 0.0,
+        bucket: str | None = None,
+        limit: int = 10,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Retrieve replay-cited experience memories for a new task/query.
+
+        This is deliberately deterministic and local: token overlap gives a
+        transparent base score, while memory quality, priority, and replay
+        citation coverage make promoted, replay-backed memories rank higher.
+        """
+        query_text = _clean_text(query, limit=800)
+        query_terms = _token_set(query_text)
+        threshold = max(0.0, min(1.0, float(min_reliability or 0.0)))
+        rows: list[dict[str, Any]] = []
+        for row in self._read().get("records") or []:
+            if bucket and str(row.get("memory_bucket") or "") != bucket:
+                continue
+            enriched = _with_memory_quality(row, now=now)
+            quality = enriched.get("memory_quality") or {}
+            if str(quality.get("contradiction_status") or "") == "contradicted":
+                continue
+            reliability = float(quality.get("reliability") or 0.0)
+            if reliability < threshold:
+                continue
+            matched_terms = sorted(
+                query_terms & _token_set(_record_search_text(enriched)),
+            )[:12]
+            if query_terms and not matched_terms:
+                continue
+            score = _recall_score(enriched, query_terms=query_terms)
+            enriched["recall"] = {
+                "schema": "octopus.experience_recall_score.v1",
+                "score": score,
+                "matched_terms": matched_terms,
+                "citation_coverage": _citation_coverage(enriched),
+            }
+            rows.append(enriched)
+
+        rows = sorted(
+            rows,
+            key=lambda row: (
+                -float(row.get("recall", {}).get("score") or 0.0),
+                _PRIORITY_RANK.get(str(row.get("priority") or "P2"), 2),
+                str(row.get("last_seen_at") or ""),
+            ),
+        )[: max(1, int(limit))]
+        cited = [
+            row for row in rows
+            if float(row.get("recall", {}).get("citation_coverage") or 0.0) >= 1.0
+        ]
+        return {
+            "schema": _RECALL_SCHEMA,
+            "query": query_text,
+            "total": len(rows),
+            "records": rows,
+            "citation_coverage": round(len(cited) / len(rows), 3) if rows else 0.0,
+            "next_actions": _recall_next_actions(rows),
+        }
 
     def weekly_summary(
         self,
@@ -617,6 +682,86 @@ def _record_id(*, kind: Any, bucket: Any, title: str, text: str) -> str:
     ])
     digest = hashlib.blake2b(key.encode("utf-8"), digest_size=10).hexdigest()
     return f"exp_{digest}"
+
+
+def _record_search_text(row: dict[str, Any]) -> str:
+    tags = " ".join(str(tag) for tag in row.get("tags") or [])
+    metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+    candidate = (
+        metadata.get("candidate")
+        if isinstance(metadata.get("candidate"), dict)
+        else {}
+    )
+    return " ".join([
+        str(row.get("title") or ""),
+        str(row.get("text") or ""),
+        str(row.get("kind") or ""),
+        str(row.get("memory_bucket") or ""),
+        tags,
+        str(candidate.get("minimal_implementation") or ""),
+        str(candidate.get("validation_metric") or ""),
+    ])
+
+
+def _token_set(text: str) -> set[str]:
+    import re
+
+    return {
+        normalized
+        for token in re.findall(r"[A-Za-z0-9]+", str(text or ""))
+        if (normalized := _normalize_token(token))
+    }
+
+
+def _normalize_token(token: str) -> str:
+    text = str(token or "").casefold().strip()
+    if len(text) < 3:
+        return ""
+    if len(text) > 4 and text.endswith("ies"):
+        return text[:-3] + "y"
+    if len(text) > 4 and text.endswith("ing"):
+        return text[:-3]
+    if len(text) > 3 and text.endswith("s"):
+        return text[:-1]
+    return text
+
+
+def _citation_coverage(row: dict[str, Any]) -> float:
+    metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+    citation = metadata.get("citation") if isinstance(metadata.get("citation"), dict) else {}
+    replay = metadata.get("replay") if isinstance(metadata.get("replay"), dict) else {}
+    has_case = bool(citation.get("replay_case_id") or replay.get("case_id"))
+    has_fingerprint = bool(citation.get("replay_fingerprint") or replay.get("fingerprint"))
+    replayable = bool(citation.get("replayable") or replay.get("replayable"))
+    return 1.0 if has_case and has_fingerprint and replayable else 0.0
+
+
+def _recall_score(row: dict[str, Any], *, query_terms: set[str]) -> float:
+    record_terms = _token_set(_record_search_text(row))
+    if not query_terms:
+        overlap = 0.0
+    else:
+        overlap = len(query_terms & record_terms) / max(1, len(query_terms))
+    quality = row.get("memory_quality") if isinstance(row.get("memory_quality"), dict) else {}
+    reliability = float(quality.get("reliability") or 0.0)
+    priority = {"P0": 1.0, "P1": 0.86, "P2": 0.72}.get(
+        _priority(row.get("priority")),
+        0.72,
+    )
+    citation = _citation_coverage(row)
+    score = (overlap * 0.48) + (reliability * 0.32) + (priority * 0.1) + (citation * 0.1)
+    return round(min(1.0, max(0.0, score)), 3)
+
+
+def _recall_next_actions(rows: list[dict[str, Any]]) -> list[str]:
+    if not rows:
+        return ["Promote replay-backed experience memories before relying on recall."]
+    actions: list[str] = []
+    if any(float(row.get("recall", {}).get("citation_coverage") or 0.0) < 1.0 for row in rows):
+        actions.append("Refresh recalled memories with replay citation evidence.")
+    if any(float(row.get("memory_quality", {}).get("reliability") or 0.0) < 0.7 for row in rows):
+        actions.append("Review low-reliability recalled memories before reuse.")
+    return actions
 
 
 def _source_from_review(review: dict[str, Any]) -> dict[str, str]:

@@ -128,8 +128,10 @@ def create_evolution_router() -> Any:
             updated = 0
             items: list[dict[str, Any]] = []
             rows = sorted(
-                report.get("octopus_below_target") or [],
+                report.get("octopus_focus_gaps") or [],
                 key=lambda row: (
+                    int(row.get("octopus_gap_to_effective_target") or 0),
+                    int(row.get("octopus_gap_to_surpass") or 0),
                     int(row.get("octopus_gap_to_target") or 0),
                     int(row.get("weight") or 0),
                 ),
@@ -154,7 +156,7 @@ def create_evolution_router() -> Any:
                     source_kind="scorecard_gap",
                     candidate_kind=f"scorecard_gap:{dimension_id}",
                     priority=_scorecard_gap_priority(
-                        int(row.get("octopus_gap_to_target") or 0),
+                        int(row.get("octopus_gap_to_effective_target") or 0),
                     ),
                     target_bucket="scorecard_gap_backlog",
                     title=f"Raise {row.get('title') or row.get('id') or 'scorecard gap'}",
@@ -165,6 +167,19 @@ def create_evolution_router() -> Any:
                         "title": row.get("title"),
                         "target_score": body.target_score,
                         "gap": row.get("octopus_gap_to_target"),
+                        "effective_target_score": row.get("effective_target_score"),
+                        "gap_to_effective_target": row.get(
+                            "octopus_gap_to_effective_target",
+                        ),
+                        "surpass_target_score": row.get("surpass_target_score"),
+                        "gap_to_surpass": row.get("octopus_gap_to_surpass"),
+                        "best_external_competitor": row.get(
+                            "best_external_competitor",
+                        ),
+                        "best_external_score": row.get("best_external_score"),
+                        "octopus_surpasses_best_external": row.get(
+                            "octopus_surpasses_best_external",
+                        ),
                         "scores": row.get("scores"),
                         "evidence_adjusted_scores": row.get(
                             "evidence_adjusted_scores",
@@ -213,9 +228,14 @@ def create_evolution_router() -> Any:
                     "evidence_adjusted_overall": report.get(
                         "evidence_adjusted_overall",
                     ),
-                    "below_target_count": len(report.get("octopus_below_target") or []),
-                },
-            }
+                        "below_target_count": len(report.get("octopus_below_target") or []),
+                        "external_gap_count": len(
+                            report.get("octopus_external_gap_dimensions") or []
+                        ),
+                        "focus_gap_count": len(report.get("octopus_focus_gaps") or []),
+                        "surpass_summary": report.get("surpass_summary"),
+                    },
+                }
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
@@ -260,6 +280,28 @@ def create_evolution_router() -> Any:
             )
 
             return {"ok": True, **compute_product_experience_quality()}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/agent-loop-quality")
+    def get_agent_loop_quality() -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.agent_loop_quality import (
+                compute_agent_loop_quality,
+            )
+
+            return {"ok": True, **compute_agent_loop_quality()}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/digital-employee-quality")
+    def get_digital_employee_quality() -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.digital_employee_quality import (
+                compute_digital_employee_quality,
+            )
+
+            return {"ok": True, **compute_digital_employee_quality()}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
@@ -888,7 +930,15 @@ def _scorecard_gap_text(row: dict[str, Any], *, reason: str) -> str:
         f"Real baseline gap for `{row.get('title') or row.get('id')}`.",
         (
             f"Octopus baseline: {scores.get('octopus', 0)}; "
-            f"target gap: {row.get('octopus_gap_to_target', 0)}."
+            f"target gap: {row.get('octopus_gap_to_target', 0)}; "
+            f"effective gap: {row.get('octopus_gap_to_effective_target', 0)}."
+        ),
+        (
+            "Best external: "
+            f"{row.get('best_external_competitor', 'unknown')} "
+            f"{row.get('best_external_score', 0)}; "
+            f"surpass target: {row.get('surpass_target_score', 0)}; "
+            f"surpass gap: {row.get('octopus_gap_to_surpass', 0)}."
         ),
     ]
     if adjusted:

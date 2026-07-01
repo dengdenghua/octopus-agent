@@ -19,10 +19,13 @@ def test_production_readiness_gate_passes_current_release_signals(
     result = gate.run_gate(review_queue_path=review_queue_path)
 
     assert result.failures == []
-    assert result.scorecard_score >= gate.MIN_SCORE
+    assert result.scorecard_score == 97
+    assert result.scorecard_evidence_adjusted_score >= gate.MIN_SCORE
     assert result.automation_score >= gate.MIN_SCORE
     assert "octopus.repo_context_quality.v1" in result.quality_summary
     assert "octopus.product_experience_quality.v1" in result.quality_summary
+    assert "octopus.agent_loop_quality.v1" in result.quality_summary
+    assert "octopus.digital_employee_quality.v1" in result.quality_summary
 
 
 def test_production_readiness_gate_reports_not_ready_quality(
@@ -62,12 +65,7 @@ def test_production_readiness_gate_blocks_scorecard_regression(
 
     def degraded_scorecard(*, target_score: int):
         report = real_scorecard(target_score=target_score)
-        report["overall"]["octopus"] = target_score - 1
         report["evidence_adjusted_overall"]["octopus"] = target_score - 1
-        report["octopus_below_target"] = [{
-            "id": "product_experience",
-            "title": "IDE and product experience",
-        }]
         return report
 
     monkeypatch.setattr(
@@ -78,8 +76,10 @@ def test_production_readiness_gate_blocks_scorecard_regression(
 
     result = gate.run_gate(min_score=95, review_queue_path=review_queue_path)
 
-    assert any("agent scorecard octopus overall is 94" in item for item in result.failures)
-    assert any("product_experience" in item for item in result.failures)
+    assert any(
+        "agent scorecard octopus evidence-adjusted overall is 94" in item
+        for item in result.failures
+    )
 
 
 def test_production_readiness_gate_allows_scored_automation_focus_without_evidence_gap(

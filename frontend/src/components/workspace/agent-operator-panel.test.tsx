@@ -103,26 +103,26 @@ describe("<AgentOperatorPanel />", () => {
         if (filters?.targetBucket === "scorecard_gap_backlog") {
           return Promise.resolve([
             {
-              id: "rq-scorecard-ecosystem",
+              id: "rq-scorecard-product",
               source: "agent_scorecard_gap",
               source_kind: "scorecard_gap",
-              candidate_kind: "scorecard_gap:ecosystem_maturity",
+              candidate_kind: "scorecard_gap:product_experience",
               priority: "P0",
               target_bucket: "scorecard_gap_backlog",
-              title: "Raise Ecosystem maturity",
-              text: "Close ecosystem maturity gap.",
+              title: "Raise IDE and product experience",
+              text: "Close product experience gap.",
               status: "pending",
               occurrences: 2,
-              tags: ["scorecard_gap", "real_baseline", "ecosystem_maturity"],
+              tags: ["scorecard_gap", "real_baseline", "product_experience"],
               metadata: {
                 schema: "octopus.agent_scorecard_gap.v1",
-                dimension_id: "ecosystem_maturity",
+                dimension_id: "product_experience",
                 remediation: {
                   schema: "octopus.scorecard_gap_remediation.v1",
-                  dimension_id: "ecosystem_maturity",
+                  dimension_id: "product_experience",
                   status: "queued",
                   primary_action:
-                    "Ship stable public docs for code mode, permissions, replay, and plugins.",
+                    "Eliminate auth, workspace, and mode-switching regressions from the frontend release gate.",
                 },
               },
             },
@@ -541,8 +541,8 @@ describe("<AgentOperatorPanel />", () => {
       },
       parity_certification: {
         schema: "octopus.parity_certification.v1",
-        passed: 14,
-        total: 14,
+        passed: 17,
+        total: 17,
         ready: true,
       },
       policy_rule_drafts: {
@@ -743,65 +743,89 @@ describe("<AgentOperatorPanel />", () => {
     });
     api.fetchAgentCompetitorScorecard.mockResolvedValue({
       schema: "octopus.agent_competitor_scorecard.v1",
-      target_score: 90,
-      competitors: ["codex", "claude_code", "cursor", "octopus"],
+      target_score: 98,
+      surpass_margin: 1,
+      competitors: ["codex", "claude_code", "openclaw", "hermes", "octopus"],
+      external_competitors: ["codex", "claude_code", "openclaw", "hermes"],
       overall: {
-        codex: 93,
-        claude_code: 91,
-        cursor: 86,
-        octopus: 91,
+        codex: 87,
+        claude_code: 87,
+        openclaw: 84,
+        hermes: 85,
+        octopus: 97,
       },
       ranking: [
-        { competitor: "codex", score: 93 },
-        { competitor: "octopus", score: 91 },
-        { competitor: "claude_code", score: 91 },
-        { competitor: "cursor", score: 86 },
+        { competitor: "octopus", score: 97 },
+        { competitor: "codex", score: 87 },
+        { competitor: "claude_code", score: 87 },
+        { competitor: "hermes", score: 85 },
+        { competitor: "openclaw", score: 84 },
       ],
-      verdict: "competitive",
+      verdict: "leading",
       evidence_adjusted_overall: {
-        codex: 93,
-        claude_code: 91,
-        cursor: 86,
-        octopus: 91,
+        codex: 87,
+        claude_code: 87,
+        openclaw: 84,
+        hermes: 85,
+        octopus: 97,
       },
       evidence_adjusted_ranking: [
-        { competitor: "codex", score: 93 },
-        { competitor: "octopus", score: 91 },
-        { competitor: "claude_code", score: 91 },
-        { competitor: "cursor", score: 86 },
+        { competitor: "octopus", score: 97 },
+        { competitor: "codex", score: 87 },
+        { competitor: "claude_code", score: 87 },
+        { competitor: "hermes", score: 85 },
+        { competitor: "openclaw", score: 84 },
       ],
-      evidence_adjusted_verdict: "competitive",
+      evidence_adjusted_verdict: "leading",
       scorecard_policy: {
         schema: "octopus.agent_scorecard_policy.v1",
         overall: "external_calibrated_baseline",
         evidence_adjusted_overall: "internal_certification_floor",
         certification_floors_do_not_change_overall: true,
+        per_dimension_target:
+          "max(user_target_score, best_external_score + surpass_margin)",
+        explicit_objective: "surpass_best_external_on_every_dimension",
       },
       dimensions: [],
       octopus_below_target: [
         {
-          id: "ecosystem_maturity",
-          title: "Ecosystem maturity",
-          weight: 5,
-          why: "Documentation, enterprise polish, integrations, and broad user trust.",
-          scores: { codex: 95, claude_code: 90, cursor: 88, octopus: 88 },
+          id: "product_experience",
+          title: "IDE and product experience",
+          weight: 6,
+          why: "Make the working loop feel fast, obvious, and low-friction for operators.",
+          scores: {
+            codex: 90,
+            claude_code: 89,
+            openclaw: 82,
+            hermes: 82,
+            octopus: 97,
+          },
           evidence_adjusted_scores: {
-            codex: 95,
-            claude_code: 90,
-            cursor: 88,
-            octopus: 94,
+            codex: 90,
+            claude_code: 89,
+            openclaw: 82,
+            hermes: 82,
+            octopus: 97,
           },
           leader: "codex",
-          octopus_gap_to_target: 2,
-          octopus_baseline_score: 88,
-          octopus_evidence_adjusted_score: 94,
-          octopus_certified_score_floor: 94,
+          target_score: 98,
+          best_external_competitor: "codex",
+          best_external_score: 90,
+          surpass_target_score: 91,
+          effective_target_score: 98,
+          octopus_surpasses_best_external: true,
+          octopus_gap_to_surpass: 0,
+          octopus_gap_to_target: 1,
+          octopus_gap_to_effective_target: 1,
+          octopus_baseline_score: 97,
+          octopus_evidence_adjusted_score: 97,
+          octopus_certified_score_floor: 97,
           octopus_evidence_readiness: 1,
           octopus_evidence: [],
           octopus_evidence_checklist: [
             {
-              id: "operator_readiness_docs",
-              title: "Operator readiness documentation",
+              id: "operator_scorecard_drilldown_ui",
+              title: "Operator scorecard drill-down UI",
               score: 1,
               status: "strong",
               implementation: {
@@ -819,20 +843,20 @@ describe("<AgentOperatorPanel />", () => {
                 coverage: 1,
               },
               next_actions: [
-                "Ship stable public docs for code mode, permissions, replay, and plugins.",
+                "Eliminate auth, workspace, and mode-switching regressions from the frontend release gate.",
               ],
             },
           ],
           operator_drilldown: {
             schema: "octopus.scorecard_operator_drilldown.v1",
-            dimension_id: "ecosystem_maturity",
-            certified_floor: 94,
+            dimension_id: "product_experience",
+            certified_floor: 97,
             links: [
               {
-                id: "plugin_permission_rule_drafts",
-                label: "Plugin permission rule drafts",
+                id: "product_experience_quality",
+                label: "Product experience quality",
                 method: "GET",
-                href: "/api/plugins/permission-rule-drafts",
+                href: "/api/evolution/product-experience-quality",
               },
               {
                 id: "team_task_timeline",
@@ -849,7 +873,39 @@ describe("<AgentOperatorPanel />", () => {
             ],
           },
           octopus_next_actions: [
-            "Ship stable public docs for code mode, permissions, replay, and plugins.",
+            "Eliminate auth, workspace, and mode-switching regressions from the frontend release gate.",
+          ],
+        },
+      ],
+      octopus_external_gap_dimensions: [],
+      octopus_focus_gaps: [
+        {
+          id: "product_experience",
+          title: "IDE and product experience",
+          weight: 6,
+          why: "Make the working loop feel fast, obvious, and low-friction for operators.",
+          scores: {
+            codex: 90,
+            claude_code: 89,
+            openclaw: 82,
+            hermes: 82,
+            octopus: 97,
+          },
+          leader: "codex",
+          best_external_competitor: "codex",
+          best_external_score: 90,
+          surpass_target_score: 91,
+          effective_target_score: 98,
+          octopus_surpasses_best_external: true,
+          octopus_gap_to_surpass: 0,
+          octopus_gap_to_target: 1,
+          octopus_gap_to_effective_target: 1,
+          octopus_baseline_score: 97,
+          octopus_evidence_adjusted_score: 97,
+          octopus_evidence_readiness: 1,
+          octopus_evidence: [],
+          octopus_next_actions: [
+            "Eliminate auth, workspace, and mode-switching regressions from the frontend release gate.",
           ],
         },
       ],
@@ -859,14 +915,37 @@ describe("<AgentOperatorPanel />", () => {
           title: "Governance operator loop",
           weight: 5,
           why: "Governance loop",
-          scores: { codex: 92, claude_code: 88, cursor: 78, octopus: 94 },
+          scores: {
+            codex: 92,
+            claude_code: 88,
+            openclaw: 82,
+            hermes: 83,
+            octopus: 95,
+          },
           leader: "octopus",
+          best_external_competitor: "codex",
+          best_external_score: 92,
+          surpass_target_score: 93,
+          effective_target_score: 93,
+          octopus_surpasses_best_external: true,
+          octopus_gap_to_surpass: 0,
           octopus_gap_to_target: 0,
           octopus_evidence_readiness: 1,
           octopus_evidence: [],
           octopus_next_actions: [],
         },
       ],
+      surpass_summary: {
+        schema: "octopus.agent_surpass_summary.v1",
+        total_dimensions: 14,
+        surpassed_dimensions: 14,
+        gap_dimensions: 0,
+        target_gap_dimensions: 1,
+        focus_gap_dimensions: 1,
+        all_dimensions_surpassed: true,
+        largest_gap: 0,
+        largest_effective_gap: 1,
+      },
       next_focus: [],
       ecosystem_readiness: {
         schema: "octopus.ecosystem_readiness.v1",
@@ -879,13 +958,13 @@ describe("<AgentOperatorPanel />", () => {
       },
       parity_certification: {
         schema: "octopus.parity_certification.v1",
-        passed: 14,
-        total: 14,
+        passed: 17,
+        total: 17,
         ready: true,
         by_kind: {
           parity: { passed: 6, total: 6 },
           operational_excellence: { passed: 4, total: 4 },
-          advantage: { passed: 4, total: 4 },
+          advantage: { passed: 7, total: 7 },
         },
         requirements: [],
         dimension_score_floors: {
@@ -1102,14 +1181,14 @@ describe("<AgentOperatorPanel />", () => {
     api.queueAgentScorecardGaps.mockResolvedValue({
       ok: true,
       schema: "octopus.agent_scorecard_gap_queue.v1",
-      created: 7,
+      created: 1,
       updated: 0,
-      total: 7,
+      total: 1,
       items: [],
       scorecard: {
-        overall: { octopus: 91 },
+        overall: { octopus: 97 },
         verdict: "competitive",
-        evidence_adjusted_overall: { octopus: 91 },
+        evidence_adjusted_overall: { octopus: 97 },
         below_target_count: 1,
       },
     });
@@ -1170,11 +1249,13 @@ describe("<AgentOperatorPanel />", () => {
       await screen.findByText(/1 recipe\(s\) need rerun evidence/),
     ).toBeInTheDocument();
     expect(
-      await screen.findByText("Ecosystem maturity is 2 point(s) under target"),
+      await screen.findByText("IDE and product experience gap 1 vs effective target"),
     ).toBeInTheDocument();
     expect(await screen.findByText("Evidence")).toBeInTheDocument();
+    expect(await screen.findByText("OpenClaw")).toBeInTheDocument();
+    expect(await screen.findByText("Hermes")).toBeInTheDocument();
     const ecosystemGapButton = await screen.findByRole("button", {
-      name: "Ecosystem maturity 88",
+      name: "IDE and product experience 1",
     });
     expect(ecosystemGapButton).toHaveAttribute(
       "aria-controls",
@@ -1183,15 +1264,17 @@ describe("<AgentOperatorPanel />", () => {
     expect(ecosystemGapButton).toHaveAttribute("aria-pressed", "true");
     expect(
       await screen.findByRole("region", {
-        name: "Scorecard gap drill-down for Ecosystem maturity",
+        name: "Scorecard gap drill-down for IDE and product experience",
       }),
     ).toBeInTheDocument();
-    expect(await screen.findByText("real 88")).toBeInTheDocument();
-    expect(await screen.findByText("evidence 94")).toBeInTheDocument();
-    expect(await screen.findByText("gap 2")).toBeInTheDocument();
+    expect(await screen.findByText("real 97")).toBeInTheDocument();
+    expect(await screen.findByText("evidence 97")).toBeInTheDocument();
+    expect(await screen.findByText("effective gap 1")).toBeInTheDocument();
+    expect(await screen.findByText("surpass gap 0")).toBeInTheDocument();
+    expect(await screen.findByText("best Codex 90")).toBeInTheDocument();
     expect(await screen.findByText("queued P0")).toBeInTheDocument();
     expect(
-      await screen.findByText("rq-scorecard-ecosystem · pending · x2"),
+      await screen.findByText("rq-scorecard-product · pending · x2"),
     ).toBeInTheDocument();
     expect(
       await screen.findByText("target scorecard_gap_backlog · audit 2"),
@@ -1201,7 +1284,7 @@ describe("<AgentOperatorPanel />", () => {
     ).toBeDisabled();
     expect(
       await screen.findAllByText(
-        "Ship stable public docs for code mode, permissions, replay, and plugins.",
+        "Eliminate auth, workspace, and mode-switching regressions from the frontend release gate.",
       ),
     ).toHaveLength(2);
     api.queueAgentScorecardGaps.mockResolvedValueOnce({
@@ -1217,13 +1300,13 @@ describe("<AgentOperatorPanel />", () => {
     );
     await waitFor(() => {
       expect(api.queueAgentScorecardGaps).toHaveBeenCalledWith({
-        targetScore: 90,
+        targetScore: 98,
         limit: 1,
-        dimensionId: "ecosystem_maturity",
+        dimensionId: "product_experience",
         reason: "operator scorecard drill-down remediation",
       });
     });
-    expect(await screen.findByText("#1 Codex 93")).toBeInTheDocument();
+    expect(await screen.findByText("#1 Octopus 97")).toBeInTheDocument();
     expect(await screen.findByText("Promotion audit")).toBeInTheDocument();
     expect(await screen.findByText("Memory quality")).toBeInTheDocument();
     expect(await screen.findByText("82% reliable")).toBeInTheDocument();
@@ -1450,10 +1533,10 @@ describe("<AgentOperatorPanel />", () => {
     renderWithProviders(<AgentOperatorPanel />);
 
     expect(
-      await screen.findByText("Plugin permission rule drafts"),
+      await screen.findByText("Product experience quality"),
     ).toBeInTheDocument();
     expect(
-      await screen.findByText("/api/plugins/permission-rule-drafts"),
+      await screen.findByText("/api/evolution/product-experience-quality"),
     ).toBeInTheDocument();
 
     fireEvent.click(
@@ -1462,12 +1545,12 @@ describe("<AgentOperatorPanel />", () => {
 
     await waitFor(() => {
       expect(api.queueAgentScorecardGaps).toHaveBeenCalledWith({
-        targetScore: 90,
+        targetScore: 98,
         limit: 10,
       });
     });
     expect(
-      await screen.findByText("Queued 7 real scorecard gap review item(s)."),
+      await screen.findByText("Queued 1 real scorecard gap review item(s)."),
     ).toBeInTheDocument();
   });
 

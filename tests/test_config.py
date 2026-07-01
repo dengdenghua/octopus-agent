@@ -191,19 +191,22 @@ class TestBuildFromConfig:
         stack = build_from_config(cfg)
         assert stack.is_llm_planner
 
-    def test_molili_llm_stack_without_anthropic_key(self, monkeypatch, tmp_path: Path):
+    def test_oct_llm_stack_without_anthropic_key(self, monkeypatch, tmp_path: Path):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
         monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
         cfg = load_from_dict({
-            "planner": {"type": "llm", "model": "molili"},
-            "molili": {"enabled": True},
+            "planner": {"type": "llm", "model": "oct"},
+            "oct": {
+                "enabled": True,
+                "jwt_secret": "oct-test-secret-key-32chars-long",
+            },
         })
 
         stack = build_from_config(cfg)
 
         assert stack.is_llm_planner
-        assert getattr(stack.planner.router, "default_model", None) == "molili"
+        assert stack.planner.planner_model == "oct"
 
     def test_static_stack_routes_research_to_web_search(self):
         cfg = AgentConfig(

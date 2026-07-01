@@ -72,19 +72,35 @@ def test_agent_scorecard_endpoint() -> None:
     assert data["ok"] is True
     assert data["schema"] == "octopus.agent_competitor_scorecard.v1"
     assert data["target_score"] == 90
-    assert data["overall"]["octopus"] == 96
-    assert data["overall"]["codex"] == 93
-    assert data["overall"]["cursor"] == 86
+    assert data["overall"]["octopus"] == 97
+    assert data["overall"]["codex"] == 87
+    assert data["overall"]["openclaw"] == 84
+    assert data["overall"]["hermes"] == 85
     assert data["verdict"] == "leading"
-    assert data["evidence_adjusted_overall"]["octopus"] == 96
+    assert data["evidence_adjusted_overall"]["octopus"] == 97
     assert data["evidence_adjusted_verdict"] == "leading"
     assert data["scorecard_policy"]["certification_floors_do_not_change_overall"] is True
-    assert data["octopus_below_target"] == []
+    assert data["scorecard_policy"]["explicit_objective"] == (
+        "surpass_best_external_on_every_dimension"
+    )
+    assert data["surpass_summary"] == {
+        "schema": "octopus.agent_surpass_summary.v1",
+        "total_dimensions": 14,
+        "surpassed_dimensions": 14,
+        "gap_dimensions": 0,
+        "target_gap_dimensions": 0,
+        "focus_gap_dimensions": 0,
+        "all_dimensions_surpassed": True,
+        "largest_gap": 0,
+        "largest_effective_gap": 0,
+    }
+    assert data["octopus_external_gap_dimensions"] == []
+    assert data["octopus_focus_gaps"] == []
     assert data["ecosystem_readiness"]["score"] == 1.0
     assert data["parity_certification"]["ready"] is True
-    assert data["parity_certification"]["passed"] == 14
+    assert data["parity_certification"]["passed"] == 17
     assert data["parity_certification"]["by_kind"]["operational_excellence"]["passed"] == 4
-    assert data["parity_certification"]["by_kind"]["advantage"]["passed"] == 4
+    assert data["parity_certification"]["by_kind"]["advantage"]["passed"] == 7
 
 
 def test_agent_scorecard_gaps_can_queue_real_baseline_backlog(
@@ -98,17 +114,59 @@ def test_agent_scorecard_gaps_can_queue_real_baseline_backlog(
 
     response = client.post(
         "/api/evolution/agent-scorecard/gaps/queue",
-        json={"target_score": 95, "limit": 3, "reason": "close real gaps"},
+        json={"target_score": 98, "limit": 3, "reason": "raise stretch ceiling"},
     )
     data = response.json()
 
     assert response.status_code == 200
     assert data["ok"] is True
     assert data["schema"] == "octopus.agent_scorecard_gap_queue.v1"
+    assert data["created"] == 3
+    assert data["scorecard"]["overall"]["octopus"] == 97
+    assert data["scorecard"]["evidence_adjusted_overall"]["octopus"] == 97
+    assert data["scorecard"]["below_target_count"] == 14
+    assert data["scorecard"]["external_gap_count"] == 0
+    assert data["scorecard"]["focus_gap_count"] == 14
+    assert [
+        item["candidate_kind"]
+        for item in data["items"]
+    ] == [
+        "scorecard_gap:permissions_sandbox",
+        "scorecard_gap:record_replay_audit",
+        "scorecard_gap:governance_operator",
+    ]
+    first = data["items"][0]["metadata"]
+    assert first["dimension_id"] == "permissions_sandbox"
+    assert first["gap_to_effective_target"] == 2
+    assert first["gap_to_surpass"] == 0
+    assert first["best_external_competitor"] == "codex"
+    assert first["best_external_score"] == 95
+
+    summary = ReviewQueue(tmp_path / "data" / "review_queue.json").summary()
+    assert summary["pending_count"] == 3
+
+
+def test_agent_scorecard_gap_queue_is_empty_once_default_surpass_is_met(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/evolution/agent-scorecard/gaps/queue",
+        json={"target_score": 95, "limit": 3, "reason": "default release target"},
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
     assert data["created"] == 0
-    assert data["scorecard"]["overall"]["octopus"] == 96
-    assert data["scorecard"]["evidence_adjusted_overall"]["octopus"] == 96
     assert data["items"] == []
+    assert data["scorecard"]["external_gap_count"] == 0
+    assert data["scorecard"]["focus_gap_count"] == 0
 
     summary = ReviewQueue(tmp_path / "data" / "review_queue.json").summary()
     assert summary["pending_count"] == 0
@@ -173,6 +231,11 @@ def test_agent_scorecard_gap_queue_can_target_single_dimension(
     assert data["created"] == 1
     assert data["items"][0]["candidate_kind"] == "scorecard_gap:ecosystem_maturity"
     assert data["items"][0]["metadata"]["dimension_id"] == "ecosystem_maturity"
+    assert data["items"][0]["metadata"]["effective_target_score"] == 97
+    assert data["items"][0]["metadata"]["gap_to_effective_target"] == 1
+    assert data["items"][0]["metadata"]["gap_to_surpass"] == 0
+    assert data["items"][0]["metadata"]["best_external_competitor"] == "codex"
+    assert data["items"][0]["metadata"]["best_external_score"] == 95
     assert data["items"][0]["metadata"]["remediation"]["schema"] == (
         "octopus.scorecard_gap_remediation.v1"
     )

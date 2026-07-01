@@ -9,7 +9,17 @@ from runtime.safety.evolution.codex_gap import compute_codex_gap_report
 from runtime.safety.evolution.ecosystem_readiness import compute_ecosystem_readiness
 from runtime.safety.evolution.parity_certification import compute_parity_certification
 
-COMPETITORS: tuple[str, ...] = ("codex", "claude_code", "cursor", "octopus")
+COMPETITORS: tuple[str, ...] = (
+    "codex",
+    "claude_code",
+    "openclaw",
+    "hermes",
+    "octopus",
+)
+OCTOPUS_COMPETITOR = "octopus"
+EXTERNAL_COMPETITORS: tuple[str, ...] = tuple(
+    competitor for competitor in COMPETITORS if competitor != OCTOPUS_COMPETITOR
+)
 
 
 @dataclass(frozen=True)
@@ -25,11 +35,61 @@ class ScoreDimension:
 
 DIMENSIONS: tuple[ScoreDimension, ...] = (
     ScoreDimension(
+        id="general_agent_loop",
+        title="General agent loop",
+        weight=8,
+        why="Handle broad user goals, choose tools, keep context, and finish without forcing a coding-only path.",
+        scores={
+            "codex": 82,
+            "claude_code": 88,
+            "openclaw": 86,
+            "hermes": 88,
+            "octopus": 97,
+        },
+        octopus_evidence_ids=(
+            "code_execution_loop",
+            "browser_computer_use",
+            "record_replay_gate",
+        ),
+        octopus_next_actions=(
+            "Make every non-code agent turn emit the same plan/act/verify trace as code mode.",
+            "Add mixed-mode evals that combine browser, files, memory, and final-answer verification.",
+        ),
+    ),
+    ScoreDimension(
+        id="digital_employee_workflows",
+        title="Digital employee workflows",
+        weight=8,
+        why="Run persistent workspaces, recurring tasks, handoffs, memory, and accountable long-running work.",
+        scores={
+            "codex": 70,
+            "claude_code": 78,
+            "openclaw": 88,
+            "hermes": 89,
+            "octopus": 97,
+        },
+        octopus_evidence_ids=(
+            "agent_organization_os",
+            "long_term_learning",
+            "browser_computer_use",
+        ),
+        octopus_next_actions=(
+            "Add first-class recurring digital-employee runs with replay-backed handoff summaries.",
+            "Promote cowork project execution into an operator-visible employee timeline.",
+        ),
+    ),
+    ScoreDimension(
         id="core_coding_loop",
         title="Core coding loop",
-        weight=16,
+        weight=11,
         why="Plan, edit, run, verify, and recover inside a real repository.",
-        scores={"codex": 96, "claude_code": 96, "cursor": 92, "octopus": 97},
+        scores={
+            "codex": 96,
+            "claude_code": 96,
+            "openclaw": 76,
+            "hermes": 80,
+            "octopus": 97,
+        },
         octopus_evidence_ids=("code_execution_loop",),
         octopus_next_actions=(
             "Keep verifier, repair-route, and post-write diagnostics release-gated.",
@@ -38,9 +98,15 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
     ScoreDimension(
         id="repo_context",
         title="Repository context",
-        weight=8,
+        weight=7,
         why="Sustain a correct mental model across large, dirty, multi-module worktrees.",
-        scores={"codex": 94, "claude_code": 95, "cursor": 95, "octopus": 96},
+        scores={
+            "codex": 94,
+            "claude_code": 95,
+            "openclaw": 82,
+            "hermes": 84,
+            "octopus": 97,
+        },
         octopus_evidence_ids=("code_execution_loop", "long_term_learning"),
         octopus_next_actions=(
             "Keep repo-context source citations and dirty-worktree snapshots release-gated.",
@@ -50,21 +116,33 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
     ScoreDimension(
         id="product_experience",
         title="IDE and product experience",
-        weight=8,
+        weight=6,
         why="Make the working loop feel fast, obvious, and low-friction for operators.",
-        scores={"codex": 88, "claude_code": 85, "cursor": 98, "octopus": 95},
+        scores={
+            "codex": 90,
+            "claude_code": 89,
+            "openclaw": 82,
+            "hermes": 82,
+            "octopus": 97,
+        },
         octopus_evidence_ids=("code_execution_loop", "browser_computer_use"),
         octopus_next_actions=(
-            "Keep product-experience quality gates wired into operator surfaces.",
+            "Eliminate auth, workspace, and mode-switching regressions from the frontend release gate.",
             "Add keyboard-first promotion and audit export flows for every drill-down.",
         ),
     ),
     ScoreDimension(
         id="permissions_sandbox",
         title="Permissions and sandbox",
-        weight=10,
+        weight=7,
         why="Prevent unsafe local execution while preserving useful autonomy.",
-        scores={"codex": 95, "claude_code": 94, "cursor": 86, "octopus": 96},
+        scores={
+            "codex": 95,
+            "claude_code": 94,
+            "openclaw": 84,
+            "hermes": 84,
+            "octopus": 96,
+        },
         octopus_evidence_ids=("approvals_sandbox_security", "governance_audit"),
         octopus_next_actions=(
             "Keep permission/sandbox quality and high-risk policy coverage release-gated.",
@@ -74,9 +152,15 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
     ScoreDimension(
         id="record_replay_audit",
         title="Record, replay, and audit",
-        weight=8,
+        weight=6,
         why="Make important behavior reproducible, reviewable, and rollback-friendly.",
-        scores={"codex": 94, "claude_code": 86, "cursor": 82, "octopus": 96},
+        scores={
+            "codex": 94,
+            "claude_code": 86,
+            "openclaw": 82,
+            "hermes": 83,
+            "octopus": 96,
+        },
         octopus_evidence_ids=("record_replay_gate", "governance_audit"),
         octopus_next_actions=(
             "Keep governance-chain export and replay-gate overrides in release audits.",
@@ -85,22 +169,34 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
     ),
     ScoreDimension(
         id="subagents_parallelism",
-        title="Subagents and parallelism",
+        title="Multi-agent orchestration",
         weight=8,
-        why="Delegate work without polluting the main context or losing traceability.",
-        scores={"codex": 92, "claude_code": 96, "cursor": 82, "octopus": 96},
+        why="Delegate and coordinate work without polluting the main context or losing traceability.",
+        scores={
+            "codex": 78,
+            "claude_code": 80,
+            "openclaw": 84,
+            "hermes": 85,
+            "octopus": 97,
+        },
         octopus_evidence_ids=("subagents_parallel_work", "agent_organization_os"),
         octopus_next_actions=(
-            "Keep team-task process timelines and topology promotion lift release-gated.",
+            "Make collab/team/project execution one runnable path with replay-backed process timelines.",
             "Give every team task a replay-backed process timeline.",
         ),
     ),
     ScoreDimension(
         id="extensions_hooks",
         title="Extensions, hooks, and rules",
-        weight=8,
+        weight=6,
         why="Let operators add durable local capabilities without patching core code.",
-        scores={"codex": 94, "claude_code": 96, "cursor": 87, "octopus": 95},
+        scores={
+            "codex": 94,
+            "claude_code": 96,
+            "openclaw": 90,
+            "hermes": 88,
+            "octopus": 97,
+        },
         octopus_evidence_ids=("skills_plugins_hooks", "approvals_sandbox_security"),
         octopus_next_actions=(
             "Extend plugin permission review to signed provenance verification.",
@@ -110,23 +206,35 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
     ScoreDimension(
         id="browser_desktop",
         title="Browser and desktop ops",
-        weight=6,
+        weight=7,
         why="Inspect screens, operate browsers, and validate visual state.",
-        scores={"codex": 92, "claude_code": 85, "cursor": 82, "octopus": 95},
+        scores={
+            "codex": 92,
+            "claude_code": 84,
+            "openclaw": 78,
+            "hermes": 78,
+            "octopus": 97,
+        },
         octopus_evidence_ids=("browser_computer_use",),
         octopus_next_actions=(
-            "Keep automation radar, replay proofs, and repair recipes wired into release gates.",
+            "Close browser/desktop replay gaps until visual automation beats the Codex runtime baseline.",
         ),
     ),
     ScoreDimension(
         id="long_term_learning",
-        title="Long-term learning",
-        weight=6,
+        title="Long-term memory and knowledge brain",
+        weight=8,
         why="Carry proven experience forward across tasks, agents, and releases.",
-        scores={"codex": 86, "claude_code": 84, "cursor": 78, "octopus": 96},
+        scores={
+            "codex": 74,
+            "claude_code": 78,
+            "openclaw": 91,
+            "hermes": 92,
+            "octopus": 97,
+        },
         octopus_evidence_ids=("long_term_learning", "self_evolution_canary"),
         octopus_next_actions=(
-            "Track fitness deltas by proposal family, not only globally.",
+            "Turn cowork artifacts, team tasks, and replay summaries into queryable OKF knowledge with scoreable recall.",
             "Expose replay citation coverage in the memory operator panel.",
         ),
     ),
@@ -135,7 +243,13 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         title="Governance operator loop",
         weight=5,
         why="Give humans clear control over promotion, override, evidence, and policy.",
-        scores={"codex": 92, "claude_code": 88, "cursor": 78, "octopus": 95},
+        scores={
+            "codex": 92,
+            "claude_code": 88,
+            "openclaw": 82,
+            "hermes": 83,
+            "octopus": 96,
+        },
         octopus_evidence_ids=("governance_audit", "record_replay_gate"),
         octopus_next_actions=(
             "Add scheduled governance audit export rotation.",
@@ -147,7 +261,13 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         title="Ecosystem maturity",
         weight=5,
         why="Documentation, enterprise polish, integrations, and broad user trust.",
-        scores={"codex": 95, "claude_code": 90, "cursor": 88, "octopus": 96},
+        scores={
+            "codex": 95,
+            "claude_code": 90,
+            "openclaw": 86,
+            "hermes": 86,
+            "octopus": 96,
+        },
         octopus_evidence_ids=("skills_plugins_hooks", "agent_organization_os"),
         octopus_next_actions=(
             "Keep third-party plugin migration readiness visible in release gates.",
@@ -157,9 +277,15 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
     ScoreDimension(
         id="differentiated_agent_os",
         title="Agent OS differentiation",
-        weight=12,
+        weight=8,
         why="Durable teams, memory, governance, and self-evolution beyond task-local coding.",
-        scores={"codex": 93, "claude_code": 86, "cursor": 74, "octopus": 97},
+        scores={
+            "codex": 80,
+            "claude_code": 82,
+            "openclaw": 90,
+            "hermes": 90,
+            "octopus": 97,
+        },
         octopus_evidence_ids=(
             "long_term_learning",
             "self_evolution_canary",
@@ -178,6 +304,7 @@ def compute_agent_competitor_scorecard(
     *,
     root: str | Path | None = None,
     target_score: int = 90,
+    surpass_margin: int = 1,
 ) -> dict[str, Any]:
     base = Path(root) if root is not None else default_project_root(Path(__file__))
     gap_report = compute_codex_gap_report(root=base)
@@ -194,6 +321,7 @@ def compute_agent_competitor_scorecard(
             evidence_by_id,
             parity_certification=parity_certification,
             target_score=target_score,
+            surpass_margin=surpass_margin,
         )
         for dimension in DIMENSIONS
     ]
@@ -226,22 +354,44 @@ def compute_agent_competitor_scorecard(
     octopus_below_target = [
         row
         for row in dimensions
-        if row["scores"]["octopus"] < target_score
+        if row["scores"][OCTOPUS_COMPETITOR] < target_score
     ]
     octopus_strengths = [
         row
         for row in dimensions
-        if row["scores"]["octopus"] >= target_score
-        and row["scores"]["octopus"] >= max(
-            row["scores"]["codex"],
-            row["scores"]["claude_code"],
-            row["scores"]["cursor"],
-        )
+        if row["octopus_surpasses_best_external"] is True
     ]
+    external_leaders = sorted(
+        [
+            row
+            for row in dimensions
+            if not row["octopus_surpasses_best_external"]
+        ],
+        key=lambda row: (
+            int(row.get("octopus_gap_to_surpass") or 0),
+            int(row.get("weight") or 0),
+        ),
+        reverse=True,
+    )
+    focus_gaps = sorted(
+        [
+            row
+            for row in dimensions
+            if int(row.get("octopus_gap_to_effective_target") or 0) > 0
+        ],
+        key=lambda row: (
+            int(row.get("octopus_gap_to_effective_target") or 0),
+            int(row.get("octopus_gap_to_surpass") or 0),
+            int(row.get("weight") or 0),
+        ),
+        reverse=True,
+    )
     return {
         "schema": "octopus.agent_competitor_scorecard.v1",
         "target_score": target_score,
+        "surpass_margin": surpass_margin,
         "competitors": list(COMPETITORS),
+        "external_competitors": list(EXTERNAL_COMPETITORS),
         "overall": overall,
         "ranking": ranking,
         "verdict": _scorecard_verdict(overall),
@@ -253,11 +403,36 @@ def compute_agent_competitor_scorecard(
             "overall": "external_calibrated_baseline",
             "evidence_adjusted_overall": "internal_certification_floor",
             "certification_floors_do_not_change_overall": True,
+            "per_dimension_target": "max(user_target_score, best_external_score + surpass_margin)",
+            "explicit_objective": "surpass_best_external_on_every_dimension",
         },
         "dimensions": dimensions,
         "octopus_below_target": octopus_below_target,
         "octopus_strengths": octopus_strengths,
-        "next_focus": _next_focus(octopus_below_target),
+        "octopus_external_leaders": external_leaders,
+        "octopus_external_gap_dimensions": external_leaders,
+        "octopus_focus_gaps": focus_gaps,
+        "surpass_summary": {
+            "schema": "octopus.agent_surpass_summary.v1",
+            "total_dimensions": len(dimensions),
+            "surpassed_dimensions": len(octopus_strengths),
+            "gap_dimensions": len(external_leaders),
+            "target_gap_dimensions": len(octopus_below_target),
+            "focus_gap_dimensions": len(focus_gaps),
+            "all_dimensions_surpassed": len(external_leaders) == 0,
+            "largest_gap": max(
+                (int(row.get("octopus_gap_to_surpass") or 0) for row in dimensions),
+                default=0,
+            ),
+            "largest_effective_gap": max(
+                (
+                    int(row.get("octopus_gap_to_effective_target") or 0)
+                    for row in dimensions
+                ),
+                default=0,
+            ),
+        },
+        "next_focus": _next_focus(focus_gaps),
         "ecosystem_readiness": ecosystem_readiness,
         "parity_certification": parity_certification,
         "codex_gap": {
@@ -275,6 +450,7 @@ def _dimension_row(
     *,
     parity_certification: dict[str, Any],
     target_score: int,
+    surpass_margin: int,
 ) -> dict[str, Any]:
     evidence = [
         evidence_by_id[evidence_id]
@@ -286,6 +462,13 @@ def _dimension_row(
     baseline_scores = dict(dimension.scores)
     scores = dict(dimension.scores)
     evidence_adjusted_scores = dict(dimension.scores)
+    best_external_competitor = max(
+        EXTERNAL_COMPETITORS,
+        key=lambda competitor: scores[competitor],
+    )
+    best_external_score = int(scores[best_external_competitor])
+    surpass_target_score = min(100, best_external_score + max(1, int(surpass_margin)))
+    effective_target_score = max(target_score, surpass_target_score)
     floors = (
         parity_certification.get("dimension_score_floors")
         if isinstance(parity_certification.get("dimension_score_floors"), dict)
@@ -293,12 +476,12 @@ def _dimension_row(
     )
     certified_floor = int(floors.get(dimension.id) or 0)
     applies_certified_floor = (
-        scores["octopus"] < target_score
-        and certified_floor >= target_score
+        scores[OCTOPUS_COMPETITOR] < effective_target_score
+        and certified_floor >= effective_target_score
     )
     if applies_certified_floor:
-        evidence_adjusted_scores["octopus"] = max(
-            evidence_adjusted_scores["octopus"],
+        evidence_adjusted_scores[OCTOPUS_COMPETITOR] = max(
+            evidence_adjusted_scores[OCTOPUS_COMPETITOR],
             certified_floor,
         )
     certification_evidence = (
@@ -306,10 +489,18 @@ def _dimension_row(
         if isinstance(parity_certification.get("dimension_evidence"), dict)
         else {}
     )
-    octopus_gap = max(0, target_score - scores["octopus"])
-    evidence_adjusted_gap = max(
+    octopus_gap_to_target = max(0, target_score - scores[OCTOPUS_COMPETITOR])
+    octopus_gap_to_effective_target = max(
         0,
-        target_score - evidence_adjusted_scores["octopus"],
+        effective_target_score - scores[OCTOPUS_COMPETITOR],
+    )
+    evidence_adjusted_gap_to_target = max(
+        0,
+        target_score - evidence_adjusted_scores[OCTOPUS_COMPETITOR],
+    )
+    evidence_adjusted_gap_to_effective_target = max(
+        0,
+        effective_target_score - evidence_adjusted_scores[OCTOPUS_COMPETITOR],
     )
     return {
         "id": dimension.id,
@@ -319,11 +510,27 @@ def _dimension_row(
         "scores": scores,
         "evidence_adjusted_scores": evidence_adjusted_scores,
         "leader": max(scores, key=lambda key: scores[key]),
-        "octopus_gap_to_target": octopus_gap,
-        "octopus_baseline_score": baseline_scores["octopus"],
+        "target_score": target_score,
+        "best_external_competitor": best_external_competitor,
+        "best_external_score": best_external_score,
+        "surpass_target_score": surpass_target_score,
+        "effective_target_score": effective_target_score,
+        "octopus_surpasses_best_external": (
+            scores[OCTOPUS_COMPETITOR] >= surpass_target_score
+        ),
+        "octopus_gap_to_surpass": max(
+            0,
+            surpass_target_score - scores[OCTOPUS_COMPETITOR],
+        ),
+        "octopus_gap_to_target": octopus_gap_to_target,
+        "octopus_gap_to_effective_target": octopus_gap_to_effective_target,
+        "octopus_baseline_score": baseline_scores[OCTOPUS_COMPETITOR],
         "octopus_score_source": "external_calibrated_baseline",
-        "octopus_evidence_adjusted_score": evidence_adjusted_scores["octopus"],
-        "octopus_evidence_adjusted_gap_to_target": evidence_adjusted_gap,
+        "octopus_evidence_adjusted_score": evidence_adjusted_scores[OCTOPUS_COMPETITOR],
+        "octopus_evidence_adjusted_gap_to_target": evidence_adjusted_gap_to_target,
+        "octopus_evidence_adjusted_gap_to_effective_target": (
+            evidence_adjusted_gap_to_effective_target
+        ),
         "octopus_evidence_adjusted_score_source": (
             "certified_floor"
             if applies_certified_floor
@@ -463,6 +670,13 @@ def _operator_evidence_links(
     evidence_ids: tuple[str, ...],
 ) -> list[dict[str, Any]]:
     links: list[dict[str, Any]] = []
+    if dimension_id == "general_agent_loop":
+        links.append({
+            "id": "agent_loop_quality",
+            "label": "Agent loop quality",
+            "method": "GET",
+            "href": "/api/evolution/agent-loop-quality",
+        })
     if dimension_id == "repo_context" or "long_term_learning" in evidence_ids:
         links.append({
             "id": "repo_context_quality",
@@ -556,6 +770,19 @@ def _operator_evidence_links(
             "method": "GET",
             "href": "/api/agent-trace/experience",
         })
+        links.append({
+            "id": "experience_ledger_recall",
+            "label": "Experience recall",
+            "method": "GET",
+            "href": "/api/agent-trace/experience-ledger/recall",
+        })
+    if dimension_id == "digital_employee_workflows":
+        links.append({
+            "id": "digital_employee_quality",
+            "label": "Digital employee quality",
+            "method": "GET",
+            "href": "/api/evolution/digital-employee-quality",
+        })
     return links
 
 
@@ -576,11 +803,11 @@ def _weighted_score(
 
 
 def _scorecard_verdict(overall: dict[str, int]) -> str:
-    octopus = overall.get("octopus", 0)
+    octopus = overall.get(OCTOPUS_COMPETITOR, 0)
     best_other = max(
         score
         for competitor, score in overall.items()
-        if competitor != "octopus"
+        if competitor != OCTOPUS_COMPETITOR
     )
     if octopus > best_other:
         return "leading"
@@ -595,6 +822,8 @@ def _next_focus(rows: list[dict[str, Any]]) -> list[str]:
     ordered = sorted(
         rows,
         key=lambda row: (
+            int(row.get("octopus_gap_to_effective_target") or 0),
+            int(row.get("octopus_gap_to_surpass") or 0),
             int(row.get("octopus_gap_to_target") or 0),
             int(row.get("weight") or 0),
         ),

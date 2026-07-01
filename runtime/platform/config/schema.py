@@ -218,7 +218,7 @@ class EvolveConfig(BaseModel):
 
 
 class OctConfig(BaseModel):
-    """oct 账号网关(octopus 自己的,octopus-mobile server)· 替代 molili。"""
+    """oct 账号网关(octopus 自己的,octopus-mobile server)。"""
 
     model_config = ConfigDict(frozen=True)
 

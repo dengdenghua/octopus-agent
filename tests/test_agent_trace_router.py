@@ -404,6 +404,10 @@ def test_trace_task_run_review_can_commit_to_experience_ledger(
         params={"week_start": today_iso},
     )
     quality = client.get("/api/agent-trace/experience-ledger/quality-summary")
+    recall = client.get(
+        "/api/agent-trace/experience-ledger/recall",
+        params={"q": "read file positive replay", "min_reliability": 0.7},
+    )
     missing = client.post("/api/agent-trace/task-runs/missing/review/commit")
 
     assert committed.status_code == 200
@@ -436,6 +440,14 @@ def test_trace_task_run_review_can_commit_to_experience_ledger(
     assert quality.status_code == 200
     assert quality.json()["schema"] == "octopus.experience_memory_quality_summary.v1"
     assert quality.json()["active_count"] == 2
+    assert recall.status_code == 200
+    assert recall.json()["schema"] == "octopus.experience_recall.v1"
+    assert recall.json()["total"] >= 1
+    assert recall.json()["citation_coverage"] == 1.0
+    assert recall.json()["records"][0]["title"] == "Positive tool-use run"
+    assert recall.json()["records"][0]["recall"]["score"] > 0.7
+    assert recall.json()["records"][0]["recall"]["citation_coverage"] == 1.0
+    assert {"read", "file"} <= set(recall.json()["records"][0]["recall"]["matched_terms"])
     assert missing.status_code == 404
 
 

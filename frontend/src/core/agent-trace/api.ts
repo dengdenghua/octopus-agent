@@ -933,11 +933,20 @@ export interface AgentCompetitorScorecardDimension {
   scores: Record<string, number>;
   evidence_adjusted_scores?: Record<string, number>;
   leader: string;
+  target_score?: number;
+  best_external_competitor?: string;
+  best_external_score?: number;
+  surpass_target_score?: number;
+  effective_target_score?: number;
+  octopus_surpasses_best_external?: boolean;
+  octopus_gap_to_surpass?: number;
   octopus_gap_to_target: number;
+  octopus_gap_to_effective_target?: number;
   octopus_baseline_score?: number;
   octopus_score_source?: string;
   octopus_evidence_adjusted_score?: number;
   octopus_evidence_adjusted_gap_to_target?: number;
+  octopus_evidence_adjusted_gap_to_effective_target?: number;
   octopus_evidence_adjusted_score_source?: string;
   octopus_certified_score_floor?: number;
   octopus_certification_score_applied?: boolean;
@@ -1007,7 +1016,9 @@ export interface AgentCompetitorScorecard {
   ok?: boolean;
   schema: "octopus.agent_competitor_scorecard.v1" | string;
   target_score: number;
+  surpass_margin?: number;
   competitors: string[];
+  external_competitors?: string[];
   overall: Record<string, number>;
   ranking: Array<{ competitor: string; score: number }>;
   verdict: "leading" | "competitive" | "near_parity" | "behind" | string;
@@ -1024,10 +1035,26 @@ export interface AgentCompetitorScorecard {
     overall?: string;
     evidence_adjusted_overall?: string;
     certification_floors_do_not_change_overall?: boolean;
+    per_dimension_target?: string;
+    explicit_objective?: string;
   };
   dimensions: AgentCompetitorScorecardDimension[];
   octopus_below_target: AgentCompetitorScorecardDimension[];
   octopus_strengths: AgentCompetitorScorecardDimension[];
+  octopus_external_leaders?: AgentCompetitorScorecardDimension[];
+  octopus_external_gap_dimensions?: AgentCompetitorScorecardDimension[];
+  octopus_focus_gaps?: AgentCompetitorScorecardDimension[];
+  surpass_summary?: {
+    schema?: "octopus.agent_surpass_summary.v1" | string;
+    total_dimensions: number;
+    surpassed_dimensions: number;
+    gap_dimensions: number;
+    target_gap_dimensions?: number;
+    focus_gap_dimensions?: number;
+    all_dimensions_surpassed: boolean;
+    largest_gap: number;
+    largest_effective_gap?: number;
+  };
   next_focus: string[];
   ecosystem_readiness?: AgentEcosystemReadiness;
   parity_certification?: {
