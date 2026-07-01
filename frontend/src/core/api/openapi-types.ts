@@ -688,6 +688,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agent-trace/experience-ledger/recall": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Api Agent Trace Experience Recall */
+        get: operations["api_agent_trace_experience_recall_api_agent_trace_experience_ledger_recall_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent-trace/experience-ledger/weekly-summary": {
         parameters: {
             query?: never;
@@ -2892,6 +2909,127 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/collab/{thread_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Session
+         * @description Unified collaboration session — one read over roster/mode/room link,
+         *     shared blackboard, async tasks, and presence (instead of stitching the
+         *     per-surface endpoints). The cowork thread is the canonical session; a
+         *     Team Room is its optional linked surface.
+         */
+        get: operations["get_session_api_collab__thread_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/link-room": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link Session Room
+         * @description Link a Team Room to this session (event-sourced) so the two surfaces
+         *     stop drifting as separate sources of truth.
+         */
+        post: operations["link_session_room_api_collab__thread_id__link_room_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/room": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ensure Session Room
+         * @description Create/link the session's persistent room.
+         *
+         *     This is the canonical replacement for "go create a Team elsewhere":
+         *     the user stays in one collaboration thread, and persistence/invites/tasks
+         *     become properties of that same session.
+         */
+        post: operations["ensure_session_room_api_collab__thread_id__room_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/room-message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Room Message
+         * @description Write a line into the session's linked Team Room transcript.
+         *
+         *     The write side of the unified session: where ``get_session`` /search read
+         *     the linked room transcript, this lets the cowork thread *post* into it
+         *     through the same session — so an agent or summary in the group lands in
+         *     the room surface instead of a separate write path. 409 if no room is
+         *     linked (link it first via ``/link-room``).
+         */
+        post: operations["post_room_message_api_collab__thread_id__room_message_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Session Tasks
+         * @description List heavyweight room tasks through the canonical session path.
+         */
+        get: operations["list_session_tasks_api_collab__thread_id__tasks_get"];
+        put?: never;
+        /**
+         * Create Session Task
+         * @description Create a heavyweight task through the collaboration session.
+         *
+         *     The underlying TeamTask store is still reused for compatibility, but the
+         *     caller no longer has to choose a separate Team surface first.
+         */
+        post: operations["create_session_task_api_collab__thread_id__tasks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/complete": {
         parameters: {
             query?: never;
@@ -3567,6 +3705,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cowork/{thread_id}/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health
+         * @description Unified operational health for a collaboration thread — one call for
+         *     an ops panel: runner state, task queue + failure reasons, presence,
+         *     mode/roster, and recent events. Read-only (like presence/search).
+         */
+        get: operations["health_api_cowork__thread_id__health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Heartbeat
+         * @description Presence ping — refresh ``member_id``'s online status.
+         */
+        post: operations["heartbeat_api_cowork__thread_id__heartbeat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cowork/{thread_id}/members": {
         parameters: {
             query?: never;
@@ -3672,6 +3852,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cowork/{thread_id}/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Presence
+         * @description Per-member presence + unread for the thread's roster. Unread counts
+         *     group events past each member's read marker (floored at their join).
+         */
+        get: operations["presence_api_cowork__thread_id__presence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cowork/{thread_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Read
+         * @description Mark ``member_id`` caught up to ``seq`` (default: the current event
+         *     head). The marker is monotonic — it never rewinds.
+         */
+        post: operations["mark_read_api_cowork__thread_id__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cowork/{thread_id}/search": {
         parameters: {
             query?: never;
@@ -3681,10 +3903,11 @@ export interface paths {
         };
         /**
          * Search
-         * @description Replayable group search across the shared blackboard, async tasks,
-         *     and the membership/mode event log. ``kinds`` is a comma-separated
-         *     subset of ``blackboard,task,event`` (default all); ``until_seq`` bounds
-         *     the event scan to a past point (time-travel).
+         * @description Replayable, session-wide search across the shared blackboard, async
+         *     tasks, the membership/mode event log, and (when a room is linked) the
+         *     room transcript + team tasks. ``kinds`` is a comma-separated subset of
+         *     ``blackboard,task,event,room_message,room_task`` (default all);
+         *     ``until_seq`` bounds the event scan to a past point (time-travel).
          */
         get: operations["search_api_cowork__thread_id__search_get"];
         put?: never;
@@ -3980,6 +4203,23 @@ export interface paths {
         };
         /** Deployment File */
         get: operations["deployment_file_api_deployments__deployment_id___file_path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/agent-loop-quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Loop Quality */
+        get: operations["get_agent_loop_quality_api_evolution_agent_loop_quality_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4373,6 +4613,23 @@ export interface paths {
         put?: never;
         /** Decide Curriculum Goal */
         post: operations["decide_curriculum_goal_api_evolution_curriculum_goals_decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/digital-employee-quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Digital Employee Quality */
+        get: operations["get_digital_employee_quality_api_evolution_digital_employee_quality_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7631,6 +7888,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/by-thread/{thread_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project By Thread */
+        get: operations["get_project_by_thread_api_projects_by_thread__thread_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/from-group/{thread_id}": {
         parameters: {
             query?: never;
@@ -7671,6 +7945,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Events
+         * @description Project audit trail: recoveries, interventions, and future operator actions.
+         */
+        get: operations["events_api_projects__project_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/recover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recover
+         * @description Reopen blocked project work after an operator fixes the cause.
+         */
+        post: operations["recover_api_projects__project_id__recover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/report": {
         parameters: {
             query?: never;
@@ -7705,6 +8019,26 @@ export interface paths {
          * @description Drive the loop until the project is done/blocked or max_ticks.
          */
         post: operations["run_api_projects__project_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tasks/{task_id}/intervene": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Intervene Task
+         * @description Manually reassign, reset, complete, or skip a task.
+         */
+        post: operations["intervene_task_api_projects__project_id__tasks__task_id__intervene_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7865,6 +8199,57 @@ export interface paths {
         get: operations["api_regeneration_summary_api_regeneration_summary_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/registry/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Registry Skills */
+        get: operations["list_registry_skills_api_registry_skills_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/registry/skills/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Registry Skill Detail */
+        get: operations["registry_skill_detail_api_registry_skills__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/registry/skills/{slug}/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Install Registry Skill */
+        post: operations["install_registry_skill_api_registry_skills__slug__install_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9301,6 +9686,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/teams/{team_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Room Messages
+         * @description Durable room transcript — reconnect catch-up (``after_seq``) and
+         *     search (``q``). Closes the gap where room chat was live-only / a 20-line
+         *     in-memory ring.
+         */
+        get: operations["get_room_messages_api_teams__team_id__messages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/teams/{team_id}/participants/{participant_id}": {
         parameters: {
             query?: never;
@@ -10628,6 +11035,35 @@ export interface components {
             /** Repo Root */
             repo_root?: string | null;
         };
+        /** CollabTaskBody */
+        CollabTaskBody: {
+            /** Assignees */
+            assignees?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            room?: components["schemas"]["EnsureRoomBody"] | null;
+            /**
+             * Run
+             * @default false
+             */
+            run: boolean;
+            /**
+             * Sop Template
+             * @default
+             */
+            sop_template: string;
+            /** Title */
+            title: string;
+        };
         /** CompleteBody */
         CompleteBody: {
             /** Blackboard Key */
@@ -10957,6 +11393,24 @@ export interface components {
             /** Write Paths */
             write_paths?: string[];
         };
+        /** EnsureRoomBody */
+        EnsureRoomBody: {
+            /** Id */
+            id?: string | null;
+            /** Leaderid */
+            leaderId?: string | null;
+            /** Members */
+            members?: {
+                [key: string]: unknown;
+            }[];
+            /** Mode */
+            mode?: string | null;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+        };
         /** FeedbackEntry */
         FeedbackEntry: {
             /** Actor */
@@ -11099,6 +11553,11 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HeartbeatBody */
+        HeartbeatBody: {
+            /** Member Id */
+            member_id: string;
+        };
         /** IdentityLockResponse */
         IdentityLockResponse: {
             /** Locked */
@@ -11160,6 +11619,11 @@ export interface components {
             display_name?: string | null;
             /** Participant Id */
             participant_id?: string | null;
+        };
+        /** LinkRoomBody */
+        LinkRoomBody: {
+            /** Room Id */
+            room_id: string;
         };
         /** LocalPartnerRegisterItem */
         LocalPartnerRegisterItem: {
@@ -11622,6 +12086,38 @@ export interface components {
             /** Top K */
             top_k?: number | null;
         };
+        /** ReadBody */
+        ReadBody: {
+            /** Member Id */
+            member_id: string;
+            /** Seq */
+            seq?: number | null;
+        };
+        /** RecoverBody */
+        RecoverBody: {
+            /**
+             * Clear Outputs
+             * @default true
+             */
+            clear_outputs: boolean;
+            /**
+             * Max Ticks
+             * @default 50
+             */
+            max_ticks: number;
+            /**
+             * Reset Attempts
+             * @default true
+             */
+            reset_attempts: boolean;
+            /**
+             * Run
+             * @default false
+             */
+            run: boolean;
+            /** Task Ids */
+            task_ids?: string[];
+        };
         /** RepairRoutePromotionQueueBody */
         RepairRoutePromotionQueueBody: {
             /**
@@ -11730,6 +12226,21 @@ export interface components {
             overrides: {
                 [key: string]: string;
             };
+        };
+        /** RoomMessageBody */
+        RoomMessageBody: {
+            /**
+             * Display Name
+             * @default
+             */
+            display_name: string;
+            /**
+             * Participant Id
+             * @default
+             */
+            participant_id: string;
+            /** Text */
+            text: string;
         };
         /** RunBody */
         RunBody: {
@@ -11959,6 +12470,42 @@ export interface components {
             kind: string;
             /** Ref */
             ref: string;
+        };
+        /** TaskInterventionBody */
+        TaskInterventionBody: {
+            /** Action */
+            action: string;
+            /** Assigned Agent */
+            assigned_agent?: string | null;
+            /** Assigned Role */
+            assigned_role?: string | null;
+            /**
+             * Cascade
+             * @default true
+             */
+            cascade: boolean;
+            /**
+             * Max Ticks
+             * @default 50
+             */
+            max_ticks: number;
+            /** Output */
+            output?: unknown;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Reset Attempts
+             * @default true
+             */
+            reset_attempts: boolean;
+            /**
+             * Run
+             * @default false
+             */
+            run: boolean;
         };
         /** TaskTakeoverRequest */
         TaskTakeoverRequest: {
@@ -13678,6 +14225,42 @@ export interface operations {
     api_agent_trace_experience_quality_summary_api_agent_trace_experience_ledger_quality_summary_get: {
         parameters: {
             query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_agent_trace_experience_recall_api_agent_trace_experience_ledger_recall_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                bucket?: string | null;
+                min_reliability?: number;
                 limit?: number;
             };
             header?: never;
@@ -17957,6 +18540,220 @@ export interface operations {
             };
         };
     };
+    get_session_api_collab__thread_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    link_session_room_api_collab__thread_id__link_room_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkRoomBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ensure_session_room_api_collab__thread_id__room_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnsureRoomBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_room_message_api_collab__thread_id__room_message_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoomMessageBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_session_tasks_api_collab__thread_id__tasks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_session_task_api_collab__thread_id__tasks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollabTaskBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     complete_api_complete_post: {
         parameters: {
             query?: never;
@@ -19088,6 +19885,76 @@ export interface operations {
             };
         };
     };
+    health_api_cowork__thread_id__health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    heartbeat_api_cowork__thread_id__heartbeat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeartbeatBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     invite_member_api_cowork__thread_id__members_post: {
         parameters: {
             query?: never;
@@ -19244,6 +20111,78 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    presence_api_cowork__thread_id__presence_get: {
+        parameters: {
+            query?: {
+                online_window_s?: number;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_read_api_cowork__thread_id__read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadBody"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -19867,6 +20806,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_loop_quality_api_evolution_agent_loop_quality_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -20609,6 +21570,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_digital_employee_quality_api_evolution_digital_employee_quality_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -26285,6 +27268,39 @@ export interface operations {
             };
         };
     };
+    get_project_by_thread_api_projects_by_thread__thread_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     from_group_api_projects_from_group__thread_id__post: {
         parameters: {
             query?: never;
@@ -26355,6 +27371,78 @@ export interface operations {
             };
         };
     };
+    events_api_projects__project_id__events_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recover_api_projects__project_id__recover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecoverBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     report_api_projects__project_id__report_get: {
         parameters: {
             query?: never;
@@ -26400,6 +27488,44 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RunBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    intervene_task_api_projects__project_id__tasks__task_id__intervene_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskInterventionBody"];
             };
         };
         responses: {
@@ -26658,6 +27784,108 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    list_registry_skills_api_registry_skills_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                category?: string | null;
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registry_skill_detail_api_registry_skills__slug__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    install_registry_skill_api_registry_skills__slug__install_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -29536,6 +30764,43 @@ export interface operations {
                 "application/json": components["schemas"]["CreateTeamInviteRequest"] | null;
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_room_messages_api_teams__team_id__messages_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                after_seq?: number;
+                q?: string;
+            };
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

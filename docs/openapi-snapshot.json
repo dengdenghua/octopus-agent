@@ -766,6 +766,58 @@
         "title": "CliTeamRunRequest",
         "type": "object"
       },
+      "CollabTaskBody": {
+        "properties": {
+          "assignees": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Assignees",
+            "type": "array"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "room": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EnsureRoomBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run": {
+            "default": false,
+            "title": "Run",
+            "type": "boolean"
+          },
+          "sop_template": {
+            "default": "",
+            "title": "Sop Template",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "CollabTaskBody",
+        "type": "object"
+      },
       "CompleteBody": {
         "properties": {
           "blackboard_key": {
@@ -1729,6 +1781,58 @@
         "title": "DispatchTaskInput",
         "type": "object"
       },
+      "EnsureRoomBody": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "leaderId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leaderid"
+          },
+          "members": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "title": "EnsureRoomBody",
+        "type": "object"
+      },
       "FeedbackEntry": {
         "properties": {
           "actor": {
@@ -2282,6 +2386,20 @@
           }
         },
         "title": "JoinInviteRequest",
+        "type": "object"
+      },
+      "LinkRoomBody": {
+        "properties": {
+          "room_id": {
+            "minLength": 1,
+            "title": "Room Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id"
+        ],
+        "title": "LinkRoomBody",
         "type": "object"
       },
       "LocalPartnerRegisterItem": {
@@ -3362,6 +3480,39 @@
         "title": "ReadBody",
         "type": "object"
       },
+      "RecoverBody": {
+        "properties": {
+          "clear_outputs": {
+            "default": true,
+            "title": "Clear Outputs",
+            "type": "boolean"
+          },
+          "max_ticks": {
+            "default": 50,
+            "title": "Max Ticks",
+            "type": "integer"
+          },
+          "reset_attempts": {
+            "default": true,
+            "title": "Reset Attempts",
+            "type": "boolean"
+          },
+          "run": {
+            "default": false,
+            "title": "Run",
+            "type": "boolean"
+          },
+          "task_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Task Ids",
+            "type": "array"
+          }
+        },
+        "title": "RecoverBody",
+        "type": "object"
+      },
       "RepairRoutePromotionQueueBody": {
         "properties": {
           "limit": {
@@ -3584,6 +3735,30 @@
           }
         },
         "title": "RoleModelsBody",
+        "type": "object"
+      },
+      "RoomMessageBody": {
+        "properties": {
+          "display_name": {
+            "default": "",
+            "title": "Display Name",
+            "type": "string"
+          },
+          "participant_id": {
+            "default": "",
+            "title": "Participant Id",
+            "type": "string"
+          },
+          "text": {
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "RoomMessageBody",
         "type": "object"
       },
       "RunBody": {
@@ -4136,6 +4311,70 @@
           "ref"
         ],
         "title": "TaskAssigneeWire",
+        "type": "object"
+      },
+      "TaskInterventionBody": {
+        "properties": {
+          "action": {
+            "minLength": 1,
+            "title": "Action",
+            "type": "string"
+          },
+          "assigned_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Agent"
+          },
+          "assigned_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Role"
+          },
+          "cascade": {
+            "default": true,
+            "title": "Cascade",
+            "type": "boolean"
+          },
+          "max_ticks": {
+            "default": 50,
+            "title": "Max Ticks",
+            "type": "integer"
+          },
+          "output": {
+            "title": "Output"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "reset_attempts": {
+            "default": true,
+            "title": "Reset Attempts",
+            "type": "boolean"
+          },
+          "run": {
+            "default": false,
+            "title": "Run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "TaskInterventionBody",
         "type": "object"
       },
       "TaskTakeoverRequest": {
@@ -7273,6 +7512,91 @@
           }
         },
         "summary": "Api Agent Trace Experience Quality Summary",
+        "tags": [
+          "agent-trace"
+        ]
+      }
+    },
+    "/api/agent-trace/experience-ledger/recall": {
+      "get": {
+        "operationId": "api_agent_trace_experience_recall_api_agent_trace_experience_ledger_recall_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bucket",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bucket"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_reliability",
+            "required": false,
+            "schema": {
+              "default": 0.0,
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Min Reliability",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Trace Experience Recall Api Agent Trace Experience Ledger Recall Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Trace Experience Recall",
         "tags": [
           "agent-trace"
         ]
@@ -13654,6 +13978,314 @@
         ]
       }
     },
+    "/api/collab/{thread_id}": {
+      "get": {
+        "description": "Unified collaboration session — one read over roster/mode/room link,\nshared blackboard, async tasks, and presence (instead of stitching the\nper-surface endpoints). The cowork thread is the canonical session; a\nTeam Room is its optional linked surface.",
+        "operationId": "get_session_api_collab__thread_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Session Api Collab  Thread Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Session",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/link-room": {
+      "post": {
+        "description": "Link a Team Room to this session (event-sourced) so the two surfaces\nstop drifting as separate sources of truth.",
+        "operationId": "link_session_room_api_collab__thread_id__link_room_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkRoomBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Link Session Room Api Collab  Thread Id  Link Room Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Link Session Room",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/room": {
+      "post": {
+        "description": "Create/link the session's persistent room.\n\nThis is the canonical replacement for \"go create a Team elsewhere\":\nthe user stays in one collaboration thread, and persistence/invites/tasks\nbecome properties of that same session.",
+        "operationId": "ensure_session_room_api_collab__thread_id__room_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnsureRoomBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ensure Session Room Api Collab  Thread Id  Room Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ensure Session Room",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/room-message": {
+      "post": {
+        "description": "Write a line into the session's linked Team Room transcript.\n\nThe write side of the unified session: where ``get_session`` /search read\nthe linked room transcript, this lets the cowork thread *post* into it\nthrough the same session — so an agent or summary in the group lands in\nthe room surface instead of a separate write path. 409 if no room is\nlinked (link it first via ``/link-room``).",
+        "operationId": "post_room_message_api_collab__thread_id__room_message_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoomMessageBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Post Room Message Api Collab  Thread Id  Room Message Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Room Message",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/tasks": {
+      "get": {
+        "description": "List heavyweight room tasks through the canonical session path.",
+        "operationId": "list_session_tasks_api_collab__thread_id__tasks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Session Tasks Api Collab  Thread Id  Tasks Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Session Tasks",
+        "tags": [
+          "cowork"
+        ]
+      },
+      "post": {
+        "description": "Create a heavyweight task through the collaboration session.\n\nThe underlying TeamTask store is still reused for compatibility, but the\ncaller no longer has to choose a separate Team surface first.",
+        "operationId": "create_session_task_api_collab__thread_id__tasks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollabTaskBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Session Task Api Collab  Thread Id  Tasks Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Session Task",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
     "/api/complete": {
       "post": {
         "operationId": "complete_api_complete_post",
@@ -15296,6 +15928,51 @@
         ]
       }
     },
+    "/api/cowork/{thread_id}/health": {
+      "get": {
+        "description": "Unified operational health for a collaboration thread — one call for\nan ops panel: runner state, task queue + failure reasons, presence,\nmode/roster, and recent events. Read-only (like presence/search).",
+        "operationId": "health_api_cowork__thread_id__health_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Health Api Cowork  Thread Id  Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
     "/api/cowork/{thread_id}/heartbeat": {
       "post": {
         "description": "Presence ping — refresh ``member_id``'s online status.",
@@ -15747,7 +16424,7 @@
     },
     "/api/cowork/{thread_id}/search": {
       "get": {
-        "description": "Replayable group search across the shared blackboard, async tasks,\nand the membership/mode event log. ``kinds`` is a comma-separated\nsubset of ``blackboard,task,event`` (default all); ``until_seq`` bounds\nthe event scan to a past point (time-travel).",
+        "description": "Replayable, session-wide search across the shared blackboard, async\ntasks, the membership/mode event log, and (when a room is linked) the\nroom transcript + team tasks. ``kinds`` is a comma-separated subset of\n``blackboard,task,event,room_message,room_task`` (default all);\n``until_seq`` bounds the event scan to a past point (time-travel).",
         "operationId": "search_api_cowork__thread_id__search_get",
         "parameters": [
           {
@@ -16585,6 +17262,29 @@
         "summary": "Deployment File",
         "tags": [
           "deployments"
+        ]
+      }
+    },
+    "/api/evolution/agent-loop-quality": {
+      "get": {
+        "operationId": "get_agent_loop_quality_api_evolution_agent_loop_quality_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Agent Loop Quality Api Evolution Agent Loop Quality Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Agent Loop Quality",
+        "tags": [
+          "evolution"
         ]
       }
     },
@@ -17623,6 +18323,29 @@
         "summary": "Decide Curriculum Goal",
         "tags": [
           "evolution-ops"
+        ]
+      }
+    },
+    "/api/evolution/digital-employee-quality": {
+      "get": {
+        "operationId": "get_digital_employee_quality_api_evolution_digital_employee_quality_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Digital Employee Quality Api Evolution Digital Employee Quality Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Digital Employee Quality",
+        "tags": [
+          "evolution"
         ]
       }
     },
@@ -25616,6 +26339,50 @@
         ]
       }
     },
+    "/api/projects/by-thread/{thread_id}": {
+      "get": {
+        "operationId": "get_project_by_thread_api_projects_by_thread__thread_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Project By Thread Api Projects By Thread  Thread Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Project By Thread",
+        "tags": [
+          "projectos"
+        ]
+      }
+    },
     "/api/projects/from-group/{thread_id}": {
       "post": {
         "description": "Turn a custom cowork group into a project team: plan milestones and (by\ndefault) run them, routing each task to the group's ACTUAL members by\ncapability — not the fixed 4 roles. This is \"assemble a group → turn on\nproject mode\".",
@@ -25710,6 +26477,116 @@
           }
         },
         "summary": "Get Project",
+        "tags": [
+          "projectos"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/events": {
+      "get": {
+        "description": "Project audit trail: recoveries, interventions, and future operator actions.",
+        "operationId": "events_api_projects__project_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Events Api Projects  Project Id  Events Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Events",
+        "tags": [
+          "projectos"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/recover": {
+      "post": {
+        "description": "Reopen blocked project work after an operator fixes the cause.",
+        "operationId": "recover_api_projects__project_id__recover_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoverBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Recover Api Projects  Project Id  Recover Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recover",
         "tags": [
           "projectos"
         ]
@@ -25810,6 +26687,70 @@
           }
         },
         "summary": "Run",
+        "tags": [
+          "projectos"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/tasks/{task_id}/intervene": {
+      "post": {
+        "description": "Manually reassign, reset, complete, or skip a task.",
+        "operationId": "intervene_task_api_projects__project_id__tasks__task_id__intervene_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskInterventionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Intervene Task Api Projects  Project Id  Tasks  Task Id  Intervene Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Intervene Task",
         "tags": [
           "projectos"
         ]
@@ -26103,6 +27044,184 @@
         "summary": "Api Regeneration Summary",
         "tags": [
           "observability"
+        ]
+      }
+    },
+    "/api/registry/skills": {
+      "get": {
+        "operationId": "list_registry_skills_api_registry_skills_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Registry Skills Api Registry Skills Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Registry Skills",
+        "tags": [
+          "registry"
+        ]
+      }
+    },
+    "/api/registry/skills/{slug}": {
+      "get": {
+        "operationId": "registry_skill_detail_api_registry_skills__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Registry Skill Detail Api Registry Skills  Slug  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Registry Skill Detail",
+        "tags": [
+          "registry"
+        ]
+      }
+    },
+    "/api/registry/skills/{slug}/install": {
+      "post": {
+        "operationId": "install_registry_skill_api_registry_skills__slug__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Install Registry Skill Api Registry Skills  Slug  Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Install Registry Skill",
+        "tags": [
+          "registry"
         ]
       }
     },
@@ -29964,6 +31083,81 @@
           }
         },
         "summary": "Create Invite",
+        "tags": [
+          "team-rooms"
+        ]
+      }
+    },
+    "/api/teams/{team_id}/messages": {
+      "get": {
+        "description": "Durable room transcript — reconnect catch-up (``after_seq``) and\nsearch (``q``). Closes the gap where room chat was live-only / a 20-line\nin-memory ring.",
+        "operationId": "get_room_messages_api_teams__team_id__messages_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "team_id",
+            "required": true,
+            "schema": {
+              "title": "Team Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_seq",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After Seq",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Room Messages Api Teams  Team Id  Messages Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Room Messages",
         "tags": [
           "team-rooms"
         ]
