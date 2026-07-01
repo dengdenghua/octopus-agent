@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .client import DEFAULT_BASE, safe_registry_skill_slug
+from .client import DEFAULT_BASE, safe_registry_asset_id, safe_registry_skill_slug
 from .materialize import sync_skills
 
 
@@ -38,7 +38,12 @@ def _lock_slug(entry: Any) -> str | None:
     if not slug:
         return None
     text = str(slug)
-    return text if "/" in text else safe_registry_skill_slug(text)
+    if "/" in text:
+        asset_id = safe_registry_asset_id(text)
+        if not asset_id.startswith("skill/"):
+            raise ValueError(f"lockfile skill entry must reference a skill asset: {text!r}")
+        return asset_id
+    return safe_registry_skill_slug(text)
 
 
 def _lock_slugs(lock: dict) -> list[str]:
@@ -92,7 +97,8 @@ def bootstrap_skills(
             todo.append(slug)
     if not todo:
         return [], present, []
-    ok, _skipped, errors = sync_skills(todo, skills_dir, base_url=base_url)
+    ok, skipped, errors = sync_skills(todo, skills_dir, base_url=base_url)
+    errors = [*errors, *[(slug, f"skipped:{why}") for slug, why in skipped]]
     return [s for s, _ in ok], present, errors
 
 

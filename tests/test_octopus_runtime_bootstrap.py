@@ -44,6 +44,14 @@ def test_bootstrap_rejects_unsafe_lockfile_slug_before_sync(tmp_path) -> None:
         bootstrap_skills(lockfile, tmp_path / "skills")
 
 
+def test_bootstrap_rejects_non_skill_asset_lockfile_entry(tmp_path) -> None:
+    lockfile = tmp_path / "skills.lock.json"
+    lockfile.write_text('{"skills": ["role/researcher"]}', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="must reference a skill asset"):
+        bootstrap_skills(lockfile, tmp_path / "skills")
+
+
 def test_bootstrap_marks_present_for_bare_slug_and_asset_id(tmp_path) -> None:
     skills = tmp_path / "skills"
     (skills / "research-pack").mkdir(parents=True)
@@ -59,6 +67,24 @@ def test_bootstrap_marks_present_for_bare_slug_and_asset_id(tmp_path) -> None:
     assert synced == []
     assert present == ["research-pack", "research-pack"]
     assert errors == []
+
+
+def test_bootstrap_surfaces_skipped_sync_results(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lockfile = tmp_path / "skills.lock.json"
+    lockfile.write_text('{"skills": ["research-pack"]}', encoding="utf-8")
+
+    def fake_sync_skills(*_args, **_kwargs):
+        return [], [("research-pack", "type=plugin/kind=code")], []
+
+    monkeypatch.setattr("octopus_runtime.bootstrap.sync_skills", fake_sync_skills)
+
+    synced, present, errors = bootstrap_skills(lockfile, tmp_path / "skills")
+
+    assert synced == []
+    assert present == []
+    assert errors == [("research-pack", "skipped:type=plugin/kind=code")]
 
 
 def test_write_lockfile_only_includes_real_safe_skill_dirs(tmp_path) -> None:
