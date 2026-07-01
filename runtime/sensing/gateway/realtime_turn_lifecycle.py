@@ -466,6 +466,7 @@ async def _start_turn(
         )
         provider: ApprovalProvider = runtime._wrap_with_policy(gateway_provider)
         agent = runtime._resolve_agent(validated)
+        turn_driver = "react"
 
         try:
             topology_id = getattr(validated, "topology_id", None)
@@ -525,6 +526,7 @@ async def _start_turn(
                 # directly with their own login instead of the LLM loop. The
                 # agent identity is the strongest signal, so this wins even
                 # over a stale topology_id.
+                turn_driver = "local_partner"
                 await runtime._drive_local_partner(
                     turn,
                     log,
@@ -538,6 +540,7 @@ async def _start_turn(
                 (intent.user_context or {}).get("cowork_mode") == "project"
                 and not (intent.user_context or {}).get("cowork_responders")
             ):
+                turn_driver = "project_os"
                 await runtime._drive_project_os(
                     turn,
                     log,
@@ -558,6 +561,7 @@ async def _start_turn(
                 # message out to every member agent in parallel — each chimes in
                 # with its own persona bubble ("boss speaks, everyone replies").
                 # No topology_id needed; degrades to single-agent if <2 members.
+                turn_driver = "group_fanout"
                 await runtime._drive_group_fanout(
                     turn,
                     log,
@@ -569,6 +573,7 @@ async def _start_turn(
                 # Explicit topology / 集群: orchestrated team — _drive_swarm_mesh
                 # auto-picks the boids/SignalBus parallel mesh vs the sequential
                 # TeamRunner by the planned graph's shape.
+                turn_driver = "swarm_mesh"
                 await runtime._drive_swarm_mesh(
                     turn,
                     log,
@@ -582,6 +587,7 @@ async def _start_turn(
                 validated,
                 conversation_messages=conversation_messages,
             ):
+                turn_driver = "reflection_fast_path"
                 await runtime._drive_reflection_fast_path(
                     turn,
                     log,
@@ -591,6 +597,7 @@ async def _start_turn(
                     model=validated.model,
                 )
             else:
+                turn_driver = "react"
                 await runtime._drive_react(
                     turn,
                     log,
@@ -601,8 +608,18 @@ async def _start_turn(
                     model=validated.model,
                 )
         except Exception as exc:
-            _logger.exception("CerebrumRuntime: react loop crashed")
-            err = ErrorItem(message=str(exc) or exc.__class__.__name__)
+            _logger.exception("CerebrumRuntime: turn driver crashed: %s", turn_driver)
+            context = intent.user_context if isinstance(intent.user_context, dict) else {}
+            err = ErrorItem(
+                message=str(exc) or exc.__class__.__name__,
+                error_info={
+                    "code": "turn_driver_exception",
+                    "driver": turn_driver,
+                    "exception_type": exc.__class__.__name__,
+                    "cowork_mode": context.get("cowork_mode"),
+                    "topology_id": topology_id or "",
+                },
+            )
             turn.items.append(err)
             await runtime._emit_item_started(turn, log, emitter, err)
             await runtime._emit_item_completed(turn, log, emitter, err)
@@ -611,7 +628,7 @@ async def _start_turn(
             runtime._record_failed_turn_proposal(
                 turn,
                 intent=intent,
-                failure_source="react_exception",
+                failure_source=f"{turn_driver}_exception",
             )
             runtime._snapshot_to_thread_store(thread_id, log, intent)
             return turn

@@ -884,8 +884,30 @@ async def _drive_group_fanout(
             )
         await runtime._drive_react(turn, log, emitter, intent, provider, agent)
 
+    def _record_fallback_audit(reason: str, exc: BaseException | None = None) -> None:
+        payload: dict[str, Any] = {
+            "schema": "octopus.group_fanout_fallback.v1",
+            "reason": reason,
+            "fallback": "react",
+        }
+        if exc is not None:
+            payload.update({
+                "exception_type": type(exc).__name__,
+                "message": str(exc),
+            })
+        with contextlib.suppress(Exception):
+            audit_item = ReasoningItem(
+                summary=["Group fanout fallback"],
+                content=json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                status=ItemStatus.COMPLETED,
+            )
+            turn.items.append(audit_item)
+            log.item_started(turn.thread_id, turn.id, audit_item)
+            log.item_completed(turn.thread_id, turn.id, audit_item)
+
     if len(members) < 2:
         # Not a real group → one agent answers (the normal single-agent path).
+        _record_fallback_audit("insufficient_members")
         await _fallback_to_react()
         return
 
@@ -1039,6 +1061,7 @@ async def _drive_group_fanout(
                 )
 
         if spoke == 0:
+            _record_fallback_audit("no_member_response")
             await _fallback_to_react()
     except Exception as exc:  # noqa: BLE001 — never break the turn on a fan-out fault
         _logger.warning(
@@ -1046,4 +1069,5 @@ async def _drive_group_fanout(
             type(exc).__name__,
             exc,
         )
+        _record_fallback_audit("exception", exc)
         await _fallback_to_react()

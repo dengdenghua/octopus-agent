@@ -568,6 +568,71 @@ def test_cowork_swarm_plan_drives_group_fanout(
     assert "use_primary_response" in audit_items[0]["content"]
 
 
+def test_cowork_swarm_failure_reports_group_fanout_driver(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    invite_member(store, "th-cowork-fail", actor="u", target_id="db-agent", kind="agent")
+    invite_member(store, "th-cowork-fail", actor="u", target_id="ui-agent", kind="agent")
+    set_mode(store, "th-cowork-fail", actor="u", mode="swarm")
+
+    def fail_fanout(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("fanout exploded")
+
+    monkeypatch.setattr(
+        "runtime.execution.agents.group_fanout.run_group_fanout",
+        fail_fanout,
+    )
+    _set_script(
+        [
+            {"type": "text_delta", "delta": "fallback react"},
+            {"type": "react_completed"},
+        ]
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=store,
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-cowork-fail",
+                "input": [{"type": "text", "text": "大家一起看下"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "completed"
+    agent_texts = [
+        item["text"] for item in turn["items"] if item["type"] == "agentMessage"
+    ]
+    assert agent_texts[-1] == "fallback react"
+    audit_items = [
+        item for item in turn["items"]
+        if item["type"] == "reasoning"
+        and "octopus.group_fanout_fallback.v1" in item.get("content", "")
+    ]
+    assert len(audit_items) == 1
+    audit = json.loads(audit_items[0]["content"])
+    assert audit["reason"] == "exception"
+    assert audit["exception_type"] == "RuntimeError"
+    assert audit["fallback"] == "react"
+
+
 def test_cowork_project_mode_runs_project_os(
     tmp_path: Path,
 ) -> None:
@@ -640,6 +705,57 @@ def test_cowork_project_mode_runs_project_os(
     }
     assert assigned <= {"research-agent", "build-agent"}
     assert assigned
+
+
+def test_cowork_project_mode_unhandled_failure_reports_driver_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.projectos.store import ProjectStore
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    invite_member(store, "th-project-fail", actor="u", target_id="research-agent", kind="agent")
+    set_mode(store, "th-project-fail", actor="u", mode="project")
+
+    def fail_project(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("project engine exploded")
+
+    monkeypatch.setattr(
+        "runtime.projectos.cowork_bridge.run_project_from_group",
+        fail_project,
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=store,
+        project_store=ProjectStore(base_dir=tmp_path / "projectos"),
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-project-fail",
+                "input": [{"type": "text", "text": "启动项目"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "failed"
+    errors = [item for item in turn["items"] if item["type"] == "error"]
+    assert errors[-1]["message"] == "project engine exploded"
+    assert errors[-1]["errorInfo"]["code"] == "turn_driver_exception"
+    assert errors[-1]["errorInfo"]["driver"] == "project_os"
+    assert errors[-1]["errorInfo"]["cowork_mode"] == "project"
 
 
 def test_cowork_project_mode_reuses_active_project(
