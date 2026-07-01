@@ -31,9 +31,9 @@ from runtime.projectos.model import (
 from runtime.projectos.store import ProjectStore
 
 MilestoneGenerator = Callable[[str], list[Milestone]]  # (project_goal) -> milestones
-TaskDecomposer = Callable[[Milestone], list[Task]]      # (milestone) -> task DAG
-Executor = Callable[[Task, dict[str, Any]], Any]        # (task, context) -> output
-QAEvaluator = Callable[[Task, Milestone], dict[str, Any]]      # -> {"approved", "reason"}
+TaskDecomposer = Callable[[Milestone], list[Task]]  # (milestone) -> task DAG
+Executor = Callable[[Task, dict[str, Any]], Any]  # (task, context) -> output
+QAEvaluator = Callable[[Task, Milestone], dict[str, Any]]  # -> {"approved", "reason"}
 MilestoneGate = Callable[[Milestone, list[Task]], dict[str, Any]]  # -> {"met", "reason"}
 
 MAX_TASK_ATTEMPTS = 2
@@ -60,12 +60,26 @@ def stub_generate_milestones(goal: str) -> list[Milestone]:
     any project, so the engine/CLI runs deterministically without a model router
     (production injects LLM hooks for goal-specific milestones)."""
     return [
-        Milestone(id="MS1", name="plan", goal=f"Scope and plan: {goal}",
-                  success_criteria=["plan approved"]),
-        Milestone(id="MS2", name="build", goal=f"Build: {goal}",
-                  success_criteria=["implementation complete"], dependencies=["MS1"]),
-        Milestone(id="MS3", name="verify", goal=f"Verify and deliver: {goal}",
-                  success_criteria=["verified against goal"], dependencies=["MS2"]),
+        Milestone(
+            id="MS1",
+            name="plan",
+            goal=f"Scope and plan: {goal}",
+            success_criteria=["plan approved"],
+        ),
+        Milestone(
+            id="MS2",
+            name="build",
+            goal=f"Build: {goal}",
+            success_criteria=["implementation complete"],
+            dependencies=["MS1"],
+        ),
+        Milestone(
+            id="MS3",
+            name="verify",
+            goal=f"Verify and deliver: {goal}",
+            success_criteria=["verified against goal"],
+            dependencies=["MS2"],
+        ),
     ]
 
 
@@ -73,8 +87,13 @@ def stub_decompose_tasks(ms: Milestone) -> list[Task]:
     """No-LLM fallback: a research → execution pair (a 2-node DAG)."""
     return [
         Task(id=f"{ms.id}-T1", milestone_id=ms.id, type="research", goal=f"{ms.goal} — assess"),
-        Task(id=f"{ms.id}-T2", milestone_id=ms.id, type="code", goal=f"{ms.goal} — do",
-             depends_on=[f"{ms.id}-T1"]),
+        Task(
+            id=f"{ms.id}-T2",
+            milestone_id=ms.id,
+            type="code",
+            goal=f"{ms.goal} — do",
+            depends_on=[f"{ms.id}-T1"],
+        ),
     ]
 
 
@@ -141,6 +160,16 @@ class ProjectEngine:
             status="running",
         )
         self.store.save_project(project)
+        self._audit(
+            project.id,
+            "project.planned",
+            {
+                "name": name,
+                "goal": goal,
+                "milestone_ids": [m.id for m in milestones],
+                "milestone_count": len(milestones),
+            },
+        )
         return project
 
     # ── the loop ─────────────────────────────────────────────────────────────
@@ -173,7 +202,8 @@ class ProjectEngine:
     def run(self, project_id: str, *, max_ticks: int = DEFAULT_RUN_MAX_TICKS) -> dict[str, Any]:
         """Drive ticks until the project is done/failed/blocked or max_ticks."""
         history: list[dict[str, Any]] = []
-        for _ in range(normalize_run_ticks(max_ticks)):
+        bounded_ticks = normalize_run_ticks(max_ticks)
+        for _ in range(bounded_ticks):
             r = self.tick(project_id)
             history.append(r)
             if r["project_status"] in ("done", "failed", "blocked"):
@@ -181,11 +211,22 @@ class ProjectEngine:
             if any(e == "no_runnable_milestone" for e in r["events"]):
                 break  # blocked — nothing to advance
         final = self.store.get_project(project_id)
-        return {
+        result = {
             "ticks": len(history),
             "final_status": final.status if final else "failed",
             "history": history,
         }
+        self._audit(
+            project_id,
+            "project.run",
+            {
+                "max_ticks": bounded_ticks,
+                "ticks": result["ticks"],
+                "final_status": result["final_status"],
+                "history": history,
+            },
+        )
+        return result
 
     def recover(
         self,
@@ -230,9 +271,7 @@ class ProjectEngine:
                 reset_ids = self._with_downstream_tasks(tasks, reset_ids)
             elif not selected:
                 reset_ids = {
-                    task.id
-                    for task in tasks
-                    if task.status in {"failed", "rejected", "blocked"}
+                    task.id for task in tasks if task.status in {"failed", "rejected", "blocked"}
                 }
 
             for task in tasks:
@@ -433,8 +472,7 @@ class ProjectEngine:
                 events.append(f"project_terminal_write_ignored:{project.id}")
             return None
         nxt = next(
-            (m for m in mss
-             if m.status == "pending" and all(d in done for d in m.dependencies)),
+            (m for m in mss if m.status == "pending" and all(d in done for d in m.dependencies)),
             None,
         )
         if nxt is None:
@@ -448,7 +486,10 @@ class ProjectEngine:
             return None
         project.current_ms = nxt.id
         saved_project = self.store.save_project(project)
-        if saved_project.current_ms != nxt.id or saved_project.status not in {"running", "planning"}:
+        if saved_project.current_ms != nxt.id or saved_project.status not in {
+            "running",
+            "planning",
+        }:
             events.append(f"project_stale_activation_ignored:{project.id}")
             return None
         events.append(f"milestone_activated:{nxt.id}")

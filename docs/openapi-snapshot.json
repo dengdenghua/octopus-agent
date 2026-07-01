@@ -26592,6 +26592,61 @@
         ]
       }
     },
+    "/api/projects/{project_id}/process-timeline": {
+      "get": {
+        "description": "Project process timeline: persisted plan/run/control evidence.",
+        "operationId": "process_timeline_api_projects__project_id__process_timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Process Timeline Api Projects  Project Id  Process Timeline Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Process Timeline",
+        "tags": [
+          "projectos"
+        ]
+      }
+    },
     "/api/projects/{project_id}/recover": {
       "post": {
         "description": "Reopen blocked project work after an operator fixes the cause.",

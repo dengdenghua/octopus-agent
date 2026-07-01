@@ -22,14 +22,20 @@ CHECKS: tuple[DigitalEmployeeCheck, ...] = (
         title="Cowork group to Project OS execution bridge",
         paths=(
             "runtime/projectos/cowork_bridge.py",
+            "runtime/projectos/timeline.py",
             "runtime/sensing/gateway/projects_router.py",
             "tests/test_projectos_cowork.py",
+            "tests/test_projects_router.py",
         ),
         required_terms=(
             "run_project_from_group",
             "octopus.projectos.run_trace.v1",
+            "octopus.projectos.process_timeline.v1",
             "/api/projects/from-group/{thread_id}",
+            "/api/projects/{project_id}/process-timeline",
             "project_for_thread",
+            "project_process_timeline",
+            "process_events_persisted",
             "available_actions",
             "action_specs",
         ),
@@ -97,11 +103,15 @@ CHECKS: tuple[DigitalEmployeeCheck, ...] = (
         title="Operator-visible employee actions",
         paths=(
             "runtime/projectos/cowork_bridge.py",
+            "runtime/projectos/timeline.py",
+            "runtime/sensing/gateway/projects_router.py",
             "runtime/safety/evolution/agent_competitor_scorecard.py",
             "frontend/src/components/workspace/agent-operator-panel.tsx",
             "tests/test_evolution_modules.py",
         ),
         required_terms=(
+            "project_process_timeline",
+            "/api/projects/{project_id}/process-timeline",
             "team_task_process_timeline",
             "/api/team-tasks/{task_id}/process-timeline",
             "available_actions",
@@ -127,34 +137,15 @@ def compute_digital_employee_quality(
         "total": len(checks),
         "ready": all(row["passed"] for row in checks),
         "checks": checks,
-        "next_actions": [
-            str(row["next_action"])
-            for row in checks
-            if not row["passed"]
-        ],
+        "next_actions": [str(row["next_action"]) for row in checks if not row["passed"]],
     }
 
 
 def _check_row(base: Path, check: DigitalEmployeeCheck) -> dict[str, Any]:
-    paths = [
-        {"path": path, "exists": (base / path).exists()}
-        for path in check.paths
-    ]
-    text = "\n".join(
-        _read_text(base / row["path"])
-        for row in paths
-        if row["exists"]
-    ).lower()
-    missing_paths = [
-        str(row["path"])
-        for row in paths
-        if not row["exists"]
-    ]
-    missing_terms = [
-        term
-        for term in check.required_terms
-        if term.lower() not in text
-    ]
+    paths = [{"path": path, "exists": (base / path).exists()} for path in check.paths]
+    text = "\n".join(_read_text(base / row["path"]) for row in paths if row["exists"]).lower()
+    missing_paths = [str(row["path"]) for row in paths if not row["exists"]]
+    missing_terms = [term for term in check.required_terms if term.lower() not in text]
     return {
         "id": check.id,
         "title": check.title,

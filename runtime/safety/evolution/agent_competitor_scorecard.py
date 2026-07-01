@@ -329,10 +329,7 @@ def compute_agent_competitor_scorecard(
     for row in dimensions:
         if row["id"] == "ecosystem_maturity":
             row["octopus_ecosystem_readiness"] = ecosystem_readiness
-    overall = {
-        competitor: _weighted_score(dimensions, competitor)
-        for competitor in COMPETITORS
-    }
+    overall = {competitor: _weighted_score(dimensions, competitor) for competitor in COMPETITORS}
     evidence_adjusted_overall = dict(overall)
     evidence_adjusted_overall["octopus"] = _weighted_score(
         dimensions,
@@ -353,21 +350,13 @@ def compute_agent_competitor_scorecard(
         reverse=True,
     )
     octopus_below_target = [
-        row
-        for row in dimensions
-        if row["scores"][OCTOPUS_COMPETITOR] < target_score
+        row for row in dimensions if row["scores"][OCTOPUS_COMPETITOR] < target_score
     ]
     octopus_strengths = [
-        row
-        for row in dimensions
-        if row["octopus_surpasses_best_external"] is True
+        row for row in dimensions if row["octopus_surpasses_best_external"] is True
     ]
     external_leaders = sorted(
-        [
-            row
-            for row in dimensions
-            if not row["octopus_surpasses_best_external"]
-        ],
+        [row for row in dimensions if not row["octopus_surpasses_best_external"]],
         key=lambda row: (
             int(row.get("octopus_gap_to_surpass") or 0),
             int(row.get("weight") or 0),
@@ -375,11 +364,7 @@ def compute_agent_competitor_scorecard(
         reverse=True,
     )
     focus_gaps = sorted(
-        [
-            row
-            for row in dimensions
-            if int(row.get("octopus_gap_to_effective_target") or 0) > 0
-        ],
+        [row for row in dimensions if int(row.get("octopus_gap_to_effective_target") or 0) > 0],
         key=lambda row: (
             int(row.get("octopus_gap_to_effective_target") or 0),
             int(row.get("octopus_gap_to_surpass") or 0),
@@ -426,10 +411,7 @@ def compute_agent_competitor_scorecard(
                 default=0,
             ),
             "largest_effective_gap": max(
-                (
-                    int(row.get("octopus_gap_to_effective_target") or 0)
-                    for row in dimensions
-                ),
+                (int(row.get("octopus_gap_to_effective_target") or 0) for row in dimensions),
                 default=0,
             ),
         },
@@ -516,9 +498,7 @@ def _dimension_row(
         "best_external_score": best_external_score,
         "surpass_target_score": surpass_target_score,
         "effective_target_score": effective_target_score,
-        "octopus_surpasses_best_external": (
-            scores[OCTOPUS_COMPETITOR] >= surpass_target_score
-        ),
+        "octopus_surpasses_best_external": (scores[OCTOPUS_COMPETITOR] >= surpass_target_score),
         "octopus_gap_to_surpass": max(
             0,
             surpass_target_score - scores[OCTOPUS_COMPETITOR],
@@ -533,9 +513,7 @@ def _dimension_row(
             evidence_adjusted_gap_to_effective_target
         ),
         "octopus_evidence_adjusted_score_source": (
-            "certified_floor"
-            if applies_certified_floor
-            else "baseline"
+            "certified_floor" if applies_certified_floor else "baseline"
         ),
         "octopus_certified_score_floor": certified_floor,
         "octopus_certification_score_applied": False,
@@ -555,8 +533,7 @@ def _dimension_row(
         ],
         "octopus_evidence_checklist": checklist,
         "octopus_missing_evidence_count": sum(
-            int(item["implementation"]["missing_count"])
-            + int(item["tests"]["missing_count"])
+            int(item["implementation"]["missing_count"]) + int(item["tests"]["missing_count"])
             for item in checklist
         ),
         "operator_drilldown": _operator_drilldown(
@@ -571,9 +548,7 @@ def _dimension_row(
 def _evidence_checklist_item(item: dict[str, Any]) -> dict[str, Any]:
     evidence = item.get("evidence") if isinstance(item.get("evidence"), dict) else {}
     implementation = (
-        evidence.get("implementation")
-        if isinstance(evidence.get("implementation"), dict)
-        else {}
+        evidence.get("implementation") if isinstance(evidence.get("implementation"), dict) else {}
     )
     tests = evidence.get("tests") if isinstance(evidence.get("tests"), dict) else {}
     return {
@@ -590,11 +565,7 @@ def _evidence_checklist_item(item: dict[str, Any]) -> dict[str, Any]:
 def _path_checklist_summary(section: dict[str, Any]) -> dict[str, Any]:
     total = int(section.get("total") or 0)
     present = int(section.get("present") or 0)
-    missing = [
-        str(path)
-        for path in section.get("missing", [])
-        if path
-    ]
+    missing = [str(path) for path in section.get("missing", []) if path]
     return {
         "present": present,
         "total": total,
@@ -672,118 +643,158 @@ def _operator_evidence_links(
 ) -> list[dict[str, Any]]:
     links: list[dict[str, Any]] = []
     if dimension_id == "general_agent_loop":
-        links.append({
-            "id": "agent_loop_quality",
-            "label": "Agent loop quality",
-            "method": "GET",
-            "href": "/api/evolution/agent-loop-quality",
-        })
+        links.append(
+            {
+                "id": "agent_loop_quality",
+                "label": "Agent loop quality",
+                "method": "GET",
+                "href": "/api/evolution/agent-loop-quality",
+            }
+        )
     if dimension_id == "repo_context" or "long_term_learning" in evidence_ids:
-        links.append({
-            "id": "repo_context_quality",
-            "label": "Repo context quality",
-            "method": "GET",
-            "href": "/api/evolution/repo-context-quality",
-        })
+        links.append(
+            {
+                "id": "repo_context_quality",
+                "label": "Repo context quality",
+                "method": "GET",
+                "href": "/api/evolution/repo-context-quality",
+            }
+        )
     if dimension_id == "permissions_sandbox" or "approvals_sandbox_security" in evidence_ids:
-        links.append({
-            "id": "permission_sandbox_quality",
-            "label": "Permission/sandbox quality",
-            "method": "GET",
-            "href": "/api/evolution/permission-sandbox-quality",
-        })
+        links.append(
+            {
+                "id": "permission_sandbox_quality",
+                "label": "Permission/sandbox quality",
+                "method": "GET",
+                "href": "/api/evolution/permission-sandbox-quality",
+            }
+        )
     if dimension_id == "product_experience":
-        links.append({
-            "id": "product_experience_quality",
-            "label": "Product experience quality",
-            "method": "GET",
-            "href": "/api/evolution/product-experience-quality",
-        })
+        links.append(
+            {
+                "id": "product_experience_quality",
+                "label": "Product experience quality",
+                "method": "GET",
+                "href": "/api/evolution/product-experience-quality",
+            }
+        )
     if "browser_computer_use" in evidence_ids or dimension_id == "browser_desktop":
-        links.append({
-            "id": "automation_radar",
-            "label": "Automation radar",
-            "method": "GET",
-            "href": "/api/evolution/automation-radar",
-        })
-        links.append({
-            "id": "browser_desktop_quality",
-            "label": "Browser/desktop quality",
-            "method": "GET",
-            "href": "/api/evolution/browser-desktop-quality",
-        })
-        links.append({
-            "id": "browser_desktop_repair_recipes",
-            "label": "Browser repair recipes",
-            "method": "GET",
-            "href": "/api/evolution/browser-desktop-repair-recipes",
-        })
+        links.append(
+            {
+                "id": "automation_radar",
+                "label": "Automation radar",
+                "method": "GET",
+                "href": "/api/evolution/automation-radar",
+            }
+        )
+        links.append(
+            {
+                "id": "browser_desktop_quality",
+                "label": "Browser/desktop quality",
+                "method": "GET",
+                "href": "/api/evolution/browser-desktop-quality",
+            }
+        )
+        links.append(
+            {
+                "id": "browser_desktop_repair_recipes",
+                "label": "Browser repair recipes",
+                "method": "GET",
+                "href": "/api/evolution/browser-desktop-repair-recipes",
+            }
+        )
     if "skills_plugins_hooks" in evidence_ids or dimension_id in {
         "extensions_hooks",
         "ecosystem_maturity",
         "permissions_sandbox",
     }:
-        links.append({
-            "id": "plugin_smoke_summary",
-            "label": "Plugin smoke summary",
-            "method": "GET",
-            "href": "/api/plugins/smoke-summary",
-        })
-        links.append({
-            "id": "plugin_permission_rule_drafts",
-            "label": "Plugin permission rule drafts",
-            "method": "GET",
-            "href": "/api/plugins/permission-rule-drafts",
-        })
-        links.append({
-            "id": "plugin_migration_readiness",
-            "label": "Plugin migration readiness",
-            "method": "GET",
-            "href": "/api/plugins/migration-readiness",
-        })
+        links.append(
+            {
+                "id": "plugin_smoke_summary",
+                "label": "Plugin smoke summary",
+                "method": "GET",
+                "href": "/api/plugins/smoke-summary",
+            }
+        )
+        links.append(
+            {
+                "id": "plugin_permission_rule_drafts",
+                "label": "Plugin permission rule drafts",
+                "method": "GET",
+                "href": "/api/plugins/permission-rule-drafts",
+            }
+        )
+        links.append(
+            {
+                "id": "plugin_migration_readiness",
+                "label": "Plugin migration readiness",
+                "method": "GET",
+                "href": "/api/plugins/migration-readiness",
+            }
+        )
     if "agent_organization_os" in evidence_ids or dimension_id in {
         "subagents_parallelism",
         "differentiated_agent_os",
     }:
-        links.append({
-            "id": "team_tasks",
-            "label": "Team task list",
-            "method": "GET",
-            "href": "/api/team-tasks",
-        })
-        links.append({
-            "id": "team_task_process_timeline",
-            "label": "Team task process timeline",
-            "method": "GET",
-            "href_template": "/api/team-tasks/{task_id}/process-timeline",
-        })
+        links.append(
+            {
+                "id": "team_tasks",
+                "label": "Team task list",
+                "method": "GET",
+                "href": "/api/team-tasks",
+            }
+        )
+        links.append(
+            {
+                "id": "team_task_process_timeline",
+                "label": "Team task process timeline",
+                "method": "GET",
+                "href_template": "/api/team-tasks/{task_id}/process-timeline",
+            }
+        )
+        links.append(
+            {
+                "id": "projectos_process_timeline",
+                "label": "Project OS process timeline",
+                "method": "GET",
+                "href_template": "/api/projects/{project_id}/process-timeline",
+            }
+        )
     if "record_replay_gate" in evidence_ids or "governance_audit" in evidence_ids:
-        links.append({
-            "id": "governance_audit_export",
-            "label": "Governance audit export",
-            "method": "GET",
-            "href": "/api/agent-trace/review-queue/promotions/audit/export",
-        })
+        links.append(
+            {
+                "id": "governance_audit_export",
+                "label": "Governance audit export",
+                "method": "GET",
+                "href": "/api/agent-trace/review-queue/promotions/audit/export",
+            }
+        )
     if "long_term_learning" in evidence_ids:
-        links.append({
-            "id": "experience_ledger",
-            "label": "Experience ledger",
-            "method": "GET",
-            "href": "/api/agent-trace/experience",
-        })
-        links.append({
-            "id": "experience_ledger_recall",
-            "label": "Experience recall",
-            "method": "GET",
-            "href": "/api/agent-trace/experience-ledger/recall",
-        })
+        links.append(
+            {
+                "id": "experience_ledger",
+                "label": "Experience ledger",
+                "method": "GET",
+                "href": "/api/agent-trace/experience",
+            }
+        )
+        links.append(
+            {
+                "id": "experience_ledger_recall",
+                "label": "Experience recall",
+                "method": "GET",
+                "href": "/api/agent-trace/experience-ledger/recall",
+            }
+        )
     if dimension_id == "digital_employee_workflows":
-        links.append({
-            "id": "digital_employee_quality",
-            "label": "Digital employee quality",
-            "method": "GET",
-            "href": "/api/evolution/digital-employee-quality",
-        })
+        links.append(
+            {
+                "id": "digital_employee_quality",
+                "label": "Digital employee quality",
+                "method": "GET",
+                "href": "/api/evolution/digital-employee-quality",
+            }
+        )
     return links
 
 
@@ -796,19 +807,14 @@ def _weighted_score(
     total_weight = sum(int(row["weight"]) for row in dimensions)
     if total_weight <= 0:
         return 0
-    weighted = sum(
-        int(row["weight"]) * int(row[score_field][competitor])
-        for row in dimensions
-    )
+    weighted = sum(int(row["weight"]) * int(row[score_field][competitor]) for row in dimensions)
     return int(round(weighted / total_weight))
 
 
 def _scorecard_verdict(overall: dict[str, int]) -> str:
     octopus = overall.get(OCTOPUS_COMPETITOR, 0)
     best_other = max(
-        score
-        for competitor, score in overall.items()
-        if competitor != OCTOPUS_COMPETITOR
+        score for competitor, score in overall.items() if competitor != OCTOPUS_COMPETITOR
     )
     if octopus > best_other:
         return "leading"

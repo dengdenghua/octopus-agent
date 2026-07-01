@@ -1,4 +1,5 @@
 """Unit tests for runtime.safety.evolution modules."""
+
 from __future__ import annotations
 
 import json
@@ -65,14 +66,18 @@ class TestEvolveConfig:
 
     def test_inherit_resolves_to_planner(self):
         cfg = EvolveConfig()
-        planner = PlannerConfig(type="llm", model="mimo-v2.5-pro", base_url="https://api.example.com/v1")
+        planner = PlannerConfig(
+            type="llm", model="mimo-v2.5-pro", base_url="https://api.example.com/v1"
+        )
         model, url = cfg.resolve(planner)
         assert model == "mimo-v2.5-pro"
         assert url == "https://api.example.com/v1"
 
     def test_cheaper_same_provider(self):
         cfg = EvolveConfig(strategy="cheaper_same_provider")
-        planner = PlannerConfig(type="llm", model="mimo-v2.5-pro", base_url="https://api.example.com/v1")
+        planner = PlannerConfig(
+            type="llm", model="mimo-v2.5-pro", base_url="https://api.example.com/v1"
+        )
         model, url = cfg.resolve(planner)
         assert model == "mimo-v2-flash"
         assert url == "https://api.example.com/v1"
@@ -111,7 +116,10 @@ class TestComputeL1:
 
     def test_all_success(self):
         from runtime.memory.learning.turn_scoring import TurnScore
-        scores = [TurnScore(ts="t", agent_id="a", score=1.0, reason="success", soul_hash="abc", rounds=3)]
+
+        scores = [
+            TurnScore(ts="t", agent_id="a", score=1.0, reason="success", soul_hash="abc", rounds=3)
+        ]
         scores = scores * 10
         with (
             patch("runtime.safety.evolution.fitness.read_recent_scores", return_value=scores),
@@ -150,23 +158,25 @@ class TestGovernanceFitness:
     def test_blocked_replay_override_penalizes_fitness(self, tmp_path):
         audit_path = tmp_path / "promotion_audit.json"
         audit_path.write_text(
-            json.dumps({
-                "schema": "octopus.promotion_audit.v1",
-                "records": [
-                    {
-                        "id": "p1",
-                        "review_queue_item_id": "rq-1",
-                        "agent_id": "test_agent",
-                        "target": "experience",
-                        "status": "applied",
-                        "applied_at": "2026-06-19T00:00:00",
-                        "decision_context": {
-                            "replay_gate": {"passed": False},
-                            "override_replay_gate": True,
-                        },
-                    }
-                ],
-            }),
+            json.dumps(
+                {
+                    "schema": "octopus.promotion_audit.v1",
+                    "records": [
+                        {
+                            "id": "p1",
+                            "review_queue_item_id": "rq-1",
+                            "agent_id": "test_agent",
+                            "target": "experience",
+                            "status": "applied",
+                            "applied_at": "2026-06-19T00:00:00",
+                            "decision_context": {
+                                "replay_gate": {"passed": False},
+                                "override_replay_gate": True,
+                            },
+                        }
+                    ],
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -305,23 +315,25 @@ class TestGovernanceFitness:
     def test_governance_penalty_is_scoped_to_agent(self, tmp_path):
         audit_path = tmp_path / "promotion_audit.json"
         audit_path.write_text(
-            json.dumps({
-                "schema": "octopus.promotion_audit.v1",
-                "records": [
-                    {
-                        "id": "p1",
-                        "review_queue_item_id": "rq-1",
-                        "agent_id": "other_agent",
-                        "target": "experience",
-                        "status": "applied",
-                        "applied_at": "2026-06-19T00:00:00",
-                        "decision_context": {
-                            "replay_gate": {"passed": False},
-                            "override_replay_gate": True,
-                        },
-                    }
-                ],
-            }),
+            json.dumps(
+                {
+                    "schema": "octopus.promotion_audit.v1",
+                    "records": [
+                        {
+                            "id": "p1",
+                            "review_queue_item_id": "rq-1",
+                            "agent_id": "other_agent",
+                            "target": "experience",
+                            "status": "applied",
+                            "applied_at": "2026-06-19T00:00:00",
+                            "decision_context": {
+                                "replay_gate": {"passed": False},
+                                "override_replay_gate": True,
+                            },
+                        }
+                    ],
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -336,35 +348,37 @@ class TestGovernanceFitness:
     def test_governance_window_zero_uses_all_records(self, tmp_path):
         audit_path = tmp_path / "promotion_audit.json"
         audit_path.write_text(
-            json.dumps({
-                "schema": "octopus.promotion_audit.v1",
-                "records": [
-                    {
-                        "id": "p1",
-                        "review_queue_item_id": "rq-1",
-                        "agent_id": "test_agent",
-                        "target": "experience",
-                        "status": "failed",
-                        "applied_at": "2026-06-19T00:00:00",
-                        "decision_context": {
-                            "replay_gate": {"passed": True},
-                            "override_replay_gate": False,
+            json.dumps(
+                {
+                    "schema": "octopus.promotion_audit.v1",
+                    "records": [
+                        {
+                            "id": "p1",
+                            "review_queue_item_id": "rq-1",
+                            "agent_id": "test_agent",
+                            "target": "experience",
+                            "status": "failed",
+                            "applied_at": "2026-06-19T00:00:00",
+                            "decision_context": {
+                                "replay_gate": {"passed": True},
+                                "override_replay_gate": False,
+                            },
                         },
-                    },
-                    {
-                        "id": "p2",
-                        "review_queue_item_id": "rq-2",
-                        "agent_id": "test_agent",
-                        "target": "experience",
-                        "status": "applied",
-                        "applied_at": "2026-06-19T00:00:01",
-                        "decision_context": {
-                            "replay_gate": {"passed": False},
-                            "override_replay_gate": True,
+                        {
+                            "id": "p2",
+                            "review_queue_item_id": "rq-2",
+                            "agent_id": "test_agent",
+                            "target": "experience",
+                            "status": "applied",
+                            "applied_at": "2026-06-19T00:00:01",
+                            "decision_context": {
+                                "replay_gate": {"passed": False},
+                                "override_replay_gate": True,
+                            },
                         },
-                    },
-                ],
-            }),
+                    ],
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -416,15 +430,23 @@ class TestGovernanceFitness:
 class TestFitnessReport:
     def test_verdict_healthy(self):
         report = FitnessReport(
-            agent_id="test", ts="t", l1=L1Fitness(0.9, "stable", 0.9, 3.0, {}),
-            l2=None, combined=0.9, verdict="healthy",
+            agent_id="test",
+            ts="t",
+            l1=L1Fitness(0.9, "stable", 0.9, 3.0, {}),
+            l2=None,
+            combined=0.9,
+            verdict="healthy",
         )
         assert report.verdict == "healthy"
 
     def test_verdict_critical(self):
         report = FitnessReport(
-            agent_id="test", ts="t", l1=L1Fitness(0.1, "regressing", 0.1, 20.0, {}),
-            l2=None, combined=0.1, verdict="critical",
+            agent_id="test",
+            ts="t",
+            l1=L1Fitness(0.1, "regressing", 0.1, 20.0, {}),
+            l2=None,
+            combined=0.1,
+            verdict="critical",
         )
         assert report.verdict == "critical"
 
@@ -451,8 +473,10 @@ class TestDriftMonitor:
         monitor._last_soul_hash = "old_hash"
         with patch.object(monitor, "_check_soul_drift") as mock_soul:
             mock_soul.return_value = DriftEvent(
-                kind="soul_change", severity="info",
-                detail="changed", ts="t",
+                kind="soul_change",
+                severity="info",
+                detail="changed",
+                ts="t",
             )
             with (
                 patch.object(monitor, "_check_genome_drift", return_value=None),
@@ -480,25 +504,22 @@ class TestCodexGap:
 
         report = compute_codex_gap_report(root=tmp_path)
         code_loop = next(
-            item for item in report["capabilities"]
-            if item["id"] == "code_execution_loop"
+            item for item in report["capabilities"] if item["id"] == "code_execution_loop"
         )
 
         assert report["schema"] == "octopus.codex_gap_report.v1"
         assert report["combined_score"] < 1.0
         assert code_loop["status"] == "gap"
-        assert "runtime/execution/tool_engine/executor.py" in (
-            code_loop["evidence"]["implementation"]["missing"]
+        assert (
+            "runtime/execution/tool_engine/executor.py"
+            in (code_loop["evidence"]["implementation"]["missing"])
         )
         subagents = next(
-            item for item in report["capabilities"]
-            if item["id"] == "subagents_parallel_work"
+            item for item in report["capabilities"] if item["id"] == "subagents_parallel_work"
         )
         assert subagents["evidence"]["behavior"]["total"] == 5
         assert subagents["evidence"]["behavior"]["passed"] == 0
-        assert "group_fanout_arbitration_contract" in (
-            subagents["evidence"]["behavior"]["missing"]
-        )
+        assert "group_fanout_arbitration_contract" in (subagents["evidence"]["behavior"]["missing"])
         assert report["top_gaps"]
 
     def test_report_includes_group_fanout_behavior_evidence(self):
@@ -506,17 +527,14 @@ class TestCodexGap:
 
         report = compute_codex_gap_report()
         subagents = next(
-            item for item in report["capabilities"]
-            if item["id"] == "subagents_parallel_work"
+            item for item in report["capabilities"] if item["id"] == "subagents_parallel_work"
         )
         behavior = subagents["evidence"]["behavior"]
 
         assert behavior["total"] == 5
         assert behavior["passed"] == 5
         assert behavior["missing"] == []
-        assert {
-            check["id"] for check in behavior["checks"]
-        } == {
+        assert {check["id"] for check in behavior["checks"]} == {
             "group_fanout_arbitration_contract",
             "group_fanout_realtime_audit",
             "group_fanout_arbitration_tests",
@@ -564,13 +582,15 @@ class TestAgentCompetitorScorecard:
         guide = tmp_path / "docs/guide/operator-readiness.md"
         guide.parent.mkdir(parents=True)
         guide.write_text(
-            "\n".join([
-                "# Operator Readiness",
-                "Code mode inspect edit verify.",
-                "Permission approval sandbox override.",
-                "Replay gate promotion evidence audit.",
-                "Plugin smoke permission review hook.",
-            ]),
+            "\n".join(
+                [
+                    "# Operator Readiness",
+                    "Code mode inspect edit verify.",
+                    "Permission approval sandbox override.",
+                    "Replay gate promotion evidence audit.",
+                    "Plugin smoke permission review hook.",
+                ]
+            ),
             encoding="utf-8",
         )
 
@@ -581,12 +601,14 @@ class TestAgentCompetitorScorecard:
 
         migration = tmp_path / "docs/guide/plugin-author-migration.md"
         migration.write_text(
-            "\n".join([
-                "# Plugin Author Migration",
-                "Compatibility checks guide plugin migration.",
-                "Permission review is required before release.",
-                "Release checklist covers hooks and tests.",
-            ]),
+            "\n".join(
+                [
+                    "# Plugin Author Migration",
+                    "Compatibility checks guide plugin migration.",
+                    "Permission review is required before release.",
+                    "Release checklist covers hooks and tests.",
+                ]
+            ),
             encoding="utf-8",
         )
 
@@ -653,10 +675,7 @@ class TestAgentCompetitorScorecard:
         assert report["octopus_below_target"] == []
         assert report["octopus_external_gap_dimensions"] == []
         assert report["octopus_focus_gaps"] == []
-        general = next(
-            row for row in report["dimensions"]
-            if row["id"] == "general_agent_loop"
-        )
+        general = next(row for row in report["dimensions"] if row["id"] == "general_agent_loop")
         assert general["octopus_baseline_score"] == 97
         assert general["octopus_surpasses_best_external"] is True
         assert general["octopus_certified_score_floor"] == 97
@@ -666,8 +685,7 @@ class TestAgentCompetitorScorecard:
             for link in general["operator_drilldown"]["links"]
         )
         employee = next(
-            row for row in report["dimensions"]
-            if row["id"] == "digital_employee_workflows"
+            row for row in report["dimensions"] if row["id"] == "digital_employee_workflows"
         )
         assert employee["octopus_baseline_score"] == 97
         assert employee["best_external_competitor"] == "hermes"
@@ -678,10 +696,7 @@ class TestAgentCompetitorScorecard:
             and link["href"] == "/api/evolution/digital-employee-quality"
             for link in employee["operator_drilldown"]["links"]
         )
-        product = next(
-            row for row in report["dimensions"]
-            if row["id"] == "product_experience"
-        )
+        product = next(row for row in report["dimensions"] if row["id"] == "product_experience")
         assert product["octopus_baseline_score"] == 97
         assert product["scores"]["octopus"] == 97
         assert product["best_external_competitor"] == "codex"
@@ -702,10 +717,7 @@ class TestAgentCompetitorScorecard:
             and link["href"] == "/api/evolution/product-experience-quality"
             for link in product["operator_drilldown"]["links"]
         )
-        repo_context = next(
-            row for row in report["dimensions"]
-            if row["id"] == "repo_context"
-        )
+        repo_context = next(row for row in report["dimensions"] if row["id"] == "repo_context")
         assert repo_context["scores"]["octopus"] == 97
         assert repo_context["scores"]["codex"] == 94
         assert repo_context["best_external_competitor"] == "claude_code"
@@ -718,8 +730,7 @@ class TestAgentCompetitorScorecard:
             for link in repo_context["operator_drilldown"]["links"]
         )
         permissions = next(
-            row for row in report["dimensions"]
-            if row["id"] == "permissions_sandbox"
+            row for row in report["dimensions"] if row["id"] == "permissions_sandbox"
         )
         assert permissions["scores"]["octopus"] == 96
         assert permissions["scores"]["codex"] == 95
@@ -731,10 +742,7 @@ class TestAgentCompetitorScorecard:
             and link["href"] == "/api/evolution/permission-sandbox-quality"
             for link in permissions["operator_drilldown"]["links"]
         )
-        browser = next(
-            row for row in report["dimensions"]
-            if row["id"] == "browser_desktop"
-        )
+        browser = next(row for row in report["dimensions"] if row["id"] == "browser_desktop")
         assert browser["scores"]["openclaw"] == 78
         assert browser["octopus_baseline_score"] == 97
         assert browser["scores"]["octopus"] == 97
@@ -747,8 +755,7 @@ class TestAgentCompetitorScorecard:
         assert browser["octopus_certification_score_applied"] is False
         assert browser["octopus_certification_adjustment_available"] is False
         differentiated = next(
-            row for row in report["dimensions"]
-            if row["id"] == "differentiated_agent_os"
+            row for row in report["dimensions"] if row["id"] == "differentiated_agent_os"
         )
         assert differentiated["scores"]["octopus"] == 97
         assert differentiated["best_external_competitor"] == "openclaw"
@@ -757,10 +764,7 @@ class TestAgentCompetitorScorecard:
         assert differentiated["octopus_surpasses_best_external"] is True
         assert differentiated["octopus_certified_score_floor"] == 97
         assert differentiated["octopus_certification_score_applied"] is False
-        ecosystem = next(
-            row for row in report["dimensions"]
-            if row["id"] == "ecosystem_maturity"
-        )
+        ecosystem = next(row for row in report["dimensions"] if row["id"] == "ecosystem_maturity")
         assert ecosystem["octopus_baseline_score"] == 96
         assert ecosystem["scores"]["octopus"] == 96
         assert ecosystem["octopus_evidence_adjusted_score"] == 96
@@ -787,8 +791,7 @@ class TestAgentCompetitorScorecard:
             for link in drilldown["links"]
         )
         subagents = next(
-            row for row in report["dimensions"]
-            if row["id"] == "subagents_parallelism"
+            row for row in report["dimensions"] if row["id"] == "subagents_parallelism"
         )
         assert subagents["best_external_competitor"] == "hermes"
         assert subagents["octopus_surpasses_best_external"] is True
@@ -797,6 +800,11 @@ class TestAgentCompetitorScorecard:
         assert any(
             link["id"] == "team_task_process_timeline"
             and link["href_template"] == "/api/team-tasks/{task_id}/process-timeline"
+            for link in subagents["operator_drilldown"]["links"]
+        )
+        assert any(
+            link["id"] == "projectos_process_timeline"
+            and link["href_template"] == "/api/projects/{project_id}/process-timeline"
             for link in subagents["operator_drilldown"]["links"]
         )
         assert report["ecosystem_readiness"]["passed"] == 5
@@ -894,9 +902,7 @@ class TestAgentCompetitorScorecard:
         assert report["ready"] is True
         assert report["score"] == 1.0
         assert report["passed"] == report["total"]
-        assert report["dirty_worktree"]["schema"] == (
-            "octopus.dirty_worktree_awareness.v1"
-        )
+        assert report["dirty_worktree"]["schema"] == ("octopus.dirty_worktree_awareness.v1")
         assert report["dirty_worktree"]["command"] == "git status --short"
 
     def test_permission_sandbox_quality_reports_policy_coverage(self):
@@ -911,8 +917,9 @@ class TestAgentCompetitorScorecard:
         assert report["score"] == 1.0
         assert report["passed"] == report["total"]
         assert report["automation_policy_coverage"]["ready"] is True
-        assert report["automation_policy_coverage"]["installable_deny_count"] == (
-            report["automation_policy_coverage"]["total"]
+        assert (
+            report["automation_policy_coverage"]["installable_deny_count"]
+            == (report["automation_policy_coverage"]["total"])
         )
         assert report["automation_policy_coverage"]["missing_controls"] == {}
         assert report["plugin_policy_coverage"]["ready"] is True
@@ -967,19 +974,18 @@ class TestAgentCompetitorScorecard:
         )
 
         report = compute_agent_competitor_scorecard(root=tmp_path)
-        code_loop = next(
-            item for item in report["dimensions"]
-            if item["id"] == "core_coding_loop"
-        )
+        code_loop = next(item for item in report["dimensions"] if item["id"] == "core_coding_loop")
 
         assert code_loop["scores"]["octopus"] == 97
         assert code_loop["octopus_evidence_readiness"] < 0.5
         assert code_loop["octopus_missing_evidence_count"] > 0
-        assert "runtime/execution/tool_engine/executor.py" in (
-            code_loop["octopus_evidence_checklist"][0]["implementation"]["missing"]
+        assert (
+            "runtime/execution/tool_engine/executor.py"
+            in (code_loop["octopus_evidence_checklist"][0]["implementation"]["missing"])
         )
-        assert "tests/test_react_loop.py" in (
-            code_loop["octopus_evidence_checklist"][0]["tests"]["missing"]
+        assert (
+            "tests/test_react_loop.py"
+            in (code_loop["octopus_evidence_checklist"][0]["tests"]["missing"])
         )
         assert report["codex_gap"]["combined_score"] < 1.0
 
@@ -1011,25 +1017,31 @@ class TestSubagentFitness:
 
         path = tmp_path / "review_queue.json"
         queue = ReviewQueue(path)
-        queue.add_from_task_run_review(_subagent_review(
-            "task-1",
-            role="researcher",
-            title="strong finding",
-            output="strong reusable result",
-            files=["report.md"],
-        ))
-        queue.add_from_task_run_review(_subagent_review(
-            "task-2",
-            role="researcher",
-            title="weak finding",
-            output="weak result",
-        ))
-        queue.add_from_task_run_review(_subagent_review(
-            "task-3",
-            role="researcher",
-            title="neutral finding",
-            output="neutral result",
-        ))
+        queue.add_from_task_run_review(
+            _subagent_review(
+                "task-1",
+                role="researcher",
+                title="strong finding",
+                output="strong reusable result",
+                files=["report.md"],
+            )
+        )
+        queue.add_from_task_run_review(
+            _subagent_review(
+                "task-2",
+                role="researcher",
+                title="weak finding",
+                output="weak result",
+            )
+        )
+        queue.add_from_task_run_review(
+            _subagent_review(
+                "task-3",
+                role="researcher",
+                title="neutral finding",
+                output="neutral result",
+            )
+        )
 
         items = queue.items()["items"]
         queue.decide(items[0]["id"], action="promoted", reason="useful")
@@ -1164,12 +1176,14 @@ class TestSubagentRouting:
         path = tmp_path / "review_queue.json"
         queue = ReviewQueue(path)
         for i in range(3):
-            added = queue.add_from_task_run_review(_subagent_review(
-                f"task-{i}",
-                role="researcher",
-                title=f"bad {i}",
-                output=f"bad output {i}",
-            ))
+            added = queue.add_from_task_run_review(
+                _subagent_review(
+                    f"task-{i}",
+                    role="researcher",
+                    title=f"bad {i}",
+                    output=f"bad output {i}",
+                )
+            )
             queue.decide(added["items"][0]["id"], action="rejected", reason="bad")
 
         decision = decide_subagent_route(
@@ -1314,27 +1328,31 @@ def _write_deep_research_route_jobs(path, *, role: str, actions: list[str]) -> N
     path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
     for index, action in enumerate(actions):
-        lines.append(json.dumps({
-            "job_id": f"research-{index}",
-            "thread_id": "thread-1",
-            "route_decisions": [
+        lines.append(
+            json.dumps(
                 {
-                    "schema": "octopus.subagent_route_decision.v1",
-                    "step_id": f"step-{index}",
-                    "task_id": f"step-{index}",
-                    "role": role,
-                    "action": action,
-                    "reason": f"{role} route {action}",
-                    "risk_level": "high" if action == "block" else "low",
-                    "verdict": "retire_candidate",
-                    "score": 0.1,
-                    "confidence": 0.6,
-                    "evidence_item_ids": [f"review-{index}"],
-                    "phase": "subagent_route_blocked" if action == "block" else "completed",
-                    "created_at": f"2026-06-19T00:00:0{index}Z",
+                    "job_id": f"research-{index}",
+                    "thread_id": "thread-1",
+                    "route_decisions": [
+                        {
+                            "schema": "octopus.subagent_route_decision.v1",
+                            "step_id": f"step-{index}",
+                            "task_id": f"step-{index}",
+                            "role": role,
+                            "action": action,
+                            "reason": f"{role} route {action}",
+                            "risk_level": "high" if action == "block" else "low",
+                            "verdict": "retire_candidate",
+                            "score": 0.1,
+                            "confidence": 0.6,
+                            "evidence_item_ids": [f"review-{index}"],
+                            "phase": "subagent_route_blocked" if action == "block" else "completed",
+                            "created_at": f"2026-06-19T00:00:0{index}Z",
+                        }
+                    ],
                 }
-            ],
-        }))
+            )
+        )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -1438,81 +1456,99 @@ class TestProposalLedger:
             final_front = [Candidate()]
             best_avg = Candidate()
             history = [{"iter": 0, "front_size": 1, "best_avg": 0.5}]
-            native_evaluation = [{
-                "candidate_id": "cand-1",
-                "total": 0.82,
-                "verdict": "promote",
-                "task_score": 0.9,
-                "constraint_score": 1.0,
-                "failure_coverage": 0.75,
-                "positive_preservation": 0.8,
-                "efficiency": 0.95,
-                "reasons": ["balanced candidate"],
-                "constraint_results": [{"verbose": "omitted"}],
-            }]
+            native_evaluation = [
+                {
+                    "candidate_id": "cand-1",
+                    "total": 0.82,
+                    "verdict": "promote",
+                    "task_score": 0.9,
+                    "constraint_score": 1.0,
+                    "failure_coverage": 0.75,
+                    "positive_preservation": 0.8,
+                    "efficiency": 0.95,
+                    "reasons": ["balanced candidate"],
+                    "constraint_results": [{"verbose": "omitted"}],
+                }
+            ]
             native_replay = {
                 "cases": [{"case_id": "case-1"}, {"case_id": "case-2"}],
-                "candidates": [{
-                    "candidate_id": "cand-1",
-                    "total": 0.77,
-                    "reasons": ["replay coverage is strong"],
-                    "case_results": [{
-                        "case_id": "case-2",
-                        "kind": "failure",
-                        "score": 0.4,
-                        "reason": "missing failure-specific guidance",
-                        "missing_signals": ["continue", "checkpoint"],
-                    }],
-                }],
+                "candidates": [
+                    {
+                        "candidate_id": "cand-1",
+                        "total": 0.77,
+                        "reasons": ["replay coverage is strong"],
+                        "case_results": [
+                            {
+                                "case_id": "case-2",
+                                "kind": "failure",
+                                "score": 0.4,
+                                "reason": "missing failure-specific guidance",
+                                "missing_signals": ["continue", "checkpoint"],
+                            }
+                        ],
+                    }
+                ],
             }
             native_sandbox_replay = {
                 "case_count": 2,
-                "candidates": [{
-                    "candidate_id": "cand-1",
-                    "total": 0.72,
-                    "passed": False,
-                    "reasons": ["sandbox replay weak cases: case-2"],
-                    "case_results": [{
-                        "case_id": "case-2",
-                        "kind": "failure",
-                        "score": 0.5,
-                        "sandbox_passed": True,
-                        "reason": "missing failure-specific guidance",
-                    }],
-                }],
+                "candidates": [
+                    {
+                        "candidate_id": "cand-1",
+                        "total": 0.72,
+                        "passed": False,
+                        "reasons": ["sandbox replay weak cases: case-2"],
+                        "case_results": [
+                            {
+                                "case_id": "case-2",
+                                "kind": "failure",
+                                "score": 0.5,
+                                "sandbox_passed": True,
+                                "reason": "missing failure-specific guidance",
+                            }
+                        ],
+                    }
+                ],
             }
             native_turn_replay = {
                 "cases": [{"case_id": "turn-1"}, {"case_id": "turn-2"}],
-                "candidates": [{
-                    "candidate_id": "cand-1",
-                    "total": 0.69,
-                    "passed": False,
-                    "reasons": ["turn replay weak cases: turn-2"],
-                    "case_results": [{
-                        "case_id": "turn-2",
-                        "kind": "final_step_stuck",
-                        "score": 0.4,
+                "candidates": [
+                    {
+                        "candidate_id": "cand-1",
+                        "total": 0.69,
                         "passed": False,
-                        "reason": "final_step_stuck missing: close-after-final",
-                        "missing_signals": ["close-after-final"],
-                    }],
-                }],
+                        "reasons": ["turn replay weak cases: turn-2"],
+                        "case_results": [
+                            {
+                                "case_id": "turn-2",
+                                "kind": "final_step_stuck",
+                                "score": 0.4,
+                                "passed": False,
+                                "reason": "final_step_stuck missing: close-after-final",
+                                "missing_signals": ["close-after-final"],
+                            }
+                        ],
+                    }
+                ],
             }
             native_llm_replay = {
                 "cases": [{"case_id": "llm-1"}],
-                "candidates": [{
-                    "candidate_id": "cand-1",
-                    "total": 0.81,
-                    "passed": False,
-                    "reasons": ["llm replay weak cases: llm-1"],
-                    "case_results": [{
-                        "case_id": "llm-1",
-                        "kind": "report_truncation",
-                        "score": 0.2,
+                "candidates": [
+                    {
+                        "candidate_id": "cand-1",
+                        "total": 0.81,
                         "passed": False,
-                        "reason": "model output was truncated",
-                    }],
-                }],
+                        "reasons": ["llm replay weak cases: llm-1"],
+                        "case_results": [
+                            {
+                                "case_id": "llm-1",
+                                "kind": "report_truncation",
+                                "score": 0.2,
+                                "passed": False,
+                                "reason": "model output was truncated",
+                            }
+                        ],
+                    }
+                ],
             }
             winner_proposal = {
                 "ok": False,
@@ -1540,7 +1576,9 @@ class TestProposalLedger:
             "candidate_id": "cand-1",
         }
 
-    def test_ledger_proposal_endpoint_returns_related_canary_and_rollback(self, tmp_path, monkeypatch):
+    def test_ledger_proposal_endpoint_returns_related_canary_and_rollback(
+        self, tmp_path, monkeypatch
+    ):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
@@ -1689,9 +1727,12 @@ class TestFederationHub:
     def test_publish_and_discover(self, tmp_path):
         hub = FederationHub(FederationConfig(shared_dir=str(tmp_path / "fed")))
         proposal = SharedProposal(
-            proposal_id="p1", source_agent="agent_a",
-            kind="add_lesson", description="test lesson",
-            fitness_delta=0.15, ts="2026-01-01T00:00:00",
+            proposal_id="p1",
+            source_agent="agent_a",
+            kind="add_lesson",
+            description="test lesson",
+            fitness_delta=0.15,
+            ts="2026-01-01T00:00:00",
         )
         hub.publish("agent_a", proposal)
         discovered = hub.discover("agent_b")
@@ -1701,9 +1742,12 @@ class TestFederationHub:
     def test_publish_rejects_path_traversal_ids(self, tmp_path):
         hub = FederationHub(FederationConfig(shared_dir=str(tmp_path / "fed")))
         proposal = SharedProposal(
-            proposal_id="../escape", source_agent="agent_a",
-            kind="add_lesson", description="test lesson",
-            fitness_delta=0.15, ts="2026-01-01T00:00:00",
+            proposal_id="../escape",
+            source_agent="agent_a",
+            kind="add_lesson",
+            description="test lesson",
+            fitness_delta=0.15,
+            ts="2026-01-01T00:00:00",
         )
 
         with pytest.raises(ValueError, match="invalid federation agent id"):
@@ -1726,9 +1770,12 @@ class TestFederationHub:
             pytest.skip(f"symlink unavailable: {exc}")
         hub = FederationHub(FederationConfig(shared_dir=str(fed)))
         proposal = SharedProposal(
-            proposal_id="p1", source_agent="agent_a",
-            kind="add_lesson", description="test lesson",
-            fitness_delta=0.15, ts="2026-01-01T00:00:00",
+            proposal_id="p1",
+            source_agent="agent_a",
+            kind="add_lesson",
+            description="test lesson",
+            fitness_delta=0.15,
+            ts="2026-01-01T00:00:00",
         )
 
         with pytest.raises(ValueError, match="must not be a symlink"):
@@ -1739,9 +1786,12 @@ class TestFederationHub:
     def test_agent_does_not_discover_own(self, tmp_path):
         hub = FederationHub(FederationConfig(shared_dir=str(tmp_path / "fed")))
         proposal = SharedProposal(
-            proposal_id="p2", source_agent="agent_a",
-            kind="add_lesson", description="test",
-            fitness_delta=0.1, ts="2026-01-01T00:00:00",
+            proposal_id="p2",
+            source_agent="agent_a",
+            kind="add_lesson",
+            description="test",
+            fitness_delta=0.1,
+            ts="2026-01-01T00:00:00",
         )
         hub.publish("agent_a", proposal)
         discovered = hub.discover("agent_a")
@@ -1750,9 +1800,12 @@ class TestFederationHub:
     def test_adopt_success(self, tmp_path):
         hub = FederationHub(FederationConfig(shared_dir=str(tmp_path / "fed")))
         proposal = SharedProposal(
-            proposal_id="p3", source_agent="agent_a",
-            kind="add_lesson", description="good lesson",
-            fitness_delta=0.2, ts="2026-01-01T00:00:00",
+            proposal_id="p3",
+            source_agent="agent_a",
+            kind="add_lesson",
+            description="good lesson",
+            fitness_delta=0.2,
+            ts="2026-01-01T00:00:00",
         )
         hub.publish("agent_a", proposal)
         discovered = hub.discover("agent_b")
@@ -1772,9 +1825,12 @@ class TestFederationHub:
             pytest.skip(f"symlink unavailable: {exc}")
         hub = FederationHub(FederationConfig(shared_dir=str(fed)))
         proposal = SharedProposal(
-            proposal_id="p3", source_agent="agent_a",
-            kind="add_lesson", description="good lesson",
-            fitness_delta=0.2, ts="2026-01-01T00:00:00",
+            proposal_id="p3",
+            source_agent="agent_a",
+            kind="add_lesson",
+            description="good lesson",
+            fitness_delta=0.2,
+            ts="2026-01-01T00:00:00",
         )
 
         with pytest.raises(ValueError, match="escapes shared directory"):
@@ -1783,14 +1839,19 @@ class TestFederationHub:
         assert not (outside / "p3.json").exists()
 
     def test_adopt_rejects_low_fitness_delta(self, tmp_path):
-        hub = FederationHub(FederationConfig(
-            shared_dir=str(tmp_path / "fed"),
-            adoption_threshold=0.5,
-        ))
+        hub = FederationHub(
+            FederationConfig(
+                shared_dir=str(tmp_path / "fed"),
+                adoption_threshold=0.5,
+            )
+        )
         proposal = SharedProposal(
-            proposal_id="p4", source_agent="agent_a",
-            kind="add_lesson", description="marginal",
-            fitness_delta=0.05, ts="2026-01-01T00:00:00",
+            proposal_id="p4",
+            source_agent="agent_a",
+            kind="add_lesson",
+            description="marginal",
+            fitness_delta=0.05,
+            ts="2026-01-01T00:00:00",
         )
         hub.publish("agent_a", proposal)
         discovered = hub.discover("agent_b")
@@ -1800,9 +1861,12 @@ class TestFederationHub:
     def test_stats(self, tmp_path):
         hub = FederationHub(FederationConfig(shared_dir=str(tmp_path / "fed")))
         proposal = SharedProposal(
-            proposal_id="p5", source_agent="agent_a",
-            kind="add_lesson", description="test",
-            fitness_delta=0.1, ts="2026-01-01T00:00:00",
+            proposal_id="p5",
+            source_agent="agent_a",
+            kind="add_lesson",
+            description="test",
+            fitness_delta=0.1,
+            ts="2026-01-01T00:00:00",
         )
         hub.publish("agent_a", proposal)
         stats = hub.stats()
@@ -1818,9 +1882,18 @@ class TestFederationHub:
 class TestStrategyEngine:
     def _make_report(self, combined: float, verdict: str) -> FitnessReport:
         return FitnessReport(
-            agent_id="test", ts="t",
-            l1=L1Fitness(score=combined, trend="stable", success_rate=combined, avg_rounds=5.0, soul_impact={}),
-            l2=None, combined=combined, verdict=verdict,
+            agent_id="test",
+            ts="t",
+            l1=L1Fitness(
+                score=combined,
+                trend="stable",
+                success_rate=combined,
+                avg_rounds=5.0,
+                soul_impact={},
+            ),
+            l2=None,
+            combined=combined,
+            verdict=verdict,
         )
 
     def test_critical_triggers_revert(self):

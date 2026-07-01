@@ -21,6 +21,7 @@ from runtime.projectos.engine import (
     stub_generate_milestones,
 )
 from runtime.projectos.store import ProjectStore
+from runtime.projectos.timeline import project_process_timeline
 
 
 class PlanBody(BaseModel):
@@ -98,8 +99,12 @@ def create_projects_router(
         from runtime.adapters.web_auth import _resolve_actor
 
         _resolve_actor(
-            request, identity_store, require_auth,
-            jwt_secret=jwt_secret, jwt_issuer=jwt_issuer, jwt_audience=jwt_audience,
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
         )
 
     router = APIRouter(tags=["projectos"])
@@ -153,15 +158,24 @@ def create_projects_router(
         except ValueError as exc:
             raise _bad_request(exc) from exc
         for m in milestones:
-            out.append({
-                "id": m.id, "name": m.name, "status": m.status,
-                "success_criteria": m.success_criteria,
-                "tasks": [
-                    {"id": t.id, "role": t.assigned_role, "type": t.type,
-                     "status": t.status, "output": t.output}
-                    for t in project_store.tasks_for_milestone(m.id)
-                ],
-            })
+            out.append(
+                {
+                    "id": m.id,
+                    "name": m.name,
+                    "status": m.status,
+                    "success_criteria": m.success_criteria,
+                    "tasks": [
+                        {
+                            "id": t.id,
+                            "role": t.assigned_role,
+                            "type": t.type,
+                            "status": t.status,
+                            "output": t.output,
+                        }
+                        for t in project_store.tasks_for_milestone(m.id)
+                    ],
+                }
+            )
         return {"project": project.name, "status": project.status, "milestones": out}
 
     @router.get("/api/projects/{project_id}/events")
@@ -176,6 +190,18 @@ def create_projects_router(
             "project_id": project_id,
             "events": audit_events,
         }
+
+    @router.get("/api/projects/{project_id}/process-timeline")
+    def process_timeline(project_id: str, limit: int = 100) -> dict[str, Any]:
+        """Project process timeline: persisted plan/run/control evidence."""
+        _project_or_404(project_id)
+        try:
+            timeline = project_process_timeline(project_store, project_id, limit=limit)
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
+        if timeline is None:
+            raise HTTPException(404, "project not found")
+        return {"timeline": timeline}
 
     @router.post("/api/projects", dependencies=[Depends(_auth_dep)])
     def plan(body: PlanBody) -> dict[str, Any]:
@@ -279,7 +305,12 @@ def create_projects_router(
                 run_result = engine.run(project_id, max_ticks=body.max_ticks)
             except ValueError as exc:
                 raise _bad_request(exc) from exc
-            return {"ok": True, "intervention": intervention, "run": run_result, **_full_state(project_id)}
+            return {
+                "ok": True,
+                "intervention": intervention,
+                "run": run_result,
+                **_full_state(project_id),
+            }
         return {"ok": True, "intervention": intervention, **_full_state(project_id)}
 
     return router

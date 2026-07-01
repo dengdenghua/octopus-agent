@@ -133,8 +133,11 @@ def test_recover_reopens_blocked_project_and_can_run(tmp_path) -> None:
     assert body["available_actions"] == ["inspect", "report"]
     assert body["tasks"]["MS1"][0]["available_actions"] == ["reset"]
     events = c.get("/api/projects/P-blocked/events").json()["events"]
-    assert [event["kind"] for event in events] == ["project.recover"]
-    assert events[0]["payload"]["events"] == body["recover"]["events"]
+    assert [event["kind"] for event in events] == ["project.recover", "project.run"]
+    recover_event = next(event for event in events if event["kind"] == "project.recover")
+    run_event = next(event for event in events if event["kind"] == "project.run")
+    assert recover_event["payload"]["events"] == body["recover"]["events"]
+    assert run_event["payload"]["final_status"] == "done"
 
 
 def test_intervene_task_reassigns_and_runs(tmp_path) -> None:
@@ -185,9 +188,10 @@ def test_intervene_task_reassigns_and_runs(tmp_path) -> None:
     assert task["status"] == "done"
     assert task["available_actions"] == ["reset"]
     events = c.get("/api/projects/P-intervene/events").json()["events"]
-    assert [event["kind"] for event in events] == ["task.intervention"]
-    assert events[0]["payload"]["action"] == "reassign"
-    assert events[0]["payload"]["assigned_agent"] == "new-agent"
+    assert [event["kind"] for event in events] == ["task.intervention", "project.run"]
+    intervention = next(event for event in events if event["kind"] == "task.intervention")
+    assert intervention["payload"]["action"] == "reassign"
+    assert intervention["payload"]["assigned_agent"] == "new-agent"
 
 
 def test_intervene_task_validates_missing_and_unknown_action(tmp_path) -> None:
@@ -259,12 +263,8 @@ def test_project_state_exposes_action_hints(tmp_path) -> None:
     reassign_spec = body["tasks"]["MS1"][0]["action_specs"][0]
     assert reassign_spec["action"] == "reassign"
     assert reassign_spec["requires"] == ["assigned_agent"]
-    assert reassign_spec["api"]["path"] == (
-        "/api/projects/P-actions/tasks/MS1-T1/intervene"
-    )
-    assert reassign_spec["realtime_command"] == (
-        "/project task MS1-T1 reassign agent=<agent-id>"
-    )
+    assert reassign_spec["api"]["path"] == ("/api/projects/P-actions/tasks/MS1-T1/intervene")
+    assert reassign_spec["realtime_command"] == ("/project task MS1-T1 reassign agent=<agent-id>")
 
 
 def test_get_project_by_thread(tmp_path) -> None:
@@ -278,3 +278,28 @@ def test_get_project_by_thread(tmp_path) -> None:
     assert body["project"]["id"] == "P-thread"
     assert body["action_specs"][0]["api"]["path"] == "/api/projects/P-thread/run"
     assert c.get("/api/projects/by-thread/missing").status_code == 404
+
+
+def test_project_process_timeline_endpoint_persists_run_evidence(tmp_path) -> None:
+    c = _client(tmp_path)
+    planned = c.post("/api/projects", json={"name": "timeline", "goal": "ship it"})
+    assert planned.status_code == 200
+    pid = planned.json()["project"]["id"]
+    run = c.post(f"/api/projects/{pid}/run", json={"max_ticks": 20})
+    assert run.status_code == 200
+
+    response = c.get(f"/api/projects/{pid}/process-timeline")
+
+    assert response.status_code == 200
+    timeline = response.json()["timeline"]
+    assert timeline["schema"] == "octopus.projectos.process_timeline.v1"
+    assert timeline["project_id"] == pid
+    assert timeline["overview"]["status"] == "done"
+    assert timeline["overview"]["event_count"] >= 2
+    assert timeline["safety"]["raw_task_outputs_included"] is False
+    assert timeline["safety"]["process_events_persisted"] is True
+    kinds = {node["kind"] for node in timeline["timeline"]}
+    lanes = {node["lane"] for node in timeline["timeline"]}
+    assert {"project.planned", "project.run", "milestone_state", "task_state"} <= kinds
+    assert {"project", "milestone", "task"} <= lanes
+    assert c.get("/api/projects/nope/process-timeline").status_code == 404

@@ -15,6 +15,7 @@ from runtime.projectos.cowork_bridge import (
 from runtime.projectos.engine import stub_generate_milestones
 from runtime.projectos.model import Milestone, Task
 from runtime.projectos.store import ProjectStore
+from runtime.projectos.timeline import project_process_timeline
 
 
 def test_roster_excludes_humans_observers_muted(tmp_path) -> None:
@@ -32,13 +33,18 @@ def test_assigner_routes_to_best_member() -> None:
     # Agents are named for their domain (matching is by 3+ char id tokens).
     roster = [("database-expert", "database-expert"), ("frontend-designer", "frontend-designer")]
     assign = nominate_assigner(roster)
-    assert assign(Task(id="T", milestone_id="M", type="code", goal="optimize database index")) \
+    assert (
+        assign(Task(id="T", milestone_id="M", type="code", goal="optimize database index"))
         == "database-expert"
-    assert assign(Task(id="T", milestone_id="M", type="design", goal="design the frontend layout")) \
+    )
+    assert (
+        assign(Task(id="T", milestone_id="M", type="design", goal="design the frontend layout"))
         == "frontend-designer"
+    )
     # no keyword match → still a group member (not a fixed role)
     assert assign(Task(id="T", milestone_id="M", type="code", goal="zzz")) in {
-        "database-expert", "frontend-designer"
+        "database-expert",
+        "frontend-designer",
     }
 
 
@@ -55,12 +61,19 @@ def test_project_runs_on_custom_group(tmp_path) -> None:
     def decompose(ms: Milestone) -> list[Task]:
         return [
             Task(id=f"{ms.id}-T1", milestone_id=ms.id, type="code", goal="database schema work"),
-            Task(id=f"{ms.id}-T2", milestone_id=ms.id, type="design", goal="frontend screens design",
-                 depends_on=[f"{ms.id}-T1"]),
+            Task(
+                id=f"{ms.id}-T2",
+                milestone_id=ms.id,
+                type="design",
+                goal="frontend screens design",
+                depends_on=[f"{ms.id}-T1"],
+            ),
         ]
 
     eng = engine_for_group(
-        ProjectStore(base_dir=tmp_path), gs, "thread-1",
+        ProjectStore(base_dir=tmp_path),
+        gs,
+        "thread-1",
         hooks={"generate_milestones": stub_generate_milestones, "decompose_tasks": decompose},
     )
     p = eng.plan("custom", "build an app")
@@ -128,6 +141,18 @@ def test_project_from_group_can_reuse_active_thread_project(tmp_path) -> None:
     assert second["trace"]["project_id"] == pid
     assert second["result"]["final_status"] == "done"
     assert second["available_actions"] == ["inspect", "report"]
+    events = store.events_for_project(pid)
+    assert "project.run_from_group" in [event["kind"] for event in events]
+    timeline = project_process_timeline(store, pid)
+    assert timeline is not None
+    assert timeline["schema"] == "octopus.projectos.process_timeline.v1"
+    assert timeline["thread_id"] == "thread-1"
+    assert timeline["overview"]["assigned_agent_count"] >= 1
+    assert any(
+        node["kind"] == "project.run_from_group"
+        and node["data"]["trace"]["thread_id"] == "thread-1"
+        for node in timeline["timeline"]
+    )
 
 
 def test_from_group_endpoint_turns_a_group_into_a_project_team(tmp_path) -> None:
@@ -159,6 +184,9 @@ def test_from_group_endpoint_turns_a_group_into_a_project_team(tmp_path) -> None
 
     # a group with no agents is rejected (can't staff a project)
     GroupStore(base_dir=tmp_path)  # empty thread
-    assert client.post(
-        "/api/projects/from-group/empty-thread", json={"name": "x", "goal": "g"}
-    ).status_code == 400
+    assert (
+        client.post(
+            "/api/projects/from-group/empty-thread", json={"name": "x", "goal": "g"}
+        ).status_code
+        == 400
+    )

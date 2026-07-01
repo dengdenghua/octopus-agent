@@ -387,15 +387,22 @@ REQUIREMENTS: tuple[CertificationRequirement, ...] = (
     CertificationRequirement(
         id="digital_employee_workflow_advantage",
         title="Digital employee Project OS workflow advantage",
-        dimension_ids=("digital_employee_workflows", "subagents_parallelism", "differentiated_agent_os"),
+        dimension_ids=(
+            "digital_employee_workflows",
+            "subagents_parallelism",
+            "differentiated_agent_os",
+        ),
         score_floor=97,
         paths=(
             "runtime/safety/evolution/digital_employee_quality.py",
             "runtime/sensing/gateway/evolution_router.py",
             "runtime/projectos/cowork_bridge.py",
+            "runtime/projectos/timeline.py",
             "runtime/sensing/gateway/realtime_cerebrum.py",
+            "runtime/sensing/gateway/projects_router.py",
             "runtime/sensing/gateway/team_tasks_router.py",
             "tests/test_projectos_cowork.py",
+            "tests/test_projects_router.py",
             "tests/test_realtime_cerebrum.py",
             "tests/test_team_tasks_router.py",
             "tests/test_evolution_router.py",
@@ -405,7 +412,9 @@ REQUIREMENTS: tuple[CertificationRequirement, ...] = (
             "octopus.digital_employee_quality.v1",
             "digital-employee-quality",
             "octopus.projectos.run_trace.v1",
+            "octopus.projectos.process_timeline.v1",
             "octopus.projectos.control_trace.v1",
+            "/api/projects/{project_id}/process-timeline",
             "octopus.team_task_process_timeline.v1",
             "process_events_persisted",
             "run_project_from_group",
@@ -463,11 +472,13 @@ def compute_parity_certification(
                 floors.get(dimension_id, 0),
                 int(row["score_floor"]),
             )
-            evidence_by_dimension.setdefault(dimension_id, []).append({
-                "id": row["id"],
-                "title": row["title"],
-                "score_floor": row["score_floor"],
-            })
+            evidence_by_dimension.setdefault(dimension_id, []).append(
+                {
+                    "id": row["id"],
+                    "title": row["title"],
+                    "score_floor": row["score_floor"],
+                }
+            )
     return {
         "schema": "octopus.parity_certification.v1",
         "passed": sum(1 for row in requirements if row["passed"]),
@@ -477,11 +488,7 @@ def compute_parity_certification(
         "requirements": requirements,
         "dimension_score_floors": floors,
         "dimension_evidence": evidence_by_dimension,
-        "next_actions": [
-            str(row["next_action"])
-            for row in requirements
-            if not row["passed"]
-        ],
+        "next_actions": [str(row["next_action"]) for row in requirements if not row["passed"]],
     }
 
 
@@ -489,25 +496,12 @@ def _requirement_row(
     base: Path,
     requirement: CertificationRequirement,
 ) -> dict[str, Any]:
-    path_rows = [
-        {"path": path, "exists": (base / path).exists()}
-        for path in requirement.paths
-    ]
+    path_rows = [{"path": path, "exists": (base / path).exists()} for path in requirement.paths]
     haystack = "\n".join(
-        _read_text(base / row["path"])
-        for row in path_rows
-        if row["exists"]
+        _read_text(base / row["path"]) for row in path_rows if row["exists"]
     ).lower()
-    missing_terms = [
-        term
-        for term in requirement.required_terms
-        if term.lower() not in haystack
-    ]
-    missing_paths = [
-        str(row["path"])
-        for row in path_rows
-        if not row["exists"]
-    ]
+    missing_terms = [term for term in requirement.required_terms if term.lower() not in haystack]
+    missing_paths = [str(row["path"]) for row in path_rows if not row["exists"]]
     passed = not missing_paths and not missing_terms
     return {
         "id": requirement.id,

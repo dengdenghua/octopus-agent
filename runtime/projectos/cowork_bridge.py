@@ -254,9 +254,7 @@ def project_run_trace(
                 "project_status": tick.get("project_status"),
                 "current_ms": tick.get("current_ms"),
                 "events": [
-                    str(event)
-                    for event in (tick.get("events") or [])
-                    if str(event or "").strip()
+                    str(event) for event in (tick.get("events") or []) if str(event or "").strip()
                 ],
             }
         )
@@ -275,8 +273,7 @@ def project_run_trace(
                 "status": milestone.get("status"),
                 "task_count": len(tasks),
                 "done_task_count": sum(
-                    1 for task in tasks
-                    if isinstance(task, dict) and task.get("status") == "done"
+                    1 for task in tasks if isinstance(task, dict) and task.get("status") == "done"
                 ),
                 "assignments": [
                     {
@@ -362,6 +359,18 @@ def run_project_from_group(
         reused=reused,
         result=result,
         state=state,
+    )
+    project_store.append_event(
+        project.id,
+        kind="project.run_from_group",
+        payload={
+            "thread_id": thread_id,
+            "roster": roster,
+            "reused": reused,
+            "run": run,
+            "max_ticks": normalize_run_ticks(max_ticks),
+            "trace": trace,
+        },
     )
     return {
         "ok": True,

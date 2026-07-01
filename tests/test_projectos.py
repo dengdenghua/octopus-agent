@@ -7,6 +7,7 @@ import pytest
 from runtime.projectos.engine import HARD_MAX_RUN_TICKS, ProjectEngine, normalize_run_ticks
 from runtime.projectos.model import Milestone, Project, Task, ready_tasks
 from runtime.projectos.store import ProjectStore
+from runtime.projectos.timeline import project_process_timeline
 
 
 # ── model ────────────────────────────────────────────────────────────────────
@@ -22,8 +23,14 @@ def test_ready_tasks_respects_dag() -> None:
 def test_roundtrips() -> None:
     p = Project(id="P1", name="x", goal="g", milestone_ids=["M1"])
     assert Project.from_dict(p.to_dict()).milestone_ids == ["M1"]
-    m = Milestone(id="M1", name="n", goal="g", spec={"power": "<5W"},
-                  success_criteria=["works"], dependencies=["M0"])
+    m = Milestone(
+        id="M1",
+        name="n",
+        goal="g",
+        spec={"power": "<5W"},
+        success_criteria=["works"],
+        dependencies=["M0"],
+    )
     assert Milestone.from_dict(m.to_dict()).spec == {"power": "<5W"}
     t = Task(id="T1", milestone_id="M1", type="research", goal="g", depends_on=["T0"])
     assert Task.from_dict(t.to_dict()).depends_on == ["T0"]
@@ -209,8 +216,13 @@ def _stub_decompose(ms: Milestone) -> list[Task]:
     # two tasks with a dependency, to exercise the DAG within a milestone
     return [
         Task(id=f"{ms.id}-T1", milestone_id=ms.id, type="research", goal=f"{ms.goal} part1"),
-        Task(id=f"{ms.id}-T2", milestone_id=ms.id, type="code", goal=f"{ms.goal} part2",
-             depends_on=[f"{ms.id}-T1"]),
+        Task(
+            id=f"{ms.id}-T2",
+            milestone_id=ms.id,
+            type="code",
+            goal=f"{ms.goal} part2",
+            depends_on=[f"{ms.id}-T1"],
+        ),
     ]
 
 
@@ -255,6 +267,30 @@ def test_full_run_drives_project_to_done(tmp_path) -> None:
     # all tasks done
     for ms_id in ("MS1", "MS2", "MS3"):
         assert all(t.status == "done" for t in eng.store.tasks_for_milestone(ms_id))
+
+
+def test_project_process_timeline_persists_plan_run_and_state(tmp_path) -> None:
+    eng = _engine(tmp_path)
+    project = eng.plan("timeline", "ship a durable employee loop")
+    eng.run(project.id, max_ticks=20)
+
+    timeline = project_process_timeline(eng.store, project.id)
+
+    assert timeline is not None
+    assert timeline["schema"] == "octopus.projectos.process_timeline.v1"
+    assert timeline["project_id"] == project.id
+    assert timeline["overview"]["status"] == "done"
+    assert timeline["overview"]["milestone_count"] == 3
+    assert timeline["overview"]["task_count"] == 6
+    assert timeline["overview"]["done_task_count"] == 6
+    assert timeline["safety"]["raw_task_outputs_included"] is False
+    assert timeline["safety"]["process_events_persisted"] is True
+    kinds = {node["kind"] for node in timeline["timeline"]}
+    lanes = {node["lane"] for node in timeline["timeline"]}
+    assert {"project.planned", "project.run", "milestone_state", "task_state"} <= kinds
+    assert {"project", "milestone", "task"} <= lanes
+    run_node = next(node for node in timeline["timeline"] if node["kind"] == "project.run")
+    assert run_node["data"]["history"]["omitted"] is True
 
 
 def test_run_tick_budget_is_bounded_even_for_internal_callers(tmp_path, monkeypatch) -> None:
@@ -355,7 +391,9 @@ def test_stale_running_claim_does_not_execute_terminal_task(tmp_path, monkeypatc
 
     def stale_save(task: Task, **kwargs):
         if task.id == "MS1-T2" and task.status == "running":
-            terminal = Task(id=task.id, milestone_id=task.milestone_id, type=task.type, goal=task.goal)
+            terminal = Task(
+                id=task.id, milestone_id=task.milestone_id, type=task.type, goal=task.goal
+            )
             terminal.status = "done"
             terminal.output = "already accepted"
             return terminal
@@ -650,8 +688,8 @@ def test_gate_exception_blocks_project_instead_of_crashing_tick(tmp_path) -> Non
     assert "milestone_gate_error:MS1" in events
     assert "project_blocked:gate_error" in events
     audit = eng.store.events_for_project(p.id)
-    assert audit[-1]["kind"] == "project.gate_failed"
-    assert "RuntimeError" in audit[-1]["payload"]["error"]
+    gate_failed = next(event for event in audit if event["kind"] == "project.gate_failed")
+    assert "RuntimeError" in gate_failed["payload"]["error"]
 
 
 def test_stale_project_block_does_not_downgrade_done_project(tmp_path) -> None:
