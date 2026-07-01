@@ -7,7 +7,7 @@ import copy
 import json
 import re
 import threading
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -18,7 +18,7 @@ _PATH_SEGMENT_RE = re.compile(r'[<>:"/\\|?*\x00-\x1F]')
 
 
 def _utc_now_iso() -> str:
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z"
 
 
 def _deepcopy(value: Any) -> Any:
@@ -400,7 +400,7 @@ class ThreadStateStore:
                     # filesystem-arbitrary, so the old hits[0] could return a
                     # stale month for both reads and appends.
                     return max(hits)
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
             return (
                 sess_root
                 / f"{now.year:04d}"
@@ -582,7 +582,7 @@ class ThreadStateStore:
         assert self._per_agent_base is not None
         misc_dir = self._per_agent_base / "data" / "sessions" / "misc"
         if misc_dir.exists():
-            for jsonl in misc_dir.rglob("*.jsonl"):
+            for jsonl in self._canonical_session_files(misc_dir):
                 self._load_from(jsonl)
         agents_root = self._per_agent_base / "agents"
         if agents_root.exists():
@@ -593,7 +593,7 @@ class ThreadStateStore:
                 if not sess.exists():
                     continue
                 implied = agent_dir.name
-                for jsonl in sess.rglob("*.jsonl"):
+                for jsonl in self._canonical_session_files(sess):
                     self._load_from(jsonl, implied_agent=implied)
         teams_root = self._per_agent_base / "teams"
         if teams_root.exists():
@@ -604,5 +604,28 @@ class ThreadStateStore:
                 if not sess.exists():
                     continue
                 implied_team_id = team_dir.name
-                for jsonl in sess.rglob("*.jsonl"):
+                for jsonl in self._canonical_session_files(sess):
                     self._load_from(jsonl, implied_team_id=implied_team_id)
+
+    def _canonical_session_files(self, sess_root: Path) -> list[Path]:
+        """Return one canonical jsonl per thread under a session root.
+
+        Mirrors ``_resolve_thread_file`` for boot-time recovery: an existing
+        flat file wins for flat→dated upgrades; otherwise the latest dated path
+        wins. This keeps stale month shards from overwriting newer state during
+        startup replay.
+        """
+        chosen: dict[str, Path] = {}
+        for jsonl in sorted(sess_root.rglob("*.jsonl")):
+            thread_id = jsonl.stem
+            current = chosen.get(thread_id)
+            if current is None:
+                chosen[thread_id] = jsonl
+                continue
+            current_is_flat = current.parent == sess_root
+            candidate_is_flat = jsonl.parent == sess_root
+            if current_is_flat:
+                continue
+            if candidate_is_flat or jsonl > current:
+                chosen[thread_id] = jsonl
+        return sorted(chosen.values())
