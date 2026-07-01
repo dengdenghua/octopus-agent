@@ -141,15 +141,21 @@ class ProjectEngine:
 
         active = self._ensure_active_milestone(project, events)
         if active is None:
-            return {"events": events, "project_status": project.status, "current_ms": None}
+            current = self.store.get_project(project_id)
+            return {
+                "events": events,
+                "project_status": current.status if current else "failed",
+                "current_ms": current.current_ms if current else None,
+            }
 
         self._ensure_tasks(project_id, active, events)
         self._run_frontier(project, active, events)
         self._gate_milestone(project, active, events)
+        current = self.store.get_project(project_id)
         return {
             "events": events,
-            "project_status": self.store.get_project(project_id).status,
-            "current_ms": active.id,
+            "project_status": current.status if current else "failed",
+            "current_ms": current.current_ms if current else None,
         }
 
     def run(self, project_id: str, *, max_ticks: int = 50) -> dict[str, Any]:
@@ -230,7 +236,7 @@ class ProjectEngine:
 
             if ms.status == "blocked" or reset_ids:
                 ms.status = "in_progress"
-                self.store.save_milestone(project.id, ms)
+                self.store.save_milestone(project.id, ms, allow_terminal_rewrite=True)
                 events.append(f"milestone_reopened:{ms.id}")
                 first_reopened = first_reopened or ms.id
                 changed = True
@@ -239,7 +245,7 @@ class ProjectEngine:
             project.status = "running"
             if first_reopened:
                 project.current_ms = first_reopened
-            self.store.save_project(project)
+            self.store.save_project(project, allow_terminal_rewrite=True)
             events.append("project_recovered")
         else:
             events.append("nothing_to_recover")
@@ -366,10 +372,10 @@ class ProjectEngine:
 
         if ms.status in {"blocked", "done"} or project.status == "blocked":
             ms.status = "in_progress"
-            self.store.save_milestone(project.id, ms)
+            self.store.save_milestone(project.id, ms, allow_terminal_rewrite=True)
             project.status = "running"
             project.current_ms = ms.id
-            self.store.save_project(project)
+            self.store.save_project(project, allow_terminal_rewrite=True)
             events.append(f"milestone_reopened:{ms.id}")
             events.append("project_recovered")
 
@@ -408,8 +414,11 @@ class ProjectEngine:
             return None
         if mss and len(done) == len(mss):
             project.status = "done"
-            self.store.save_project(project)
-            events.append("project_done")
+            saved = self.store.save_project(project)
+            if saved.status == "done":
+                events.append("project_done")
+            else:
+                events.append(f"project_terminal_write_ignored:{project.id}")
             return None
         nxt = next(
             (m for m in mss
@@ -421,9 +430,15 @@ class ProjectEngine:
             self._block_project(project, project.current_ms, events, reason="no_runnable_milestone")
             return None
         nxt.status = "active"
-        self.store.save_milestone(project.id, nxt)
+        saved_ms = self.store.save_milestone(project.id, nxt)
+        if saved_ms.status != "active":
+            events.append(f"milestone_stale_activation_ignored:{nxt.id}")
+            return None
         project.current_ms = nxt.id
-        self.store.save_project(project)
+        saved_project = self.store.save_project(project)
+        if saved_project.current_ms != nxt.id or saved_project.status not in {"running", "planning"}:
+            events.append(f"project_stale_activation_ignored:{project.id}")
+            return None
         events.append(f"milestone_activated:{nxt.id}")
         return nxt
 
@@ -463,7 +478,10 @@ class ProjectEngine:
             self.store.save_task(t)
         ms.task_ids = [t.id for t in new_tasks]
         ms.status = "in_progress"
-        self.store.save_milestone(project_id, ms)
+        saved_ms = self.store.save_milestone(project_id, ms)
+        if saved_ms.status != "in_progress":
+            events.append(f"milestone_stale_tasks_ignored:{ms.id}")
+            return
         events.append(f"tasks_created:{ms.id}:{len(new_tasks)}")
 
     def _run_frontier(self, project: Project, ms: Milestone, events: list[str]) -> None:
@@ -536,12 +554,18 @@ class ProjectEngine:
         if not tasks or not all(t.status == "done" for t in tasks):
             if any(t.status == "failed" for t in tasks):
                 ms.status = "blocked"
-                self.store.save_milestone(project.id, ms)
+                saved_ms = self.store.save_milestone(project.id, ms)
+                if saved_ms.status != "blocked":
+                    events.append(f"milestone_stale_block_ignored:{ms.id}")
+                    return
                 events.append(f"milestone_blocked:{ms.id}")
                 self._block_project(project, ms.id, events, reason="task_failed")
             elif tasks and not any(t.status == "running" for t in tasks) and not ready_tasks(tasks):
                 ms.status = "blocked"
-                self.store.save_milestone(project.id, ms)
+                saved_ms = self.store.save_milestone(project.id, ms)
+                if saved_ms.status != "blocked":
+                    events.append(f"milestone_stale_block_ignored:{ms.id}")
+                    return
                 events.append(f"milestone_blocked_dag:{ms.id}")
                 self._block_project(project, ms.id, events, reason="task_dag_blocked")
             return
@@ -549,7 +573,10 @@ class ProjectEngine:
             gate = self._gate(ms, tasks)
         except Exception as exc:  # noqa: BLE001 — milestone gate is an injected hook
             ms.status = "blocked"
-            self.store.save_milestone(project.id, ms)
+            saved_ms = self.store.save_milestone(project.id, ms)
+            if saved_ms.status != "blocked":
+                events.append(f"milestone_stale_gate_error_ignored:{ms.id}")
+                return
             events.append(f"milestone_gate_error:{ms.id}")
             self._block_project(project, ms.id, events, reason="gate_error")
             self._audit(
@@ -560,13 +587,22 @@ class ProjectEngine:
             return
         if gate.get("met"):
             ms.status = "done"
-            self.store.save_milestone(project.id, ms)
+            saved_ms = self.store.save_milestone(project.id, ms)
+            if saved_ms.status != "done":
+                events.append(f"milestone_stale_done_ignored:{ms.id}")
+                return
             project.current_ms = None
-            self.store.save_project(project)
+            saved_project = self.store.save_project(project)
+            if saved_project.current_ms is not None and saved_project.current_ms != "":
+                events.append(f"project_stale_milestone_done_ignored:{project.id}")
+                return
             events.append(f"milestone_done:{ms.id}")
         else:
             ms.status = "blocked"
-            self.store.save_milestone(project.id, ms)
+            saved_ms = self.store.save_milestone(project.id, ms)
+            if saved_ms.status != "blocked":
+                events.append(f"milestone_stale_gate_failed_ignored:{ms.id}")
+                return
             events.append(f"milestone_gate_failed:{ms.id}")
             self._block_project(project, ms.id, events, reason="gate_failed")
 
@@ -581,7 +617,10 @@ class ProjectEngine:
         project.status = "blocked"
         if milestone_id:
             project.current_ms = milestone_id
-        self.store.save_project(project)
+        saved_project = self.store.save_project(project)
+        if saved_project.status != "blocked":
+            events.append(f"project_stale_block_ignored:{reason}")
+            return
         events.append(f"project_blocked:{reason}")
 
     def _with_downstream_tasks(self, tasks: list[Task], task_ids: set[str]) -> set[str]:

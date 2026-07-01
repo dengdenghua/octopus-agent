@@ -98,6 +98,56 @@ def test_store_task_terminal_status_can_be_reopened_explicitly(tmp_path) -> None
     assert s.get_task("T1").status == "pending"
 
 
+def test_store_project_terminal_status_is_immutable_by_default(tmp_path) -> None:
+    s = ProjectStore(base_dir=tmp_path)
+    original = Project(id="P1", name="x", goal="g", status="done")
+    s.save_project(original)
+
+    stale = Project(id="P1", name="x", goal="g", status="blocked", current_ms="MS1")
+    returned = s.save_project(stale)
+
+    assert returned.status == "done"
+    assert returned.current_ms is None
+    assert s.get_project("P1").status == "done"
+
+
+def test_store_project_terminal_status_can_be_reopened_explicitly(tmp_path) -> None:
+    s = ProjectStore(base_dir=tmp_path)
+    original = Project(id="P1", name="x", goal="g", status="done")
+    s.save_project(original)
+
+    reopened = Project(id="P1", name="x", goal="g", status="running", current_ms="MS1")
+    returned = s.save_project(reopened, allow_terminal_rewrite=True)
+
+    assert returned.status == "running"
+    assert returned.current_ms == "MS1"
+    assert s.get_project("P1").status == "running"
+
+
+def test_store_milestone_terminal_status_is_immutable_by_default(tmp_path) -> None:
+    s = ProjectStore(base_dir=tmp_path)
+    original = Milestone(id="MS1", name="m", goal="g", status="done")
+    s.save_milestone("P1", original)
+
+    stale = Milestone(id="MS1", name="m", goal="g", status="blocked")
+    returned = s.save_milestone("P1", stale)
+
+    assert returned.status == "done"
+    assert s.get_milestone("MS1").status == "done"
+
+
+def test_store_milestone_terminal_status_can_be_reopened_explicitly(tmp_path) -> None:
+    s = ProjectStore(base_dir=tmp_path)
+    original = Milestone(id="MS1", name="m", goal="g", status="done")
+    s.save_milestone("P1", original)
+
+    reopened = Milestone(id="MS1", name="m", goal="g", status="in_progress")
+    returned = s.save_milestone("P1", reopened, allow_terminal_rewrite=True)
+
+    assert returned.status == "in_progress"
+    assert s.get_milestone("MS1").status == "in_progress"
+
+
 # ── engine ───────────────────────────────────────────────────────────────────
 def _stub_milestones(goal: str) -> list[Milestone]:
     return [
@@ -531,3 +581,70 @@ def test_gate_exception_blocks_project_instead_of_crashing_tick(tmp_path) -> Non
     audit = eng.store.events_for_project(p.id)
     assert audit[-1]["kind"] == "project.gate_failed"
     assert "RuntimeError" in audit[-1]["payload"]["error"]
+
+
+def test_stale_project_block_does_not_downgrade_done_project(tmp_path) -> None:
+    eng = _engine(tmp_path)
+    p = eng.plan("x", "g")
+    p.status = "done"
+    p.current_ms = None
+    eng.store.save_project(p)
+    stale = Project(id=p.id, name=p.name, goal=p.goal, status="running", current_ms="MS1")
+    events: list[str] = []
+
+    eng._block_project(stale, "MS1", events, reason="late_failure")
+
+    stored = eng.store.get_project(p.id)
+    assert stored.status == "done"
+    assert stored.current_ms is None
+    assert "project_blocked:late_failure" not in events
+    assert "project_stale_block_ignored:late_failure" in events
+
+
+def test_stale_done_tick_reports_stored_terminal_project_status(tmp_path) -> None:
+    eng = _engine(tmp_path)
+    p = eng.plan("x", "g")
+    for ms in eng.store.milestones_for(p.id):
+        ms.status = "done"
+        eng.store.save_milestone(p.id, ms)
+    failed = Project(
+        id=p.id,
+        name=p.name,
+        goal=p.goal,
+        milestone_ids=p.milestone_ids,
+        status="failed",
+        current_ms="MS2",
+    )
+    eng.store.save_project(failed, allow_terminal_rewrite=True)
+
+    tick = eng.tick(p.id)
+
+    assert tick["project_status"] == "failed"
+    assert tick["current_ms"] == "MS2"
+    assert f"project_terminal_write_ignored:{p.id}" in tick["events"]
+    assert eng.store.get_project(p.id).status == "failed"
+
+
+def test_stale_gate_failure_does_not_downgrade_done_milestone(tmp_path) -> None:
+    def strict_gate(ms: Milestone, tasks: list[Task]) -> dict:
+        return {"met": False, "reason": "late fail"}
+
+    eng = _engine(tmp_path, gate_milestone=strict_gate)
+    p = eng.plan("x", "g")
+    ms = eng.store.milestones_for(p.id)[0]
+    ms.status = "done"
+    eng.store.save_milestone(p.id, ms)
+    t1 = Task(id="MS1-T1", milestone_id="MS1", type="research", goal="a")
+    t1.status = "done"
+    t2 = Task(id="MS1-T2", milestone_id="MS1", type="code", goal="b")
+    t2.status = "done"
+    eng.store.save_task(t1)
+    eng.store.save_task(t2)
+    stale_ms = Milestone(id="MS1", name="research", goal="scope it", status="in_progress")
+    events: list[str] = []
+
+    eng._gate_milestone(p, stale_ms, events)
+
+    assert eng.store.get_milestone("MS1").status == "done"
+    assert "milestone_gate_failed:MS1" not in events
+    assert "milestone_stale_gate_failed_ignored:MS1" in events

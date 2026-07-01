@@ -15,6 +15,8 @@ from uuid import uuid4
 
 from runtime.projectos.model import Milestone, Project, Task
 
+_TERMINAL_PROJECT_STATUSES = frozenset({"done", "failed"})
+_TERMINAL_MILESTONE_STATUSES = frozenset({"done", "failed"})
 _TERMINAL_TASK_STATUSES = frozenset({"done", "failed", "rejected"})
 
 _SCHEMA = """
@@ -62,8 +64,22 @@ class ProjectStore:
         return sqlite3.connect(str(self._db), timeout=10.0)
 
     # ── projects ─────────────────────────────────────────────────────────────
-    def save_project(self, project: Project) -> Project:
+    def save_project(self, project: Project, *, allow_terminal_rewrite: bool = False) -> Project:
+        """Persist ``project``.
+
+        Terminal project rows are immutable by default so a stale tick cannot
+        downgrade a completed project back to ``running``/``blocked``. Operator
+        recovery paths must pass ``allow_terminal_rewrite=True`` explicitly.
+        """
         with self._lock, self._conn() as conn:
+            existing_row = conn.execute(
+                "SELECT doc FROM projects WHERE id=?",
+                (project.id,),
+            ).fetchone()
+            if existing_row and not allow_terminal_rewrite:
+                existing = Project.from_dict(json.loads(existing_row[0]))
+                if existing.status in _TERMINAL_PROJECT_STATUSES:
+                    return existing
             conn.execute(
                 "INSERT INTO projects(id, doc) VALUES (?, ?) "
                 "ON CONFLICT(id) DO UPDATE SET doc=excluded.doc",
@@ -173,8 +189,28 @@ class ProjectStore:
         return self.get_project(str(row[0]))
 
     # ── milestones ───────────────────────────────────────────────────────────
-    def save_milestone(self, project_id: str, ms: Milestone) -> Milestone:
+    def save_milestone(
+        self,
+        project_id: str,
+        ms: Milestone,
+        *,
+        allow_terminal_rewrite: bool = False,
+    ) -> Milestone:
+        """Persist ``ms``.
+
+        Terminal milestone rows are immutable by default for the same reason as
+        terminal tasks/projects: a stale engine tick must not reopen or block a
+        milestone that another tick has already completed.
+        """
         with self._lock, self._conn() as conn:
+            existing_row = conn.execute(
+                "SELECT doc FROM milestones WHERE id=?",
+                (ms.id,),
+            ).fetchone()
+            if existing_row and not allow_terminal_rewrite:
+                existing = Milestone.from_dict(json.loads(existing_row[0]))
+                if existing.status in _TERMINAL_MILESTONE_STATUSES:
+                    return existing
             conn.execute(
                 "INSERT INTO milestones(id, project_id, doc) VALUES (?, ?, ?) "
                 "ON CONFLICT(id) DO UPDATE SET doc=excluded.doc, project_id=excluded.project_id",
