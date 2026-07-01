@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import re
 import shutil
@@ -50,6 +51,16 @@ def _safe_skill_slug(p: AssetPayload) -> str:
     return slug
 
 
+def _verify_bundle_checksum(p: AssetPayload, data: bytes) -> None:
+    expected = p.bundle.checksum if p.bundle else None
+    if not expected:
+        return
+    expected = expected.removeprefix("sha256:")
+    actual = hashlib.sha256(data).hexdigest()
+    if actual != expected:
+        raise ValueError(f"bundle checksum mismatch for {p.id}: expected {expected} got {actual}")
+
+
 def _validate_skill_bundle(tar: tarfile.TarFile, skills_dir: Path, slug: str) -> None:
     """Validate that a full-bundle only writes ``<slug>/...`` and contains SKILL.md."""
     dest = skills_dir.resolve()
@@ -87,12 +98,23 @@ def _extract_skill_bundle(tar: tarfile.TarFile, skills_dir: Path, slug: str) -> 
         if not md.is_file():
             raise ValueError(f"bundle missing required file after extraction: {slug}/SKILL.md")
         dest = skills_dir / slug
+        backup = tmp_root / f"{slug}.previous"
         if dest.exists():
             if dest.is_dir() and not dest.is_symlink():
-                shutil.rmtree(dest)
+                dest.rename(backup)
             else:
-                dest.unlink()
-        shutil.move(str(staged), str(dest))
+                dest.rename(backup)
+        try:
+            staged.rename(dest)
+        except Exception:
+            if backup.exists() and not dest.exists():
+                backup.rename(dest)
+            raise
+        if backup.exists():
+            if backup.is_dir() and not backup.is_symlink():
+                shutil.rmtree(backup)
+            else:
+                backup.unlink()
     return skills_dir / slug / "SKILL.md"
 
 
@@ -104,6 +126,7 @@ def materialize_skill(p: AssetPayload, skills_dir: Path, *, client: RegistryClie
     if p.bundle and p.bundle.ref:
         c = client or RegistryClient(DEFAULT_BASE)
         data = c.fetch_bundle(p.id)
+        _verify_bundle_checksum(p, data)
         with tarfile.open(fileobj=io.BytesIO(data)) as tar:
             return _extract_skill_bundle(tar, skills_dir, slug)
     dest = skills_dir / slug

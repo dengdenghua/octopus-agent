@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import tarfile
+from pathlib import Path
 
 import pytest
 
@@ -258,6 +260,78 @@ def test_materialize_skill_rejects_bundle_missing_skill_md_without_clobbering(
     bundle = _tar_bytes({"research-pack/README.md": "missing skill md"})
 
     with pytest.raises(ValueError, match="missing required file"):
+        materialize_skill(payload, tmp_path / "skills", client=FakeBundleClient(bundle))
+
+    assert (existing / "SKILL.md").read_text(encoding="utf-8") == "old safe version"
+
+
+def test_materialize_skill_verifies_payload_bundle_checksum(tmp_path) -> None:
+    bundle = _tar_bytes({"research-pack/SKILL.md": "new safe version"})
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        description="bundle",
+        bundle=BundleRef(ref="bundle.tar.gz", checksum="sha256:" + ("0" * 64)),
+    )
+
+    with pytest.raises(ValueError, match="bundle checksum mismatch"):
+        materialize_skill(payload, tmp_path / "skills", client=FakeBundleClient(bundle))
+
+    assert not (tmp_path / "skills" / "research-pack").exists()
+
+
+def test_materialize_skill_replaces_existing_bundle_after_checksum_match(tmp_path) -> None:
+    existing = tmp_path / "skills" / "research-pack"
+    existing.mkdir(parents=True)
+    (existing / "SKILL.md").write_text("old safe version", encoding="utf-8")
+    bundle = _tar_bytes({"research-pack/SKILL.md": "new safe version"})
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        description="bundle",
+        bundle=BundleRef(
+            ref="bundle.tar.gz",
+            checksum="sha256:" + hashlib.sha256(bundle).hexdigest(),
+        ),
+    )
+
+    md = materialize_skill(payload, tmp_path / "skills", client=FakeBundleClient(bundle))
+
+    assert md.read_text(encoding="utf-8") == "new safe version"
+
+
+def test_materialize_skill_restores_existing_bundle_when_replace_fails(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    existing = tmp_path / "skills" / "research-pack"
+    existing.mkdir(parents=True)
+    (existing / "SKILL.md").write_text("old safe version", encoding="utf-8")
+    bundle = _tar_bytes({"research-pack/SKILL.md": "new safe version"})
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        description="bundle",
+        bundle=BundleRef(
+            ref="bundle.tar.gz",
+            checksum="sha256:" + hashlib.sha256(bundle).hexdigest(),
+        ),
+    )
+    original_rename = Path.rename
+
+    def fail_staged_replace(self: Path, target: Path) -> Path:
+        if self.name == "research-pack" and self.parent.name.startswith(".research-pack."):
+            raise OSError("replace failed")
+        return original_rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", fail_staged_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
         materialize_skill(payload, tmp_path / "skills", client=FakeBundleClient(bundle))
 
     assert (existing / "SKILL.md").read_text(encoding="utf-8") == "old safe version"
