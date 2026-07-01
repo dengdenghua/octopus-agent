@@ -105,6 +105,21 @@ def test_agent_scorecard_endpoint() -> None:
     assert data["parity_certification"]["by_kind"]["advantage"]["passed"] == 7
 
 
+def test_agent_scorecard_endpoint_defaults_to_e2e_target() -> None:
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.get("/api/evolution/agent-scorecard")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["target_score"] == 95
+    assert data["octopus_below_target"] == []
+    assert data["octopus_focus_gaps"] == []
+
+
 def test_e2e_surpass_certification_endpoint() -> None:
     app = FastAPI()
     app.include_router(create_evolution_router())
@@ -180,14 +195,12 @@ def test_agent_scorecard_gap_queue_is_empty_once_default_surpass_is_met(
     app.include_router(create_evolution_router())
     client = TestClient(app)
 
-    response = client.post(
-        "/api/evolution/agent-scorecard/gaps/queue",
-        json={"target_score": 95, "limit": 3, "reason": "default release target"},
-    )
+    response = client.post("/api/evolution/agent-scorecard/gaps/queue")
     data = response.json()
 
     assert response.status_code == 200
     assert data["ok"] is True
+    assert data["scorecard"]["target_score"] == 95
     assert data["created"] == 0
     assert data["items"] == []
     assert data["scorecard"]["external_gap_count"] == 0

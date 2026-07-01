@@ -5,6 +5,10 @@ import os
 from typing import Any
 from urllib.parse import urlparse
 
+from runtime.safety.evolution.agent_competitor_scorecard import (
+    DEFAULT_TARGET_SCORE as DEFAULT_AGENT_SCORECARD_TARGET_SCORE,
+)
+
 try:
     from fastapi import APIRouter, HTTPException, Query, Request
     from pydantic import BaseModel, Field
@@ -23,7 +27,11 @@ if FASTAPI_AVAILABLE:
 
 
     class ScorecardGapQueueBody(BaseModel):
-        target_score: int = Field(default=90, ge=1, le=100)
+        target_score: int = Field(
+            default=DEFAULT_AGENT_SCORECARD_TARGET_SCORE,
+            ge=1,
+            le=100,
+        )
         limit: int = Field(default=10, ge=1, le=50)
         reason: str = "operator_scorecard_gap_review"
         dimension_id: str = ""
@@ -94,7 +102,11 @@ def create_evolution_router() -> Any:
 
     @router.get("/agent-scorecard")
     def get_agent_scorecard(
-        target_score: int = Query(default=90, ge=1, le=100),
+        target_score: int = Query(
+            default=DEFAULT_AGENT_SCORECARD_TARGET_SCORE,
+            ge=1,
+            le=100,
+        ),
     ) -> dict[str, Any]:
         try:
             from runtime.safety.evolution.agent_competitor_scorecard import (
@@ -239,6 +251,7 @@ def create_evolution_router() -> Any:
                 "total": created + updated,
                 "items": items,
                 "scorecard": {
+                    "target_score": report.get("target_score"),
                     "overall": report.get("overall"),
                     "verdict": report.get("verdict"),
                     "evidence_adjusted_overall": report.get(

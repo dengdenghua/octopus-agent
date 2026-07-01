@@ -20,6 +20,7 @@ OCTOPUS_COMPETITOR = "octopus"
 EXTERNAL_COMPETITORS: tuple[str, ...] = tuple(
     competitor for competitor in COMPETITORS if competitor != OCTOPUS_COMPETITOR
 )
+DEFAULT_TARGET_SCORE = 95
 
 
 @dataclass(frozen=True)
@@ -303,7 +304,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
 def compute_agent_competitor_scorecard(
     *,
     root: str | Path | None = None,
-    target_score: int = 90,
+    target_score: int = DEFAULT_TARGET_SCORE,
     surpass_margin: int = 1,
 ) -> dict[str, Any]:
     base = Path(root) if root is not None else default_project_root(Path(__file__))
@@ -841,6 +842,7 @@ def _next_focus(rows: list[dict[str, Any]]) -> list[str]:
 
 __all__ = [
     "COMPETITORS",
+    "DEFAULT_TARGET_SCORE",
     "DIMENSIONS",
     "ScoreDimension",
     "compute_agent_competitor_scorecard",

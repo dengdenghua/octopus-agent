@@ -606,6 +606,7 @@ class TestAgentCompetitorScorecard:
         report = compute_agent_competitor_scorecard()
 
         assert report["schema"] == "octopus.agent_competitor_scorecard.v1"
+        assert report["target_score"] == 95
         assert sum(dimension.weight for dimension in DIMENSIONS) == 100
         assert report["overall"] == {
             "codex": 87,
@@ -686,7 +687,7 @@ class TestAgentCompetitorScorecard:
         assert product["best_external_competitor"] == "codex"
         assert product["best_external_score"] == 90
         assert product["surpass_target_score"] == 91
-        assert product["effective_target_score"] == 91
+        assert product["effective_target_score"] == 95
         assert product["octopus_gap_to_target"] == 0
         assert product["octopus_gap_to_surpass"] == 0
         assert product["octopus_gap_to_effective_target"] == 0
