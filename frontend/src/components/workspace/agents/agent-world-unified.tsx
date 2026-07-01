@@ -1180,13 +1180,6 @@ export function AgentWorldUnified() {
                   {t.agentWorldUnified.roleLibrary}
                 </TabsTrigger>
               )}
-              <TabsTrigger
-                value="registry-roles"
-                className="h-8 gap-1.5 px-3 text-xs"
-              >
-                <CloudIcon className="h-3.5 w-3.5" />
-                云端角色
-              </TabsTrigger>
               <TabsTrigger value="plugins" className="h-8 gap-1.5 px-3 text-xs">
                 <PuzzleIcon className="h-3.5 w-3.5" />
                 {t.plugins.pageTitle}
@@ -1207,20 +1200,40 @@ export function AgentWorldUnified() {
             </TabsList>
 
             <TabsContent value="agents" className="mt-0">
-              <AgentsTab
-                agents={dedupedAgents}
-                filteredAgents={filteredAgents}
-                loading={loading}
-                activeCategory={activeCategory}
-                categoryCounts={categoryCounts}
-                onCategoryChange={setActiveCategory}
-                onSelectAgent={handleSelectAgent}
-                onInstallChange={handleInstallChange}
-              />
-            </TabsContent>
+              <Tabs defaultValue="local">
+                <TabsList variant="line" className="mb-3">
+                  <TabsTrigger
+                    value="local"
+                    className="h-8 gap-1.5 px-3 text-xs"
+                  >
+                    本地
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="registry"
+                    className="h-8 gap-1.5 px-3 text-xs"
+                  >
+                    <CloudIcon className="h-3.5 w-3.5" />
+                    云端角色
+                  </TabsTrigger>
+                </TabsList>
 
-            <TabsContent value="registry-roles" className="mt-0">
-              <RegistryRolesPanel />
+                <TabsContent value="local" className="mt-0">
+                  <AgentsTab
+                    agents={dedupedAgents}
+                    filteredAgents={filteredAgents}
+                    loading={loading}
+                    activeCategory={activeCategory}
+                    categoryCounts={categoryCounts}
+                    onCategoryChange={setActiveCategory}
+                    onSelectAgent={handleSelectAgent}
+                    onInstallChange={handleInstallChange}
+                  />
+                </TabsContent>
+
+                <TabsContent value="registry" className="mt-0">
+                  <RegistryRolesPanel />
+                </TabsContent>
+              </Tabs>
             </TabsContent>
 
             <TabsContent value="plugins" className="mt-0">
