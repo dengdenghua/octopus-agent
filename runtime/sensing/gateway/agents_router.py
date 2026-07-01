@@ -4,7 +4,9 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+import shutil
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from runtime.execution.misc.agent_avatar import pixel_agent_avatar_svg
@@ -42,6 +44,46 @@ _PERSONA_RE = re.compile(
 _BUILTIN_AGENT_IDS = frozenset(
     {"general", "coder", "vibe_selling", "ecommerce_mind", "admin", "desktop_operator"}
 )
+_SAFE_AGENT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+
+
+def _require_safe_agent_id(agent_id: str) -> str:
+    value = str(agent_id or "").strip()
+    if not _SAFE_AGENT_ID_RE.fullmatch(value):
+        raise HTTPException(
+            400,
+            "invalid agent_id: only alphanumeric characters, hyphens, and underscores are allowed",
+        )
+    return value
+
+
+def _agent_dir_for(root: Path, agent_id: str) -> Path:
+    safe_id = _require_safe_agent_id(agent_id)
+    return root / safe_id
+
+
+def _require_real_agent_dir(root: Path, agent_id: str) -> Path:
+    agent_dir = _agent_dir_for(root, agent_id)
+    if agent_dir.is_symlink():
+        raise HTTPException(409, f"agent path is not a real directory: {agent_id}")
+    if not agent_dir.is_dir():
+        raise HTTPException(404, f"agent folder not found: {agent_id}")
+    return agent_dir
+
+
+def _cleanup_created_agent_dir(agent_dir: Path, *, created: bool) -> None:
+    if created and agent_dir.is_dir() and not agent_dir.is_symlink():
+        shutil.rmtree(agent_dir, ignore_errors=True)
+
+
+def _restore_text_file(path: Path, original: str | None) -> None:
+    if original is None:
+        with contextlib.suppress(OSError):
+            path.unlink()
+        return
+    from runtime.platform.io import atomic_write_text
+
+    atomic_write_text(path, original, newline=None)
 
 
 def _soul_for_display(soul: str | None) -> str | None:
@@ -444,16 +486,10 @@ def create_agents_router(
                 503, "agent creation needs a GraphRuntime in this router"
             )
 
-        # Validate agent_id
         agent_id = body.name.strip()
         if not agent_id:
             raise HTTPException(400, "agent name is required")
-        if "/" in agent_id or "\\" in agent_id or agent_id in (".", ".."):
-            raise HTTPException(400, "invalid agent_id: cannot contain path separators")
-        if not agent_id.replace("-", "").replace("_", "").isalnum():
-            raise HTTPException(
-                400, "invalid agent_id: only alphanumeric, hyphens, and underscores allowed"
-            )
+        agent_id = _require_safe_agent_id(agent_id)
 
         # Check for reserved names
         if agent_id in _BUILTIN_AGENT_IDS:
@@ -464,18 +500,20 @@ def create_agents_router(
             load_agent,
         )
 
-        root = default_agents_root()
-        agent_dir = root / agent_id
+        root = default_agents_root().resolve()
+        agent_dir = _agent_dir_for(root, agent_id)
 
         # Check if agent already exists
-        if agent_dir.exists():
+        if agent_dir.exists() or agent_dir.is_symlink():
             raise HTTPException(409, f"agent already exists: {agent_id}")
         if registry.has(agent_id):
             raise HTTPException(409, f"agent already registered: {agent_id}")
 
         # Create directory structure
+        created_agent_dir = False
         try:
             agent_dir.mkdir(parents=True)
+            created_agent_dir = True
             (agent_dir / "agent-core").mkdir()
             (agent_dir / "agent-core" / ".soul_history").mkdir()
             (agent_dir / "agent-core" / "diary").mkdir()
@@ -487,6 +525,7 @@ def create_agents_router(
             (agent_dir / "sessions").mkdir()
             (agent_dir / "skills").mkdir()
         except OSError as exc:
+            _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
             raise HTTPException(
                 500, f"failed to create agent directories: {type(exc).__name__}: {exc}"
             ) from exc
@@ -529,6 +568,7 @@ def create_agents_router(
             )
             atomic_write_text(profile_path, profile_text)
         except OSError as exc:
+            _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
             raise HTTPException(
                 500, f"failed to write profile.jsonc: {type(exc).__name__}: {exc}"
             ) from exc
@@ -558,6 +598,7 @@ _This file is yours to evolve. As you learn who you are, update it._
         try:
             atomic_write_text(soul_path, soul_content, newline=None)
         except OSError as exc:
+            _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
             raise HTTPException(
                 500, f"failed to write SOUL.md: {type(exc).__name__}: {exc}"
             ) from exc
@@ -582,6 +623,7 @@ _This file is yours to evolve. As you learn who you are, update it._
         try:
             atomic_write_text(identity_path, identity_content, newline=None)
         except OSError as exc:
+            _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
             raise HTTPException(
                 500, f"failed to write IDENTITY.md: {type(exc).__name__}: {exc}"
             ) from exc
@@ -606,6 +648,7 @@ When making changes, first read the surrounding code.
         try:
             atomic_write_text(agents_md_path, agents_md_content, newline=None)
         except OSError as exc:
+            _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
             raise HTTPException(
                 500, f"failed to write AGENTS.md: {type(exc).__name__}: {exc}"
             ) from exc
@@ -616,6 +659,7 @@ When making changes, first read the surrounding code.
         try:
             atomic_write_text(avatar_path, avatar_svg, newline=None)
         except OSError as exc:
+            _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
             raise HTTPException(
                 500, f"failed to write avatar.svg: {type(exc).__name__}: {exc}"
             ) from exc
@@ -635,6 +679,7 @@ When making changes, first read the surrounding code.
                 )
                 atomic_write_text(tool_registry_path, tool_text)
             except OSError as exc:
+                _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
                 raise HTTPException(
                     500, f"failed to write tool-registry.jsonc: {type(exc).__name__}: {exc}"
                 ) from exc
@@ -643,11 +688,18 @@ When making changes, first read the surrounding code.
         try:
             new_agent = load_agent(agent_dir, runtime, root / "_shared")
         except (OSError, ValueError, TypeError) as exc:
+            _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
             raise HTTPException(
                 500, f"agent load failed after creation: {type(exc).__name__}: {exc}"
             ) from exc
 
-        registry.register(new_agent)
+        try:
+            registry.register(new_agent)
+        except (ValueError, TypeError) as exc:
+            _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
+            raise HTTPException(
+                500, f"agent registry update failed after creation: {type(exc).__name__}: {exc}"
+            ) from exc
         return _to_detail_wire(new_agent)
 
     @router.get("/api/agents/local-partners")
@@ -800,8 +852,7 @@ When making changes, first read the surrounding code.
             raise HTTPException(
                 503, "agent update needs a GraphRuntime in this router"
             )
-        if "/" in agent_id or "\\" in agent_id or agent_id in ("", ".", ".."):
-            raise HTTPException(400, "invalid agent_id")
+        agent_id = _require_safe_agent_id(agent_id)
 
         from runtime.execution.agents.loader import (
             default_agents_root,
@@ -810,14 +861,17 @@ When making changes, first read the surrounding code.
         from runtime.platform.io import atomic_write_text
         from runtime.platform.process.utils import parse_jsonc
 
-        root = default_agents_root()
-        agent_dir = root / agent_id
+        root = default_agents_root().resolve()
+        agent_dir = _require_real_agent_dir(root, agent_id)
         profile_path = agent_dir / "profile.jsonc"
+        if profile_path.is_symlink():
+            raise HTTPException(409, f"agent profile is not a real file: {agent_id}")
         if not profile_path.is_file():
             raise HTTPException(404, f"agent not found: {agent_id}")
 
         try:
-            profile = parse_jsonc(profile_path.read_text(encoding="utf-8"))
+            original_profile_text = profile_path.read_text(encoding="utf-8")
+            profile = parse_jsonc(original_profile_text)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             raise HTTPException(
                 500, f"failed to read profile.jsonc: {type(exc).__name__}: {exc}"
@@ -847,11 +901,23 @@ When making changes, first read the surrounding code.
                 500, f"failed to write profile.jsonc: {type(exc).__name__}: {exc}"
             ) from exc
 
+        soul_path = agent_dir / "agent-core" / "SOUL.md"
+        original_soul_text: str | None = None
         if "soul" in provided_fields:
-            soul_path = agent_dir / "agent-core" / "SOUL.md"
+            core_dir = soul_path.parent
+            if core_dir.is_symlink() or not core_dir.is_dir():
+                _restore_text_file(profile_path, original_profile_text)
+                raise HTTPException(409, f"agent-core is not a real directory: {agent_id}")
+            if soul_path.is_symlink():
+                _restore_text_file(profile_path, original_profile_text)
+                raise HTTPException(409, f"SOUL.md is not a real file: {agent_id}")
             try:
+                if soul_path.is_file():
+                    original_soul_text = soul_path.read_text(encoding="utf-8")
                 atomic_write_text(soul_path, body.soul, newline=None)
             except OSError as exc:
+                _restore_text_file(profile_path, original_profile_text)
+                _restore_text_file(soul_path, original_soul_text)
                 raise HTTPException(
                     500, f"failed to write SOUL.md: {type(exc).__name__}: {exc}"
                 ) from exc
@@ -859,16 +925,27 @@ When making changes, first read the surrounding code.
         try:
             updated_agent = load_agent(agent_dir, runtime, root / "_shared")
         except (OSError, ValueError, TypeError) as exc:
+            _restore_text_file(profile_path, original_profile_text)
+            if "soul" in provided_fields:
+                _restore_text_file(soul_path, original_soul_text)
             raise HTTPException(
                 500, f"agent load failed after update: {type(exc).__name__}: {exc}"
             ) from exc
 
-        if hasattr(registry, "replace"):
-            registry.replace(updated_agent)
-        else:
-            if registry.has(agent_id) and hasattr(registry, "remove"):
-                registry.remove(agent_id)
-            registry.register(updated_agent)
+        try:
+            if hasattr(registry, "replace"):
+                registry.replace(updated_agent)
+            else:
+                if registry.has(agent_id) and hasattr(registry, "remove"):
+                    registry.remove(agent_id)
+                registry.register(updated_agent)
+        except (ValueError, TypeError) as exc:
+            _restore_text_file(profile_path, original_profile_text)
+            if "soul" in provided_fields:
+                _restore_text_file(soul_path, original_soul_text)
+            raise HTTPException(
+                500, f"agent registry update failed after update: {type(exc).__name__}: {exc}"
+            ) from exc
         return _to_detail_wire(updated_agent)
 
     @router.get("/api/agents/{agent_id}")
@@ -885,8 +962,7 @@ When making changes, first read the surrounding code.
         body: GenerateAgentVisualsRequest | None = None,
     ) -> AgentVisualsWire:
         _require_admin(request)  # Mutation: regenerates avatar via LLM, writes to disk
-        if "/" in agent_id or "\\" in agent_id or agent_id in ("", ".", ".."):
-            raise HTTPException(400, "invalid agent_id")
+        agent_id = _require_safe_agent_id(agent_id)
 
         from runtime.execution.agents.loader import default_agents_root
         from runtime.execution.misc.image_generation import generate_agent_visuals
@@ -896,13 +972,10 @@ When making changes, first read the surrounding code.
         except OSError as exc:
             raise HTTPException(500, f"agents root unavailable: {exc}") from exc
 
-        agent_dir = (root / agent_id).resolve()
-        try:
-            agent_dir.relative_to(root)
-        except ValueError as exc:
-            raise HTTPException(400, "invalid agent path") from exc
-        if not agent_dir.is_dir():
-            raise HTTPException(404, f"agent folder not found: {agent_id}")
+        agent_dir = _require_real_agent_dir(root, agent_id)
+        visuals_dir = agent_dir / "visuals"
+        if visuals_dir.is_symlink():
+            raise HTTPException(409, f"agent visuals path is not a real directory: {agent_id}")
 
         display_name = agent_id
         description = ""
@@ -936,7 +1009,7 @@ When making changes, first read the surrounding code.
                 agent_id=agent_id,
                 display_name=display_name,
                 description=description,
-                output_dir=agent_dir / "visuals",
+                output_dir=visuals_dir,
                 style_prompt=body.style_prompt if body else "",
                 reference_images=body.reference_images if body else [],
                 provider=body.provider if body else None,
@@ -986,8 +1059,7 @@ When making changes, first read the surrounding code.
     @router.delete("/api/agents/{agent_id}", status_code=204, response_class=Response, response_model=None)
     def delete_agent(request: Request, agent_id: str):
         _require_admin(request)  # Mutation: deletes agent directory + unloads from registry
-        if "/" in agent_id or "\\" in agent_id or agent_id in ("", ".", ".."):
-            raise HTTPException(400, "invalid agent_id")
+        agent_id = _require_safe_agent_id(agent_id)
         if agent_id in _BUILTIN_AGENT_IDS:
             raise HTTPException(400, f"agent_id '{agent_id}' is reserved")
 
@@ -998,11 +1070,11 @@ When making changes, first read the surrounding code.
         except OSError as exc:
             raise HTTPException(500, f"agents root unavailable: {exc}") from exc
 
-        agent_dir = (root / agent_id).resolve()
-        try:
-            agent_dir.relative_to(root)
-        except ValueError as exc:
-            raise HTTPException(400, "invalid agent path") from exc
+        agent_dir = _agent_dir_for(root, agent_id)
+        if agent_dir.is_symlink():
+            raise HTTPException(409, f"agent path is not a real directory: {agent_id}")
+        if agent_dir.exists() and not agent_dir.is_dir():
+            raise HTTPException(409, f"agent path is not a directory: {agent_id}")
 
         exists_on_disk = agent_dir.is_dir()
         exists_in_registry = registry.has(agent_id)
@@ -1010,8 +1082,6 @@ When making changes, first read the surrounding code.
             raise HTTPException(404, f"agent not found: {agent_id}")
 
         if exists_on_disk:
-            import shutil
-
             try:
                 shutil.rmtree(agent_dir)
             except OSError as exc:
@@ -1209,16 +1279,18 @@ When making changes, first read the surrounding code.
             raise HTTPException(
                 503, "tool-registry edits need a GraphRuntime in this router",
             )
-        if "/" in agent_id or "\\" in agent_id or agent_id in ("", ".", ".."):
-            raise HTTPException(400, "invalid agent_id")
+        agent_id = _require_safe_agent_id(agent_id)
         from runtime.execution.agents.loader import (
             _ARM_FACTORIES,
             default_agents_root,
             load_agent,
         )
-        root = default_agents_root()
-        agent_dir = root / agent_id
-        if not agent_dir.is_dir() or not (agent_dir / "profile.jsonc").exists():
+        root = default_agents_root().resolve()
+        agent_dir = _require_real_agent_dir(root, agent_id)
+        profile_path = agent_dir / "profile.jsonc"
+        if profile_path.is_symlink():
+            raise HTTPException(409, f"agent profile is not a real file: {agent_id}")
+        if not profile_path.exists():
             raise HTTPException(404, f"agent folder not found: {agent_id}")
 
         # Validate arms · fail loud on unknown names
@@ -1240,8 +1312,15 @@ When making changes, first read the surrounding code.
             payload["private_skills"] = list(body.private_skills)
 
         core_dir = agent_dir / "agent-core"
+        if core_dir.is_symlink():
+            raise HTTPException(409, f"agent-core is not a real directory: {agent_id}")
         core_dir.mkdir(parents=True, exist_ok=True)
         target = core_dir / "tool-registry.jsonc"
+        if target.is_symlink():
+            raise HTTPException(409, f"tool-registry is not a real file: {agent_id}")
+        original_tool_registry = (
+            target.read_text(encoding="utf-8") if target.is_file() else None
+        )
 
         # Atomic write via shared utility (.bak rotation + fsync)
         from runtime.platform.io import atomic_write_text
@@ -1252,18 +1331,33 @@ When making changes, first read the surrounding code.
             "// edited via PUT /api/agents/{id}/tool-registry\n\n"
             + json.dumps(payload, ensure_ascii=False, indent=2)
         )
-        atomic_write_text(target, text)
+        try:
+            atomic_write_text(target, text)
+        except OSError as exc:
+            raise HTTPException(
+                500,
+                f"tool-registry save failed: {type(exc).__name__}: {exc}",
+            ) from exc
 
         # Hot reload · reuse the same path as POST /api/agents/{id}/reload
         try:
             new_agent = load_agent(agent_dir, runtime, root / "_shared")
         except (OSError, ValueError, TypeError) as exc:
+            _restore_text_file(target, original_tool_registry)
             raise HTTPException(
                 400,
                 f"agent rebuild failed after tool-registry save: "
                 f"{type(exc).__name__}: {exc}",
             ) from exc
-        registry.replace(new_agent)
+        try:
+            registry.replace(new_agent)
+        except (ValueError, TypeError) as exc:
+            _restore_text_file(target, original_tool_registry)
+            raise HTTPException(
+                500,
+                f"agent registry update failed after tool-registry save: "
+                f"{type(exc).__name__}: {exc}",
+            ) from exc
         return _to_detail_wire(new_agent)
 
 

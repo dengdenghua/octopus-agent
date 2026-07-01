@@ -223,6 +223,57 @@ class TestAgentDetail:
         assert registry.has("general")
         assert (tmp_path / "general").exists()
 
+    def test_delete_agent_rejects_symlink_without_removing_target(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path / "agents"))
+        agents_root = tmp_path / "agents"
+        agents_root.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "marker.txt").write_text("keep", encoding="utf-8")
+        (agents_root / "custom_agent").symlink_to(outside, target_is_directory=True)
+        registry = AgentRegistry()
+        registry.register(Agent(
+            agent_id="custom_agent",
+            display_name="Custom Agent",
+            description="",
+            soul="",
+            arms=ArmPool([make_web_read_arm(_rt())]),
+        ))
+        app = FastAPI()
+        app.include_router(create_agents_router(registry=registry))
+
+        r = TestClient(app).delete("/api/agents/custom_agent")
+
+        assert r.status_code == 409
+        assert (outside / "marker.txt").read_text(encoding="utf-8") == "keep"
+        assert registry.has("custom_agent")
+
+    def test_create_agent_cleans_directory_when_load_fails(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
+
+        def fail_load(*_args, **_kwargs):
+            raise ValueError("bad profile")
+
+        monkeypatch.setattr("runtime.execution.agents.loader.load_agent", fail_load)
+        app = FastAPI()
+        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
+
+        r = TestClient(app).post(
+            "/api/agents",
+            json={"name": "custom_agent", "description": "Custom"},
+        )
+
+        assert r.status_code == 500
+        assert not (tmp_path / "custom_agent").exists()
+
     def test_market_install_hot_registers_and_uninstall_removes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
         monkeypatch.setattr(agent_world_router, "_INSTALL_STATE", tmp_path / "installed.json")
@@ -449,6 +500,91 @@ class TestAgentDetail:
         assert registry.get("general").display_name == "New Name"
         assert "New Name" in (tmp_path / "general" / "profile.jsonc").read_text(encoding="utf-8")
         assert (agent_core / "SOUL.md").read_text(encoding="utf-8") == "new soul"
+
+    def test_update_agent_rolls_back_files_when_load_fails(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
+        agent_core = tmp_path / "general" / "agent-core"
+        agent_core.mkdir(parents=True)
+        profile_path = tmp_path / "general" / "profile.jsonc"
+        old_profile = (
+            '{"id":"general","name":"Old Name","description":"old",'
+            '"model":{"provider":"auto","name":"auto"}}'
+        )
+        profile_path.write_text(old_profile, encoding="utf-8")
+        soul_path = agent_core / "SOUL.md"
+        soul_path.write_text("old soul", encoding="utf-8")
+        (agent_core / "tool-registry.jsonc").write_text(
+            '{"arms":["web_read"],"extra_affinity":[],"private_skills":[]}',
+            encoding="utf-8",
+        )
+        registry = AgentRegistry()
+        registry.register(Agent(
+            agent_id="general",
+            display_name="Old Name",
+            description="old",
+            soul="old soul",
+            arms=ArmPool([make_web_read_arm(_rt())]),
+        ))
+
+        def fail_load(*_args, **_kwargs):
+            raise ValueError("broken reload")
+
+        monkeypatch.setattr("runtime.execution.agents.loader.load_agent", fail_load)
+        app = FastAPI()
+        app.include_router(create_agents_router(registry=registry, runtime=_rt()))
+
+        r = TestClient(app).put(
+            "/api/agents/general",
+            json={"display_name": "New Name", "description": "new", "soul": "new soul"},
+        )
+
+        assert r.status_code == 500
+        assert profile_path.read_text(encoding="utf-8") == old_profile
+        assert soul_path.read_text(encoding="utf-8") == "old soul"
+        assert registry.get("general").display_name == "Old Name"
+
+    def test_tool_registry_update_rolls_back_when_load_fails(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
+        agent_core = tmp_path / "general" / "agent-core"
+        agent_core.mkdir(parents=True)
+        (tmp_path / "general" / "profile.jsonc").write_text(
+            '{"id":"general","name":"Old Name","description":"old"}',
+            encoding="utf-8",
+        )
+        tool_registry = agent_core / "tool-registry.jsonc"
+        old_tool_registry = '{"arms":["web_read"],"extra_affinity":[],"private_skills":[]}'
+        tool_registry.write_text(old_tool_registry, encoding="utf-8")
+        registry = AgentRegistry()
+        registry.register(Agent(
+            agent_id="general",
+            display_name="Old Name",
+            description="old",
+            soul="old soul",
+            arms=ArmPool([make_web_read_arm(_rt())]),
+        ))
+
+        def fail_load(*_args, **_kwargs):
+            raise ValueError("broken registry")
+
+        monkeypatch.setattr("runtime.execution.agents.loader.load_agent", fail_load)
+        app = FastAPI()
+        app.include_router(create_agents_router(registry=registry, runtime=_rt()))
+
+        r = TestClient(app).put(
+            "/api/agents/general/tool-registry",
+            json={"arms": ["web_read"], "extra_affinity": ["new"]},
+        )
+
+        assert r.status_code == 400
+        assert tool_registry.read_text(encoding="utf-8") == old_tool_registry
 
     def test_detail_arm_fields(self, registry_with_presets):
         app = FastAPI()
