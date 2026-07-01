@@ -100,12 +100,7 @@ class CanaryManager:
             if state.phase == CanaryPhase.ROLLED_BACK:
                 self._persist_state(state)
                 return state
-            state.sample_count += 1
-            if success:
-                state.success_count += 1
-            else:
-                state.failure_count += 1
-            state.current_rate = state.success_count / max(1, state.sample_count)
+            self._record_windowed_outcome(state, success)
 
             if state.current_rate < self.config.rollback_threshold and state.sample_count >= 5:
                 state.phase = CanaryPhase.ROLLED_BACK
@@ -193,6 +188,7 @@ class CanaryManager:
             state.success_count = 0
             state.failure_count = 0
             state.current_rate = 0.0
+            state.metadata["outcome_window"] = []
             _LOG.info(
                 "canary PROMOTE %s: %s -> %s",
                 state.skill_name, old_phase.value, state.phase.value,
@@ -225,6 +221,34 @@ class CanaryManager:
             return self.config.shadow_pass_rate
         return self.config.promotion_thresholds.get(phase.value, 0.80)
 
+    def _record_windowed_outcome(self, state: CanaryState, success: bool) -> None:
+        window = self._outcome_window(state)
+        window.append(bool(success))
+        sample_window = max(1, int(self.config.sample_window or 1))
+        if len(window) > sample_window:
+            window = window[-sample_window:]
+        state.metadata["outcome_window"] = window
+        self._sync_counts_from_window(state)
+
+    @staticmethod
+    def _outcome_window(state: CanaryState) -> list[bool]:
+        raw = state.metadata.get("outcome_window") if isinstance(state.metadata, dict) else None
+        if isinstance(raw, list):
+            return [bool(item) for item in raw]
+        if state.sample_count <= 0:
+            return []
+        successes = max(0, min(state.success_count, state.sample_count))
+        failures = max(0, min(state.failure_count, state.sample_count - successes))
+        return [True] * successes + [False] * failures
+
+    @staticmethod
+    def _sync_counts_from_window(state: CanaryState) -> None:
+        window = CanaryManager._outcome_window(state)
+        state.sample_count = len(window)
+        state.success_count = sum(1 for item in window if item)
+        state.failure_count = state.sample_count - state.success_count
+        state.current_rate = state.success_count / max(1, state.sample_count)
+
     def _persist_state(self, state: CanaryState) -> None:
         path = self._state_dir / f"{state.skill_name}.json"
         try:
@@ -252,6 +276,7 @@ class CanaryManager:
                     current_rate=float(d.get("current_rate", 0.0) or 0.0),
                     metadata=d.get("metadata") or {},
                 )
+                self._sync_counts_from_window(self._states[name])
             except Exception as _exc:
                 _LOG.debug("canary result parse failed: %s", _exc)
                 continue

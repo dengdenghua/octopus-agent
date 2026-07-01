@@ -84,6 +84,31 @@ class TestCanaryRollback:
         assert reloaded.metadata["last_rollback_reason"] == "operator rejected metrics"
         assert reloaded.metadata["last_rollback_id"] == "rb_123"
 
+    def test_rollback_uses_recent_sample_window(self, tmp_path):
+        cm = CanaryManager(CanaryConfig(
+            state_dir=str(tmp_path / "canary"),
+            sample_window=5,
+            rollback_threshold=0.50,
+        ))
+        cm.register("regressed_skill")
+
+        for _ in range(5):
+            cm.record_outcome("regressed_skill", True)
+        state = cm.get_state("regressed_skill")
+        assert state is not None
+        assert state.current_rate == 1.0
+
+        for _ in range(3):
+            cm.record_outcome("regressed_skill", False)
+
+        state = cm.get_state("regressed_skill")
+        assert state is not None
+        assert state.sample_count == 5
+        assert state.success_count == 2
+        assert state.failure_count == 3
+        assert state.current_rate == 0.4
+        assert state.phase == CanaryPhase.ROLLED_BACK
+
 
 class TestCanaryPromotion:
     def test_shadow_promotion_on_high_success(self, tmp_path):
@@ -127,6 +152,37 @@ class TestCanaryPromotion:
         state = cm.get_state("reset_skill")
         if state.phase != CanaryPhase.SHADOW:
             assert state.sample_count == 0
+            assert state.metadata["outcome_window"] == []
+
+    def test_outcome_window_persists_across_reload(self, tmp_path):
+        state_dir = tmp_path / "canary"
+        cm = CanaryManager(CanaryConfig(
+            state_dir=str(state_dir),
+            sample_window=4,
+            rollback_threshold=0.20,
+        ))
+        cm.register("windowed_skill")
+
+        for outcome in [True, False, True, True, False]:
+            cm.record_outcome("windowed_skill", outcome)
+
+        state = cm.get_state("windowed_skill")
+        assert state is not None
+        assert state.metadata["outcome_window"] == [False, True, True, False]
+        assert state.sample_count == 4
+        assert state.success_count == 2
+        assert state.failure_count == 2
+        assert state.current_rate == 0.5
+
+        reloaded = CanaryManager(CanaryConfig(
+            state_dir=str(state_dir),
+            sample_window=4,
+            rollback_threshold=0.20,
+        )).get_state("windowed_skill")
+        assert reloaded is not None
+        assert reloaded.metadata["outcome_window"] == [False, True, True, False]
+        assert reloaded.sample_count == 4
+        assert reloaded.current_rate == 0.5
 
 
 class TestProposalLedgerRollback:
