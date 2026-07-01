@@ -140,6 +140,21 @@ def run_gate(
         compute_browser_desktop_quality(review_queue_path=review_queue_path),
     ]
 
+    scorecard_score = _nested_int(scorecard, "overall", "octopus")
+    scorecard_evidence_adjusted_score = _nested_int(
+        scorecard,
+        "evidence_adjusted_overall",
+        "octopus",
+    )
+    automation_score = _nested_int(automation, "overall", "octopus")
+    e2e_summary = dict(e2e_certification.get("summary") or {})
+    e2e_failed_checks = _failed_check_ids(e2e_certification.get("checks"))
+    quality_ready = sum(1 for report in quality_reports if bool(report.get("ready")))
+    quality_total = len(quality_reports)
+    scorecard_surpass_summary = scorecard.get("surpass_summary")
+    if not isinstance(scorecard_surpass_summary, Mapping):
+        scorecard_surpass_summary = {}
+
     _require_ready(
         failures,
         "agent competitor scorecard parity certification",
@@ -195,6 +210,25 @@ def run_gate(
         "e2e surpass certification checks",
         e2e_certification.get("checks"),
     )
+    _require_e2e_summary_consistency(
+        failures,
+        e2e_summary,
+        {
+            "scorecard_octopus": scorecard_score,
+            "scorecard_evidence_adjusted_octopus": scorecard_evidence_adjusted_score,
+            "automation_octopus": automation_score,
+            "automation_codex": _nested_int(automation, "overall", "codex"),
+            "quality_ready": quality_ready,
+            "quality_total": quality_total,
+            "all_dimensions_surpassed": bool(
+                scorecard_surpass_summary.get("all_dimensions_surpassed"),
+            ),
+            "scorecard_gap_dimensions": int(
+                scorecard_surpass_summary.get("gap_dimensions") or 0,
+            ),
+            "automation_gap_dimensions": len(automation.get("octopus_gaps") or []),
+        },
+    )
 
     for report in quality_reports:
         schema = str(report.get("schema") or "quality report")
@@ -206,14 +240,6 @@ def run_gate(
             expected=1.0,
         )
 
-    scorecard_score = _nested_int(scorecard, "overall", "octopus")
-    scorecard_evidence_adjusted_score = _nested_int(
-        scorecard,
-        "evidence_adjusted_overall",
-        "octopus",
-    )
-    automation_score = _nested_int(automation, "overall", "octopus")
-    e2e_failed_checks = _failed_check_ids(e2e_certification.get("checks"))
     quality_summary = ", ".join(
         f"{report.get('schema')}={report.get('passed')}/{report.get('total')}"
         for report in quality_reports
@@ -225,7 +251,7 @@ def run_gate(
         automation_score=automation_score,
         e2e_ready=bool(e2e_certification.get("ready")),
         e2e_verdict=str(e2e_certification.get("verdict") or "unknown"),
-        e2e_summary=dict(e2e_certification.get("summary") or {}),
+        e2e_summary=e2e_summary,
         e2e_failed_checks=e2e_failed_checks,
         quality_summary=quality_summary,
     )
@@ -311,6 +337,21 @@ def _require_no_failed_checks(
     ]
     if failed:
         failures.append(f"{label}: {_row_ids(failed)}")
+
+
+def _require_e2e_summary_consistency(
+    failures: list[str],
+    summary: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> None:
+    for key, expected_value in expected.items():
+        actual_value = summary.get(key)
+        if actual_value == expected_value:
+            continue
+        failures.append(
+            "e2e summary mismatch: "
+            f"{key}={actual_value!r}, expected {expected_value!r}",
+        )
 
 
 def _require_browser_desktop_replay_trends(

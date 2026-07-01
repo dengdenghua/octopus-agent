@@ -141,6 +141,30 @@ def test_production_readiness_gate_blocks_e2e_certification_regression(
     )
 
 
+def test_production_readiness_gate_blocks_e2e_summary_drift(
+    monkeypatch,
+    review_queue_path: Path,
+) -> None:
+    real_e2e = gate.compute_e2e_surpass_certification
+
+    def drifted_e2e(**kwargs):
+        report = real_e2e(**kwargs)
+        report["summary"] = {
+            **report["summary"],
+            "automation_octopus": 94,
+        }
+        return report
+
+    monkeypatch.setattr(gate, "compute_e2e_surpass_certification", drifted_e2e)
+
+    result = gate.run_gate(min_score=95, review_queue_path=review_queue_path)
+
+    assert any(
+        "e2e summary mismatch: automation_octopus=94, expected 95" in item
+        for item in result.failures
+    )
+
+
 def test_production_readiness_gate_allows_scored_automation_focus_without_evidence_gap(
     monkeypatch,
     review_queue_path: Path,
