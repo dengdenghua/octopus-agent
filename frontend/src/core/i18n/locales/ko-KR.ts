@@ -352,6 +352,7 @@ export const koKR: Translations = {
     insertCodexSpec: "Insert Spec marker",
     insertCodexGoal: "Insert Goal marker",
     insertBrowserSurface: "Insert Browser marker",
+    insertChromeSurface: "Insert Chrome marker",
     workflow: "Workflow",
     deepResearchConfig: "Research settings",
     roles: "Subagents",

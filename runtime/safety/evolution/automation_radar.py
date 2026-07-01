@@ -109,6 +109,21 @@ DIMENSIONS: tuple[AutomationRadarDimension, ...] = (
         ),
     ),
     AutomationRadarDimension(
+        id="external_chrome_mode",
+        title="External Chrome mode",
+        weight=4,
+        why=(
+            "Let the user invoke signed-in external Google Chrome with @Chrome, "
+            "then prefer the extension relay for current-tab state, actions, "
+            "screenshots, and site-policy aware automation."
+        ),
+        scores={"codex": 96, "claude_code": 95, "cursor": 84, "octopus": 96},
+        evidence_check_ids=("thread_native_external_chrome_activation",),
+        next_actions=(
+            "Keep @Chrome activation distinct from @Browser and verify the extension relay before fallback.",
+        ),
+    ),
+    AutomationRadarDimension(
         id="automation_safety",
         title="Automation safety",
         weight=12,

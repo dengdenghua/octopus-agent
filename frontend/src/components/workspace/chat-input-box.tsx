@@ -3,6 +3,7 @@ import {
   ArrowUpIcon,
   FileIcon,
   FileTextIcon,
+  GlobeIcon,
   ImageIcon,
   LinkIcon,
   LightbulbIcon,
@@ -801,14 +802,19 @@ export function ChatInputBox({
     window.setTimeout(() => textareaRef.current?.focus(), 0);
   }, []);
 
-  const insertBrowserSurfaceMarker = useCallback(() => {
-    const marker = "@Browser";
-    setDraft((current) => {
-      const body = current.replace(/^@Browser(?:\s+|$)/i, "").trimStart();
-      return body ? `${marker}\n${body}` : `${marker}\n`;
-    });
-    window.setTimeout(() => textareaRef.current?.focus(), 0);
-  }, []);
+  const insertBrowserSurfaceMarker = useCallback(
+    (surface: "Browser" | "Chrome") => {
+      const marker = `@${surface}`;
+      setDraft((current) => {
+        const body = current
+          .replace(/^@(Browser|Chrome)(?:\s+|$)/i, "")
+          .trimStart();
+        return body ? `${marker}\n${body}` : `${marker}\n`;
+      });
+      window.setTimeout(() => textareaRef.current?.focus(), 0);
+    },
+    [],
+  );
 
   const toggleResearchSource = useCallback((kind: ResearchSourceKind) => {
     setResearchSources((current) => {
@@ -1430,11 +1436,19 @@ export function ChatInputBox({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   data-testid="chat-insert-browser-surface"
-                  onClick={insertBrowserSurfaceMarker}
+                  onClick={() => insertBrowserSurfaceMarker("Browser")}
                   className="gap-2 rounded-md text-[13px]"
                 >
                   <MonitorIcon className="size-4" />
                   {t.chatInputBox.insertBrowserSurface}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  data-testid="chat-insert-chrome-surface"
+                  onClick={() => insertBrowserSurfaceMarker("Chrome")}
+                  className="gap-2 rounded-md text-[13px]"
+                >
+                  <GlobeIcon className="size-4" />
+                  {t.chatInputBox.insertChromeSurface}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {canUseDeepResearch && (

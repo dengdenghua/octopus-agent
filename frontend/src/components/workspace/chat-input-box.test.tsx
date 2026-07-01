@@ -84,6 +84,7 @@ describe("<ChatInputBox /> cowork materials", () => {
     expect(screen.getByText("Insert Spec marker")).toBeInTheDocument();
     expect(screen.getByText("Insert Goal marker")).toBeInTheDocument();
     expect(screen.getByText("Insert Browser marker")).toBeInTheDocument();
+    expect(screen.getByText("Insert Chrome marker")).toBeInTheDocument();
     expect(screen.getByText("Add material")).toBeInTheDocument();
     expect(
       screen.getByText("Add image (paste / drag / select)"),
@@ -159,6 +160,34 @@ describe("<ChatInputBox /> cowork materials", () => {
     fireEvent.click(screen.getByText("Insert Browser marker"));
 
     expect(textarea().value).toBe("@Browser\nOpen the current page");
+    expect(onModeChange).not.toHaveBeenCalled();
+  });
+
+  it("inserts Chrome surface marker into the draft without switching mode", async () => {
+    const onModeChange = vi.fn();
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-1"
+        allowAgentModes
+        onModeChange={onModeChange}
+        onDeepResearch={vi.fn()}
+      />,
+    );
+
+    await openToolsMenu();
+    fireEvent.click(screen.getByText("Insert Chrome marker"));
+
+    expect(textarea().value).toBe("@Chrome\n");
+    expect(onModeChange).not.toHaveBeenCalled();
+
+    fireEvent.change(textarea(), {
+      target: { value: "@Browser\nOpen the signed-in page" },
+    });
+    await openToolsMenu();
+    fireEvent.click(screen.getByText("Insert Chrome marker"));
+
+    expect(textarea().value).toBe("@Chrome\nOpen the signed-in page");
     expect(onModeChange).not.toHaveBeenCalled();
   });
 

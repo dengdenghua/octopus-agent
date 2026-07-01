@@ -586,7 +586,25 @@ def _apply_runtime_surface_context(
     out.setdefault("runtime_surfaces", list(surfaces))
     out.setdefault("tool_surface", surfaces[0])
 
-    if "browser" in surfaces:
+    if "chrome" in surfaces:
+        current_mode = str(out.get("mode") or "").strip().lower()
+        if current_mode in {"", "chat", "react", "flash", "conversation", "discuss"}:
+            out["mode"] = "chrome"
+        out.setdefault("capability_mode", "browser")
+        out.setdefault("mode_preset", "codex.chrome")
+        out.setdefault("workflow_preset", "codex.chrome")
+        out["browser_operation_mode"] = True
+        out["chrome_operation_mode"] = True
+        out.setdefault("browser_surface", "chrome")
+        out.setdefault("browser_session_policy", "thread_native_external_chrome")
+        out.setdefault("browser_track_preference", "extension")
+        out.setdefault("browser_permission_policy", "site_policy_required")
+        out.setdefault(
+            "browser_evidence_policy",
+            "state_first_screenshot_only_for_visual_evidence",
+        )
+        out.setdefault("native_tool_loop", True)
+    elif "browser" in surfaces:
         current_mode = str(out.get("mode") or "").strip().lower()
         if current_mode in {"", "chat", "react", "flash", "conversation", "discuss"}:
             out["mode"] = "browser"

@@ -203,6 +203,9 @@ class ElectronBackend:
     def extract(self) -> BrowserResult:
         return self._call("extract", {})
 
+    def screenshot(self, path: str = "", *, full_page: bool = False) -> BrowserResult:
+        return self._call("screenshot", {})
+
 
 # ── Playwright (headless, stateless per call) ────────────────────
 
@@ -244,6 +247,7 @@ class PlaywrightBackend:
             "scroll": bs._browser_scroll,
             "wait": bs._browser_wait,
             "state": bs._browser_state,
+            "screenshot": bs._browser_screenshot,
             # extract() means "read the page's text". _browser_extract is
             # a CSS-selector scraper that REQUIRES a selector and errors
             # without one; _browser_get returns title + inner text, which
@@ -299,6 +303,16 @@ class PlaywrightBackend:
 
     def extract(self) -> BrowserResult:
         return self._call("extract", {"url": self._current_url})
+
+    def screenshot(self, path: str = "", *, full_page: bool = False) -> BrowserResult:
+        return self._call(
+            "screenshot",
+            {
+                "url": self._current_url,
+                "path": path,
+                "full_page": bool(full_page),
+            },
+        )
 
 
 # ── Extension relay (the user's own live browser) ────────────────
@@ -371,6 +385,9 @@ class ExtensionBackend:
 
     def extract(self) -> BrowserResult:
         return self._call("extract", {})
+
+    def screenshot(self, path: str = "", *, full_page: bool = False) -> BrowserResult:
+        return self._call("screenshot", {})
 
 
 __all__ = ["ElectronBackend", "PlaywrightBackend", "ExtensionBackend"]

@@ -28,6 +28,7 @@ def test_browser_desktop_quality_reports_all_local_checks() -> None:
         "browser_session_lifecycle",
         "browser_pixel_replay_gate",
         "thread_native_browser_activation",
+        "thread_native_external_chrome_activation",
         "desktop_preview_execute_lease",
         "desktop_uia_grounding",
         "operator_visibility",
@@ -137,7 +138,7 @@ def test_automation_radar_reports_browser_desktop_advantage() -> None:
 
     assert report["schema"] == "octopus.automation_radar.v1"
     assert report["scope"] == "browser_desktop_visual_automation"
-    assert report["overall"]["octopus"] == 95
+    assert report["overall"]["octopus"] == 96
     assert report["overall"]["codex"] == 93
     assert report["verdict"] == "leading"
     assert report["browser_desktop_quality"]["ready"] is True
@@ -169,6 +170,7 @@ def test_automation_radar_reports_browser_desktop_advantage() -> None:
         "visual_replay_validation",
         "repair_recipe_learning",
         "thread_native_browser_mode",
+        "external_chrome_mode",
         "automation_safety",
         "productized_api_bridge",
     }
@@ -205,5 +207,5 @@ def test_automation_radar_endpoint() -> None:
 
     assert data["ok"] is True
     assert data["schema"] == "octopus.automation_radar.v1"
-    assert data["overall"]["octopus"] == 95
+    assert data["overall"]["octopus"] == 96
     assert data["ranking"][0]["competitor"] == "octopus"

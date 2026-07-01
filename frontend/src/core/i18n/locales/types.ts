@@ -288,6 +288,7 @@ export interface Translations {
     insertCodexSpec: string;
     insertCodexGoal: string;
     insertBrowserSurface: string;
+    insertChromeSurface: string;
     workflow: string;
     deepResearchConfig: string;
     roles: string;

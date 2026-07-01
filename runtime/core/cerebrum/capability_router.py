@@ -164,7 +164,7 @@ _RULES: tuple[dict[str, Any], ...] = (
     },
     {
         "label": "browser-ui",
-        "modes": {"browser", "ui"},
+        "modes": {"browser", "chrome", "ui"},
         "keywords": (
             "browser", "localhost", "127.0.0.1", "screenshot",
             "click", "ux", "ui", "playwright", "regression",
@@ -313,7 +313,28 @@ def activate_capabilities(
             "edit_file", "git_diff",
         ))
 
-    if "browser" in pinned_surfaces:
+    if "chrome" in pinned_surfaces:
+        labels.append("external-chrome")
+        terms.append("@Chrome")
+        leading_chrome_skills = (
+            "browser_state",
+            "browser_get",
+            "browser_navigate",
+            "browser_extract",
+            "browser_find",
+            "browser_click",
+            "browser_type",
+            "browser_wait",
+            "browser_scroll",
+            "browser_screenshot",
+            "live_browser_state",
+            "live_browser_current_url",
+            "live_browser_extract",
+            "live_browser_screenshot",
+        )
+        skills = [*leading_chrome_skills, *skills]
+
+    elif "browser" in pinned_surfaces:
         labels.append("browser-ui")
         terms.append("@Browser")
         leading_browser_skills = (

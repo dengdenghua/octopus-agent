@@ -166,6 +166,9 @@ class _FakeTrack:
     def extract(self):
         return self._record("extract", {})
 
+    def screenshot(self, path="", *, full_page=False):
+        return self._record("screenshot", {"path": path, "full_page": full_page})
+
 
 def test_with_page_navigate_then_acts_on_higher_track(monkeypatch):
     from runtime.execution.suckers import browser_skills as bs
@@ -226,6 +229,77 @@ def test_unavailable_higher_track_is_skipped(monkeypatch):
 
     monkeypatch.setattr(bs, "_higher_track_backends", lambda: [_Down()])
     assert bs._dispatch_higher_track("click", {"selector": "#x"}) is None
+
+
+def test_browser_state_uses_current_higher_track_without_url(monkeypatch):
+    from runtime.execution.suckers import browser_skills as bs
+
+    fake = _FakeTrack()
+    monkeypatch.setattr(bs, "_higher_track_backends", lambda: [fake])
+
+    out = bs._browser_state()
+
+    assert out["action"] == "state"
+    assert fake.calls == [("state", {"max_items": 30})]
+
+
+def test_browser_find_uses_higher_track_extract_without_url(monkeypatch):
+    from runtime.execution.suckers import browser_skills as bs
+
+    class _TextTrack(_FakeTrack):
+        def extract(self):
+            from runtime.execution.suckers.browser_backend import BrowserResult, Track
+
+            self.calls.append(("extract", {}))
+            return BrowserResult.from_track(
+                Track.EXTENSION,
+                {
+                    "ok": True,
+                    "url": "https://signed-in.test",
+                    "title": "Signed in",
+                    "text": "alpha beta gamma beta",
+                },
+            )
+
+    fake = _TextTrack()
+    monkeypatch.setattr(bs, "_higher_track_backends", lambda: [fake])
+
+    out = bs._browser_find(text="beta")
+
+    assert out["url"] == "https://signed-in.test"
+    assert out["count"] == 2
+    assert fake.calls == [("extract", {})]
+
+
+def test_browser_current_tab_screenshot_materializes_higher_track_data(
+    monkeypatch,
+    tmp_path,
+):
+    from runtime.execution.suckers import browser_skills as bs
+
+    class _ScreenshotTrack(_FakeTrack):
+        def screenshot(self, path="", *, full_page=False):
+            from runtime.execution.suckers.browser_backend import BrowserResult, Track
+
+            self.calls.append(("screenshot", {"path": path, "full_page": full_page}))
+            return BrowserResult.from_track(
+                Track.EXTENSION,
+                {
+                    "ok": True,
+                    "track": "extension",
+                    "dataUrl": "data:image/png;base64,iVBORw0KGgo=",
+                },
+            )
+
+    fake = _ScreenshotTrack()
+    monkeypatch.setattr(bs, "_higher_track_backends", lambda: [fake])
+    shot = tmp_path / "current.png"
+
+    out = bs._browser_screenshot(path=str(shot))
+
+    assert out["track"] == "extension"
+    assert out["path"] == str(shot)
+    assert shot.read_bytes() == b"\x89PNG\r\n\x1a\n"
 
 
 def test_planner_injects_grounding_into_prompt(tmp_path):

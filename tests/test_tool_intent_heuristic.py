@@ -55,6 +55,8 @@ def test_tool_meta_followup_matches_without_history() -> None:
 def test_runtime_surface_marker_matches_tool_intent() -> None:
     assert looks_like_tool_intent("@Browser")
     assert looks_like_contextual_tool_followup("@Browser")
+    assert looks_like_tool_intent("@Chrome")
+    assert looks_like_contextual_tool_followup("@Chrome")
 
 
 def test_plain_chat_stays_plain() -> None:

@@ -84,5 +84,8 @@ class MockBrowserBackend:
             {"ok": True, "url": self._url, "title": "mock page", "text": ""},
         )
 
+    def screenshot(self, path: str = "", *, full_page: bool = False) -> BrowserResult:
+        return self._record("screenshot", path=path, full_page=full_page)
+
 
 __all__ = ["MockBrowserBackend"]

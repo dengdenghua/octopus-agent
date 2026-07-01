@@ -168,6 +168,33 @@ def test_browser_surface_marker_promotes_chat_turn_to_tool_mode():
     assert context["native_tool_loop"] is True
 
 
+def test_chrome_surface_marker_promotes_chat_turn_to_external_chrome_mode():
+    from runtime.sensing.gateway.realtime_cerebrum import _build_intent
+
+    params = TurnParams(
+        threadId="thread-chrome",
+        input=[
+            {
+                "type": "input_text",
+                "text": "@Chrome inspect the current signed-in tab",
+                "metadata": {"context": {"mode": "chat"}},
+            },
+        ],
+    )
+
+    intent = _build_intent("@Chrome inspect the current signed-in tab", params)
+    context = intent.user_context or {}
+
+    assert context["mode"] == "chrome"
+    assert context["capability_mode"] == "browser"
+    assert context["browser_operation_mode"] is True
+    assert context["chrome_operation_mode"] is True
+    assert context["browser_surface"] == "chrome"
+    assert context["browser_session_policy"] == "thread_native_external_chrome"
+    assert context["browser_track_preference"] == "extension"
+    assert context["native_tool_loop"] is True
+
+
 def test_complex_turn_defaults_to_planning_mode_when_not_explicit():
     from runtime.protocol.items import TurnParams
 
@@ -268,3 +295,42 @@ def test_agentic_session_metadata_preserves_browser_surface_context():
     assert metadata["browser_session_policy"] == "thread_native"
     assert "thread-native browser operation" in guidance
     assert "live_browser_state" in guidance
+
+
+def test_agentic_session_metadata_preserves_chrome_surface_context():
+    from runtime.sensing.gateway.tool_bridge import (
+        _browser_operation_guidance,
+        _session_metadata_from_intent,
+    )
+
+    intent = ParsedIntent(
+        raw="@Chrome check page",
+        intent_type="task",
+        normalized_goal="@Chrome check page",
+        user_context={
+            "mode": "chrome",
+            "capability_mode": "browser",
+            "runtime_surfaces": ["chrome"],
+            "tool_surface": "chrome",
+            "browser_operation_mode": True,
+            "chrome_operation_mode": True,
+            "browser_surface": "chrome",
+            "browser_session_policy": "thread_native_external_chrome",
+            "browser_track_preference": "extension",
+            "browser_permission_policy": "site_policy_required",
+            "browser_evidence_policy": (
+                "state_first_screenshot_only_for_visual_evidence"
+            ),
+        },
+    )
+
+    metadata = _session_metadata_from_intent(intent)
+    guidance = _browser_operation_guidance(intent.user_context or {})
+
+    assert metadata["mode"] == "chrome"
+    assert metadata["runtime_surfaces"] == ["chrome"]
+    assert metadata["chrome_operation_mode"] is True
+    assert metadata["browser_surface"] == "chrome"
+    assert metadata["browser_track_preference"] == "extension"
+    assert "thread-native external Chrome operation" in guidance
+    assert "browser_state" in guidance

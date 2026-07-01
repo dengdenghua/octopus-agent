@@ -63,6 +63,15 @@ def test_parse_input_mentions_extracts_known_runtime_surface() -> None:
     assert result.raw_mentions[0].raw == "@Browser"
 
 
+def test_parse_input_mentions_extracts_chrome_runtime_surface() -> None:
+    result = parse_input_mentions("@Chrome inspect my signed-in tab")
+
+    assert result.surfaces == ("chrome",)
+    assert result.has_any
+    assert result.raw_mentions[0].type == "surface"
+    assert result.raw_mentions[0].raw == "@Chrome"
+
+
 def test_parse_input_mentions_records_span() -> None:
     text = "Hi @skill:foo there"
     result = parse_input_mentions(text)
@@ -157,5 +166,28 @@ def test_capability_router_promotes_browser_surface_tools() -> None:
         "live_browser_current_url",
         "live_browser_navigate",
         "live_browser_extract",
+    )
+
+
+def test_capability_router_promotes_chrome_surface_tools() -> None:
+    from runtime.core.cerebrum.capability_router import activate_capabilities
+
+    class _Registry:
+        def has(self, _name: str) -> bool:
+            return True
+
+        def is_enabled(self, _name: str) -> bool:
+            return True
+
+    activation = activate_capabilities("@Chrome check the current tab", registry=_Registry())
+
+    assert activation.pinned_surfaces == ("chrome",)
+    assert "external-chrome" in activation.labels
+    assert activation.priority_skills[:5] == (
+        "browser_state",
+        "browser_get",
+        "browser_navigate",
+        "browser_extract",
+        "browser_find",
     )
     assert "runtime surfaces" in activation.render_prompt()

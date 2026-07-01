@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import threading
 from typing import Any
@@ -52,9 +53,15 @@ def _browser_get(
     **_kw: Any,
 ) -> dict[str, Any]:
     if page is None:
-        err = _check_url_safe(url, allow_private)
-        if err:
-            return {"error": err, "blocked": err.startswith("ssrf_")}
+        if url:
+            err = _check_url_safe(url, allow_private)
+            if err:
+                return {"error": err, "blocked": err.startswith("ssrf_")}
+        routed = _dispatch_higher_track("extract", {}, url=url)
+        if routed is not None:
+            return routed
+        if not url:
+            return {"error": "missing url", "blocked": False}
     elif not url:
         return {"error": "missing url"}
 
@@ -234,7 +241,10 @@ def _dispatch_higher_track(
             if not nav.ok:
                 return _browser_result_payload(nav)
         res = _call_browser_backend(chosen, verb, payload, fallback_url=url)
-        return _browser_result_payload(res)
+        result = _browser_result_payload(res)
+        if verb == "screenshot" and "error" not in result:
+            return _materialize_higher_track_screenshot(result, payload)
+        return result
     except Exception as e:  # noqa: BLE001
         return {"error": f"browser_error: {type(e).__name__}: {e}"}
 
@@ -272,7 +282,85 @@ def _call_browser_backend(
         return backend.state(max_items=int(payload.get("max_items") or 30))
     if verb == "extract":
         return backend.extract()
+    if verb == "screenshot":
+        return backend.screenshot(
+            str(payload.get("path") or ""),
+            full_page=bool(payload.get("full_page")),
+        )
     raise ValueError(f"unsupported browser backend verb: {verb}")
+
+
+def _materialize_higher_track_screenshot(
+    result: dict[str, Any],
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    path = str(payload.get("path") or "").strip()
+    if not path:
+        return result
+    raw_data = result.get("dataUrl") or result.get("data")
+    if not isinstance(raw_data, str) or not raw_data.strip():
+        return result
+    data = raw_data.strip()
+    if "," in data:
+        data = data.split(",", 1)[1]
+    try:
+        image_bytes = base64.b64decode(data)
+    except (ValueError, TypeError):
+        return result
+    size = len(image_bytes)
+    if size > MAX_SCREENSHOT_BYTES:
+        return {
+            "error": f"screenshot too large: {size} > {MAX_SCREENSHOT_BYTES}",
+            "path": path,
+        }
+    from pathlib import Path as _P  # noqa: N814
+
+    target = _P(path)
+    with contextlib.suppress(OSError):
+        target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(image_bytes)
+    return {
+        **result,
+        "path": path,
+        "size_bytes": size,
+        "full_page": bool(payload.get("full_page")),
+        "track": result.get("track", "extension"),
+    }
+
+
+def _find_matches_in_text(
+    *,
+    text: str,
+    needle: str,
+    url: str = "",
+    title: str = "",
+    case_sensitive: bool = False,
+    max_results: int = 20,
+    context_chars: int = 80,
+) -> dict[str, Any]:
+    haystack = text if case_sensitive else text.lower()
+    target = needle if case_sensitive else needle.lower()
+    matches: list[dict[str, Any]] = []
+    start = 0
+    while len(matches) < max_results:
+        idx = haystack.find(target, start)
+        if idx < 0:
+            break
+        left = max(0, idx - context_chars)
+        right = min(len(text), idx + len(needle) + context_chars)
+        matches.append({
+            "index": idx,
+            "snippet": text[left:right].replace("\n", " ").strip(),
+        })
+        start = idx + max(1, len(target))
+    return {
+        "url": url,
+        "title": title,
+        "text": needle,
+        "count": len(matches),
+        "truncated": len(matches) >= max_results,
+        "matches": matches,
+    }
 
 
 def _browser_result_payload(result: Any) -> dict[str, Any]:
@@ -405,15 +493,44 @@ def _browser_find(
     needle = str(query if query is not None else text).strip()
     if not needle:
         return {"error": "missing text", "matches": []}
+    max_results = max(1, min(int(max_results), 100))
+    context_chars = max(20, min(int(context_chars), 500))
     if page is None:
+        if not url:
+            routed = _dispatch_higher_track("extract", {}, url="")
+            if routed is not None:
+                if "error" in routed:
+                    return {**routed, "matches": []}
+                text_value = routed.get("text") or routed.get("content") or ""
+                return _find_matches_in_text(
+                    text=str(text_value or ""),
+                    needle=needle,
+                    url=str(routed.get("url") or ""),
+                    title=str(routed.get("title") or ""),
+                    case_sensitive=case_sensitive,
+                    max_results=max_results,
+                    context_chars=context_chars,
+                )
+            return {"error": "missing url", "matches": []}
         err = _check_url_safe(url, allow_private)
         if err:
             return {"error": err, "blocked": err.startswith("ssrf_"), "matches": []}
+        routed = _dispatch_higher_track("extract", {}, url=url)
+        if routed is not None:
+            if "error" in routed:
+                return {**routed, "matches": []}
+            text_value = routed.get("text") or routed.get("content") or ""
+            return _find_matches_in_text(
+                text=str(text_value or ""),
+                needle=needle,
+                url=str(routed.get("url") or url),
+                title=str(routed.get("title") or ""),
+                case_sensitive=case_sensitive,
+                max_results=max_results,
+                context_chars=context_chars,
+            )
     elif not url:
         return {"error": "missing url", "matches": []}
-
-    max_results = max(1, min(int(max_results), 100))
-    context_chars = max(20, min(int(context_chars), 500))
 
     def _act(p: Any) -> dict[str, Any]:
         try:
@@ -427,29 +544,15 @@ def _browser_find(
         except Exception as e:  # noqa: BLE001
             return {"error": f"read_error: {type(e).__name__}: {e}", "matches": []}
 
-        haystack = body_text if case_sensitive else body_text.lower()
-        target = needle if case_sensitive else needle.lower()
-        matches: list[dict[str, Any]] = []
-        start = 0
-        while len(matches) < max_results:
-            idx = haystack.find(target, start)
-            if idx < 0:
-                break
-            left = max(0, idx - context_chars)
-            right = min(len(body_text), idx + len(needle) + context_chars)
-            matches.append({
-                "index": idx,
-                "snippet": body_text[left:right].replace("\n", " ").strip(),
-            })
-            start = idx + max(1, len(target))
-        return {
-            "url": p.url,
-            "title": p.title(),
-            "text": needle,
-            "count": len(matches),
-            "truncated": len(matches) >= max_results,
-            "matches": matches,
-        }
+        return _find_matches_in_text(
+            text=body_text,
+            needle=needle,
+            url=p.url,
+            title=p.title(),
+            case_sensitive=case_sensitive,
+            max_results=max_results,
+            context_chars=context_chars,
+        )
 
     return _with_page(page, _act)
 
@@ -464,14 +567,18 @@ def _browser_state(
     page: Any = None,
     **_kw: Any,
 ) -> dict[str, Any]:
+    max_items = max(1, min(int(max_items), 100))
     if page is None:
+        if not url:
+            routed = _dispatch_higher_track("state", {"max_items": max_items}, url="")
+            if routed is not None:
+                return routed
+            return {"error": "missing url", "blocked": False}
         err = _check_url_safe(url, allow_private)
         if err:
             return {"error": err, "blocked": err.startswith("ssrf_")}
     elif not url:
         return {"error": "missing url"}
-
-    max_items = max(1, min(int(max_items), 100))
 
     def _act(p: Any) -> dict[str, Any]:
         try:
@@ -518,6 +625,15 @@ def _browser_click(
     if not selector:
         return {"error": "missing selector"}
     if page is None:
+        if not url:
+            routed = _dispatch_higher_track(
+                "click",
+                {"selector": selector},
+                url="",
+            )
+            if routed is not None:
+                return routed
+            return {"error": "missing url", "blocked": False}
         err = _check_url_safe(url, allow_private)
         if err:
             return {"error": err, "blocked": err.startswith("ssrf_")}
@@ -565,6 +681,15 @@ def _browser_type(
     if not selector:
         return {"error": "missing selector"}
     if page is None:
+        if not url:
+            routed = _dispatch_higher_track(
+                "type",
+                {"selector": selector, "text": text, "clear": clear_first},
+                url="",
+            )
+            if routed is not None:
+                return routed
+            return {"error": "missing url", "blocked": False}
         err = _check_url_safe(url, allow_private)
         if err:
             return {"error": err, "blocked": err.startswith("ssrf_")}
@@ -611,6 +736,16 @@ def _browser_scroll(
     if (to_selector is None) == (to_y is None):
         return {"error": "provide exactly one of to_selector / to_y"}
     if page is None:
+        if not url:
+            payload: dict[str, Any] = {}
+            if to_selector is not None:
+                payload["selector"] = to_selector
+            if to_y is not None:
+                payload["delta_y"] = int(to_y)
+            routed = _dispatch_higher_track("scroll", payload, url="")
+            if routed is not None:
+                return routed
+            return {"error": "missing url", "blocked": False}
         err = _check_url_safe(url, allow_private)
         if err:
             return {"error": err, "blocked": err.startswith("ssrf_")}
@@ -635,12 +770,13 @@ def _browser_scroll(
             return {"error": f"scroll_error: {type(e).__name__}: {e}"}
         return {"scrolled_to": scrolled_to, "final_url": p.url}
 
-    # Only scroll-to-selector maps to the higher tracks; absolute scroll-to-y
-    # has no adapter verb, so it stays on Playwright.
     return _with_page(
         page, _act,
-        verb="scroll" if to_selector is not None else None,
-        payload={"selector": to_selector} if to_selector is not None else None,
+        verb="scroll",
+        payload={
+            "selector": to_selector,
+            "delta_y": int(to_y) if to_y is not None else 0,
+        },
         url=url,
     )
 
@@ -660,6 +796,15 @@ def _browser_wait(
     if state not in {"visible", "hidden", "attached", "detached"}:
         return {"error": f"invalid state: {state!r}"}
     if page is None:
+        if not url:
+            routed = _dispatch_higher_track(
+                "wait",
+                {"selector": selector, "timeout": timeout_ms},
+                url="",
+            )
+            if routed is not None:
+                return routed
+            return {"error": "missing url", "blocked": False}
         err = _check_url_safe(url, allow_private)
         if err:
             return {"error": err, "blocked": err.startswith("ssrf_")}
@@ -702,18 +847,28 @@ def _browser_screenshot(
 ) -> dict[str, Any]:
     if not path:
         return {"error": "missing path"}
-    if page is None:
-        err = _check_url_safe(url, allow_private)
-        if err:
-            return {"error": err, "blocked": err.startswith("ssrf_")}
-    elif not url:
-        return {"error": "missing url"}
 
     from runtime.safety.auth.path_guard import check_path
     verdict = check_path(path, sandbox_dir=sandbox_dir)
     if not verdict.allow:
         return {"error": f"path_blocked: {verdict.reason}"}
     resolved = verdict.resolved or path
+
+    if page is None:
+        if not url:
+            routed = _dispatch_higher_track(
+                "screenshot",
+                {"path": str(resolved), "full_page": bool(full_page)},
+                url="",
+            )
+            if routed is not None:
+                return routed
+            return {"error": "missing url", "blocked": False}
+        err = _check_url_safe(url, allow_private)
+        if err:
+            return {"error": err, "blocked": err.startswith("ssrf_")}
+    elif not url:
+        return {"error": "missing url"}
 
     def _act(p: Any) -> dict[str, Any]:
         try:
@@ -744,7 +899,13 @@ def _browser_screenshot(
             "full_page": full_page,
         }
 
-    return _with_page(page, _act)
+    return _with_page(
+        page,
+        _act,
+        verb="screenshot",
+        payload={"path": str(resolved), "full_page": bool(full_page)},
+        url=url,
+    )
 
 
 # ═══════════════════════════════════════════════════════════

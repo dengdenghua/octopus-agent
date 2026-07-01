@@ -43,8 +43,17 @@ class TestElectronBackend:
         b.scroll(delta_y=120)
         b.wait("#done", timeout_ms=5000)
         b.extract()
+        b.screenshot()
         actions = [a for a, _ in rec.calls]
-        assert actions == ["navigate", "click", "type", "scroll", "wait", "extract"]
+        assert actions == [
+            "navigate",
+            "click",
+            "type",
+            "scroll",
+            "wait",
+            "extract",
+            "screenshot",
+        ]
         # Payload shape per track contract.
         assert rec.calls[1][1] == {"selector": "#go"}
         assert rec.calls[2][1] == {"selector": "#q", "text": "hi", "clear": True}
@@ -153,7 +162,8 @@ class TestExtensionBackend:
         assert b.available() is True
         b.navigate("https://x")
         b.type("#q", "hi")
-        assert [a for a, _ in rec.calls] == ["navigate", "type"]
+        b.screenshot()
+        assert [a for a, _ in rec.calls] == ["navigate", "type", "screenshot"]
 
 
 class TestResolverWithRealAdapters:
