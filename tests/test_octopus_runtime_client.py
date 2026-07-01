@@ -51,6 +51,22 @@ def test_fetch_verifies_checksum_even_when_body_is_empty(
         RegistryClient("https://registry.test").fetch("skill/empty")
 
 
+def test_fetch_rejects_unsafe_asset_id_before_http(monkeypatch: pytest.MonkeyPatch) -> None:
+    called = False
+
+    def fake_get(_url: str, **_kwargs: Any) -> FakeResponse:
+        nonlocal called
+        called = True
+        return FakeResponse()
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    with pytest.raises(ValueError, match="unsafe registry asset id"):
+        RegistryClient("https://registry.test").fetch("skill/../escape")
+
+    assert called is False
+
+
 def test_fetch_rejects_malformed_content_checksum(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -100,6 +116,32 @@ def test_fetch_accepts_uppercase_sha256_checksum(
     assert payload.body == body
 
 
+def test_fetch_accepts_safe_asset_id_variants(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[str] = []
+
+    def fake_get(url: str, **_kwargs: Any) -> FakeResponse:
+        captured.append(url)
+        return FakeResponse(
+            payload={
+                "data": {
+                    "id": "twin-role/operator_1.2",
+                    "type": "twin-role",
+                    "kind": "data",
+                    "body": "hello",
+                }
+            }
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    payload = RegistryClient("https://registry.test").fetch("twin-role/operator_1.2")
+
+    assert payload.id == "twin-role/operator_1.2"
+    assert captured == [
+        "https://registry.test/api/v1/registry/assets/twin-role/operator_1.2/download"
+    ]
+
+
 def test_fetch_bundle_rejects_malformed_header_checksum(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -110,6 +152,24 @@ def test_fetch_bundle_rejects_malformed_header_checksum(
 
     with pytest.raises(ValueError, match="invalid sha256 checksum"):
         RegistryClient("https://registry.test").fetch_bundle("skill/bad")
+
+
+def test_fetch_bundle_rejects_unsafe_asset_id_before_http(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    def fake_get(_url: str, **_kwargs: Any) -> FakeResponse:
+        nonlocal called
+        called = True
+        return FakeResponse()
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    with pytest.raises(ValueError, match="unsafe registry asset id"):
+        RegistryClient("https://registry.test").fetch_bundle("skill/name?bad=1")
+
+    assert called is False
 
 
 def test_fetch_bundle_accepts_sha256_header(monkeypatch: pytest.MonkeyPatch) -> None:

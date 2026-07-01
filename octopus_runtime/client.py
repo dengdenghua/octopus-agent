@@ -15,6 +15,7 @@ from pydantic import BaseModel
 DEFAULT_BASE = "https://api.octoapk.com"
 _API = "/api/v1/registry/assets"
 _SHA256_RE = re.compile(r"^(?:sha256:)?([0-9a-fA-F]{64})$")
+_ASSET_ID_RE = re.compile(r"^[a-z][a-z0-9-]*/[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def _sha256_expected(value: str | None, *, label: str) -> str | None:
@@ -24,6 +25,12 @@ def _sha256_expected(value: str | None, *, label: str) -> str | None:
     if not m:
         raise ValueError(f"invalid sha256 checksum for {label}: {value!r}")
     return m.group(1).lower()
+
+
+def _safe_asset_id(asset_id: str) -> str:
+    if not _ASSET_ID_RE.fullmatch(asset_id):
+        raise ValueError(f"unsafe registry asset id: {asset_id!r}")
+    return asset_id
 
 
 class AssetContent(BaseModel):
@@ -86,6 +93,7 @@ class RegistryClient:
 
     def fetch(self, asset_id: str) -> AssetPayload:
         """下载单资产(信封 + body)并**校验 sha256 checksum**。失败抛异常。"""
+        asset_id = _safe_asset_id(asset_id)
         r = httpx.get(f"{self.base}{_API}/{asset_id}/download", timeout=self._timeout)
         r.raise_for_status()
         d = r.json().get("data") or {}
@@ -96,6 +104,7 @@ class RegistryClient:
     def fetch_bundle(self, asset_id: str) -> bytes:
         """下载技能 **full-bundle**(整目录 tar.gz)并校验 sha256(X-Checksum-Sha256 头)。
         无 bundle → httpx 抛 404。"""
+        asset_id = _safe_asset_id(asset_id)
         r = httpx.get(f"{self.base}{_API}/{asset_id}/bundle", timeout=self._timeout)
         r.raise_for_status()
         data = r.content
