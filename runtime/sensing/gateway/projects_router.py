@@ -12,12 +12,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from runtime.projectos.cowork_bridge import full_project_state, run_project_from_group
 from runtime.projectos.engine import (
+    DEFAULT_RUN_MAX_TICKS,
+    HARD_MAX_RUN_TICKS,
     ProjectEngine,
     stub_decompose_tasks,
     stub_generate_milestones,
 )
-from runtime.projectos.cowork_bridge import full_project_state, run_project_from_group
 from runtime.projectos.store import ProjectStore
 
 
@@ -27,7 +29,7 @@ class PlanBody(BaseModel):
 
 
 class RunBody(BaseModel):
-    max_ticks: int = 50
+    max_ticks: int = Field(default=DEFAULT_RUN_MAX_TICKS, ge=1, le=HARD_MAX_RUN_TICKS)
 
 
 class RecoverBody(BaseModel):
@@ -35,7 +37,7 @@ class RecoverBody(BaseModel):
     reset_attempts: bool = True
     clear_outputs: bool = True
     run: bool = False
-    max_ticks: int = 50
+    max_ticks: int = Field(default=DEFAULT_RUN_MAX_TICKS, ge=1, le=HARD_MAX_RUN_TICKS)
 
 
 class TaskInterventionBody(BaseModel):
@@ -47,14 +49,14 @@ class TaskInterventionBody(BaseModel):
     reset_attempts: bool = True
     cascade: bool = True
     run: bool = False
-    max_ticks: int = 50
+    max_ticks: int = Field(default=DEFAULT_RUN_MAX_TICKS, ge=1, le=HARD_MAX_RUN_TICKS)
 
 
 class FromGroupBody(BaseModel):
     name: str = Field(min_length=1)
     goal: str = Field(min_length=1)
     run: bool = True
-    max_ticks: int = 50
+    max_ticks: int = Field(default=DEFAULT_RUN_MAX_TICKS, ge=1, le=HARD_MAX_RUN_TICKS)
 
 
 def create_projects_router(
@@ -176,7 +178,10 @@ def create_projects_router(
                 max_ticks=body.max_ticks,
             )
         except ValueError as exc:
-            raise HTTPException(400, "group has no participant agents to staff the project")
+            raise HTTPException(
+                400,
+                "group has no participant agents to staff the project",
+            ) from exc
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(500, f"project run failed: {exc}") from exc
 

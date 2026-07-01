@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from runtime.projectos.engine import ProjectEngine
+from runtime.projectos.engine import HARD_MAX_RUN_TICKS, ProjectEngine, normalize_run_ticks
 from runtime.projectos.model import Milestone, Project, Task, ready_tasks
 from runtime.projectos.store import ProjectStore
 
@@ -207,6 +207,29 @@ def test_full_run_drives_project_to_done(tmp_path) -> None:
     # all tasks done
     for ms_id in ("MS1", "MS2", "MS3"):
         assert all(t.status == "done" for t in eng.store.tasks_for_milestone(ms_id))
+
+
+def test_run_tick_budget_is_bounded_even_for_internal_callers(tmp_path, monkeypatch) -> None:
+    eng = _engine(tmp_path)
+    project = eng.plan("long", "keep running")
+    calls = {"n": 0}
+
+    def fake_tick(project_id: str) -> dict:
+        calls["n"] += 1
+        return {"events": [], "project_status": "running", "current_ms": "MS1"}
+
+    monkeypatch.setattr(eng, "tick", fake_tick)
+
+    result = eng.run(project.id, max_ticks=10_000)
+
+    assert result["ticks"] == HARD_MAX_RUN_TICKS
+    assert calls["n"] == HARD_MAX_RUN_TICKS
+
+
+def test_normalize_run_ticks_has_safe_floor_and_default() -> None:
+    assert normalize_run_ticks(0) == 1
+    assert normalize_run_ticks(-10) == 1
+    assert normalize_run_ticks(None) == 50
 
 
 def test_dependent_milestone_waits(tmp_path) -> None:

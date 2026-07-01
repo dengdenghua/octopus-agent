@@ -14,9 +14,11 @@ from typing import Any
 from runtime.memory.cowork.group_store import GroupStore
 from runtime.memory.cowork.nominate import CompetenceStore, suggest
 from runtime.projectos.engine import (
+    DEFAULT_RUN_MAX_TICKS,
     AgentAssigner,
     ProjectEngine,
     _default_assign,
+    normalize_run_ticks,
     stub_decompose_tasks,
     stub_generate_milestones,
 )
@@ -136,7 +138,7 @@ def _project_action_specs(project_id: str, status: str) -> list[dict[str, Any]]:
             "api": {
                 "method": "POST",
                 "path": f"/api/projects/{project_id}/run",
-                "body": {"max_ticks": 50},
+                "body": {"max_ticks": DEFAULT_RUN_MAX_TICKS},
             },
         },
         "tick": {
@@ -313,7 +315,7 @@ def run_project_from_group(
     goal: str,
     hooks: dict[str, Any] | None = None,
     run: bool = True,
-    max_ticks: int = 50,
+    max_ticks: int = DEFAULT_RUN_MAX_TICKS,
     competence: CompetenceStore | None = None,
     actor: str = "project-os",
     reuse_active: bool = False,
@@ -347,7 +349,7 @@ def run_project_from_group(
         project = engine.plan(name, goal)
         project_store.bind_thread(thread_id, project.id)
     result = (
-        engine.run(project.id, max_ticks=max_ticks)
+        engine.run(project.id, max_ticks=normalize_run_ticks(max_ticks))
         if run
         else {"final_status": project.status}
     )

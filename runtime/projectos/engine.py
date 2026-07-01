@@ -37,6 +37,18 @@ QAEvaluator = Callable[[Task, Milestone], dict[str, Any]]      # -> {"approved",
 MilestoneGate = Callable[[Milestone, list[Task]], dict[str, Any]]  # -> {"met", "reason"}
 
 MAX_TASK_ATTEMPTS = 2
+DEFAULT_RUN_MAX_TICKS = 50
+HARD_MAX_RUN_TICKS = 200
+MIN_RUN_TICKS = 1
+
+
+def normalize_run_ticks(value: int | None) -> int:
+    """Bound synchronous project runs so one request cannot monopolize workers."""
+    try:
+        ticks = int(value if value is not None else DEFAULT_RUN_MAX_TICKS)
+    except (TypeError, ValueError):
+        ticks = DEFAULT_RUN_MAX_TICKS
+    return max(MIN_RUN_TICKS, min(ticks, HARD_MAX_RUN_TICKS))
 
 
 def _error_text(exc: BaseException) -> str:
@@ -158,10 +170,10 @@ class ProjectEngine:
             "current_ms": current.current_ms if current else None,
         }
 
-    def run(self, project_id: str, *, max_ticks: int = 50) -> dict[str, Any]:
+    def run(self, project_id: str, *, max_ticks: int = DEFAULT_RUN_MAX_TICKS) -> dict[str, Any]:
         """Drive ticks until the project is done/failed/blocked or max_ticks."""
         history: list[dict[str, Any]] = []
-        for _ in range(max_ticks):
+        for _ in range(normalize_run_ticks(max_ticks)):
             r = self.tick(project_id)
             history.append(r)
             if r["project_status"] in ("done", "failed", "blocked"):

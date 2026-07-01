@@ -44,6 +44,19 @@ def test_plan_run_report_flow(tmp_path) -> None:
     assert pid in [p["id"] for p in c.get("/api/projects").json()["projects"]]
 
 
+def test_run_tick_budget_is_bounded_at_api_boundary(tmp_path) -> None:
+    c = _client(tmp_path)
+    pid = c.post("/api/projects", json={"name": "sleep", "goal": "smart sleep system"}).json()[
+        "project"
+    ]["id"]
+
+    too_large = c.post(f"/api/projects/{pid}/run", json={"max_ticks": 100_000})
+    too_small = c.post(f"/api/projects/{pid}/run", json={"max_ticks": 0})
+
+    assert too_large.status_code == 422
+    assert too_small.status_code == 422
+
+
 def test_tick_advances_incrementally(tmp_path) -> None:
     c = _client(tmp_path)
     pid = c.post("/api/projects", json={"name": "x", "goal": "g"}).json()["project"]["id"]
