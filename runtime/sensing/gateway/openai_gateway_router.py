@@ -676,6 +676,13 @@ def _run_chat(
         user_context=intent.user_context if intent is not None else None,
     )
     finish_reason = "stop" if traj.outcome.success else "failed"
+    planner_usage = getattr(graph, "planner_usage", None)
+    if not isinstance(planner_usage, dict):
+        planner_usage = {}
+    planner_prompt_tokens = int(planner_usage.get("input_tokens") or 0)
+    planner_completion_tokens = int(planner_usage.get("output_tokens") or 0)
+    completion_tokens = budget.tokens_spent + planner_completion_tokens
+    total_tokens = planner_prompt_tokens + completion_tokens
 
     octopus_meta: dict[str, Any] = {
         "task_id": str(graph.task_id),
@@ -684,6 +691,11 @@ def _run_chat(
         "usd_spent": round(budget.usd_spent, 6),
         "success": traj.outcome.success,
     }
+    if planner_usage:
+        octopus_meta["planner_usage"] = {
+            "input_tokens": planner_prompt_tokens,
+            "output_tokens": planner_completion_tokens,
+        }
     if variant_name is not None:
         octopus_meta["variant"] = variant_name
     if force_deep:
@@ -706,9 +718,9 @@ def _run_chat(
             }
         ],
         "usage": {
-            "prompt_tokens": 0,
-            "completion_tokens": budget.tokens_spent,
-            "total_tokens": budget.tokens_spent,
+            "prompt_tokens": planner_prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
         },
         "octopus": octopus_meta,
     }

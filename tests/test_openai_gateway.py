@@ -165,11 +165,14 @@ class TestChatCompletionsNonStream:
         assert "usage" in data
         for k in ("prompt_tokens", "completion_tokens", "total_tokens"):
             assert k in data["usage"]
+        assert data["usage"]["prompt_tokens"] == 100
+        assert data["usage"]["total_tokens"] >= data["usage"]["prompt_tokens"]
 
         # Implementation note.
         assert "octopus" in data
         assert "task_id" in data["octopus"]
         assert "step_count" in data["octopus"]
+        assert data["octopus"]["planner_usage"]["input_tokens"] == 100
 
     def test_multimodal_content_text_extracted(self, client):
         r = client.post("/v1/chat/completions", json={

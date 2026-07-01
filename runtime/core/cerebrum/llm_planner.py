@@ -1,4 +1,3 @@
-
 # ruff: noqa: E402 — module-level imports below intentionally appear
 # after the local logger is built so that runtime modules log through
 # the configured handler from their first import-time side effects.
@@ -59,9 +58,11 @@ _JSON_FENCED_RE = re.compile(
 # data dependencies when the LLM didn't emit explicit ``depends_on``.
 _TEMPLATE_REF_RE = re.compile(r"\{(n\d+)(?:\.[a-zA-Z0-9_.]+)?\}")
 
-_NON_SKILL_ACTION_NAMES: frozenset[str] = frozenset({
-    "call_agent",
-})
+_NON_SKILL_ACTION_NAMES: frozenset[str] = frozenset(
+    {
+        "call_agent",
+    }
+)
 
 
 def _render_team_roster_section(user_context: dict) -> str:
@@ -103,16 +104,14 @@ def _render_team_roster_section(user_context: dict) -> str:
         lines.append(
             "Refer to yourself and your teammates as people / characters "
             "/ team members (人物 / 队友 / 成员) — NEVER as "
-            "\"tentacles\" or \"触手\". The internal organ names are "
+            '"tentacles" or "触手". The internal organ names are '
             "an implementation detail; the user-facing team is "
             "a cast of personas."
         )
         lines.append("")
 
     lines.append("## TEAM ROSTER")
-    lines.append(
-        "You are part of a multi-agent team in this thread. Your teammates:"
-    )
+    lines.append("You are part of a multi-agent team in this thread. Your teammates:")
     for entry in roster:
         if not isinstance(entry, dict):
             continue
@@ -213,7 +212,8 @@ def _render_conversation_history(
 
 
 def _extract_edges(
-    plan_nodes: list[dict], node_count: int,
+    plan_nodes: list[dict],
+    node_count: int,
 ) -> list[WorkflowEdge]:
     """Compute the TaskGraph edges for a plan.
 
@@ -337,16 +337,14 @@ def _extract_edges(
             # LLM spoke · trust it · no fallback.
             continue
         if in_degrees.get(node_id, 0) == 0:
-            edges.add((f"n{i-1}", node_id))
+            edges.add((f"n{i - 1}", node_id))
 
     # ── Cycle check ─────────────────────────────────────────
     # If the LLM emitted contradictory depends_on (a cycle), we'd
     # rather raise here than have GraphRuntime deadlock on topo
     # sort later. Simple DFS white/gray/black.
     if _has_cycle(node_count, edges):
-        raise PlannerError(
-            f"LLM plan has cyclic dependencies: {sorted(edges)}"
-        )
+        raise PlannerError(f"LLM plan has cyclic dependencies: {sorted(edges)}")
 
     # Stable order for deterministic tests · sort by (src index, dst index).
     ordered = sorted(
@@ -478,8 +476,8 @@ class LLMPlanner:
         learned_rules_section: str = "",
         learned_memories_section: str = "",
         *,
-        auto_persist_rules_path: Any = None,       # str | Path | None
-        auto_persist_memories_path: Any = None,    # str | Path | None
+        auto_persist_rules_path: Any = None,  # str | Path | None
+        auto_persist_memories_path: Any = None,  # str | Path | None
     ) -> None:
         self.router = router
         self.registry = registry
@@ -517,13 +515,10 @@ class LLMPlanner:
         self._kg_attached_count = 0
         self._recipe_assessed_count = 0
 
-
     def update_learned_rules(self, rules: list, *, max_total_chars: int = 2000) -> None:
         from runtime.safety.recovery import format_rules_for_prompt
 
-        self.learned_rules_section = format_rules_for_prompt(
-            rules, max_total_chars=max_total_chars
-        )
+        self.learned_rules_section = format_rules_for_prompt(rules, max_total_chars=max_total_chars)
         self._rules_updated_count += 1
         with trace_stage("cerebrum.rules_updated") as span:
             span.set_attribute("octopus.rules.count", len(rules))
@@ -550,9 +545,7 @@ class LLMPlanner:
         self.update_learned_rules(report.rules_produced)
         return len(report.rules_produced)
 
-    def update_learned_memories(
-        self, memories: list, *, max_total_chars: int = 2000
-    ) -> None:
+    def update_learned_memories(self, memories: list, *, max_total_chars: int = 2000) -> None:
         from runtime.safety.recovery import format_memories_for_prompt
 
         self.learned_memories_section = format_memories_for_prompt(
@@ -583,9 +576,7 @@ class LLMPlanner:
             span.set_attribute("octopus.kg.triples", size)
             span.set_attribute("octopus.kg.max_triples", max_triples)
 
-    def enable_persistent_kg(
-        self, db_path: Any, *, max_triples: int | None = None
-    ) -> int:
+    def enable_persistent_kg(self, db_path: Any, *, max_triples: int | None = None) -> int:
         """Back the planner's KG with a durable on-disk store.
 
         Once enabled, :meth:`learn_kg_from_journal` ACCUMULATES distilled
@@ -605,9 +596,7 @@ class LLMPlanner:
         self._kg_persistent = True
         return kg.count()
 
-    def learn_kg_from_journal(
-        self, journal: Journal, *, max_triples: int | None = None
-    ) -> int:
+    def learn_kg_from_journal(self, journal: Journal, *, max_triples: int | None = None) -> int:
         from runtime.safety.recovery import KGUpdater
 
         if max_triples is not None:
@@ -681,7 +670,6 @@ class LLMPlanner:
             "avoid repeating patterns that previously failed."
         )
 
-
     def plan(
         self,
         intent: ParsedIntent,
@@ -692,6 +680,7 @@ class LLMPlanner:
     ) -> TaskGraph:
         base_prompt = _PLANNER_SYSTEM_PROMPT
         from datetime import datetime as _dt
+
         base_prompt += (
             f"\n\n当前日期: {_dt.now().strftime('%Y-%m-%d %A')}。"
             " 搜索时请注意信息时效性,优先引用最新来源。"
@@ -732,6 +721,7 @@ class LLMPlanner:
                 load_for_recipe,
                 load_global,
             )
+
             _global_section = load_global()
             if _global_section:
                 base_prompt = base_prompt + "\n\n" + _global_section
@@ -747,12 +737,15 @@ class LLMPlanner:
                 from runtime.safety.recovery.gepa_variants import (
                     select_variant,
                 )
+
                 _conv_id = (
                     intent.user_context.get("conversation_id")
-                    if isinstance(intent.user_context, dict) else None
+                    if isinstance(intent.user_context, dict)
+                    else None
                 )
                 _variant_id, _variant_content = select_variant(
-                    _base_recipe_id, _conv_id,
+                    _base_recipe_id,
+                    _conv_id,
                 )
             except (OSError, ImportError, ValueError):
                 _variant_id, _variant_content = None, ""
@@ -809,8 +802,7 @@ class LLMPlanner:
         if conversation_history:
             user_parts.insert(
                 0,
-                "CONVERSATION HISTORY (oldest to newest):\n"
-                f"{conversation_history}",
+                f"CONVERSATION HISTORY (oldest to newest):\n{conversation_history}",
             )
 
         messages = [
@@ -835,21 +827,15 @@ class LLMPlanner:
             )
         )
 
-        # Stash the last plan's LLM usage on the planner instance so
-        # the realtime gateway / OpenAI-compat handler can reconcile
-        # it into ``additional_kwargs.octopus`` after the graph runs.
-        # Without this, plan-path turns show Budget.tokens_spent (which
-        # only counts executor-level commits — excludes the planner's
-        # own LLM call) and under-report input/output tokens.
-        #
-        # Thread-safety: planner is shared across requests, so this
-        # attribute races if two turns execute concurrently. For
-        # accurate per-turn accounting the caller should read it
-        # BEFORE yielding control. Best-effort · never raises.
-        self.last_plan_usage = {
+        # Carry planner-call usage on the immutable TaskGraph so the
+        # accounting data follows the turn that produced it. The legacy
+        # instance attribute is kept as a best-effort compatibility mirror,
+        # but callers must not treat it as authoritative in concurrent runs.
+        planner_usage = {
             "input_tokens": int(getattr(response, "input_tokens", 0) or 0),
             "output_tokens": int(getattr(response, "output_tokens", 0) or 0),
         }
+        self.last_plan_usage = dict(planner_usage)
 
         plan_dict = self._extract_json(response.text)
         nodes = self._validate_nodes(plan_dict.get("nodes", []))
@@ -873,6 +859,7 @@ class LLMPlanner:
             budget=self.default_budget,
             strategy="llm_planner",
             task_type=_derive_task_type(intent),
+            planner_usage=planner_usage,
             # When a GEPA variant was picked for this turn, stamp it
             # onto the recipe_hash so RecipeEvaluator naturally groups
             # success/failure by (recipe + variant). Format:
@@ -909,23 +896,23 @@ class LLMPlanner:
             return f"{base}#__default__"
         return f"{base}#{v}"
 
-
     def recipe_hash(self) -> str:
         import hashlib
 
         kg_fingerprint = ""
         if self.kg is not None and hasattr(self.kg, "count"):
             kg_fingerprint = f"kg@{self.kg.count()}@{self.kg_max_triples}"
-        payload = "|".join([
-            self.planner_model,
-            _PLANNER_SYSTEM_PROMPT,
-            self.learned_rules_section,
-            self.learned_memories_section,
-            kg_fingerprint,
-        ])
+        payload = "|".join(
+            [
+                self.planner_model,
+                _PLANNER_SYSTEM_PROMPT,
+                self.learned_rules_section,
+                self.learned_memories_section,
+                kg_fingerprint,
+            ]
+        )
         h = hashlib.blake2b(payload.encode("utf-8"), digest_size=4).hexdigest()
         return f"llm@{h}"
-
 
     def _extract_json(self, text: str) -> dict:
         """Extract the LLM's JSON plan from free-form text.
@@ -991,8 +978,7 @@ class LLMPlanner:
         # present but all candidates malformed".
         if last_parse_error is not None:
             raise PlannerError(
-                f"LLM JSON parse failed (no balanced candidate parsed): "
-                f"{last_parse_error}"
+                f"LLM JSON parse failed (no balanced candidate parsed): {last_parse_error}"
             ) from last_parse_error
         raise PlannerError(f"LLM response lacks JSON: {text[:200]!r}")
 
@@ -1058,7 +1044,6 @@ class LLMPlanner:
             validated.append(out)
         return validated
 
-
     def _autosave_rules(self) -> None:
         if self.auto_persist_rules_path is None:
             return
@@ -1076,7 +1061,9 @@ class LLMPlanner:
             # persist next turn. Logger rather than silent drop so
             # operators see recurring write failures.
             _logger.warning(
-                "learned_rules autosave failed (%s): %s", type(e).__name__, e,
+                "learned_rules autosave failed (%s): %s",
+                type(e).__name__,
+                e,
             )
 
     def _autosave_memories(self) -> None:
@@ -1093,10 +1080,9 @@ class LLMPlanner:
         except OSError as e:
             _logger.warning(
                 "learned_memories autosave failed (%s): %s",
-                type(e).__name__, e,
+                type(e).__name__,
+                e,
             )
-
-
 
 
 def _derive_task_type(intent: ParsedIntent) -> str:

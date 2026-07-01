@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -37,7 +36,6 @@ PrivacyClass = Literal["public", "internal", "confidential", "personal"]
 
 
 class AmbientSignal(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     source: str
@@ -48,7 +46,6 @@ class AmbientSignal(BaseModel):
 
 
 class ParsedIntent(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     intent_id: UUID = Field(default_factory=new_id)
@@ -63,12 +60,10 @@ class ParsedIntent(BaseModel):
     ts: datetime = Field(default_factory=now_utc)
 
 
-
 RoutePath = Literal["reflex", "deliberative"]
 
 
 class RouteDecision(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     path: RoutePath
@@ -80,19 +75,18 @@ class RouteDecision(BaseModel):
 # ─── STAGE 3 · PLAN ─────────────────────────────────────────
 
 NodeKind = Literal[
-    "sucker",        # Implementation note.
-    "subgraph",      # Implementation note.
-    "validator",     # Implementation note.
-    "branch",        # Implementation note.
-    "merger",        # Implementation note.
-    "arm",           # Implementation note.
+    "sucker",  # Implementation note.
+    "subgraph",  # Implementation note.
+    "validator",  # Implementation note.
+    "branch",  # Implementation note.
+    "merger",  # Implementation note.
+    "arm",  # Implementation note.
 ]
 
 EdgeKind = Literal["normal", "branch", "chromatophore"]
 
 
 class TaskNode(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     node_id: str = Field(..., min_length=1)
@@ -106,7 +100,6 @@ class TaskNode(BaseModel):
 
 
 class WorkflowEdge(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     from_node: str
@@ -116,7 +109,6 @@ class WorkflowEdge(BaseModel):
 
 
 class BudgetSpec(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     tokens: int = Field(..., gt=0)
@@ -125,7 +117,6 @@ class BudgetSpec(BaseModel):
 
 
 class TaskGraph(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     task_id: TaskId = Field(default_factory=lambda: TaskId(new_id()))
@@ -135,6 +126,7 @@ class TaskGraph(BaseModel):
     strategy: str = "default"
     task_type: str = "general"
     recipe_hash: str | None = None  # Implementation note.
+    planner_usage: dict[str, int] = Field(default_factory=dict)
     ts: datetime = Field(default_factory=now_utc)
 
     @model_validator(mode="after")
@@ -148,8 +140,7 @@ class TaskGraph(BaseModel):
                 )
             if edge.to_node not in node_ids:
                 raise ValueError(
-                    f"edge.to_node '{edge.to_node}' not found in nodes "
-                    f"(valid: {sorted(node_ids)})"
+                    f"edge.to_node '{edge.to_node}' not found in nodes (valid: {sorted(node_ids)})"
                 )
         return self
 
@@ -188,7 +179,6 @@ class TaskGraph(BaseModel):
 
 
 class ContextPacketRef(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     packet_id: UUID
@@ -197,7 +187,6 @@ class ContextPacketRef(BaseModel):
 
 
 class ArmAssignment(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     arm_id: ArmId
@@ -211,8 +200,6 @@ class ArmAssignment(BaseModel):
     exclusive_resources: list[str] = Field(default_factory=list)
 
 
-
-
 ArmResultStatus = Literal[
     "success",
     "partial",
@@ -224,7 +211,6 @@ ArmResultStatus = Literal[
 
 
 class ArmResult(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     arm_id: ArmId
@@ -241,7 +227,6 @@ class ArmResult(BaseModel):
 
 
 class FinalResponse(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     task_id: TaskId
