@@ -28,12 +28,16 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment, misc]
 
 from runtime.execution.agents.loader import default_agents_root
-from runtime.execution.misc.agent_avatar import write_pixel_agent_avatar
+from runtime.execution.misc.agent_avatar import pixel_agent_avatar_svg
+from runtime.platform.io import atomic_write_json, atomic_write_text, read_json_with_backup
 from runtime.platform.process.paths import resources_root
 
 _INSTALL_STATE = Path(os.path.expanduser("~/.octopus/agents-installed.json"))
 _OCTOPUS_AUTHOR = "octopus"
 _OCTOPUS_AUTHOR_ALIASES = {"preset", "system", "octopus", "Octopus"}
+_SAFE_AGENT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+_SAFE_SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+_MARKET_INSTALL_SOURCE = "agent-market-template"
 _AGENCY_AGENTS_ROOT = Path(__file__).with_name("agent_market_sources") / "agency-agents"
 _FINANCIAL_SERVICES_ROOT = Path(__file__).with_name("agent_market_sources") / "financial-services"
 _HARDWARE_STARTUP_ROOT = Path(__file__).with_name("agent_market_sources") / "hardware-startup"
@@ -81,21 +85,54 @@ BUILTIN_TEMPLATES: list[dict[str, Any]] = [
 
 
 def _read_install_state() -> set[str]:
-    try:
-        if _INSTALL_STATE.is_file():
-            data = json.loads(_INSTALL_STATE.read_text(encoding="utf-8"))
-            return set(data.get("installed", []))
-    except (OSError, json.JSONDecodeError, ValueError):  # noqa: BLE001 — installed list missing/corrupt; treat as empty set
-        pass
-    return set()
+    data = read_json_with_backup(_INSTALL_STATE, default={})
+    if not isinstance(data, dict):
+        return set()
+    raw = data.get("installed", [])
+    if not isinstance(raw, list):
+        return set()
+    installed: set[str] = set()
+    for item in raw:
+        agent_id = str(item).strip()
+        if _is_safe_agent_id(agent_id):
+            installed.add(agent_id)
+    return installed
 
 
 def _write_install_state(installed: set[str]) -> None:
-    _INSTALL_STATE.parent.mkdir(parents=True, exist_ok=True)
-    _INSTALL_STATE.write_text(
-        json.dumps({"installed": sorted(installed)}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
+    safe_installed = sorted(
+        agent_id for agent_id in installed if _is_safe_agent_id(agent_id)
     )
+    atomic_write_json(
+        _INSTALL_STATE,
+        {"installed": safe_installed},
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    )
+
+
+def _is_safe_agent_id(agent_id: str) -> bool:
+    return bool(_SAFE_AGENT_ID_RE.fullmatch(str(agent_id or "")))
+
+
+def _require_safe_agent_id(agent_id: str) -> str:
+    value = str(agent_id or "").strip()
+    if not _is_safe_agent_id(value):
+        raise ValueError(
+            "invalid agent_id: only alphanumeric characters, hyphens, and underscores are allowed"
+        )
+    return value
+
+
+def _require_safe_skill_name(skill_name: str) -> str:
+    value = str(skill_name or "").strip()
+    if not _SAFE_SKILL_NAME_RE.fullmatch(value):
+        raise ValueError(
+            "invalid skill name in market template: only alphanumeric characters, "
+            "hyphens, and underscores are allowed"
+        )
+    return value
 
 
 from runtime.platform.process.utils import parse_jsonc as _parse_jsonc
@@ -320,12 +357,18 @@ def _copy_template_private_skills(
     source_root = _template_source_root(template) / str(source_rel)
     skills_root.mkdir(parents=True, exist_ok=True)
     for skill_name in available_skills:
+        skill_name = _require_safe_skill_name(skill_name)
         source = source_root / skill_name
-        if not (source / "SKILL.md").is_file():
+        if (
+            source.is_symlink()
+            or not source.is_dir()
+            or not (source / "SKILL.md").is_file()
+            or any(child.is_symlink() for child in source.rglob("*"))
+        ):
             result["missing"].append(skill_name)
             continue
         target = skills_root / skill_name
-        if target.exists():
+        if target.exists() or target.is_symlink():
             result["skipped"].append(skill_name)
             continue
         shutil.copytree(source, target)
@@ -395,6 +438,8 @@ def _model_name_for_wire(value: Any) -> str | None:
 
 
 def _template_by_id(agent_id: str) -> dict[str, Any] | None:
+    if not _is_safe_agent_id(agent_id):
+        return None
     template = next((t for t in BUILTIN_TEMPLATES if t["id"] == agent_id), None)
     if template:
         return template
@@ -412,70 +457,145 @@ def _template_by_id(agent_id: str) -> dict[str, Any] | None:
     )
 
 
+def _read_agent_profile(agent_root: Path) -> dict[str, Any] | None:
+    profile_path = agent_root / "profile.jsonc"
+    if profile_path.is_symlink() or not profile_path.is_file():
+        return None
+    try:
+        profile = _parse_jsonc(profile_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+    return profile if isinstance(profile, dict) else None
+
+
+def _is_market_managed_agent(
+    agent_root: Path,
+    agent_id: str,
+    *,
+    template: dict[str, Any] | None = None,
+    installed: set[str] | None = None,
+) -> bool:
+    if agent_root.is_symlink() or not agent_root.is_dir():
+        return False
+    profile = _read_agent_profile(agent_root)
+    if not profile:
+        return False
+    if str(profile.get("id") or agent_root.name).strip() != agent_id:
+        return False
+    if profile.get("source_kind") == _MARKET_INSTALL_SOURCE:
+        return True
+    if profile.get("managed_by") == "agent-market":
+        return True
+
+    # Backward compatibility for agents installed before the explicit
+    # source marker existed: require both persisted install state and
+    # catalog-identical metadata before treating the directory as managed.
+    if not template or not installed or agent_id not in installed:
+        return False
+    return (
+        str(profile.get("templateId") or "").strip() == agent_id
+        and str(profile.get("creator") or "").strip()
+        == str(template.get("author") or "").strip()
+    )
+
+
+def _cleanup_new_agent_root(agent_root: Path, *, created_new: bool) -> None:
+    if created_new and agent_root.is_dir() and not agent_root.is_symlink():
+        shutil.rmtree(agent_root, ignore_errors=True)
+
+
 def _install_template_agent(
     agent_id: str,
     agents_root: Path,
     *,
     skills_root: Path | None = None,
 ) -> Path | None:
+    agent_id = _require_safe_agent_id(agent_id)
     template = _template_by_id(agent_id)
     if not template:
         return None
     skills_root = skills_root or resources_root() / "skills" / "public"
     private_skills = _template_private_skills(template)
     available_skills = _template_skill_catalog(template)
-    skill_bundle = _copy_template_private_skills(template, skills_root)
+    if agents_root.exists() and (agents_root.is_symlink() or not agents_root.is_dir()):
+        raise ValueError("agents root must be a real directory")
+    agents_root.mkdir(parents=True, exist_ok=True)
     agent_root = agents_root / agent_id
-    core = agent_root / "agent-core"
-    core.mkdir(parents=True, exist_ok=True)
-    profile = {
-        "id": template["id"],
-        "templateId": template["id"],
-        "templateVersion": "1.0.0",
-        "name": template["display_name"],
-        "icon": template["icon"],
-        "did": f"DID-{template['id'].upper()}-LOCAL",
-        "description": template["description"],
-        "avatar": "avatar.svg",
-        "category": template["category"],
-        "tags": template["tags"],
-        "model": {"provider": "auto", "name": "auto"},
-        "runtime": "local",
-        "creator": template["author"],
-        "source": template.get("source_url"),
-        "key_skills": private_skills,
-        "available_skills": available_skills,
-        "skill_bundle": skill_bundle,
-    }
-    (agent_root / "profile.jsonc").write_text(
-        json.dumps(profile, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    write_pixel_agent_avatar(agent_root / "avatar.svg", template["display_name"])
-    source_path = template.get("source_path")
-    source_body = ""
-    if source_path:
-        try:
-            _meta, source_body = _parse_agent_markdown(
-                _template_source_root(template) / str(source_path),
+    created_new = not agent_root.exists() and not agent_root.is_symlink()
+    if agent_root.exists() or agent_root.is_symlink():
+        if not _is_market_managed_agent(
+            agent_root,
+            agent_id,
+            template=template,
+            installed=_read_install_state(),
+        ):
+            raise FileExistsError(
+                f"agent directory already exists and is not market-managed: {agent_id}"
             )
-        except OSError:
-            source_body = ""
-    soul = source_body or (
-        f"You are {template['display_name']}.\n\n"
-        f"Primary mission: {template['description']}\n\n"
-        f"Specialties: {', '.join(template['tags'])}.\n"
-        "Be concise, action-oriented, and precise."
-    )
-    if template.get("source_url"):
-        soul = f"{soul}\n\n---\nSource: {template['source_url']}\n"
-    (core / "SOUL.md").write_text(soul, encoding="utf-8")
-    (core / "IDENTITY.md").write_text(
-        f"- Name: {template['display_name']}\n- Role: {template['category']} specialist\n",
-        encoding="utf-8",
-    )
-    (core / "tool-registry.jsonc").write_text(
-        json.dumps(
+        if agent_root.is_symlink() or not agent_root.is_dir():
+            raise ValueError("agent directory must be a real directory")
+    core = agent_root / "agent-core"
+    try:
+        core.mkdir(parents=True, exist_ok=True)
+        if core.is_symlink() or not core.is_dir():
+            raise ValueError("agent-core must be a real directory")
+    except Exception:
+        _cleanup_new_agent_root(agent_root, created_new=created_new)
+        raise
+    try:
+        skill_bundle = _copy_template_private_skills(template, skills_root)
+        profile = {
+            "id": template["id"],
+            "templateId": template["id"],
+            "templateVersion": "1.0.0",
+            "source_kind": _MARKET_INSTALL_SOURCE,
+            "managed_by": "agent-market",
+            "name": template["display_name"],
+            "icon": template["icon"],
+            "did": f"DID-{template['id'].upper()}-LOCAL",
+            "description": template["description"],
+            "avatar": "avatar.svg",
+            "category": template["category"],
+            "tags": template["tags"],
+            "model": {"provider": "auto", "name": "auto"},
+            "runtime": "local",
+            "creator": template["author"],
+            "source": template.get("source_url"),
+            "key_skills": private_skills,
+            "available_skills": available_skills,
+            "skill_bundle": skill_bundle,
+        }
+        atomic_write_json(agent_root / "profile.jsonc", profile, ensure_ascii=False, indent=2)
+        atomic_write_text(
+            agent_root / "avatar.svg",
+            pixel_agent_avatar_svg(template["display_name"]),
+            newline=None,
+        )
+        source_path = template.get("source_path")
+        source_body = ""
+        if source_path:
+            try:
+                _meta, source_body = _parse_agent_markdown(
+                    _template_source_root(template) / str(source_path),
+                )
+            except OSError:
+                source_body = ""
+        soul = source_body or (
+            f"You are {template['display_name']}.\n\n"
+            f"Primary mission: {template['description']}\n\n"
+            f"Specialties: {', '.join(template['tags'])}.\n"
+            "Be concise, action-oriented, and precise."
+        )
+        if template.get("source_url"):
+            soul = f"{soul}\n\n---\nSource: {template['source_url']}\n"
+        atomic_write_text(core / "SOUL.md", soul, newline=None)
+        atomic_write_text(
+            core / "IDENTITY.md",
+            f"- Name: {template['display_name']}\n- Role: {template['category']} specialist\n",
+            newline=None,
+        )
+        atomic_write_json(
+            core / "tool-registry.jsonc",
             {
                 "arms": ["fs_writer", "git", "shell"],
                 "extra_affinity": template["tags"],
@@ -483,9 +603,10 @@ def _install_template_agent(
             },
             ensure_ascii=False,
             indent=2,
-        ),
-        encoding="utf-8",
-    )
+        )
+    except Exception:
+        _cleanup_new_agent_root(agent_root, created_new=created_new)
+        raise
     return agent_root
 
 
@@ -730,6 +851,10 @@ def create_agent_world_router(
 
     @router.get("/api/agent-market/store/{agent_id}")
     def api_agent_market_detail(agent_id: str) -> dict[str, Any]:
+        try:
+            agent_id = _require_safe_agent_id(agent_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         for agent in _list_local_agents():
             if agent["id"] == agent_id:
                 return agent
@@ -742,6 +867,10 @@ def create_agent_world_router(
 
     @router.post("/api/agent-market/store/{agent_id}/install")
     def api_agent_market_install(agent_id: str) -> dict[str, Any]:
+        try:
+            agent_id = _require_safe_agent_id(agent_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         template = _template_by_id(agent_id)
         if not template:
             agents = _list_local_agents()
@@ -750,13 +879,34 @@ def create_agent_world_router(
             raise HTTPException(404, f"agent not found: {agent_id}")
         agents_root = default_agents_root()
         skills_root = resources_root() / "skills" / "public"
-        agent_root = _install_template_agent(agent_id, agents_root, skills_root=skills_root)
+        preexisting_agent_root = agents_root / agent_id
+        had_agent_root = preexisting_agent_root.exists() or preexisting_agent_root.is_symlink()
+        try:
+            agent_root = _install_template_agent(agent_id, agents_root, skills_root=skills_root)
+        except FileExistsError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(
+                500, f"failed to install market agent: {type(exc).__name__}: {exc}"
+            ) from exc
         if agent_root is None:
             raise HTTPException(404, f"agent template not found: {agent_id}")
         registered_skills = _register_public_prompt_skills(skill_registry, skills_root)
         installed = _read_install_state()
         installed.add(agent_id)
-        _write_install_state(installed)
+        try:
+            _write_install_state(installed)
+        except OSError as exc:
+            if (
+                not had_agent_root
+                and _is_market_managed_agent(agent_root, agent_id, template=template, installed=installed)
+            ):
+                shutil.rmtree(agent_root, ignore_errors=True)
+            raise HTTPException(
+                500, f"failed to persist market install state: {type(exc).__name__}: {exc}"
+            ) from exc
         if registry is not None and runtime is not None:
             from runtime.execution.agents.loader import load_agent
 
@@ -777,15 +927,39 @@ def create_agent_world_router(
 
     @router.delete("/api/agent-market/store/{agent_id}/install")
     def api_agent_market_uninstall(agent_id: str) -> dict[str, Any]:
-        if not _template_by_id(agent_id):
+        try:
+            agent_id = _require_safe_agent_id(agent_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        template = _template_by_id(agent_id)
+        if not template:
             raise HTTPException(400, f"agent is local and cannot be uninstalled from market: {agent_id}")
         installed = _read_install_state()
-        installed.discard(agent_id)
-        _write_install_state(installed)
         agent_root = default_agents_root() / agent_id
-        if agent_root.is_dir():
-            import shutil
-            shutil.rmtree(agent_root, ignore_errors=True)
+        if agent_root.exists() or agent_root.is_symlink():
+            if not _is_market_managed_agent(
+                agent_root,
+                agent_id,
+                template=template,
+                installed=installed,
+            ):
+                raise HTTPException(
+                    409,
+                    f"agent directory is not market-managed and will not be removed: {agent_id}",
+                )
+            try:
+                shutil.rmtree(agent_root)
+            except OSError as exc:
+                raise HTTPException(
+                    500, f"failed to remove market agent: {type(exc).__name__}: {exc}"
+                ) from exc
+        installed.discard(agent_id)
+        try:
+            _write_install_state(installed)
+        except OSError as exc:
+            raise HTTPException(
+                500, f"failed to persist market install state: {type(exc).__name__}: {exc}"
+            ) from exc
         if registry is not None and hasattr(registry, "remove"):
             registry.remove(agent_id)
         return {"installed": False, "agent_id": agent_id}

@@ -248,6 +248,107 @@ class TestAgentDetail:
         assert not registry.has("test_writer")
         assert not (tmp_path / "test_writer").exists()
 
+    def test_market_install_rejects_unsafe_agent_id(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
+        monkeypatch.setattr(agent_world_router, "_INSTALL_STATE", tmp_path / "installed.json")
+        app = FastAPI()
+        app.include_router(create_agent_world_router())
+        client = TestClient(app)
+
+        r = client.post("/api/agent-market/store/bad:agent/install")
+
+        assert r.status_code == 400
+        assert not any(tmp_path.iterdir())
+        assert not (tmp_path / "installed.json").exists()
+
+    def test_market_install_does_not_overwrite_local_same_id(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
+        monkeypatch.setattr(agent_world_router, "_INSTALL_STATE", tmp_path / "installed.json")
+        existing = tmp_path / "test_writer"
+        (existing / "agent-core").mkdir(parents=True)
+        profile = existing / "profile.jsonc"
+        profile.write_text(
+            '{"id":"test_writer","templateId":"test_writer","creator":"user"}',
+            encoding="utf-8",
+        )
+        app = FastAPI()
+        app.include_router(create_agent_world_router())
+
+        r = TestClient(app).post("/api/agent-market/store/test_writer/install")
+
+        assert r.status_code == 409
+        assert profile.read_text(encoding="utf-8") == (
+            '{"id":"test_writer","templateId":"test_writer","creator":"user"}'
+        )
+        assert not (tmp_path / "installed.json").exists()
+
+    def test_market_uninstall_does_not_remove_local_same_id(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
+        monkeypatch.setattr(agent_world_router, "_INSTALL_STATE", tmp_path / "installed.json")
+        existing = tmp_path / "test_writer"
+        (existing / "agent-core").mkdir(parents=True)
+        profile = existing / "profile.jsonc"
+        profile.write_text(
+            '{"id":"test_writer","templateId":"test_writer","creator":"user"}',
+            encoding="utf-8",
+        )
+        app = FastAPI()
+        app.include_router(create_agent_world_router())
+
+        r = TestClient(app).delete("/api/agent-market/store/test_writer/install")
+
+        assert r.status_code == 409
+        assert existing.exists()
+        assert profile.is_file()
+        assert not (tmp_path / "installed.json").exists()
+
+    def test_market_install_state_recovers_backup_and_filters_unsafe_ids(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        install_state = tmp_path / "installed.json"
+        monkeypatch.setattr(agent_world_router, "_INSTALL_STATE", install_state)
+        install_state.write_text("{broken", encoding="utf-8")
+        install_state.with_suffix(".json.bak").write_text(
+            '{"installed":["test_writer","../escape","bad:agent","code_reviewer"]}',
+            encoding="utf-8",
+        )
+
+        assert agent_world_router._read_install_state() == {"test_writer", "code_reviewer"}
+
+    def test_market_install_cleans_new_agent_when_template_skill_name_is_invalid(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path / "agents"))
+        monkeypatch.setattr(agent_world_router, "_INSTALL_STATE", tmp_path / "installed.json")
+        original = agent_world_router._template_skill_catalog
+
+        def fake_catalog(template: dict[str, object]) -> list[str]:
+            if template.get("id") == "financial_pitch_agent":
+                return ["../escape"]
+            return original(template)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(agent_world_router, "_template_skill_catalog", fake_catalog)
+        app = FastAPI()
+        app.include_router(create_agent_world_router())
+
+        r = TestClient(app).post("/api/agent-market/store/financial_pitch_agent/install")
+
+        assert r.status_code == 400
+        assert not (tmp_path / "agents" / "financial_pitch_agent").exists()
+        assert not (tmp_path / "installed.json").exists()
+
     def test_market_uninstall_rejects_local_agent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
         monkeypatch.setattr(agent_world_router, "_INSTALL_STATE", tmp_path / "installed.json")
