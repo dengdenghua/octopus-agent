@@ -56,6 +56,10 @@ CHECKS: tuple[DigitalEmployeeCheck, ...] = (
         paths=(
             "runtime/sensing/gateway/team_tasks_router.py",
             "tests/test_team_tasks_router.py",
+            "frontend/src/core/team-tasks/api.ts",
+            "frontend/src/core/team-tasks/hooks.ts",
+            "frontend/src/components/workspace/collab/team-tasks-panel.tsx",
+            "frontend/src/components/workspace/collab/team-tasks-panel.test.tsx",
         ),
         required_terms=(
             "/api/team-tasks/{task_id}/process-timeline",
@@ -64,6 +68,9 @@ CHECKS: tuple[DigitalEmployeeCheck, ...] = (
             "team_role_start",
             "team_role_end",
             "run_done",
+            "getTaskProcessTimeline",
+            "useTeamTaskProcessTimeline",
+            "流程证据",
         ),
     ),
     DigitalEmployeeCheck(

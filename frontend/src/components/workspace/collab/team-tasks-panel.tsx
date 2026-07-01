@@ -20,10 +20,16 @@ import { useI18n } from "@/core/i18n/hooks";
 import {
   useDeleteTeamTask,
   useRunTeamTask,
+  useTeamTaskProcessTimeline,
   useTeamTasks,
   useUpdateTeamTask,
 } from "@/core/team-tasks";
-import type { TeamTask, TeamTaskStatus } from "@/core/team-tasks";
+import type {
+  TeamTask,
+  TeamTaskProcessTimeline,
+  TeamTaskProcessTimelineNode,
+  TeamTaskStatus,
+} from "@/core/team-tasks";
 import type { Team } from "@/core/teams";
 import { cn } from "@/lib/utils";
 
@@ -322,6 +328,11 @@ export function TeamTasksPanel({
     const assigneeLabels = assigneeNames(task, team);
     const artifactCount = task.produced_artifacts?.length ?? 0;
     const [showArtifacts, setShowArtifacts] = useState(false);
+    const [showTimeline, setShowTimeline] = useState(false);
+    const timelineQuery = useTeamTaskProcessTimeline(task.id, {
+      enabled: showTimeline,
+      refetchMs: showTimeline && task.status === "running" ? 1500 : false,
+    });
     const roleLabel = formatTeamRole(taskEvent?.role);
     const liveStatus = taskEvent
       ? formatTeamTaskEvent(taskEvent.event, roleLabel)
@@ -379,6 +390,20 @@ export function TeamTasksPanel({
                   {t.teamTasksPanel.artifactCount(artifactCount)}
                 </button>
               )}
+              {task.status !== "pending" && (
+                <button
+                  type="button"
+                  onClick={() => setShowTimeline((v) => !v)}
+                  className="flex items-center gap-0.5 rounded-md bg-blue-500/10 px-1.5 py-0.5 text-blue-700 transition-colors hover:bg-blue-500/20"
+                >
+                  {showTimeline ? (
+                    <ChevronDownIcon className="size-3" />
+                  ) : (
+                    <ChevronRightIcon className="size-3" />
+                  )}
+                  流程证据
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -415,6 +440,14 @@ export function TeamTasksPanel({
               );
             })}
           </div>
+        )}
+
+        {showTimeline && (
+          <TeamTaskTimelinePreview
+            timeline={timelineQuery.data ?? null}
+            loading={timelineQuery.isLoading || timelineQuery.isFetching}
+            error={timelineQuery.error}
+          />
         )}
 
         {liveStatus && task.status === "running" && (
@@ -474,6 +507,101 @@ export function TeamTasksPanel({
       </article>
     );
   }
+}
+
+function TeamTaskTimelinePreview({
+  timeline,
+  loading,
+  error,
+}: {
+  timeline: TeamTaskProcessTimeline | null;
+  loading: boolean;
+  error: unknown;
+}) {
+  const nodes = (timeline?.timeline ?? []).slice(-8);
+  return (
+    <div className="border-t border-border/45 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+        <span className="rounded-md bg-muted/60 px-1.5 py-0.5">
+          流程 {timeline?.overview.event_count ?? 0}
+        </span>
+        <span className="rounded-md bg-muted/60 px-1.5 py-0.5">
+          产物 {timeline?.overview.artifact_count ?? 0}
+        </span>
+        <span className="rounded-md bg-muted/60 px-1.5 py-0.5">
+          raw {timeline?.safety.raw_messages_included ? "included" : "hidden"}
+        </span>
+        {loading && (
+          <span className="inline-flex items-center gap-1 text-primary">
+            <Loader2Icon className="size-3 animate-spin" />
+            刷新中
+          </span>
+        )}
+      </div>
+      {error ? (
+        <div className="mt-2 rounded-md border border-destructive/25 bg-destructive/10 px-2 py-1.5 text-[11px] leading-5 text-destructive">
+          {error instanceof Error ? error.message : String(error)}
+        </div>
+      ) : nodes.length === 0 ? (
+        <div className="mt-2 rounded-md border border-dashed border-border/70 bg-muted/15 px-2 py-3 text-center text-[11px] text-muted-foreground">
+          暂无持久流程证据
+        </div>
+      ) : (
+        <div className="mt-2 space-y-1.5">
+          {nodes.map((node) => (
+            <TimelineNodeRow key={node.id} node={node} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TimelineNodeRow({ node }: { node: TeamTaskProcessTimelineNode }) {
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-[4.25rem_1fr] gap-2 rounded-md border px-2 py-1.5 text-[11px] leading-5",
+        node.severity === "high"
+          ? "border-destructive/25 bg-destructive/10"
+          : node.lane === "artifact"
+            ? "border-emerald-500/20 bg-emerald-500/10"
+            : "border-border/55 bg-muted/15",
+      )}
+    >
+      <div className="min-w-0 text-muted-foreground">
+        <div className="truncate font-mono">{node.lane}</div>
+        <div className="truncate">{formatTimelineTime(node.ts)}</div>
+      </div>
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-medium text-foreground">
+            {node.title || node.kind}
+          </span>
+          {node.status && (
+            <span className="shrink-0 rounded bg-background/70 px-1 font-mono text-[10px] text-muted-foreground">
+              {node.status}
+            </span>
+          )}
+        </div>
+        {node.summary && (
+          <div className="mt-0.5 line-clamp-2 text-muted-foreground">
+            {node.summary}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatTimelineTime(value: string) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function assigneeNames(task: TeamTask, team: Team | null): string[] {
