@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Octopus Chrome Sidecar</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="mark">O</span>
+          <div>
+            <h1>Octopus</h1>
+            <p id="connectionText">Connecting</p>
+          </div>
+        </div>
+        <button id="newThreadButton" class="icon-button" type="button" title="New thread">
+          +
+        </button>
+      </header>
+
+      <section class="tab-strip" aria-label="Current tab">
+        <div class="status-dot" id="relayDot"></div>
+        <div class="tab-copy">
+          <strong id="tabTitle">No active tab</strong>
+          <span id="tabUrl">Waiting for Chrome relay</span>
+        </div>
+      </section>
+
+      <section id="approvalDock" class="approval-dock" hidden></section>
+
+      <section id="messages" class="messages" aria-live="polite">
+        <article class="message system">
+          <span>用这里和 Agent 沟通；真实网页保留在左侧主区域。</span>
+        </article>
+      </section>
+
+      <form id="composer" class="composer">
+        <textarea
+          id="promptInput"
+          rows="3"
+          placeholder="告诉 Agent 要在当前 Chrome 页面做什么..."
+        ></textarea>
+        <div class="composer-actions">
+          <button id="pageAgentButton" class="secondary" type="button">
+            页面轻面板
+          </button>
+          <button id="openAppButton" class="secondary" type="button">
+            打开主控
+          </button>
+          <button id="sendButton" class="primary" type="submit">发送</button>
+        </div>
+      </form>
+    </main>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

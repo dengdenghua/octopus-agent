@@ -1,0 +1,57 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+EXTENSION = ROOT / "extensions" / "octopus-browser-relay"
+
+
+def test_chrome_extension_manifest_declares_side_panel() -> None:
+    manifest = json.loads((EXTENSION / "manifest.json").read_text(encoding="utf-8"))
+
+    assert manifest["manifest_version"] == 3
+    assert manifest["side_panel"]["default_path"] == "sidepanel.html"
+    assert {"sidePanel", "storage", "tabs", "scripting"} <= set(manifest["permissions"])
+    csp = manifest["content_security_policy"]["extension_pages"]
+    assert "connect-src" in csp
+    assert "ws://127.0.0.1:8000" in csp
+    assert "ws://localhost:8000" in csp
+    assert manifest["action"]["default_title"] == "Open Octopus Agent Sidecar"
+
+
+def test_sidepanel_is_extension_native_not_page_overlay() -> None:
+    html = (EXTENSION / "sidepanel.html").read_text(encoding="utf-8")
+
+    assert 'href="sidepanel.css"' in html
+    assert 'src="sidepanel.js"' in html
+    assert "<script>" not in html
+    assert "Octopus Chrome Sidecar" in html
+    assert "页面轻面板" in html
+
+
+def test_sidepanel_sends_chrome_turns_over_realtime() -> None:
+    js = (EXTENSION / "sidepanel.js").read_text(encoding="utf-8")
+
+    assert "/api/realtime" in js
+    assert 'rpc("turn/start"' in js
+    assert "@Chrome" in js
+    assert 'runtime_surfaces: ["chrome"]' in js
+    assert "chrome_operation_mode: true" in js
+    assert 'method === "item/agentMessage/delta"' in js
+    assert "payload.id !== undefined" in js
+    assert "showApprovalRequest" in js
+    assert 'action: "accept"' in js
+    assert 'action: "decline"' in js
+
+
+def test_background_opens_sidepanel_and_keeps_bookmarklet_fallback() -> None:
+    js = (EXTENSION / "background.js").read_text(encoding="utf-8")
+
+    assert "chrome.sidePanel.setPanelBehavior" in js
+    assert "openPanelOnActionClick" in js
+    assert "openSidePanel" in js
+    assert "openPageAgent" in js
+    assert 'type === "octopus.status"' in js
+    assert 'type === "octopus.openPageAgent"' in js

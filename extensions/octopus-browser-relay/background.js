@@ -30,6 +30,12 @@ async function apiFetch(path, init) {
   return null;
 }
 
+async function apiJson(path, init) {
+  const res = await apiFetch(path, init);
+  if (!res) return null;
+  return res.json().catch(() => null);
+}
+
 function waitForTabComplete(tabId, timeoutMs = 10000) {
   return new Promise((resolve) => {
     const timer = setTimeout(done, timeoutMs);
@@ -253,7 +259,7 @@ async function processCommands(commands = []) {
 }
 
 async function postHeartbeat() {
-  const res = await apiFetch("/api/browser/relay/heartbeat", {
+  const data = await apiJson("/api/browser/relay/heartbeat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -261,35 +267,103 @@ async function postHeartbeat() {
       active_tab: await activeTabInfo(),
     }),
   });
-  if (!res) return false;
-  const data = await res.json().catch(() => ({}));
+  if (!data) return false;
   void processCommands(Array.isArray(data.commands) ? data.commands : []);
   return true;
 }
 
+async function relayStatus() {
+  await postHeartbeat();
+  const data = await apiJson("/api/browser/relay/status", { method: "GET" });
+  return {
+    ok: Boolean(data),
+    base_url: lastWorkingBase,
+    active_tab: await activeTabInfo(),
+    relay: data || null,
+  };
+}
+
+async function openSidePanel(windowId) {
+  if (!chrome.sidePanel?.open || !windowId) return false;
+  await chrome.sidePanel.open({ windowId });
+  return true;
+}
+
+async function openPageAgent(tabId) {
+  if (!tabId) return false;
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["bookmarklet.js"],
+  });
+  await postHeartbeat();
+  return true;
+}
+
+async function configureSidePanelBehavior() {
+  if (!chrome.sidePanel?.setPanelBehavior) return;
+  try {
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  } catch (error) {
+    console.warn(
+      "Octopus Browser Relay: failed to enable side panel behavior",
+      error instanceof Error ? error.message : error,
+    );
+  }
+}
+
 chrome.runtime.onInstalled.addListener(() => {
+  void configureSidePanelBehavior();
   void postHeartbeat();
 });
 
 chrome.runtime.onStartup.addListener(() => {
+  void configureSidePanelBehavior();
   void postHeartbeat();
 });
 
 chrome.action.onClicked.addListener(async (tab) => {
   const tabId = tab.id;
-  if (!tabId) return;
+  const windowId = tab.windowId;
   try {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ["bookmarklet.js"],
-    });
+    const opened = await openSidePanel(windowId);
+    if (!opened && tabId) {
+      await openPageAgent(tabId);
+    }
     await postHeartbeat();
   } catch (error) {
     console.warn(
-      "Octopus Browser Relay: failed to open Page Agent",
+      "Octopus Browser Relay: failed to open Agent Sidecar",
       error instanceof Error ? error.message : error,
     );
   }
+});
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  const type = String(message?.type || "");
+  (async () => {
+    if (type === "octopus.status") {
+      return relayStatus();
+    }
+    if (type === "octopus.heartbeat") {
+      return { ok: await postHeartbeat(), base_url: lastWorkingBase };
+    }
+    if (type === "octopus.openPageAgent") {
+      const tab = await currentTab();
+      return { ok: await openPageAgent(tab.id) };
+    }
+    if (type === "octopus.activeTab") {
+      return { ok: true, active_tab: await activeTabInfo() };
+    }
+    return { ok: false, error: `unknown message: ${type}` };
+  })()
+    .then((result) => sendResponse(result))
+    .catch((error) => {
+      sendResponse({
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  return true;
 });
 
 chrome.tabs.onActivated.addListener(() => {
