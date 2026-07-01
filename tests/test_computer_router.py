@@ -133,6 +133,66 @@ def test_router_requires_auth_when_enabled() -> None:
     ).status_code == 200
 
 
+def test_status_reports_runtime_readiness_with_degraded_uia(monkeypatch):
+    monkeypatch.setattr(
+        computer_skills,
+        "_screen_info",
+        lambda: {"width": 1440, "height": 900, "cursor_x": 20, "cursor_y": 30},
+    )
+    monkeypatch.setattr(
+        computer_uia_skills,
+        "_computer_uia_status",
+        lambda: {
+            "ok": False,
+            "available": False,
+            "platform": "Darwin",
+            "error": "uiautomation not installed",
+        },
+    )
+
+    data = TestClient(_app()).get("/api/computer/status").json()
+
+    assert data["schema"] == "octopus.computer_runtime_status.v1"
+    assert data["ok"] is True
+    assert data["ready"] is True
+    assert data["health"] == "degraded"
+    assert data["readiness"]["schema"] == "octopus.computer_runtime_readiness.v1"
+    assert data["readiness"]["ready"] is True
+    degraded_ids = {item["id"] for item in data["degraded_capabilities"]}
+    assert degraded_ids == {"uia_semantic_grounding"}
+    capability_ids = {item["id"] for item in data["capabilities"]}
+    assert {
+        "screen_observation",
+        "preview_execute_contract",
+        "lease_coordination",
+        "uia_semantic_grounding",
+        "replay_evidence",
+    } <= capability_ids
+    assert "install_or_enable_uia_backend" in data["recommended_actions"]
+    assert data["replay_evidence"]["schema"] == "octopus.computer_replay_evidence_hint.v1"
+
+
+def test_status_reports_blocked_when_screen_observation_fails(monkeypatch):
+    monkeypatch.setattr(
+        computer_skills,
+        "_screen_info",
+        lambda: {"error": "screen_info_failed: display unavailable"},
+    )
+    monkeypatch.setattr(
+        computer_uia_skills,
+        "_computer_uia_status",
+        lambda: {"ok": True, "available": True, "platform": "Windows"},
+    )
+
+    data = TestClient(_app()).get("/api/computer/status").json()
+
+    assert data["ok"] is False
+    assert data["ready"] is False
+    assert data["health"] == "blocked"
+    assert [item["id"] for item in data["critical_blockers"]] == ["screen_observation"]
+    assert "check_display_or_desktop_permissions" in data["recommended_actions"]
+
+
 def test_uia_tree_and_find_endpoints(monkeypatch):
     monkeypatch.setattr(platform, "system", lambda: "Windows")
     monkeypatch.setattr(computer_uia_skills, "UIA_AVAILABLE", True)

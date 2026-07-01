@@ -97,6 +97,10 @@ CHECKS: tuple[BrowserDesktopCheck, ...] = (
             "octopus.computer_execution_proof.v1",
             "execution_proof",
             "review_queue",
+            "octopus.computer_runtime_readiness.v1",
+            "degraded_capabilities",
+            "critical_blockers",
+            "recommended_actions",
         ),
     ),
     BrowserDesktopCheck(

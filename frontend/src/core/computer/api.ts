@@ -19,9 +19,46 @@ export type ComputerLease = {
   lease_ttl_seconds: number;
 };
 
+export type ComputerRuntimeHealth = "ready" | "degraded" | "blocked" | string;
+
+export type ComputerReplayEvidenceHint = {
+  schema?: "octopus.computer_replay_evidence_hint.v1" | string;
+  replay_ready?: boolean;
+  case_id?: string;
+  fingerprint?: string;
+  [key: string]: unknown;
+};
+
+export type ComputerCapability = {
+  id: string;
+  title: string;
+  available: boolean;
+  critical: boolean;
+  mode: string;
+  reason?: string;
+  recommended_action?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type ComputerRuntimeReadiness = {
+  schema?: "octopus.computer_runtime_readiness.v1" | string;
+  ready: boolean;
+  health: ComputerRuntimeHealth;
+  capabilities: ComputerCapability[];
+  degraded_capabilities: ComputerCapability[];
+  critical_blockers: ComputerCapability[];
+  recommended_actions: string[];
+  replay_evidence?: ComputerReplayEvidenceHint;
+};
+
 export type ComputerStatus = {
+  schema?: "octopus.computer_runtime_status.v1" | string;
   ok: boolean;
+  ready?: boolean;
+  health?: ComputerRuntimeHealth;
   pyautogui_available: boolean;
+  uia_available?: boolean;
+  uia?: Record<string, unknown>;
   lease?: ComputerLease;
   screen: {
     width?: number;
@@ -30,6 +67,14 @@ export type ComputerStatus = {
     cursor_y?: number;
     error?: string;
   };
+  readiness?: ComputerRuntimeReadiness;
+  capabilities?: ComputerCapability[];
+  degraded_capabilities?: ComputerCapability[];
+  critical_blockers?: ComputerCapability[];
+  recommended_actions?: string[];
+  replay_evidence?: ComputerReplayEvidenceHint;
+  activity_count?: number;
+  recent_activity?: unknown[];
   skills: string[];
   mode: string;
 };

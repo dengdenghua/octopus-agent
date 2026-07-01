@@ -48,6 +48,7 @@ import {
   releaseComputerLease,
   type ComputerActionPlan,
   type ComputerAction,
+  type ComputerCapability,
   type ComputerExecuteResult,
   type ComputerLease,
   type ComputerLeaseOwner,
@@ -179,6 +180,7 @@ export default function ComputerAutomationPage() {
       ? null
       : Math.max(0, Math.ceil((previewExpiresAt - now) / 1000));
   const previewExpired = previewExpiresAt !== null && previewSecondsLeft === 0;
+  const runtimeState = getRuntimeState(status);
   const deviceState = getDeviceState(status);
   const activeAction = getActiveAction({
     busy,
@@ -196,8 +198,7 @@ export default function ComputerAutomationPage() {
   });
   const leaseState = getLeaseState(status?.lease, leaseOwner);
   const leaseBlocked = leaseState.tone === "blocked";
-  const computerUnavailable =
-    !status || !status.ok || !status.pyautogui_available;
+  const computerUnavailable = runtimeState.blocksActions;
   const computerActionDisabled = busy !== null || computerUnavailable;
 
   const mergeLease = useCallback((lease?: ComputerLease) => {
@@ -230,13 +231,17 @@ export default function ComputerAutomationPage() {
     setBusy("status");
     try {
       const data = await getComputerStatus();
+      const nextRuntimeState = getRuntimeState(data);
       setStatus(data);
       addLog({
-        title: data.ok ? "本机助手可用" : "本机助手不可用",
-        detail: data.ok
-          ? `屏幕 ${data.screen.width}x${data.screen.height}`
-          : data.screen.error || "",
-        tone: data.ok ? "ok" : "error",
+        title: nextRuntimeState.logTitle,
+        detail: nextRuntimeState.detail,
+        tone:
+          nextRuntimeState.tone === "error"
+            ? "error"
+            : nextRuntimeState.tone === "warn"
+              ? "warn"
+              : "ok",
       });
     } catch (error) {
       swallow(error);
@@ -634,7 +639,11 @@ export default function ComputerAutomationPage() {
               <CurrentActionPanel action={activeAction} />
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+              <StatusTile
+                label="运行健康"
+                value={getHealthLabel(status?.health, status?.ready)}
+              />
               <StatusTile
                 label="确认方式"
                 value={status?.mode ? "先预演再确认" : "加载中"}
@@ -659,22 +668,41 @@ export default function ComputerAutomationPage() {
                 label="电脑控制"
                 value={status?.pyautogui_available ? "已就绪" : "未就绪"}
               />
+              <StatusTile
+                label="语义定位"
+                value={status?.uia_available ? "已就绪" : "降级可用"}
+              />
               <StatusTile label="接管租约" value={leaseState.label} />
             </div>
+
+            {status && <RuntimeReadinessPanel status={status} />}
 
             {computerUnavailable && status && (
               <div className="rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100">
                 <div className="flex items-start gap-2">
                   <ShieldAlertIcon className="mt-0.5 size-4 shrink-0" />
                   <div>
-                    <div className="font-medium">本机控制依赖未就绪</div>
+                    <div className="font-medium">本机运行时被阻塞</div>
                     <p className="mt-1">
-                      {status.screen.error ||
-                        "后端已启动，但 pyautogui 不可用，暂时不能截图、预演或执行鼠标键盘动作。"}
+                      {runtimeState.detail ||
+                        "后端已启动，但关键电脑自动化能力还没有就绪，暂时不能截图、预演或执行鼠标键盘动作。"}
                     </p>
-                    <p className="mt-1 font-mono text-xs">
-                      python -m pip install pyautogui
-                    </p>
+                    {runtimeState.actions.length ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {runtimeState.actions.map((action) => (
+                          <span
+                            key={action}
+                            className="rounded-md border border-amber-300/80 px-2 py-0.5 font-mono text-xs dark:border-amber-800"
+                          >
+                            {action}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-1 font-mono text-xs">
+                        python -m pip install pyautogui
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1091,10 +1119,109 @@ function StatusTile({ label, value }: { label: string; value: string }) {
   );
 }
 
+function RuntimeReadinessPanel({ status }: { status: ComputerStatus }) {
+  const state = getRuntimeState(status);
+  const blockers = getCriticalBlockers(status);
+  const degraded = getDegradedCapabilities(status);
+  const evidence = status.replay_evidence ?? status.readiness?.replay_evidence;
+  const visibleItems =
+    blockers.length || degraded.length
+      ? [...blockers, ...degraded]
+      : getCapabilities(status)
+          .filter((item) => item.critical)
+          .slice(0, 3);
+  const toneClass = {
+    ok: "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-100",
+    warn: "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100",
+    error: "border-destructive/30 bg-destructive/10 text-destructive",
+    loading: "border-border bg-background/70 text-foreground",
+  }[state.tone];
+
+  return (
+    <div className={cn("rounded-2xl border px-4 py-3", toneClass)}>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            {state.tone === "ok" ? (
+              <ShieldCheckIcon className="size-4 shrink-0" />
+            ) : (
+              <ShieldAlertIcon className="size-4 shrink-0" />
+            )}
+            运行时 · {state.label}
+          </div>
+          <p className="mt-1 text-xs leading-5 opacity-85">{state.detail}</p>
+        </div>
+        {evidence?.case_id || evidence?.fingerprint ? (
+          <div className="shrink-0 rounded-xl border border-current/20 px-3 py-2 text-xs leading-5">
+            <div className="font-medium">回放证据</div>
+            <div className="mt-0.5 font-mono opacity-80">
+              {evidence.case_id || evidence.fingerprint}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {visibleItems.length ? (
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
+          {visibleItems.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-xl border border-current/15 bg-background/45 px-3 py-2 text-xs leading-5 text-foreground"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold">{item.title}</span>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[11px]",
+                    item.available
+                      ? "border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-200"
+                      : item.critical
+                        ? "border-destructive/40 text-destructive"
+                        : "border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-200",
+                  )}
+                >
+                  {item.available
+                    ? "ready"
+                    : item.critical
+                      ? "blocked"
+                      : "degraded"}
+                </span>
+              </div>
+              <div className="mt-1 text-muted-foreground">
+                {item.reason || item.recommended_action || item.mode}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {state.actions.length ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {state.actions.map((action) => (
+            <span
+              key={action}
+              className="rounded-md border border-current/20 bg-background/45 px-2 py-0.5 font-mono text-xs text-foreground"
+            >
+              {action}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 type DeviceState = {
   label: string;
   detail: string;
   tone: "ok" | "warn" | "error" | "loading";
+};
+
+type RuntimeState = DeviceState & {
+  health: string;
+  logTitle: string;
+  blocksActions: boolean;
+  actions: string[];
 };
 
 type ActiveAction = {
@@ -1142,6 +1269,14 @@ function getLeaseState(
 }
 
 function getDeviceState(status: ComputerStatus | null): DeviceState {
+  const runtime = getRuntimeState(status);
+  if (runtime.tone !== "ok") {
+    return {
+      label: runtime.label,
+      detail: runtime.detail,
+      tone: runtime.tone,
+    };
+  }
   if (!status) {
     return {
       label: "正在检查",
@@ -1171,6 +1306,111 @@ function getDeviceState(status: ComputerStatus | null): DeviceState {
     detail: `可以观察当前屏幕，并在确认后执行动作。${screen}`,
     tone: "ok",
   };
+}
+
+function getRuntimeState(status: ComputerStatus | null): RuntimeState {
+  if (!status) {
+    return {
+      health: "loading",
+      label: "正在检查",
+      logTitle: "正在检查本机助手",
+      detail: "正在确认这台电脑是否可以被 Agent 观察和操作。",
+      tone: "loading",
+      blocksActions: true,
+      actions: [],
+    };
+  }
+  const health = status.health ?? legacyHealth(status);
+  const blockers = getCriticalBlockers(status);
+  const degraded = getDegradedCapabilities(status);
+  const actions = getRecommendedActions(status);
+  const firstIssue = blockers[0] ?? degraded[0] ?? null;
+  const fallbackError =
+    status.screen.error ||
+    (!status.pyautogui_available ? "pyautogui 不可用" : "");
+  if (
+    health === "blocked" ||
+    status.ready === false ||
+    !status.ok ||
+    !status.pyautogui_available
+  ) {
+    const detail =
+      firstIssue?.reason ||
+      firstIssue?.recommended_action ||
+      fallbackError ||
+      "关键电脑自动化能力未通过运行时检查。";
+    return {
+      health,
+      label: "阻塞",
+      logTitle: "本机助手被阻塞",
+      detail,
+      tone: "error",
+      blocksActions: true,
+      actions,
+    };
+  }
+  if (health === "degraded" || degraded.length > 0) {
+    const names = degraded.map((item) => item.title).join("、");
+    return {
+      health,
+      label: "降级可用",
+      logTitle: "本机助手降级可用",
+      detail: names
+        ? `${names} 暂不可用；基础观察、预演和确认执行仍可继续。`
+        : "部分非关键能力暂不可用；基础观察、预演和确认执行仍可继续。",
+      tone: "warn",
+      blocksActions: false,
+      actions,
+    };
+  }
+  const screen = status.screen.width
+    ? `${status.screen.width} × ${status.screen.height}`
+    : "屏幕已连接";
+  return {
+    health,
+    label: "已就绪",
+    logTitle: "本机助手已就绪",
+    detail: `关键能力已通过运行时检查。${screen}`,
+    tone: "ok",
+    blocksActions: false,
+    actions,
+  };
+}
+
+function legacyHealth(status: ComputerStatus) {
+  return status.ok && status.pyautogui_available ? "ready" : "blocked";
+}
+
+function getHealthLabel(
+  health: ComputerStatus["health"] | undefined,
+  ready: boolean | undefined,
+) {
+  if (health === "blocked" || ready === false) return "阻塞";
+  if (health === "degraded") return "降级可用";
+  if (health === "ready" || ready === true) return "已就绪";
+  return "加载中";
+}
+
+function getCapabilities(status: ComputerStatus): ComputerCapability[] {
+  return status.capabilities ?? status.readiness?.capabilities ?? [];
+}
+
+function getCriticalBlockers(status: ComputerStatus): ComputerCapability[] {
+  return status.critical_blockers ?? status.readiness?.critical_blockers ?? [];
+}
+
+function getDegradedCapabilities(status: ComputerStatus): ComputerCapability[] {
+  return (
+    status.degraded_capabilities ??
+    status.readiness?.degraded_capabilities ??
+    []
+  );
+}
+
+function getRecommendedActions(status: ComputerStatus) {
+  return (
+    status.recommended_actions ?? status.readiness?.recommended_actions ?? []
+  );
 }
 
 function getActiveAction({
