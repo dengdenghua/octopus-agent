@@ -7,12 +7,23 @@
 from __future__ import annotations
 
 import hashlib
+import re
 
 import httpx
 from pydantic import BaseModel
 
 DEFAULT_BASE = "https://api.octoapk.com"
 _API = "/api/v1/registry/assets"
+_SHA256_RE = re.compile(r"^(?:sha256:)?([0-9a-fA-F]{64})$")
+
+
+def _sha256_expected(value: str | None, *, label: str) -> str | None:
+    if not value:
+        return None
+    m = _SHA256_RE.fullmatch(value.strip())
+    if not m:
+        raise ValueError(f"invalid sha256 checksum for {label}: {value!r}")
+    return m.group(1).lower()
 
 
 class AssetContent(BaseModel):
@@ -88,7 +99,7 @@ class RegistryClient:
         r = httpx.get(f"{self.base}{_API}/{asset_id}/bundle", timeout=self._timeout)
         r.raise_for_status()
         data = r.content
-        expected = r.headers.get("X-Checksum-Sha256")
+        expected = _sha256_expected(r.headers.get("X-Checksum-Sha256"), label=asset_id)
         if expected:
             actual = hashlib.sha256(data).hexdigest()
             if actual != expected:
@@ -97,9 +108,8 @@ class RegistryClient:
 
     @staticmethod
     def _verify(p: AssetPayload) -> None:
-        expected = p.content.checksum if p.content else None
-        if expected and p.body:
-            expected = expected.removeprefix("sha256:")
+        expected = _sha256_expected(p.content.checksum if p.content else None, label=p.id)
+        if expected:
             actual = hashlib.sha256(p.body.encode("utf-8")).hexdigest()
             if actual != expected:
                 raise ValueError(f"checksum mismatch for {p.id}: expected {expected} got {actual}")
