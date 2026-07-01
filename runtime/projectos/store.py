@@ -15,6 +15,8 @@ from uuid import uuid4
 
 from runtime.projectos.model import Milestone, Project, Task
 
+_TERMINAL_TASK_STATUSES = frozenset({"done", "failed", "rejected"})
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, doc TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS milestones (
@@ -193,8 +195,23 @@ class ProjectStore:
         return [Milestone.from_dict(json.loads(r[0])) for r in rows]
 
     # ── tasks ────────────────────────────────────────────────────────────────
-    def save_task(self, task: Task) -> Task:
+    def save_task(self, task: Task, *, allow_terminal_rewrite: bool = False) -> Task:
+        """Persist ``task``.
+
+        Terminal task rows are immutable by default so a stale worker callback
+        cannot downgrade ``done`` to ``failed`` or replace a failed task's
+        diagnostic output. Recovery/operator actions that intentionally reopen
+        work must pass ``allow_terminal_rewrite=True``.
+        """
         with self._lock, self._conn() as conn:
+            existing_row = conn.execute(
+                "SELECT doc FROM tasks WHERE id=?",
+                (task.id,),
+            ).fetchone()
+            if existing_row and not allow_terminal_rewrite:
+                existing = Task.from_dict(json.loads(existing_row[0]))
+                if existing.status in _TERMINAL_TASK_STATUSES:
+                    return existing
             conn.execute(
                 "INSERT INTO tasks(id, milestone_id, doc) VALUES (?, ?, ?) "
                 "ON CONFLICT(id) DO UPDATE SET doc=excluded.doc, milestone_id=excluded.milestone_id",

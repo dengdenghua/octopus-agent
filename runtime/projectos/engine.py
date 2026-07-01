@@ -17,6 +17,7 @@ deterministic stubs. The engine itself is pure orchestration.
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import suppress
 from typing import Any
 from uuid import uuid4
 
@@ -329,7 +330,7 @@ class ProjectEngine:
             task.status = "done"
             task.output = output
             task.qa_verdict = {"approved": True, "reason": reason or "operator completed"}
-            self.store.save_task(task)
+            self.store.save_task(task, allow_terminal_rewrite=True)
             events.append(f"task_completed_by_operator:{task.id}")
         elif action == "skip":
             task.status = "done"
@@ -339,7 +340,7 @@ class ProjectEngine:
                 "previous_output": task.output,
             }
             task.qa_verdict = {"approved": True, "reason": reason or "operator skipped"}
-            self.store.save_task(task)
+            self.store.save_task(task, allow_terminal_rewrite=True)
             events.append(f"task_skipped:{task.id}")
         else:
             result = {
@@ -439,7 +440,10 @@ class ProjectEngine:
             task.assigned_agent = task.assigned_agent or self._assign(task)
             task.status = "running"
             task.attempts += 1
-            self.store.save_task(task)
+            claimed = self.store.save_task(task)
+            if claimed.status != "running":
+                events.append(f"task_stale_claim_ignored:{task.id}")
+                continue
             context = self._context(project, ms, tasks)
             try:
                 task.output = self._execute(task, context)
@@ -528,13 +532,11 @@ class ProjectEngine:
         if clear_outputs:
             task.output = None
             task.qa_verdict = None
-        self.store.save_task(task)
+        self.store.save_task(task, allow_terminal_rewrite=True)
 
     def _audit(self, project_id: str, kind: str, payload: dict) -> None:
-        try:
+        with suppress(Exception):
             self.store.append_event(project_id, kind=kind, payload=payload)
-        except Exception:  # noqa: BLE001
-            pass
 
     def _context(self, project: Project, ms: Milestone, tasks: list[Task]) -> dict[str, Any]:
         return {

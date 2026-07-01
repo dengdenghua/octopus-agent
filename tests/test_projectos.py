@@ -59,6 +59,45 @@ def test_store_project_events_roundtrip_and_limit(tmp_path) -> None:
     assert [event["payload"]["n"] for event in s.events_for_project("P1", limit=1)] == [2]
 
 
+def test_store_task_terminal_status_is_immutable_by_default(tmp_path) -> None:
+    s = ProjectStore(base_dir=tmp_path)
+    original = Task(id="T1", milestone_id="M1", type="code", goal="g")
+    original.status = "done"
+    original.output = "accepted"
+    s.save_task(original)
+
+    stale_failure = Task(id="T1", milestone_id="M1", type="code", goal="g")
+    stale_failure.status = "failed"
+    stale_failure.output = "late failure"
+    returned = s.save_task(stale_failure)
+
+    assert returned.status == "done"
+    assert returned.output == "accepted"
+    stored = s.get_task("T1")
+    assert stored.status == "done"
+    assert stored.output == "accepted"
+
+
+def test_store_task_terminal_status_can_be_reopened_explicitly(tmp_path) -> None:
+    s = ProjectStore(base_dir=tmp_path)
+    original = Task(id="T1", milestone_id="M1", type="code", goal="g")
+    original.status = "failed"
+    original.output = "bad"
+    original.attempts = 2
+    s.save_task(original)
+
+    recovered = Task(id="T1", milestone_id="M1", type="code", goal="g")
+    recovered.status = "pending"
+    recovered.output = None
+    recovered.attempts = 0
+    returned = s.save_task(recovered, allow_terminal_rewrite=True)
+
+    assert returned.status == "pending"
+    assert returned.output is None
+    assert returned.attempts == 0
+    assert s.get_task("T1").status == "pending"
+
+
 # ── engine ───────────────────────────────────────────────────────────────────
 def _stub_milestones(goal: str) -> list[Milestone]:
     return [
@@ -170,6 +209,34 @@ def test_task_execution_error_blocks_project_after_retry_cap(tmp_path) -> None:
     assert "task_error_retry:MS1-T1" in events
     assert "task_failed:MS1-T1" in events
     assert "project_blocked:task_failed" in events
+
+
+def test_stale_running_claim_does_not_execute_terminal_task(tmp_path, monkeypatch) -> None:
+    eng = _engine(tmp_path)
+    p = eng.plan("x", "g")
+    eng.tick(p.id)
+    calls = {"execute": 0}
+    original_save_task = eng.store.save_task
+
+    def stale_save(task: Task, **kwargs):
+        if task.id == "MS1-T2" and task.status == "running":
+            terminal = Task(id=task.id, milestone_id=task.milestone_id, type=task.type, goal=task.goal)
+            terminal.status = "done"
+            terminal.output = "already accepted"
+            return terminal
+        return original_save_task(task, **kwargs)
+
+    def execute(task: Task, context: dict) -> str:
+        calls["execute"] += 1
+        return "should not run"
+
+    monkeypatch.setattr(eng.store, "save_task", stale_save)
+    eng._execute = execute
+
+    tick = eng.tick(p.id)
+
+    assert "task_stale_claim_ignored:MS1-T2" in tick["events"]
+    assert calls["execute"] == 0
 
 
 def test_recover_reopens_blocked_project_and_reruns_task(tmp_path) -> None:
