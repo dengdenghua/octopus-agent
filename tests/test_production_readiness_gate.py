@@ -27,11 +27,13 @@ def test_production_readiness_gate_passes_current_release_signals(
     assert result.e2e_ready is True
     assert result.e2e_verdict == "surpassed"
     assert result.e2e_summary["scorecard_octopus"] == 97
+    assert result.e2e_summary["scorecard_best_external"] == 87
     assert result.e2e_summary["automation_octopus"] == 95
     assert result.e2e_summary["quality_ready"] == result.e2e_summary["quality_total"]
     assert result.e2e_failed_checks == []
     assert result.e2e_summary_text == (
-        "e2e_scorecard=97, e2e_automation=95, e2e_quality=6/6"
+        "e2e_scorecard=97, e2e_best_external=87, "
+        "e2e_automation=95, e2e_quality=6/6"
     )
     assert "octopus.repo_context_quality.v1" in result.quality_summary
     assert "octopus.product_experience_quality.v1" in result.quality_summary
@@ -50,6 +52,7 @@ def test_production_readiness_gate_prints_e2e_summary(
     assert code == 0
     assert "e2e=surpassed" in captured.out
     assert "e2e_scorecard=97" in captured.out
+    assert "e2e_best_external=87" in captured.out
     assert "e2e_automation=95" in captured.out
     assert "e2e_quality=6/6" in captured.out
 
@@ -161,6 +164,30 @@ def test_production_readiness_gate_blocks_e2e_summary_drift(
 
     assert any(
         "e2e summary mismatch: automation_octopus=94, expected 95" in item
+        for item in result.failures
+    )
+
+
+def test_production_readiness_gate_blocks_best_external_summary_drift(
+    monkeypatch,
+    review_queue_path: Path,
+) -> None:
+    real_e2e = gate.compute_e2e_surpass_certification
+
+    def drifted_e2e(**kwargs):
+        report = real_e2e(**kwargs)
+        report["summary"] = {
+            **report["summary"],
+            "scorecard_best_external": 1,
+        }
+        return report
+
+    monkeypatch.setattr(gate, "compute_e2e_surpass_certification", drifted_e2e)
+
+    result = gate.run_gate(min_score=95, review_queue_path=review_queue_path)
+
+    assert any(
+        "e2e summary mismatch: scorecard_best_external=1, expected 87" in item
         for item in result.failures
     )
 

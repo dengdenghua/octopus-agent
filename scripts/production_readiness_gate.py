@@ -109,6 +109,7 @@ class GateResult:
     def e2e_summary_text(self) -> str:
         return (
             f"e2e_scorecard={_nested_int(self.e2e_summary, 'scorecard_octopus')}, "
+            f"e2e_best_external={_nested_int(self.e2e_summary, 'scorecard_best_external')}, "
             f"e2e_automation={_nested_int(self.e2e_summary, 'automation_octopus')}, "
             f"e2e_quality={_nested_int(self.e2e_summary, 'quality_ready')}/"
             f"{_nested_int(self.e2e_summary, 'quality_total')}"
@@ -215,6 +216,7 @@ def run_gate(
         e2e_summary,
         {
             "scorecard_octopus": scorecard_score,
+            "scorecard_best_external": _best_external_score(scorecard),
             "scorecard_evidence_adjusted_octopus": scorecard_evidence_adjusted_score,
             "automation_octopus": automation_score,
             "automation_codex": _nested_int(automation, "overall", "codex"),
@@ -399,6 +401,21 @@ def _nested_int(report: Mapping[str, Any], *keys: str) -> int:
             return 0
         value = value.get(key)
     return int(value or 0)
+
+
+def _best_external_score(scorecard: Mapping[str, Any]) -> int:
+    overall = scorecard.get("overall")
+    external = scorecard.get("external_competitors")
+    if not isinstance(overall, Mapping) or not isinstance(external, Sequence):
+        return 0
+    return max(
+        (
+            int(overall.get(str(competitor)) or 0)
+            for competitor in external
+            if isinstance(competitor, str)
+        ),
+        default=0,
+    )
 
 
 def _failed_check_ids(rows: Any) -> list[str]:
