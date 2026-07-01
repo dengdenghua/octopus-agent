@@ -33,6 +33,18 @@ export interface ActionResult {
   attempt?: number;
 }
 
+export type BrowserControlIndicatorMode = "idle" | "action" | "paused";
+
+export interface BrowserControlOptions {
+  surface?: "chrome" | "electron_webview" | "backend_preview" | "browser";
+  targetId?: string | number | null;
+  getStopped?: () => boolean;
+  setIndicator?: (
+    mode: BrowserControlIndicatorMode,
+    detail?: Record<string, unknown>,
+  ) => void | Promise<void>;
+}
+
 const ACTION_BLOCK_RE = /```action\s*\n([\s\S]*?)```/g;
 
 /* Implementation note. */
@@ -208,6 +220,58 @@ export async function runActionWithRetry(
     await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
   }
   return { ...last, attempt: maxAttempts - 1 };
+}
+
+function interruptedActionResult(
+  action: AgentAction,
+  reason: string,
+  control?: BrowserControlOptions,
+): ActionResult {
+  return {
+    action,
+    ok: false,
+    error: `browser control interrupted: ${reason}`,
+    detail: {
+      code: "browser_control_interrupted",
+      reason,
+      surface: control?.surface,
+      targetId: control?.targetId,
+    },
+  };
+}
+
+export async function runBrowserActionWithControl(
+  action: AgentAction,
+  run: () => Promise<ActionResult>,
+  control: BrowserControlOptions = {},
+): Promise<ActionResult> {
+  if (control.getStopped?.()) {
+    await control.setIndicator?.("paused", {
+      action: action.type,
+      reason: "operator_stop",
+    });
+    return interruptedActionResult(action, "operator_stop", control);
+  }
+  await control.setIndicator?.("action", {
+    action: action.type,
+    surface: control.surface,
+    targetId: control.targetId,
+  });
+  try {
+    const result = await run();
+    if (control.getStopped?.()) {
+      await control.setIndicator?.("paused", {
+        action: action.type,
+        reason: "operator_stop",
+      });
+      return interruptedActionResult(action, "operator_stop", control);
+    }
+    return result;
+  } finally {
+    if (!control.getStopped?.()) {
+      await control.setIndicator?.("idle", { action: action.type });
+    }
+  }
 }
 
 /* Implementation note. */
@@ -400,6 +464,24 @@ export async function runBrowserHandleAction(
       error: e instanceof Error ? e.message : String(e),
     };
   }
+}
+
+export async function runBrowserHandleActionWithControl(
+  handle: WebviewTabHandle,
+  action: AgentAction,
+  options: {
+    confirmDangerous?: boolean;
+    control?: BrowserControlOptions;
+  } = {},
+): Promise<ActionResult> {
+  return runBrowserActionWithControl(
+    action,
+    () =>
+      runBrowserHandleAction(handle, action, {
+        confirmDangerous: options.confirmDangerous,
+      }),
+    options.control,
+  );
 }
 
 function browserActionResult(

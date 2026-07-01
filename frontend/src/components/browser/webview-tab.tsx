@@ -2,6 +2,7 @@
 
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -98,6 +99,10 @@ export interface WebviewTabHandle {
     action: string,
     params?: Record<string, unknown>,
   ) => Promise<Record<string, unknown>>;
+  setControlIndicator?: (
+    mode: "idle" | "action" | "paused",
+    detail?: Record<string, unknown>,
+  ) => void;
 }
 
 interface BrowserRelayStatus {
@@ -525,6 +530,7 @@ function BackendBrowserTab({
         return { dataUrl, width: shot.width, height: shot.height };
       },
       runAction,
+      setControlIndicator: () => undefined,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- imperative handle exposes local async helpers that depend on session/tab state; stabilizing them all would require extensive restructuring
     [sessionId, tab.url, relayStatus?.connected],
@@ -1537,6 +1543,13 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
     const wt = t.browser.webviewTab;
     const [crash, setCrash] = useState<CrashInfo | null>(null);
     const [reloadSeed, setReloadSeed] = useState(0); // Implementation note.
+    const [controlIndicator, setControlIndicatorState] = useState<{
+      mode: "idle" | "action" | "paused";
+      action?: string;
+      reason?: string;
+      nonce: number;
+    }>({ mode: "idle", nonce: 0 });
+    const controlIndicatorTimerRef = useRef<number | null>(null);
 
     // Implementation note.
     // Implementation note.
@@ -1554,6 +1567,36 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
         return fallback;
       }
     };
+
+    const setControlIndicator = useCallback(
+      (
+        mode: "idle" | "action" | "paused",
+        detail: Record<string, unknown> = {},
+      ) => {
+        if (controlIndicatorTimerRef.current !== null) {
+          window.clearTimeout(controlIndicatorTimerRef.current);
+          controlIndicatorTimerRef.current = null;
+        }
+        const next = {
+          mode,
+          action: typeof detail.action === "string" ? detail.action : undefined,
+          reason: typeof detail.reason === "string" ? detail.reason : undefined,
+          nonce: Date.now(),
+        };
+        setControlIndicatorState(next);
+        if (mode === "paused") {
+          controlIndicatorTimerRef.current = window.setTimeout(() => {
+            setControlIndicatorState((prev) =>
+              prev.nonce === next.nonce
+                ? { mode: "idle", nonce: Date.now() }
+                : prev,
+            );
+            controlIndicatorTimerRef.current = null;
+          }, 1600);
+        }
+      },
+      [],
+    );
 
     useImperativeHandle(
       imperativeRef,
@@ -1659,7 +1702,17 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
               return { ok: false, error: `unsupported action: ${action}` };
           }
         },
+        setControlIndicator,
       }),
+      [setControlIndicator],
+    );
+
+    useEffect(
+      () => () => {
+        if (controlIndicatorTimerRef.current !== null) {
+          window.clearTimeout(controlIndicatorTimerRef.current);
+        }
+      },
       [],
     );
 
@@ -1818,14 +1871,56 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
       );
     }
 
+    const controlEdgeVisible = controlIndicator.mode !== "idle";
+    const controlEdgePaused = controlIndicator.mode === "paused";
+    const controlEdgeColor = controlEdgePaused
+      ? "rgba(245, 158, 11, 0.78)"
+      : "rgba(20, 184, 166, 0.62)";
+    const controlEdgeGlow = controlEdgePaused
+      ? [
+          "inset 0 0 0 1px rgba(245, 158, 11, 0.34)",
+          "inset 0 0 18px rgba(245, 158, 11, 0.18)",
+        ].join(", ")
+      : [
+          "inset 0 0 0 1px rgba(20, 184, 166, 0.26)",
+          "inset 0 0 18px rgba(20, 184, 166, 0.16)",
+        ].join(", ");
+
     return (
-      <webview
-        key={`wv-${tab.id}-${reloadSeed}`}
-        ref={ref as unknown as React.RefObject<HTMLElement>}
-        src={tab.url}
-        partition="persist:octopus-browser"
-        style={style}
-      />
+      <div style={style} className="relative overflow-hidden bg-background">
+        <style>
+          {`@keyframes octopus-browser-webview-edge-pulse {
+  0% { box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.24), inset 0 0 10px rgba(20, 184, 166, 0.10); }
+  45% { box-shadow: inset 0 0 0 2px rgba(20, 184, 166, 0.72), inset 0 0 24px rgba(20, 184, 166, 0.24); }
+  100% { box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.26), inset 0 0 18px rgba(20, 184, 166, 0.16); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .octopus-browser-webview-edge-light { animation: none !important; transition: none !important; }
+}`}
+        </style>
+        <webview
+          key={`wv-${tab.id}-${reloadSeed}`}
+          ref={ref as unknown as React.RefObject<HTMLElement>}
+          src={tab.url}
+          partition="persist:octopus-browser"
+          style={{ width: "100%", height: "100%" }}
+        />
+        {controlEdgeVisible && (
+          <div
+            key={controlIndicator.nonce}
+            aria-hidden="true"
+            className="octopus-browser-webview-edge-light pointer-events-none absolute inset-0 z-20 opacity-100 transition-opacity duration-150"
+            style={{
+              border: `1px solid ${controlEdgeColor}`,
+              boxShadow: controlEdgeGlow,
+              animation:
+                controlIndicator.mode === "action"
+                  ? "octopus-browser-webview-edge-pulse 620ms ease-out 1"
+                  : undefined,
+            }}
+          />
+        )}
+      </div>
     );
   },
 );

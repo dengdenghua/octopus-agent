@@ -40,10 +40,12 @@ import {
   formatResults,
   parseActions,
   runActionWithRetry,
-  runBrowserHandleAction,
+  runBrowserActionWithControl,
+  runBrowserHandleActionWithControl,
   withActionTimeout,
   type AgentAction,
   type ActionResult,
+  type BrowserControlOptions,
 } from "./agentic-actions";
 import { useBrowserStore } from "./browser-store";
 import { liquidGlassClass } from "./liquid-glass";
@@ -170,10 +172,15 @@ export function CopilotPanel({ webviewHandle }: Props) {
   const loopCountRef = useRef(0);
   // Implementation note.
   const stopRequestedRef = useRef(false);
+  const activeTabIdRef = useRef<string | null>(activeTab?.id ?? null);
   // Implementation note.
   // Implementation note.
   const [agentLoopActive, setAgentLoopActive] = useState(false);
   const MAX_AGENT_LOOP = 8;
+
+  useEffect(() => {
+    activeTabIdRef.current = activeTab?.id ?? null;
+  }, [activeTab?.id]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -215,12 +222,15 @@ export function CopilotPanel({ webviewHandle }: Props) {
   const stopAgentLoop = useCallback(() => {
     stopRequestedRef.current = true;
     setAgentLoopActive(false);
+    webviewHandle?.setControlIndicator?.("paused", {
+      reason: "operator_stop",
+    });
     // Implementation note.
     void sendMessage(threadId, {
       text: t.browser.copilot.stopAgentMessage,
       files: [],
     });
-  }, [sendMessage, threadId, t]);
+  }, [sendMessage, threadId, t, webviewHandle]);
 
   const addPendingConfirmation = useCallback(
     (action: AgentAction, result: ActionResult) => {
@@ -242,6 +252,20 @@ export function CopilotPanel({ webviewHandle }: Props) {
       ]);
     },
     [],
+  );
+
+  const buildBrowserControl = useCallback(
+    (loopTabId: string | null): BrowserControlOptions => ({
+      surface: window.octopus?.isElectron
+        ? "electron_webview"
+        : "backend_preview",
+      targetId: loopTabId,
+      getStopped: () =>
+        stopRequestedRef.current || activeTabIdRef.current !== loopTabId,
+      setIndicator: (mode, detail) =>
+        webviewHandle?.setControlIndicator?.(mode, detail),
+    }),
+    [webviewHandle],
   );
 
   // Implementation note.
@@ -287,6 +311,8 @@ export function CopilotPanel({ webviewHandle }: Props) {
     lastProcessedAiIdRef.current = aiId;
 
     if (webviewHandle && !window.octopus) {
+      const loopTabId = activeTabIdRef.current;
+      const control = buildBrowserControl(loopTabId);
       if (loopCountRef.current >= MAX_AGENT_LOOP) {
         void sendMessage(threadId, {
           text: t.browser.copilot.maxLoopReached(MAX_AGENT_LOOP),
@@ -303,6 +329,14 @@ export function CopilotPanel({ webviewHandle }: Props) {
         try {
           const results: ActionResult[] = [];
           for (const action of actions) {
+            if (control.getStopped?.()) {
+              results.push({
+                action,
+                ok: false,
+                error: "browser control interrupted: operator_stop",
+              });
+              break;
+            }
             const preflight = confirmationPreflight(action, t);
             if (preflight) {
               results.push(preflight);
@@ -312,7 +346,9 @@ export function CopilotPanel({ webviewHandle }: Props) {
               break;
             }
             const r = await withActionTimeout(
-              runBrowserHandleAction(webviewHandle, action),
+              runBrowserHandleActionWithControl(webviewHandle, action, {
+                control,
+              }),
               action.type,
             );
             results.push(r);
@@ -369,6 +405,8 @@ export function CopilotPanel({ webviewHandle }: Props) {
       return;
     }
     loopCountRef.current += 1;
+    const loopTabId = activeTabIdRef.current;
+    const control = buildBrowserControl(loopTabId);
 
     void (async () => {
       setBusy(true);
@@ -376,6 +414,14 @@ export function CopilotPanel({ webviewHandle }: Props) {
       try {
         const results: ActionResult[] = [];
         for (const action of actions) {
+          if (control.getStopped?.()) {
+            results.push({
+              action,
+              ok: false,
+              error: "browser control interrupted: operator_stop",
+            });
+            break;
+          }
           const preflight = confirmationPreflight(action, t);
           if (preflight) {
             results.push(preflight);
@@ -385,11 +431,16 @@ export function CopilotPanel({ webviewHandle }: Props) {
             break;
           }
           const r = await withActionTimeout(
-            runActionWithRetry(api, wcId, action, {
-              navigate: (url: string) => {
-                webviewHandle?.loadURL(url);
-              },
-            }),
+            runBrowserActionWithControl(
+              action,
+              () =>
+                runActionWithRetry(api, wcId, action, {
+                  navigate: (url: string) => {
+                    webviewHandle?.loadURL(url);
+                  },
+                }),
+              control,
+            ),
             action.type,
           );
           results.push(r);
@@ -430,6 +481,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
     threadId,
     webviewHandle,
     addPendingConfirmation,
+    buildBrowserControl,
   ]);
 
   const confirmPendingAction = useCallback(
@@ -437,10 +489,12 @@ export function CopilotPanel({ webviewHandle }: Props) {
       if (!webviewHandle) return;
       setBusy(true);
       setErrorMsg(null);
+      const loopTabId = activeTabIdRef.current;
       try {
         const result = await withActionTimeout(
-          runBrowserHandleAction(webviewHandle, pending.action, {
+          runBrowserHandleActionWithControl(webviewHandle, pending.action, {
             confirmDangerous: true,
+            control: buildBrowserControl(loopTabId),
           }),
           pending.action.type,
         );
@@ -468,7 +522,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
         setBusy(false);
       }
     },
-    [sendMessage, threadId, webviewHandle, t],
+    [sendMessage, threadId, webviewHandle, t, buildBrowserControl],
   );
 
   const dismissPendingAction = useCallback((id: string) => {
