@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 from typing import Any
 
 _logger = logging.getLogger(__name__)
@@ -514,6 +515,21 @@ class LLMPlanner:
         self._memories_updated_count = 0
         self._kg_attached_count = 0
         self._recipe_assessed_count = 0
+        self._plan_usage_local = threading.local()
+
+    @property
+    def last_plan_usage(self) -> dict[str, int]:
+        usage_local = getattr(self, "_plan_usage_local", None)
+        if usage_local is None:
+            return {}
+        usage = getattr(usage_local, "last_plan_usage", None)
+        return dict(usage) if isinstance(usage, dict) else {}
+
+    @last_plan_usage.setter
+    def last_plan_usage(self, value: dict[str, int] | None) -> None:
+        if not hasattr(self, "_plan_usage_local"):
+            self._plan_usage_local = threading.local()
+        self._plan_usage_local.last_plan_usage = dict(value or {})
 
     def update_learned_rules(self, rules: list, *, max_total_chars: int = 2000) -> None:
         from runtime.safety.recovery import format_rules_for_prompt

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 
 import pytest
 
@@ -12,7 +13,7 @@ from runtime.execution.suckers.builtins import register_builtins
 from runtime.memory.hemolymph import ContextComposer
 from runtime.memory.journal import InMemoryJournal
 from runtime.platform.models import BudgetSpec, ParsedIntent
-from runtime.sensing.model_router import MockModelRouter
+from runtime.sensing.model_router import MockModelRouter, ModelResponse
 
 
 @pytest.fixture
@@ -34,6 +35,22 @@ def intent() -> ParsedIntent:
 
 def _make_plan_json(nodes: list[dict]) -> str:
     return json.dumps({"reasoning": "test", "nodes": nodes})
+
+
+class _ConcurrentUsageRouter:
+    def __init__(self, response: str) -> None:
+        self.response = response
+        self.both_started = threading.Barrier(2)
+        self.allow_beta_response = threading.Event()
+
+    def call(self, request) -> ModelResponse:
+        content = str(request.messages[-1].content)
+        is_beta = "goal-beta" in content
+        self.both_started.wait(timeout=5)
+        if is_beta:
+            assert self.allow_beta_response.wait(timeout=5)
+            return ModelResponse(text=self.response, input_tokens=31, output_tokens=7)
+        return ModelResponse(text=self.response, input_tokens=17, output_tokens=5)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -74,6 +91,56 @@ class TestHappyPath:
         assert first.planner_usage["input_tokens"] == 17
         assert second.planner_usage["input_tokens"] == 31
         assert planner.last_plan_usage["input_tokens"] == 31
+
+    def test_last_plan_usage_is_thread_local(self, registry, composer):
+        response = _make_plan_json([{"skill": "list_cwd", "args": {}}])
+        router = _ConcurrentUsageRouter(response)
+        planner = LLMPlanner(router=router, registry=registry, composer=composer)
+        beta_done = threading.Event()
+        results: dict[str, dict[str, int]] = {}
+        errors: list[BaseException] = []
+
+        def _alpha() -> None:
+            try:
+                graph = planner.plan(ParsedIntent(
+                    raw="goal-alpha",
+                    intent_type="task",
+                    normalized_goal="goal-alpha",
+                ))
+                results["alpha_graph"] = graph.planner_usage
+                router.allow_beta_response.set()
+                assert beta_done.wait(timeout=5)
+                results["alpha_last"] = planner.last_plan_usage
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        def _beta() -> None:
+            try:
+                graph = planner.plan(ParsedIntent(
+                    raw="goal-beta",
+                    intent_type="task",
+                    normalized_goal="goal-beta",
+                ))
+                results["beta_graph"] = graph.planner_usage
+                results["beta_last"] = planner.last_plan_usage
+                beta_done.set()
+            except BaseException as exc:  # noqa: BLE001
+                router.allow_beta_response.set()
+                beta_done.set()
+                errors.append(exc)
+
+        threads = [threading.Thread(target=_alpha), threading.Thread(target=_beta)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        assert not errors
+        assert all(not thread.is_alive() for thread in threads)
+        assert results["alpha_graph"]["input_tokens"] == 17
+        assert results["beta_graph"]["input_tokens"] == 31
+        assert results["alpha_last"]["input_tokens"] == 17
+        assert results["beta_last"]["input_tokens"] == 31
 
     def test_edges_linear(self, registry, composer, intent):
         response = _make_plan_json(
