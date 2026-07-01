@@ -29,6 +29,7 @@ CHECKS: tuple[ProductExperienceCheck, ...] = (
             "operator_drilldown",
             "Evidence checklist",
             "queueAgentScorecardGaps",
+            "E2E_SURPASS_TARGET_SCORE",
             "fetchAgentCompetitorScorecard",
             "scorecard_gap_backlog",
         ),

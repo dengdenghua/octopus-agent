@@ -1462,7 +1462,7 @@ export async function queueAgentScorecardGaps(options?: {
   return postJson<AgentScorecardGapQueueResult>(
     "/api/evolution/agent-scorecard/gaps/queue",
     {
-      target_score: options?.targetScore ?? 90,
+      target_score: options?.targetScore ?? E2E_SURPASS_TARGET_SCORE,
       limit: options?.limit ?? 10,
       reason: options?.reason ?? "operator panel real score gap review",
       dimension_id: options?.dimensionId ?? "",
