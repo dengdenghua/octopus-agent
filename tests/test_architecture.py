@@ -333,6 +333,30 @@ class TestFileBackend:
         assert len(self.backend.list_keys("ns1")) == 2
         assert set(self.backend.list_namespaces()) == {"ns1", "ns2"}
 
+    def test_rejects_namespace_path_traversal(self):
+        base = Path(self.tmpdir)
+        outside = base.parent / f"{base.name}-escape"
+
+        with pytest.raises(ValueError, match="invalid file state namespace"):
+            self.backend.set(StateEntry(key="k", value="v", namespace="../escape"))
+
+        assert not outside.exists()
+
+    def test_rejects_symlinked_namespace_escape(self):
+        base = Path(self.tmpdir)
+        outside = base.parent / f"{base.name}-outside"
+        outside.mkdir()
+        link = base / "linked"
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except OSError as exc:
+            pytest.skip(f"symlink unavailable: {exc}")
+
+        with pytest.raises(ValueError, match="escapes base directory"):
+            self.backend.set(StateEntry(key="k", value="v", namespace="linked"))
+
+        assert not (outside / "k.json").exists()
+
 
 class TestSQLiteBackend:
     def setup_method(self):

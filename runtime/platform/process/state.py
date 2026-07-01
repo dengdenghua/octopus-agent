@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 import threading
 from abc import ABC, abstractmethod
@@ -12,6 +13,16 @@ from pathlib import Path
 from typing import Any
 
 _LOG = logging.getLogger("octopus.platform.state")
+_SAFE_FILE_NAMESPACE_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,239}$")
+
+
+def _require_file_namespace(namespace: str) -> str:
+    value = str(namespace or "").strip()
+    if not _SAFE_FILE_NAMESPACE_RE.fullmatch(value):
+        raise ValueError(
+            "invalid file state namespace: use letters, numbers, dot, underscore, or hyphen"
+        )
+    return value
 
 
 @dataclass
@@ -90,13 +101,20 @@ class FileBackend(StateBackend):
         self._lock = threading.RLock()
 
     def _ns_dir(self, namespace: str) -> Path:
-        d = self._base / namespace
+        d = self._base / _require_file_namespace(namespace)
         d.mkdir(parents=True, exist_ok=True)
         return d
 
     def _key_path(self, key: str, namespace: str) -> Path:
         safe_key = key.replace("/", "_").replace("\\", "_")
-        return self._ns_dir(namespace) / f"{safe_key}.json"
+        if not safe_key or safe_key in {".", ".."}:
+            raise ValueError("invalid file state key")
+        path = self._ns_dir(namespace) / f"{safe_key}.json"
+        base = self._base.resolve()
+        resolved = path.resolve()
+        if base not in resolved.parents:
+            raise ValueError("file state path escapes base directory")
+        return path
 
     def get(self, key: str, namespace: str = "default") -> StateEntry | None:
         path = self._key_path(key, namespace)
