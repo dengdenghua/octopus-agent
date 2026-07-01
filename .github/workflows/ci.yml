@@ -98,7 +98,16 @@ jobs:
         env:
           OCTOPUS_READINESS_HOME: ${{ runner.temp }}/octopus-readiness
           OCTOPUS_READINESS_DATA_DIR: ${{ runner.temp }}/octopus-readiness/data
+          OCTOPUS_READINESS_REPORT: ${{ runner.temp }}/octopus-readiness/readiness_gate.json
         run: make production-readiness
+
+      - name: Upload production readiness proof
+        if: always() && matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-readiness-proof
+          path: ${{ runner.temp }}/octopus-readiness/readiness_gate.json
+          if-no-files-found: error
 
       - name: Golden-path gate (plan→execute→replan→verify, incl. parallel/recovery)
         run: pytest tests/test_golden_path_e2e.py tests/test_ganglia_runtime.py -v --tb=short

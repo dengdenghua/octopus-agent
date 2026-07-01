@@ -418,6 +418,11 @@ def test_ci_runs_production_readiness_gate_with_isolated_state() -> None:
     assert "run: make production-readiness" in workflow
     assert "runner.temp" in workflow
     assert "OCTOPUS_READINESS_DATA_DIR" in workflow
+    assert "OCTOPUS_READINESS_REPORT" in workflow
+    assert "Upload production readiness proof" in workflow
+    assert "production-readiness-proof" in workflow
+    assert "readiness_gate.json" in workflow
+    assert "if-no-files-found: error" in workflow
 
 
 def test_makefile_exposes_isolated_production_readiness_target() -> None:
