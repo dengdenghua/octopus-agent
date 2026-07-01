@@ -11,9 +11,14 @@ from __future__ import annotations
 
 import io
 import tarfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from .client import DEFAULT_BASE, AssetPayload, RegistryClient
+
+# 冷启动(空目录、97 个技能全要同步)串行拉取实测 ~150s——每个技能是独立 HTTP 往返(部分还要
+# 再拉一次 bundle),线程池并发把它压到并发 N 批。httpx 同步调用天然线程安全,无需上 asyncio。
+_DEFAULT_WORKERS = 16
 
 # 可安全落地的类型:type=skill 资产 = SKILL.md prompt-pack —— body 被产品当 **prompt 注入**、
 # 从不作为代码执行,故落地安全(registry 把 skill 粗标 kind=code 是为将来签名/沙箱策略,
@@ -61,28 +66,46 @@ def materialize_skill(p: AssetPayload, skills_dir: Path, *, client: RegistryClie
     return md
 
 
+def _sync_one(
+    slug: str, skills_dir: Path, client: RegistryClient, allow_code: bool
+) -> tuple[str, str | None, str | None]:
+    """拉取 + 落地单个技能。返回 (slug, ok_path_or_None, skip_or_error_reason_or_None)。"""
+    asset_id = slug if "/" in slug else f"skill/{slug}"
+    try:
+        p = client.fetch(asset_id)
+        if not _is_prompt_pack(p) and not allow_code:
+            return slug, None, f"type={p.type or '?'}/kind={p.kind or '?'}:可执行资产默认不落地(--allow-code 放开)"
+        md = materialize_skill(p, skills_dir, client=client)
+        return slug, str(md), None
+    except Exception as exc:  # noqa: BLE001 — 单个坏不影响整批
+        return slug, None, f"__error__:{exc}"
+
+
 def sync_skills(
     slugs: list[str],
     skills_dir: Path | str,
     *,
     base_url: str = DEFAULT_BASE,
     allow_code: bool = False,
+    max_workers: int = _DEFAULT_WORKERS,
 ) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]]:
-    """拉取 + 校验 + 落地一批技能。返回 (ok, skipped, errors),各元素 (slug, info)。"""
+    """拉取 + 校验 + 落地一批技能(**并发**,httpx 同步调用线程安全)。
+    返回 (ok, skipped, errors),各元素 (slug, info)。"""
     client = RegistryClient(base_url)
     skills_dir = Path(skills_dir)
     ok: list[tuple[str, str]] = []
     skipped: list[tuple[str, str]] = []
     errors: list[tuple[str, str]] = []
-    for slug in slugs:
-        asset_id = slug if "/" in slug else f"skill/{slug}"
-        try:
-            p = client.fetch(asset_id)
-            if not _is_prompt_pack(p) and not allow_code:
-                skipped.append((slug, f"type={p.type or '?'}/kind={p.kind or '?'}:可执行资产默认不落地(--allow-code 放开)"))
-                continue
-            md = materialize_skill(p, skills_dir, client=client)
-            ok.append((slug, str(md)))
-        except Exception as exc:  # noqa: BLE001 — 单个坏不影响整批
-            errors.append((slug, str(exc)))
+    if not slugs:
+        return ok, skipped, errors
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(slugs))) as pool:
+        futures = [pool.submit(_sync_one, slug, skills_dir, client, allow_code) for slug in slugs]
+        for fut in as_completed(futures):
+            slug, path, reason = fut.result()
+            if path:
+                ok.append((slug, path))
+            elif reason and reason.startswith("__error__:"):
+                errors.append((slug, reason.removeprefix("__error__:")))
+            elif reason:
+                skipped.append((slug, reason))
     return ok, skipped, errors
