@@ -40,9 +40,11 @@ class CoworkRuntime:
             self.runner.stop(timeout=timeout)
 
     def status(self, thread_id: str | None = None) -> dict[str, Any]:
+        runner_status = self.runner.status() if self.runner is not None else None
         return {
             "runner_enabled": self.runner_enabled,
             "runner_reason": self.runner_reason,
+            "runner_status": runner_status,
             "task_counts": self.async_store.counts(thread_id),
         }
 

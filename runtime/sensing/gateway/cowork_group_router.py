@@ -614,9 +614,10 @@ def create_cowork_group_router(
             runner = {
                 "enabled": bool(rstatus.get("runner_enabled")),
                 "reason": rstatus.get("runner_reason") or "",
+                "status": rstatus.get("runner_status"),
             }
         else:
-            runner = {"enabled": False, "reason": "runtime not attached"}
+            runner = {"enabled": False, "reason": "runtime not attached", "status": None}
 
         state = group_store.state(thread_id)
         members = group_presence(group_store, _presence_store(), thread_id)

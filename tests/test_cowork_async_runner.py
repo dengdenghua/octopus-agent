@@ -93,6 +93,59 @@ def test_drain_all_across_threads(tmp_path) -> None:
     assert aw.threads_with_pending() == []
 
 
+def test_tick_once_records_success_health(tmp_path) -> None:
+    gs, aw = _setup(tmp_path)
+    runner = AsyncWorkRunner(aw, gs, lambda t, c: "r")
+    aw.assign("t", "w", "a", actor="u")
+
+    assert runner.tick_once() == 1
+
+    status = runner.status()
+    assert status["running"] is False
+    assert status["total_ticks"] == 1
+    assert status["total_failures"] == 0
+    assert status["consecutive_failures"] == 0
+    assert status["last_error"] is None
+    assert status["last_ran_count"] == 1
+    assert status["last_recovered"] == {"requeued": 0, "failed": 0}
+    assert status["last_success_at"]
+
+
+def test_tick_once_records_recovered_stale_health(tmp_path) -> None:
+    gs, aw = _setup(tmp_path)
+    task = aw.assign("t", "worker", "recover during tick", actor="u")
+    assert aw.claim(task.task_id) is True
+    with aw._lock, sqlite3.connect(str(aw._db)) as conn:  # noqa: SLF001
+        conn.execute(
+            "UPDATE async_tasks SET updated_at='2000-01-01T00:00:00+00:00' WHERE task_id=?",
+            (task.task_id,),
+        )
+    runner = AsyncWorkRunner(aw, gs, lambda t, c: "rerun", recover_stale_seconds=1)
+
+    assert runner.tick_once() == 1
+
+    status = runner.status()
+    assert status["total_ticks"] == 1
+    assert status["last_recovered"] == {"requeued": 1, "failed": 0}
+    assert status["last_ran_count"] == 1
+
+
+def test_tick_once_records_failure_health(tmp_path, monkeypatch) -> None:
+    gs, aw = _setup(tmp_path)
+    runner = AsyncWorkRunner(aw, gs, lambda t, c: "r")
+
+    monkeypatch.setattr(aw, "threads_with_pending", lambda: (_ for _ in ()).throw(RuntimeError("db down")))
+
+    assert runner.tick_once() == 0
+
+    status = runner.status()
+    assert status["total_ticks"] == 1
+    assert status["total_failures"] == 1
+    assert status["consecutive_failures"] == 1
+    assert status["last_error"] == "RuntimeError: db down"
+    assert status["last_failure_at"]
+
+
 def test_drain_all_recovers_stale_working_before_polling(tmp_path) -> None:
     gs, aw = _setup(tmp_path)
     task = aw.assign("t", "worker", "recover during drain", actor="u")
@@ -170,6 +223,9 @@ def test_runtime_dispatches_through_subagent_bridge(tmp_path, monkeypatch) -> No
         assert seen["prompt"] == "do background work"
         assert seen["context"]["source"] == "cowork_async_task"
         assert runtime.group_store.blackboard_snapshot("t")
+        status = runtime.status("t")
+        assert status["runner_status"]["total_ticks"] == 0
+        assert status["runner_status"]["last_error"] is None
     finally:
         set_sub_agent_runner(previous_runner)
 

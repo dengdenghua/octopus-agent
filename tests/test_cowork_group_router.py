@@ -230,3 +230,36 @@ def test_health_endpoint_aggregates_runner_tasks_presence(tmp_path) -> None:
     assert h["tasks"]["failures"][0]["error"] == "boom"
     assert h["presence"]["members"] == 2
     assert len(h["recent_events"]) >= 2
+
+
+def test_health_endpoint_includes_runner_status_when_runtime_attached(tmp_path) -> None:
+    from runtime.memory.cowork.async_runner import AsyncWorkRunner
+    from runtime.memory.cowork.async_work import AsyncWorkStore
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+    from runtime.memory.cowork.runtime import CoworkRuntime
+
+    store = GroupStore(base_dir=tmp_path)
+    async_store = AsyncWorkStore(base_dir=store.base_dir, group_store=store)
+    runner = AsyncWorkRunner(async_store, store, lambda _task, _context: "done")
+    runtime = CoworkRuntime(
+        group_store=store,
+        async_store=async_store,
+        collaboration_store=CollaborationStore(base_dir=store.base_dir),
+        runner=runner,
+        runner_enabled=True,
+        runner_reason="test runner",
+    )
+    app = FastAPI()
+    app.include_router(create_cowork_group_router(store=store, runtime=runtime))
+    c = TestClient(app)
+    t = "thread-runner-health"
+    async_store.assign(t, "worker", "background work", actor="user")
+    assert runner.tick_once() == 1
+
+    h = c.get(f"/api/cowork/{t}/health").json()
+
+    assert h["runner"]["enabled"] is True
+    assert h["runner"]["reason"] == "test runner"
+    assert h["runner"]["status"]["total_ticks"] == 1
+    assert h["runner"]["status"]["last_ran_count"] == 1
+    assert h["runner"]["status"]["last_error"] is None

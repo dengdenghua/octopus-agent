@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 from runtime.memory.cowork.async_work import AsyncTask, AsyncWorkStore
@@ -29,6 +30,10 @@ _LOG = logging.getLogger("octopus.cowork.async_runner")
 # history, the shared blackboard, and the roster.
 Executor = Callable[[AsyncTask, dict[str, Any]], str]
 HistoryProvider = Callable[[str], list[Any]]
+
+
+def _now_iso() -> str:
+    return datetime.now(UTC).isoformat()
 
 
 class AsyncWorkRunner:
@@ -54,6 +59,62 @@ class AsyncWorkRunner:
         self._max_attempts = max(1, int(max_attempts))
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._state_lock = threading.Lock()
+        self._total_ticks = 0
+        self._total_failures = 0
+        self._consecutive_failures = 0
+        self._last_tick_at: str | None = None
+        self._last_success_at: str | None = None
+        self._last_failure_at: str | None = None
+        self._last_error: str | None = None
+        self._last_recovered: dict[str, int] = {"requeued": 0, "failed": 0}
+        self._last_ran_count = 0
+
+    @property
+    def running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def status(self) -> dict[str, Any]:
+        """Operational health snapshot for UI/API diagnostics."""
+        with self._state_lock:
+            return {
+                "running": self.running,
+                "recover_stale_seconds": self._recover_stale_seconds,
+                "max_attempts": self._max_attempts,
+                "total_ticks": self._total_ticks,
+                "total_failures": self._total_failures,
+                "consecutive_failures": self._consecutive_failures,
+                "last_tick_at": self._last_tick_at,
+                "last_success_at": self._last_success_at,
+                "last_failure_at": self._last_failure_at,
+                "last_error": self._last_error,
+                "last_recovered": dict(self._last_recovered),
+                "last_ran_count": self._last_ran_count,
+            }
+
+    def _record_tick_result(
+        self,
+        *,
+        success: bool,
+        recovered: dict[str, int] | None = None,
+        ran_count: int = 0,
+        error: str | None = None,
+    ) -> None:
+        now = _now_iso()
+        with self._state_lock:
+            self._total_ticks += 1
+            self._last_tick_at = now
+            self._last_recovered = dict(recovered or {"requeued": 0, "failed": 0})
+            self._last_ran_count = int(ran_count)
+            if success:
+                self._consecutive_failures = 0
+                self._last_error = None
+                self._last_success_at = now
+                return
+            self._total_failures += 1
+            self._consecutive_failures += 1
+            self._last_error = error or "tick failed"
+            self._last_failure_at = now
 
     def _build_context(self, task: AsyncTask) -> dict[str, Any]:
         state = self._groups.state(task.thread_id)
@@ -110,6 +171,23 @@ class AsyncWorkRunner:
         self.recover_stale()
         return sum(self.drain(tid) for tid in self._store.threads_with_pending())
 
+    def tick_once(self) -> int:
+        """Run one recover+drain tick and record runner health."""
+        try:
+            recovered = self.recover_stale()
+            ran = 0
+            for thread_id in self._store.threads_with_pending():
+                ran += self.drain(thread_id)
+        except Exception as exc:  # noqa: BLE001 — tick health must capture store/context failures
+            self._record_tick_result(
+                success=False,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            _LOG.warning("async runner tick error: %s", exc, exc_info=True)
+            return 0
+        self._record_tick_result(success=True, recovered=recovered, ran_count=ran)
+        return ran
+
     # ── background daemon ────────────────────────────────────────────────────
     def start(self, *, poll_seconds: float = 5.0) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -128,7 +206,4 @@ class AsyncWorkRunner:
 
     def _loop(self, poll_seconds: float) -> None:
         while not self._stop.wait(timeout=poll_seconds):
-            try:
-                self.drain_all()
-            except Exception as exc:  # noqa: BLE001 — the daemon must never die
-                _LOG.debug("async runner tick error: %s", exc)
+            self.tick_once()
