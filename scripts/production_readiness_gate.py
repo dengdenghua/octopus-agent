@@ -102,6 +102,7 @@ class GateResult:
         e2e_ready: bool,
         e2e_verdict: str,
         e2e_summary: dict[str, Any],
+        e2e_coverage: dict[str, Any],
         e2e_failed_checks: list[str],
         quality_summary: str,
     ) -> None:
@@ -112,6 +113,7 @@ class GateResult:
         self.e2e_ready = e2e_ready
         self.e2e_verdict = e2e_verdict
         self.e2e_summary = e2e_summary
+        self.e2e_coverage = e2e_coverage
         self.e2e_failed_checks = e2e_failed_checks
         self.quality_summary = quality_summary
 
@@ -121,6 +123,8 @@ class GateResult:
             f"e2e_scorecard={_nested_int(self.e2e_summary, 'scorecard_octopus')}, "
             f"e2e_best_external={_nested_int(self.e2e_summary, 'scorecard_best_external')}, "
             f"e2e_automation={_nested_int(self.e2e_summary, 'automation_octopus')}, "
+            f"e2e_coverage={_nested_int(self.e2e_summary, 'coverage_ready')}/"
+            f"{_nested_int(self.e2e_summary, 'coverage_total')}, "
             f"e2e_quality={_nested_int(self.e2e_summary, 'quality_ready')}/"
             f"{_nested_int(self.e2e_summary, 'quality_total')}"
         )
@@ -139,6 +143,7 @@ class GateResult:
                 "ready": self.e2e_ready,
                 "verdict": self.e2e_verdict,
                 "summary": dict(self.e2e_summary),
+                "coverage": dict(self.e2e_coverage),
                 "failed_checks": list(self.e2e_failed_checks),
             },
             "quality_summary": self.quality_summary,
@@ -178,6 +183,7 @@ def run_gate(
     )
     automation_score = _nested_int(automation, "overall", "octopus")
     e2e_summary = dict(e2e_certification.get("summary") or {})
+    e2e_coverage = dict(e2e_certification.get("coverage") or {})
     e2e_failed_checks = _failed_check_ids(e2e_certification.get("checks"))
     quality_ready = sum(1 for report in quality_reports if bool(report.get("ready")))
     quality_total = len(quality_reports)
@@ -249,6 +255,21 @@ def run_gate(
             "scorecard_evidence_adjusted_octopus": scorecard_evidence_adjusted_score,
             "automation_octopus": automation_score,
             "automation_codex": _nested_int(automation, "overall", "codex"),
+            "coverage_ready": _nested_int(
+                e2e_coverage,
+                "summary",
+                "ready_domains",
+            ),
+            "coverage_total": _nested_int(
+                e2e_coverage,
+                "summary",
+                "total_domains",
+            ),
+            "coverage_gap_domains": _nested_int(
+                e2e_coverage,
+                "summary",
+                "gap_domains",
+            ),
             "quality_ready": quality_ready,
             "quality_total": quality_total,
             "all_dimensions_surpassed": bool(
@@ -283,6 +304,7 @@ def run_gate(
         e2e_ready=bool(e2e_certification.get("ready")),
         e2e_verdict=str(e2e_certification.get("verdict") or "unknown"),
         e2e_summary=e2e_summary,
+        e2e_coverage=e2e_coverage,
         e2e_failed_checks=e2e_failed_checks,
         quality_summary=quality_summary,
     )

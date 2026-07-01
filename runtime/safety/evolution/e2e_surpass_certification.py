@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,78 @@ QUALITY_REPORTS = (
 )
 
 
+@dataclass(frozen=True)
+class E2ECoverageDomain:
+    id: str
+    title: str
+    scorecard_dimension_ids: tuple[str, ...]
+    quality_schemas: tuple[str, ...] = ()
+    automation_dimension_ids: tuple[str, ...] = ()
+
+
+REQUIRED_COVERAGE_DOMAINS: tuple[E2ECoverageDomain, ...] = (
+    E2ECoverageDomain(
+        id="general_runtime_and_coding",
+        title="General runtime and coding loop",
+        scorecard_dimension_ids=("general_agent_loop", "core_coding_loop"),
+        quality_schemas=("octopus.agent_loop_quality.v1",),
+    ),
+    E2ECoverageDomain(
+        id="frontend_product_experience",
+        title="Frontend product experience",
+        scorecard_dimension_ids=("product_experience",),
+        quality_schemas=("octopus.product_experience_quality.v1",),
+    ),
+    E2ECoverageDomain(
+        id="browser_desktop_automation",
+        title="Browser and desktop automation",
+        scorecard_dimension_ids=("browser_desktop",),
+        quality_schemas=("octopus.browser_desktop_quality.v1",),
+        automation_dimension_ids=(
+            "browser_session_control",
+            "desktop_preview_execute",
+            "desktop_semantic_grounding",
+            "visual_replay_validation",
+            "repair_recipe_learning",
+            "operator_visibility",
+            "automation_safety",
+            "productized_api_bridge",
+        ),
+    ),
+    E2ECoverageDomain(
+        id="multi_agent_digital_employee",
+        title="Multi-agent and digital employee execution",
+        scorecard_dimension_ids=(
+            "digital_employee_workflows",
+            "subagents_parallelism",
+            "differentiated_agent_os",
+        ),
+        quality_schemas=("octopus.digital_employee_quality.v1",),
+    ),
+    E2ECoverageDomain(
+        id="repo_memory_knowledge",
+        title="Repository context, memory, and knowledge",
+        scorecard_dimension_ids=("repo_context", "long_term_learning"),
+        quality_schemas=("octopus.repo_context_quality.v1",),
+    ),
+    E2ECoverageDomain(
+        id="security_governance",
+        title="Security, sandbox, replay, and governance",
+        scorecard_dimension_ids=(
+            "permissions_sandbox",
+            "record_replay_audit",
+            "governance_operator",
+        ),
+        quality_schemas=("octopus.permission_sandbox_quality.v1",),
+    ),
+    E2ECoverageDomain(
+        id="extensions_ecosystem",
+        title="Extensions, hooks, and ecosystem maturity",
+        scorecard_dimension_ids=("extensions_hooks", "ecosystem_maturity"),
+    ),
+)
+
+
 def compute_e2e_surpass_certification(
     *,
     target_score: int = 95,
@@ -64,6 +137,12 @@ def compute_e2e_surpass_certification(
     automation_octopus = _nested_int(automation, "overall", "octopus")
     scorecard_target_score = int(scorecard.get("target_score") or 0)
     automation_target_score = int(automation.get("target_score") or 0)
+    coverage_domains = _coverage_domains(
+        scorecard=scorecard,
+        automation=automation,
+        quality_reports=quality_reports,
+    )
+    coverage_summary = _coverage_summary(coverage_domains)
     checks = [
         {
             "id": "scorecard_target_aligned",
@@ -123,6 +202,28 @@ def compute_e2e_surpass_certification(
             "score": len(automation.get("octopus_gaps") or []),
             "target": 0,
         },
+        {
+            "id": "e2e_required_domains_present",
+            "title": "Required E2E domains are covered",
+            "passed": (
+                int(coverage_summary["present_domains"])
+                == int(coverage_summary["total_domains"])
+            ),
+            "score": int(coverage_summary["present_domains"]),
+            "target": int(coverage_summary["total_domains"]),
+            "next_action": "Restore missing scorecard, automation, or quality coverage.",
+        },
+        {
+            "id": "e2e_required_domains_ready",
+            "title": "Required E2E domains are ready",
+            "passed": (
+                int(coverage_summary["ready_domains"])
+                == int(coverage_summary["total_domains"])
+            ),
+            "score": int(coverage_summary["ready_domains"]),
+            "target": int(coverage_summary["total_domains"]),
+            "next_action": "Restore non-ready E2E coverage domains.",
+        },
     ]
     checks.extend(_quality_checks(quality_reports))
     ready = all(bool(check.get("passed")) for check in checks)
@@ -139,6 +240,9 @@ def compute_e2e_surpass_certification(
             ),
             "automation_octopus": automation_octopus,
             "automation_codex": _nested_int(automation, "overall", "codex"),
+            "coverage_ready": int(coverage_summary["ready_domains"]),
+            "coverage_total": int(coverage_summary["total_domains"]),
+            "coverage_gap_domains": int(coverage_summary["gap_domains"]),
             "quality_ready": sum(
                 1 for report in quality_reports
                 if bool(report.get("ready"))
@@ -174,6 +278,11 @@ def compute_e2e_surpass_certification(
             "verdict": automation.get("verdict"),
             "next_focus": automation.get("next_focus") or [],
             "gap_count": len(automation.get("octopus_gaps") or []),
+        },
+        "coverage": {
+            "schema": "octopus.e2e_coverage.v1",
+            "summary": coverage_summary,
+            "domains": coverage_domains,
         },
         "quality": [
             {
@@ -225,6 +334,147 @@ def _quality_checks(reports: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return checks
 
 
+def _coverage_domains(
+    *,
+    scorecard: dict[str, Any],
+    automation: dict[str, Any],
+    quality_reports: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    scorecard_dimensions = {
+        str(row.get("id")): row
+        for row in scorecard.get("dimensions") or []
+        if isinstance(row, dict)
+    }
+    automation_dimensions = {
+        str(row.get("id")): row
+        for row in automation.get("dimensions") or []
+        if isinstance(row, dict)
+    }
+    quality_by_schema = {
+        str(report.get("schema")): report
+        for report in quality_reports
+        if isinstance(report, dict)
+    }
+    return [
+        _coverage_domain_row(
+            domain,
+            scorecard_dimensions=scorecard_dimensions,
+            automation_dimensions=automation_dimensions,
+            quality_by_schema=quality_by_schema,
+        )
+        for domain in REQUIRED_COVERAGE_DOMAINS
+    ]
+
+
+def _coverage_domain_row(
+    domain: E2ECoverageDomain,
+    *,
+    scorecard_dimensions: dict[str, dict[str, Any]],
+    automation_dimensions: dict[str, dict[str, Any]],
+    quality_by_schema: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    scorecard_rows = [
+        scorecard_dimensions[dimension_id]
+        for dimension_id in domain.scorecard_dimension_ids
+        if dimension_id in scorecard_dimensions
+    ]
+    missing_scorecard_dimensions = [
+        dimension_id
+        for dimension_id in domain.scorecard_dimension_ids
+        if dimension_id not in scorecard_dimensions
+    ]
+    scorecard_ready = (
+        not missing_scorecard_dimensions
+        and bool(scorecard_rows)
+        and all(_scorecard_dimension_ready(row) for row in scorecard_rows)
+    )
+
+    quality_reports = [
+        quality_by_schema[schema]
+        for schema in domain.quality_schemas
+        if schema in quality_by_schema
+    ]
+    missing_quality_schemas = [
+        schema for schema in domain.quality_schemas if schema not in quality_by_schema
+    ]
+    quality_ready = (
+        not missing_quality_schemas
+        and all(_quality_report_ready(report) for report in quality_reports)
+    )
+
+    automation_rows = [
+        automation_dimensions[dimension_id]
+        for dimension_id in domain.automation_dimension_ids
+        if dimension_id in automation_dimensions
+    ]
+    missing_automation_dimensions = [
+        dimension_id
+        for dimension_id in domain.automation_dimension_ids
+        if dimension_id not in automation_dimensions
+    ]
+    automation_ready = (
+        not missing_automation_dimensions
+        and all(_automation_dimension_ready(row) for row in automation_rows)
+    )
+
+    present = (
+        not missing_scorecard_dimensions
+        and not missing_quality_schemas
+        and not missing_automation_dimensions
+    )
+    ready = present and scorecard_ready and quality_ready and automation_ready
+    return {
+        "id": domain.id,
+        "title": domain.title,
+        "present": present,
+        "ready": ready,
+        "scorecard_dimension_ids": list(domain.scorecard_dimension_ids),
+        "scorecard_ready": scorecard_ready,
+        "missing_scorecard_dimension_ids": missing_scorecard_dimensions,
+        "quality_schemas": list(domain.quality_schemas),
+        "quality_ready": quality_ready,
+        "missing_quality_schemas": missing_quality_schemas,
+        "automation_dimension_ids": list(domain.automation_dimension_ids),
+        "automation_ready": automation_ready,
+        "missing_automation_dimension_ids": missing_automation_dimensions,
+    }
+
+
+def _scorecard_dimension_ready(row: dict[str, Any]) -> bool:
+    return (
+        bool(row.get("octopus_surpasses_best_external"))
+        and int(row.get("octopus_gap_to_effective_target") or 0) == 0
+        and int(row.get("octopus_evidence_adjusted_gap_to_effective_target") or 0) == 0
+    )
+
+
+def _quality_report_ready(report: dict[str, Any]) -> bool:
+    return bool(report.get("ready")) and float(report.get("score") or 0.0) >= 1.0
+
+
+def _automation_dimension_ready(row: dict[str, Any]) -> bool:
+    return (
+        bool(row.get("evidence_ready"))
+        and int(row.get("octopus_gap_to_target") or 0) == 0
+        and int(row.get("octopus_gap_to_codex") or 0) <= 0
+    )
+
+
+def _coverage_summary(domains: list[dict[str, Any]]) -> dict[str, Any]:
+    total = len(domains)
+    ready = [row for row in domains if bool(row.get("ready"))]
+    present = [row for row in domains if bool(row.get("present"))]
+    gaps = [row for row in domains if not bool(row.get("ready"))]
+    return {
+        "schema": "octopus.e2e_coverage_summary.v1",
+        "total_domains": total,
+        "present_domains": len(present),
+        "ready_domains": len(ready),
+        "gap_domains": len(gaps),
+        "gap_domain_ids": [str(row.get("id")) for row in gaps],
+    }
+
+
 def _first_next_action(report: dict[str, Any]) -> str:
     actions = report.get("next_actions")
     if isinstance(actions, list) and actions:
@@ -250,6 +500,8 @@ def _nested_int(report: dict[str, Any], *keys: str) -> int:
 
 
 __all__ = [
+    "E2ECoverageDomain",
     "QUALITY_REPORTS",
+    "REQUIRED_COVERAGE_DOMAINS",
     "compute_e2e_surpass_certification",
 ]

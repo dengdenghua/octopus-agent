@@ -830,18 +830,53 @@ class TestAgentCompetitorScorecard:
             "scorecard_evidence_adjusted_octopus": 97,
             "automation_octopus": 95,
             "automation_codex": 93,
+            "coverage_ready": 7,
+            "coverage_total": 7,
+            "coverage_gap_domains": 0,
             "quality_ready": 6,
             "quality_total": 6,
             "all_dimensions_surpassed": True,
             "scorecard_gap_dimensions": 0,
             "automation_gap_dimensions": 0,
         }
+        assert report["coverage"]["schema"] == "octopus.e2e_coverage.v1"
+        assert report["coverage"]["summary"] == {
+            "schema": "octopus.e2e_coverage_summary.v1",
+            "total_domains": 7,
+            "present_domains": 7,
+            "ready_domains": 7,
+            "gap_domains": 0,
+            "gap_domain_ids": [],
+        }
+        coverage = {row["id"]: row for row in report["coverage"]["domains"]}
+        assert coverage["frontend_product_experience"]["ready"] is True
+        assert coverage["frontend_product_experience"]["quality_schemas"] == [
+            "octopus.product_experience_quality.v1",
+        ]
+        assert coverage["browser_desktop_automation"]["automation_ready"] is True
+        assert coverage["browser_desktop_automation"]["automation_dimension_ids"] == [
+            "browser_session_control",
+            "desktop_preview_execute",
+            "desktop_semantic_grounding",
+            "visual_replay_validation",
+            "repair_recipe_learning",
+            "operator_visibility",
+            "automation_safety",
+            "productized_api_bridge",
+        ]
+        assert coverage["multi_agent_digital_employee"]["scorecard_dimension_ids"] == [
+            "digital_employee_workflows",
+            "subagents_parallelism",
+            "differentiated_agent_os",
+        ]
         assert all(check["passed"] for check in report["checks"])
         assert {
             "scorecard_target_aligned",
             "automation_target_aligned",
             "scorecard_all_dimensions_surpassed",
             "automation_no_gaps",
+            "e2e_required_domains_present",
+            "e2e_required_domains_ready",
             "octopus.digital_employee_quality.v1:ready",
         } <= {check["id"] for check in report["checks"]}
         assert report["scorecard"]["target_score"] == 95
