@@ -108,6 +108,11 @@ def test_quarantine_custom_ttl_overrides_default():
         assert ai.is_quarantined("skill_a") is False
 
 
+def test_quarantine_ttl_s_exposes_clamped_default():
+    ai = _make_ai(ttl_s=0.1)
+    assert ai.quarantine_ttl_s == 1.0
+
+
 # ── 5. TrustEngine.learn() quarantines anomalous sucker ──────────────────────
 
 def test_learn_quarantines_on_anomaly():

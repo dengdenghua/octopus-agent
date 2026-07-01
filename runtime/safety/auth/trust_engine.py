@@ -174,7 +174,7 @@ class TrustEngine:
                 "adaptive immunity · behavioural anomaly · sucker=%s "
                 "composite=%.2f · %s · quarantining for %.0fs",
                 sucker, score.composite, score.reason,
-                self.adaptive._quarantine_ttl,
+                self.adaptive.quarantine_ttl_s,
             )
             self.adaptive.quarantine(sucker)
         self.adaptive.learn(sucker, latency_ms=latency_ms, tokens=tokens)

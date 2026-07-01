@@ -117,6 +117,11 @@ class AdaptiveImmunity:
         self._quarantined: dict[str, float] = {}
         self._lock = threading.Lock()
 
+    @property
+    def quarantine_ttl_s(self) -> float:
+        """Default quarantine TTL, in seconds."""
+        return self._quarantine_ttl
+
     def _baseline_for(self, sucker_id: str) -> _Baseline:
         bl = self._baselines.get(sucker_id)
         if bl is None:
