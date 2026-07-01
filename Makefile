@@ -38,7 +38,8 @@ production-readiness:  ## Run the production readiness gate with isolated runtim
 	OCTOPUS_HOME=$${OCTOPUS_READINESS_HOME:-test-results/production-readiness} \
 	OCTOPUS_DATA_DIR=$${OCTOPUS_READINESS_DATA_DIR:-test-results/production-readiness/data} \
 	$${PYTHON:-$$(if [ -x .venv/bin/python ]; then printf '%s' .venv/bin/python; else printf '%s' python; fi)} -m scripts.production_readiness_gate \
-		--review-queue-path "$${OCTOPUS_READINESS_REVIEW_QUEUE:-test-results/production-readiness/data/review_queue.json}"
+		--review-queue-path "$${OCTOPUS_READINESS_REVIEW_QUEUE:-test-results/production-readiness/data/review_queue.json}" \
+		--json-output "$${OCTOPUS_READINESS_REPORT:-test-results/production-readiness/readiness_gate.json}"
 
 verify-local:  ## Run backend/frontend/full-stack local stability gates
 	bash scripts/verify_local.sh

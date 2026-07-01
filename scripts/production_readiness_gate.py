@@ -66,14 +66,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Emit a machine-readable readiness report instead of text.",
     )
+    parser.add_argument(
+        "--json-output",
+        type=Path,
+        default=None,
+        help="Write the machine-readable readiness report to this path.",
+    )
     args = parser.parse_args(argv)
 
     result = run_gate(
         min_score=args.min_score,
         review_queue_path=args.review_queue_path,
     )
+    report = result.to_dict()
+    if args.json_output is not None:
+        args.json_output.parent.mkdir(parents=True, exist_ok=True)
+        args.json_output.write_text(
+            json.dumps(report, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
     if args.json:
-        print(json.dumps(result.to_dict(), sort_keys=True))
+        print(json.dumps(report, sort_keys=True))
         return 1 if result.failures else 0
 
     if result.failures:

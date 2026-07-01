@@ -91,6 +91,32 @@ def test_production_readiness_gate_can_emit_json_summary(
     assert data["e2e"]["failed_checks"] == []
 
 
+def test_production_readiness_gate_can_write_json_output(
+    capsys,
+    review_queue_path: Path,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "reports" / "readiness.json"
+
+    code = gate.main([
+        "--review-queue-path",
+        str(review_queue_path),
+        "--json-output",
+        str(output_path),
+    ])
+
+    captured = capsys.readouterr()
+    data = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert code == 0
+    assert output_path.exists()
+    assert "production readiness gate passed" in captured.out
+    assert data["schema"] == "octopus.production_readiness_gate.v1"
+    assert data["ready"] is True
+    assert data["e2e"]["summary"]["coverage_ready"] == 7
+    assert data["e2e"]["coverage"]["summary"]["total_domains"] == 7
+
+
 def test_production_readiness_gate_json_reports_failures(
     capsys,
     monkeypatch,
@@ -401,10 +427,23 @@ def test_makefile_exposes_isolated_production_readiness_target() -> None:
     assert "OCTOPUS_READINESS_HOME" in makefile
     assert "OCTOPUS_READINESS_DATA_DIR" in makefile
     assert "OCTOPUS_READINESS_REVIEW_QUEUE" in makefile
+    assert "OCTOPUS_READINESS_REPORT" in makefile
     assert ".venv/bin/python" in makefile
     assert "$${PYTHON:-" in makefile
     assert "-m scripts.production_readiness_gate" in makefile
     assert "--review-queue-path" in makefile
+    assert "--json-output" in makefile
+
+
+def test_verify_local_persists_production_readiness_report() -> None:
+    script = (REPO_ROOT / "scripts" / "verify_local.sh").read_text(
+        encoding="utf-8",
+    )
+
+    assert "VERIFY_READINESS_REPORT" in script
+    assert "production_readiness_gate.json" in script
+    assert "--json-output \"$VERIFY_READINESS_REPORT\"" in script
+    assert "readiness report: $VERIFY_READINESS_REPORT" in script
 
 
 def test_pr_template_points_reviewers_to_make_production_readiness() -> None:

@@ -14,6 +14,7 @@ run_production_gate="${OCTOPUS_VERIFY_SKIP_PRODUCTION_GATE:-0}"
 VERIFY_STATE_ROOT="${OCTOPUS_VERIFY_STATE_ROOT:-$ROOT_DIR/test-results/local-verify-state}"
 VERIFY_DATA_DIR="$VERIFY_STATE_ROOT/data"
 VERIFY_REVIEW_QUEUE="$VERIFY_DATA_DIR/review_queue.json"
+VERIFY_READINESS_REPORT="$VERIFY_STATE_ROOT/production_readiness_gate.json"
 
 usage() {
   cat <<'EOF'
@@ -117,7 +118,9 @@ if [[ "$run_production_gate" != "1" ]]; then
   OCTOPUS_HOME="$VERIFY_STATE_ROOT" \
   OCTOPUS_DATA_DIR="$VERIFY_DATA_DIR" \
   "$PYTHON_BIN" scripts/production_readiness_gate.py \
-    --review-queue-path "$VERIFY_REVIEW_QUEUE"
+    --review-queue-path "$VERIFY_REVIEW_QUEUE" \
+    --json-output "$VERIFY_READINESS_REPORT"
+  echo "readiness report: $VERIFY_READINESS_REPORT"
 fi
 
 if [[ "$run_frontend_static" == "1" ]]; then
