@@ -458,3 +458,51 @@ def test_team_room_projection_can_promote_to_thread_session(tmp_path) -> None:
     assert [t["title"] for t in collab_store.tasks_for_session("thread-1")] == [
         "created from team"
     ]
+
+
+def test_team_room_delete_projection_removes_unified_room_state(tmp_path) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+    from runtime.sensing.gateway.team_rooms_router import create_team_rooms_router
+
+    collab_store = CollaborationStore(base_dir=tmp_path / "cowork")
+    rooms = create_team_rooms_router(
+        state_path=tmp_path / "team_rooms.json",
+        room_projection=lambda room: collab_store.upsert_room_by_id(room),
+        room_delete_projection=lambda room_id: collab_store.delete_room_by_id(room_id),
+    )
+    app = FastAPI()
+    app.include_router(rooms)
+    c = TestClient(app)
+
+    team = c.post(
+        "/api/teams",
+        json={
+            "id": "room-1",
+            "name": "Team first",
+            "members": [{"name": "alice"}],
+            "leaderId": "alice",
+        },
+    ).json()
+    collab_store.upsert_task_for_room(
+        team["id"],
+        {
+            "id": "task-1",
+            "room_id": team["id"],
+            "title": "created from team",
+            "created_at": "t0",
+            "updated_at": "t0",
+        },
+    )
+    collab_store.append_message_for_room(team["id"], text="room transcript")
+
+    assert collab_store.room_by_id(team["id"]) is not None
+    assert collab_store.tasks_for_room(team["id"])
+    assert collab_store.messages_for_room(team["id"])
+
+    deleted = c.delete(f"/api/teams/{team['id']}")
+
+    assert deleted.status_code == 200
+    assert collab_store.session_id_for_room(team["id"]) is None
+    assert collab_store.room_by_id(team["id"]) is None
+    assert collab_store.tasks_for_room(team["id"]) == []
+    assert collab_store.messages_for_room(team["id"]) == []

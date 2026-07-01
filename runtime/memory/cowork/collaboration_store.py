@@ -344,6 +344,25 @@ class CollaborationStore:
             )
             return cur.rowcount > 0
 
+    def delete_room_by_id(self, room_id: str) -> bool:
+        if not room_id:
+            return False
+        room_id = require_cowork_id(room_id, label="room_id")
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "DELETE FROM collaboration_tasks WHERE room_id = ?",
+                (room_id,),
+            )
+            conn.execute(
+                "DELETE FROM collaboration_messages WHERE room_id = ?",
+                (room_id,),
+            )
+            cur = conn.execute(
+                "DELETE FROM collaboration_rooms WHERE room_id = ?",
+                (room_id,),
+            )
+            return cur.rowcount > 0
+
     def append_message(
         self,
         session_id: str,

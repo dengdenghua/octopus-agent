@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import re
 import secrets
 from collections.abc import Awaitable, Callable
@@ -36,6 +37,8 @@ from .team_speaker_policy import (
     _participant_can_speak,
     _resolve_moderator,
 )
+
+_LOG = logging.getLogger("octopus.team_rooms")
 
 try:
     from fastapi import APIRouter, HTTPException, Request, WebSocket
@@ -171,6 +174,7 @@ def create_team_rooms_router(
     reset_callback: Any = None,
     room_message_store: Any = None,
     room_projection: Callable[[dict[str, Any]], None] | None = None,
+    room_delete_projection: Callable[[str], None] | None = None,
     room_message_projection: Callable[[str, dict[str, Any]], None] | None = None,
     room_message_provider: Callable[[str, int, int, str], list[dict[str, Any]]] | None = None,
     twin_responder: (
@@ -218,7 +222,15 @@ def create_team_rooms_router(
                 try:
                     room_projection(team.model_dump())
                 except Exception:  # noqa: BLE001 - projection must not block room writes
-                    pass
+                    _LOG.warning("team room projection failed for %s", team.id, exc_info=True)
+
+    def _project_room_delete(room_id: str) -> None:
+        if room_delete_projection is None:
+            return
+        try:
+            room_delete_projection(room_id)
+        except Exception:  # noqa: BLE001 - projection must not block room deletion
+            _LOG.warning("team room delete projection failed for %s", room_id, exc_info=True)
 
     def _reset_state() -> None:
         with lock:
@@ -462,6 +474,7 @@ def create_team_rooms_router(
             existed = teams.pop(team_id, None)
             if existed is not None:
                 _save()
+                _project_room_delete(existed.id)
             return {"ok": True, "deleted": existed is not None, "team_id": team_id}
 
     def _list_room_members(team_id: str) -> list[str]:

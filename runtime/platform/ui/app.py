@@ -861,6 +861,12 @@ def create_app(
         if callable(upsert_room):
             upsert_room(room)
 
+    def _delete_room_from_collaboration(room_id: str) -> None:
+        collab_store = getattr(app.state, "collaboration_store", None)
+        delete_room = getattr(collab_store, "delete_room_by_id", None)
+        if callable(delete_room):
+            delete_room(room_id)
+
     def _project_room_message_to_collaboration(room_id: str, message: dict[str, Any]) -> None:
         collab_store = getattr(app.state, "collaboration_store", None)
         append_message = getattr(collab_store, "append_message_for_room", None)
@@ -903,6 +909,7 @@ def create_app(
         # generate + emit speech when the floor reaches them. None-safe: no
         # router (e.g. no planner) → twins stay silent, human paths unchanged.
         room_projection=_project_room_to_collaboration,
+        room_delete_projection=_delete_room_from_collaboration,
         room_message_projection=_project_room_message_to_collaboration,
         room_message_provider=_collaboration_room_messages,
         twin_responder=make_twin_responder(stack),
