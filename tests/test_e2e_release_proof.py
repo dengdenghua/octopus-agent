@@ -49,9 +49,19 @@ def test_e2e_release_proof_merges_readiness_and_full_stack(tmp_path: Path) -> No
     assert data["summary"]["coverage_gap_domains"] == 0
     assert data["summary"]["full_stack_suite_count"] == 2
     assert data["summary"]["full_stack_test_file_count"] == 5
+    assert data["summary"]["full_stack_test_case_count"] == 16
+    assert data["summary"]["full_stack_passed_test_count"] == 15
     assert data["summary"]["required_suite_test_file_counts"] == {
         "full-stack-desktop": 4,
         "full-stack-mobile": 1,
+    }
+    assert data["summary"]["required_suite_passed_test_counts"] == {
+        "full-stack-desktop": 12,
+        "full-stack-mobile": 3,
+    }
+    assert data["summary"]["required_suite_failed_test_counts"] == {
+        "full-stack-desktop": 0,
+        "full-stack-mobile": 0,
     }
 
 
@@ -220,6 +230,92 @@ def test_e2e_release_proof_rejects_weak_required_suite_coverage(
     assert data["summary"]["weak_suite_test_coverage"] == ["full-stack-desktop"]
 
 
+def test_e2e_release_proof_rejects_weak_required_passed_test_count(
+    tmp_path: Path,
+) -> None:
+    readiness = tmp_path / "readiness.json"
+    full_stack = tmp_path / "full_stack.json"
+    output = tmp_path / "release.json"
+    readiness.write_text(json.dumps(_readiness()), encoding="utf-8")
+    full_stack.write_text(
+        json.dumps(
+            _full_stack(
+                suite_passed_counts={
+                    "full-stack-desktop": 11,
+                    "full-stack-mobile": 3,
+                },
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/e2e_release_proof.py",
+            "--readiness",
+            str(readiness),
+            "--full-stack",
+            str(full_stack),
+            "--output",
+            str(output),
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert result.returncode == 1
+    assert data["ready"] is False
+    assert "full_stack_required_suites_have_passed_tests" in data["failed_checks"]
+    assert data["summary"]["weak_suite_passed_tests"] == ["full-stack-desktop"]
+
+
+def test_e2e_release_proof_rejects_failed_required_tests(
+    tmp_path: Path,
+) -> None:
+    readiness = tmp_path / "readiness.json"
+    full_stack = tmp_path / "full_stack.json"
+    output = tmp_path / "release.json"
+    readiness.write_text(json.dumps(_readiness()), encoding="utf-8")
+    full_stack.write_text(
+        json.dumps(
+            _full_stack(
+                suite_failed_counts={
+                    "full-stack-desktop": 1,
+                    "full-stack-mobile": 0,
+                },
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/e2e_release_proof.py",
+            "--readiness",
+            str(readiness),
+            "--full-stack",
+            str(full_stack),
+            "--output",
+            str(output),
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert result.returncode == 1
+    assert data["ready"] is False
+    assert "full_stack_required_suites_have_no_failed_tests" in data["failed_checks"]
+    assert data["summary"]["suites_with_failed_tests"] == ["full-stack-desktop"]
+
+
 def _readiness(
     *,
     schema: str = "octopus.production_readiness_gate.v1",
@@ -250,6 +346,8 @@ def _full_stack(
     suite_count: int | None = None,
     passed_count: int | None = None,
     suite_test_matches: dict[str, tuple[str, ...]] | None = None,
+    suite_passed_counts: dict[str, int] | None = None,
+    suite_failed_counts: dict[str, int] | None = None,
 ) -> dict[str, object]:
     default_test_matches = {
         "full-stack-desktop": (
@@ -261,6 +359,18 @@ def _full_stack(
         "full-stack-mobile": ("mobile-smoke.spec.ts",),
     }
     test_matches_by_suite = suite_test_matches or default_test_matches
+    passed_counts = suite_passed_counts or {
+        "full-stack-desktop": 12,
+        "full-stack-mobile": 3,
+    }
+    failed_counts = suite_failed_counts or {
+        "full-stack-desktop": 0,
+        "full-stack-mobile": 0,
+    }
+    skipped_counts = {
+        "full-stack-desktop": 1,
+        "full-stack-mobile": 0,
+    }
     rows = [
         {
             "suite": suite,
@@ -268,6 +378,15 @@ def _full_stack(
             "state_root": f"test-results/{suite}",
             "test_match": list(test_matches_by_suite.get(suite, ())),
             "test_file_count": len(test_matches_by_suite.get(suite, ())),
+            "test_case_count": (
+                passed_counts.get(suite, 0)
+                + failed_counts.get(suite, 0)
+                + skipped_counts.get(suite, 0)
+            ),
+            "passed_test_count": passed_counts.get(suite, 0),
+            "skipped_test_count": skipped_counts.get(suite, 0),
+            "failed_test_count": failed_counts.get(suite, 0),
+            "flaky_test_count": 0,
         }
         for suite in suites
     ]
@@ -277,6 +396,11 @@ def _full_stack(
         "suite_count": len(rows) if suite_count is None else suite_count,
         "passed_count": len(rows) if passed_count is None else passed_count,
         "test_file_count": sum(int(row["test_file_count"]) for row in rows),
+        "test_case_count": sum(int(row["test_case_count"]) for row in rows),
+        "passed_test_count": sum(int(row["passed_test_count"]) for row in rows),
+        "skipped_test_count": sum(int(row["skipped_test_count"]) for row in rows),
+        "failed_test_count": sum(int(row["failed_test_count"]) for row in rows),
+        "flaky_test_count": sum(int(row["flaky_test_count"]) for row in rows),
         "failed_suites": [],
         "suites": rows,
     }

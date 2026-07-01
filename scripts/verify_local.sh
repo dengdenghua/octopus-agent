@@ -89,6 +89,9 @@ section() {
 PYTHON_BIN="$(resolve_python)"
 export PYTHON="$PYTHON_BIN"
 mkdir -p "$VERIFY_DATA_DIR"
+VERIFY_STATE_ROOT_ABS="$(cd "$VERIFY_STATE_ROOT" && pwd)"
+VERIFY_DESKTOP_PLAYWRIGHT_REPORT="$VERIFY_STATE_ROOT_ABS/full-stack-playwright-report.json"
+VERIFY_MOBILE_PLAYWRIGHT_REPORT="$VERIFY_STATE_ROOT_ABS/full-stack-mobile-playwright-report.json"
 
 backend_tests=(
   tests/test_openapi_snapshot.py
@@ -154,6 +157,7 @@ if [[ "$run_full_stack" != "1" ]]; then
     cd frontend
     PYTHON="$PYTHON_BIN" \
     OCTOPUS_E2E_STATE_ROOT="$VERIFY_STATE_ROOT/full-stack" \
+    OCTOPUS_E2E_JSON_REPORT="$VERIFY_DESKTOP_PLAYWRIGHT_REPORT" \
     pnpm e2e:full
   )
   "$PYTHON_BIN" scripts/e2e_smoke_proof.py \
@@ -164,6 +168,7 @@ if [[ "$run_full_stack" != "1" ]]; then
     --frontend-port "${FRONTEND_PORT:-13000}" \
     --backend-host "${GATEWAY_HOST:-127.0.0.1}" \
     --backend-port "${GATEWAY_PORT:-18000}" \
+    --playwright-report "$VERIFY_DESKTOP_PLAYWRIGHT_REPORT" \
     --test-match "full-stack-smoke.spec.ts,chat.spec.ts,regression.spec.ts,workflow-editor.spec.ts"
 
   if [[ "$run_full_stack_mobile" != "1" ]]; then
@@ -172,6 +177,7 @@ if [[ "$run_full_stack" != "1" ]]; then
       cd frontend
       PYTHON="$PYTHON_BIN" \
       OCTOPUS_E2E_STATE_ROOT="$VERIFY_STATE_ROOT/full-stack-mobile" \
+      OCTOPUS_E2E_JSON_REPORT="$VERIFY_MOBILE_PLAYWRIGHT_REPORT" \
       pnpm e2e:full:mobile
     )
     "$PYTHON_BIN" scripts/e2e_smoke_proof.py \
@@ -182,6 +188,7 @@ if [[ "$run_full_stack" != "1" ]]; then
       --frontend-port "${FRONTEND_PORT:-13000}" \
       --backend-host "${GATEWAY_HOST:-127.0.0.1}" \
       --backend-port "${GATEWAY_PORT:-18000}" \
+      --playwright-report "$VERIFY_MOBILE_PLAYWRIGHT_REPORT" \
       --test-match "mobile-smoke.spec.ts"
   fi
   echo "full-stack smoke proof: $VERIFY_FULL_STACK_PROOF"

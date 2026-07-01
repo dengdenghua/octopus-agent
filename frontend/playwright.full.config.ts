@@ -1,4 +1,8 @@
-import { defineConfig, devices } from "@playwright/test";
+import {
+  defineConfig,
+  devices,
+  type ReporterDescription,
+} from "@playwright/test";
 import { rmSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +21,12 @@ const e2eStateRoot = isAbsolute(rawE2eStateRoot)
 const e2eDataDir = join(e2eStateRoot, "data");
 const pythonBin = process.env.PYTHON || "./.venv/bin/python";
 const reuseServers = process.env.OCTOPUS_E2E_REUSE_SERVER === "1";
+const jsonReportPath = process.env.OCTOPUS_E2E_JSON_REPORT;
+const reporter: ReporterDescription | ReporterDescription[] = jsonReportPath
+  ? [["list"], ["json", { outputFile: jsonReportPath }]]
+  : process.env.CI
+    ? "github"
+    : "list";
 const defaultTestMatch = [
   "full-stack-smoke.spec.ts",
   "chat.spec.ts",
@@ -73,7 +83,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
-  reporter: process.env.CI ? "github" : "list",
+  reporter,
   timeout: 45_000,
 
   use: {

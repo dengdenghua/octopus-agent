@@ -16,6 +16,10 @@ MIN_TEST_FILES_BY_SUITE = {
     "full-stack-desktop": 4,
     "full-stack-mobile": 1,
 }
+MIN_PASSED_TESTS_BY_SUITE = {
+    "full-stack-desktop": 12,
+    "full-stack-mobile": 3,
+}
 
 
 def main() -> int:
@@ -62,17 +66,34 @@ def build_release_proof(
     ]
     suite_rows = _suite_rows(full_stack)
     suite_test_counts = _suite_test_counts(suite_rows)
+    suite_passed_test_counts = _suite_counts(suite_rows, "passed_test_count")
+    suite_failed_test_counts = _suite_counts(suite_rows, "failed_test_count")
     weak_suite_test_coverage = [
         suite
         for suite in required
         if suite in suite_test_counts
         and suite_test_counts[suite] < MIN_TEST_FILES_BY_SUITE.get(suite, 1)
     ]
+    weak_suite_passed_tests = [
+        suite
+        for suite in required
+        if suite in suite_passed_test_counts
+        and suite_passed_test_counts[suite] < MIN_PASSED_TESTS_BY_SUITE.get(suite, 1)
+    ]
+    suites_with_failed_tests = [
+        suite
+        for suite in required
+        if suite in suite_failed_test_counts and suite_failed_test_counts[suite] > 0
+    ]
     passed_suite_count = sum(1 for row in suite_rows if row.get("status") == "passed")
     declared_suite_count = _as_int(full_stack.get("suite_count"))
     declared_passed_count = _as_int(full_stack.get("passed_count"))
     declared_test_file_count = _as_int(full_stack.get("test_file_count"))
     observed_test_file_count = sum(suite_test_counts.values())
+    declared_test_case_count = _as_int(full_stack.get("test_case_count"))
+    observed_test_case_count = sum(_suite_counts(suite_rows, "test_case_count").values())
+    declared_passed_test_count = _as_int(full_stack.get("passed_test_count"))
+    observed_passed_test_count = sum(suite_passed_test_counts.values())
     scorecard_score = _as_int(readiness.get("scorecard_score"))
     automation_score = _as_int(readiness.get("automation_score"))
     checks = [
@@ -154,6 +175,31 @@ def build_release_proof(
                 f"{', '.join(weak_suite_test_coverage)}"
             ),
         },
+        {
+            "id": "full_stack_test_case_counts_consistent",
+            "passed": (
+                declared_test_case_count == observed_test_case_count
+                and declared_passed_test_count == observed_passed_test_count
+            ),
+            "next_action": (
+                "Regenerate full-stack smoke proof; Playwright test counts are inconsistent."
+            ),
+        },
+        {
+            "id": "full_stack_required_suites_have_passed_tests",
+            "passed": not weak_suite_passed_tests,
+            "next_action": (
+                "Restore required passed Playwright tests for suites: "
+                f"{', '.join(weak_suite_passed_tests)}"
+            ),
+        },
+        {
+            "id": "full_stack_required_suites_have_no_failed_tests",
+            "passed": not suites_with_failed_tests,
+            "next_action": (
+                f"Fix failed Playwright tests in suites: {', '.join(suites_with_failed_tests)}"
+            ),
+        },
     ]
     ready = all(bool(check["passed"]) for check in checks)
     return {
@@ -178,13 +224,23 @@ def build_release_proof(
             "full_stack_suite_count": declared_suite_count,
             "full_stack_passed_count": declared_passed_count,
             "full_stack_test_file_count": declared_test_file_count,
+            "full_stack_test_case_count": declared_test_case_count,
+            "full_stack_passed_test_count": declared_passed_test_count,
             "required_suite_test_file_counts": {
                 suite: suite_test_counts.get(suite, 0) for suite in required
+            },
+            "required_suite_passed_test_counts": {
+                suite: suite_passed_test_counts.get(suite, 0) for suite in required
+            },
+            "required_suite_failed_test_counts": {
+                suite: suite_failed_test_counts.get(suite, 0) for suite in required
             },
             "required_suites": required,
             "missing_suites": missing_suites,
             "failed_suites": failed_suites,
             "weak_suite_test_coverage": weak_suite_test_coverage,
+            "weak_suite_passed_tests": weak_suite_passed_tests,
+            "suites_with_failed_tests": suites_with_failed_tests,
         },
         "inputs": {
             "readiness": str(readiness_path),
@@ -203,6 +259,10 @@ def build_release_proof(
             "suite_count": full_stack.get("suite_count"),
             "passed_count": full_stack.get("passed_count"),
             "test_file_count": full_stack.get("test_file_count"),
+            "test_case_count": full_stack.get("test_case_count"),
+            "passed_test_count": full_stack.get("passed_test_count"),
+            "skipped_test_count": full_stack.get("skipped_test_count"),
+            "failed_test_count": full_stack.get("failed_test_count"),
             "failed_suites": full_stack.get("failed_suites"),
             "suites": full_stack.get("suites"),
         },
@@ -250,6 +310,15 @@ def _suite_test_counts(suite_rows: list[dict[str, Any]]) -> dict[str, int]:
             if isinstance(test_match, list):
                 count = len([item for item in test_match if str(item).strip()])
         counts[suite] = count
+    return counts
+
+
+def _suite_counts(suite_rows: list[dict[str, Any]], field: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in suite_rows:
+        suite = str(row.get("suite") or "").strip()
+        if suite:
+            counts[suite] = _as_int(row.get(field))
     return counts
 
 
