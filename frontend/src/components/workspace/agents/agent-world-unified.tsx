@@ -8,6 +8,7 @@ import {
   BotIcon,
   Building2Icon,
   ChevronDownIcon,
+  CloudIcon,
   ImportIcon,
   Loader2Icon,
   PlusIcon,
@@ -68,6 +69,8 @@ import { AgentRoleProfileDialog } from "./agent-role-profile-dialog";
 import { AgentWorldCard } from "./agent-world-card";
 import { LocalAgentConnectDialog } from "./local-agent-connect-dialog";
 import { RegistrySkillsPanel } from "@/components/store/registry-skills-panel";
+import { RegistryRolesPanel } from "@/components/store/registry-roles-panel";
+import { RegistryPluginsPanel } from "@/components/store/registry-plugins-panel";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -843,95 +846,121 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={pluginAuthorFilter}
-            onValueChange={setPluginAuthorFilter}
-          >
-            <SelectTrigger className="h-9 w-auto gap-2 rounded-lg bg-background shadow-none">
-              <SelectValue>
-                {pluginAuthorFilter === "all"
-                  ? t.plugins.filterAllAuthors
-                  : t.plugins.filterByAuthor(pluginAuthorFilter)}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t.plugins.filterAllAuthors}</SelectItem>
-              {pluginAuthors.map((author) => (
-                <SelectItem key={author} value={author}>
-                  {t.plugins.filterByAuthor(author)}
-                </SelectItem>
+      <Tabs defaultValue="local">
+        <TabsList variant="line" className="mb-1">
+          <TabsTrigger value="local" className="h-8 gap-1.5 px-3 text-xs">
+            已启用
+          </TabsTrigger>
+          <TabsTrigger value="registry" className="h-8 gap-1.5 px-3 text-xs">
+            <CloudIcon className="h-3.5 w-3.5" />
+            云端插件
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="registry" className="mt-0">
+          <RegistryPluginsPanel />
+        </TabsContent>
+
+        <TabsContent value="local" className="mt-0 flex flex-col gap-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={pluginAuthorFilter}
+                onValueChange={setPluginAuthorFilter}
+              >
+                <SelectTrigger className="h-9 w-auto gap-2 rounded-lg bg-background shadow-none">
+                  <SelectValue>
+                    {pluginAuthorFilter === "all"
+                      ? t.plugins.filterAllAuthors
+                      : t.plugins.filterByAuthor(pluginAuthorFilter)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    {t.plugins.filterAllAuthors}
+                  </SelectItem>
+                  {pluginAuthors.map((author) => (
+                    <SelectItem key={author} value={author}>
+                      {t.plugins.filterByAuthor(author)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={pluginStatusFilter}
+                onValueChange={(value) =>
+                  setPluginStatusFilter(value as PluginStatusFilter)
+                }
+              >
+                <SelectTrigger className="h-9 w-auto gap-2 rounded-lg bg-background shadow-none">
+                  <SelectValue>
+                    {pluginStatusFilter === "all" && t.plugins.statusAll}
+                    {pluginStatusFilter === "enabled" &&
+                      t.plugins.statusEnabledFilter}
+                    {pluginStatusFilter === "disabled" &&
+                      t.plugins.statusDisabledFilter}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t.plugins.statusAll}</SelectItem>
+                  <SelectItem value="enabled">
+                    {t.plugins.statusEnabledFilter}
+                  </SelectItem>
+                  <SelectItem value="disabled">
+                    {t.plugins.statusDisabledFilter}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 rounded-lg px-3 text-xs"
+              onClick={openCreatePluginChat}
+            >
+              <PlusIcon className="mr-1.5 size-3.5" />
+              {t.common.create}
+            </Button>
+          </div>
+
+          {filteredPluginEntries.length > 0 ? (
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-3">
+              {filteredPluginEntries.map((entry) => (
+                <PluginListItem
+                  key={`${entry.source}-${entry.plugin.id}`}
+                  entry={entry}
+                  onConfigure={setConfigTarget}
+                />
               ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={pluginStatusFilter}
-            onValueChange={(value) =>
-              setPluginStatusFilter(value as PluginStatusFilter)
-            }
-          >
-            <SelectTrigger className="h-9 w-auto gap-2 rounded-lg bg-background shadow-none">
-              <SelectValue>
-                {pluginStatusFilter === "all" && t.plugins.statusAll}
-                {pluginStatusFilter === "enabled" && t.plugins.statusEnabledFilter}
-                {pluginStatusFilter === "disabled" && t.plugins.statusDisabledFilter}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t.plugins.statusAll}</SelectItem>
-              <SelectItem value="enabled">{t.plugins.statusEnabledFilter}</SelectItem>
-              <SelectItem value="disabled">{t.plugins.statusDisabledFilter}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-9 rounded-lg px-3 text-xs"
-          onClick={openCreatePluginChat}
-        >
-          <PlusIcon className="mr-1.5 size-3.5" />
-          {t.common.create}
-        </Button>
-      </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border bg-muted/10 px-6 py-12 text-center">
+              <PuzzleIcon className="mx-auto mb-3 size-10 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">
+                {pluginEntries.length === 0
+                  ? t.plugins.emptyTitle
+                  : t.plugins.noMatches}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground/60">
+                {pluginEntries.length === 0
+                  ? t.plugins.emptyHint
+                  : t.plugins.tryDifferentQuery}
+              </p>
+            </div>
+          )}
 
-      {filteredPluginEntries.length > 0 ? (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-3">
-          {filteredPluginEntries.map((entry) => (
-            <PluginListItem
-              key={`${entry.source}-${entry.plugin.id}`}
-              entry={entry}
-              onConfigure={setConfigTarget}
+          {configTarget && (
+            <HubPluginConfigDialog
+              plugin={configTarget}
+              open={true}
+              onOpenChange={(open) => {
+                if (!open) setConfigTarget(null);
+              }}
             />
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-lg border border-dashed border-border bg-muted/10 px-6 py-12 text-center">
-          <PuzzleIcon className="mx-auto mb-3 size-10 text-muted-foreground/30" />
-          <p className="text-sm text-muted-foreground">
-            {pluginEntries.length === 0
-              ? t.plugins.emptyTitle
-              : t.plugins.noMatches}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground/60">
-            {pluginEntries.length === 0
-              ? t.plugins.emptyHint
-              : t.plugins.tryDifferentQuery}
-          </p>
-        </div>
-      )}
-
-      {configTarget && (
-        <HubPluginConfigDialog
-          plugin={configTarget}
-          open={true}
-          onOpenChange={(open) => {
-            if (!open) setConfigTarget(null);
-          }}
-        />
-      )}
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -1151,6 +1180,13 @@ export function AgentWorldUnified() {
                   {t.agentWorldUnified.roleLibrary}
                 </TabsTrigger>
               )}
+              <TabsTrigger
+                value="registry-roles"
+                className="h-8 gap-1.5 px-3 text-xs"
+              >
+                <CloudIcon className="h-3.5 w-3.5" />
+                云端角色
+              </TabsTrigger>
               <TabsTrigger value="plugins" className="h-8 gap-1.5 px-3 text-xs">
                 <PuzzleIcon className="h-3.5 w-3.5" />
                 {t.plugins.pageTitle}
@@ -1181,6 +1217,10 @@ export function AgentWorldUnified() {
                 onSelectAgent={handleSelectAgent}
                 onInstallChange={handleInstallChange}
               />
+            </TabsContent>
+
+            <TabsContent value="registry-roles" className="mt-0">
+              <RegistryRolesPanel />
             </TabsContent>
 
             <TabsContent value="plugins" className="mt-0">

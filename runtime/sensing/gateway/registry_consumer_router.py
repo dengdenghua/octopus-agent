@@ -13,6 +13,8 @@ additive 新文件,零碰 Codex WIP(cowork/oct/i18n);SDK 读/解析半边仍 run
 
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +26,76 @@ except Exception:  # pragma: no cover - fastapi optional at import time
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
     Depends = None  # type: ignore[assignment, misc]
+
+
+# registry 除 skill 外还托管 role / twin-role(数字分身岗位模板)/ plugin / task /
+# twin / experience(见 asset.type,api.octoapk.com 实测 473 条)。角色类(role/
+# twin-role)与 skill 同属 kind=data 声明式 prompt,落地规则等价 → 直接可"安装"成
+# 本地可用 agent(同 enterprise_assets_router._scaffold_local_agent 的落地形状)。
+# plugin 类目前统一标 kind=code(codex-plugin 集成说明),即便实测 body 常是纯文本,
+# 出于沿用 octopus_runtime.materialize.SAFE_TYPES 的既有安全边界,本路由只做只读浏览、
+# 不提供一键安装(避免绕过该边界)。
+_ROLE_ASSET_TYPES = ("role", "twin-role")
+
+
+def _scaffold_local_agent_from_registry_asset(asset: Any) -> tuple[str, Path]:
+    """把 registry role/twin-role 资产落地成本地 agent(profile.jsonc + agent-core/*)。
+
+    形状对齐 enterprise_assets_router._scaffold_local_agent:body 当 SOUL,
+    写入 default_agents_root()/registry_<slug>/,下次 /api/agents 扫描即可见。
+    """
+    from runtime.execution.agents.loader import default_agents_root
+
+    slug = str(getattr(asset, "slug", "") or asset.id.split("/")[-1])
+    agent_id = f"registry_{re.sub(r'[^a-z0-9_]+', '_', slug.lower()).strip('_') or 'imported_role'}"
+    name = asset.name or slug
+    category = asset.category or "specialist"
+    tags = list(asset.tags or [])
+    description = asset.description or ""
+    body = asset.body or ""
+
+    agent_root = default_agents_root() / agent_id
+    core = agent_root / "agent-core"
+    core.mkdir(parents=True, exist_ok=True)
+    profile = {
+        "id": agent_id,
+        "name": name,
+        "icon": "🌐",
+        "did": f"DID-{agent_id.upper()}-REGISTRY",
+        "description": description,
+        "category": category,
+        "tags": tags,
+        "model": {"provider": "auto", "name": "auto"},
+        "runtime": "local",
+        "source": "registry",
+    }
+    (agent_root / "profile.jsonc").write_text(
+        json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    soul = body or (
+        f"You are {name}.\n\nPrimary mission: {description}\n\n"
+        f"Specialties: {', '.join(tags)}.\nBe concise, action-oriented, and precise."
+    )
+    (core / "SOUL.md").write_text(soul, encoding="utf-8")
+    (core / "IDENTITY.md").write_text(
+        f"- Name: {name}\n- Role: {category} specialist\n- Source: registry asset library\n",
+        encoding="utf-8",
+    )
+    (core / "tool-registry.jsonc").write_text(
+        json.dumps(
+            {"arms": ["fs_writer", "git", "shell"], "extra_affinity": tags, "private_skills": []},
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    try:
+        from runtime.execution.misc.agent_avatar import write_pixel_agent_avatar
+
+        write_pixel_agent_avatar(agent_root / "avatar.svg", name)
+    except Exception:  # noqa: BLE001 - 头像生成失败不阻断安装
+        pass
+    return agent_id, agent_root
 
 
 def _register_runtime(skill_registry: Any, skills_root: Path) -> int:
@@ -62,7 +134,9 @@ def create_registry_consumer_router(
 
     import os
 
-    base = (registry_base or os.environ.get("OCTOPUS_REGISTRY_URL") or "https://api.octoapk.com").rstrip("/")
+    base = (
+        registry_base or os.environ.get("OCTOPUS_REGISTRY_URL") or "https://api.octoapk.com"
+    ).rstrip("/")
     if skills_root is None:
         try:
             from runtime.platform.process.paths import resources_root
@@ -103,7 +177,11 @@ def create_registry_consumer_router(
             assets = [a for a in assets if (a.category or "") == category]
         if search:
             q = search.lower()
-            assets = [a for a in assets if q in a.name.lower() or q in a.description.lower() or q in a.slug.lower()]
+            assets = [
+                a
+                for a in assets
+                if q in a.name.lower() or q in a.description.lower() or q in a.slug.lower()
+            ]
         total = len(assets)
         paged = assets[offset : offset + limit]
         return {
@@ -144,5 +222,129 @@ def create_registry_consumer_router(
             raise HTTPException(400, f"skipped: {skipped[0][1]}")
         registered = _register_runtime(skill_registry, skills_root)
         return {"installed": slug, "path": ok[0][1] if ok else None, "registered_now": registered}
+
+    # ─── 角色(role / twin-role,数字分身岗位模板)─── 只读浏览 + 安装成本地 agent ───
+
+    @router.get("/api/registry/roles")
+    def list_registry_roles(
+        search: str | None = None,
+        category: str | None = None,
+        role_type: str | None = Query(default=None, alias="type"),
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=50, ge=1, le=500),
+    ) -> dict[str, Any]:
+        from octopus_runtime import RegistryClient
+
+        types = (role_type,) if role_type in _ROLE_ASSET_TYPES else _ROLE_ASSET_TYPES
+        try:
+            client = RegistryClient(base)
+            assets = [a for t in types for a in client.list_assets(type_=t)]
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(502, f"registry unreachable: {exc}") from exc
+        if category:
+            assets = [a for a in assets if (a.category or "") == category]
+        if search:
+            q = search.lower()
+            assets = [
+                a
+                for a in assets
+                if q in a.name.lower() or q in a.description.lower() or q in a.slug.lower()
+            ]
+        total = len(assets)
+        paged = assets[offset : offset + limit]
+        return {
+            "roles": [a.model_dump() for a in paged],
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "source": base,
+        }
+
+    @router.get("/api/registry/roles/{asset_id:path}")
+    def registry_role_detail(asset_id: str) -> dict[str, Any]:
+        from octopus_runtime import RegistryClient
+
+        if "/" not in asset_id:
+            asset_id = f"role/{asset_id}"
+        try:
+            p = RegistryClient(base).fetch(asset_id)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(404, f"role not found: {asset_id} ({exc})") from exc
+        d = p.model_dump()
+        body = d.pop("body", "")
+        d["body_preview"] = body[:1200]
+        d["body_chars"] = len(body)
+        return d
+
+    @router.post("/api/registry/roles/{asset_id:path}/install")
+    def install_registry_role(asset_id: str) -> dict[str, Any]:
+        from octopus_runtime import RegistryClient
+
+        if "/" not in asset_id:
+            asset_id = f"role/{asset_id}"
+        if not asset_id.startswith(_ROLE_ASSET_TYPES):
+            raise HTTPException(400, f"not a role asset: {asset_id}")
+        try:
+            asset = RegistryClient(base).fetch(asset_id)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(404, f"role not found: {asset_id} ({exc})") from exc
+        agent_id, agent_root = _scaffold_local_agent_from_registry_asset(asset)
+        return {
+            "installed": True,
+            "agent_id": agent_id,
+            "name": asset.name,
+            "path": str(agent_root),
+        }
+
+    # ─── 插件(plugin)─── 只读浏览(kind=code,沿用 SAFE_TYPES 边界,不提供安装)───
+
+    @router.get("/api/registry/plugins")
+    def list_registry_plugins(
+        search: str | None = None,
+        category: str | None = None,
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=50, ge=1, le=500),
+    ) -> dict[str, Any]:
+        from octopus_runtime import RegistryClient
+
+        try:
+            assets = RegistryClient(base).list_assets(type_="plugin")
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(502, f"registry unreachable: {exc}") from exc
+        if category:
+            assets = [a for a in assets if (a.category or "") == category]
+        if search:
+            q = search.lower()
+            assets = [
+                a
+                for a in assets
+                if q in a.name.lower() or q in a.description.lower() or q in a.slug.lower()
+            ]
+        total = len(assets)
+        paged = assets[offset : offset + limit]
+        return {
+            "plugins": [a.model_dump() for a in paged],
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "source": base,
+            "installable": False,
+        }
+
+    @router.get("/api/registry/plugins/{slug}")
+    def registry_plugin_detail(slug: str) -> dict[str, Any]:
+        from octopus_runtime import RegistryClient
+
+        asset_id = slug if "/" in slug else f"plugin/{slug}"
+        try:
+            p = RegistryClient(base).fetch(asset_id)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(404, f"plugin not found: {slug} ({exc})") from exc
+        d = p.model_dump()
+        body = d.pop("body", "")
+        d["body_preview"] = body[:1200]
+        d["body_chars"] = len(body)
+        d["installable"] = False
+        return d
 
     return router
