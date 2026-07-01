@@ -309,6 +309,52 @@ def test_materialize_skill_replaces_existing_bundle_after_checksum_match(tmp_pat
     assert md.read_text(encoding="utf-8") == "new safe version"
 
 
+def test_materialize_skill_bundle_replaces_existing_symlink_dir(tmp_path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    skills = tmp_path / "skills"
+    skills.mkdir()
+    (skills / "research-pack").symlink_to(outside, target_is_directory=True)
+    bundle = _tar_bytes({"research-pack/SKILL.md": "new safe version"})
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        description="bundle",
+        bundle=BundleRef(ref="bundle.tar.gz"),
+    )
+
+    md = materialize_skill(payload, skills, client=FakeBundleClient(bundle))
+
+    assert md.read_text(encoding="utf-8") == "new safe version"
+    assert md.parent.is_dir()
+    assert not md.parent.is_symlink()
+    assert not (outside / "SKILL.md").exists()
+
+
+def test_materialize_skill_rejects_bundle_parent_traversal_member(tmp_path) -> None:
+    bundle = _tar_bytes(
+        {
+            "research-pack/SKILL.md": "safe skill",
+            "research-pack/../escape.txt": "should not be written",
+        }
+    )
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        description="bundle",
+        bundle=BundleRef(ref="bundle.tar.gz"),
+    )
+
+    with pytest.raises(ValueError, match="unsafe path"):
+        materialize_skill(payload, tmp_path / "skills", client=FakeBundleClient(bundle))
+
+    assert not (tmp_path / "skills" / "escape.txt").exists()
+
+
 def test_materialize_skill_restores_existing_bundle_when_replace_fails(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

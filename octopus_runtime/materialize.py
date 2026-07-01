@@ -102,21 +102,20 @@ def _atomic_write_text(path: Path, content: str) -> None:
 
 def _validate_skill_bundle(tar: tarfile.TarFile, skills_dir: Path, slug: str) -> None:
     """Validate that a full-bundle only writes ``<slug>/...`` and contains SKILL.md."""
-    dest = skills_dir.resolve()
-    skill_root = (dest / slug).resolve()
-    skill_md = skill_root / "SKILL.md"
     has_skill_md = False
     for m in tar.getmembers():
-        target = (dest / m.name).resolve()
-        if target != skill_root and skill_root not in target.parents:
+        member = Path(m.name)
+        if member.is_absolute() or ".." in member.parts:
+            raise ValueError(f"unsafe path in bundle: {m.name}")
+        if not member.parts or member.parts[0] != slug:
             raise ValueError(f"bundle member outside skill dir {slug!r}: {m.name}")
         if m.issym() or m.islnk():
             raise ValueError(f"link not allowed in bundle: {m.name}")
         if not (m.isdir() or m.isfile()):
             raise ValueError(f"unsupported file type in bundle: {m.name}")
-        if target == skill_root and not m.isdir():
+        if member.parts == (slug,) and not m.isdir():
             raise ValueError(f"skill root must be a directory in bundle: {m.name}")
-        if target == skill_md and m.isfile():
+        if member.parts == (slug, "SKILL.md") and m.isfile():
             has_skill_md = True
     if not has_skill_md:
         raise ValueError(f"bundle missing required file: {slug}/SKILL.md")
