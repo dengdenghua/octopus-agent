@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import io
 import re
+import shutil
 import tarfile
+import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -48,16 +50,50 @@ def _safe_skill_slug(p: AssetPayload) -> str:
     return slug
 
 
-def _safe_extract(tar: tarfile.TarFile, dest: Path) -> None:
-    """防穿越 / 防 symlink 的 tar 解压(bundle 来自可信 registry,仍做基本校验)。"""
-    dest = dest.resolve()
+def _validate_skill_bundle(tar: tarfile.TarFile, skills_dir: Path, slug: str) -> None:
+    """Validate that a full-bundle only writes ``<slug>/...`` and contains SKILL.md."""
+    dest = skills_dir.resolve()
+    skill_root = (dest / slug).resolve()
+    skill_md = skill_root / "SKILL.md"
+    has_skill_md = False
     for m in tar.getmembers():
         target = (dest / m.name).resolve()
-        if target != dest and dest not in target.parents:
-            raise ValueError(f"unsafe path in bundle: {m.name}")
+        if target != skill_root and skill_root not in target.parents:
+            raise ValueError(f"bundle member outside skill dir {slug!r}: {m.name}")
         if m.issym() or m.islnk():
             raise ValueError(f"link not allowed in bundle: {m.name}")
-    tar.extractall(dest)  # noqa: S202 - 成员已逐个校验在 dest 内、无 link
+        if not (m.isdir() or m.isfile()):
+            raise ValueError(f"unsupported file type in bundle: {m.name}")
+        if target == skill_root and not m.isdir():
+            raise ValueError(f"skill root must be a directory in bundle: {m.name}")
+        if target == skill_md and m.isfile():
+            has_skill_md = True
+    if not has_skill_md:
+        raise ValueError(f"bundle missing required file: {slug}/SKILL.md")
+
+
+def _extract_skill_bundle(tar: tarfile.TarFile, skills_dir: Path, slug: str) -> Path:
+    """Safely extract a full-bundle into ``skills_dir/slug`` with staged replacement."""
+    _validate_skill_bundle(tar, skills_dir, slug)
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=f".{slug}.", dir=skills_dir) as tmp_name:
+        tmp_root = Path(tmp_name)
+        try:
+            tar.extractall(tmp_root, filter="data")  # noqa: S202 - members validated above.
+        except TypeError:  # pragma: no cover - compatibility with older Python 3.11 patch levels
+            tar.extractall(tmp_root)  # noqa: S202 - members validated above.
+        staged = tmp_root / slug
+        md = staged / "SKILL.md"
+        if not md.is_file():
+            raise ValueError(f"bundle missing required file after extraction: {slug}/SKILL.md")
+        dest = skills_dir / slug
+        if dest.exists():
+            if dest.is_dir() and not dest.is_symlink():
+                shutil.rmtree(dest)
+            else:
+                dest.unlink()
+        shutil.move(str(staged), str(dest))
+    return skills_dir / slug / "SKILL.md"
 
 
 def materialize_skill(p: AssetPayload, skills_dir: Path, *, client: RegistryClient | None = None) -> Path:
@@ -69,8 +105,7 @@ def materialize_skill(p: AssetPayload, skills_dir: Path, *, client: RegistryClie
         c = client or RegistryClient(DEFAULT_BASE)
         data = c.fetch_bundle(p.id)
         with tarfile.open(fileobj=io.BytesIO(data)) as tar:
-            _safe_extract(tar, skills_dir)
-        return skills_dir / slug / "SKILL.md"
+            return _extract_skill_bundle(tar, skills_dir, slug)
     dest = skills_dir / slug
     dest.mkdir(parents=True, exist_ok=True)
     md = dest / "SKILL.md"

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import io
 import json
+import tarfile
 
 import pytest
 
@@ -8,7 +10,7 @@ fastapi = pytest.importorskip("fastapi")
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from octopus_runtime.client import AssetPayload, RegistryAsset  # noqa: E402
+from octopus_runtime.client import AssetPayload, BundleRef, RegistryAsset  # noqa: E402
 from octopus_runtime.materialize import materialize_skill  # noqa: E402
 from runtime.sensing.gateway.registry_consumer_router import (  # noqa: E402
     create_registry_consumer_router,
@@ -86,6 +88,25 @@ class FakeRegistryClient:
                 body="plugin manifest",
             )
         raise KeyError(asset_id)
+
+
+class FakeBundleClient:
+    def __init__(self, bundle: bytes) -> None:
+        self.bundle = bundle
+
+    def fetch_bundle(self, _asset_id: str) -> bytes:
+        return self.bundle
+
+
+def _tar_bytes(files: dict[str, str]) -> bytes:
+    out = io.BytesIO()
+    with tarfile.open(fileobj=out, mode="w:gz") as tar:
+        for name, body in files.items():
+            data = body.encode("utf-8")
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+    return out.getvalue()
 
 
 @pytest.fixture
@@ -169,3 +190,74 @@ def test_materialize_skill_rejects_unsafe_registry_slug(tmp_path) -> None:
         materialize_skill(payload, tmp_path / "skills")
 
     assert not (tmp_path / "escape").exists()
+
+
+def test_materialize_skill_extracts_full_bundle_under_matching_slug(tmp_path) -> None:
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        description="bundle",
+        body="ignored when bundle exists",
+        bundle=BundleRef(ref="bundle.tar.gz"),
+    )
+    bundle = _tar_bytes(
+        {
+            "research-pack/SKILL.md": "---\nname: Research Pack\n---\n\nUse sources.",
+            "research-pack/references/source-policy.md": "cite primary sources",
+        }
+    )
+
+    md = materialize_skill(payload, tmp_path / "skills", client=FakeBundleClient(bundle))
+
+    assert md == tmp_path / "skills" / "research-pack" / "SKILL.md"
+    assert md.read_text(encoding="utf-8").endswith("Use sources.")
+    assert (
+        tmp_path / "skills" / "research-pack" / "references" / "source-policy.md"
+    ).read_text(encoding="utf-8") == "cite primary sources"
+
+
+def test_materialize_skill_rejects_bundle_that_writes_other_skill_dir(tmp_path) -> None:
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        description="bundle",
+        bundle=BundleRef(ref="bundle.tar.gz"),
+    )
+    bundle = _tar_bytes(
+        {
+            "research-pack/SKILL.md": "safe skill",
+            "other-pack/SKILL.md": "should not be written",
+        }
+    )
+
+    with pytest.raises(ValueError, match="outside skill dir"):
+        materialize_skill(payload, tmp_path / "skills", client=FakeBundleClient(bundle))
+
+    assert not (tmp_path / "skills" / "research-pack").exists()
+    assert not (tmp_path / "skills" / "other-pack").exists()
+
+
+def test_materialize_skill_rejects_bundle_missing_skill_md_without_clobbering(
+    tmp_path,
+) -> None:
+    existing = tmp_path / "skills" / "research-pack"
+    existing.mkdir(parents=True)
+    (existing / "SKILL.md").write_text("old safe version", encoding="utf-8")
+    payload = AssetPayload(
+        id="skill/research-pack",
+        type="skill",
+        kind="data",
+        name="Research Pack",
+        description="bundle",
+        bundle=BundleRef(ref="bundle.tar.gz"),
+    )
+    bundle = _tar_bytes({"research-pack/README.md": "missing skill md"})
+
+    with pytest.raises(ValueError, match="missing required file"):
+        materialize_skill(payload, tmp_path / "skills", client=FakeBundleClient(bundle))
+
+    assert (existing / "SKILL.md").read_text(encoding="utf-8") == "old safe version"
