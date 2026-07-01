@@ -1,8 +1,11 @@
 """Unit tests for evolution rollback mechanisms."""
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from unittest.mock import patch
+
+import pytest
 
 from runtime.safety.evolution.canary import (
     CanaryConfig,
@@ -24,6 +27,34 @@ from runtime.safety.evolution.proposal_ledger import (
 
 
 class TestCanaryRollback:
+    def test_register_rejects_path_traversal_skill_name(self, tmp_path):
+        state_dir = tmp_path / "canary"
+        cm = CanaryManager(CanaryConfig(state_dir=str(state_dir)))
+
+        with pytest.raises(ValueError, match="invalid canary skill name"):
+            cm.register("../escape")
+
+        assert not (tmp_path / "escape.json").exists()
+        assert cm.list_all() == []
+
+    def test_load_skips_unsafe_persisted_skill_name(self, tmp_path):
+        state_dir = tmp_path / "canary"
+        state_dir.mkdir()
+        (state_dir / "unsafe.json").write_text(
+            json.dumps({
+                "skill_name": "../escape",
+                "phase": CanaryPhase.SHADOW.value,
+                "entered_ts": "2026-01-01T00:00:00",
+            }),
+            encoding="utf-8",
+        )
+
+        cm = CanaryManager(CanaryConfig(state_dir=str(state_dir)))
+
+        assert cm.list_all() == []
+        assert cm.record_outcome("../escape", success=True) is None
+        assert not (tmp_path / "escape.json").exists()
+
     def test_force_rollback_sets_phase_to_rolled_back(self, tmp_path):
         cm = CanaryManager(CanaryConfig(state_dir=str(tmp_path / "canary")))
         cm.register("my_skill")

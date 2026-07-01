@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 _LOG = logging.getLogger("octopus.evolution.canary")
+_SAFE_CANARY_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,239}$")
 
 
 class CanaryPhase(StrEnum):
@@ -60,6 +62,22 @@ _PHASE_ORDER = [
 ]
 
 
+def _safe_canary_name(value: str) -> str | None:
+    name = str(value or "").strip()
+    if not _SAFE_CANARY_NAME_RE.fullmatch(name):
+        return None
+    return name
+
+
+def _require_canary_name(value: str) -> str:
+    name = _safe_canary_name(value)
+    if name is None:
+        raise ValueError(
+            "invalid canary skill name: use letters, numbers, dot, underscore, or hyphen"
+        )
+    return name
+
+
 class CanaryManager:
     def __init__(self, config: CanaryConfig | None = None) -> None:
         self.config = config or CanaryConfig()
@@ -75,6 +93,7 @@ class CanaryManager:
         *,
         metadata: dict[str, Any] | None = None,
     ) -> CanaryState:
+        skill_name = _require_canary_name(skill_name)
         with self._lock:
             if skill_name in self._states:
                 state = self._states[skill_name]
@@ -93,6 +112,9 @@ class CanaryManager:
             return state
 
     def record_outcome(self, skill_name: str, success: bool) -> CanaryState | None:
+        skill_name = _safe_canary_name(skill_name) or ""
+        if not skill_name:
+            return None
         with self._lock:
             state = self._states.get(skill_name)
             if state is None:
@@ -127,10 +149,16 @@ class CanaryManager:
             return state
 
     def get_state(self, skill_name: str) -> CanaryState | None:
+        skill_name = _safe_canary_name(skill_name) or ""
+        if not skill_name:
+            return None
         with self._lock:
             return self._states.get(skill_name)
 
     def should_route_to_skill(self, skill_name: str) -> bool:
+        skill_name = _safe_canary_name(skill_name) or ""
+        if not skill_name:
+            return False
         with self._lock:
             state = self._states.get(skill_name)
             if state is None:
@@ -162,6 +190,9 @@ class CanaryManager:
         reason: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> CanaryState | None:
+        skill_name = _safe_canary_name(skill_name) or ""
+        if not skill_name:
+            return None
         with self._lock:
             state = self._states.get(skill_name)
             if state is None:
@@ -250,6 +281,9 @@ class CanaryManager:
         state.current_rate = state.success_count / max(1, state.sample_count)
 
     def _persist_state(self, state: CanaryState) -> None:
+        if _safe_canary_name(state.skill_name) is None:
+            _LOG.warning("refusing to persist unsafe canary state name: %r", state.skill_name)
+            return
         path = self._state_dir / f"{state.skill_name}.json"
         try:
             path.write_text(
@@ -266,6 +300,7 @@ class CanaryManager:
             try:
                 d = json.loads(path.read_text(encoding="utf-8"))
                 name = d.get("skill_name", path.stem)
+                name = _require_canary_name(name)
                 self._states[name] = CanaryState(
                     skill_name=name,
                     phase=CanaryPhase(d.get("phase", "shadow")),
