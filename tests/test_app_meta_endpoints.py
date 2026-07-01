@@ -30,6 +30,7 @@ Hermetic isolation
   ``auth_providers`` returns an empty list · pinning the "nothing
   configured" behavior
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -48,7 +49,8 @@ from runtime.sensing.gateway.meta_router import create_meta_router
 
 @pytest.fixture
 def isolated_cwd(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[Path]:
     monkeypatch.chdir(tmp_path)
     # The agent-market install registry lives at ~/.octopus/agents-installed.json
@@ -77,23 +79,32 @@ def secured_meta_client(
     store.add(Identity(actor_id="alice", roles=("admin",)), api_key_plaintext="sk-alice")
     store.add(Identity(actor_id="bob", roles=("user",)), api_key_plaintext="sk-bob")
     registry = SkillRegistry()
-    registry.register(Skill(
-        name="demo_skill",
-        description="Demo skill",
-        trusted_source="skill://public/demo_skill",
-        handler=lambda **_kw: {"ok": True},
-    ), verify_tests=False)
+    registry.register(
+        Skill(
+            name="demo_skill",
+            description="Demo skill",
+            trusted_source="skill://public/demo_skill",
+            handler=lambda **_kw: {"ok": True},
+        ),
+        verify_tests=False,
+    )
 
     app = FastAPI()
-    app.include_router(create_meta_router(
-        registry=registry,
-        identity_store=store,
-    ))
+    app.include_router(
+        create_meta_router(
+            registry=registry,
+            identity_store=store,
+        )
+    )
     with TestClient(app) as test_client:
-        yield test_client, {
-            "admin": {"Authorization": "Bearer sk-alice"},
-            "user": {"Authorization": "Bearer sk-bob"},
-        }, registry
+        yield (
+            test_client,
+            {
+                "admin": {"Authorization": "Bearer sk-alice"},
+                "user": {"Authorization": "Bearer sk-bob"},
+            },
+            registry,
+        )
 
 
 # ═══════════════════════════════════════════════════════════
@@ -103,7 +114,9 @@ def secured_meta_client(
 
 class TestFeedbackPost:
     def test_liked_feedback_persists_to_jsonl(
-        self, client: TestClient, isolated_cwd: Path,
+        self,
+        client: TestClient,
+        isolated_cwd: Path,
     ) -> None:
         r = client.post(
             "/api/feedback",
@@ -143,7 +156,8 @@ class TestFeedbackPost:
 
     def test_invalid_sentiment_rejected(self, client: TestClient) -> None:
         r = client.post(
-            "/api/feedback", json={"sentiment": "meh"},
+            "/api/feedback",
+            json={"sentiment": "meh"},
         )
         assert r.status_code == 400
 
@@ -152,7 +166,9 @@ class TestFeedbackPost:
         assert r.status_code == 400
 
     def test_content_preview_truncated(
-        self, client: TestClient, isolated_cwd: Path,
+        self,
+        client: TestClient,
+        isolated_cwd: Path,
     ) -> None:
         """Preview is capped at 400 chars — guards the feedback log
         from growing unbounded on huge reply texts."""
@@ -258,15 +274,20 @@ class TestSkills:
             pytest.skip("no skills registered in minimal create_app()")
         entry = data["skills"][0]
         required = {
-            "name", "description", "affinity", "cost_profile",
-            "trusted_source", "has_tests",
+            "name",
+            "description",
+            "affinity",
+            "cost_profile",
+            "trusted_source",
+            "has_tests",
         }
         assert required.issubset(entry.keys()), (
             f"skill entry missing fields: {required - entry.keys()}"
         )
 
     def test_default_app_includes_file_backed_skill_library(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         data = client.get("/api/skills").json()
         skills = {s["name"]: s for s in data["skills"]}
@@ -276,21 +297,28 @@ class TestSkills:
         assert pdf["trusted_source"] == "skill://all_skills/pdf"
 
     def test_plugin_dynamic_skills_are_hidden_from_global_catalog(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         registry = SkillRegistry()
-        registry.register(Skill(
-            name="plugin_skill",
-            description="Plugin skill",
-            trusted_source="skill://all_skills/plugin_skill",
-            handler=lambda **_kw: {"ok": True},
-        ), verify_tests=False)
-        registry.register(Skill(
-            name="local_skill",
-            description="Local skill",
-            trusted_source="skill://public/local_skill",
-            handler=lambda **_kw: {"ok": True},
-        ), verify_tests=False)
+        registry.register(
+            Skill(
+                name="plugin_skill",
+                description="Plugin skill",
+                trusted_source="skill://all_skills/plugin_skill",
+                handler=lambda **_kw: {"ok": True},
+            ),
+            verify_tests=False,
+        )
+        registry.register(
+            Skill(
+                name="local_skill",
+                description="Local skill",
+                trusted_source="skill://public/local_skill",
+                handler=lambda **_kw: {"ok": True},
+            ),
+            verify_tests=False,
+        )
         monkeypatch.setattr(
             "runtime.sensing.gateway.meta_router._dynamic_plugin_skill_names",
             lambda: {"plugin_skill"},
@@ -305,7 +333,8 @@ class TestSkills:
         assert "local_skill" in names
 
     def test_skill_catalog_collapses_alias_child_and_duplicate_sources(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         registry = SkillRegistry()
         for name, source in (
@@ -315,12 +344,15 @@ class TestSkills:
             ("duplicate_root", "skill://all_skills/root-skill"),
             ("other_skill", "skill://all_skills/other-skill"),
         ):
-            registry.register(Skill(
-                name=name,
-                description=name,
-                trusted_source=source,
-                handler=lambda **_kw: {"ok": True},
-            ), verify_tests=False)
+            registry.register(
+                Skill(
+                    name=name,
+                    description=name,
+                    trusted_source=source,
+                    handler=lambda **_kw: {"ok": True},
+                ),
+                verify_tests=False,
+            )
         monkeypatch.setattr(
             "runtime.sensing.gateway.meta_router._dynamic_plugin_skill_names",
             lambda: set(),
@@ -338,7 +370,8 @@ class TestSkills:
         assert "duplicate_root" not in names
 
     def test_skill_catalog_skips_broken_registry_entries(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         class RegistryWithBrokenEntry:
             def all_names(self) -> list[str]:
@@ -378,13 +411,16 @@ class TestCapabilityCatalog:
         tmp_path: Path,
     ) -> None:
         registry = SkillRegistry()
-        registry.register(Skill(
-            name="exec_shell",
-            description="Execute shell commands.",
-            affinity=["shell"],
-            trusted_source="builtin://exec_shell",
-            handler=lambda **_kw: {"ok": True},
-        ), verify_tests=False)
+        registry.register(
+            Skill(
+                name="exec_shell",
+                description="Execute shell commands.",
+                affinity=["shell"],
+                trusted_source="builtin://exec_shell",
+                handler=lambda **_kw: {"ok": True},
+            ),
+            verify_tests=False,
+        )
         skill_dir = tmp_path / "mobile-skills" / "tap"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(
@@ -401,11 +437,13 @@ parameters:
         )
         tool_registry = ToolRegistry()
         app = FastAPI()
-        app.include_router(create_meta_router(
-            registry=registry,
-            tool_registry=tool_registry,
-            mobile_skills_root=tmp_path / "mobile-skills",
-        ))
+        app.include_router(
+            create_meta_router(
+                registry=registry,
+                tool_registry=tool_registry,
+                mobile_skills_root=tmp_path / "mobile-skills",
+            )
+        )
         client = TestClient(app)
 
         response = client.get(
@@ -427,7 +465,8 @@ parameters:
 
 class TestPlugins:
     def test_copied_codex_plugins_are_registered_for_frontend(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         r = client.get("/api/plugins")
         assert r.status_code == 200
@@ -445,7 +484,8 @@ class TestPlugins:
         assert by_id["browser"]["icon_url"].endswith("/assets/composer-icon.png")
 
     def test_plugin_detail_and_capabilities(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         r = client.get("/api/plugins")
         if not r.json():
@@ -460,7 +500,8 @@ class TestPlugins:
         assert any(cap["provider"] == "browser" for cap in caps.json())
 
     def test_plugin_assets_are_served(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         r = client.get("/api/plugins")
         if not r.json():
@@ -482,26 +523,25 @@ class TestPlugins:
 
 
 class TestAgentMarket:
-    def test_agency_agents_are_available_in_square(
-        self, client: TestClient,
+    def test_agency_agents_are_registry_only_not_listed_locally(
+        self,
+        client: TestClient,
     ) -> None:
+        """Agency template catalog moved to the public registry (/api/registry/roles,
+        304 role+twin-role assets — a superset of the old local templates); the local
+        store search no longer surfaces it, only physically-installed agents (echo
+        cast + system agents) remain local-default. Direct id lookup still resolves
+        (see test_agency_agent_detail_uses_catalog_metadata) for install/uninstall."""
         r = client.get("/api/agent-market/store?search=Frontend%20Developer&limit=20")
         assert r.status_code == 200
 
         agents = r.json()["agents"]
         by_id = {agent["id"]: agent for agent in agents}
-        frontend = by_id["agency_engineering_frontend_developer"]
-        assert frontend["display_name"] == "Frontend Developer"
-        assert frontend["author"] == "msitarzewski/agency-agents"
-        assert frontend["category"] == "coder"
-        assert frontend["is_installed"] is False
-        assert frontend["is_official"] is False
-        assert frontend["source_url"].endswith(
-            "/engineering/engineering-frontend-developer.md",
-        )
+        assert "agency_engineering_frontend_developer" not in by_id
 
     def test_agency_agent_detail_uses_catalog_metadata(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         r = client.get("/api/agent-market/store/agency_marketing_xiaohongshu_specialist")
         assert r.status_code == 200
@@ -511,31 +551,22 @@ class TestAgentMarket:
         assert "agency-agents" in data["tags"]
         assert data["category"] == "creative"
 
-    def test_financial_services_agents_are_available_in_square(
-        self, client: TestClient,
+    def test_financial_services_agents_are_registry_only_not_listed_locally(
+        self,
+        client: TestClient,
     ) -> None:
+        """Same move as agency templates — financial-services templates live in the
+        registry now, not the local store search."""
         r = client.get("/api/agent-market/store?search=Pitch%20Agent&limit=20")
         assert r.status_code == 200
 
         agents = r.json()["agents"]
         by_id = {agent["id"]: agent for agent in agents}
-        pitch = by_id["financial_pitch_agent"]
-        assert pitch["display_name"] == "Pitch Agent"
-        assert pitch["author"] == "anthropics/financial-services"
-        assert pitch["category"] == "financial"
-        assert pitch["is_installed"] is False
-        assert pitch["is_official"] is False
-        assert "financial-services" in pitch["tags"]
-        assert "pitch-deck" in pitch["key_skills"]
-        assert "dcf-model" in pitch["key_skills"]
-        assert "pptx-author" in pitch["available_skills"]
-        assert len(pitch["available_skills"]) > len(pitch["key_skills"])
-        assert pitch["source_url"].endswith(
-            "/plugins/agent-plugins/pitch-agent/agents/pitch-agent.md",
-        )
+        assert "financial_pitch_agent" not in by_id
 
     def test_financial_services_agent_detail_uses_catalog_metadata(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         r = client.get("/api/agent-market/store/financial_kyc_screener")
         assert r.status_code == 200
@@ -548,20 +579,21 @@ class TestAgentMarket:
         assert data["key_skills"] == ["kyc-doc-parse", "kyc-rules", "xlsx-author"]
         assert data["available_skills"] == data["key_skills"]
 
-    def test_financial_services_category_filter(
-        self, client: TestClient,
+    def test_financial_services_category_filter_empty_locally(
+        self,
+        client: TestClient,
     ) -> None:
+        """category=financial used to match the 10 local financial-services
+        templates; those are registry-only now, so the local store has none."""
         r = client.get("/api/agent-market/store?category=financial&limit=50")
         assert r.status_code == 200
 
         data = r.json()
-        assert data["total"] == 10
-        assert {agent["author"] for agent in data["agents"]} == {
-            "anthropics/financial-services",
-        }
+        assert data["total"] == 0
 
     def test_financial_services_install_carries_key_skills(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         from runtime.sensing.gateway.agent_world_router import (
             _install_template_agent,
@@ -585,7 +617,8 @@ class TestAgentMarket:
 
 class TestAuthProviders:
     def test_empty_when_no_provider_configured(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         """Neither molili_config nor local_auth_config injected →
         empty list. The frontend Login page hides all tabs in this
@@ -596,7 +629,9 @@ class TestAuthProviders:
         assert r.json() == {"providers": []}
 
     def test_molili_provider_when_configured(
-        self, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        isolated_cwd: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """The molili auth router pokes many attributes on the config
         (jwt_secret, jwt_issuer, api, ...). Rather than stub every
@@ -624,7 +659,8 @@ class TestAuthProviders:
         assert "molili" in ids
 
     def test_local_provider_when_configured(
-        self, isolated_cwd: Path,
+        self,
+        isolated_cwd: Path,
     ) -> None:
         class _FakeLocal:
             enabled = True
@@ -649,10 +685,13 @@ class TestAdminMetaMutations:
         client, headers, registry = secured_meta_client
 
         assert client.post("/api/skills/demo_skill/disable").status_code == 401
-        assert client.post(
-            "/api/skills/demo_skill/disable",
-            headers=headers["user"],
-        ).status_code == 403
+        assert (
+            client.post(
+                "/api/skills/demo_skill/disable",
+                headers=headers["user"],
+            ).status_code
+            == 403
+        )
 
         disabled = client.post(
             "/api/skills/demo_skill/disable",
@@ -675,10 +714,13 @@ class TestAdminMetaMutations:
         client, headers, registry = secured_meta_client
 
         assert client.post("/api/skills-market/demo_skill/disable").status_code == 401
-        assert client.post(
-            "/api/skills-market/demo_skill/disable",
-            headers=headers["user"],
-        ).status_code == 403
+        assert (
+            client.post(
+                "/api/skills-market/demo_skill/disable",
+                headers=headers["user"],
+            ).status_code
+            == 403
+        )
 
         disabled = client.post(
             "/api/skills-market/demo_skill/disable",
@@ -705,10 +747,13 @@ class TestAdminMetaMutations:
         (skill_dir / "SKILL.md").write_text("name: demo\n", encoding="utf-8")
 
         assert client.delete("/api/skills/demo_skill/uninstall").status_code == 401
-        assert client.delete(
-            "/api/skills/demo_skill/uninstall",
-            headers=headers["user"],
-        ).status_code == 403
+        assert (
+            client.delete(
+                "/api/skills/demo_skill/uninstall",
+                headers=headers["user"],
+            ).status_code
+            == 403
+        )
 
         removed = client.delete(
             "/api/skills/demo_skill/uninstall",
@@ -723,20 +768,29 @@ class TestAdminMetaMutations:
     ) -> None:
         client, headers, _registry = secured_meta_client
 
-        assert client.put(
-            "/api/capability-permissions/not-a-group",
-            json={"enabled": False},
-        ).status_code == 401
-        assert client.put(
-            "/api/capability-permissions/not-a-group",
-            json={"enabled": False},
-            headers=headers["user"],
-        ).status_code == 403
-        assert client.put(
-            "/api/capability-permissions/not-a-group",
-            json={"enabled": False},
-            headers=headers["admin"],
-        ).status_code == 404
+        assert (
+            client.put(
+                "/api/capability-permissions/not-a-group",
+                json={"enabled": False},
+            ).status_code
+            == 401
+        )
+        assert (
+            client.put(
+                "/api/capability-permissions/not-a-group",
+                json={"enabled": False},
+                headers=headers["user"],
+            ).status_code
+            == 403
+        )
+        assert (
+            client.put(
+                "/api/capability-permissions/not-a-group",
+                json={"enabled": False},
+                headers=headers["admin"],
+            ).status_code
+            == 404
+        )
 
     def test_skill_install_requires_admin_before_body_validation(
         self,
@@ -745,13 +799,19 @@ class TestAdminMetaMutations:
         client, headers, _registry = secured_meta_client
 
         assert client.post("/api/skills/install", json={}).status_code == 401
-        assert client.post(
-            "/api/skills/install",
-            json={},
-            headers=headers["user"],
-        ).status_code == 403
-        assert client.post(
-            "/api/skills/install",
-            json={},
-            headers=headers["admin"],
-        ).status_code == 400
+        assert (
+            client.post(
+                "/api/skills/install",
+                json={},
+                headers=headers["user"],
+            ).status_code
+            == 403
+        )
+        assert (
+            client.post(
+                "/api/skills/install",
+                json={},
+                headers=headers["admin"],
+            ).status_code
+            == 400
+        )

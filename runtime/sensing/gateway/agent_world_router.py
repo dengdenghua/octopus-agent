@@ -557,7 +557,6 @@ def _agent_visual_urls_for(agent_id: str, agent_dir: Path) -> dict[str, str]:
 
 def _list_local_agents() -> list[dict[str, Any]]:
     root = default_agents_root()
-    installed = _read_install_state()
     agents: list[dict[str, Any]] = []
     seen: set[str] = set()
     if root.is_dir():
@@ -624,43 +623,45 @@ def _list_local_agents() -> list[dict[str, Any]]:
             })
             seen.add(agent_id)
 
-    for template in [
-        *BUILTIN_TEMPLATES,
-        *_load_agency_templates(),
-        *_load_financial_services_templates(),
-        *_load_hardware_startup_templates(),
-    ]:
-        if template["id"] in seen:
-            continue
-        agent_id = template["id"]
-        agents.append({
-            "id": agent_id,
-            "name": agent_id,
-            "display_name": template["display_name"],
-            "description": template["description"],
-            "author": template["author"],
-            "category": template["category"],
-            "tags": template["tags"],
-            "icon": template["icon"],
-            "avatar_url": None,
-            "model": None,
-            "tool_groups": ["fs_writer", "git", "shell"],
-            "extra_affinity": list(template["tags"]),
-            "private_skills": _template_private_skills(template),
-            "capabilities": {},
-            "version": "1.0.0",
-            "downloads": 0,
-            "rating": 4.5,
-            "rating_count": 0,
-            "is_featured": bool(template.get("featured")),
-            "is_official": template["author"] == "octopus",
-            "is_installed": agent_id in installed,
-            "created_at": "0",
-            "source_url": template.get("source_url"),
-            "key_skills": _template_private_skills(template),
-            "available_skills": _template_skill_catalog(template),
-        })
+    # 本地角色库只保留物理存在于 agents/ 下的默认角色(含 echo 9 角色 + 系统内建
+    # agent),不再把静态模板目录(BUILTIN_TEMPLATES/agency/financial/hardware,
+    # 约 200 余条)当"可装入"项混进来 —— 这批模板已整体发布到公网 registry(见
+    # registry_consumer_router 的 /api/registry/roles,role+twin-role 304 条,
+    # 是模板目录的超集),改走「云端角色」浏览安装,母本本地只默认这 9(+系统)个。
     return agents
+
+
+def _template_to_agent_dict(template: dict[str, Any], *, installed: set[str]) -> dict[str, Any]:
+    """模板 → 与 ``_list_local_agents`` 同形状的 dict(供按 id 直查 / 安装用,
+    不进入列表)。"""
+    agent_id = template["id"]
+    return {
+        "id": agent_id,
+        "name": agent_id,
+        "display_name": template["display_name"],
+        "description": template["description"],
+        "author": template["author"],
+        "category": template["category"],
+        "tags": template["tags"],
+        "icon": template["icon"],
+        "avatar_url": None,
+        "model": None,
+        "tool_groups": ["fs_writer", "git", "shell"],
+        "extra_affinity": list(template["tags"]),
+        "private_skills": _template_private_skills(template),
+        "capabilities": {},
+        "version": "1.0.0",
+        "downloads": 0,
+        "rating": 4.5,
+        "rating_count": 0,
+        "is_featured": bool(template.get("featured")),
+        "is_official": template["author"] == "octopus",
+        "is_installed": agent_id in installed,
+        "created_at": "0",
+        "source_url": template.get("source_url"),
+        "key_skills": _template_private_skills(template),
+        "available_skills": _template_skill_catalog(template),
+    }
 
 
 def create_agent_world_router(
@@ -732,16 +733,21 @@ def create_agent_world_router(
         for agent in _list_local_agents():
             if agent["id"] == agent_id:
                 return agent
+        # 不在本地列表(模板目录已不再列出,见 _list_local_agents)时按 id 直查——
+        # 保留旧模板 id 的可解析性(供 install 等既有调用方使用),只是不再列出。
+        template = _template_by_id(agent_id)
+        if template:
+            return _template_to_agent_dict(template, installed=_read_install_state())
         raise HTTPException(404, f"agent not found: {agent_id}")
 
     @router.post("/api/agent-market/store/{agent_id}/install")
     def api_agent_market_install(agent_id: str) -> dict[str, Any]:
-        agents = _list_local_agents()
-        if not any(a["id"] == agent_id for a in agents):
-            raise HTTPException(404, f"agent not found: {agent_id}")
         template = _template_by_id(agent_id)
         if not template:
-            raise HTTPException(400, f"agent is already local: {agent_id}")
+            agents = _list_local_agents()
+            if any(a["id"] == agent_id for a in agents):
+                raise HTTPException(400, f"agent is already local: {agent_id}")
+            raise HTTPException(404, f"agent not found: {agent_id}")
         agents_root = default_agents_root()
         skills_root = resources_root() / "skills" / "public"
         agent_root = _install_template_agent(agent_id, agents_root, skills_root=skills_root)
