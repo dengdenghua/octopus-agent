@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import io
+import re
 import tarfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -24,6 +25,7 @@ _DEFAULT_WORKERS = 16
 # 从不作为代码执行,故落地安全(registry 把 skill 粗标 kind=code 是为将来签名/沙箱策略,
 # 不代表 body 是可执行码)。真正可执行的(plugin 等集成)默认不落地,需 allow_code 显式放开。
 SAFE_TYPES = {"skill"}
+_SAFE_SKILL_SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def _is_prompt_pack(p: AssetPayload) -> bool:
@@ -35,6 +37,15 @@ def _skill_md(p: AssetPayload) -> str:
     name = (p.name or p.slug).strip()
     desc = " ".join((p.description or "").split())  # 压成单行,贴 SKILL.md frontmatter
     return f"---\nname: {name}\ndescription: {desc}\nsource: registry\n---\n\n{p.body.strip()}\n"
+
+
+def _safe_skill_slug(p: AssetPayload) -> str:
+    prefix, sep, slug = p.id.partition("/")
+    if prefix != "skill" or sep != "/" or "/" in slug:
+        raise ValueError(f"unsafe skill id from registry payload: {p.id!r}")
+    if not _SAFE_SKILL_SLUG_RE.fullmatch(slug):
+        raise ValueError(f"unsafe skill slug from registry payload: {slug!r}")
+    return slug
 
 
 def _safe_extract(tar: tarfile.TarFile, dest: Path) -> None:
@@ -53,13 +64,14 @@ def materialize_skill(p: AssetPayload, skills_dir: Path, *, client: RegistryClie
     """落地一个技能到 ``<skills_dir>/<slug>/``。**有 full-bundle 则取整目录 tar.gz 解压**(带
     scripts/refs/requirements);否则只写 ``SKILL.md``(body-only)。返回 SKILL.md 路径。"""
     skills_dir = Path(skills_dir)
+    slug = _safe_skill_slug(p)
     if p.bundle and p.bundle.ref:
         c = client or RegistryClient(DEFAULT_BASE)
         data = c.fetch_bundle(p.id)
         with tarfile.open(fileobj=io.BytesIO(data)) as tar:
             _safe_extract(tar, skills_dir)
-        return skills_dir / p.slug / "SKILL.md"
-    dest = skills_dir / p.slug
+        return skills_dir / slug / "SKILL.md"
+    dest = skills_dir / slug
     dest.mkdir(parents=True, exist_ok=True)
     md = dest / "SKILL.md"
     md.write_text(_skill_md(p), encoding="utf-8")

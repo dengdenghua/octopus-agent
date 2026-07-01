@@ -9,6 +9,7 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from octopus_runtime.client import AssetPayload, RegistryAsset  # noqa: E402
+from octopus_runtime.materialize import materialize_skill  # noqa: E402
 from runtime.sensing.gateway.registry_consumer_router import (  # noqa: E402
     create_registry_consumer_router,
 )
@@ -63,6 +64,16 @@ class FakeRegistryClient:
                 category="research",
                 tags=["analysis"],
                 body="You are a careful researcher.",
+            )
+        if asset_id == "role/not-really-role":
+            return AssetPayload(
+                id="plugin/not-really-role",
+                type="plugin",
+                kind="code",
+                name="Executable Plugin",
+                description="Plugin returned from a role-looking request",
+                category="browser",
+                body="plugin manifest",
             )
         if asset_id == "plugin/browser-tool":
             return AssetPayload(
@@ -122,6 +133,16 @@ def test_rejects_role_install_for_non_role_asset(client: TestClient) -> None:
     assert "not a role asset" in resp.json()["detail"]
 
 
+def test_rejects_registry_payload_that_is_not_installable_role(
+    client: TestClient, tmp_path
+) -> None:
+    resp = client.post("/api/registry/roles/role/not-really-role/install")
+
+    assert resp.status_code == 400
+    assert "not an installable role asset" in resp.json()["detail"]
+    assert not (tmp_path / "agents" / "registry_not_really_role").exists()
+
+
 def test_plugins_are_browsable_but_not_installable(client: TestClient) -> None:
     data = client.get("/api/registry/plugins").json()
 
@@ -132,3 +153,19 @@ def test_plugins_are_browsable_but_not_installable(client: TestClient) -> None:
     detail = client.get("/api/registry/plugins/browser-tool").json()
     assert detail["installable"] is False
     assert detail["body_preview"] == "plugin manifest"
+
+
+def test_materialize_skill_rejects_unsafe_registry_slug(tmp_path) -> None:
+    payload = AssetPayload(
+        id="skill/../../escape",
+        type="skill",
+        kind="data",
+        name="Escape",
+        description="unsafe path",
+        body="never write outside skills root",
+    )
+
+    with pytest.raises(ValueError, match="unsafe skill (id|slug)"):
+        materialize_skill(payload, tmp_path / "skills")
+
+    assert not (tmp_path / "escape").exists()

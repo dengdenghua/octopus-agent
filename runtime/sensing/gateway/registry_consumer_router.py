@@ -102,6 +102,12 @@ def _asset_type(asset_id: str) -> str:
     return asset_id.split("/", 1)[0]
 
 
+def _is_installable_role_asset(asset: Any) -> bool:
+    return str(getattr(asset, "type", "") or "") in _ROLE_ASSET_TYPES and (
+        str(getattr(asset, "kind", "") or "") == "data"
+    )
+
+
 def _register_runtime(skill_registry: Any, skills_root: Path) -> int:
     """把 skills_root 下的 prompt-skill 注册进**活 registry**(无需重启)。
     已注册的同名会被 register_market_skills 自身跳过,故只净增新装的。"""
@@ -292,6 +298,11 @@ def create_registry_consumer_router(
             asset = RegistryClient(base).fetch(asset_id)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(404, f"role not found: {asset_id} ({exc})") from exc
+        if not _is_installable_role_asset(asset):
+            raise HTTPException(
+                400,
+                f"not an installable role asset: type={asset.type or '?'} kind={asset.kind or '?'}",
+            )
         agent_id, agent_root = _scaffold_local_agent_from_registry_asset(asset)
         return {
             "installed": True,
