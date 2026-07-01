@@ -18,6 +18,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from runtime.memory.cowork.ids import (
+    normalize_display_name,
+    normalize_search_query,
+    optional_cowork_id,
+    require_cowork_id,
+    require_message_text,
+)
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS room_messages (
     room_id        TEXT NOT NULL,
@@ -69,8 +77,10 @@ class RoomMessageStore:
         """Append a line, stamping a per-room monotonic ``seq`` + ``ts``. The
         next ``seq`` is computed inside the INSERT so concurrent appends never
         collide. Returns the assigned seq."""
-        if not room_id:
-            raise ValueError("room_id is required")
+        room_id = require_cowork_id(room_id, label="room_id")
+        participant_id = optional_cowork_id(participant_id, label="participant_id")
+        display_name = normalize_display_name(display_name)
+        text = require_message_text(text)
         ts = datetime.now(UTC).isoformat()
         with self._lock, self._connect() as conn:
             cur = conn.execute(
@@ -87,6 +97,7 @@ class RoomMessageStore:
     ) -> list[dict[str, Any]]:
         """Messages for a room in order, those with ``seq > after_seq`` (for
         reconnect catch-up), capped at ``limit`` (the most recent ``limit``)."""
+        room_id = require_cowork_id(room_id, label="room_id")
         limit = max(1, min(2000, limit))
         with self._lock, self._connect() as conn:
             rows = conn.execute(
@@ -108,7 +119,8 @@ class RoomMessageStore:
     def search(self, room_id: str, query: str, *, limit: int = 50) -> list[dict[str, Any]]:
         """Case-insensitive substring search over a room's messages (newest
         first). Small per-room volume → a plain scan, no FTS engine."""
-        q = (query or "").strip().lower()
+        room_id = require_cowork_id(room_id, label="room_id")
+        q = normalize_search_query(query)
         if not q:
             return []
         with self._lock, self._connect() as conn:

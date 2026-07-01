@@ -28,6 +28,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from runtime.memory.cowork.ids import require_cowork_id
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS read_state (
     thread_id    TEXT NOT NULL,
@@ -89,21 +91,24 @@ class PresenceStore:
     def mark_read(self, thread_id: str, member_id: str, position: int) -> None:
         """Record that ``member_id`` has caught up to ``position`` (monotonic —
         a lower position never rewinds the marker)."""
-        if not thread_id or not member_id:
-            raise ValueError("thread_id and member_id are required")
+        thread_id = require_cowork_id(thread_id, label="thread_id")
+        member_id = require_cowork_id(member_id, label="member_id")
+        position = int(position)
+        if position < 0:
+            raise ValueError("position must be >= 0")
         with self._lock, self._connect() as conn:
             conn.execute(
                 "INSERT INTO read_state(thread_id, member_id, last_read, updated_at) "
                 "VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(thread_id, member_id) DO UPDATE SET "
                 "last_read=MAX(last_read, excluded.last_read), updated_at=excluded.updated_at",
-                (thread_id, member_id, int(position), _now_iso()),
+                (thread_id, member_id, position, _now_iso()),
             )
 
     def heartbeat(self, thread_id: str, member_id: str, *, now: str | None = None) -> None:
         """Presence ping — stamps ``last_seen_at`` for the member."""
-        if not thread_id or not member_id:
-            raise ValueError("thread_id and member_id are required")
+        thread_id = require_cowork_id(thread_id, label="thread_id")
+        member_id = require_cowork_id(member_id, label="member_id")
         ts = now or _now_iso()
         with self._lock, self._connect() as conn:
             conn.execute(
@@ -116,6 +121,8 @@ class PresenceStore:
 
     def get(self, thread_id: str, member_id: str) -> dict[str, Any]:
         """``{last_read, last_seen_at}`` for one member (defaults if unseen)."""
+        thread_id = require_cowork_id(thread_id, label="thread_id")
+        member_id = require_cowork_id(member_id, label="member_id")
         with self._lock, self._connect() as conn:
             row = conn.execute(
                 "SELECT last_read, last_seen_at FROM read_state "
@@ -128,6 +135,7 @@ class PresenceStore:
 
     def all(self, thread_id: str) -> dict[str, dict[str, Any]]:
         """Every recorded member's ``{last_read, last_seen_at}`` for the thread."""
+        thread_id = require_cowork_id(thread_id, label="thread_id")
         with self._lock, self._connect() as conn:
             rows = conn.execute(
                 "SELECT member_id, last_read, last_seen_at FROM read_state WHERE thread_id=?",

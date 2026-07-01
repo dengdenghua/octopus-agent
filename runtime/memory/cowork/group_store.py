@@ -17,6 +17,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from runtime.memory.cowork.group import GroupState, MemberEvent, fold_state
+from runtime.memory.cowork.ids import (
+    normalize_actor_id,
+    optional_cowork_id,
+    require_cowork_id,
+)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS group_events (
@@ -66,8 +71,9 @@ class GroupStore:
     def append(self, thread_id: str, event: MemberEvent) -> MemberEvent:
         """Append a membership/mode event, stamping ``seq`` + ``ts``. The next
         ``seq`` is computed inside the INSERT so concurrent appends never collide."""
-        if not thread_id:
-            raise ValueError("thread_id is required")
+        thread_id = require_cowork_id(thread_id, label="thread_id")
+        event.actor = normalize_actor_id(event.actor)
+        event.target_id = optional_cowork_id(event.target_id, label="target_id")
         event.ts = datetime.now(UTC).isoformat()
         with self._lock, self._connect() as conn:
             cur = conn.execute(
@@ -81,6 +87,7 @@ class GroupStore:
         return event
 
     def events(self, thread_id: str) -> list[MemberEvent]:
+        thread_id = require_cowork_id(thread_id, label="thread_id")
         with self._lock, self._connect() as conn:
             rows = conn.execute(
                 "SELECT event_json, seq, ts FROM group_events "
@@ -97,6 +104,7 @@ class GroupStore:
 
     def state(self, thread_id: str, until_seq: int | None = None) -> GroupState:
         """The folded group (roster + mode). ``until_seq`` replays to a point."""
+        thread_id = require_cowork_id(thread_id, label="thread_id")
         return fold_state(self.events(thread_id), until_seq=until_seq)
 
     # ── thread-scoped shared blackboard ──────────────────────────────────────
@@ -105,10 +113,12 @@ class GroupStore:
         namespaced by ``thread_id`` so it persists across turns and members."""
         from runtime.memory.runtime_state.blackboard_store import SqliteBlackboard
 
+        thread_id = require_cowork_id(thread_id, label="thread_id")
         return SqliteBlackboard(self._board_db, thread_id)
 
     def blackboard_snapshot(self, thread_id: str) -> dict:
         """All shared-board keys → values for the thread (empty if none)."""
+        thread_id = require_cowork_id(thread_id, label="thread_id")
         board = self.blackboard(thread_id)
         snap = getattr(board, "snapshot", None)
         if callable(snap):

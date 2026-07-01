@@ -16,6 +16,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from runtime.memory.cowork.ids import (
+    normalize_display_name,
+    normalize_search_query,
+    optional_cowork_id,
+    require_cowork_id,
+    require_message_text,
+)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS collaboration_rooms (
@@ -101,6 +108,7 @@ class CollaborationStore:
     def room_for_session(self, session_id: str) -> dict[str, Any] | None:
         if not session_id:
             return None
+        session_id = require_cowork_id(session_id, label="session_id")
         with self._lock, self._connect() as conn:
             row = conn.execute(
                 "SELECT room_json FROM collaboration_rooms WHERE session_id = ?",
@@ -111,6 +119,7 @@ class CollaborationStore:
     def room_by_id(self, room_id: str) -> dict[str, Any] | None:
         if not room_id:
             return None
+        room_id = require_cowork_id(room_id, label="room_id")
         with self._lock, self._connect() as conn:
             row = conn.execute(
                 "SELECT room_json FROM collaboration_rooms WHERE room_id = ?",
@@ -121,6 +130,7 @@ class CollaborationStore:
     def session_id_for_room(self, room_id: str) -> str | None:
         if not room_id:
             return None
+        room_id = require_cowork_id(room_id, label="room_id")
         with self._lock, self._connect() as conn:
             row = conn.execute(
                 "SELECT session_id FROM collaboration_rooms WHERE room_id = ?",
@@ -129,10 +139,12 @@ class CollaborationStore:
         return str(row[0]) if row else None
 
     def upsert_room(self, session_id: str, room: dict[str, Any]) -> dict[str, Any]:
-        if not session_id:
-            raise ValueError("session_id is required")
+        session_id = require_cowork_id(session_id, label="session_id")
         payload = dict(room or {})
-        room_id = str(payload.get("id") or payload.get("room_id") or f"collab-{session_id}")
+        room_id = require_cowork_id(
+            payload.get("id") or payload.get("room_id") or f"collab-{session_id}",
+            label="room_id",
+        )
         payload["id"] = room_id
         now = _now()
         with self._lock, self._connect() as conn:
@@ -171,9 +183,11 @@ class CollaborationStore:
 
     def upsert_room_by_id(self, room: dict[str, Any]) -> dict[str, Any] | None:
         payload = dict(room or {})
-        room_id = str(payload.get("id") or payload.get("room_id") or "")
-        if not room_id:
-            raise ValueError("room_id is required")
+        room_id = require_cowork_id(
+            payload.get("id") or payload.get("room_id") or "",
+            label="room_id",
+        )
+        payload["id"] = room_id
         with self._lock, self._connect() as conn:
             row = conn.execute(
                 "SELECT session_id FROM collaboration_rooms WHERE room_id = ?",
@@ -186,6 +200,7 @@ class CollaborationStore:
     def tasks_for_session(self, session_id: str) -> list[dict[str, Any]]:
         if not session_id:
             return []
+        session_id = require_cowork_id(session_id, label="session_id")
         with self._lock, self._connect() as conn:
             rows = conn.execute(
                 "SELECT task_json FROM collaboration_tasks WHERE session_id = ? "
@@ -197,6 +212,7 @@ class CollaborationStore:
     def tasks_for_room(self, room_id: str) -> list[dict[str, Any]]:
         if not room_id:
             return []
+        room_id = require_cowork_id(room_id, label="room_id")
         with self._lock, self._connect() as conn:
             rows = conn.execute(
                 "SELECT task_json FROM collaboration_tasks WHERE room_id = ? "
@@ -206,15 +222,12 @@ class CollaborationStore:
         return [_load(row[0]) for row in rows]
 
     def upsert_task(self, session_id: str, task: dict[str, Any]) -> dict[str, Any]:
-        if not session_id:
-            raise ValueError("session_id is required")
+        session_id = require_cowork_id(session_id, label="session_id")
         payload = dict(task or {})
-        task_id = str(payload.get("id") or payload.get("task_id") or "")
-        room_id = str(payload.get("room_id") or "")
-        if not task_id:
-            raise ValueError("task id is required")
-        if not room_id:
-            raise ValueError("room_id is required")
+        task_id = require_cowork_id(payload.get("id") or payload.get("task_id") or "", label="task_id")
+        room_id = require_cowork_id(payload.get("room_id") or "", label="room_id")
+        payload["id"] = task_id
+        payload["room_id"] = room_id
         metadata = payload.get("metadata")
         if not isinstance(metadata, dict):
             metadata = {}
@@ -239,6 +252,7 @@ class CollaborationStore:
         return payload
 
     def upsert_task_for_room(self, room_id: str, task: dict[str, Any]) -> dict[str, Any] | None:
+        room_id = require_cowork_id(room_id, label="room_id")
         session_id = self.session_id_for_room(room_id)
         if not session_id:
             return None
@@ -249,6 +263,7 @@ class CollaborationStore:
     def delete_task(self, task_id: str) -> bool:
         if not task_id:
             return False
+        task_id = require_cowork_id(task_id, label="task_id")
         with self._lock, self._connect() as conn:
             cur = conn.execute(
                 "DELETE FROM collaboration_tasks WHERE task_id = ?",
@@ -265,12 +280,11 @@ class CollaborationStore:
         participant_id: str = "",
         display_name: str = "",
     ) -> int:
-        if not session_id:
-            raise ValueError("session_id is required")
-        if not room_id:
-            raise ValueError("room_id is required")
-        if not text:
-            raise ValueError("text is required")
+        session_id = require_cowork_id(session_id, label="session_id")
+        room_id = require_cowork_id(room_id, label="room_id")
+        participant_id = optional_cowork_id(participant_id, label="participant_id")
+        display_name = normalize_display_name(display_name)
+        text = require_message_text(text)
         ts = _now()
         with self._lock, self._connect() as conn:
             cur = conn.execute(
@@ -291,6 +305,7 @@ class CollaborationStore:
         participant_id: str = "",
         display_name: str = "",
     ) -> int | None:
+        room_id = require_cowork_id(room_id, label="room_id")
         session_id = self.session_id_for_room(room_id)
         if not session_id:
             return None
@@ -311,6 +326,7 @@ class CollaborationStore:
     ) -> list[dict[str, Any]]:
         if not session_id:
             return []
+        session_id = require_cowork_id(session_id, label="session_id")
         limit = max(1, min(2000, limit))
         with self._lock, self._connect() as conn:
             rows = conn.execute(
@@ -340,6 +356,7 @@ class CollaborationStore:
     ) -> list[dict[str, Any]]:
         if not room_id:
             return []
+        room_id = require_cowork_id(room_id, label="room_id")
         limit = max(1, min(2000, limit))
         with self._lock, self._connect() as conn:
             rows = conn.execute(
@@ -367,9 +384,10 @@ class CollaborationStore:
         *,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        q = (query or "").strip().lower()
+        q = normalize_search_query(query)
         if not session_id or not q:
             return []
+        session_id = require_cowork_id(session_id, label="session_id")
         with self._lock, self._connect() as conn:
             rows = conn.execute(
                 "SELECT seq, room_id, participant_id, display_name, text, ts "
@@ -396,9 +414,10 @@ class CollaborationStore:
         *,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        q = (query or "").strip().lower()
+        q = normalize_search_query(query)
         if not room_id or not q:
             return []
+        room_id = require_cowork_id(room_id, label="room_id")
         with self._lock, self._connect() as conn:
             rows = conn.execute(
                 "SELECT seq, session_id, participant_id, display_name, text, ts "
