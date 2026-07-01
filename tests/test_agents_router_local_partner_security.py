@@ -277,6 +277,80 @@ def test_register_rejects_executable_in_cwd(
     assert "user-writable" in result["message"]
 
 
+def test_register_rejects_existing_agent_symlink_without_touching_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path / "agents"))
+    agents_root = tmp_path / "agents"
+    agents_root.mkdir()
+    outside = tmp_path / "outside-agent"
+    outside.mkdir()
+    (outside / "marker.txt").write_text("keep", encoding="utf-8")
+    (agents_root / "local_claude_code").symlink_to(outside, target_is_directory=True)
+    safe_exe = tmp_path / "deep" / "claude.cmd"
+    safe_exe.parent.mkdir(parents=True)
+    safe_exe.write_text("@echo ok", encoding="utf-8")
+
+    def fake_which(commands: list[str]) -> tuple[str | None, str | None]:
+        return "claude", str(safe_exe)
+
+    monkeypatch.setattr(
+        agents_router_module,
+        "_which_local_partner_command",
+        fake_which,
+    )
+
+    client, keys = _build_auth_app(tmp_path)
+    resp = client.post(
+        "/api/agents/local-partners/register",
+        json={"partners": [{"id": "claude-code"}]},
+        headers=_bearer(keys["admin-user"]),
+    )
+
+    assert resp.status_code == 200
+    result = resp.json()["results"][0]
+    assert result["status"] == "error"
+    assert "not a real directory" in result["message"]
+    assert (outside / "marker.txt").read_text(encoding="utf-8") == "keep"
+
+
+def test_register_cleans_created_agent_when_load_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path / "agents"))
+    safe_exe = tmp_path / "deep" / "claude.cmd"
+    safe_exe.parent.mkdir(parents=True)
+    safe_exe.write_text("@echo ok", encoding="utf-8")
+
+    def fake_which(commands: list[str]) -> tuple[str | None, str | None]:
+        return "claude", str(safe_exe)
+
+    def fail_load(*_args, **_kwargs):
+        raise ValueError("broken local partner")
+
+    monkeypatch.setattr(
+        agents_router_module,
+        "_which_local_partner_command",
+        fake_which,
+    )
+    monkeypatch.setattr("runtime.execution.agents.loader.load_agent", fail_load)
+
+    client, keys = _build_auth_app(tmp_path)
+    resp = client.post(
+        "/api/agents/local-partners/register",
+        json={"partners": [{"id": "claude-code"}]},
+        headers=_bearer(keys["admin-user"]),
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["registered_count"] == 0
+    assert body["results"][0]["status"] == "error"
+    assert not (tmp_path / "agents" / "local_claude_code").exists()
+
+
 def test_register_accepts_admin_with_valid_alias(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

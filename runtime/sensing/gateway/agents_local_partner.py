@@ -31,6 +31,7 @@ import json
 import re
 import shutil
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from runtime.execution.misc.agent_avatar import pixel_agent_avatar_svg
@@ -62,6 +63,22 @@ from .agents_models import LocalPartnerWire
 _LOCAL_PARTNER_ALIAS_RE = re.compile(
     r"^[A-Za-z0-9一-龥　-〿 .\-_]{1,64}$",
 )
+_SAFE_LOCAL_PARTNER_AGENT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+
+
+def _require_safe_agent_id(value: str) -> str:
+    agent_id = str(value or "").strip()
+    if not _SAFE_LOCAL_PARTNER_AGENT_ID_RE.fullmatch(agent_id):
+        raise ValueError(
+            "local partner agent_id may only contain alphanumeric characters, "
+            "hyphens, and underscores"
+        )
+    return agent_id
+
+
+def _cleanup_created_agent_dir(agent_dir: Path, *, created: bool) -> None:
+    if created and agent_dir.is_dir() and not agent_dir.is_symlink():
+        shutil.rmtree(agent_dir, ignore_errors=True)
 
 
 def validate_alias(value: str | None) -> str:
@@ -304,11 +321,16 @@ def write_partner_agent(
     from runtime.execution.agents.loader import default_agents_root, load_agent
     from runtime.platform.io import atomic_write_text
 
-    agent_id = str(spec["agent_id"])
-    root = default_agents_root()
+    agent_id = _require_safe_agent_id(str(spec["agent_id"]))
+    root = default_agents_root().resolve()
     agent_dir = root / agent_id
+    if agent_dir.is_symlink():
+        raise ValueError(f"agent folder is not a real directory: {agent_id}")
+    if agent_dir.exists() and not agent_dir.is_dir():
+        raise ValueError(f"agent path is not a directory: {agent_id}")
     if agent_dir.exists():
-        if not (agent_dir / "profile.jsonc").is_file():
+        profile_path = agent_dir / "profile.jsonc"
+        if profile_path.is_symlink() or not profile_path.is_file():
             raise ValueError(f"agent folder exists without profile: {agent_id}")
         agent = load_agent(agent_dir, runtime, root / "_shared")
         if hasattr(registry, "replace"):
@@ -317,20 +339,26 @@ def write_partner_agent(
             registry.register(agent)
         return agent
 
-    agent_dir.mkdir(parents=True)
-    for rel in (
-        "agent-core",
-        "agent-core/.soul_history",
-        "agent-core/diary",
-        "agent-core/skills",
-        "memory",
-        "permissions",
-        "project",
-        "runtime",
-        "sessions",
-        "skills",
-    ):
-        (agent_dir / rel).mkdir(parents=True, exist_ok=True)
+    created_agent_dir = False
+    try:
+        agent_dir.mkdir(parents=True)
+        created_agent_dir = True
+        for rel in (
+            "agent-core",
+            "agent-core/.soul_history",
+            "agent-core/diary",
+            "agent-core/skills",
+            "memory",
+            "permissions",
+            "project",
+            "runtime",
+            "sessions",
+            "skills",
+        ):
+            (agent_dir / rel).mkdir(parents=True, exist_ok=True)
+    except OSError:
+        _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
+        raise
 
     did = f"DID-{uuid.uuid4().hex[:12].upper()}-{uuid.uuid4().hex[:6].upper()}"
     profile = {
@@ -355,23 +383,24 @@ def write_partner_agent(
             "local_partner_executable": executable,
         },
     }
-    atomic_write_text(
-        agent_dir / "profile.jsonc",
-        (
-            f"// Octopus local partner profile · {agent_id}\n"
-            "// Created by local partner registration\n\n"
-            + json.dumps(profile, ensure_ascii=False, indent=2)
-        ),
-    )
-    soul = soul_template(
-        alias=alias,
-        partner_name=str(spec["name"]),
-        command=command,
-    )
-    atomic_write_text(agent_dir / "agent-core" / "SOUL.md", soul, newline=None)
-    atomic_write_text(
-        agent_dir / "agent-core" / "IDENTITY.md",
-        f"""# Identity
+    try:
+        atomic_write_text(
+            agent_dir / "profile.jsonc",
+            (
+                f"// Octopus local partner profile · {agent_id}\n"
+                "// Created by local partner registration\n\n"
+                + json.dumps(profile, ensure_ascii=False, indent=2)
+            ),
+        )
+        soul = soul_template(
+            alias=alias,
+            partner_name=str(spec["name"]),
+            command=command,
+        )
+        atomic_write_text(agent_dir / "agent-core" / "SOUL.md", soul, newline=None)
+        atomic_write_text(
+            agent_dir / "agent-core" / "IDENTITY.md",
+            f"""# Identity
 
 - **Name**: {alias}
 - **Role**: Local partner bridge for {spec["name"]}
@@ -381,33 +410,44 @@ def write_partner_agent(
 - You are registered from a local executable detected on this machine.
 - Respect the current workspace and the user's requested task.
 """,
-        newline=None,
-    )
-    atomic_write_text(
-        agent_dir / "agent-core" / "AGENTS.md",
-        """# Working rules
+            newline=None,
+        )
+        atomic_write_text(
+            agent_dir / "agent-core" / "AGENTS.md",
+            """# Working rules
 
 Before using the local partner command, understand the user's task and current workspace. Keep outputs concise and user-facing.
 """,
-        newline=None,
-    )
-    atomic_write_text(
-        agent_dir / "agent-core" / "tool-registry.jsonc",
-        (
-            "// Tool registry for this local partner\n\n"
-            + json.dumps(
-                {
-                    "arms": list(spec.get("tool_groups") or []),
-                    "extra_affinity": ["local_partner", str(spec["id"])],
-                    "private_skills": [],
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-        ),
-    )
-    atomic_write_text(agent_dir / "avatar.svg", pixel_agent_avatar_svg(alias), newline=None)
+            newline=None,
+        )
+        atomic_write_text(
+            agent_dir / "agent-core" / "tool-registry.jsonc",
+            (
+                "// Tool registry for this local partner\n\n"
+                + json.dumps(
+                    {
+                        "arms": list(spec.get("tool_groups") or []),
+                        "extra_affinity": ["local_partner", str(spec["id"])],
+                        "private_skills": [],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            ),
+        )
+        atomic_write_text(agent_dir / "avatar.svg", pixel_agent_avatar_svg(alias), newline=None)
+    except OSError:
+        _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
+        raise
 
-    agent = load_agent(agent_dir, runtime, root / "_shared")
-    registry.register(agent)
+    try:
+        agent = load_agent(agent_dir, runtime, root / "_shared")
+    except (OSError, ValueError, TypeError):
+        _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
+        raise
+    try:
+        registry.register(agent)
+    except (ValueError, TypeError):
+        _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
+        raise
     return agent
