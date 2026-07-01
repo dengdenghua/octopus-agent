@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from runtime.core.cerebrum.react_context import _compress_context, _estimate_messages_tokens
 from runtime.core.cerebrum.react_loop import _estimate_context_fullness
 
 
@@ -22,6 +23,7 @@ class _Msg:
     """
 
     content: str
+    role: str = "user"
 
 
 # ─── 1. Empty / zero-length input ───────────────────────────────
@@ -119,3 +121,60 @@ def test_ratio_always_within_bounds_for_varied_inputs() -> None:
     for msgs, model in cases:
         r = _estimate_context_fullness(msgs, model)
         assert 0.0 <= r <= 1.0, f"out of range for ({len(msgs)}, {model!r}): {r}"
+
+
+def test_compress_context_hard_caps_when_observations_remain_large() -> None:
+    messages = [
+        _Msg(role="system", content="system prompt"),
+        *[
+            _Msg(
+                role="user",
+                content="Observation: web_search\n" + ("x" * 12_000),
+            )
+            for _ in range(12)
+        ],
+        _Msg(role="assistant", content="recent answer"),
+    ]
+
+    compressed = _compress_context(messages, max_tokens=2_000, router=None)
+
+    assert _estimate_messages_tokens(compressed) <= 2_000
+    assert compressed[0].role == "system"
+    assert compressed[-1].content == "recent answer"
+
+
+def test_code_mode_compression_hard_caps_large_file_observations() -> None:
+    messages = [
+        _Msg(role="system", content="system prompt"),
+        *[
+            _Msg(
+                role="user",
+                content="Observation: read_file big.py\n" + ("x" * 20_000),
+            )
+            for _ in range(10)
+        ],
+        _Msg(role="assistant", content="next step"),
+    ]
+
+    compressed = _compress_context(
+        messages,
+        max_tokens=3_000,
+        router=None,
+        is_code_mode=True,
+    )
+
+    assert _estimate_messages_tokens(compressed) <= 3_000
+    assert compressed[0].role == "system"
+    assert compressed[-1].content == "next step"
+
+
+def test_compress_context_trims_oversized_chinese_tail() -> None:
+    messages = [
+        _Msg(role="system", content="system prompt"),
+        _Msg(role="user", content="中" * 30_000),
+    ]
+
+    compressed = _compress_context(messages, max_tokens=2_000, router=None)
+
+    assert _estimate_messages_tokens(compressed) <= 2_000
+    assert compressed[-1].content.startswith("[前文因上下文预算已截断]")

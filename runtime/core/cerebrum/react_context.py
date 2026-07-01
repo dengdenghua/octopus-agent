@@ -59,7 +59,7 @@ def _compress_context(
 
     keep_tail = 8
     if len(messages) <= keep_head + keep_tail:
-        return messages
+        return _ensure_context_budget(messages, max_tokens=max_tokens)
 
     mid_start = keep_head
     mid_end = len(messages) - keep_tail
@@ -83,7 +83,7 @@ def _compress_context(
                 total,
                 _estimate_messages_tokens(compressed),
             )
-            return compressed
+            return _ensure_context_budget(compressed, max_tokens=max_tokens)
 
     if is_code_mode:
         compressed = list(messages[:mid_start])
@@ -121,7 +121,7 @@ def _compress_context(
             total,
             _estimate_messages_tokens(compressed),
         )
-        return compressed
+        return _ensure_context_budget(compressed, max_tokens=max_tokens)
 
     compressed = list(messages[:mid_start])
     for m in mid_messages:
@@ -143,7 +143,85 @@ def _compress_context(
         len(messages),
         len(compressed),
     )
-    return compressed
+    return _ensure_context_budget(compressed, max_tokens=max_tokens)
+
+
+def _ensure_context_budget(messages: list, *, max_tokens: int) -> list:
+    """Hard cap compressed context when soft summarization still runs long."""
+    if max_tokens <= 0 or _estimate_messages_tokens(messages) <= max_tokens:
+        return messages
+
+    keep_head = 0
+    for j, m in enumerate(messages):
+        if getattr(m, "role", "") == "system":
+            keep_head = j + 1
+        else:
+            break
+
+    head = list(messages[:keep_head])
+    if _estimate_messages_tokens(head) >= max_tokens:
+        out = [_trim_message_to_budget(head[-1], head_tokens=0, max_tokens=max_tokens)] if head else []
+        _logger.info(
+            "context hard-capped oversized system head: ~%d tokens → ~%d tokens (%d msgs → %d msgs)",
+            _estimate_messages_tokens(messages),
+            _estimate_messages_tokens(out),
+            len(messages),
+            len(out),
+        )
+        return out
+
+    kept_tail: list[Any] = []
+    for m in reversed(messages[keep_head:]):
+        candidate = head + [m] + list(reversed(kept_tail))
+        if _estimate_messages_tokens(candidate) <= max_tokens:
+            kept_tail.append(m)
+            continue
+        if not kept_tail:
+            kept_tail.append(_trim_message_to_budget(m, head_tokens=_estimate_messages_tokens(head), max_tokens=max_tokens))
+        break
+
+    out = head + list(reversed(kept_tail))
+    _logger.info(
+        "context hard-capped after compression: ~%d tokens → ~%d tokens (%d msgs → %d msgs)",
+        _estimate_messages_tokens(messages),
+        _estimate_messages_tokens(out),
+        len(messages),
+        len(out),
+    )
+    return out
+
+
+def _trim_message_to_budget(message: Any, *, head_tokens: int, max_tokens: int) -> Any:
+    content = getattr(message, "content", "") or ""
+    role = getattr(message, "role", "")
+    if not isinstance(content, str):
+        content = str(content)
+    remaining_tokens = max(1, max_tokens - head_tokens)
+    prefix = "[前文因上下文预算已截断]\n"
+    prefix_tokens = _estimate_tokens(prefix)
+    trimmed = _suffix_within_token_budget(content, max(1, remaining_tokens - prefix_tokens))
+    if len(trimmed) < len(content):
+        trimmed = prefix + trimmed
+    from runtime.platform.models.llm import Message
+
+    return Message(role=role or "user", content=trimmed)
+
+
+def _suffix_within_token_budget(content: str, max_tokens: int) -> str:
+    if _estimate_tokens(content) <= max_tokens:
+        return content
+    lo = 0
+    hi = len(content)
+    best = ""
+    while lo <= hi:
+        size = (lo + hi) // 2
+        candidate = content[-size:] if size else ""
+        if _estimate_tokens(candidate) <= max_tokens:
+            best = candidate
+            lo = size + 1
+        else:
+            hi = size - 1
+    return best
 
 
 def _summarize_messages(messages: list, router: Any, model: str) -> str:
