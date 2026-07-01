@@ -68,11 +68,13 @@ def test_production_readiness_gate_can_emit_json_summary(
     capsys,
     review_queue_path: Path,
 ) -> None:
-    code = gate.main([
-        "--review-queue-path",
-        str(review_queue_path),
-        "--json",
-    ])
+    code = gate.main(
+        [
+            "--review-queue-path",
+            str(review_queue_path),
+            "--json",
+        ]
+    )
 
     captured = capsys.readouterr()
     data = json.loads(captured.out)
@@ -98,12 +100,14 @@ def test_production_readiness_gate_can_write_json_output(
 ) -> None:
     output_path = tmp_path / "reports" / "readiness.json"
 
-    code = gate.main([
-        "--review-queue-path",
-        str(review_queue_path),
-        "--json-output",
-        str(output_path),
-    ])
+    code = gate.main(
+        [
+            "--review-queue-path",
+            str(review_queue_path),
+            "--json-output",
+            str(output_path),
+        ]
+    )
 
     captured = capsys.readouterr()
     data = json.loads(output_path.read_text(encoding="utf-8"))
@@ -134,11 +138,13 @@ def test_production_readiness_gate_json_reports_failures(
 
     monkeypatch.setattr(gate, "compute_e2e_surpass_certification", drifted_e2e)
 
-    code = gate.main([
-        "--review-queue-path",
-        str(review_queue_path),
-        "--json",
-    ])
+    code = gate.main(
+        [
+            "--review-queue-path",
+            str(review_queue_path),
+            "--json",
+        ]
+    )
 
     captured = capsys.readouterr()
     data = json.loads(captured.out)
@@ -171,12 +177,10 @@ def test_production_readiness_gate_reports_not_ready_quality(
     result = gate.run_gate(review_queue_path=review_queue_path)
 
     assert any(
-        "octopus.repo_context_quality.v1 is not ready" in failure
-        for failure in result.failures
+        "octopus.repo_context_quality.v1 is not ready" in failure for failure in result.failures
     )
     assert any(
-        "octopus.repo_context_quality.v1 score is 0.4" in failure
-        for failure in result.failures
+        "octopus.repo_context_quality.v1 score is 0.4" in failure for failure in result.failures
     )
 
 
@@ -227,13 +231,9 @@ def test_production_readiness_gate_blocks_e2e_certification_regression(
 
     result = gate.run_gate(min_score=95, review_queue_path=review_queue_path)
 
+    assert any("e2e surpass certification is not ready" in item for item in result.failures)
     assert any(
-        "e2e surpass certification is not ready" in item
-        for item in result.failures
-    )
-    assert any(
-        "e2e surpass certification checks: scorecard_all_dimensions_surpassed"
-        in item
+        "e2e surpass certification checks: scorecard_all_dimensions_surpassed" in item
         for item in result.failures
     )
 
@@ -301,10 +301,12 @@ def test_production_readiness_gate_allows_scored_automation_focus_without_eviden
             target_score=target_score,
             review_queue_path=review_queue_path,
         )
-        report["octopus_gaps"] = [{
-            "id": "desktop_preview_execute",
-            "evidence_ready": True,
-        }]
+        report["octopus_gaps"] = [
+            {
+                "id": "desktop_preview_execute",
+                "evidence_ready": True,
+            }
+        ]
         return report
 
     monkeypatch.setattr(gate, "compute_automation_radar", automation_with_scored_focus)
@@ -329,10 +331,12 @@ def test_production_readiness_gate_blocks_automation_evidence_gap(
             target_score=target_score,
             review_queue_path=review_queue_path,
         )
-        report["octopus_gaps"] = [{
-            "id": "desktop_preview_execute",
-            "evidence_ready": False,
-        }]
+        report["octopus_gaps"] = [
+            {
+                "id": "desktop_preview_execute",
+                "evidence_ready": False,
+            }
+        ]
         return report
 
     monkeypatch.setattr(gate, "compute_automation_radar", automation_with_missing_evidence)
@@ -376,8 +380,7 @@ def test_production_readiness_gate_blocks_stale_browser_replay_artifacts(
     result = gate.run_gate(min_score=95, review_queue_path=review_queue_path)
 
     assert any(
-        "browser/desktop replay stale source artifacts: 2" in item
-        for item in result.failures
+        "browser/desktop replay stale source artifacts: 2" in item for item in result.failures
     )
     assert any(
         "browser/desktop replay repair recipes pending: cases=2, recipes=1" in item
@@ -404,8 +407,7 @@ def test_production_readiness_gate_uses_explicit_review_queue_path(
     result = gate.run_gate(review_queue_path=review_queue_path)
 
     assert any(
-        "browser/desktop replay stale source artifacts: 1" in item
-        for item in result.failures
+        "browser/desktop replay stale source artifacts: 1" in item for item in result.failures
     )
 
 
@@ -423,6 +425,9 @@ def test_ci_runs_production_readiness_gate_with_isolated_state() -> None:
     assert "production-readiness-proof" in workflow
     assert "readiness_gate.json" in workflow
     assert "if-no-files-found: error" in workflow
+    assert "Upload full-stack smoke proof" in workflow
+    assert "full-stack-smoke-proof" in workflow
+    assert "full_stack_smoke_proof.json" in workflow
 
 
 def test_makefile_exposes_isolated_production_readiness_target() -> None:
@@ -446,9 +451,15 @@ def test_verify_local_persists_production_readiness_report() -> None:
     )
 
     assert "VERIFY_READINESS_REPORT" in script
+    assert "VERIFY_FULL_STACK_PROOF" in script
     assert "production_readiness_gate.json" in script
-    assert "--json-output \"$VERIFY_READINESS_REPORT\"" in script
+    assert "full_stack_smoke_proof.json" in script
+    assert '--json-output "$VERIFY_READINESS_REPORT"' in script
     assert "readiness report: $VERIFY_READINESS_REPORT" in script
+    assert "scripts/e2e_smoke_proof.py" in script
+    assert "full-stack-desktop" in script
+    assert "full-stack-mobile" in script
+    assert "full-stack smoke proof: $VERIFY_FULL_STACK_PROOF" in script
 
 
 def test_pr_template_points_reviewers_to_make_production_readiness() -> None:

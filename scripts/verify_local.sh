@@ -15,6 +15,7 @@ VERIFY_STATE_ROOT="${OCTOPUS_VERIFY_STATE_ROOT:-$ROOT_DIR/test-results/local-ver
 VERIFY_DATA_DIR="$VERIFY_STATE_ROOT/data"
 VERIFY_REVIEW_QUEUE="$VERIFY_DATA_DIR/review_queue.json"
 VERIFY_READINESS_REPORT="$VERIFY_STATE_ROOT/production_readiness_gate.json"
+VERIFY_FULL_STACK_PROOF="$VERIFY_STATE_ROOT/full_stack_smoke_proof.json"
 
 usage() {
   cat <<'EOF'
@@ -152,6 +153,15 @@ if [[ "$run_full_stack" != "1" ]]; then
     OCTOPUS_E2E_STATE_ROOT="$VERIFY_STATE_ROOT/full-stack" \
     pnpm e2e:full
   )
+  "$PYTHON_BIN" scripts/e2e_smoke_proof.py \
+    --output "$VERIFY_FULL_STACK_PROOF" \
+    --suite full-stack-desktop \
+    --status passed \
+    --state-root "$VERIFY_STATE_ROOT/full-stack" \
+    --frontend-port "${FRONTEND_PORT:-13000}" \
+    --backend-host "${GATEWAY_HOST:-127.0.0.1}" \
+    --backend-port "${GATEWAY_PORT:-18000}" \
+    --test-match "full-stack-smoke.spec.ts,chat.spec.ts,regression.spec.ts,workflow-editor.spec.ts"
 
   if [[ "$run_full_stack_mobile" != "1" ]]; then
     section "mobile full-stack smoke"
@@ -161,5 +171,15 @@ if [[ "$run_full_stack" != "1" ]]; then
       OCTOPUS_E2E_STATE_ROOT="$VERIFY_STATE_ROOT/full-stack-mobile" \
       pnpm e2e:full:mobile
     )
+    "$PYTHON_BIN" scripts/e2e_smoke_proof.py \
+      --output "$VERIFY_FULL_STACK_PROOF" \
+      --suite full-stack-mobile \
+      --status passed \
+      --state-root "$VERIFY_STATE_ROOT/full-stack-mobile" \
+      --frontend-port "${FRONTEND_PORT:-13000}" \
+      --backend-host "${GATEWAY_HOST:-127.0.0.1}" \
+      --backend-port "${GATEWAY_PORT:-18000}" \
+      --test-match "mobile-smoke.spec.ts"
   fi
+  echo "full-stack smoke proof: $VERIFY_FULL_STACK_PROOF"
 fi

@@ -243,6 +243,14 @@ jobs:
       - name: FastAPI + Vite smoke
         run: bash scripts/verify_local.sh --full-stack-only
 
+      - name: Upload full-stack smoke proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-stack-smoke-proof
+          path: test-results/local-verify-state/full_stack_smoke_proof.json
+          if-no-files-found: error
+
   docker-build:
     name: Docker build test
     runs-on: ubuntu-latest
