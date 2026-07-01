@@ -24,10 +24,34 @@ def test_production_readiness_gate_passes_current_release_signals(
     assert result.scorecard_score == 97
     assert result.scorecard_evidence_adjusted_score >= gate.MIN_SCORE
     assert result.automation_score >= gate.MIN_SCORE
+    assert result.e2e_ready is True
+    assert result.e2e_verdict == "surpassed"
+    assert result.e2e_summary["scorecard_octopus"] == 97
+    assert result.e2e_summary["automation_octopus"] == 95
+    assert result.e2e_summary["quality_ready"] == result.e2e_summary["quality_total"]
+    assert result.e2e_failed_checks == []
+    assert result.e2e_summary_text == (
+        "e2e_scorecard=97, e2e_automation=95, e2e_quality=6/6"
+    )
     assert "octopus.repo_context_quality.v1" in result.quality_summary
     assert "octopus.product_experience_quality.v1" in result.quality_summary
     assert "octopus.agent_loop_quality.v1" in result.quality_summary
     assert "octopus.digital_employee_quality.v1" in result.quality_summary
+
+
+def test_production_readiness_gate_prints_e2e_summary(
+    capsys,
+    review_queue_path: Path,
+) -> None:
+    code = gate.main(["--review-queue-path", str(review_queue_path)])
+
+    captured = capsys.readouterr()
+
+    assert code == 0
+    assert "e2e=surpassed" in captured.out
+    assert "e2e_scorecard=97" in captured.out
+    assert "e2e_automation=95" in captured.out
+    assert "e2e_quality=6/6" in captured.out
 
 
 def test_production_readiness_gate_reports_not_ready_quality(

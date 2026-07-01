@@ -75,6 +75,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         "production readiness gate passed: "
         f"scorecard={result.scorecard_score}, automation={result.automation_score}, "
+        f"e2e={result.e2e_verdict}, {result.e2e_summary_text}, "
         f"quality={result.quality_summary}",
     )
     return 0
@@ -88,13 +89,30 @@ class GateResult:
         scorecard_score: int,
         scorecard_evidence_adjusted_score: int,
         automation_score: int,
+        e2e_ready: bool,
+        e2e_verdict: str,
+        e2e_summary: dict[str, Any],
+        e2e_failed_checks: list[str],
         quality_summary: str,
     ) -> None:
         self.failures = failures
         self.scorecard_score = scorecard_score
         self.scorecard_evidence_adjusted_score = scorecard_evidence_adjusted_score
         self.automation_score = automation_score
+        self.e2e_ready = e2e_ready
+        self.e2e_verdict = e2e_verdict
+        self.e2e_summary = e2e_summary
+        self.e2e_failed_checks = e2e_failed_checks
         self.quality_summary = quality_summary
+
+    @property
+    def e2e_summary_text(self) -> str:
+        return (
+            f"e2e_scorecard={_nested_int(self.e2e_summary, 'scorecard_octopus')}, "
+            f"e2e_automation={_nested_int(self.e2e_summary, 'automation_octopus')}, "
+            f"e2e_quality={_nested_int(self.e2e_summary, 'quality_ready')}/"
+            f"{_nested_int(self.e2e_summary, 'quality_total')}"
+        )
 
 
 def run_gate(
@@ -195,6 +213,7 @@ def run_gate(
         "octopus",
     )
     automation_score = _nested_int(automation, "overall", "octopus")
+    e2e_failed_checks = _failed_check_ids(e2e_certification.get("checks"))
     quality_summary = ", ".join(
         f"{report.get('schema')}={report.get('passed')}/{report.get('total')}"
         for report in quality_reports
@@ -204,6 +223,10 @@ def run_gate(
         scorecard_score=scorecard_score,
         scorecard_evidence_adjusted_score=scorecard_evidence_adjusted_score,
         automation_score=automation_score,
+        e2e_ready=bool(e2e_certification.get("ready")),
+        e2e_verdict=str(e2e_certification.get("verdict") or "unknown"),
+        e2e_summary=dict(e2e_certification.get("summary") or {}),
+        e2e_failed_checks=e2e_failed_checks,
         quality_summary=quality_summary,
     )
 
@@ -335,6 +358,16 @@ def _nested_int(report: Mapping[str, Any], *keys: str) -> int:
             return 0
         value = value.get(key)
     return int(value or 0)
+
+
+def _failed_check_ids(rows: Any) -> list[str]:
+    if not isinstance(rows, Sequence) or isinstance(rows, str):
+        return ["unavailable"]
+    failed: list[str] = []
+    for row in rows:
+        if isinstance(row, Mapping) and row.get("passed") is not True:
+            failed.append(str(row.get("id") or row.get("title") or row))
+    return failed
 
 
 def _row_ids(rows: Any) -> str:
