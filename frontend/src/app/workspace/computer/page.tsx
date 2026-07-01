@@ -17,9 +17,11 @@ import {
   ScanSearchIcon,
   MousePointerClickIcon,
   PlayIcon,
+  RadioIcon,
   RefreshCwIcon,
   ShieldAlertIcon,
   ShieldCheckIcon,
+  SquareIcon,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -60,9 +62,17 @@ import {
 import { swallow } from "@/core/utils/log";
 import { loadModels } from "@/core/models/api";
 import type { Model } from "@/core/models/types";
+import {
+  getPcScreenStats,
+  startPcScreenCapture,
+  stopPcScreenCapture,
+  type PcScreenStats,
+} from "@/core/tentacle/api";
+import { usePcScreenStream } from "@/core/tentacle/use-pc-screen-stream";
 import { cn } from "@/lib/utils";
 
 type ActionKind = "click" | "move" | "type" | "key" | "wait";
+type ObservationMode = "snapshot" | "live";
 type LogItem = {
   id: string;
   title: string;
@@ -86,6 +96,12 @@ type ScreenshotImageBox = {
 export default function ComputerAutomationPage() {
   const [status, setStatus] = useState<ComputerStatus | null>(null);
   const [screenshot, setScreenshot] = useState<ComputerScreenshot | null>(null);
+  const [observationMode, setObservationMode] =
+    useState<ObservationMode>("snapshot");
+  const [pcScreenStats, setPcScreenStats] = useState<PcScreenStats | null>(
+    null,
+  );
+  const [pcScreenError, setPcScreenError] = useState<string | null>(null);
   const [actionKind, setActionKind] = useState<ActionKind>("click");
   const [x, setX] = useState("400");
   const [y, setY] = useState("300");
@@ -110,6 +126,8 @@ export default function ComputerAutomationPage() {
   > | null>(null);
   const [screenshotImageBox, setScreenshotImageBox] =
     useState<ScreenshotImageBox | null>(null);
+  const [liveCanvasBox, setLiveCanvasBox] =
+    useState<ScreenshotImageBox | null>(null);
   const [leaseOwner, setLeaseOwner] = useState<ComputerLeaseOwner | null>(null);
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [busy, setBusy] = useState<
@@ -121,10 +139,16 @@ export default function ComputerAutomationPage() {
     | "preview"
     | "execute"
     | "release"
+    | "stream"
     | null
   >(null);
   const screenshotFrameRef = useRef<HTMLDivElement | null>(null);
   const screenshotImageRef = useRef<HTMLImageElement | null>(null);
+  const liveCanvasFrameRef = useRef<HTMLDivElement | null>(null);
+  const liveCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pcStream = usePcScreenStream(liveCanvasRef, {
+    enabled: observationMode === "live",
+  });
 
   const addLog = useCallback((item: Omit<LogItem, "id">) => {
     setLogs((prev) =>
@@ -251,6 +275,78 @@ export default function ComputerAutomationPage() {
     }
   }, [addLog]);
 
+  const refreshPcStreamStats = useCallback(async () => {
+    try {
+      const data = await getPcScreenStats();
+      setPcScreenStats(data);
+      setPcScreenError(null);
+    } catch (error) {
+      swallow(error);
+      setPcScreenError(String(error));
+    }
+  }, []);
+
+  const startLiveScreen = async () => {
+    setBusy("stream");
+    setPcScreenError(null);
+    try {
+      const data = await startPcScreenCapture({
+        fps: 10,
+        scale: 1,
+        quality: 72,
+      });
+      setPcScreenStats(data.stats);
+      setObservationMode("live");
+      addLog({
+        title: "实时屏幕已启动",
+        detail: "电脑画面进入工位观察区；点击画面只会选点，不会直接执行。",
+        tone: "ok",
+      });
+    } catch (error) {
+      swallow(error);
+      setPcScreenError(String(error));
+      addLog({
+        title: "实时屏幕启动失败",
+        detail: String(error),
+        tone: "error",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const stopLiveScreen = async () => {
+    setBusy("stream");
+    try {
+      const data = await stopPcScreenCapture();
+      setPcScreenStats(data.last_stats);
+      addLog({
+        title: "实时屏幕已停止",
+        detail: "保留当前工位布局；需要继续观察时可重新启动实时屏幕。",
+        tone: "ok",
+      });
+    } catch (error) {
+      swallow(error);
+      setPcScreenError(String(error));
+      addLog({
+        title: "实时屏幕停止失败",
+        detail: String(error),
+        tone: "error",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  useEffect(() => {
+    if (observationMode !== "live") return;
+    void refreshPcStreamStats();
+    const handle = window.setInterval(() => {
+      void refreshPcStreamStats();
+    }, 3000);
+    return () => window.clearInterval(handle);
+  }, [observationMode, refreshPcStreamStats]);
+
   const measureScreenshotImage = useCallback(() => {
     const frame = screenshotFrameRef.current;
     const image = screenshotImageRef.current;
@@ -265,6 +361,23 @@ export default function ComputerAutomationPage() {
       height: imageRect.height,
       naturalWidth: image.naturalWidth,
       naturalHeight: image.naturalHeight,
+    });
+  }, []);
+
+  const measureLiveCanvas = useCallback(() => {
+    const frame = liveCanvasFrameRef.current;
+    const canvas = liveCanvasRef.current;
+    if (!frame || !canvas || !canvas.width || !canvas.height) return;
+
+    const frameRect = frame.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    setLiveCanvasBox({
+      left: canvasRect.left - frameRect.left,
+      top: canvasRect.top - frameRect.top,
+      width: canvasRect.width,
+      height: canvasRect.height,
+      naturalWidth: canvas.width,
+      naturalHeight: canvas.height,
     });
   }, []);
 
@@ -290,6 +403,34 @@ export default function ComputerAutomationPage() {
       window.cancelAnimationFrame(frameId);
     };
   }, [measureScreenshotImage, screenshot?.data_url]);
+
+  useEffect(() => {
+    if (observationMode !== "live") {
+      setLiveCanvasBox(null);
+      return;
+    }
+    const frame = liveCanvasFrameRef.current;
+    const canvas = liveCanvasRef.current;
+    if (!frame || !canvas) return;
+
+    const resizeObserver = new ResizeObserver(measureLiveCanvas);
+    resizeObserver.observe(frame);
+    resizeObserver.observe(canvas);
+    window.addEventListener("resize", measureLiveCanvas);
+    const frameId = window.requestAnimationFrame(measureLiveCanvas);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", measureLiveCanvas);
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [measureLiveCanvas, observationMode]);
+
+  useEffect(() => {
+    if (observationMode !== "live") return;
+    const frameId = window.requestAnimationFrame(measureLiveCanvas);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [measureLiveCanvas, observationMode, pcStream.frameCount]);
 
   const capture = async () => {
     setBusy("capture");
@@ -536,6 +677,39 @@ export default function ComputerAutomationPage() {
     });
   };
 
+  const selectLiveCanvasPoint = (event: MouseEvent<HTMLCanvasElement>) => {
+    const canvas = liveCanvasRef.current;
+    if (!canvas || !canvas.width || !canvas.height) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const realX = Math.round(
+      ((event.clientX - rect.left) / rect.width) * canvas.width,
+    );
+    const realY = Math.round(
+      ((event.clientY - rect.top) / rect.height) * canvas.height,
+    );
+    const clampedX = Math.max(0, Math.min(realX, canvas.width - 1));
+    const clampedY = Math.max(0, Math.min(realY, canvas.height - 1));
+    setLiveCanvasBox((current) =>
+      current
+        ? {
+            ...current,
+            naturalWidth: canvas.width,
+            naturalHeight: canvas.height,
+          }
+        : current,
+    );
+    setSelectedPoint({ x: clampedX, y: clampedY });
+    setActionKind("click");
+    setX(String(clampedX));
+    setY(String(clampedY));
+    addLog({
+      title: "已从实时屏幕选中坐标",
+      detail: `${clampedX}, ${clampedY}`,
+      tone: "ok",
+    });
+  };
+
   const executePreview = async () => {
     if (!preview) return;
     setBusy("execute");
@@ -589,6 +763,15 @@ export default function ComputerAutomationPage() {
       })
       .catch((error) => setModelsError(String(error)));
   }, [refreshStatus]);
+
+  const liveScreenRunning = pcScreenStats?.running === true;
+  const liveScreenDetail = pcScreenError
+    ? "连接异常"
+    : pcStream.isConnected
+      ? `${pcStream.fps} fps · ${pcStream.frameCount} 帧`
+      : liveScreenRunning
+        ? "等待画面"
+        : "未启动";
 
   return (
     <WorkspaceContainer>
@@ -711,21 +894,157 @@ export default function ComputerAutomationPage() {
 
           <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[1.35fr_0.95fr]">
             <section className="workspace-panel flex min-h-0 flex-col overflow-hidden rounded-[1.75rem] p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-semibold">屏幕观察</h2>
-                {screenshot?.created_at && (
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(
-                      screenshot.created_at * 1000,
-                    ).toLocaleTimeString()}
-                  </span>
-                )}
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold">屏幕观察</h2>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    {observationMode === "snapshot" &&
+                    screenshot?.created_at ? (
+                      <span>
+                        {new Date(
+                          screenshot.created_at * 1000,
+                        ).toLocaleTimeString()}
+                      </span>
+                    ) : null}
+                    {observationMode === "live" ? (
+                      <>
+                        <span>{liveScreenDetail}</span>
+                        {pcScreenStats?.config?.backend ? (
+                          <span>{pcScreenStats.config.backend}</span>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex overflow-hidden rounded-xl border border-border bg-background p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setObservationMode("snapshot")}
+                      className={cn(
+                        "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                        observationMode === "snapshot"
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted",
+                      )}
+                    >
+                      截图
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setObservationMode("live")}
+                      className={cn(
+                        "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                        observationMode === "live"
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted",
+                      )}
+                    >
+                      实时
+                    </button>
+                  </div>
+                  {observationMode === "live" ? (
+                    <Button
+                      size="sm"
+                      variant={liveScreenRunning ? "outline" : "default"}
+                      onClick={
+                        liveScreenRunning ? stopLiveScreen : startLiveScreen
+                      }
+                      disabled={busy !== null || computerUnavailable}
+                    >
+                      {liveScreenRunning ? (
+                        <>
+                          <SquareIcon className="size-4" />
+                          停止实时
+                        </>
+                      ) : (
+                        <>
+                          <RadioIcon className="size-4" />
+                          启动实时
+                        </>
+                      )}
+                    </Button>
+                  ) : null}
+                </div>
               </div>
               <div
-                ref={screenshotFrameRef}
+                ref={
+                  observationMode === "live"
+                    ? liveCanvasFrameRef
+                    : screenshotFrameRef
+                }
                 className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-border bg-muted/30"
               >
-                {screenshot?.data_url ? (
+                {observationMode === "live" ? (
+                  <>
+                    <p id="live-screen-help" className="sr-only">
+                      点击实时屏幕选择坐标；按 Enter 可选择屏幕中心点。
+                    </p>
+                    <canvas
+                      ref={liveCanvasRef}
+                      aria-describedby="live-screen-help"
+                      aria-label="实时电脑屏幕"
+                      role="button"
+                      tabIndex={0}
+                      className="max-h-full max-w-full cursor-crosshair bg-black object-contain focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      onClick={selectLiveCanvasPoint}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter" && e.key !== " ") return;
+                        e.preventDefault();
+                        const canvas = liveCanvasRef.current;
+                        if (!canvas || !canvas.width || !canvas.height) return;
+                        const cx = Math.floor(canvas.width / 2);
+                        const cy = Math.floor(canvas.height / 2);
+                        setSelectedPoint({ x: cx, y: cy });
+                        setActionKind("click");
+                        setX(String(cx));
+                        setY(String(cy));
+                        addLog({
+                          title: "已从实时屏幕选中坐标",
+                          detail: `${cx}, ${cy}`,
+                          tone: "ok",
+                        });
+                      }}
+                    />
+                    <ScreenshotActionOverlay
+                      cursor={cursorPoint}
+                      imageBox={liveCanvasBox}
+                      target={visualTarget}
+                    />
+                    {visualTarget && (
+                      <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-border bg-background/90 px-3 py-1 text-xs font-medium shadow-sm">
+                        {visualTarget.label} · {Math.round(visualTarget.x)},{" "}
+                        {Math.round(visualTarget.y)}
+                      </div>
+                    )}
+                    <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-1 text-xs shadow-sm">
+                      <span
+                        className={cn(
+                          "size-1.5 rounded-full",
+                          pcStream.isConnected
+                            ? "bg-emerald-500"
+                            : pcScreenError
+                              ? "bg-destructive"
+                              : "bg-amber-500",
+                        )}
+                      />
+                      <span>{liveScreenDetail}</span>
+                    </div>
+                    {pcScreenError ? (
+                      <div className="pointer-events-none absolute inset-x-6 top-6 rounded-xl border border-destructive/30 bg-background/95 px-3 py-2 text-xs leading-5 text-destructive shadow-sm">
+                        {pcScreenError}
+                      </div>
+                    ) : null}
+                    {!pcStream.frameCount ? (
+                      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/70 text-sm text-muted-foreground">
+                        <RadioIcon className="size-7" />
+                        {liveScreenRunning
+                          ? "等待实时屏幕画面"
+                          : "点击“启动实时”打开电脑工位画面"}
+                      </div>
+                    ) : null}
+                  </>
+                ) : screenshot?.data_url ? (
                   <>
                     <p id="screenshot-help" className="sr-only">
                       点击截图选择坐标；按 Enter 可选择屏幕中心点。

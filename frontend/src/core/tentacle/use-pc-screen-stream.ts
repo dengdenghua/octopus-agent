@@ -83,9 +83,11 @@ function parseFrameHeader(buf: ArrayBuffer): {
 
 export function usePcScreenStream(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
+  options: { enabled?: boolean } = {},
 ): PcScreenStreamState & {
   sendInput: (event: RemoteInputEvent) => Promise<void>;
 } {
+  const enabled = options.enabled ?? true;
   const [isConnected, setIsConnected] = useState(false);
   const [frameCount, setFrameCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +97,7 @@ export function usePcScreenStream(
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const fpsFramesRef = useRef<number[]>([]);
+  const shouldReconnectRef = useRef(false);
 
   // ── Render JPEG / WebP frame ────────────────────────
 
@@ -175,9 +178,42 @@ export function usePcScreenStream(
 
   // ── Connect / disconnect ────────────────────────────
 
-  const connect = useCallback(() => {
+  const disconnect = useCallback(() => {
+    shouldReconnectRef.current = false;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     if (wsRef.current) {
-      wsRef.current.close();
+      const ws = wsRef.current;
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+      ws.onopen = null;
+      ws.close();
+      wsRef.current = null;
+    }
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    fpsFramesRef.current = [];
+    setIsConnected(false);
+    setFrameCount(0);
+    setFps(0);
+    setError(null);
+  }, []);
+
+  const connect = useCallback(() => {
+    if (!enabled) return;
+    shouldReconnectRef.current = true;
+    if (wsRef.current) {
+      const previous = wsRef.current;
+      previous.onclose = null;
+      previous.onerror = null;
+      previous.onmessage = null;
+      previous.onopen = null;
+      previous.close();
       wsRef.current = null;
     }
 
@@ -198,6 +234,7 @@ export function usePcScreenStream(
 
     ws.onclose = () => {
       setIsConnected(false);
+      if (!shouldReconnectRef.current) return;
       // Auto-reconnect after 3s
       reconnectTimerRef.current = setTimeout(() => {
         connect();
@@ -208,32 +245,19 @@ export function usePcScreenStream(
       setError("PC screen WebSocket connection error");
       ws.close();
     };
-  }, [handleMessage]);
+  }, [enabled, handleMessage]);
 
   // ── Lifecycle ───────────────────────────────────────
 
   useEffect(() => {
+    if (!enabled) {
+      disconnect();
+      return;
+    }
     connect();
 
-    return () => {
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = null;
-      }
-      setIsConnected(false);
-      setFrameCount(0);
-      setFps(0);
-      setError(null);
-    };
-  }, [connect]);
+    return disconnect;
+  }, [connect, disconnect, enabled]);
 
   return { isConnected, frameCount, error, fps, sendInput };
 }
