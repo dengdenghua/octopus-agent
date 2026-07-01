@@ -1695,11 +1695,21 @@
   :root
     :is(
       [data-slot="card"],
-      [data-slot="dialog-content"],
+      [data-slot="dialog-content"]
+    ) {
+    border-radius: var(--appearance-radius-2xl) !important;
+  }
+
+  /* Structural workspace chrome must keep hard edges. These are layout
+     boundaries, not cards, so they should not inherit the global radius
+     slider or liquid-glass defaults. */
+  :root
+    :is(
+      [data-slot="sidebar-container"],
       [data-slot="sidebar-inner"],
       [data-slot="sidebar-inset"]
     ) {
-    border-radius: var(--appearance-radius-2xl) !important;
+    border-radius: 0 !important;
   }
 
   :root

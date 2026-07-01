@@ -260,6 +260,41 @@ describe("workspace sidebar project grouping", () => {
       ),
     ).toBe("总项目");
   });
+
+  test("keeps project header actions focused on executable commands", () => {
+    const actions = __testing.buildProjectSectionActions({
+      groupingEnabled: true,
+      newProjectLabel: "添加工作区/项目",
+      onNewProject: () => undefined,
+    });
+
+    expect(actions.map((action) => action.label)).toEqual([
+      "添加工作区/项目",
+    ]);
+    expect(actions.some((action) => /排序|分组|Sort|group/i.test(action.label)))
+      .toBe(false);
+    expect(
+      __testing.buildProjectSectionActions({
+        groupingEnabled: false,
+        newProjectLabel: "添加工作区/项目",
+        onNewProject: () => undefined,
+      }),
+    ).toEqual([]);
+  });
+
+  test("keeps chat header actions to the new-task command", () => {
+    const actions = __testing.buildChatsSectionActions({
+      sectionLabel: "对话",
+      actionLabel: "新建任务",
+      onNewChat: () => undefined,
+    });
+
+    expect(actions.map((action) => action.label)).toEqual(["新建任务"]);
+    expect(actions[0]?.ariaLabel).toBe("对话 · 新建任务");
+    expect(actions.some((action) => /排序|Sort/i.test(action.label))).toBe(
+      false,
+    );
+  });
 });
 
 describe("workspace sidebar thread status lights", () => {

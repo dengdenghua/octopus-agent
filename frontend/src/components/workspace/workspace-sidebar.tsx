@@ -1,6 +1,5 @@
 import {
   ArrowLeftIcon,
-  ArrowUpDownIcon,
   AppWindowIcon,
   BotIcon,
   BrainIcon,
@@ -1599,6 +1598,8 @@ export const __testing = {
   projectNameForThread,
   summarizeThreadForSidebar,
   withThreadSidebarMode,
+  buildProjectSectionActions,
+  buildChatsSectionActions,
 };
 
 type WorkspaceSurfaceMode = "agent" | "browser";
@@ -2084,9 +2085,9 @@ function ProjectGroup({
           )}
         </div>
         <CollapsibleContent className="overflow-hidden">
-          {/* Threads nested under the folder — indent so titles start
-              beyond the 📁 icon, matching the Codex reference. */}
-          <ul className="mt-0.5 space-y-px pl-6">
+          {/* Keep task content indented, but let the active/hover bar span
+              the full project lane like TRAE's code sidebar. */}
+          <ul className="mt-0.5 space-y-px">
             {threads.slice(0, 12).map((thread) => {
               const active = pathname.includes(thread.id);
               const runStatus = runStatusByHref.get(thread.href);
@@ -2104,7 +2105,7 @@ function ProjectGroup({
                     onMouseDown={() => syncThreadAgentSelection(thread.agents)}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "flex min-h-8 items-center gap-2 rounded-md py-1 pl-2 pr-14 text-[13px] opacity-75 transition-[opacity,background-color] duration-150",
+                      "flex min-h-8 w-full items-center gap-2 rounded-md py-1 pl-3 pr-12 text-[13px] opacity-75 transition-[opacity,background-color] duration-150",
                       "hover:opacity-100 hover:bg-muted/40",
                       active &&
                         "opacity-100 bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)]",
@@ -2123,7 +2124,14 @@ function ProjectGroup({
                     <span className="min-w-0 flex-1 truncate leading-tight">
                       {thread.title}
                     </span>
-                    <span className="shrink-0 text-xs text-muted-foreground/60 transition-[opacity,color] group-hover/thread:opacity-0 group-hover/thread:text-muted-foreground/90">
+                    <span
+                      className={cn(
+                        "overflow-hidden whitespace-nowrap text-xs text-muted-foreground/60 transition-[width,opacity,color] duration-150 group-hover/thread:text-muted-foreground/90",
+                        active
+                          ? "w-0 opacity-0"
+                          : "w-[4.5rem] opacity-100 group-hover/thread:w-0 group-hover/thread:opacity-0",
+                      )}
+                    >
                       {formatRelativeTimestamp(thread.updatedAt)}
                     </span>
                   </Link>
@@ -2137,7 +2145,7 @@ function ProjectGroup({
                       onOpenFiles(thread, project);
                     }}
                     className={cn(
-                      "absolute right-7 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md border border-transparent bg-background/70 text-muted-foreground/75 shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-[opacity,background-color,border-color,color] duration-150",
+                      "absolute right-1 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md border border-transparent bg-background/70 text-muted-foreground/75 shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-[opacity,background-color,border-color,color] duration-150",
                       "hover:border-border/65 hover:bg-background hover:text-foreground",
                       active ? "opacity-100" : "opacity-0 group-hover/thread:opacity-100",
                     )}
@@ -2153,7 +2161,7 @@ function ProjectGroup({
                       e.stopPropagation();
                       setThreadToDelete(thread);
                     }}
-                    className="absolute right-1 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity duration-150 hover:bg-destructive/10 hover:text-destructive group-hover/thread:opacity-100"
+                    className="absolute right-8 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity duration-150 hover:bg-destructive/10 hover:text-destructive group-hover/thread:opacity-100"
                   >
                     <Trash2Icon className="size-3" />
                   </button>
@@ -2236,6 +2244,44 @@ interface SectionAction {
   active?: boolean;
   onClick?: () => void;
   href?: string;
+}
+
+function buildProjectSectionActions({
+  groupingEnabled,
+  newProjectLabel,
+  onNewProject,
+}: {
+  groupingEnabled: boolean;
+  newProjectLabel: string;
+  onNewProject: () => void;
+}): SectionAction[] {
+  if (!groupingEnabled) return [];
+  return [
+    {
+      icon: FolderPlusIcon,
+      label: newProjectLabel,
+      onClick: onNewProject,
+    },
+  ];
+}
+
+function buildChatsSectionActions({
+  sectionLabel,
+  actionLabel,
+  onNewChat,
+}: {
+  sectionLabel: string;
+  actionLabel: string;
+  onNewChat: () => void;
+}): SectionAction[] {
+  return [
+    {
+      icon: MessageSquarePlusIcon,
+      label: actionLabel,
+      ariaLabel: `${sectionLabel} · ${actionLabel}`,
+      onClick: onNewChat,
+    },
+  ];
 }
 
 /* Implementation note. */
@@ -2382,29 +2428,12 @@ function ProjectsSection({
             setOpen((v) => !v);
           }}
           actions={[
-            {
-              icon: FolderIcon,
-              label: groupingEnabled
-                ? t.sidebar.actionDisableProjectGrouping
-                : t.sidebar.actionEnableProjectGrouping,
-              active: groupingEnabled,
-              onClick: onToggleGrouping,
-            },
-            ...(groupingEnabled
-              ? [
-                  {
-                    icon: ArrowUpDownIcon,
-                    label: t.sidebar.actionSort,
-                    onClick: () => eventBus.emit("projects:sort"),
-                  },
-                  {
-                    icon: FolderPlusIcon,
-                    label: t.sidebar.actionNewProject,
-                    onClick: () =>
-                      window.dispatchEvent(new Event("octopus:project-new")),
-                  },
-                ]
-              : []),
+            ...buildProjectSectionActions({
+              groupingEnabled,
+              newProjectLabel: t.sidebar.actionNewProject,
+              onNewProject: () =>
+                window.dispatchEvent(new Event("octopus:project-new")),
+            }),
           ]}
         />
         {groupingEnabled && open && (
@@ -2542,19 +2571,11 @@ function ChatsSection({
           label={sectionLabel}
           open={open}
           onToggleOpen={() => setOpen((v) => !v)}
-          actions={[
-            {
-              icon: ArrowUpDownIcon,
-              label: tr.sidebar.actionSort,
-              onClick: () => eventBus.emit("chats:sort"),
-            },
-            {
-              icon: MessageSquarePlusIcon,
-              label: actionLabel,
-              ariaLabel: `${sectionLabel} · ${actionLabel}`,
-              onClick: startNewChat,
-            },
-          ]}
+          actions={buildChatsSectionActions({
+            sectionLabel,
+            actionLabel,
+            onNewChat: startNewChat,
+          })}
         />
         {open &&
           (threads.length === 0 ? (
