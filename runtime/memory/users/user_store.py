@@ -16,6 +16,17 @@ from uuid import uuid4
 from runtime.platform.io import atomic_write_json
 from runtime.platform.process.paths import app_paths
 
+DEFAULT_MAX_FACTS = 500
+HARD_MAX_FACTS = 2_000
+DEFAULT_DEBOUNCE_SECONDS = 5
+MAX_DEBOUNCE_SECONDS = 3_600
+DEFAULT_MAX_INJECTION_TOKENS = 2_000
+HARD_MAX_INJECTION_TOKENS = 32_000
+MAX_FACT_CONTENT_CHARS = 500
+MAX_SECTION_SUMMARY_CHARS = 4_000
+MAX_LABEL_CHARS = 80
+MAX_SCOPE_VALUE_CHARS = 120
+
 
 def _memory_path() -> Path:
     return app_paths().user_memory_path
@@ -84,6 +95,7 @@ def add_fact(
         return None
     memory = read_memory()
     facts = list(memory.get("facts") or [])
+    max_facts = int(read_config().get("max_facts") or DEFAULT_MAX_FACTS)
     scope = _normalize_scope(scope, agent_id=agent_id, project=project)
     clean_agent = _clean_scope_value(agent_id)
     clean_project = _clean_scope_value(project)
@@ -99,15 +111,15 @@ def add_fact(
     fact = {
         "id": uuid4().hex,
         "content": content,
-        "category": category or "profile",
-        "confidence": max(0.0, min(1.0, float(confidence))),
+        "category": _clean_label(category or "profile", fallback="profile"),
+        "confidence": max(0.0, min(1.0, _coerce_float(confidence, 0.85))),
         "createdAt": now_iso(),
-        "source": source or "chat",
+        "source": _clean_label(source or "chat", fallback="chat"),
         "scope": scope,
         "agent_id": clean_agent,
         "project": clean_project,
     }
-    memory["facts"] = [*facts, fact][-500:]
+    memory["facts"] = [*facts, fact][-max_facts:]
     write_memory(memory)
     return fact
 
@@ -208,11 +220,11 @@ def default_config() -> dict[str, Any]:
         "enabled": True,
         "storage_path": str(_memory_path()),
         "auto_capture_enabled": True,
-        "debounce_seconds": 5,
-        "max_facts": 500,
+        "debounce_seconds": DEFAULT_DEBOUNCE_SECONDS,
+        "max_facts": DEFAULT_MAX_FACTS,
         "fact_confidence_threshold": 0.5,
         "injection_enabled": True,
-        "max_injection_tokens": 2000,
+        "max_injection_tokens": DEFAULT_MAX_INJECTION_TOKENS,
     }
 
 
@@ -233,17 +245,22 @@ def read_config() -> dict[str, Any]:
         "auto_capture_enabled": bool(
             raw.get("auto_capture_enabled", config["auto_capture_enabled"])
         ),
-        "debounce_seconds": int(raw.get("debounce_seconds", config["debounce_seconds"]) or 5),
-        "max_facts": int(raw.get("max_facts", config["max_facts"]) or 500),
-        "fact_confidence_threshold": float(
-            raw.get("fact_confidence_threshold", config["fact_confidence_threshold"]) or 0.5
+        "debounce_seconds": _coerce_int(
+            raw.get("debounce_seconds"),
+            int(config["debounce_seconds"]),
+        ),
+        "max_facts": _coerce_int(raw.get("max_facts"), int(config["max_facts"])),
+        "fact_confidence_threshold": _coerce_float(
+            raw.get("fact_confidence_threshold"),
+            float(config["fact_confidence_threshold"]),
         ),
         "injection_enabled": bool(raw.get("injection_enabled", config["injection_enabled"])),
-        "max_injection_tokens": int(
-            raw.get("max_injection_tokens", config["max_injection_tokens"]) or 2000
+        "max_injection_tokens": _coerce_int(
+            raw.get("max_injection_tokens"),
+            int(config["max_injection_tokens"]),
         ),
     })
-    return config
+    return read_config_from_raw(config)
 
 
 def write_config(patch: dict[str, Any]) -> dict[str, Any]:
@@ -272,15 +289,33 @@ def read_config_from_raw(raw: dict[str, Any]) -> dict[str, Any]:
     config["auto_capture_enabled"] = bool(config.get("auto_capture_enabled", True))
     config["injection_enabled"] = bool(config.get("injection_enabled", True))
     config["storage_path"] = str(_memory_path())
-    config["debounce_seconds"] = max(0, int(config.get("debounce_seconds") or 5))
-    config["max_facts"] = max(1, int(config.get("max_facts") or 500))
+    config["debounce_seconds"] = max(
+        0,
+        min(
+            MAX_DEBOUNCE_SECONDS,
+            _coerce_int(config.get("debounce_seconds"), DEFAULT_DEBOUNCE_SECONDS),
+        ),
+    )
+    config["max_facts"] = max(
+        1,
+        min(HARD_MAX_FACTS, _coerce_int(config.get("max_facts"), DEFAULT_MAX_FACTS)),
+    )
     config["fact_confidence_threshold"] = max(
         0.0,
-        min(1.0, float(config.get("fact_confidence_threshold") or 0.5)),
+        min(
+            1.0,
+            _coerce_float(config.get("fact_confidence_threshold"), 0.5),
+        ),
     )
     config["max_injection_tokens"] = max(
         0,
-        int(config.get("max_injection_tokens") or 2000),
+        min(
+            HARD_MAX_INJECTION_TOKENS,
+            _coerce_int(
+                config.get("max_injection_tokens"),
+                DEFAULT_MAX_INJECTION_TOKENS,
+            ),
+        ),
     )
     return config
 
@@ -306,10 +341,10 @@ def normalize_memory(raw: Any) -> dict[str, Any]:
         facts.append({
             "id": str(item.get("id") or uuid4().hex),
             "content": content,
-            "category": str(item.get("category") or "context"),
+            "category": _clean_label(item.get("category") or "context", fallback="context"),
             "confidence": max(0.0, min(1.0, confidence)),
             "createdAt": str(item.get("createdAt") or last_updated),
-            "source": str(item.get("source") or "manual"),
+            "source": _clean_label(item.get("source") or "manual", fallback="manual"),
             "scope": _normalize_scope(
                 item.get("scope") or "global",
                 agent_id=item.get("agent_id"),
@@ -331,7 +366,7 @@ def normalize_memory(raw: Any) -> dict[str, Any]:
             "earlierContext": _section(history.get("earlierContext"), last_updated),
             "longTermBackground": _section(history.get("longTermBackground"), last_updated),
         },
-        "facts": facts,
+        "facts": facts[-_configured_max_facts():],
     })
     return base
 
@@ -339,21 +374,54 @@ def normalize_memory(raw: Any) -> dict[str, Any]:
 def _section(value: Any, fallback_updated_at: str) -> dict[str, str]:
     if isinstance(value, dict):
         return {
-            "summary": str(value.get("summary") or ""),
+            "summary": _clean_section_summary(value.get("summary") or ""),
             "updatedAt": str(value.get("updatedAt") or fallback_updated_at or ""),
         }
     if isinstance(value, str):
-        return {"summary": value, "updatedAt": fallback_updated_at or ""}
+        return {
+            "summary": _clean_section_summary(value),
+            "updatedAt": fallback_updated_at or "",
+        }
     return {"summary": "", "updatedAt": fallback_updated_at or ""}
 
 
 def _clean_text(value: Any) -> str:
     text = " ".join(str(value).split()).strip(" .。")
-    return text[:500].rstrip()
+    return text[:MAX_FACT_CONTENT_CHARS].rstrip()
 
 
 def _clean_scope_value(value: Any) -> str:
-    return " ".join(str(value or "").split()).strip()[:120]
+    return " ".join(str(value or "").split()).strip()[:MAX_SCOPE_VALUE_CHARS]
+
+
+def _clean_section_summary(value: Any) -> str:
+    return " ".join(str(value or "").split()).strip()[:MAX_SECTION_SUMMARY_CHARS].rstrip()
+
+
+def _clean_label(value: Any, *, fallback: str) -> str:
+    text = " ".join(str(value or "").split()).strip()
+    return (text[:MAX_LABEL_CHARS].rstrip() or fallback)
+
+
+def _coerce_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def _coerce_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _configured_max_facts() -> int:
+    try:
+        return int(read_config().get("max_facts") or DEFAULT_MAX_FACTS)
+    except (TypeError, ValueError):
+        return DEFAULT_MAX_FACTS
 
 
 def _normalize_scope(

@@ -78,6 +78,81 @@ def test_memory_config_uses_same_app_paths(client: TestClient, tmp_path: Path) -
     assert (tmp_path / "data" / "user_memory_config.json").exists()
 
 
+def test_memory_config_clamps_invalid_and_unbounded_values(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / "data" / "user_memory_config.json"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        json.dumps({
+            "debounce_seconds": 999_999,
+            "max_facts": 999_999,
+            "fact_confidence_threshold": "bad",
+            "max_injection_tokens": 999_999,
+        }),
+        encoding="utf-8",
+    )
+
+    config = user_store.read_config()
+
+    assert config["debounce_seconds"] == user_store.MAX_DEBOUNCE_SECONDS
+    assert config["max_facts"] == user_store.HARD_MAX_FACTS
+    assert config["fact_confidence_threshold"] == 0.5
+    assert config["max_injection_tokens"] == user_store.HARD_MAX_INJECTION_TOKENS
+
+
+def test_memory_import_is_normalized_and_trimmed(
+    client: TestClient,
+) -> None:
+    client.put("/api/memory/config", json={"max_facts": 2})
+
+    imported = client.post(
+        "/api/memory/import",
+        json={
+            "user": {
+                "workContext": {
+                    "summary": "x" * (user_store.MAX_SECTION_SUMMARY_CHARS + 100),
+                },
+            },
+            "facts": [
+                {"content": "fact zero"},
+                {
+                    "content": "fact one",
+                    "category": "c" * (user_store.MAX_LABEL_CHARS + 20),
+                    "source": "s" * (user_store.MAX_LABEL_CHARS + 20),
+                },
+                {"content": "fact two"},
+            ],
+        },
+    )
+
+    body = imported.json()
+    assert imported.status_code == 200
+    assert [fact["content"] for fact in body["facts"]] == ["fact one", "fact two"]
+    assert len(body["facts"][0]["category"]) == user_store.MAX_LABEL_CHARS
+    assert len(body["facts"][0]["source"]) == user_store.MAX_LABEL_CHARS
+    assert len(body["user"]["workContext"]["summary"]) == user_store.MAX_SECTION_SUMMARY_CHARS
+
+
+def test_add_fact_respects_configured_max_facts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    user_store.write_config({"max_facts": 2})
+
+    user_store.add_fact("first")
+    user_store.add_fact("second")
+    user_store.add_fact("third")
+
+    assert [fact["content"] for fact in user_store.read_memory()["facts"]] == [
+        "second",
+        "third",
+    ]
+
+
 class TestMemoryRouterAuth:
     def _client(self, require_auth: bool) -> TestClient:
         from runtime.safety.auth import Identity, IdentityStore
