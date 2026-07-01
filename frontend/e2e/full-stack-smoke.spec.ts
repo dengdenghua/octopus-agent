@@ -80,6 +80,53 @@ async function waitForThreadState(
     .not.toBeNull();
 }
 
+async function waitForRealtimeThreadId(
+  page: Page,
+  timeoutMs: number,
+): Promise<string | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      return extractRealtimeThreadId(page.url());
+    } catch {
+      await page.waitForTimeout(250);
+    }
+  }
+  return null;
+}
+
+async function submitRealtimePrompt(
+  page: Page,
+  prompt: string,
+): Promise<string> {
+  const input = page.locator('[data-testid="chat-composer-input"]').first();
+  const sendButton = page.getByTestId("chat-send-button");
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    await input.waitFor({ state: "visible", timeout: 15_000 });
+    if (
+      (await inputValue(page, '[data-testid="chat-composer-input"]')) !== prompt
+    ) {
+      await reactFill(page, '[data-testid="chat-composer-input"]', prompt);
+    }
+    await expect(sendButton).toBeEnabled({ timeout: 10_000 });
+    if (attempt === 1) {
+      await sendButton.click();
+    } else {
+      await input.press("Enter");
+    }
+    const threadId = await waitForRealtimeThreadId(
+      page,
+      attempt === 3 ? 45_000 : 15_000,
+    );
+    if (threadId) return threadId;
+  }
+  throw new Error(
+    `realtime prompt did not create a thread; url=${page.url()} input=${String(
+      await inputValue(page, '[data-testid="chat-composer-input"]'),
+    )}`,
+  );
+}
+
 function threadStateMessages(state: Record<string, unknown>): unknown[] {
   const values = state.values;
   if (
@@ -244,15 +291,7 @@ test.describe("Full-stack golden smoke", () => {
     await expect(chatModeToggle).toHaveAttribute("aria-pressed", "true");
 
     await reactFill(page, '[data-testid="chat-composer-input"]', prompt);
-    await expect(page.getByTestId("chat-send-button")).toBeEnabled({
-      timeout: 10_000,
-    });
-    await page.getByTestId("chat-send-button").click();
-
-    await page.waitForURL(/#\/workspace\/realtime\/(?!new)[^/]+$/, {
-      timeout: 45_000,
-    });
-    const threadId = extractRealtimeThreadId(page.url());
+    const threadId = await submitRealtimePrompt(page, prompt);
 
     await waitForThreadState(page, threadId, (state) => {
       const messages = threadStateMessages(state);

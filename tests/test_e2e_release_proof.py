@@ -65,6 +65,14 @@ def test_e2e_release_proof_merges_readiness_and_full_stack(tmp_path: Path) -> No
         "full-stack-desktop": 0,
         "full-stack-mobile": 0,
     }
+    assert data["summary"]["required_suite_skipped_test_counts"] == {
+        "full-stack-desktop": 1,
+        "full-stack-mobile": 0,
+    }
+    assert data["summary"]["required_suite_skipped_tests"] == {
+        "full-stack-desktop": [_allowed_skipped_test()],
+        "full-stack-mobile": [],
+    }
     assert data["summary"]["required_suite_run_ids"] == {
         "full-stack-desktop": "proof-run-1",
         "full-stack-mobile": "proof-run-1",
@@ -482,6 +490,103 @@ def test_e2e_release_proof_rejects_mismatched_suite_run_id(
     assert data["summary"]["suites_with_mismatched_run_ids"] == ["full-stack-mobile"]
 
 
+def test_e2e_release_proof_rejects_incomplete_skipped_test_inventory(
+    tmp_path: Path,
+) -> None:
+    readiness = tmp_path / "readiness.json"
+    full_stack = tmp_path / "full_stack.json"
+    output = tmp_path / "release.json"
+    readiness.write_text(json.dumps(_readiness()), encoding="utf-8")
+    full_stack.write_text(
+        json.dumps(
+            _full_stack(
+                report_root=tmp_path,
+                suite_skipped_counts={"full-stack-desktop": 1},
+                suite_skipped_tests={"full-stack-desktop": []},
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/e2e_release_proof.py",
+            "--readiness",
+            str(readiness),
+            "--full-stack",
+            str(full_stack),
+            "--output",
+            str(output),
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert result.returncode == 1
+    assert data["ready"] is False
+    assert "full_stack_skipped_test_inventory_complete" in data["failed_checks"]
+    assert data["summary"]["suites_with_incomplete_skipped_test_inventory"] == [
+        "full-stack-desktop"
+    ]
+
+
+def test_e2e_release_proof_rejects_unexpected_skipped_test(
+    tmp_path: Path,
+) -> None:
+    readiness = tmp_path / "readiness.json"
+    full_stack = tmp_path / "full_stack.json"
+    output = tmp_path / "release.json"
+    readiness.write_text(json.dumps(_readiness()), encoding="utf-8")
+    unexpected = {
+        "file": "workflow-editor.spec.ts",
+        "title": "Workflow Editor › hidden broken editor path",
+        "reason": "temporarily disabled",
+        "line": 10,
+    }
+    full_stack.write_text(
+        json.dumps(
+            _full_stack(
+                report_root=tmp_path,
+                suite_skipped_counts={"full-stack-desktop": 2},
+                suite_skipped_tests={
+                    "full-stack-desktop": [_allowed_skipped_test(), unexpected],
+                },
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/e2e_release_proof.py",
+            "--readiness",
+            str(readiness),
+            "--full-stack",
+            str(full_stack),
+            "--output",
+            str(output),
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert result.returncode == 1
+    assert data["ready"] is False
+    assert "full_stack_skipped_tests_are_expected" in data["failed_checks"]
+    assert data["summary"]["suites_with_unexpected_skipped_tests"] == ["full-stack-desktop"]
+    assert data["summary"]["unexpected_skipped_tests_by_suite"] == {
+        "full-stack-desktop": [unexpected]
+    }
+
+
 def test_e2e_release_proof_rejects_missing_required_state_root(
     tmp_path: Path,
 ) -> None:
@@ -645,6 +750,9 @@ def _full_stack(
     suite_test_matches: dict[str, tuple[str, ...]] | None = None,
     suite_passed_counts: dict[str, int] | None = None,
     suite_failed_counts: dict[str, int] | None = None,
+    suite_skipped_counts: dict[str, int] | None = None,
+    suite_skipped_tests: dict[str, list[dict[str, object]]] | None = None,
+    suite_row_skipped_tests: dict[str, list[dict[str, object]]] | None = None,
     suite_run_ids: dict[str, str] | None = None,
     suite_report_presence: dict[str, bool] | None = None,
     suite_report_stats: dict[str, dict[str, int]] | None = None,
@@ -670,10 +778,15 @@ def _full_stack(
         "full-stack-desktop": 0,
         "full-stack-mobile": 0,
     }
-    skipped_counts = {
+    skipped_counts = suite_skipped_counts or {
         "full-stack-desktop": 1,
         "full-stack-mobile": 0,
     }
+    skipped_tests_by_suite = suite_skipped_tests or {
+        "full-stack-desktop": [_allowed_skipped_test()],
+        "full-stack-mobile": [],
+    }
+    row_skipped_tests_by_suite = suite_row_skipped_tests or skipped_tests_by_suite
     run_ids = suite_run_ids or {}
     report_presence = suite_report_presence or {
         "full-stack-desktop": True,
@@ -694,6 +807,7 @@ def _full_stack(
             suite,
             bool(report_presence.get(suite, False)),
         )
+        skipped_tests = list(skipped_tests_by_suite.get(suite, []))
         if should_write_report:
             stats = report_stats.get(suite) or {
                 "expected": passed_counts.get(suite, 0),
@@ -702,7 +816,7 @@ def _full_stack(
                 "flaky": 0,
             }
             report_path.write_text(
-                json.dumps({"stats": stats, "suites": []}),
+                json.dumps({"stats": stats, "suites": _playwright_suites(skipped_tests)}),
                 encoding="utf-8",
             )
         try:
@@ -734,6 +848,7 @@ def _full_stack(
                 "skipped_test_count": skipped_counts.get(suite, 0),
                 "failed_test_count": failed_counts.get(suite, 0),
                 "flaky_test_count": 0,
+                "skipped_tests": list(row_skipped_tests_by_suite.get(suite, [])),
             }
         )
     return {
@@ -753,3 +868,65 @@ def _full_stack(
         "failed_suites": [],
         "suites": rows,
     }
+
+
+def _allowed_skipped_test() -> dict[str, object]:
+    return {
+        "file": "regression.spec.ts",
+        "title": (
+            "Bug#2 regression · Cost tab reflects real chat cost › "
+            "chat then observability/cost shows non-zero tokens"
+        ),
+        "reason": "requires a real model/provider and writes non-zero budget commits",
+        "line": 139,
+    }
+
+
+def _playwright_suites(skipped_tests: list[dict[str, object]]) -> list[dict[str, object]]:
+    if not skipped_tests:
+        return []
+    suites_by_describe: dict[tuple[str, str], list[dict[str, object]]] = {}
+    for skipped in skipped_tests:
+        title_parts = str(skipped["title"]).split(" › ")
+        describe = title_parts[0] if len(title_parts) > 1 else ""
+        spec_title = title_parts[-1]
+        key = (str(skipped["file"]), describe)
+        suites_by_describe.setdefault(key, []).append(
+            {
+                "title": spec_title,
+                "file": skipped["file"],
+                "line": skipped["line"],
+                "column": 3,
+                "tests": [
+                    {
+                        "annotations": [
+                            {
+                                "type": "skip",
+                                "description": skipped["reason"],
+                            }
+                        ],
+                        "expectedStatus": "skipped",
+                        "results": [{"status": "skipped", "annotations": []}],
+                        "status": "skipped",
+                    }
+                ],
+            }
+        )
+    file_suites: dict[str, list[dict[str, object]]] = {}
+    for (file_name, describe), specs in suites_by_describe.items():
+        file_suites.setdefault(file_name, []).append(
+            {
+                "title": describe,
+                "file": file_name,
+                "specs": specs,
+            }
+        )
+    return [
+        {
+            "title": file_name,
+            "file": file_name,
+            "suites": child_suites,
+            "specs": [],
+        }
+        for file_name, child_suites in file_suites.items()
+    ]

@@ -21,6 +21,17 @@ MIN_PASSED_TESTS_BY_SUITE = {
     "full-stack-desktop": 13,
     "full-stack-mobile": 3,
 }
+ALLOWED_SKIPPED_TESTS_BY_SUITE = {
+    "full-stack-desktop": {
+        (
+            "regression.spec.ts",
+            "Bug#2 regression · Cost tab reflects real chat cost › "
+            "chat then observability/cost shows non-zero tokens",
+            "requires a real model/provider and writes non-zero budget commits",
+        ),
+    },
+    "full-stack-mobile": set(),
+}
 
 
 def main() -> int:
@@ -111,6 +122,36 @@ def build_release_proof(
             report_counts=suite_report_counts[suite],
         )
     ]
+    suites_with_incomplete_skipped_test_inventory = [
+        suite
+        for suite in required
+        if suite in suite_report_counts
+        and suite_report_valid.get(suite, False)
+        and not _skipped_test_inventory_is_complete(suite_report_counts[suite])
+    ]
+    suites_with_mismatched_skipped_test_inventory = [
+        suite
+        for suite in required
+        if suite in suite_report_counts
+        and suite_report_valid.get(suite, False)
+        and not _suite_skipped_tests_match_playwright_report(
+            row=_suite_row_by_name(suite_rows, suite),
+            report_counts=suite_report_counts[suite],
+        )
+    ]
+    unexpected_skipped_tests_by_suite = {
+        suite: unexpected
+        for suite in required
+        if suite in suite_report_counts
+        for unexpected in [
+            _unexpected_skipped_tests(
+                suite=suite,
+                skipped_tests=suite_report_counts[suite].get("skipped_tests"),
+            )
+        ]
+        if unexpected
+    }
+    suites_with_unexpected_skipped_tests = sorted(unexpected_skipped_tests_by_suite)
     weak_suite_test_coverage = [
         suite
         for suite in required
@@ -285,6 +326,32 @@ def build_release_proof(
             ),
         },
         {
+            "id": "full_stack_skipped_test_inventory_complete",
+            "passed": not suites_with_incomplete_skipped_test_inventory,
+            "next_action": (
+                "Regenerate full-stack smoke proof with a test-level skipped inventory "
+                "for suites: "
+                f"{', '.join(suites_with_incomplete_skipped_test_inventory)}"
+            ),
+        },
+        {
+            "id": "full_stack_skipped_test_inventory_matches_report",
+            "passed": not suites_with_mismatched_skipped_test_inventory,
+            "next_action": (
+                "Regenerate full-stack smoke proof; skipped test inventories "
+                "do not match Playwright reports for suites: "
+                f"{', '.join(suites_with_mismatched_skipped_test_inventory)}"
+            ),
+        },
+        {
+            "id": "full_stack_skipped_tests_are_expected",
+            "passed": not suites_with_unexpected_skipped_tests,
+            "next_action": (
+                "Remove or explicitly approve unexpected skipped Playwright tests for suites: "
+                f"{', '.join(suites_with_unexpected_skipped_tests)}"
+            ),
+        },
+        {
             "id": "full_stack_test_file_counts_consistent",
             "passed": declared_test_file_count == observed_test_file_count,
             "next_action": (
@@ -360,6 +427,18 @@ def build_release_proof(
             "required_suite_failed_test_counts": {
                 suite: suite_failed_test_counts.get(suite, 0) for suite in required
             },
+            "required_suite_skipped_test_counts": {
+                suite: _as_int(
+                    suite_report_counts.get(suite, {}).get("skipped_test_count"),
+                )
+                for suite in required
+            },
+            "required_suite_skipped_tests": {
+                suite: _normalize_skipped_tests(
+                    suite_report_counts.get(suite, {}).get("skipped_tests"),
+                )
+                for suite in required
+            },
             "required_suite_run_ids": {suite: suite_run_ids.get(suite, "") for suite in required},
             "required_suite_state_roots": {
                 suite: str(suite_state_roots.get(suite) or "") for suite in required
@@ -393,6 +472,14 @@ def build_release_proof(
             "suites_with_mismatched_playwright_report_hashes": (
                 suites_with_mismatched_playwright_report_hashes
             ),
+            "suites_with_incomplete_skipped_test_inventory": (
+                suites_with_incomplete_skipped_test_inventory
+            ),
+            "suites_with_mismatched_skipped_test_inventory": (
+                suites_with_mismatched_skipped_test_inventory
+            ),
+            "suites_with_unexpected_skipped_tests": suites_with_unexpected_skipped_tests,
+            "unexpected_skipped_tests_by_suite": unexpected_skipped_tests_by_suite,
             "weak_suite_test_coverage": weak_suite_test_coverage,
             "weak_suite_passed_tests": weak_suite_passed_tests,
             "suites_with_failed_tests": suites_with_failed_tests,
@@ -517,8 +604,8 @@ def _suite_playwright_report_counts(
     suite_rows: list[dict[str, Any]],
     *,
     base_dir: Path,
-) -> dict[str, dict[str, int | bool | str]]:
-    counts: dict[str, dict[str, int | bool | str]] = {}
+) -> dict[str, dict[str, Any]]:
+    counts: dict[str, dict[str, Any]] = {}
     for row in suite_rows:
         suite = str(row.get("suite") or "").strip()
         if not suite:
@@ -550,7 +637,7 @@ def _resolve_state_root(raw_path: str, *, base_dir: Path) -> Path | None:
     return path.resolve()
 
 
-def _read_playwright_report_counts(path: Path | None) -> dict[str, int | bool | str]:
+def _read_playwright_report_counts(path: Path | None) -> dict[str, Any]:
     empty = {
         "valid": False,
         "sha256": "",
@@ -560,6 +647,7 @@ def _read_playwright_report_counts(path: Path | None) -> dict[str, int | bool | 
         "skipped_test_count": 0,
         "failed_test_count": 0,
         "flaky_test_count": 0,
+        "skipped_tests": [],
     }
     if path is None:
         return empty
@@ -591,6 +679,7 @@ def _read_playwright_report_counts(path: Path | None) -> dict[str, int | bool | 
         "skipped_test_count": skipped,
         "failed_test_count": failed,
         "flaky_test_count": flaky,
+        "skipped_tests": _collect_playwright_skipped_tests(data),
     }
 
 
@@ -625,7 +714,7 @@ def _count_playwright_tests(data: object) -> tuple[int, int, int, int, int]:
 def _suite_counts_match_playwright_report(
     *,
     row: dict[str, Any],
-    report_counts: dict[str, int | bool | str],
+    report_counts: dict[str, Any],
 ) -> bool:
     return (
         _as_int(row.get("test_case_count")) == int(report_counts.get("test_case_count") or 0)
@@ -641,13 +730,167 @@ def _suite_counts_match_playwright_report(
 def _suite_hash_matches_playwright_report(
     *,
     row: dict[str, Any],
-    report_counts: dict[str, int | bool | str],
+    report_counts: dict[str, Any],
 ) -> bool:
     expected_sha = str(row.get("playwright_report_sha256") or "").strip()
     expected_bytes = _as_int(row.get("playwright_report_bytes"))
     actual_sha = str(report_counts.get("sha256") or "").strip()
     actual_bytes = int(report_counts.get("bytes") or 0)
     return bool(expected_sha) and expected_sha == actual_sha and expected_bytes == actual_bytes
+
+
+def _skipped_test_inventory_is_complete(report_counts: dict[str, Any]) -> bool:
+    skipped_count = _as_int(report_counts.get("skipped_test_count"))
+    skipped_tests = _normalize_skipped_tests(report_counts.get("skipped_tests"))
+    return skipped_count == len(skipped_tests)
+
+
+def _suite_skipped_tests_match_playwright_report(
+    *,
+    row: dict[str, Any],
+    report_counts: dict[str, Any],
+) -> bool:
+    return _normalize_skipped_tests(row.get("skipped_tests")) == _normalize_skipped_tests(
+        report_counts.get("skipped_tests"),
+    )
+
+
+def _unexpected_skipped_tests(
+    *,
+    suite: str,
+    skipped_tests: object,
+) -> list[dict[str, object]]:
+    allowed = ALLOWED_SKIPPED_TESTS_BY_SUITE.get(suite, set())
+    return [
+        entry
+        for entry in _normalize_skipped_tests(skipped_tests)
+        if _skipped_approval_key(entry) not in allowed
+    ]
+
+
+def _normalize_skipped_tests(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[dict[str, object]] = []
+    for entry in value:
+        if not isinstance(entry, dict):
+            continue
+        normalized.append(
+            {
+                "file": str(entry.get("file") or "").strip(),
+                "title": str(entry.get("title") or "").strip(),
+                "reason": str(entry.get("reason") or "").strip(),
+                "line": _as_nonnegative_int(entry.get("line")),
+            }
+        )
+    return sorted(normalized, key=_skipped_test_key)
+
+
+def _collect_playwright_skipped_tests(data: object) -> list[dict[str, object]]:
+    skipped: list[dict[str, object]] = []
+
+    def walk_suite(suite: dict[str, object], title_path: list[str], file_hint: str) -> None:
+        file_name = str(suite.get("file") or file_hint).strip()
+        title = str(suite.get("title") or "").strip()
+        next_path = list(title_path)
+        if title and title != file_name:
+            next_path.append(title)
+
+        specs = suite.get("specs")
+        if isinstance(specs, list):
+            for spec in specs:
+                if isinstance(spec, dict):
+                    skipped.extend(_skipped_tests_from_spec(spec, next_path, file_name))
+
+        child_suites = suite.get("suites")
+        if isinstance(child_suites, list):
+            for child in child_suites:
+                if isinstance(child, dict):
+                    walk_suite(child, next_path, file_name)
+
+    if isinstance(data, dict):
+        suites = data.get("suites")
+        if isinstance(suites, list):
+            for suite in suites:
+                if isinstance(suite, dict):
+                    walk_suite(suite, [], "")
+    return sorted(skipped, key=_skipped_test_key)
+
+
+def _skipped_tests_from_spec(
+    spec: dict[str, object],
+    title_path: list[str],
+    file_hint: str,
+) -> list[dict[str, object]]:
+    tests = spec.get("tests")
+    if not isinstance(tests, list):
+        return []
+    title = " › ".join(
+        [*title_path, str(spec.get("title") or "").strip()],
+    ).strip(" ›")
+    file_name = str(spec.get("file") or file_hint).strip()
+    line = _as_nonnegative_int(spec.get("line"))
+    skipped: list[dict[str, object]] = []
+    for test in tests:
+        if not isinstance(test, dict) or not _playwright_test_is_skipped(test):
+            continue
+        skipped.append(
+            {
+                "file": file_name,
+                "title": title,
+                "reason": _skip_reason(test),
+                "line": line,
+            }
+        )
+    return skipped
+
+
+def _playwright_test_is_skipped(test: dict[str, object]) -> bool:
+    if str(test.get("status") or "") == "skipped":
+        return True
+    if str(test.get("expectedStatus") or "") == "skipped":
+        return True
+    results = test.get("results")
+    return isinstance(results, list) and any(
+        isinstance(result, dict) and str(result.get("status") or "") == "skipped"
+        for result in results
+    )
+
+
+def _skip_reason(test: dict[str, object]) -> str:
+    candidates: list[object] = []
+    annotations = test.get("annotations")
+    if isinstance(annotations, list):
+        candidates.extend(annotations)
+    results = test.get("results")
+    if isinstance(results, list):
+        for result in results:
+            if isinstance(result, dict) and isinstance(result.get("annotations"), list):
+                candidates.extend(result["annotations"])
+    for annotation in candidates:
+        if not isinstance(annotation, dict):
+            continue
+        if str(annotation.get("type") or "") != "skip":
+            continue
+        return str(annotation.get("description") or "").strip()
+    return ""
+
+
+def _skipped_approval_key(entry: dict[str, object]) -> tuple[str, str, str]:
+    return (
+        str(entry.get("file") or ""),
+        str(entry.get("title") or ""),
+        str(entry.get("reason") or ""),
+    )
+
+
+def _skipped_test_key(entry: dict[str, object]) -> tuple[str, str, str, int]:
+    return (
+        str(entry.get("file") or ""),
+        str(entry.get("title") or ""),
+        str(entry.get("reason") or ""),
+        _as_nonnegative_int(entry.get("line")),
+    )
 
 
 def _suite_counts(suite_rows: list[dict[str, Any]], field: str) -> dict[str, int]:

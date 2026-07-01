@@ -65,6 +65,7 @@ def main() -> int:
             "skipped_test_count": int(playwright.get("skipped_test_count") or 0),
             "failed_test_count": int(playwright.get("failed_test_count") or 0),
             "flaky_test_count": int(playwright.get("flaky_test_count") or 0),
+            "skipped_tests": playwright.get("skipped_tests") or [],
             "recorded_at": now,
         }
     )
@@ -115,7 +116,7 @@ def _read_proof(path: Path) -> dict[str, Any]:
     return data
 
 
-def _read_playwright_report(path: Path | None) -> dict[str, int | bool | str]:
+def _read_playwright_report(path: Path | None) -> dict[str, object]:
     if path is None:
         return _empty_playwright_report()
     try:
@@ -142,10 +143,11 @@ def _read_playwright_report(path: Path | None) -> dict[str, int | bool | str]:
         "skipped_test_count": skipped,
         "failed_test_count": failed,
         "flaky_test_count": flaky,
+        "skipped_tests": _collect_playwright_skipped_tests(data),
     }
 
 
-def _empty_playwright_report() -> dict[str, int | bool | str]:
+def _empty_playwright_report() -> dict[str, object]:
     return {
         "present": False,
         "sha256": "",
@@ -155,6 +157,7 @@ def _empty_playwright_report() -> dict[str, int | bool | str]:
         "skipped_test_count": 0,
         "failed_test_count": 0,
         "flaky_test_count": 0,
+        "skipped_tests": [],
     }
 
 
@@ -187,6 +190,105 @@ def _count_playwright_tests(data: object) -> tuple[int, int, int, int, int]:
         elif isinstance(item, list):
             stack.extend(item)
     return total, passed, skipped, failed, flaky
+
+
+def _collect_playwright_skipped_tests(data: object) -> list[dict[str, object]]:
+    skipped: list[dict[str, object]] = []
+
+    def walk_suite(suite: dict[str, object], title_path: list[str], file_hint: str) -> None:
+        file_name = str(suite.get("file") or file_hint).strip()
+        title = str(suite.get("title") or "").strip()
+        next_path = list(title_path)
+        if title and title != file_name:
+            next_path.append(title)
+
+        specs = suite.get("specs")
+        if isinstance(specs, list):
+            for spec in specs:
+                if isinstance(spec, dict):
+                    skipped.extend(_skipped_tests_from_spec(spec, next_path, file_name))
+
+        child_suites = suite.get("suites")
+        if isinstance(child_suites, list):
+            for child in child_suites:
+                if isinstance(child, dict):
+                    walk_suite(child, next_path, file_name)
+
+    if isinstance(data, dict):
+        suites = data.get("suites")
+        if isinstance(suites, list):
+            for suite in suites:
+                if isinstance(suite, dict):
+                    walk_suite(suite, [], "")
+    return sorted(skipped, key=_skipped_test_key)
+
+
+def _skipped_tests_from_spec(
+    spec: dict[str, object],
+    title_path: list[str],
+    file_hint: str,
+) -> list[dict[str, object]]:
+    tests = spec.get("tests")
+    if not isinstance(tests, list):
+        return []
+    title = " › ".join(
+        [*title_path, str(spec.get("title") or "").strip()],
+    ).strip(" ›")
+    file_name = str(spec.get("file") or file_hint).strip()
+    line = _nonnegative_int(spec.get("line"))
+    skipped: list[dict[str, object]] = []
+    for test in tests:
+        if not isinstance(test, dict) or not _playwright_test_is_skipped(test):
+            continue
+        skipped.append(
+            {
+                "file": file_name,
+                "title": title,
+                "reason": _skip_reason(test),
+                "line": line,
+            }
+        )
+    return skipped
+
+
+def _playwright_test_is_skipped(test: dict[str, object]) -> bool:
+    if str(test.get("status") or "") == "skipped":
+        return True
+    if str(test.get("expectedStatus") or "") == "skipped":
+        return True
+    results = test.get("results")
+    return isinstance(results, list) and any(
+        isinstance(result, dict) and str(result.get("status") or "") == "skipped"
+        for result in results
+    )
+
+
+def _skip_reason(test: dict[str, object]) -> str:
+    candidates: list[object] = []
+    annotations = test.get("annotations")
+    if isinstance(annotations, list):
+        candidates.extend(annotations)
+    results = test.get("results")
+    if isinstance(results, list):
+        for result in results:
+            if isinstance(result, dict) and isinstance(result.get("annotations"), list):
+                candidates.extend(result["annotations"])
+    for annotation in candidates:
+        if not isinstance(annotation, dict):
+            continue
+        if str(annotation.get("type") or "") != "skip":
+            continue
+        return str(annotation.get("description") or "").strip()
+    return ""
+
+
+def _skipped_test_key(entry: dict[str, object]) -> tuple[str, str, str, int]:
+    return (
+        str(entry.get("file") or ""),
+        str(entry.get("title") or ""),
+        str(entry.get("reason") or ""),
+        _nonnegative_int(entry.get("line")),
+    )
 
 
 def _test_file_count(suite: dict[str, Any]) -> int:

@@ -12,22 +12,38 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 def test_e2e_smoke_proof_records_desktop_and_mobile_suites(tmp_path: Path) -> None:
     output = tmp_path / "proof" / "full_stack_smoke_proof.json"
 
-    for suite, state_root, test_match, stats in (
+    for suite, state_root, test_match, stats, skipped_tests in (
         (
             "full-stack-desktop",
             tmp_path / "desktop",
             "full-stack-smoke.spec.ts",
             {"expected": 13, "skipped": 1, "unexpected": 0, "flaky": 0},
+            [
+                {
+                    "file": "regression.spec.ts",
+                    "title": (
+                        "Bug#2 regression · Cost tab reflects real chat cost › "
+                        "chat then observability/cost shows non-zero tokens"
+                    ),
+                    "reason": ("requires a real model/provider and writes non-zero budget commits"),
+                    "line": 139,
+                }
+            ],
         ),
         (
             "full-stack-mobile",
             tmp_path / "mobile",
             "mobile-smoke.spec.ts",
             {"expected": 3, "skipped": 0, "unexpected": 0, "flaky": 0},
+            [],
         ),
     ):
         playwright_report = tmp_path / f"{suite}.json"
-        _write_playwright_report(playwright_report, stats=stats)
+        _write_playwright_report(
+            playwright_report,
+            stats=stats,
+            skipped_tests=skipped_tests,
+        )
         result = subprocess.run(
             [
                 sys.executable,
@@ -91,6 +107,17 @@ def test_e2e_smoke_proof_records_desktop_and_mobile_suites(tmp_path: Path) -> No
     )
     assert data["suites"][0]["test_case_count"] == 14
     assert data["suites"][0]["passed_test_count"] == 13
+    assert data["suites"][0]["skipped_tests"] == [
+        {
+            "file": "regression.spec.ts",
+            "title": (
+                "Bug#2 regression · Cost tab reflects real chat cost › "
+                "chat then observability/cost shows non-zero tokens"
+            ),
+            "reason": "requires a real model/provider and writes non-zero budget commits",
+            "line": 139,
+        }
+    ]
 
 
 def test_e2e_smoke_proof_reports_failed_suite(tmp_path: Path) -> None:
@@ -121,8 +148,55 @@ def test_e2e_smoke_proof_reports_failed_suite(tmp_path: Path) -> None:
     assert data["failed_suites"] == ["full-stack-desktop"]
 
 
-def _write_playwright_report(path: Path, *, stats: dict[str, int]) -> None:
+def _write_playwright_report(
+    path: Path,
+    *,
+    stats: dict[str, int],
+    skipped_tests: list[dict[str, object]],
+) -> None:
     path.write_text(
-        json.dumps({"stats": stats, "suites": []}),
+        json.dumps({"stats": stats, "suites": _playwright_suites(skipped_tests)}),
         encoding="utf-8",
     )
+
+
+def _playwright_suites(skipped_tests: list[dict[str, object]]) -> list[dict[str, object]]:
+    if not skipped_tests:
+        return []
+    specs = []
+    for skipped in skipped_tests:
+        specs.append(
+            {
+                "title": str(skipped["title"]).split(" › ")[-1],
+                "file": skipped["file"],
+                "line": skipped["line"],
+                "column": 3,
+                "tests": [
+                    {
+                        "annotations": [
+                            {
+                                "type": "skip",
+                                "description": skipped["reason"],
+                            }
+                        ],
+                        "expectedStatus": "skipped",
+                        "results": [{"status": "skipped", "annotations": []}],
+                        "status": "skipped",
+                    }
+                ],
+            }
+        )
+    return [
+        {
+            "title": "regression.spec.ts",
+            "file": "regression.spec.ts",
+            "suites": [
+                {
+                    "title": "Bug#2 regression · Cost tab reflects real chat cost",
+                    "file": "regression.spec.ts",
+                    "specs": specs,
+                }
+            ],
+            "specs": [],
+        }
+    ]
