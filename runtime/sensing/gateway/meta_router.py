@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shutil
 import time
 from collections.abc import Sequence
 from contextlib import suppress
@@ -61,6 +62,88 @@ except ImportError:  # pragma: no cover
     Query = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
+
+
+_SAFE_SKILL_INSTALL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+
+
+def _require_safe_skill_install_name(value: str, *, label: str = "skill name") -> str:
+    name = str(value or "").strip()
+    if not _SAFE_SKILL_INSTALL_NAME_RE.fullmatch(name):
+        raise ValueError(
+            f"invalid {label}: only alphanumeric characters, hyphens, and underscores are allowed"
+        )
+    return name
+
+
+def _ensure_real_directory(path: Path, label: str) -> Path:
+    if path.is_symlink():
+        raise ValueError(f"{label} must be a real directory: {path}")
+    if path.exists() and not path.is_dir():
+        raise ValueError(f"{label} must be a directory: {path}")
+    path.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink() or not path.is_dir():
+        raise ValueError(f"{label} must be a real directory: {path}")
+    return path
+
+
+def _contains_symlink(directory: Path) -> bool:
+    return any(child.is_symlink() for child in directory.rglob("*"))
+
+
+def _install_public_skill_dir(skill_root: Path, skill_name: str) -> Path:
+    name = _require_safe_skill_install_name(skill_name)
+    if skill_root.is_symlink() or not skill_root.is_dir():
+        raise ValueError(f"skill source must be a real directory: {skill_root}")
+    if _contains_symlink(skill_root):
+        raise ValueError(f"skill source must not contain symlinks: {skill_root}")
+    if not (skill_root / "SKILL.md").is_file():
+        raise FileNotFoundError(f"skill source missing SKILL.md: {skill_root}")
+
+    skills_root = _ensure_real_directory(Path("skills/public"), "skills root")
+    target = skills_root / name
+    if target.is_symlink() or (target.exists() and not target.is_dir()):
+        raise FileExistsError(f"skill target is not a real directory: {name}")
+
+    stage_parent: Path | None = None
+    backup = skills_root / f".{name}.backup-{time.time_ns()}"
+    backup_created = False
+    try:
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix=f".{name}.staged-", dir=skills_root) as tmpdir:
+            stage_parent = Path(tmpdir)
+            staged = stage_parent / name
+            shutil.copytree(skill_root, staged)
+            if target.exists():
+                target.rename(backup)
+                backup_created = True
+            try:
+                staged.rename(target)
+            except OSError:
+                if backup_created and backup.exists() and not target.exists():
+                    backup.rename(target)
+                raise
+    finally:
+        if backup_created and backup.exists():
+            shutil.rmtree(backup, ignore_errors=True)
+        if stage_parent is not None and stage_parent.exists():
+            shutil.rmtree(stage_parent, ignore_errors=True)
+    return target
+
+
+def _uninstall_public_skill_dir(skill_name: str) -> Path:
+    name = _require_safe_skill_install_name(skill_name)
+    skills_root = _ensure_real_directory(Path("skills/public"), "skills root")
+    target = skills_root / name
+    if target.is_symlink():
+        raise FileExistsError(f"skill target is not a real directory: {name}")
+    if not target.exists():
+        raise FileNotFoundError(f"skill directory not found: {name}")
+    if not target.is_dir():
+        raise NotADirectoryError(f"not a directory: {name}")
+    shutil.rmtree(target)
+    return target
 
 
 # ═══════════════════════════════════════════════════════════
@@ -534,13 +617,10 @@ def create_meta_router(
         if name_override is not None:
             if not isinstance(name_override, str) or not name_override:
                 raise HTTPException(400, "name must be a non-empty string")
-            if (
-                "/" in name_override
-                or "\\" in name_override
-                or ".." in name_override
-                or name_override.startswith(".")
-            ):
-                raise HTTPException(400, "invalid name")
+            try:
+                name_override = _require_safe_skill_install_name(name_override, label="name")
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
 
         try:
             import httpx as _httpx
@@ -588,35 +668,39 @@ def create_meta_router(
                 raise HTTPException(400, "no SKILL.md found in archive")
             skill_root = skill_dirs[0].parent
             skill_name = name_override or skill_root.name
-            # Last-line check on the derived name (the archive may
-            # supply a directory whose name is hostile too).
-            if (
-                "/" in skill_name
-                or "\\" in skill_name
-                or ".." in skill_name
-                or skill_name.startswith(".")
-            ):
-                raise HTTPException(400, f"invalid derived skill name: {skill_name!r}")
-
-            import shutil as _shutil
-
-            target = Path("skills/public") / skill_name
-            if target.exists():
-                _shutil.rmtree(target)
-            _shutil.copytree(str(skill_root), str(target))
+            try:
+                target = _install_public_skill_dir(skill_root, skill_name)
+                skill_name = target.name
+            except FileExistsError as exc:
+                raise HTTPException(409, str(exc)) from exc
+            except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
+                raise HTTPException(400, str(exc)) from exc
+            except OSError as exc:
+                raise HTTPException(
+                    500,
+                    f"skill install failed: {type(exc).__name__}: {exc}",
+                ) from exc
 
         return {"ok": True, "name": skill_name, "path": str(target)}
 
     @router.delete("/api/skills/{skill_name}/uninstall")
     def api_uninstall_skill(request: Request, skill_name: str) -> dict[str, Any]:
         _require_admin(request, purpose="uninstall skills")
-        import shutil
-        target = Path("skills/public") / skill_name
-        if not target.exists():
-            raise HTTPException(404, f"skill directory not found: {skill_name}")
-        if not target.is_dir():
-            raise HTTPException(400, f"not a directory: {skill_name}")
-        shutil.rmtree(target)
+        try:
+            _uninstall_public_skill_dir(skill_name)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(404, f"skill directory not found: {skill_name}") from exc
+        except NotADirectoryError as exc:
+            raise HTTPException(400, f"not a directory: {skill_name}") from exc
+        except OSError as exc:
+            raise HTTPException(
+                500,
+                f"skill uninstall failed: {type(exc).__name__}: {exc}",
+            ) from exc
         return {"ok": True, "name": skill_name, "removed": True}
 
     @router.get(

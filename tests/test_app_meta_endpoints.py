@@ -33,9 +33,12 @@ Hermetic isolation
 
 from __future__ import annotations
 
+import io
+import zipfile
 from collections.abc import Iterator
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -45,6 +48,13 @@ from runtime.execution.suckers.registry import Skill, SkillRegistry
 from runtime.platform.ui.app import create_app
 from runtime.safety.auth import Identity, IdentityStore
 from runtime.sensing.gateway.meta_router import create_meta_router
+
+
+def _skill_zip_bytes(skill_name: str = "demo_skill") -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(f"{skill_name}/SKILL.md", f"name: {skill_name}\n")
+    return buf.getvalue()
 
 
 @pytest.fixture
@@ -761,6 +771,66 @@ class TestAdminMetaMutations:
         )
         assert removed.status_code == 200
         assert skill_dir.exists() is False
+
+    def test_skill_uninstall_rejects_symlink_without_removing_target(
+        self,
+        isolated_cwd: Path,
+        secured_meta_client: tuple[TestClient, dict[str, dict[str, str]], SkillRegistry],
+    ) -> None:
+        client, headers, _registry = secured_meta_client
+        public_root = isolated_cwd / "skills" / "public"
+        public_root.mkdir(parents=True)
+        outside = isolated_cwd / "outside-skill"
+        outside.mkdir()
+        (outside / "marker.txt").write_text("keep", encoding="utf-8")
+        (public_root / "demo_skill").symlink_to(outside, target_is_directory=True)
+
+        resp = client.delete(
+            "/api/skills/demo_skill/uninstall",
+            headers=headers["admin"],
+        )
+
+        assert resp.status_code == 409
+        assert (outside / "marker.txt").read_text(encoding="utf-8") == "keep"
+
+    def test_skill_install_rejects_existing_symlink_target(
+        self,
+        isolated_cwd: Path,
+        secured_meta_client: tuple[TestClient, dict[str, dict[str, str]], SkillRegistry],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from runtime.safety.auth.url_guard import URLVerdict
+
+        client, headers, _registry = secured_meta_client
+        public_root = isolated_cwd / "skills" / "public"
+        public_root.mkdir(parents=True)
+        outside = isolated_cwd / "outside-skill"
+        outside.mkdir()
+        (outside / "marker.txt").write_text("keep", encoding="utf-8")
+        (public_root / "demo_skill").symlink_to(outside, target_is_directory=True)
+        archive = _skill_zip_bytes("demo_skill")
+
+        monkeypatch.setattr(
+            "runtime.safety.auth.url_guard.check_url",
+            lambda url, **_kwargs: URLVerdict(True, url, resolved_ip="93.184.216.34"),
+        )
+        monkeypatch.setattr(
+            "runtime.safety.auth.url_guard.safe_httpx_get",
+            lambda url, **_kwargs: httpx.Response(
+                200,
+                content=archive,
+                request=httpx.Request("GET", url),
+            ),
+        )
+
+        resp = client.post(
+            "/api/skills/install",
+            json={"url": "https://example.com/demo-skill.zip", "name": "demo_skill"},
+            headers=headers["admin"],
+        )
+
+        assert resp.status_code == 409
+        assert (outside / "marker.txt").read_text(encoding="utf-8") == "keep"
 
     def test_capability_permission_update_requires_admin(
         self,
