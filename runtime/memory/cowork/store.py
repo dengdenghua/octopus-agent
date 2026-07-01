@@ -664,6 +664,15 @@ class CoworkStore:
             existing = assignments.get(task_id)
             if not isinstance(existing, dict):
                 return False
+            previous_status = str(existing.get("status") or "")
+            if previous_status in {"done", "failed"}:
+                if previous_status == status == "done" and artifact_ref is not None:
+                    existing["artifact_ref"] = artifact_ref
+                    assignments[task_id] = existing
+                    data["assignments"] = assignments
+                    atomic_write_json(path, data)
+                    return True
+                return False
             existing["status"] = status
             if artifact_ref is not None:
                 existing["artifact_ref"] = artifact_ref

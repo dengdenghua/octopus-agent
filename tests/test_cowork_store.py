@@ -236,6 +236,81 @@ def test_write_artifact_creates_file_and_updates_assignment(
     assert a.completed_at is not None
 
 
+def test_assignment_terminal_status_is_not_overwritten_by_late_failure(
+    store: CoworkStore,
+) -> None:
+    store.create_plan(
+        session_id="sess-terminal-done",
+        created_by="coord",
+        tasks=_sample_tasks(),
+    )
+    assert store.claim_task("sess-terminal-done", "t1", "agent-A") is True
+    assert store.update_assignment_status("sess-terminal-done", "t1", "done") is True
+    done = store.read_assignments("sess-terminal-done")["t1"]
+
+    assert store.update_assignment_status("sess-terminal-done", "t1", "failed") is False
+
+    stored = store.read_assignments("sess-terminal-done")["t1"]
+    assert stored.status == "done"
+    assert stored.completed_at == done.completed_at
+
+
+def test_assignment_terminal_failure_is_not_overwritten_by_late_success(
+    store: CoworkStore,
+) -> None:
+    store.create_plan(
+        session_id="sess-terminal-failed",
+        created_by="coord",
+        tasks=_sample_tasks(),
+    )
+    assert store.claim_task("sess-terminal-failed", "t1", "agent-A") is True
+    assert store.update_assignment_status("sess-terminal-failed", "t1", "failed") is True
+    failed = store.read_assignments("sess-terminal-failed")["t1"]
+
+    assert (
+        store.update_assignment_status(
+            "sess-terminal-failed",
+            "t1",
+            "done",
+            artifact_ref="artifacts/t1.json",
+        )
+        is False
+    )
+
+    stored = store.read_assignments("sess-terminal-failed")["t1"]
+    assert stored.status == "failed"
+    assert stored.artifact_ref is None
+    assert stored.completed_at == failed.completed_at
+
+
+def test_assignment_done_status_allows_idempotent_artifact_ref_backfill(
+    store: CoworkStore,
+) -> None:
+    store.create_plan(
+        session_id="sess-terminal-backfill",
+        created_by="coord",
+        tasks=_sample_tasks(),
+    )
+    assert store.claim_task("sess-terminal-backfill", "t1", "agent-A") is True
+    assert store.update_assignment_status("sess-terminal-backfill", "t1", "done") is True
+    done = store.read_assignments("sess-terminal-backfill")["t1"]
+
+    assert (
+        store.update_assignment_status(
+            "sess-terminal-backfill",
+            "t1",
+            "done",
+            artifact_ref="artifacts/t1.json",
+        )
+        is True
+    )
+
+    stored = store.read_assignments("sess-terminal-backfill")["t1"]
+    assert stored.status == "done"
+    assert stored.artifact_ref == "artifacts/t1.json"
+    assert stored.completed_at == done.completed_at
+
+
 # ─── 7. read_artifacts returns all artifacts for a session ──
 
 
