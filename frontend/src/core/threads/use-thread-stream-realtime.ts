@@ -302,9 +302,15 @@ function mcpItemToLiveEvent(
       output: result,
     };
   }
+  const toolName =
+    item.server === "team" && item.tool === "team_swarm"
+      ? "team_swarm"
+      : item.tool
+        ? `mcp:${item.tool}`
+        : "mcp";
   return {
     id: item.id,
-    name: item.tool ? `mcp:${item.tool}` : "mcp",
+    name: toolName,
     status,
     startedAt,
     iteration,
@@ -925,7 +931,11 @@ export function useThreadStreamRealtime(
             .then((images) => {
               window.dispatchEvent(
                 new CustomEvent("octopus:send-failed", {
-                  detail: { threadId: effectiveThreadId, text: rawText, images },
+                  detail: {
+                    threadId: effectiveThreadId,
+                    text: rawText,
+                    images,
+                  },
                 }),
               );
             });

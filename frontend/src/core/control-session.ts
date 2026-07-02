@@ -99,12 +99,50 @@ export interface ControlActionRecord {
   expires_at?: number | null;
 }
 
+export interface ControlSessionReplayTimelineItem {
+  id: string;
+  kind: "action" | "evidence" | string;
+  phase: string;
+  at: number;
+  action_id?: string;
+  evidence_id?: string;
+  action?: string;
+  status?: string;
+  summary: string;
+  cursor?: string;
+  detail_href?: string;
+  detail_schema?: string;
+  truncated?: boolean;
+}
+
+export interface ControlSessionReplayTimeline {
+  schema: "octopus.control_session_replay_timeline.v1" | string;
+  items: ControlSessionReplayTimelineItem[];
+  count: number;
+  session_id?: string;
+  status?: string;
+  after?: number;
+  after_cursor?: string;
+  next_after?: number;
+  next_cursor?: string;
+  has_more?: boolean;
+}
+
 export interface ControlSessionReplay {
   schema: "octopus.control_session_replay.v1" | string;
   session: ControlSessionRecord;
   actions: ControlActionRecord[];
   evidence: Array<ControlEvidence & { evidence_id?: string; seq?: number }>;
+  timeline?: ControlSessionReplayTimeline;
   playwright_script?: string;
+}
+
+export interface ControlSessionEvidenceDetail {
+  schema: "octopus.control_evidence_detail.v1" | string;
+  session_id: string;
+  evidence_id: string;
+  source: "inline" | "blob" | string;
+  detail: Record<string, unknown>;
 }
 
 export function getControlActionType(action: ControlActionDescriptor): string {
@@ -304,6 +342,98 @@ export async function getControlSessionReplay(
 ): Promise<ControlSessionReplay> {
   return fetchControlJson<ControlSessionReplay>(
     `/${encodeURIComponent(sessionId)}/replay`,
+    { method: "GET" },
+  );
+}
+
+export async function getControlSessionTimeline(
+  sessionId: string,
+  options: { after?: number; afterCursor?: string; limit?: number } = {},
+): Promise<ControlSessionReplayTimeline> {
+  const params = new URLSearchParams();
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  if (options.after !== undefined) params.set("after", String(options.after));
+  if (options.afterCursor !== undefined)
+    params.set("after_cursor", options.afterCursor);
+  const query = params.toString();
+  return fetchControlJson<ControlSessionReplayTimeline>(
+    `/${encodeURIComponent(sessionId)}/timeline${query ? `?${query}` : ""}`,
+    { method: "GET" },
+  );
+}
+
+function controlTimelineItemKey(
+  item: ControlSessionReplayTimelineItem,
+  fallbackIndex: number,
+): string {
+  if (item.cursor) return `cursor:${item.cursor}`;
+  if (item.id) return `id:${item.id}`;
+  return `anonymous:${item.kind}:${item.phase}:${item.at}:${fallbackIndex}`;
+}
+
+function controlTimelineSortKey(
+  item: ControlSessionReplayTimelineItem,
+): [number, string] {
+  const at = Number.isFinite(item.at) ? item.at : 0;
+  return [at, item.id || item.cursor || item.summary || ""];
+}
+
+export function mergeControlSessionTimelineItems(
+  existing: ControlSessionReplayTimelineItem[],
+  incoming: ControlSessionReplayTimelineItem[],
+): ControlSessionReplayTimelineItem[] {
+  const byKey = new Map<string, ControlSessionReplayTimelineItem>();
+  const idToKey = new Map<string, string>();
+
+  const add = (item: ControlSessionReplayTimelineItem, index: number) => {
+    const key = controlTimelineItemKey(item, index);
+    const idKey = item.id ? idToKey.get(item.id) : undefined;
+    const finalKey = idKey || key;
+    if (item.id) idToKey.set(item.id, finalKey);
+    byKey.set(finalKey, { ...(byKey.get(finalKey) || {}), ...item });
+  };
+
+  existing.forEach(add);
+  incoming.forEach((item, index) => add(item, existing.length + index));
+
+  return Array.from(byKey.values()).sort((left, right) => {
+    const [leftAt, leftId] = controlTimelineSortKey(left);
+    const [rightAt, rightId] = controlTimelineSortKey(right);
+    if (leftAt !== rightAt) return leftAt - rightAt;
+    return leftId.localeCompare(rightId);
+  });
+}
+
+export function mergeControlSessionTimeline(
+  existing: ControlSessionReplayTimeline | null | undefined,
+  incoming: ControlSessionReplayTimeline,
+): ControlSessionReplayTimeline {
+  if (!existing) return { ...incoming, count: incoming.items.length };
+  const items = mergeControlSessionTimelineItems(
+    existing.items || [],
+    incoming.items || [],
+  );
+  return {
+    ...existing,
+    ...incoming,
+    items,
+    count: items.length,
+    after: existing.after ?? incoming.after,
+    after_cursor: existing.after_cursor ?? incoming.after_cursor,
+    next_after: incoming.next_after ?? existing.next_after,
+    next_cursor: incoming.next_cursor ?? existing.next_cursor,
+    has_more: incoming.has_more ?? existing.has_more,
+  };
+}
+
+export async function getControlSessionEvidenceDetail(
+  sessionId: string,
+  evidenceId: string,
+): Promise<ControlSessionEvidenceDetail> {
+  return fetchControlJson<ControlSessionEvidenceDetail>(
+    `/${encodeURIComponent(sessionId)}/evidence/${encodeURIComponent(
+      evidenceId,
+    )}/detail`,
     { method: "GET" },
   );
 }

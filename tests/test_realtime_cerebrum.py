@@ -283,8 +283,7 @@ def test_empty_react_completion_becomes_visible_error(gateway: Any) -> None:
     completed_errors = [
         n.params["item"]
         for n in out["notifications"]
-        if n.method == "item/completed"
-        and n.params["item"]["type"] == "error"
+        if n.method == "item/completed" and n.params["item"]["type"] == "error"
     ]
     assert completed_errors
 
@@ -498,16 +497,36 @@ def test_cowork_swarm_plan_drives_group_fanout(
             "ok": True,
             "count": len(members),
             "spoke": len(members),
+            "capacity": {
+                "schema": "octopus.group_fanout_capacity.v1",
+                "requested_members": len(members),
+                "dispatched_members": len(members),
+                "dropped_members": 0,
+                "max_members": _kwargs.get("max_members"),
+                "concurrency": len(members),
+                "capacity_tier": "room_scale",
+            },
             "arbitration": {
                 "schema": "octopus.group_fanout_arbitration.v1",
                 "primary_agent_id": members[0]["name"],
                 "primary_response_id": "resp-1",
-                "recommended_next_action": "use_primary_response",
+                "recommended_next_action": "use_primary_and_retry_failed_members",
                 "answered_agent_ids": [member["name"] for member in members],
-                "failed_agent_ids": [],
+                "failed_agent_ids": ["qa-agent"],
                 "empty_agent_ids": [],
                 "ranking": [],
                 "outcomes": [],
+            },
+            "synthesis": {
+                "schema": "octopus.group_fanout_synthesis.v1",
+                "primary_agent_id": members[0]["name"],
+                "primary_reply": f"{members[0]['name']} replied",
+                "supporting_agent_ids": [members[1]["name"]],
+                "retry_agent_ids": ["qa-agent"],
+                "answered_count": len(members),
+                "total_count": len(members),
+                "recommended_next_action": "use_primary_and_retry_failed_members",
+                "ready": True,
             },
             "replies": [
                 {
@@ -553,19 +572,43 @@ def test_cowork_swarm_plan_drives_group_fanout(
     assert seen["message"] == "大家一起看下"
     assert [m["name"] for m in seen["members"]] == ["db-agent", "ui-agent"]
     turn = out["response"].result["turn"]
-    agent_texts = [
-        item["text"] for item in turn["items"] if item["type"] == "agentMessage"
+    team_items = [
+        item
+        for item in turn["items"]
+        if item["type"] == "mcpToolCall" and item["tool"] == "team_swarm"
     ]
+    assert len(team_items) == 1
+    assert team_items[0]["status"] == "completed"
+    assert team_items[0]["arguments"]["schema"] == "octopus.group_fanout_run.v1"
+    assert team_items[0]["arguments"]["capacity"]["schema"] == (
+        "octopus.group_fanout_capacity.v1"
+    )
+    assert team_items[0]["result"]["schema"] == "octopus.group_fanout_result.v1"
+    assert team_items[0]["result"]["capacity"]["requested_members"] == 2
+    assert team_items[0]["result"]["capacity"]["dispatched_members"] == 2
+    subagent_items = [
+        item
+        for item in turn["items"]
+        if item["type"] == "subagent" and item.get("parentItemId") == team_items[0]["id"]
+    ]
+    assert {item["subagentId"] for item in subagent_items} == {"db-agent", "ui-agent"}
+    assert all(item["status"] == "completed" for item in subagent_items)
+    agent_texts = [item["text"] for item in turn["items"] if item["type"] == "agentMessage"]
     assert "db-agent replied" in agent_texts
     assert "ui-agent replied" in agent_texts
+    summary_text = next(text for text in agent_texts if text.startswith("协作汇总:"))
+    assert "采纳主视角，同时补看失败成员" in summary_text
+    assert "use_primary_and_retry_failed_members" not in summary_text
     assert "react should not run" not in agent_texts
     audit_items = [
-        item for item in turn["items"]
+        item
+        for item in turn["items"]
         if item["type"] == "reasoning"
         and "octopus.group_fanout_audit.v1" in item.get("content", "")
     ]
     assert len(audit_items) == 1
-    assert "use_primary_response" in audit_items[0]["content"]
+    assert "use_primary_and_retry_failed_members" in audit_items[0]["content"]
+    assert "octopus.group_fanout_capacity.v1" in audit_items[0]["content"]
 
 
 def test_cowork_swarm_failure_reports_group_fanout_driver(
@@ -617,12 +660,11 @@ def test_cowork_swarm_failure_reports_group_fanout_driver(
 
     turn = out["response"].result["turn"]
     assert turn["status"] == "completed"
-    agent_texts = [
-        item["text"] for item in turn["items"] if item["type"] == "agentMessage"
-    ]
+    agent_texts = [item["text"] for item in turn["items"] if item["type"] == "agentMessage"]
     assert agent_texts[-1] == "fallback react"
     audit_items = [
-        item for item in turn["items"]
+        item
+        for item in turn["items"]
         if item["type"] == "reasoning"
         and "octopus.group_fanout_fallback.v1" in item.get("content", "")
     ]
@@ -675,9 +717,7 @@ def test_cowork_project_mode_runs_project_os(
         )
 
     turn = out["response"].result["turn"]
-    agent_texts = [
-        item["text"] for item in turn["items"] if item["type"] == "agentMessage"
-    ]
+    agent_texts = [item["text"] for item in turn["items"] if item["type"] == "agentMessage"]
     assert len(agent_texts) == 1
     assert "Project OS 已接管并运行项目" in agent_texts[0]
     assert "react should not run" not in agent_texts[0]
@@ -686,7 +726,8 @@ def test_cowork_project_mode_runs_project_os(
     assert todo_items[0]["explanation"].startswith("Project OS")
     assert all(entry["status"] == "completed" for entry in todo_items[0]["plan"])
     trace_items = [
-        item for item in turn["items"]
+        item
+        for item in turn["items"]
         if item["type"] == "reasoning"
         and "octopus.projectos.run_trace.v1" in item.get("content", "")
     ]
@@ -813,23 +854,24 @@ def test_cowork_project_mode_reuses_active_project(
     assert len(project_store.list_projects()) == 1
     assert project_store.project_for_thread("th-project").id == first_project_id
     first_text = "\n".join(
-        item["text"] for item in first["response"].result["turn"]["items"]
+        item["text"]
+        for item in first["response"].result["turn"]["items"]
         if item["type"] == "agentMessage"
     )
     second_text = "\n".join(
-        item["text"] for item in second["response"].result["turn"]["items"]
+        item["text"]
+        for item in second["response"].result["turn"]["items"]
         if item["type"] == "agentMessage"
     )
     first_todos = [
-        item for item in first["response"].result["turn"]["items"]
-        if item["type"] == "todo-list"
+        item for item in first["response"].result["turn"]["items"] if item["type"] == "todo-list"
     ]
     second_todos = [
-        item for item in second["response"].result["turn"]["items"]
-        if item["type"] == "todo-list"
+        item for item in second["response"].result["turn"]["items"] if item["type"] == "todo-list"
     ]
     second_trace_items = [
-        item for item in second["response"].result["turn"]["items"]
+        item
+        for item in second["response"].result["turn"]["items"]
         if item["type"] == "reasoning"
         and "octopus.projectos.run_trace.v1" in item.get("content", "")
     ]
@@ -977,12 +1019,11 @@ def test_cowork_project_mode_accepts_task_control_command(
     assert events[-1]["payload"]["action"] == "reassign"
 
     turn = out["response"].result["turn"]
-    agent_text = "\n".join(
-        item["text"] for item in turn["items"] if item["type"] == "agentMessage"
-    )
+    agent_text = "\n".join(item["text"] for item in turn["items"] if item["type"] == "agentMessage")
     assert "Project OS 已执行控制命令" in agent_text
     trace_items = [
-        item for item in turn["items"]
+        item
+        for item in turn["items"]
         if item["type"] == "reasoning"
         and "octopus.projectos.control_trace.v1" in item.get("content", "")
     ]
@@ -1046,13 +1087,12 @@ def test_cowork_project_mode_reports_failed_task_control_command(
     events = project_store.events_for_project(project_id)
     assert events[-1]["kind"] == "task.intervention_rejected"
     turn = out["response"].result["turn"]
-    agent_text = "\n".join(
-        item["text"] for item in turn["items"] if item["type"] == "agentMessage"
-    )
+    agent_text = "\n".join(item["text"] for item in turn["items"] if item["type"] == "agentMessage")
     assert "Project OS 任务控制命令未执行" in agent_text
     assert "unknown_task_action:teleport" in agent_text
     assert not [
-        item for item in turn["items"]
+        item
+        for item in turn["items"]
         if item["type"] == "reasoning"
         and "octopus.projectos.control_trace.v1" in item.get("content", "")
     ]
@@ -1965,9 +2005,7 @@ def test_resume_proposal_block_preserves_sanitized_tool_context() -> None:
                 "iteration": 3,
                 "tool": "exec_shell",
                 "input_preview": f"pytest tests/test_x.py -q --token {fake_api_key}",
-                "observation_preview": (
-                    "failed for ops@example.com: assertion message body"
-                ),
+                "observation_preview": ("failed for ops@example.com: assertion message body"),
             },
         ],
         "raw_state_included": False,
@@ -1995,9 +2033,7 @@ Resume this agent run from the selected durable checkpoint.
             "iteration": 3,
             "tool": "exec_shell",
             "input_preview": "pytest tests/test_x.py -q --token [REDACTED:api_key]",
-            "observation_preview": (
-                "failed for [REDACTED:email]: assertion message body"
-            ),
+            "observation_preview": ("failed for [REDACTED:email]: assertion message body"),
         }
     ]
     assert resume_intent["safety"]["raw_state_included"] is False

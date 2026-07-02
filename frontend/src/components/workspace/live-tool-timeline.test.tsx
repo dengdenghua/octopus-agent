@@ -130,7 +130,7 @@ describe("LiveToolTimeline · nested sub-tool rendering", () => {
     wrap(events);
     // The sub-agent badge appears as " · architect" next to the
     // row label. Rendered via ``{showAgent && event.agentName && …}``.
-    expect(screen.getByText(/architect/)).toBeInTheDocument();
+    expect(screen.getAllByText(/architect/).length).toBeGreaterThan(0);
   });
 
   test("events with parentToolUseId never appear as top-level rows", () => {

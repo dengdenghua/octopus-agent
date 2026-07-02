@@ -276,15 +276,11 @@ export function maxDefined(a?: number, b?: number): number | undefined {
 }
 
 export function agentEventGroupId(event: LiveToolEvent): string | undefined {
+  if (event.agentId) return event.agentId;
   if (event.parentToolUseId && event.subAgentRole) {
     return `${event.parentToolUseId}:${event.subAgentRole}`;
   }
-  return (
-    event.agentId ??
-    event.subagentCodename ??
-    event.subAgentRole ??
-    event.agentName
-  );
+  return event.subagentCodename ?? event.subAgentRole ?? event.agentName;
 }
 
 export function readableToolName(event: LiveToolEvent): string {

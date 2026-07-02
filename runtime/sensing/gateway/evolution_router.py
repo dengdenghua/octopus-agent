@@ -82,6 +82,30 @@ if FASTAPI_AVAILABLE:
         confirm_install: bool = False
         limit: int = Field(default=100, ge=1, le=500)
 
+
+    class KimiSwarmLoadTestBody(BaseModel):
+        session_id: str = "kimi-swarm-load-test"
+        provider_id: str = "dry_run"
+        model: str = "dry-run-swarm"
+        agent_count: int = Field(default=300, ge=1, le=512)
+        step_count: int = Field(default=4000, ge=1, le=20000)
+        max_concurrency: int = Field(default=32, ge=1, le=256)
+        real_provider: bool = False
+        confirm_real_provider: bool = False
+        max_provider_calls: int = Field(default=0, ge=0, le=20000)
+        estimated_max_tokens: int = Field(default=0, ge=0, le=20_000_000)
+        record_every_step: bool = True
+        stage_id: str = "auto"
+        resume_from_session_id: str = ""
+        resume_step_ranges: list[dict[str, int]] = Field(default_factory=list)
+
+    class KimiSwarmQuotaProbeBody(BaseModel):
+        session_id: str = "kimi-swarm-quota-probe"
+        provider_id: str = "kimi_coding"
+        model: str = "kimi-for-coding"
+        confirm_real_provider: bool = False
+        max_tokens: int = Field(default=16, ge=1, le=512)
+
 _LOG = logging.getLogger("octopus.siphon.evolution_router")
 
 
@@ -128,6 +152,194 @@ def create_evolution_router() -> Any:
             )
 
             return {"ok": True, **compute_agent_benchmark()}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/kimi-swarm-certification")
+    def get_kimi_swarm_certification() -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.kimi_swarm_certification import (
+                compute_kimi_swarm_certification,
+            )
+
+            return {
+                "ok": True,
+                **compute_kimi_swarm_certification(
+                    provider_configured=_kimi_swarm_provider_configured("kimi-for-coding"),
+                ),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.post("/kimi-swarm-certification/load-test")
+    def run_kimi_swarm_certification_load_test(
+        body: KimiSwarmLoadTestBody | None = None,
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.kimi_swarm_load_test import (
+                KimiSwarmLoadTestConfig,
+                run_kimi_swarm_load_test,
+            )
+
+            body = body or KimiSwarmLoadTestBody()
+            provider_caller = None
+            if body.real_provider:
+                _validate_kimi_swarm_real_provider_request(body)
+                provider_caller = _kimi_swarm_provider_caller(body.model)
+            result = run_kimi_swarm_load_test(
+                config=KimiSwarmLoadTestConfig(
+                    session_id=body.session_id,
+                    provider_id=body.provider_id,
+                    model=body.model,
+                    agent_count=body.agent_count,
+                    step_count=body.step_count,
+                    max_concurrency=body.max_concurrency,
+                    real_provider=body.real_provider,
+                    confirm_real_provider=body.confirm_real_provider,
+                    record_every_step=body.record_every_step,
+                    max_provider_calls=body.max_provider_calls,
+                    estimated_max_tokens=body.estimated_max_tokens,
+                    stage_id=body.stage_id,
+                    resume_from_session_id=body.resume_from_session_id,
+                    resume_step_ranges=tuple(body.resume_step_ranges),
+                ),
+                provider_caller=provider_caller,
+            )
+            return {"ok": True, **result}
+        except HTTPException:
+            raise
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.post("/kimi-swarm-certification/load-test/preflight")
+    def preflight_kimi_swarm_certification_load_test(
+        body: KimiSwarmLoadTestBody | None = None,
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.kimi_swarm_load_test import (
+                KimiSwarmLoadTestConfig,
+                build_kimi_swarm_load_test_preflight,
+            )
+
+            body = body or KimiSwarmLoadTestBody()
+            provider_configured = None
+            if body.real_provider:
+                provider_configured = _kimi_swarm_provider_configured(body.model)
+            return {
+                "ok": True,
+                **build_kimi_swarm_load_test_preflight(
+                    config=KimiSwarmLoadTestConfig(
+                        session_id=body.session_id,
+                        provider_id=body.provider_id,
+                        model=body.model,
+                        agent_count=body.agent_count,
+                        step_count=body.step_count,
+                        max_concurrency=body.max_concurrency,
+                        real_provider=body.real_provider,
+                        confirm_real_provider=body.confirm_real_provider,
+                        record_every_step=body.record_every_step,
+                        max_provider_calls=body.max_provider_calls,
+                        estimated_max_tokens=body.estimated_max_tokens,
+                        stage_id=body.stage_id,
+                        resume_from_session_id=body.resume_from_session_id,
+                        resume_step_ranges=tuple(body.resume_step_ranges),
+                    ),
+                    provider_configured=provider_configured,
+                    data_dir=None,
+                ),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.post("/kimi-swarm-certification/quota-probe")
+    def run_kimi_swarm_certification_quota_probe(
+        body: KimiSwarmQuotaProbeBody | None = None,
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.kimi_swarm_load_test import (
+                KimiSwarmQuotaProbeConfig,
+                run_kimi_swarm_quota_probe,
+            )
+
+            body = body or KimiSwarmQuotaProbeBody()
+            _validate_kimi_swarm_quota_probe_request(body)
+            result = run_kimi_swarm_quota_probe(
+                config=KimiSwarmQuotaProbeConfig(
+                    session_id=body.session_id,
+                    provider_id=body.provider_id,
+                    model=body.model,
+                    confirm_real_provider=body.confirm_real_provider,
+                    max_tokens=body.max_tokens,
+                ),
+                provider_caller=_kimi_swarm_provider_caller(body.model),
+            )
+            return {"ok": True, **result}
+        except HTTPException:
+            raise
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/kimi-swarm-certification/proof-bundle")
+    def get_kimi_swarm_certification_proof_bundle() -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.kimi_swarm_load_test import (
+                export_kimi_swarm_proof_bundle,
+            )
+
+            return {"ok": True, **export_kimi_swarm_proof_bundle()}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/kimi-swarm-certification/next-stage")
+    def get_kimi_swarm_certification_next_stage(
+        provider_id: str = Query(default="kimi_coding"),
+        model: str = Query(default="kimi-for-coding"),
+        agent_count: int = Query(default=300, ge=1, le=512),
+        step_count: int = Query(default=4000, ge=1, le=20000),
+        max_concurrency: int = Query(default=32, ge=1, le=256),
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.kimi_swarm_load_test import (
+                recommend_kimi_swarm_next_stage,
+            )
+
+            return {
+                "ok": True,
+                **recommend_kimi_swarm_next_stage(
+                    provider_id=provider_id,
+                    model=model,
+                    agent_count=agent_count,
+                    step_count=step_count,
+                    max_concurrency=max_concurrency,
+                    provider_configured=_kimi_swarm_provider_configured(model),
+                ),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/kimi-swarm-certification/resume-plan")
+    def get_kimi_swarm_certification_resume_plan(
+        provider_id: str = Query(default="kimi_coding"),
+        model: str = Query(default="kimi-for-coding"),
+        agent_count: int = Query(default=300, ge=1, le=512),
+        step_count: int = Query(default=4000, ge=1, le=20000),
+        max_concurrency: int = Query(default=32, ge=1, le=256),
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.kimi_swarm_load_test import (
+                build_kimi_swarm_resume_plan,
+            )
+
+            return {
+                "ok": True,
+                **build_kimi_swarm_resume_plan(
+                    provider_id=provider_id,
+                    model=model,
+                    agent_count=agent_count,
+                    step_count=step_count,
+                    max_concurrency=max_concurrency,
+                ),
+            }
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
@@ -923,6 +1135,110 @@ def _scorecard_gap_priority(gap: int) -> str:
 
 def _actor_from_request(request: Any) -> str:
     return str(getattr(getattr(request, "state", None), "actor_id", "") or "local_operator")
+
+
+def _validate_kimi_swarm_real_provider_request(body: Any) -> None:
+    try:
+        from runtime.safety.evolution import kimi_swarm_load_test as load_test_module
+    except Exception:
+        load_test_module = None  # type: ignore[assignment]
+    if not bool(getattr(body, "confirm_real_provider", False)):
+        raise HTTPException(
+            status_code=400,
+            detail="confirm_real_provider=true is required for real provider load tests",
+        )
+    step_count = int(getattr(body, "step_count", 0) or 0)
+    max_provider_calls = int(getattr(body, "max_provider_calls", 0) or 0)
+    estimated_max_tokens = int(getattr(body, "estimated_max_tokens", 0) or 0)
+    max_concurrency = int(getattr(body, "max_concurrency", 0) or 0)
+    if max_concurrency > 64:
+        raise HTTPException(
+            status_code=400,
+            detail="real provider load tests cap max_concurrency at 64",
+        )
+    if load_test_module is not None:
+        preflight = load_test_module.build_kimi_swarm_load_test_preflight(
+            config=load_test_module.KimiSwarmLoadTestConfig(
+                session_id=getattr(body, "session_id", "kimi-swarm-load-test"),
+                provider_id=getattr(body, "provider_id", "dry_run"),
+                model=getattr(body, "model", "dry-run-swarm"),
+                agent_count=int(getattr(body, "agent_count", 300) or 300),
+                step_count=step_count,
+                max_concurrency=max_concurrency,
+                real_provider=True,
+                confirm_real_provider=True,
+                max_provider_calls=max_provider_calls,
+                estimated_max_tokens=estimated_max_tokens,
+                stage_id=str(getattr(body, "stage_id", "auto") or "auto"),
+                resume_from_session_id=str(
+                    getattr(body, "resume_from_session_id", "") or "",
+                ),
+                resume_step_ranges=tuple(
+                    getattr(body, "resume_step_ranges", []) or [],
+                ),
+            ),
+            provider_configured=True,
+        )
+        if preflight.get("blocking_failures"):
+            first = preflight["blocking_failures"][0]
+            raise HTTPException(
+                status_code=400,
+                detail=f"kimi swarm load-test preflight failed: {first.get('id')}",
+            )
+    elif max_provider_calls < step_count or estimated_max_tokens < step_count:
+        raise HTTPException(
+            status_code=400,
+            detail="provider budgets must cover every requested step",
+        )
+
+
+def _validate_kimi_swarm_quota_probe_request(body: Any) -> None:
+    if not bool(getattr(body, "confirm_real_provider", False)):
+        raise HTTPException(
+            status_code=400,
+            detail="confirm_real_provider=true is required for quota probes",
+        )
+    if not _kimi_swarm_provider_configured(str(getattr(body, "model", "") or "")):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "no custom model router configured for quota probe; "
+                "add data/custom_models.json first"
+            ),
+        )
+
+
+def _kimi_swarm_provider_caller(model: str) -> Any:
+    try:
+        from runtime.sensing.model_router.openai_router import (
+            build_fallback_router_from_custom_models,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    router = build_fallback_router_from_custom_models(str(model or "").strip())
+    if router is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "no custom model router configured for real provider load test; "
+                "add data/custom_models.json first"
+            ),
+        )
+
+    def _call(request: Any) -> Any:
+        return router.call(request)
+
+    return _call
+
+
+def _kimi_swarm_provider_configured(model: str) -> bool:
+    try:
+        from runtime.sensing.model_router.openai_router import (
+            build_fallback_router_from_custom_models,
+        )
+    except Exception:
+        return False
+    return build_fallback_router_from_custom_models(str(model or "").strip()) is not None
 
 
 def _resolve_api_base_url(value: str | None, *, request: Request | None) -> str:

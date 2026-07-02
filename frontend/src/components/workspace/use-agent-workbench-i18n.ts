@@ -24,113 +24,109 @@ import {
   maxDefined,
 } from "./agent-workbench-utils";
 
+export function deriveAgentTilesFromEvents(
+  events: LiveToolEvent[],
+): AgentTile[] {
+  const byId = new Map<string, AgentTile>();
+  const ordered = [...events].sort((a, b) => a.startedAt - b.startedAt);
+  for (const event of ordered) {
+    addDispatchSpecTiles(event, byId);
+    addDispatchResultTiles(event, byId);
+    const id = agentEventGroupId(event);
+    if (!id || id === "__main__") continue;
+    const existing = byId.get(id);
+    // Lifecycle events take precedence: spawned creates the tile immediately,
+    // finished resolves it to done/error.
+    let status: AgentTile["status"];
+    if (event.lifecycle === "spawned") {
+      status = "running";
+    } else if (event.lifecycle === "finished") {
+      status = event.status === "error" ? "error" : "done";
+    } else if (event.status === "error") {
+      status = "error";
+    } else if (event.status === "done") {
+      status = "done";
+    } else if (event.status === "waiting_approval") {
+      status = "waiting_approval";
+    } else if (event.status === "running") {
+      status = "running";
+    } else {
+      status = "pending";
+    }
+    // Don't downgrade running -> pending if the next event happens to be stale.
+    const finalStatus =
+      existing?.status === "running" && status === "pending"
+        ? existing.status
+        : status;
+    const currentTool =
+      event.lifecycle === undefined
+        ? readableToolName(event)
+        : existing?.currentTool;
+    const lastThought = thoughtFromEvent(event) ?? existing?.lastThought;
+    const prompt =
+      stringFromKeys(event.input, [
+        "prompt",
+        "task",
+        "description",
+        "query",
+        "objective",
+      ]) ?? existing?.prompt;
+    const resultSummary = existing?.resultSummary;
+    const blackboardWrites = uniqueStrings([
+      ...(existing?.blackboardWrites ?? []),
+      ...blackboardWritesFromEvent(event),
+    ]);
+    const filesTouched = uniqueStrings([
+      ...(existing?.filesTouched ?? []),
+      ...filesFromAgentEvent(event),
+    ]);
+    const startedAt = Math.min(
+      existing?.startedAt ?? event.startedAt,
+      event.startedAt,
+    );
+    byId.set(id, {
+      id,
+      name:
+        event.subagentCodename ??
+        existing?.codename ??
+        event.agentName ??
+        event.subAgentRole ??
+        id,
+      label: existing?.label ?? String(byId.size + 1).padStart(2, "0"),
+      status: finalStatus,
+      task:
+        lastThought ?? existing?.task ?? currentTool ?? readableToolName(event),
+      prompt,
+      avatar:
+        event.subagentAvatar ??
+        existing?.avatar ??
+        avatarForRole(event.subAgentRole),
+      codename: event.subagentCodename ?? existing?.codename,
+      role: event.subAgentRole ?? existing?.role,
+      specIndex: existing?.specIndex,
+      taskLabel: existing?.taskLabel,
+      parentToolUseId: event.parentToolUseId ?? existing?.parentToolUseId,
+      currentTool,
+      lastThought,
+      resultSummary,
+      iterationCount: event.iterationCount ?? existing?.iterationCount,
+      blackboardWrites,
+      filesTouched,
+      durationMs: event.durationMs ?? existing?.durationMs,
+      error: errorFromAgentEvent(event) ?? existing?.error,
+      eventCount: (existing?.eventCount ?? 0) + 1,
+      startedAt,
+      finishedAt: maxDefined(existing?.finishedAt, event.finishedAt),
+    });
+  }
+  if (byId.size > 0) return Array.from(byId.values()).slice(0, 12);
+
+  // No dispatch specs or real sub-agent lifecycle events were observed.
+  return [];
+}
+
 export function useAgentWorkbenchI18n() {
   const { t } = useI18n();
-
-  function deriveAgentTiles(events: LiveToolEvent[]): AgentTile[] {
-    const byId = new Map<string, AgentTile>();
-    const ordered = [...events].sort((a, b) => a.startedAt - b.startedAt);
-    for (const event of ordered) {
-      addDispatchSpecTiles(event, byId);
-      addDispatchResultTiles(event, byId);
-      const id = agentEventGroupId(event);
-      if (!id || id === "__main__") continue;
-      const existing = byId.get(id);
-      // Lifecycle events take precedence — a "spawned" event creates
-      // the tile immediately, "finished" updates it to done/error.
-      let status: AgentTile["status"];
-      if (event.lifecycle === "spawned") {
-        status = "running";
-      } else if (event.lifecycle === "finished") {
-        status = event.status === "error" ? "error" : "done";
-      } else if (event.status === "error") {
-        status = "error";
-      } else if (event.status === "done") {
-        status = "done";
-      } else if (
-        event.status === "waiting_approval"
-      ) {
-        status = "waiting_approval";
-      } else if (event.status === "running") {
-        status = "running";
-      } else {
-        status = "pending";
-      }
-      // Don't downgrade running → pending if the next event happens
-      // to be a stale tool call.
-      const finalStatus =
-        existing?.status === "running" && status === "pending"
-          ? existing.status
-          : status;
-      const currentTool =
-        event.lifecycle === undefined
-          ? readableToolName(event)
-          : existing?.currentTool;
-      const lastThought = thoughtFromEvent(event) ?? existing?.lastThought;
-      const prompt =
-        stringFromKeys(event.input, [
-          "prompt",
-          "task",
-          "description",
-          "query",
-          "objective",
-        ]) ?? existing?.prompt;
-      const resultSummary = existing?.resultSummary;
-      const blackboardWrites = uniqueStrings([
-        ...(existing?.blackboardWrites ?? []),
-        ...blackboardWritesFromEvent(event),
-      ]);
-      const filesTouched = uniqueStrings([
-        ...(existing?.filesTouched ?? []),
-        ...filesFromAgentEvent(event),
-      ]);
-      const startedAt = Math.min(
-        existing?.startedAt ?? event.startedAt,
-        event.startedAt,
-      );
-      byId.set(id, {
-        id,
-        name:
-          event.subagentCodename ??
-          existing?.codename ??
-          event.agentName ??
-          event.subAgentRole ??
-          id,
-        label: existing?.label ?? String(byId.size + 1).padStart(2, "0"),
-        status: finalStatus,
-        task:
-          lastThought ??
-          existing?.task ??
-          currentTool ??
-          readableToolName(event),
-        prompt,
-        avatar:
-          event.subagentAvatar ??
-          existing?.avatar ??
-          avatarForRole(event.subAgentRole),
-        codename: event.subagentCodename ?? existing?.codename,
-        role: event.subAgentRole ?? existing?.role,
-        specIndex: existing?.specIndex,
-        taskLabel: existing?.taskLabel,
-        parentToolUseId: event.parentToolUseId ?? existing?.parentToolUseId,
-        currentTool,
-        lastThought,
-        resultSummary,
-        iterationCount: event.iterationCount ?? existing?.iterationCount,
-        blackboardWrites,
-        filesTouched,
-        durationMs: event.durationMs ?? existing?.durationMs,
-        error: errorFromAgentEvent(event) ?? existing?.error,
-        eventCount: (existing?.eventCount ?? 0) + 1,
-        startedAt,
-        finishedAt: maxDefined(existing?.finishedAt, event.finishedAt),
-      });
-    }
-    if (byId.size > 0) return Array.from(byId.values()).slice(0, 12);
-
-    // No dispatch specs or real sub-agent lifecycle events were observed.
-    return [];
-  }
 
   function phaseBlockSummary(phase: AgentPhase, blocks: WorkBlock[]) {
     const related = blocks.filter((block) => phase.blockIds.includes(block.id));
@@ -221,7 +217,7 @@ export function useAgentWorkbenchI18n() {
   }
 
   return {
-    deriveAgentTiles,
+    deriveAgentTiles: deriveAgentTilesFromEvents,
     phaseBlockSummary,
     agentStatusLabel,
     agentStatusClass,
@@ -233,7 +229,11 @@ function addDispatchSpecTiles(
   event: LiveToolEvent,
   byId: Map<string, AgentTile>,
 ) {
-  if (event.name !== "call_agent_parallel" && event.name !== "call_agent") {
+  if (
+    event.name !== "call_agent_parallel" &&
+    event.name !== "call_agent" &&
+    event.name !== "team_swarm"
+  ) {
     return;
   }
   const specs = dispatchSpecsFromEvent(event);
@@ -251,9 +251,11 @@ function addDispatchSpecTiles(
       stringFromKeys(spec, ["task_label", "bb_key", "key", "lane", "title"]) ||
       role;
     const id =
-      event.name === "call_agent_parallel"
-        ? `${event.id}:spec:${index + 1}`
-        : event.id;
+      event.name === "team_swarm"
+        ? role
+        : event.name === "call_agent_parallel"
+          ? `${event.id}:spec:${index + 1}`
+          : event.id;
     const existing = byId.get(id);
     const prompt =
       stringFromKeys(spec, [
@@ -324,7 +326,11 @@ function addDispatchResultTiles(
   event: LiveToolEvent,
   byId: Map<string, AgentTile>,
 ) {
-  if (event.name !== "call_agent_parallel" && event.name !== "call_agent") {
+  if (
+    event.name !== "call_agent_parallel" &&
+    event.name !== "call_agent" &&
+    event.name !== "team_swarm"
+  ) {
     return;
   }
   if (event.status !== "done" && event.status !== "error") return;

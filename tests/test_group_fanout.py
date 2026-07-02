@@ -6,6 +6,7 @@ from runtime.execution.agents.group_fanout import (
     arbitrate_group_fanout,
     build_fanout_prompt,
     run_group_fanout,
+    synthesize_group_fanout,
 )
 
 _MEMBERS = [
@@ -36,6 +37,10 @@ def test_every_member_replies_in_parallel() -> None:
     assert out["arbitration"]["primary_agent_id"] == "aoi"
     assert out["arbitration"]["recommended_next_action"] == "use_primary_response"
     assert out["arbitration"]["ranking"][0]["response_id"].startswith("turn-1:resp:0:")
+    assert out["synthesis"]["schema"] == "octopus.group_fanout_synthesis.v1"
+    assert out["synthesis"]["ready"] is True
+    assert out["synthesis"]["primary_agent_id"] == "aoi"
+    assert out["synthesis"]["supporting_agent_ids"] == ["coder", "market_researcher"]
 
 
 def test_one_member_failure_is_isolated() -> None:
@@ -51,10 +56,8 @@ def test_one_member_failure_is_isolated() -> None:
     assert out["spoke"] == 2 and out["ok"] is True  # group ok if anyone spoke
     assert out["arbitration"]["primary_agent_id"] == "aoi"
     assert out["arbitration"]["failed_agent_ids"] == ["coder"]
-    assert (
-        out["arbitration"]["recommended_next_action"]
-        == "use_primary_and_retry_failed_members"
-    )
+    assert out["arbitration"]["recommended_next_action"] == "use_primary_and_retry_failed_members"
+    assert out["synthesis"]["retry_agent_ids"] == ["coder"]
 
 
 def test_caller_exception_does_not_break_others() -> None:
@@ -75,6 +78,78 @@ def test_caps_member_count() -> None:
     out = run_group_fanout("hi", many, agent_caller=_caller_ok, max_members=4)
     assert out["count"] == 4
     assert out["dropped"] == 16
+    assert out["capacity"] == {
+        "schema": "octopus.group_fanout_capacity.v1",
+        "requested_members": 20,
+        "dispatched_members": 4,
+        "dropped_members": 16,
+        "max_members": 4,
+        "max_concurrency": 4,
+        "concurrency": 4,
+        "scale_mode": "safe",
+        "capacity_tier": "room_scale",
+    }
+
+
+def test_capacity_marks_kimi_scale_rosters_without_hiding_dispatch_limit() -> None:
+    many = [{"name": f"a{i}", "display_name": f"A{i}"} for i in range(300)]
+    called: list[str] = []
+
+    def caller(*, agent_id, prompt, **_kw):
+        called.append(agent_id)
+        return {"success": True, "output": f"{agent_id} ok", "error": None}
+
+    out = run_group_fanout("hi", many, agent_caller=caller, max_members=32)
+
+    assert out["count"] == 32
+    assert len(called) == 32
+    assert called == [f"a{i}" for i in range(32)]
+    assert out["dropped"] == 268
+    assert out["capacity"]["schema"] == "octopus.group_fanout_capacity.v1"
+    assert out["capacity"]["requested_members"] == 300
+    assert out["capacity"]["dispatched_members"] == 32
+    assert out["capacity"]["dropped_members"] == 268
+    assert out["capacity"]["scale_mode"] == "safe"
+    assert out["capacity"]["capacity_tier"] == "kimi_scale"
+
+
+def test_full_scale_mode_dispatches_kimi_scale_roster_with_bounded_workers() -> None:
+    many = [{"name": f"a{i}", "display_name": f"A{i}"} for i in range(320)]
+    called: list[str] = []
+
+    def caller(*, agent_id, prompt, **_kw):
+        called.append(agent_id)
+        return {"success": True, "output": f"{agent_id} ok", "error": None}
+
+    out = run_group_fanout(
+        "hi",
+        many,
+        agent_caller=caller,
+        max_members=320,
+        max_concurrency=32,
+        scale_mode="full",
+    )
+
+    assert out["ok"] is True
+    assert out["count"] == 320
+    assert out["spoke"] == 320
+    assert len(called) == 320
+    assert called[0] == "a0"
+    assert called[-1] == "a319"
+    assert out["dropped"] == 0
+    assert out["capacity"] == {
+        "schema": "octopus.group_fanout_capacity.v1",
+        "requested_members": 320,
+        "dispatched_members": 320,
+        "dropped_members": 0,
+        "max_members": 320,
+        "max_concurrency": 32,
+        "concurrency": 32,
+        "scale_mode": "full",
+        "capacity_tier": "kimi_scale",
+    }
+    assert out["synthesis"]["answered_count"] == 320
+    assert out["synthesis"]["total_count"] == 320
 
 
 def test_guards() -> None:
@@ -132,3 +207,37 @@ def test_arbitration_handles_empty_successes() -> None:
     assert out["primary_agent_id"] is None
     assert out["empty_agent_ids"] == ["aoi"]
     assert out["recommended_next_action"] == "ask_members_to_expand"
+
+
+def test_synthesis_is_structured_without_extra_model_call() -> None:
+    replies = [
+        {
+            "agent_id": "aoi",
+            "display_name": "Aoi",
+            "ok": True,
+            "reply": "主答案",
+            "error": None,
+        },
+        {
+            "agent_id": "coder",
+            "display_name": "Coder",
+            "ok": False,
+            "reply": "",
+            "error": "timeout",
+        },
+    ]
+    arbitration = arbitrate_group_fanout(replies, turn_id="turn-synthesis")
+
+    synthesis = synthesize_group_fanout(replies, arbitration)
+
+    assert synthesis == {
+        "schema": "octopus.group_fanout_synthesis.v1",
+        "primary_agent_id": "aoi",
+        "primary_reply": "主答案",
+        "supporting_agent_ids": [],
+        "retry_agent_ids": ["coder"],
+        "answered_count": 1,
+        "total_count": 2,
+        "recommended_next_action": "use_primary_and_retry_failed_members",
+        "ready": True,
+    }

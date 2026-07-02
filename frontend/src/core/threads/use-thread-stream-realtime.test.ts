@@ -386,6 +386,40 @@ describe("liveToolEventsFromConversation", () => {
     });
   });
 
+  it("maps team swarm MCP items to the shared swarm event name", () => {
+    const conv = makeConversation([
+      makeTurn([
+        mcpItem({
+          id: "team-1",
+          server: "team",
+          tool: "team_swarm",
+          arguments: {
+            schema: "octopus.group_fanout_run.v1",
+            specs: [{ agent_id: "db-agent", task: "check schema" }],
+          },
+          result: {
+            schema: "octopus.group_fanout_result.v1",
+            replies: [{ agent_id: "db-agent", ok: true, reply: "done" }],
+          },
+        }),
+      ]),
+    ]);
+
+    const events = liveToolEventsFromConversation(conv);
+
+    expect(events[0]).toMatchObject({
+      id: "team-1",
+      name: "team_swarm",
+      input: {
+        server: "team",
+        tool: "team_swarm",
+      },
+      output: {
+        schema: "octopus.group_fanout_result.v1",
+      },
+    });
+  });
+
   it("preserves running and failed statuses", () => {
     const conv = makeConversation([
       makeTurn([
@@ -589,7 +623,9 @@ describe("useThreadStreamRealtime permissions", () => {
     );
 
     expect(result.current[0].threadId).toBe("server-thread-1");
-    await waitFor(() => expect(onStart).toHaveBeenCalledWith("server-thread-1"));
+    await waitFor(() =>
+      expect(onStart).toHaveBeenCalledWith("server-thread-1"),
+    );
     expect(onStart).not.toHaveBeenCalledWith("new");
   });
 

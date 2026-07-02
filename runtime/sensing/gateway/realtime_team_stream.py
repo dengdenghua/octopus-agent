@@ -14,6 +14,7 @@ import contextlib
 import json
 import logging
 import re
+import time
 from typing import TYPE_CHECKING, Any
 
 from runtime.memory.threads.event_log import EventLog
@@ -22,6 +23,7 @@ from runtime.protocol import (
     AgentMessageItem,
     ErrorItem,
     ItemStatus,
+    McpToolCallItem,
     ReasoningItem,
     ServerMethod,
     SubagentItem,
@@ -126,14 +128,12 @@ async def _drive_team_topology(
         )
         await _fallback_to_react()
         return
-    policy_report = evaluate_agent_policy({
-        str(role): spec.agent_id
-        for role, spec in topology.agents.items()
-    })
+    policy_report = evaluate_agent_policy(
+        {str(role): spec.agent_id for role, spec in topology.agents.items()}
+    )
     if policy_report.get("blocked"):
         _logger.warning(
-            "topology_id %r is blocked by operator subagent policy · "
-            "falling back to react",
+            "topology_id %r is blocked by operator subagent policy · falling back to react",
             topology_id,
         )
         with contextlib.suppress(Exception):
@@ -735,8 +735,12 @@ async def _drive_swarm_mesh(
             strategy = "topo_layers" if getattr(graph, "edges", None) else "per_node"
             signals: list[Any] = []
             result = run_swarm(
-                graph, budget, arm_pool=pool, signal_bus=sb,
-                journal=stack.journal, split_strategy=strategy,
+                graph,
+                budget,
+                arm_pool=pool,
+                signal_bus=sb,
+                journal=stack.journal,
+                split_strategy=strategy,
                 on_signal=signals.append,
                 registry=stack.registry,  # ADR-010 Phase 2 · skill-declared exclusivity
             )
@@ -759,15 +763,17 @@ async def _drive_swarm_mesh(
     with contextlib.suppress(Exception):
         graph = await asyncio.to_thread(_plan)
 
-    use_mesh = (
-        graph is not None
-        and not forced_off
-        and (forced_on or _graph_favors_mesh(graph))
-    )
+    use_mesh = graph is not None and not forced_off and (forced_on or _graph_favors_mesh(graph))
     if not use_mesh:
         # small / sequential / planning failed / forced off → sequential team
         await _drive_team_topology(
-            runtime, turn, log, emitter, intent, text=text, topology_id=topology_id,
+            runtime,
+            turn,
+            log,
+            emitter,
+            intent,
+            text=text,
+            topology_id=topology_id,
         )
         return
 
@@ -784,16 +790,13 @@ async def _drive_swarm_mesh(
         tail = f", {len(failed)} need a look" if failed else ""
         # Surface the SignalBus chatter — observable proof the agents actually
         # shared progress with each other, not just ran in isolation.
-        shared = (
-            f" · shared {signal_count} live updates between them"
-            if signal_count
-            else ""
-        )
+        shared = f" · shared {signal_count} live updates between them" if signal_count else ""
         await _emit(f"Ran {len(arms)} agents in parallel — {done} done{tail}{shared}")
     except Exception as exc:  # noqa: BLE001 — never break the turn on a mesh fault
         _logger.warning(
             "mesh swarm failed (%s: %s) — falling back to react",
-            type(exc).__name__, exc,
+            type(exc).__name__,
+            exc,
         )
         await _fallback_to_react()
 
@@ -891,10 +894,12 @@ async def _drive_group_fanout(
             "fallback": "react",
         }
         if exc is not None:
-            payload.update({
-                "exception_type": type(exc).__name__,
-                "message": str(exc),
-            })
+            payload.update(
+                {
+                    "exception_type": type(exc).__name__,
+                    "message": str(exc),
+                }
+            )
         with contextlib.suppress(Exception):
             audit_item = ReasoningItem(
                 summary=["Group fanout fallback"],
@@ -904,6 +909,204 @@ async def _drive_group_fanout(
             turn.items.append(audit_item)
             log.item_started(turn.thread_id, turn.id, audit_item)
             log.item_completed(turn.thread_id, turn.id, audit_item)
+
+    async def _notify_started(item: Any) -> None:
+        turn.items.append(item)
+        with contextlib.suppress(Exception):
+            log.item_started(turn.thread_id, turn.id, item)
+        payload = {
+            "threadId": turn.thread_id,
+            "turnId": turn.id,
+            "item": item.model_dump(by_alias=True, mode="json"),
+        }
+        with contextlib.suppress(Exception):
+            await emitter.notify(ServerMethod.ITEM_STARTED, payload)
+
+    async def _notify_completed(item: Any) -> None:
+        with contextlib.suppress(Exception):
+            log.item_completed(turn.thread_id, turn.id, item)
+        payload = {
+            "threadId": turn.thread_id,
+            "turnId": turn.id,
+            "item": item.model_dump(by_alias=True, mode="json"),
+        }
+        with contextlib.suppress(Exception):
+            await emitter.notify(ServerMethod.ITEM_COMPLETED, payload)
+
+    team_trace_item: McpToolCallItem | None = None
+    member_trace_items: dict[str, SubagentItem] = {}
+    team_trace_started = 0.0
+    planned_group_capacity: dict[str, Any] = {}
+
+    async def _start_group_trace(
+        group_members: list[dict[str, str]],
+        *,
+        max_members: int,
+        max_concurrency: int,
+        scale_mode: str,
+    ) -> None:
+        """Expose lightweight cowork fanout as a first-class team run.
+
+        Kimi-style swarm UX depends on the user seeing who was dispatched before
+        the replies arrive. The fanout itself is still conversational, but the
+        runtime now records a replayable parent ``team_swarm`` item plus one
+        ``SubagentItem`` lane per member.
+        """
+        nonlocal team_trace_item, team_trace_started
+        if not group_members:
+            return
+        nonlocal planned_group_capacity
+        team_trace_started = time.monotonic()
+        dispatched_members = group_members[:max_members]
+        planned_group_capacity = {
+            "schema": "octopus.group_fanout_capacity.v1",
+            "requested_members": len(group_members),
+            "dispatched_members": len(dispatched_members),
+            "dropped_members": max(0, len(group_members) - len(dispatched_members)),
+            "max_members": max_members,
+            "max_concurrency": max_concurrency,
+            "concurrency": max(1, min(len(dispatched_members), max_concurrency)),
+            "scale_mode": scale_mode,
+            "capacity_tier": "kimi_scale"
+            if len(group_members) >= 300
+            else "large"
+            if len(dispatched_members) >= 64
+            else "team_scale"
+            if len(dispatched_members) >= 16
+            else "room_scale"
+            if len(dispatched_members) >= 2
+            else "single",
+        }
+        specs = [
+            {
+                "agent_id": member["name"],
+                "display_name": member["display_name"],
+                "role": "cowork",
+                "task": text[:500],
+            }
+            for member in dispatched_members
+        ]
+        team_trace_item = McpToolCallItem(
+            server="team",
+            tool="team_swarm",
+            arguments={
+                "schema": "octopus.group_fanout_run.v1",
+                "mode": "cowork_swarm",
+                "message": text[:1000],
+                "specs": specs,
+                "capacity": planned_group_capacity,
+            },
+            status=ItemStatus.IN_PROGRESS,
+        )
+        await _notify_started(team_trace_item)
+        for member in dispatched_members:
+            agent_id = member["name"]
+            display = member["display_name"]
+            item = SubagentItem(
+                subagent_id=agent_id,
+                role="cowork",
+                name=display,
+                codename=display,
+                parent_item_id=team_trace_item.id,
+                summary="waiting for cowork fanout reply",
+                status=ItemStatus.IN_PROGRESS,
+            )
+            member_trace_items[agent_id] = item
+            await _notify_started(item)
+
+    async def _complete_group_trace(result: dict[str, Any]) -> None:
+        replies = [reply for reply in result.get("replies", []) if isinstance(reply, dict)]
+        by_agent = {str(reply.get("agent_id") or ""): reply for reply in replies}
+        for agent_id, item in member_trace_items.items():
+            reply = by_agent.get(agent_id, {})
+            body = str(reply.get("reply") or "").strip()
+            err = str(reply.get("error") or "").strip()
+            ok = bool(reply.get("ok")) and bool(body)
+            item.status = ItemStatus.COMPLETED if ok else ItemStatus.FAILED
+            item.summary = body[:2000] if body else None
+            item.error = None if ok else (err or "empty cowork fanout reply")
+            item.iteration_count = 1
+            await _notify_completed(item)
+        if team_trace_item is not None:
+            ok = bool(result.get("ok"))
+            team_trace_item.status = ItemStatus.COMPLETED if ok else ItemStatus.FAILED
+            team_trace_item.result = {
+                "schema": "octopus.group_fanout_result.v1",
+                "count": result.get("count"),
+                "spoke": result.get("spoke"),
+                "dropped": result.get("dropped", 0),
+                "capacity": result.get("capacity") or planned_group_capacity,
+                "arbitration": result.get("arbitration"),
+                "synthesis": result.get("synthesis"),
+                "replies": replies,
+            }
+            team_trace_item.error = None if ok else str(result.get("error") or "no member replied")
+            team_trace_item.duration_ms = max(
+                0,
+                int((time.monotonic() - team_trace_started) * 1000),
+            )
+            await _notify_completed(team_trace_item)
+
+    async def _fail_group_trace(exc: BaseException) -> None:
+        for item in member_trace_items.values():
+            if item.status == ItemStatus.IN_PROGRESS:
+                item.status = ItemStatus.FAILED
+                item.error = f"{type(exc).__name__}: {exc}"
+                await _notify_completed(item)
+        if team_trace_item is not None and team_trace_item.status == ItemStatus.IN_PROGRESS:
+            team_trace_item.status = ItemStatus.FAILED
+            team_trace_item.error = f"{type(exc).__name__}: {exc}"
+            team_trace_item.duration_ms = max(
+                0,
+                int((time.monotonic() - team_trace_started) * 1000),
+            )
+            await _notify_completed(team_trace_item)
+
+    def _group_summary(result: dict[str, Any]) -> str | None:
+        arbitration = result.get("arbitration")
+        if not isinstance(arbitration, dict):
+            return None
+        synthesis = result.get("synthesis")
+        answered = arbitration.get("answered_agent_ids")
+        failed = arbitration.get("failed_agent_ids")
+        empty = arbitration.get("empty_agent_ids")
+        if isinstance(synthesis, dict):
+            primary = str(synthesis.get("primary_agent_id") or "").strip()
+            recommended = str(
+                synthesis.get("recommended_next_action") or "",
+            ).strip()
+        else:
+            primary = str(arbitration.get("primary_agent_id") or "").strip()
+            recommended = str(arbitration.get("recommended_next_action") or "").strip()
+        if not isinstance(answered, list):
+            answered = []
+        if not isinstance(failed, list):
+            failed = []
+        if not isinstance(empty, list):
+            empty = []
+        if len(answered) < 2 and not failed and not empty:
+            return None
+        parts = [
+            f"协作汇总: {len(answered)} 位成员已回应",
+        ]
+        if primary:
+            parts.append(f"优先采纳 {primary} 的视角继续")
+        if recommended and recommended != "use_primary_response":
+            parts.append(f"下一步建议: {_group_next_action_label(recommended)}")
+        blocked = [str(x) for x in [*failed, *empty] if x]
+        if blocked:
+            parts.append(f"{len(blocked)} 位成员需要补看")
+        return "；".join(parts) + "。"
+
+    def _group_next_action_label(action: str) -> str:
+        labels = {
+            "use_primary_response": "采纳主视角继续",
+            "use_primary_and_retry_failed_members": "采纳主视角，同时补看失败成员",
+            "ask_members_to_expand": "请成员补充展开",
+            "retry_or_fallback_to_single_agent": "重试成员或回退单 Agent",
+            "fallback_to_single_agent": "回退单 Agent",
+        }
+        return labels.get(action, action.replace("_", " "))
 
     if len(members) < 2:
         # Not a real group → one agent answers (the normal single-agent path).
@@ -934,10 +1137,38 @@ async def _drive_group_fanout(
         # in a worktree) rather than just chime in. Conservative — defaults to
         # chat so a casual "@Codex 在么" never fires a heavyweight run.
         task_cues = (
-            "改", "写", "修", "实现", "重构", "添加", "新增", "删", "创建", "生成",
-            "优化", "修复", "测试", "运行", "跑", "重命名", "替换", "集成", "接入",
-            "fix", "add", "implement", "refactor", "write", "create", "run",
-            "test", "build", "rename", "replace", "update", "bug",
+            "改",
+            "写",
+            "修",
+            "实现",
+            "重构",
+            "添加",
+            "新增",
+            "删",
+            "创建",
+            "生成",
+            "优化",
+            "修复",
+            "测试",
+            "运行",
+            "跑",
+            "重命名",
+            "替换",
+            "集成",
+            "接入",
+            "fix",
+            "add",
+            "implement",
+            "refactor",
+            "write",
+            "create",
+            "run",
+            "test",
+            "build",
+            "rename",
+            "replace",
+            "update",
+            "bug",
         )
 
         def _looks_like_task(t: str) -> bool:
@@ -949,18 +1180,14 @@ async def _drive_group_fanout(
         work_members = [
             m
             for m in members
-            if m["name"] in detected
-            and _mentioned(m["display_name"])
-            and _looks_like_task(text)
+            if m["name"] in detected and _mentioned(m["display_name"]) and _looks_like_task(text)
         ]
         work_ids = {m["name"] for m in work_members}
         chat_members = [m for m in members if m["name"] not in work_ids]
         # @-mentioned chat members first so a small fan-out cap never drops them.
         chat_members.sort(key=lambda m: 0 if _mentioned(m["display_name"]) else 1)
 
-        def _member_caller(
-            agent_id: str, prompt: str, timeout_s: int = 90
-        ) -> dict[str, Any]:
+        def _member_caller(agent_id: str, prompt: str, timeout_s: int = 90) -> dict[str, Any]:
             """Persona agents run in-process; local CLI partners bridge to their
             real CLI for a short, conversational group-chat bubble."""
             info = detected.get(agent_id)
@@ -980,6 +1207,32 @@ async def _drive_group_fanout(
 
         spoke = 0
         if chat_members:
+            scale_mode = str(
+                ctx.get("swarm_scale_mode") or ctx.get("fanout_scale_mode") or "safe"
+            ).strip().lower()
+            if scale_mode not in {"safe", "full"}:
+                scale_mode = "safe"
+            requested_limit = ctx.get("swarm_max_members") or ctx.get("max_members")
+            try:
+                requested_limit_int = int(requested_limit) if requested_limit is not None else 0
+            except (TypeError, ValueError):
+                requested_limit_int = 0
+            fanout_limit = (
+                min(512, max(2, requested_limit_int or len(chat_members)))
+                if scale_mode == "full"
+                else min(32, max(2, requested_limit_int or len(chat_members)))
+            )
+            try:
+                fanout_concurrency = int(ctx.get("swarm_max_concurrency") or 32)
+            except (TypeError, ValueError):
+                fanout_concurrency = 32
+            fanout_concurrency = max(1, min(64, fanout_concurrency))
+            await _start_group_trace(
+                chat_members,
+                max_members=fanout_limit,
+                max_concurrency=fanout_concurrency,
+                scale_mode=scale_mode,
+            )
             result = await asyncio.to_thread(
                 run_group_fanout,
                 text,
@@ -987,9 +1240,12 @@ async def _drive_group_fanout(
                 agent_caller=_member_caller,
                 # Cover the whole roster (was hard-capped at 5, which silently
                 # dropped members ordered last — e.g. the local CLI partners).
-                max_members=min(8, max(2, len(chat_members))),
+                max_members=fanout_limit,
+                max_concurrency=fanout_concurrency,
+                scale_mode=scale_mode,
                 turn_id=turn.id,
             )
+            await _complete_group_trace(result)
             arbitration = result.get("arbitration")
             if isinstance(arbitration, dict):
                 with contextlib.suppress(Exception):
@@ -998,6 +1254,7 @@ async def _drive_group_fanout(
                             {
                                 "schema": "octopus.group_fanout_audit.v1",
                                 "arbitration": arbitration,
+                                "capacity": result.get("capacity") or planned_group_capacity,
                             },
                             ensure_ascii=False,
                             sort_keys=True,
@@ -1016,6 +1273,9 @@ async def _drive_group_fanout(
                         agent_id=str(reply.get("agent_id") or ""),
                     )
                     spoke += 1
+            summary = _group_summary(result)
+            if summary:
+                await _emit(summary)
 
         # Each @-mentioned partner with a task runs it in its OWN git worktree
         # (no collision with the live tree) and reports the diff for review.
@@ -1037,7 +1297,11 @@ async def _drive_group_fanout(
                 if mem.get("ok") and diff:
                     files = mem.get("files") or []
                     flist = "、".join(files[:8]) + ("…" if len(files) > 8 else "")
-                    shown = diff if len(diff) <= 1500 else diff[:1500] + "\n…(diff 截断，完整在 worktree)"
+                    shown = (
+                        diff
+                        if len(diff) <= 1500
+                        else diff[:1500] + "\n…(diff 截断，完整在 worktree)"
+                    )
                     await _emit(
                         f"✅ 已在隔离 worktree 完成 · 改动 {len(files)} 个文件"
                         + (f"：{flist}" if files else "")
@@ -1069,5 +1333,6 @@ async def _drive_group_fanout(
             type(exc).__name__,
             exc,
         )
+        await _fail_group_trace(exc)
         _record_fallback_audit("exception", exc)
         await _fallback_to_react()

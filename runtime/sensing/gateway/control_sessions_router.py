@@ -175,6 +175,15 @@ def create_control_sessions_router(
             raise _bad_request(exc) from exc
         return {"ok": True, "evidence": evidence}
 
+    @router.get("/{session_id}/evidence/{evidence_id}/detail")
+    def evidence_detail(session_id: str, evidence_id: str) -> dict[str, Any]:
+        try:
+            return session_store.evidence_detail(session_id, evidence_id)
+        except KeyError as exc:
+            raise HTTPException(404, "control evidence not found") from exc
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
+
     def _set_state(
         session_id: str,
         *,
@@ -199,15 +208,21 @@ def create_control_sessions_router(
         return {"ok": True, "session": session}
 
     @router.post("/{session_id}/pause")
-    def pause_session(session_id: str, body: ControlSessionStateBody | None = None) -> dict[str, Any]:
+    def pause_session(
+        session_id: str, body: ControlSessionStateBody | None = None
+    ) -> dict[str, Any]:
         return _set_state(session_id, status="paused", body=body or ControlSessionStateBody())
 
     @router.post("/{session_id}/resume")
-    def resume_session(session_id: str, body: ControlSessionStateBody | None = None) -> dict[str, Any]:
+    def resume_session(
+        session_id: str, body: ControlSessionStateBody | None = None
+    ) -> dict[str, Any]:
         return _set_state(session_id, status="idle", body=body or ControlSessionStateBody())
 
     @router.post("/{session_id}/stop")
-    def stop_session(session_id: str, body: ControlSessionStateBody | None = None) -> dict[str, Any]:
+    def stop_session(
+        session_id: str, body: ControlSessionStateBody | None = None
+    ) -> dict[str, Any]:
         return _set_state(session_id, status="stopped", body=body or ControlSessionStateBody())
 
     @router.post("/{session_id}/takeover")
@@ -234,6 +249,25 @@ def create_control_sessions_router(
         except ValueError as exc:
             raise _bad_request(exc) from exc
 
+    @router.get("/{session_id}/timeline")
+    def replay_timeline(
+        session_id: str,
+        limit: int = Query(default=500, ge=1, le=5000),
+        after: float = Query(default=0.0, ge=0.0),
+        after_cursor: str = "",
+    ) -> dict[str, Any]:
+        try:
+            return session_store.timeline(
+                session_id,
+                limit=limit,
+                after=after,
+                after_cursor=after_cursor,
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "control session not found") from exc
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
+
     @router.get("/{session_id}/events")
     def session_events(
         session_id: str,
@@ -244,7 +278,7 @@ def create_control_sessions_router(
             last = after
             try:
                 if session_store.get_session(session_id) is None:
-                    yield "event: error\ndata: {\"error\":\"control session not found\"}\n\n"
+                    yield 'event: error\ndata: {"error":"control session not found"}\n\n'
                     return
             except ValueError as exc:
                 yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"

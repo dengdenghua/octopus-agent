@@ -3,9 +3,16 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from runtime.memory.control_sessions import ControlSessionStore
 from runtime.memory.learning.review_queue import ReviewQueue
 from runtime.safety.approval.approval_policy_store import load_policy
+from runtime.safety.evolution.kimi_swarm_load_test import (
+    KimiSwarmLoadTestConfig,
+    build_kimi_swarm_resume_plan,
+    run_kimi_swarm_load_test,
+)
 from runtime.sensing.gateway.evolution_router import create_evolution_router
+from runtime.sensing.model_router.models import ModelRequest, ModelResponse
 
 
 def test_auto_verifier_metrics_endpoint(monkeypatch) -> None:
@@ -141,6 +148,504 @@ def test_agent_benchmark_endpoint_and_scorecards_are_evidence_backed() -> None:
     assert scorecard["agent_benchmark"]["ready"] is True
     assert radar["agent_benchmark"]["schema"] == "octopus.agent_benchmark.v1"
     assert radar["agent_benchmark"]["ready"] is True
+
+
+def test_kimi_swarm_certification_endpoint(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.get("/api/evolution/kimi-swarm-certification")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["schema"] == "octopus.kimi_swarm_certification.v1"
+    assert data["ready"] is True
+    assert data["verdict"] == "deterministic_orchestration_surpassed"
+    assert data["summary"]["octopus_deterministic_max_members"] == 320
+    assert data["summary"]["kimi_reference_subagents"] == 300
+    assert data["summary"]["benchmark_case_ready"] is True
+    assert data["remaining_proof"][0]["id"] == "provider_backed_300_agent_load_test"
+    assert "provider_load_test_proof" in data
+    assert data["provider_load_test_next_stage"]["schema"] == (
+        "octopus.kimi_swarm_next_stage.v1"
+    )
+    assert data["provider_load_test_next_stage"]["next_stage"] == "provider_canary"
+    assert data["provider_load_test_next_stage"]["provider_id"] == "kimi_coding"
+    assert data["provider_load_test_next_stage"]["model"] == "kimi-for-coding"
+
+
+def test_kimi_swarm_next_stage_endpoint_reports_default_kimi_coding_path(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(
+        "runtime.sensing.model_router.openai_router.build_fallback_router_from_custom_models",
+        lambda _model: None,
+    )
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.get("/api/evolution/kimi-swarm-certification/next-stage")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["schema"] == "octopus.kimi_swarm_next_stage.v1"
+    assert data["ready"] is False
+    assert data["proof_ready"] is False
+    assert data["next_stage"] == "provider_canary"
+    assert data["provider_id"] == "kimi_coding"
+    assert data["model"] == "kimi-for-coding"
+    assert data["provider_configured"] is False
+    assert data["can_run_recommended_payload"] is False
+    assert data["recommended_payload"]["stage_id"] == "provider_canary"
+    assert data["recommended_preflight"]["blocking_failures"][0]["id"] == (
+        "provider_configured"
+    )
+
+
+def test_kimi_swarm_next_stage_endpoint_marks_configured_payload_runnable(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(
+        "runtime.sensing.model_router.openai_router.build_fallback_router_from_custom_models",
+        lambda _model: object(),
+    )
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.get("/api/evolution/kimi-swarm-certification/next-stage")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["next_stage"] == "provider_canary"
+    assert data["provider_configured"] is True
+    assert data["can_run_recommended_payload"] is True
+    assert data["recommended_preflight"]["ready"] is True
+
+
+def test_kimi_swarm_resume_plan_endpoint_reports_no_source(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.get("/api/evolution/kimi-swarm-certification/resume-plan")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["schema"] == "octopus.kimi_swarm_resume_plan.v1"
+    assert data["ready"] is False
+    assert data["recommended_payload"] is None
+
+
+def test_kimi_swarm_proof_bundle_endpoint_reports_missing_proof(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.get("/api/evolution/kimi-swarm-certification/proof-bundle")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["schema"] == "octopus.kimi_swarm_proof_bundle.v1"
+    assert data["ready"] is False
+    assert data["proof"] is None
+
+
+def test_kimi_swarm_load_test_endpoint_runs_dry_replay(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/evolution/kimi-swarm-certification/load-test",
+        json={
+            "session_id": "router-load-dry-1",
+            "agent_count": 4,
+            "step_count": 9,
+            "max_concurrency": 2,
+        },
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["schema"] == "octopus.kimi_swarm_load_test.v1"
+    assert data["successful_steps"] == 9
+    assert data["provider_backed"] is False
+
+    certification = client.get("/api/evolution/kimi-swarm-certification").json()
+    assert certification["ok"] is True
+    assert certification["provider_load_test"]["session_id"] == "router-load-dry-1"
+    assert certification["remaining_proof"][0]["status"] == "dry_run_only"
+
+
+def test_kimi_swarm_load_test_preflight_endpoint_reports_stage_plan(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "runtime.sensing.model_router.openai_router.build_fallback_router_from_custom_models",
+        lambda _model: object(),
+    )
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/evolution/kimi-swarm-certification/load-test/preflight",
+        json={
+            "provider_id": "test_provider",
+            "model": "test-model",
+            "agent_count": 300,
+            "step_count": 4000,
+            "max_concurrency": 32,
+            "real_provider": True,
+            "confirm_real_provider": True,
+            "max_provider_calls": 10,
+            "estimated_max_tokens": 5120,
+            "stage_id": "provider_canary",
+        },
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["schema"] == "octopus.kimi_swarm_load_test_preflight.v1"
+    assert data["ready"] is True
+    assert data["provider_ready"] is True
+    assert data["selected_stage"]["id"] == "provider_canary"
+    assert data["stage_plan"]["schema"] == "octopus.kimi_swarm_load_stage_plan.v1"
+    assert data["stage_plan"]["stages"][-1]["id"] == "provider_full_reference"
+    assert data["stage_plan"]["stages"][0]["id"] == "provider_canary"
+
+
+def test_kimi_swarm_quota_probe_endpoint_rejects_without_confirmation() -> None:
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/evolution/kimi-swarm-certification/quota-probe",
+        json={"model": "test-model"},
+    )
+
+    assert response.status_code == 400
+    assert "confirm_real_provider=true" in response.json()["detail"]
+
+
+def test_kimi_swarm_quota_probe_endpoint_rejects_without_model_config(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "runtime.sensing.model_router.openai_router.build_fallback_router_from_custom_models",
+        lambda _model: None,
+    )
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/evolution/kimi-swarm-certification/quota-probe",
+        json={"model": "test-model", "confirm_real_provider": True},
+    )
+
+    assert response.status_code == 400
+    assert "custom model router" in response.json()["detail"]
+
+
+def test_kimi_swarm_quota_probe_endpoint_runs_guarded_provider_probe(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+
+    class FakeRouter:
+        def __init__(self) -> None:
+            self.calls: list[ModelRequest] = []
+
+        def call(self, request):
+            self.calls.append(request)
+            return ModelResponse(
+                text='{"ok":true}',
+                input_tokens=1,
+                output_tokens=1,
+                model=request.model,
+                provider=request.system_provider,
+            )
+
+    fake_router = FakeRouter()
+    monkeypatch.setattr(
+        "runtime.sensing.model_router.openai_router.build_fallback_router_from_custom_models",
+        lambda _model: fake_router,
+    )
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/evolution/kimi-swarm-certification/quota-probe",
+        json={
+            "session_id": "router-quota-probe",
+            "provider_id": "test_provider",
+            "model": "test-model",
+            "confirm_real_provider": True,
+            "max_tokens": 9,
+        },
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["schema"] == "octopus.kimi_swarm_quota_probe.v1"
+    assert data["can_resume_provider_load_test"] is True
+    assert data["provider_quota_limited"] is False
+    assert len(fake_router.calls) == 1
+    assert fake_router.calls[0].max_tokens == 9
+    assert fake_router.calls[0].model == "test-model"
+    assert fake_router.calls[0].system_provider == "test_provider"
+
+
+def test_kimi_swarm_load_test_endpoint_rejects_real_provider_without_confirmation() -> None:
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/evolution/kimi-swarm-certification/load-test",
+        json={"real_provider": True},
+    )
+
+    assert response.status_code == 400
+    assert "confirm_real_provider=true" in response.json()["detail"]
+
+
+def test_kimi_swarm_load_test_endpoint_rejects_real_provider_without_model_config(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "runtime.sensing.model_router.openai_router.build_fallback_router_from_custom_models",
+        lambda _model: None,
+    )
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/evolution/kimi-swarm-certification/load-test",
+        json={
+            "real_provider": True,
+            "confirm_real_provider": True,
+            "step_count": 3,
+            "agent_count": 2,
+            "max_provider_calls": 3,
+            "estimated_max_tokens": 12,
+            "stage_id": "provider_canary",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "custom model router" in response.json()["detail"]
+
+
+def test_kimi_swarm_load_test_endpoint_rejects_full_before_ramp(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(
+        "runtime.sensing.model_router.openai_router.build_fallback_router_from_custom_models",
+        lambda _model: object(),
+    )
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/evolution/kimi-swarm-certification/load-test",
+        json={
+            "session_id": "router-full-before-ramp",
+            "provider_id": "test_provider",
+            "model": "test-model",
+            "agent_count": 300,
+            "step_count": 4000,
+            "max_concurrency": 32,
+            "real_provider": True,
+            "confirm_real_provider": True,
+            "max_provider_calls": 4000,
+            "estimated_max_tokens": 8000,
+            "stage_id": "provider_full_reference",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "previous_stage_ready" in response.json()["detail"]
+
+
+def test_kimi_swarm_load_test_endpoint_runs_guarded_real_provider(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+
+    class FakeRouter:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def call(self, request):
+            self.calls += 1
+            from runtime.sensing.model_router.models import ModelResponse
+
+            return ModelResponse(
+                text='{"ok":true}',
+                input_tokens=2,
+                output_tokens=1,
+                model=request.model,
+                provider=request.system_provider,
+            )
+
+    fake_router = FakeRouter()
+    monkeypatch.setattr(
+        "runtime.sensing.model_router.openai_router.build_fallback_router_from_custom_models",
+        lambda _model: fake_router,
+    )
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/evolution/kimi-swarm-certification/load-test",
+        json={
+            "session_id": "router-load-real-1",
+            "provider_id": "test_provider",
+            "model": "test-model",
+            "agent_count": 3,
+            "step_count": 7,
+            "max_concurrency": 2,
+            "real_provider": True,
+            "confirm_real_provider": True,
+            "max_provider_calls": 7,
+            "estimated_max_tokens": 21,
+            "record_every_step": False,
+            "stage_id": "provider_canary",
+        },
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["provider_backed"] is True
+    assert data["stage_id"] == "provider_canary"
+    assert data["successful_steps"] == 7
+    assert data["recorded_step_evidence_count"] == 0
+    assert data["max_provider_calls"] == 7
+    assert fake_router.calls == 7
+
+
+def test_kimi_swarm_load_test_endpoint_runs_resume_payload(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    store = ControlSessionStore(tmp_path / "data" / "control_sessions")
+    calls = 0
+
+    def quota_after_seven(request: ModelRequest) -> ModelResponse:
+        nonlocal calls
+        calls += 1
+        if calls > 7:
+            raise RuntimeError("OpenAIRouterError: http_429: usage limit quota")
+        return ModelResponse(text="ok", input_tokens=1, output_tokens=1)
+
+    run_kimi_swarm_load_test(
+        config=KimiSwarmLoadTestConfig(
+            session_id="router-resume-full-source",
+            provider_id="test_provider",
+            model="test-model",
+            agent_count=3,
+            step_count=12,
+            max_concurrency=1,
+            real_provider=True,
+            confirm_real_provider=True,
+            record_every_step=True,
+            max_provider_calls=12,
+            estimated_max_tokens=6144,
+            stage_id="provider_full_reference",
+        ),
+        store=store,
+        provider_caller=quota_after_seven,
+    )
+    payload = build_kimi_swarm_resume_plan(
+        provider_id="test_provider",
+        model="test-model",
+        agent_count=3,
+        step_count=12,
+        max_concurrency=1,
+        store=store,
+    )["recommended_payload"]
+
+    class FakeRouter:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def call(self, request):
+            self.calls += 1
+            return ModelResponse(
+                text="ok",
+                input_tokens=1,
+                output_tokens=1,
+                model=request.model,
+                provider=request.system_provider,
+            )
+
+    fake_router = FakeRouter()
+    monkeypatch.setattr(
+        "runtime.sensing.model_router.openai_router.build_fallback_router_from_custom_models",
+        lambda _model: fake_router,
+    )
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/evolution/kimi-swarm-certification/load-test",
+        json={
+            **payload,
+            "session_id": "router-resume-full-repair",
+        },
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["stage_id"] == "provider_full_reference_resume"
+    assert data["step_count"] == 5
+    assert data["reference_step_count"] == 12
+    assert data["successful_steps"] == 5
+    assert data["resume_from_session_id"] == "router-resume-full-source"
+    assert fake_router.calls == 5
 
 
 def test_e2e_surpass_certification_endpoint() -> None:

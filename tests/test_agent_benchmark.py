@@ -9,7 +9,7 @@ def test_agent_benchmark_is_replayable_and_dimensioned() -> None:
     assert report["schema"] == "octopus.agent_benchmark.v1"
     assert report["score"] == 1.0
     assert report["ready"] is True
-    assert report["passed"] == report["total"] == 10
+    assert report["passed"] == report["total"] == 12
     assert {
         "general_agent",
         "digital_employee",

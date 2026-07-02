@@ -25,15 +25,18 @@ from typing import Any
 # Keep the group from getting spammy / expensive: a real group chat has a few
 # people chime in, not 20. Also bounds the parallel LLM fan-out cost.
 _MAX_FANOUT = 6
+_MAX_SCALE_FANOUT = 512
 _ARBITRATION_SCHEMA = "octopus.group_fanout_arbitration.v1"
+_SYNTHESIS_SCHEMA = "octopus.group_fanout_synthesis.v1"
+_CAPACITY_SCHEMA = "octopus.group_fanout_capacity.v1"
 
 
 def _response_id(turn_id: str | None, index: int, agent_id: str) -> str:
     prefix = str(turn_id or "fanout").strip() or "fanout"
-    safe_agent = "".join(
-        ch if ch.isalnum() or ch in ("-", "_", ".") else "-"
-        for ch in agent_id
-    ).strip("-") or "agent"
+    safe_agent = (
+        "".join(ch if ch.isalnum() or ch in ("-", "_", ".") else "-" for ch in agent_id).strip("-")
+        or "agent"
+    )
     return f"{prefix}:resp:{index}:{safe_agent}"
 
 
@@ -55,6 +58,18 @@ def _reply_status(reply: dict[str, Any]) -> str:
     if str(reply.get("reply") or "").strip():
         return "answered"
     return "empty"
+
+
+def _capacity_tier(dispatched_members: int, requested_members: int) -> str:
+    if requested_members >= 300:
+        return "kimi_scale"
+    if dispatched_members >= 64:
+        return "large"
+    if dispatched_members >= 16:
+        return "team_scale"
+    if dispatched_members >= 2:
+        return "room_scale"
+    return "single"
 
 
 def arbitrate_group_fanout(
@@ -134,6 +149,47 @@ def arbitrate_group_fanout(
     }
 
 
+def synthesize_group_fanout(
+    replies: list[dict[str, Any]],
+    arbitration: dict[str, Any],
+) -> dict[str, Any]:
+    """Produce a structured, replayable synthesis for the fanout result.
+
+    This is intentionally deterministic: the runtime already paid for the
+    member replies, so the coordinator can expose a useful delivery envelope
+    without another model call. UI/replay/benchmarks can then tell whether the
+    swarm produced a primary answer, supporting signals, and retry targets.
+    """
+    rows = [reply for reply in replies if isinstance(reply, dict)]
+    by_agent = {
+        str(reply.get("agent_id") or ""): str(reply.get("reply") or "").strip() for reply in rows
+    }
+    primary_agent_id = str(arbitration.get("primary_agent_id") or "").strip()
+    answered = [
+        str(agent_id) for agent_id in arbitration.get("answered_agent_ids") or [] if str(agent_id)
+    ]
+    failed = [
+        str(agent_id) for agent_id in arbitration.get("failed_agent_ids") or [] if str(agent_id)
+    ]
+    empty = [
+        str(agent_id) for agent_id in arbitration.get("empty_agent_ids") or [] if str(agent_id)
+    ]
+    retry_agent_ids = [*failed, *empty]
+    supporting_agent_ids = [agent_id for agent_id in answered if agent_id != primary_agent_id]
+    primary_reply = by_agent.get(primary_agent_id, "") if primary_agent_id else ""
+    return {
+        "schema": _SYNTHESIS_SCHEMA,
+        "primary_agent_id": primary_agent_id or None,
+        "primary_reply": primary_reply[:2000],
+        "supporting_agent_ids": supporting_agent_ids,
+        "retry_agent_ids": retry_agent_ids,
+        "answered_count": len(answered),
+        "total_count": len(rows),
+        "recommended_next_action": arbitration.get("recommended_next_action"),
+        "ready": bool(primary_agent_id and primary_reply),
+    }
+
+
 def build_fanout_prompt(message: str, speaker: str, roster: list[str]) -> str:
     """The per-member instruction: react in persona, short, group-chat style."""
     names = "、".join(roster) if roster else "(只有你)"
@@ -152,6 +208,8 @@ def run_group_fanout(
     *,
     agent_caller: Callable[..., dict[str, Any]],
     max_members: int = _MAX_FANOUT,
+    max_concurrency: int | None = None,
+    scale_mode: str = "safe",
     turn_id: str | None = None,
 ) -> dict[str, Any]:
     """Fan ``message`` out to each member in parallel; collect persona replies.
@@ -167,17 +225,35 @@ def run_group_fanout(
     msg = (message or "").strip()
     if not msg:
         return {"ok": False, "error": "message is required", "replies": [], "count": 0, "spoke": 0}
-    clean = [
-        m
-        for m in (members or [])
-        if isinstance(m, dict) and (m.get("name") or m.get("agent_id"))
-    ][:max_members]
+    eligible = [
+        m for m in (members or []) if isinstance(m, dict) and (m.get("name") or m.get("agent_id"))
+    ]
+    requested_members = len(eligible)
+    scale = str(scale_mode or "safe").strip().lower()
+    if scale not in {"safe", "full"}:
+        scale = "safe"
+    max_cap = _MAX_SCALE_FANOUT if scale == "full" else max(1, int(max_members or _MAX_FANOUT))
+    max_members = max(1, min(int(max_members or _MAX_FANOUT), max_cap))
+    clean = eligible[:max_members]
     if not clean:
         return {"ok": False, "error": "no members", "replies": [], "count": 0, "spoke": 0}
 
-    roster = [
-        str(m.get("display_name") or m.get("name") or m.get("agent_id")) for m in clean
-    ]
+    roster = [str(m.get("display_name") or m.get("name") or m.get("agent_id")) for m in clean]
+    concurrency_limit = (
+        max_members if max_concurrency is None else max(1, int(max_concurrency or 1))
+    )
+    workers = max(1, min(len(clean), concurrency_limit))
+    capacity = {
+        "schema": _CAPACITY_SCHEMA,
+        "requested_members": requested_members,
+        "dispatched_members": len(clean),
+        "dropped_members": max(0, requested_members - len(clean)),
+        "max_members": max_members,
+        "max_concurrency": concurrency_limit,
+        "concurrency": workers,
+        "scale_mode": scale,
+        "capacity_tier": _capacity_tier(len(clean), requested_members),
+    }
 
     def _one(member: dict[str, Any]) -> dict[str, Any]:
         agent_id = str(member.get("name") or member.get("agent_id"))
@@ -203,15 +279,12 @@ def run_group_fanout(
         return rec
 
     results: list[dict[str, Any]] = []
-    workers = max(1, min(len(clean), max_members))
     with _cf.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="group-fanout") as pool:
         futures = [pool.submit(_one, m) for m in clean]
         for fut in _cf.as_completed(futures):
             results.append(fut.result())
 
-    order = {
-        str(m.get("name") or m.get("agent_id")): i for i, m in enumerate(clean)
-    }
+    order = {str(m.get("name") or m.get("agent_id")): i for i, m in enumerate(clean)}
     results.sort(key=lambda r: order.get(r["agent_id"], len(order)))
     for index, reply in enumerate(results):
         reply.setdefault(
@@ -220,11 +293,14 @@ def run_group_fanout(
         )
     spoke = sum(1 for r in results if r["ok"] and r["reply"].strip())
     arbitration = arbitrate_group_fanout(results, turn_id=turn_id)
+    synthesis = synthesize_group_fanout(results, arbitration)
     return {
         "ok": spoke > 0,
         "replies": results,
         "count": len(results),
         "spoke": spoke,
-        "dropped": max(0, len([m for m in (members or []) if isinstance(m, dict)]) - len(clean)),
+        "dropped": capacity["dropped_members"],
+        "capacity": capacity,
         "arbitration": arbitration,
+        "synthesis": synthesis,
     }

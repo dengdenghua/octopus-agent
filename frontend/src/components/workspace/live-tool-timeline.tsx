@@ -29,6 +29,7 @@ import {
 } from "./agent-run-status";
 import { stripToolEnvelope } from "./messages/trace-labels";
 import { getProcessTraceEvents } from "./process-trace-events";
+import { SwarmRunOverview } from "./swarm-run-overview";
 import { isSkillToolName } from "./tool-action-kind";
 
 type TimelineT = Pick<Translations, "liveTools" | "liveToolTimeline">;
@@ -218,22 +219,27 @@ export function LiveToolTimeline({
     [events, runningOnly, showAll],
   );
 
-  if (visibleEvents.length === 0) return null;
+  if (visibleEvents.length === 0) {
+    return <SwarmRunOverview events={events} className={className} />;
+  }
 
   if (groupByAgent) {
     return (
-      <GroupedTimeline
-        events={visibleEvents}
-        allEvents={events}
-        toolLabels={toolLabels}
-        t={t}
-        className={className}
-      />
+      <div className={className}>
+        <SwarmRunOverview events={events} />
+        <GroupedTimeline
+          events={visibleEvents}
+          allEvents={events}
+          toolLabels={toolLabels}
+          t={t}
+        />
+      </div>
     );
   }
 
   return (
     <div className={cn("space-y-1 py-1.5", className)}>
+      <SwarmRunOverview events={events} />
       {visibleEvents.map((event, index) => (
         <ParentWithChildren
           key={`${event.id}:${index}`}
@@ -1205,13 +1211,15 @@ function ToolEventRow({
             {statusText(event, t)}
           </span>
 
-          {event.status === "done" && event.durationMs != null && event.durationMs >= 1 && (
-            <span className="text-muted-foreground text-[10px]">
-              {event.durationMs < 1000
-                ? `${event.durationMs}ms`
-                : `${(event.durationMs / 1000).toFixed(1)}s`}
-            </span>
-          )}
+          {event.status === "done" &&
+            event.durationMs != null &&
+            event.durationMs >= 1 && (
+              <span className="text-muted-foreground text-[10px]">
+                {event.durationMs < 1000
+                  ? `${event.durationMs}ms`
+                  : `${(event.durationMs / 1000).toFixed(1)}s`}
+              </span>
+            )}
 
           {hasDetails && (
             <button
