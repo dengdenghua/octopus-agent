@@ -59,6 +59,12 @@ import {
   type ComputerScreenshot,
   type ComputerStatus,
 } from "@/core/computer/api";
+import {
+  runControlSessionAction,
+  type ControlEvidence,
+  type ControlIndicatorMode,
+  type ControlSessionOptions,
+} from "@/core/control-session";
 import { swallow } from "@/core/utils/log";
 import { loadModels } from "@/core/models/api";
 import type { Model } from "@/core/models/types";
@@ -102,6 +108,12 @@ export default function ComputerAutomationPage() {
     null,
   );
   const [pcScreenError, setPcScreenError] = useState<string | null>(null);
+  const [controlIndicator, setControlIndicator] = useState<{
+    mode: ControlIndicatorMode;
+    detail?: Record<string, unknown>;
+    updatedAt: number;
+  }>({ mode: "idle", updatedAt: Date.now() });
+  const [controlEvidence, setControlEvidence] = useState<ControlEvidence[]>([]);
   const [actionKind, setActionKind] = useState<ActionKind>("click");
   const [x, setX] = useState("400");
   const [y, setY] = useState("300");
@@ -126,8 +138,9 @@ export default function ComputerAutomationPage() {
   > | null>(null);
   const [screenshotImageBox, setScreenshotImageBox] =
     useState<ScreenshotImageBox | null>(null);
-  const [liveCanvasBox, setLiveCanvasBox] =
-    useState<ScreenshotImageBox | null>(null);
+  const [liveCanvasBox, setLiveCanvasBox] = useState<ScreenshotImageBox | null>(
+    null,
+  );
   const [leaseOwner, setLeaseOwner] = useState<ComputerLeaseOwner | null>(null);
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [busy, setBusy] = useState<
@@ -224,6 +237,51 @@ export default function ComputerAutomationPage() {
   const leaseBlocked = leaseState.tone === "blocked";
   const computerUnavailable = runtimeState.blocksActions;
   const computerActionDisabled = busy !== null || computerUnavailable;
+
+  const computerControlSession = useMemo<ControlSessionOptions>(
+    () => ({
+      sessionId: leaseOwner?.owner_id,
+      ownerLabel: leaseOwner?.owner_label ?? "本地电脑自动化页",
+      surface: "computer",
+      targetId: "local-pc",
+      getStopped: () => (leaseBlocked ? "lease_lost" : false),
+      setIndicator: (mode, detail) => {
+        setControlIndicator({
+          mode,
+          detail,
+          updatedAt: Date.now(),
+        });
+      },
+      recordEvidence: (evidence) => {
+        setControlEvidence((prev) =>
+          [
+            {
+              ...evidence,
+              id:
+                evidence.id ??
+                `control-${Date.now()}-${Math.random()
+                  .toString(36)
+                  .slice(2, 8)}`,
+              at: evidence.at ?? Date.now(),
+            },
+            ...prev,
+          ].slice(0, 12),
+        );
+      },
+    }),
+    [leaseBlocked, leaseOwner],
+  );
+
+  const runComputerControlAction = useCallback(
+    async <T,>(action: string, run: () => Promise<T>): Promise<T> =>
+      runControlSessionAction(action, run, {
+        control: computerControlSession,
+        interrupted: (reason) => {
+          throw new Error(`computer control interrupted: ${reason}`);
+        },
+      }),
+    [computerControlSession],
+  );
 
   const mergeLease = useCallback((lease?: ComputerLease) => {
     if (!lease) return;
@@ -438,6 +496,19 @@ export default function ComputerAutomationPage() {
       const data = await captureComputerScreen();
       setScreenshot(data);
       setHighlightedAction(null);
+      await computerControlSession.recordEvidence?.({
+        kind: "screenshot",
+        action: "capture",
+        ok: data.ok,
+        summary: data.ok
+          ? `${data.size_bytes || 0} bytes`
+          : data.error || "capture failed",
+        detail: {
+          path: data.path,
+          size_bytes: data.size_bytes,
+          created_at: data.created_at,
+        },
+      });
       addLog({
         title: data.ok ? "已观察当前屏幕" : "截图失败",
         detail: data.ok ? `${data.size_bytes || 0} bytes` : data.error || "",
@@ -484,7 +555,9 @@ export default function ComputerAutomationPage() {
     setBusy("preview");
     clearPreview();
     try {
-      const data = await previewComputerAction(action, { leaseOwner });
+      const data = await runComputerControlAction("preview", () =>
+        previewComputerAction(action, { leaseOwner }),
+      );
       mergeLease(data.lease);
       applyPreview(data);
       addLog({
@@ -506,15 +579,19 @@ export default function ComputerAutomationPage() {
     clearPreview();
     setHighlightedAction(null);
     try {
-      const data = await previewComputerAction(
-        {
-          action: "click",
-          x: selectedPoint.x,
-          y: selectedPoint.y,
-          button: "left",
-          clicks: 1,
-        },
-        { leaseOwner },
+      const data = await runComputerControlAction(
+        "preview_selected_point",
+        () =>
+          previewComputerAction(
+            {
+              action: "click",
+              x: selectedPoint.x,
+              y: selectedPoint.y,
+              button: "left",
+              clicks: 1,
+            },
+            { leaseOwner },
+          ),
       );
       mergeLease(data.lease);
       applyPreview(data);
@@ -541,10 +618,12 @@ export default function ComputerAutomationPage() {
     setHighlightedAction(null);
     clearPreview();
     try {
-      const data = await planComputerActions(goal, {
-        capture: true,
-        leaseOwner,
-      });
+      const data = await runComputerControlAction("plan", () =>
+        planComputerActions(goal, {
+          capture: true,
+          leaseOwner,
+        }),
+      );
       setPlan(data);
       mergeLease(data.lease);
       if (data.screenshot) setScreenshot(data.screenshot);
@@ -587,10 +666,12 @@ export default function ComputerAutomationPage() {
     setHighlightedAction(null);
     clearPreview();
     try {
-      const data = await groundComputerActions(goal, visionOutput, {
-        capture: true,
-        leaseOwner,
-      });
+      const data = await runComputerControlAction("ground", () =>
+        groundComputerActions(goal, visionOutput, {
+          capture: true,
+          leaseOwner,
+        }),
+      );
       setPlan(data);
       mergeLease(data.lease);
       if (data.screenshot) setScreenshot(data.screenshot);
@@ -619,9 +700,11 @@ export default function ComputerAutomationPage() {
     setHighlightedAction(null);
     clearPreview();
     try {
-      const data = await askVisionModelForComputerActions(goal, visionModelId, {
-        leaseOwner,
-      });
+      const data = await runComputerControlAction("vision", () =>
+        askVisionModelForComputerActions(goal, visionModelId, {
+          leaseOwner,
+        }),
+      );
       setPlan(data);
       mergeLease(data.lease);
       if (data.screenshot) setScreenshot(data.screenshot);
@@ -714,7 +797,9 @@ export default function ComputerAutomationPage() {
     if (!preview) return;
     setBusy("execute");
     try {
-      const data = await executeComputerAction(preview.token, { leaseOwner });
+      const data = await runComputerControlAction("execute", () =>
+        executeComputerAction(preview.token, { leaseOwner }),
+      );
       mergeLease(data.lease);
       clearPreview();
       addLog({
@@ -809,7 +894,7 @@ export default function ComputerAutomationPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-[1.1fr_1.2fr_1fr]">
+            <div className="grid gap-3 lg:grid-cols-4">
               <DeviceStatePanel state={deviceState} />
               <PermissionGuardPanel
                 hasScreenshot={Boolean(screenshot?.data_url)}
@@ -820,6 +905,11 @@ export default function ComputerAutomationPage() {
                 previewSecondsLeft={previewSecondsLeft}
               />
               <CurrentActionPanel action={activeAction} />
+              <ControlSessionPanel
+                evidence={controlEvidence}
+                indicator={controlIndicator}
+                session={computerControlSession}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
@@ -1764,6 +1854,7 @@ function getActiveAction({
       preview: "生成确认",
       execute: "执行动作",
       release: "释放接管",
+      stream: "切换实时屏幕",
     };
     return {
       label: labelMap[busy] || "正在处理",
@@ -2187,6 +2278,105 @@ function CurrentActionPanel({ action }: { action: ActiveAction }) {
       <p className="mt-2 text-xs leading-5 opacity-80">{action.detail}</p>
     </div>
   );
+}
+
+function ControlSessionPanel({
+  evidence,
+  indicator,
+  session,
+}: {
+  evidence: ControlEvidence[];
+  indicator: {
+    mode: ControlIndicatorMode;
+    detail?: Record<string, unknown>;
+    updatedAt: number;
+  };
+  session: ControlSessionOptions;
+}) {
+  const toneClass = {
+    idle: "border-border bg-background/70",
+    action:
+      "border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/20 dark:text-sky-100",
+    paused:
+      "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100",
+  }[indicator.mode];
+  const action =
+    typeof indicator.detail?.action === "string"
+      ? indicator.detail.action
+      : null;
+  const latest = evidence.slice(0, 3);
+
+  return (
+    <div className={cn("rounded-2xl border p-4", toneClass)}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <ShieldCheckIcon className="size-4" />
+          控制会话 · {formatControlMode(indicator.mode)}
+        </div>
+        <span className="rounded-md border border-current/20 px-1.5 py-0.5 font-mono text-[11px]">
+          {session.surface || "surface"}
+        </span>
+      </div>
+      <div className="mt-2 grid gap-1 text-xs leading-5 opacity-85">
+        <div className="flex justify-between gap-3">
+          <span>Owner</span>
+          <span className="truncate font-medium">
+            {session.ownerLabel || "本地电脑自动化页"}
+          </span>
+        </div>
+        <div className="flex justify-between gap-3">
+          <span>Target</span>
+          <span className="truncate font-medium">
+            {session.targetId != null ? String(session.targetId) : "local-pc"}
+          </span>
+        </div>
+        <div className="flex justify-between gap-3">
+          <span>Action</span>
+          <span className="truncate font-medium">{action || "-"}</span>
+        </div>
+      </div>
+      {latest.length ? (
+        <div className="mt-3 space-y-1.5">
+          {latest.map((item) => (
+            <div
+              key={item.id || `${item.kind}-${item.at}`}
+              className="rounded-lg border border-current/15 bg-background/45 px-2 py-1.5 text-[11px] leading-4 text-foreground"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium">{item.action || item.kind}</span>
+                <span
+                  className={cn(
+                    item.ok === false
+                      ? "text-destructive"
+                      : item.ok === true
+                        ? "text-emerald-600"
+                        : "text-muted-foreground",
+                  )}
+                >
+                  {item.ok === false ? "failed" : item.ok === true ? "ok" : ""}
+                </span>
+              </div>
+              {item.summary ? (
+                <div className="mt-0.5 truncate text-muted-foreground">
+                  {item.summary}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-xs leading-5 opacity-80">
+          预演、执行、截图会沉淀为控制证据。
+        </p>
+      )}
+    </div>
+  );
+}
+
+function formatControlMode(mode: ControlIndicatorMode) {
+  if (mode === "action") return "执行中";
+  if (mode === "paused") return "暂停";
+  return "空闲";
 }
 
 // Token-TTL countdown chip. Color shifts from neutral → amber as the

@@ -1,6 +1,13 @@
 /* Implementation note. */
 
 import { swallow } from "@/core/utils/log";
+import {
+  controlInterruptionDetail,
+  runControlSessionAction,
+  type ControlIndicatorMode,
+  type ControlSessionOptions,
+  type ControlStopReason,
+} from "@/core/control-session";
 import type { OctopusElectronAPI } from "@/types/electron";
 import type { WebviewTabHandle } from "./webview-tab";
 
@@ -33,17 +40,9 @@ export interface ActionResult {
   attempt?: number;
 }
 
-export type BrowserControlIndicatorMode = "idle" | "action" | "paused";
+export type BrowserControlIndicatorMode = ControlIndicatorMode;
 
-export interface BrowserControlOptions {
-  surface?: "chrome" | "electron_webview" | "backend_preview" | "browser";
-  targetId?: string | number | null;
-  getStopped?: () => boolean;
-  setIndicator?: (
-    mode: BrowserControlIndicatorMode,
-    detail?: Record<string, unknown>,
-  ) => void | Promise<void>;
-}
+export type BrowserControlOptions = ControlSessionOptions;
 
 const ACTION_BLOCK_RE = /```action\s*\n([\s\S]*?)```/g;
 
@@ -224,7 +223,7 @@ export async function runActionWithRetry(
 
 function interruptedActionResult(
   action: AgentAction,
-  reason: string,
+  reason: ControlStopReason,
   control?: BrowserControlOptions,
 ): ActionResult {
   return {
@@ -232,10 +231,8 @@ function interruptedActionResult(
     ok: false,
     error: `browser control interrupted: ${reason}`,
     detail: {
+      ...controlInterruptionDetail(reason, control),
       code: "browser_control_interrupted",
-      reason,
-      surface: control?.surface,
-      targetId: control?.targetId,
     },
   };
 }
@@ -245,33 +242,10 @@ export async function runBrowserActionWithControl(
   run: () => Promise<ActionResult>,
   control: BrowserControlOptions = {},
 ): Promise<ActionResult> {
-  if (control.getStopped?.()) {
-    await control.setIndicator?.("paused", {
-      action: action.type,
-      reason: "operator_stop",
-    });
-    return interruptedActionResult(action, "operator_stop", control);
-  }
-  await control.setIndicator?.("action", {
-    action: action.type,
-    surface: control.surface,
-    targetId: control.targetId,
+  return runControlSessionAction(action, run, {
+    control,
+    interrupted: (reason) => interruptedActionResult(action, reason, control),
   });
-  try {
-    const result = await run();
-    if (control.getStopped?.()) {
-      await control.setIndicator?.("paused", {
-        action: action.type,
-        reason: "operator_stop",
-      });
-      return interruptedActionResult(action, "operator_stop", control);
-    }
-    return result;
-  } finally {
-    if (!control.getStopped?.()) {
-      await control.setIndicator?.("idle", { action: action.type });
-    }
-  }
 }
 
 /* Implementation note. */
