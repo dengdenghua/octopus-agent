@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import shlex
 import subprocess
 import urllib.error
 import urllib.request
@@ -681,12 +682,16 @@ def _generate_with_command(
         )
 
     output = output_dir / "reference.png"
+    # 对用户可控的文本字段进行 shell 转义,防止命令注入。
+    # prompt / agent_id / display_name 可能包含 shell 元字符(如 ; ` $ 等),
+    # 必须用 shlex.quote 包裹后再代入模板,使模板中的 "$prompt" 等占位符
+    # 在 shell 中被解释为字面字符串。output/output_dir 是受控路径,同样转义以防边界情况。
     variables = {
-        "agent_id": agent_id,
-        "display_name": display_name,
-        "prompt": prompt,
-        "output": str(output),
-        "output_dir": str(output_dir),
+        "agent_id": shlex.quote(agent_id),
+        "display_name": shlex.quote(display_name),
+        "prompt": shlex.quote(prompt),
+        "output": shlex.quote(str(output)),
+        "output_dir": shlex.quote(str(output_dir)),
     }
     command = Template(command_template).safe_substitute(variables)
     timeout = int(os.getenv("OCTOPUS_IMAGE_GEN_TIMEOUT_SECONDS") or "180")
