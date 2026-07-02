@@ -11,6 +11,7 @@ from runtime.memory.learning.review_queue import ReviewQueue
 from runtime.safety.auth import Identity, IdentityStore
 from runtime.safety.replay.browser_desktop_replay import computer_activity_replay_identity
 from runtime.sensing.gateway.computer_router import create_computer_router
+from runtime.sensing.gateway.control_sessions_router import create_control_sessions_router
 
 
 class _Rect:
@@ -320,6 +321,103 @@ def test_execute_claims_computer_lease(monkeypatch):
     assert replay["last_activity"]["event"] == "action_executed"
     assert replay["last_activity"]["proof"]["execution_proof"]["schema"] == (
         "octopus.computer_execution_proof.v1"
+    )
+
+
+def test_computer_preview_execute_writes_control_session_replay(monkeypatch, tmp_path):
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(
+        computer_skills,
+        "_mouse_move",
+        lambda **kwargs: {"moved": True, **kwargs},
+    )
+    app = FastAPI()
+    app.include_router(create_control_sessions_router())
+    app.include_router(create_computer_router())
+    client = TestClient(app)
+
+    client.post(
+        "/api/control-sessions",
+        json={
+            "session_id": "ctrl-computer-loop",
+            "surface": "computer",
+            "target_id": "local-pc",
+            "owner_id": "agent",
+            "owner_label": "Agent",
+        },
+    )
+    preview = client.post(
+        "/api/computer/actions/preview",
+        json={
+            "control_session_id": "ctrl-computer-loop",
+            "action": "move",
+            "x": 10,
+            "y": 20,
+            "lease_owner_id": "project-a",
+            "lease_owner_label": "Project A",
+        },
+    ).json()
+
+    replay_before = client.get("/api/control-sessions/ctrl-computer-loop/replay").json()
+    assert replay_before["session"]["status"] == "awaiting_confirmation"
+    assert replay_before["actions"][0]["status"] == "waiting_user"
+    assert replay_before["actions"][0]["descriptor"]["preview_token"] == preview["token"]
+
+    result = client.post(
+        "/api/computer/actions/execute",
+        json={
+            "control_session_id": "ctrl-computer-loop",
+            "token": preview["token"],
+            "lease_owner_id": "project-a",
+        },
+    ).json()
+    assert result["ok"] is True
+
+    replay_after = client.get("/api/control-sessions/ctrl-computer-loop/replay").json()
+    assert replay_after["schema"] == "octopus.control_session_replay.v1"
+    assert replay_after["actions"][0]["status"] == "done"
+    summaries = [item["summary"] for item in replay_after["evidence"]]
+    assert any("preview queued" in item for item in summaries)
+    assert "executed" in summaries
+
+
+def test_computer_ground_schema_helper_finishes_control_action(tmp_path, monkeypatch):
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    app = FastAPI()
+    app.include_router(create_control_sessions_router())
+    app.include_router(create_computer_router())
+    client = TestClient(app)
+
+    client.post(
+        "/api/control-sessions",
+        json={
+            "session_id": "ctrl-ground-helper",
+            "surface": "computer",
+            "target_id": "local-pc",
+        },
+    )
+    response = client.post(
+        "/api/computer/actions/ground",
+        json={
+            "control_session_id": "ctrl-ground-helper",
+            "goal": "click the button",
+            "capture": False,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+    replay = client.get("/api/control-sessions/ctrl-ground-helper/replay").json()
+    ground_actions = [
+        action
+        for action in replay["actions"]
+        if action["action_type"] == "computer_ground"
+    ]
+    assert ground_actions
+    assert ground_actions[0]["status"] == "done"
+    assert any(
+        evidence["summary"] == "schema helper returned"
+        for evidence in replay["evidence"]
     )
 
 

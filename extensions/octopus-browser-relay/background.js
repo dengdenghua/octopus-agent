@@ -39,6 +39,14 @@ async function apiJson(path, init) {
   return res.json().catch(() => null);
 }
 
+async function controlJson(path, body, method = "POST") {
+  return apiJson(`/api/control-sessions${path}`, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+}
+
 function nowSeconds() {
   return Date.now() / 1000;
 }
@@ -55,6 +63,91 @@ function leaseTabId(lease) {
 function leaseTabUrl(lease) {
   const tab = lease?.tab && typeof lease.tab === "object" ? lease.tab : null;
   return comparableUrl(tab?.url);
+}
+
+function controlSessionIdFor(commandOrLease, tab) {
+  const lease =
+    commandOrLease?.lease && typeof commandOrLease.lease === "object"
+      ? commandOrLease.lease
+      : commandOrLease;
+  return String(
+    commandOrLease?.control_session_id ||
+      commandOrLease?.controlSessionId ||
+      lease?.control_session_id ||
+      lease?.controlSessionId ||
+      (tab?.id ? `chrome-tab-${tab.id}` : "chrome-active-tab"),
+  );
+}
+
+function controlActionIdFor(command) {
+  return String(command?.control_action_id || command?.id || `chrome-${Date.now()}`);
+}
+
+async function ensureControlSessionForCommand(command, tab, status = "running") {
+  const sessionId = controlSessionIdFor(command, tab);
+  await controlJson("", {
+    session_id: sessionId,
+    owner_id: "chrome-extension",
+    owner_label: "Chrome Extension",
+    surface: "chrome",
+    target_id: tab?.id ? String(tab.id) : "active-tab",
+    status,
+    metadata: {
+      extension_version: EXTENSION_VERSION,
+      url: tab?.url || "",
+      title: tab?.title || "",
+      command_id: command?.id || "",
+    },
+  });
+  return sessionId;
+}
+
+async function appendControlAction(command, tab, status = "running") {
+  const sessionId = await ensureControlSessionForCommand(command, tab, status);
+  const actionId = controlActionIdFor(command);
+  const action = String(command?.action || "action");
+  await controlJson(`/${encodeURIComponent(sessionId)}/actions`, {
+    action_id: actionId,
+    action_type: action,
+    status,
+    surface: "chrome",
+    target_id: tab?.id ? String(tab.id) : "active-tab",
+    descriptor: {
+      type: action,
+      params: command?.params || {},
+      command_id: command?.id || "",
+      url: tab?.url || "",
+      title: tab?.title || "",
+    },
+  });
+  return { sessionId, actionId };
+}
+
+async function updateControlAction(command, tab, status, result = {}, error = "") {
+  const sessionId = controlSessionIdFor(command, tab);
+  const actionId = controlActionIdFor(command);
+  await controlJson(
+    `/${encodeURIComponent(sessionId)}/actions/${encodeURIComponent(actionId)}`,
+    { status, result, error },
+    "PATCH",
+  );
+}
+
+async function appendControlEvidence(sessionId, evidence) {
+  await controlJson(`/${encodeURIComponent(sessionId)}/evidence`, evidence);
+}
+
+async function finishControlAction(command, tab, control, action, result) {
+  await updateControlAction(command, tab, "done", result);
+  await appendControlEvidence(control.sessionId, {
+    action_id: control.actionId,
+    kind: action === "screenshot" ? "screenshot" : "result",
+    action,
+    ok: true,
+    summary: "completed",
+    detail: result,
+  });
+  return result;
 }
 
 function commandInterruptedError(reason, detail = {}) {
@@ -91,15 +184,35 @@ function recordHumanActivity(tabId, activity = {}) {
 }
 
 async function reportControlEvent(event) {
+  const tab = await activeTabInfo();
   await apiFetch("/api/browser/relay/heartbeat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       extension_version: EXTENSION_VERSION,
-      active_tab: await activeTabInfo(),
+      active_tab: tab,
       control_event: event,
     }),
   });
+  if (event?.lease) {
+    const sessionId = controlSessionIdFor(event.lease, tab);
+    await controlJson(`/${encodeURIComponent(sessionId)}/takeover`, {
+      reason: String(event.reason || event.type || "human_interrupt"),
+      owner_id: "human",
+      owner_label: "Human operator",
+      metadata: {
+        source: event.source || "chrome_extension",
+        activity: event.activity || {},
+      },
+    });
+    await appendControlEvidence(sessionId, {
+      kind: "lease",
+      action: "chrome_human_interrupt",
+      ok: false,
+      summary: String(event.reason || "human interrupt"),
+      detail: event,
+    });
+  }
 }
 
 async function relayControl(action, reason = "") {
@@ -360,6 +473,7 @@ async function executeCommand(command) {
   const tabId = tab.id;
   const action = command.action;
   const params = command.params || {};
+  const control = await appendControlAction(command, tab, "running");
 
   activeLease = lease;
   try {
@@ -383,17 +497,38 @@ async function executeCommand(command) {
       await waitForTabComplete(tabId);
     } else if (action === "screenshot") {
       const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
-      return { ok: true, dataUrl };
+      return finishControlAction(command, tab, control, action, { ok: true, dataUrl });
     } else {
       const domResult = await runInTab(tabId, runDomAction, [action, params]);
       if (domResult && action !== "extract" && action !== "aria") {
         await new Promise((resolve) => setTimeout(resolve, 150));
       }
-      if (domResult && (action === "extract" || action === "aria")) return domResult;
+      if (domResult && (action === "extract" || action === "aria")) {
+        return finishControlAction(command, tab, control, action, domResult);
+      }
     }
 
     const next = await chrome.tabs.get(tabId);
-    return { ok: true, url: next.url || "", title: next.title || "" };
+    const result = { ok: true, url: next.url || "", title: next.title || "" };
+    return finishControlAction(command, next, control, action, result);
+  } catch (error) {
+    const detail = {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+      code: error?.code || "",
+      reason: error?.reason || "",
+      detail: error?.detail || {},
+    };
+    await updateControlAction(command, tab, "failed", detail, detail.error);
+    await appendControlEvidence(control.sessionId, {
+      action_id: control.actionId,
+      kind: "result",
+      action,
+      ok: false,
+      summary: detail.error,
+      detail,
+    });
+    throw error;
   } finally {
     activeLease = null;
     await setPageControlIndicator(tabId, "idle", {

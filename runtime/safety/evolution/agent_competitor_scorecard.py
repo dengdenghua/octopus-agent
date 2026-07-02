@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from runtime.safety.evolution.agent_benchmark import compute_agent_benchmark
 from runtime.platform.process.paths import project_root as default_project_root
 from runtime.safety.evolution.codex_gap import compute_codex_gap_report
 from runtime.safety.evolution.ecosystem_readiness import compute_ecosystem_readiness
@@ -311,6 +312,7 @@ def compute_agent_competitor_scorecard(
     gap_report = compute_codex_gap_report(root=base)
     ecosystem_readiness = compute_ecosystem_readiness(root=base)
     parity_certification = compute_parity_certification(root=base)
+    agent_benchmark = compute_agent_benchmark(root=base)
     evidence_by_id = {
         str(item.get("id")): item
         for item in gap_report.get("capabilities", [])
@@ -418,6 +420,14 @@ def compute_agent_competitor_scorecard(
         "next_focus": _next_focus(focus_gaps),
         "ecosystem_readiness": ecosystem_readiness,
         "parity_certification": parity_certification,
+        "agent_benchmark": {
+            "schema": agent_benchmark.get("schema"),
+            "score": agent_benchmark.get("score"),
+            "passed": agent_benchmark.get("passed"),
+            "total": agent_benchmark.get("total"),
+            "ready": agent_benchmark.get("ready"),
+            "by_dimension": agent_benchmark.get("by_dimension", {}),
+        },
         "codex_gap": {
             "schema": gap_report.get("schema"),
             "combined_score": gap_report.get("combined_score"),

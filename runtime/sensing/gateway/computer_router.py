@@ -19,6 +19,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from runtime.execution.suckers import computer_skills, computer_uia_skills
+from runtime.memory.control_sessions import ControlSessionStore
 from runtime.memory.learning.review_queue import ReviewQueue
 from runtime.platform.process.paths import app_paths
 from runtime.safety.replay.browser_desktop_replay import computer_activity_replay_identity
@@ -71,6 +72,117 @@ def create_computer_router(
     lease: dict[str, Any] = {}
     activity: list[dict[str, Any]] = []
     screenshot_root = Path("data/computer_automation/screenshots").resolve()
+    control_sessions = ControlSessionStore()
+
+    def _control_session_id(body: dict[str, Any] | None) -> str:
+        if not isinstance(body, dict):
+            return ""
+        return str(body.get("control_session_id") or body.get("controlSessionId") or "").strip()
+
+    def _ensure_control_session(
+        body: dict[str, Any] | None,
+        owner: dict[str, str] | None = None,
+        *,
+        status: str = "idle",
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        session_id = _control_session_id(body)
+        if not session_id:
+            return ""
+        owner = owner or _lease_from_body(body)
+        try:
+            if control_sessions.get_session(session_id) is not None:
+                return session_id
+            control_sessions.upsert_session(
+                session_id=session_id,
+                owner_id=str(owner.get("owner_id") or "computer-agent"),
+                owner_label=str(owner.get("owner_label") or "Computer Agent"),
+                surface="computer",
+                target_id="local-pc",
+                status=status,
+                metadata={
+                    "source": "computer_router",
+                    **(metadata or {}),
+                },
+            )
+        except Exception:  # noqa: BLE001 - control evidence must not block the safe preview chain
+            return ""
+        return session_id
+
+    def _record_control_action(
+        body: dict[str, Any] | None,
+        *,
+        action_id: str | None = None,
+        action_type: str,
+        descriptor: dict[str, Any],
+        status: str = "queued",
+        owner: dict[str, str] | None = None,
+    ) -> str:
+        session_id = _ensure_control_session(body, owner, status="running")
+        if not session_id:
+            return ""
+        try:
+            action = control_sessions.append_action(
+                session_id,
+                action_id=action_id,
+                action_type=action_type,
+                descriptor=descriptor,
+                status=status,
+                surface="computer",
+                target_id="local-pc",
+            )
+            return str(action.get("action_id") or "")
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def _update_control_action(
+        body: dict[str, Any] | None,
+        action_id: str,
+        *,
+        status: str,
+        result: dict[str, Any] | None = None,
+        error: str = "",
+    ) -> None:
+        session_id = _control_session_id(body)
+        if not session_id or not action_id:
+            return
+        try:
+            control_sessions.update_action(
+                session_id,
+                action_id,
+                status=status,
+                result=result or {},
+                error=error,
+            )
+        except Exception:  # noqa: BLE001
+            return
+
+    def _record_control_evidence(
+        body: dict[str, Any] | None,
+        *,
+        action_id: str = "",
+        kind: str,
+        action: str,
+        ok: bool | None = None,
+        summary: str = "",
+        detail: dict[str, Any] | None = None,
+        owner: dict[str, str] | None = None,
+    ) -> None:
+        session_id = _ensure_control_session(body, owner)
+        if not session_id:
+            return
+        try:
+            control_sessions.append_evidence(
+                session_id,
+                action_id=action_id,
+                kind=kind,
+                action=action,
+                ok=ok,
+                summary=summary,
+                detail=detail or {},
+            )
+        except Exception:  # noqa: BLE001
+            return
 
     def _cleanup_pending() -> None:
         now = time.time()
@@ -1172,6 +1284,14 @@ def create_computer_router(
     @router.post("/screenshot")
     def screenshot(body: dict[str, Any] | None = None) -> dict[str, Any]:
         body = body or {}
+        owner = _lease_from_body(body)
+        control_action_id = _record_control_action(
+            body,
+            action_type="computer_observe",
+            descriptor={"type": "screenshot", "region": body.get("region")},
+            status="running",
+            owner=owner,
+        )
         screenshot_root.mkdir(parents=True, exist_ok=True)
         shot_path = screenshot_root / f"{int(time.time())}_{uuid.uuid4().hex[:8]}.png"
         region = body.get("region")
@@ -1181,9 +1301,26 @@ def create_computer_router(
             region=region if isinstance(region, list) else None,
         )
         if "error" in result:
+            _update_control_action(
+                body,
+                control_action_id,
+                status="failed",
+                result=result,
+                error=str(result.get("error") or ""),
+            )
+            _record_control_evidence(
+                body,
+                action_id=control_action_id,
+                kind="screenshot",
+                action="computer_observe",
+                ok=False,
+                summary=str(result.get("error") or "screenshot failed"),
+                detail=result,
+                owner=owner,
+            )
             return {"ok": False, "error": result["error"]}
         data = shot_path.read_bytes()
-        return {
+        payload = {
             "ok": True,
             "path": str(shot_path),
             "size_bytes": len(data),
@@ -1191,6 +1328,27 @@ def create_computer_router(
             + base64.standard_b64encode(data).decode("ascii"),
             "created_at": time.time(),
         }
+        _update_control_action(
+            body,
+            control_action_id,
+            status="done",
+            result={key: value for key, value in payload.items() if key != "data_url"},
+        )
+        _record_control_evidence(
+            body,
+            action_id=control_action_id,
+            kind="screenshot",
+            action="computer_observe",
+            ok=True,
+            summary=f"{len(data)} bytes",
+            detail={
+                "path": str(shot_path),
+                "size_bytes": len(data),
+                "created_at": payload["created_at"],
+            },
+            owner=owner,
+        )
+        return payload
 
     @router.get("/uia/status")
     def uia_status() -> dict[str, Any]:
@@ -1238,6 +1396,34 @@ def create_computer_router(
         owner = _lease_from_body(body)
         action = _normalize_action(body)
         preview = _queue_preview(action, owner)
+        control_action_id = _record_control_action(
+            body,
+            action_id=str(body.get("control_action_id") or f"computer-preview-{preview['token']}"),
+            action_type=str(action.get("action") or "computer_action"),
+            descriptor={
+                "type": "computer_preview",
+                "action": action,
+                "risk": preview["risk"],
+                "preview_token": preview["token"],
+                "preview_contract": preview["preview_contract"],
+            },
+            status="waiting_user",
+            owner=owner,
+        )
+        _record_control_evidence(
+            body,
+            action_id=control_action_id,
+            kind="action",
+            action=str(action.get("action") or "computer_preview"),
+            ok=True,
+            summary=f"preview queued · {preview['risk']['level']}",
+            detail={
+                "token": preview["token"],
+                "risk": preview["risk"],
+                "preview_contract": preview["preview_contract"],
+            },
+            owner=owner,
+        )
         _record_activity(
             "preview_queued",
             action=action,
@@ -1261,9 +1447,16 @@ def create_computer_router(
         owner = _lease_from_body(body)
         goal = str(body.get("goal") or "")
         capture = bool(body.get("capture", True))
+        control_action_id = _record_control_action(
+            body,
+            action_type="computer_plan",
+            descriptor={"type": "computer_plan", "goal": goal, "capture": capture},
+            status="running",
+            owner=owner,
+        )
         screenshot_data: dict[str, Any] | None = None
         if capture:
-            screenshot_data = screenshot({})
+            screenshot_data = screenshot({**body, "control_action_id": f"{control_action_id}:screenshot"})
 
         suggestions = []
         for idx, action in enumerate(_plan_actions(goal), start=1):
@@ -1274,6 +1467,20 @@ def create_computer_router(
                 "rationale": "Heuristic next action based on the task text and current screen observation.",
                 **preview,
             })
+            _record_control_action(
+                body,
+                action_id=f"computer-preview-{preview['token']}",
+                action_type=str(action.get("action") or "computer_action"),
+                descriptor={
+                    "type": "computer_preview",
+                    "goal": goal,
+                    "action": action,
+                    "risk": preview["risk"],
+                    "preview_token": preview["token"],
+                },
+                status="waiting_user",
+                owner=owner,
+            )
         _record_activity(
             "plan_created",
             detail={
@@ -1282,8 +1489,7 @@ def create_computer_router(
                 "capture": capture,
             },
         )
-
-        return {
+        payload = {
             "ok": True,
             "goal": goal,
             "screenshot": screenshot_data,
@@ -1296,6 +1502,35 @@ def create_computer_router(
                 "Every suggested action still requires explicit user confirmation before execution.",
             ],
         }
+        _update_control_action(
+            body,
+            control_action_id,
+            status="done",
+            result={"suggestion_count": len(suggestions), "mode": payload["mode"]},
+        )
+        _record_control_evidence(
+            body,
+            action_id=control_action_id,
+            kind="result",
+            action="computer_plan",
+            ok=True,
+            summary=f"{len(suggestions)} suggestion(s)",
+            detail={
+                "goal": goal,
+                "suggestions": [
+                    {
+                        "id": item.get("id"),
+                        "title": item.get("title"),
+                        "action": item.get("action"),
+                        "risk": item.get("risk"),
+                        "token": item.get("token"),
+                    }
+                    for item in suggestions
+                ],
+            },
+            owner=owner,
+        )
+        return payload
 
     @router.post("/actions/ground")
     def ground_actions(body: dict[str, Any]) -> dict[str, Any]:
@@ -1304,11 +1539,34 @@ def create_computer_router(
         goal = str(body.get("goal") or "")
         output = body.get("output")
         capture = bool(body.get("capture", True))
+        control_action_id = _record_control_action(
+            body,
+            action_type="computer_ground",
+            descriptor={"type": "computer_ground", "goal": goal, "capture": capture},
+            status="running",
+            owner=owner,
+        )
         screenshot_data: dict[str, Any] | None = None
         if capture:
-            screenshot_data = screenshot({})
+            screenshot_data = screenshot({**body, "control_action_id": f"{control_action_id}:screenshot"})
 
         if output is None:
+            _update_control_action(
+                body,
+                control_action_id,
+                status="done",
+                result={"suggestion_count": 0, "mode": "vision-output-adapter"},
+            )
+            _record_control_evidence(
+                body,
+                action_id=control_action_id,
+                kind="result",
+                action="computer_ground",
+                ok=True,
+                summary="schema helper returned",
+                detail={"goal": goal, "suggestion_count": 0},
+                owner=owner,
+            )
             return {
                 "ok": True,
                 "goal": goal,
@@ -1340,12 +1598,26 @@ def create_computer_router(
                 "rationale": "Validated action parsed from vision model output.",
                 **preview,
             })
+            _record_control_action(
+                body,
+                action_id=f"computer-preview-{preview['token']}",
+                action_type=str(action.get("action") or "computer_action"),
+                descriptor={
+                    "type": "computer_preview",
+                    "goal": goal,
+                    "action": action,
+                    "risk": preview["risk"],
+                    "preview_token": preview["token"],
+                    "source": "ground",
+                },
+                status="waiting_user",
+                owner=owner,
+            )
         _record_activity(
             "grounded_actions_created",
             detail={"goal": goal, "suggestion_count": len(suggestions)},
         )
-
-        return {
+        payload = {
             "ok": True,
             "goal": goal,
             "screenshot": screenshot_data,
@@ -1357,6 +1629,23 @@ def create_computer_router(
                 "Every parsed action still requires explicit user confirmation.",
             ],
         }
+        _update_control_action(
+            body,
+            control_action_id,
+            status="done",
+            result={"suggestion_count": len(suggestions), "mode": payload["mode"]},
+        )
+        _record_control_evidence(
+            body,
+            action_id=control_action_id,
+            kind="result",
+            action="computer_ground",
+            ok=True,
+            summary=f"{len(suggestions)} grounded action(s)",
+            detail={"goal": goal, "suggestion_count": len(suggestions)},
+            owner=owner,
+        )
+        return payload
 
     @router.post("/actions/vision")
     def vision_actions(body: dict[str, Any]) -> dict[str, Any]:
@@ -1364,9 +1653,23 @@ def create_computer_router(
         owner = _lease_from_body(body)
         goal = str(body.get("goal") or "")
         model_id = str(body.get("model_id") or "")
+        control_action_id = _record_control_action(
+            body,
+            action_type="computer_vision",
+            descriptor={"type": "computer_vision", "goal": goal, "model_id": model_id},
+            status="running",
+            owner=owner,
+        )
         config = _vision_model_config(model_id)
-        screenshot_data = screenshot({})
+        screenshot_data = screenshot({**body, "control_action_id": f"{control_action_id}:screenshot"})
         if not screenshot_data.get("ok"):
+            _update_control_action(
+                body,
+                control_action_id,
+                status="failed",
+                result={"screenshot": screenshot_data},
+                error=str(screenshot_data.get("error") or "screenshot failed"),
+            )
             return {
                 "ok": False,
                 "goal": goal,
@@ -1377,6 +1680,13 @@ def create_computer_router(
                 "error": screenshot_data.get("error") or "screenshot failed",
             }
         if not config:
+            _update_control_action(
+                body,
+                control_action_id,
+                status="failed",
+                result={"screenshot": screenshot_data},
+                error="vision model not configured",
+            )
             return {
                 "ok": False,
                 "goal": goal,
@@ -1402,6 +1712,21 @@ def create_computer_router(
                 "rationale": "Grounded action returned by the configured vision model.",
                 **preview,
             })
+            _record_control_action(
+                body,
+                action_id=f"computer-preview-{preview['token']}",
+                action_type=str(action.get("action") or "computer_action"),
+                descriptor={
+                    "type": "computer_preview",
+                    "goal": goal,
+                    "action": action,
+                    "risk": preview["risk"],
+                    "preview_token": preview["token"],
+                    "source": "vision",
+                },
+                status="waiting_user",
+                owner=owner,
+            )
         _record_activity(
             "vision_actions_created",
             detail={
@@ -1410,7 +1735,7 @@ def create_computer_router(
                 "suggestion_count": len(suggestions),
             },
         )
-        return {
+        payload = {
             "ok": True,
             "goal": goal,
             "model_id": str(config.get("id") or model_id),
@@ -1424,11 +1749,30 @@ def create_computer_router(
                 "Returned actions are validated and require explicit user confirmation.",
             ],
         }
+        _update_control_action(
+            body,
+            control_action_id,
+            status="done",
+            result={"suggestion_count": len(suggestions), "mode": payload["mode"]},
+        )
+        _record_control_evidence(
+            body,
+            action_id=control_action_id,
+            kind="result",
+            action="computer_vision",
+            ok=True,
+            summary=f"{len(suggestions)} vision action(s)",
+            detail={"goal": goal, "model_id": str(config.get("id") or model_id)},
+            owner=owner,
+        )
+        return payload
 
     @router.post("/actions/execute")
     def execute_action(body: dict[str, Any]) -> dict[str, Any]:
         _cleanup_pending()
         token = str(body.get("token") or "")
+        control_action_id = str(body.get("control_action_id") or f"computer-preview-{token}")
+        _update_control_action(body, control_action_id, status="running")
         item = pending.pop(token, None)
         if not item:
             diagnostic = _computer_diagnostic(
@@ -1444,6 +1788,22 @@ def create_computer_router(
                 token=token,
                 error="preview token not found or expired",
                 detail={"diagnostic": diagnostic},
+            )
+            _update_control_action(
+                body,
+                control_action_id,
+                status="failed",
+                result={"diagnostic": diagnostic},
+                error="preview token not found or expired",
+            )
+            _record_control_evidence(
+                body,
+                action_id=control_action_id,
+                kind="result",
+                action="computer_execute",
+                ok=False,
+                summary="preview token not found or expired",
+                detail={"diagnostic": diagnostic, "token_present": bool(token)},
             )
             raise HTTPException(
                 status_code=404,
@@ -1484,6 +1844,23 @@ def create_computer_router(
                         "requested_owner": body_owner,
                         "diagnostic": diagnostic,
                     },
+                )
+                _update_control_action(
+                    body,
+                    control_action_id,
+                    status="failed",
+                    result={"diagnostic": diagnostic},
+                    error="preview token belongs to another operator",
+                )
+                _record_control_evidence(
+                    body,
+                    action_id=control_action_id,
+                    kind="result",
+                    action="computer_execute",
+                    ok=False,
+                    summary="preview owner mismatch",
+                    detail={"diagnostic": diagnostic},
+                    owner=body_owner,
                 )
                 raise HTTPException(
                     status_code=409,
@@ -1546,7 +1923,7 @@ def create_computer_router(
         assertion_queue = None
         if replay_assertion.get("ok") is False:
             assertion_queue = _queue_uia_replay_assertion(action, replay_assertion)
-        return {
+        payload = {
             "ok": ok,
             "action": action,
             "risk": item["risk"],
@@ -1560,12 +1937,50 @@ def create_computer_router(
             **({"recommended_actions": [diagnostic["recommended_action"]]} if diagnostic else {}),
             **({"replay_evidence": _computer_replay_evidence()} if not ok else {}),
         }
+        _update_control_action(
+            body,
+            control_action_id,
+            status="done" if ok else "failed",
+            result={
+                "result": result,
+                "execution_proof_id": execution_proof.get("proof_id"),
+                **({"diagnostic": diagnostic} if diagnostic else {}),
+            },
+            error=str(result.get("error") or ""),
+        )
+        _record_control_evidence(
+            body,
+            action_id=control_action_id,
+            kind="result",
+            action="computer_execute",
+            ok=ok,
+            summary="executed" if ok else str(result.get("error") or "execute failed"),
+            detail={
+                "action": action,
+                "risk": item["risk"],
+                "result": result,
+                "preview_contract": preview_contract,
+                "execution_proof": execution_proof,
+            },
+            owner=owner,
+        )
+        return payload
 
     @router.post("/lease/release")
     def release_lease(body: dict[str, Any] | None = None) -> dict[str, Any]:
         owner = _lease_from_body(body)
         force = bool((body or {}).get("force", False))
         lease_state = _release_lease(owner, force=force)
+        _ensure_control_session(body, owner)
+        _record_control_evidence(
+            body,
+            kind="lease",
+            action="computer_lease_release",
+            ok=True,
+            summary="lease released",
+            detail={"lease": lease_state, "force": force},
+            owner=owner,
+        )
         _record_activity(
             "lease_released",
             lease_state=lease_state,

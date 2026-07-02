@@ -95,7 +95,7 @@ type DesktopBackdropId =
   | "theme-focus"
   | "theme-clear"
   | "wallpaper-sky"
-  | "wallpaper-aurora"
+  | "wallpaper-clear-sky"
   | "wallpaper-forest"
   | "wallpaper-ember";
 
@@ -510,11 +510,11 @@ const DESKTOP_BACKDROPS: Record<
       "bg-[radial-gradient(circle_at_22%_14%,rgba(219,234,254,0.92),transparent_26%),radial-gradient(circle_at_72%_16%,rgba(103,232,249,0.44),transparent_28%),linear-gradient(145deg,#60a5fa_0%,#93c5fd_45%,#f8fafc_100%)]",
     swatchClassName: "bg-gradient-to-br from-sky-300 via-blue-300 to-white",
   },
-  "wallpaper-aurora": {
-    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/aurora-lab.png`,
+  "wallpaper-clear-sky": {
+    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/clear-productivity.png`,
     className:
-      "bg-[radial-gradient(circle_at_20%_12%,rgba(52,211,153,0.64),transparent_30%),radial-gradient(circle_at_76%_22%,rgba(129,140,248,0.62),transparent_34%),radial-gradient(circle_at_64%_84%,rgba(244,114,182,0.42),transparent_30%),linear-gradient(145deg,#0f766e_0%,#334155_46%,#581c87_100%)]",
-    swatchClassName: "bg-gradient-to-br from-emerald-300 via-indigo-400 to-fuchsia-400",
+      "bg-[radial-gradient(circle_at_24%_16%,rgba(219,234,254,0.72),transparent_30%),radial-gradient(circle_at_76%_28%,rgba(226,232,240,0.52),transparent_32%),linear-gradient(145deg,#dbeafe_0%,#f8fafc_52%,#e0f2fe_100%)]",
+    swatchClassName: "bg-gradient-to-br from-blue-100 via-white to-sky-200",
   },
   "wallpaper-forest": {
     imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/forest-calm.png`,
@@ -549,7 +549,7 @@ const DESKTOP_THEME_BACKDROPS: DesktopBackdropId[] = [
 ];
 const DESKTOP_WALLPAPER_BACKDROPS: DesktopBackdropId[] = [
   "wallpaper-sky",
-  "wallpaper-aurora",
+  "wallpaper-clear-sky",
   "wallpaper-forest",
   "wallpaper-ember",
 ];

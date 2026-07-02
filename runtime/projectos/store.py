@@ -366,6 +366,20 @@ class ProjectStore:
         except ValueError:
             return None
 
+    def thread_for_project(self, project_id: str) -> str | None:
+        project = _require_id(project_id, label="project_id")
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                "SELECT thread_id FROM thread_projects WHERE project_id=?",
+                (project,),
+            ).fetchone()
+        if not row:
+            return None
+        try:
+            return _require_id(row[0], label="thread_id")
+        except ValueError:
+            return None
+
     # ── milestones ───────────────────────────────────────────────────────────
     def save_milestone(
         self,

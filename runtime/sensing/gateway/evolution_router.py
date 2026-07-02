@@ -120,6 +120,17 @@ def create_evolution_router() -> Any:
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
+    @router.get("/agent-benchmark")
+    def get_agent_benchmark() -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.agent_benchmark import (
+                compute_agent_benchmark,
+            )
+
+            return {"ok": True, **compute_agent_benchmark()}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
     @router.get("/e2e-surpass-certification")
     def get_e2e_surpass_certification(
         target_score: int = Query(default=95, ge=1, le=100),

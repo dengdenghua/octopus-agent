@@ -256,6 +256,9 @@ export function CopilotPanel({ webviewHandle }: Props) {
 
   const buildBrowserControl = useCallback(
     (loopTabId: string | null): BrowserControlOptions => ({
+      sessionId: `browser-${loopTabId || "active"}`,
+      ownerId: "browser-copilot",
+      ownerLabel: "Browser Copilot",
       surface: window.octopus?.isElectron
         ? "electron_webview"
         : "backend_preview",

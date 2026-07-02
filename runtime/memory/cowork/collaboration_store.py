@@ -26,7 +26,17 @@ from runtime.memory.cowork.ids import (
 
 _MAX_JSON_BYTES = 512 * 1024
 _MAX_LIST_ITEMS = 512
-_TASK_STATUSES = frozenset({"pending", "running", "done", "failed", "cancelled"})
+_TASK_KINDS = frozenset({"async", "team", "project"})
+_TASK_STATUSES = frozenset({
+    "pending",
+    "ready",
+    "running",
+    "blocked",
+    "done",
+    "failed",
+    "cancelled",
+    "rejected",
+})
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS collaboration_rooms (
@@ -134,6 +144,11 @@ def _normalize_task_payload(
     payload = _normalize_json_dict(payload, label="task")
     payload["id"] = task_id
     payload["room_id"] = room_id
+    kind = str(payload.get("kind") or "").strip().lower()
+    if not kind:
+        source = str((payload.get("metadata") or {}).get("source") if isinstance(payload.get("metadata"), dict) else "")
+        kind = "project" if source.startswith("projectos") else "team"
+    payload["kind"] = kind if kind in _TASK_KINDS else "team"
     status = str(payload.get("status") or "pending").strip().lower()
     payload["status"] = status if status in _TASK_STATUSES else "pending"
     if "title" in payload:
@@ -148,6 +163,15 @@ def _normalize_task_payload(
         payload["assignees"] = _compact_dict_list(payload.get("assignees"))
     if "produced_artifacts" in payload:
         payload["produced_artifacts"] = _compact_dict_list(payload.get("produced_artifacts"))
+    if "artifacts" in payload:
+        payload["artifacts"] = _compact_dict_list(payload.get("artifacts"))
+    elif payload.get("produced_artifacts"):
+        payload["artifacts"] = _compact_dict_list(payload.get("produced_artifacts"))
+    if "lease" in payload:
+        payload["lease"] = _normalize_json_dict(payload.get("lease"), label="task lease")
+    for key in ("project_id", "milestone_id", "parent_task_id"):
+        if key in payload:
+            payload[key] = optional_cowork_id(payload.get(key), label=key) or ""
     metadata = payload.get("metadata")
     if not isinstance(metadata, dict):
         metadata = {}
@@ -332,6 +356,43 @@ class CollaborationStore:
         payload = dict(task or {})
         payload.setdefault("room_id", room_id)
         return self.upsert_task(session_id, payload)
+
+    def upsert_project_task(
+        self,
+        *,
+        session_id: str,
+        room_id: str,
+        project_id: str,
+        milestone_id: str,
+        task: dict[str, Any],
+    ) -> dict[str, Any]:
+        payload = dict(task or {})
+        payload["kind"] = "project"
+        payload["room_id"] = room_id
+        payload["project_id"] = project_id
+        payload["milestone_id"] = milestone_id
+        metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+        payload["metadata"] = {
+            **metadata,
+            "source": "projectos",
+            "project_id": project_id,
+            "milestone_id": milestone_id,
+        }
+        return self.upsert_task(session_id, payload)
+
+    def project_tasks_for_project(self, project_id: str) -> list[dict[str, Any]]:
+        if not project_id:
+            return []
+        project_id = require_cowork_id(project_id, label="project_id")
+        with self._lock, self._connect() as conn:
+            rows = conn.execute(
+                "SELECT task_json FROM collaboration_tasks "
+                "WHERE json_extract(task_json, '$.kind') = 'project' "
+                "AND json_extract(task_json, '$.project_id') = ? "
+                "ORDER BY updated_at DESC, created_at DESC",
+                (project_id,),
+            ).fetchall()
+        return [item for row in rows if (item := _load(row[0])) is not None]
 
     def delete_task(self, task_id: str) -> bool:
         if not task_id:

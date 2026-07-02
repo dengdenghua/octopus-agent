@@ -230,10 +230,39 @@ def _run_probes(
     timeout_s: float,
     baseline: ProviderCapabilities,
 ) -> ProviderCapabilities:
-    """Run the three canary probes and merge results with ``baseline``."""
+    """Run canary probes and merge results with ``baseline``."""
     streaming = _probe_streaming(router, model=model, timeout_s=timeout_s)
     tool_use = _probe_tool_use(router, model=model, timeout_s=timeout_s)
     vision = _probe_vision(router, model=model, timeout_s=timeout_s)
+    structured_output = _probe_structured_output(router, model=model, timeout_s=timeout_s)
+    system_prompt = _probe_system_prompt(router, model=model, timeout_s=timeout_s)
+    reasoning_effort = _probe_reasoning_effort(router, model=model, timeout_s=timeout_s)
+    unsupported_fields = sorted(
+        {
+            field
+            for field, value in {
+                "streaming": streaming,
+                "tool_use": tool_use,
+                "vision": vision,
+                "json_schema": structured_output,
+                "system_prompt": system_prompt,
+                "reasoning_effort": reasoning_effort,
+            }.items()
+            if value is False
+        }
+    )
+    extra = dict(baseline.extra)
+    extra["capability_probe"] = {
+        "schema": "octopus.provider_capability_probe.v1",
+        "model": model,
+        "streaming": streaming,
+        "tool_use": tool_use,
+        "vision": vision,
+        "json_schema": structured_output,
+        "system_prompt": system_prompt,
+        "reasoning_effort": reasoning_effort,
+        "unsupported_fields": unsupported_fields,
+    }
 
     return ProviderCapabilities(
         supports_streaming=streaming if streaming is not None else baseline.supports_streaming,
@@ -241,16 +270,29 @@ def _run_probes(
         supports_vision=vision if vision is not None else baseline.supports_vision,
         # Non-probed caps inherit from static declaration.
         supports_prompt_cache=baseline.supports_prompt_cache,
-        supports_structured_output=baseline.supports_structured_output,
+        supports_structured_output=(
+            structured_output
+            if structured_output is not None
+            else baseline.supports_structured_output
+        ),
         default_model=baseline.default_model or model,
         pricing_hint=baseline.pricing_hint,
-        extra=dict(baseline.extra),
+        extra=extra,
     )
 
 
 def _probe_streaming(router: Any, *, model: str, timeout_s: float) -> bool | None:
     """Return True if the router can stream, False if not, None on error."""
     stream_fn = getattr(router, "stream", None)
+    stream_label = "stream"
+    if stream_fn is None:
+        from .models import ModelRouter
+
+        call_stream_fn = getattr(router, "call_stream", None)
+        call_stream_impl = getattr(type(router), "call_stream", None)
+        if call_stream_fn is not None and call_stream_impl is not ModelRouter.call_stream:
+            stream_fn = call_stream_fn
+            stream_label = "call_stream"
     if stream_fn is None:
         return False
     try:
@@ -269,7 +311,12 @@ def _probe_streaming(router: Any, *, model: str, timeout_s: float) -> bool | Non
     except NotImplementedError:
         return False
     except Exception as exc:  # noqa: BLE001
-        _LOG.debug("streaming probe failed for %s: %s", type(router).__name__, exc)
+        _LOG.debug(
+            "%s probe failed for %s: %s",
+            stream_label,
+            type(router).__name__,
+            exc,
+        )
         return None
 
 
@@ -341,6 +388,95 @@ def _probe_vision(router: Any, *, model: str, timeout_s: float) -> bool | None:
         return False
     except Exception as exc:  # noqa: BLE001
         _LOG.debug("vision probe failed for %s: %s", type(router).__name__, exc)
+        return None
+
+
+def _probe_structured_output(router: Any, *, model: str, timeout_s: float) -> bool | None:
+    """Return True if the provider can follow a minimal JSON schema canary."""
+    call_fn = getattr(router, "call", None)
+    if call_fn is None:
+        return None
+    try:
+        from .models import Message, ModelRequest
+
+        req = ModelRequest(
+            model=model or "probe",
+            messages=[
+                Message(
+                    role="user",
+                    content=(
+                        "Return exactly one minified JSON object matching this schema: "
+                        '{"ok": boolean}. Use {"ok": true}.'
+                    ),
+                )
+            ],
+            max_tokens=16,
+            temperature=0.0,
+        )
+        response = call_fn(req)
+        text = str(getattr(response, "text", "") or "").strip()
+        parsed = json.loads(text)
+        return isinstance(parsed, dict) and isinstance(parsed.get("ok"), bool)
+    except NotImplementedError:
+        return False
+    except json.JSONDecodeError:
+        return False
+    except Exception as exc:  # noqa: BLE001
+        _LOG.debug("structured output probe failed for %s: %s", type(router).__name__, exc)
+        return None
+
+
+def _probe_system_prompt(router: Any, *, model: str, timeout_s: float) -> bool | None:
+    """Return True if a system-role message is accepted."""
+    call_fn = getattr(router, "call", None)
+    if call_fn is None:
+        return None
+    try:
+        from .models import Message, ModelRequest
+
+        req = ModelRequest(
+            model=model or "probe",
+            messages=[
+                Message(role="system", content="You are a probe. Reply with ok."),
+                Message(role="user", content="ping"),
+            ],
+            max_tokens=4,
+        )
+        call_fn(req)
+        return True
+    except NotImplementedError:
+        return False
+    except Exception as exc:  # noqa: BLE001
+        message = str(exc).lower()
+        if "system" in message and ("unsupported" in message or "not support" in message):
+            return False
+        _LOG.debug("system prompt probe failed for %s: %s", type(router).__name__, exc)
+        return None
+
+
+def _probe_reasoning_effort(router: Any, *, model: str, timeout_s: float) -> bool | None:
+    """Return True if the router accepts the reasoning_effort request field."""
+    call_fn = getattr(router, "call", None)
+    if call_fn is None:
+        return None
+    try:
+        from .models import Message, ModelRequest
+
+        req = ModelRequest(
+            model=model or "probe",
+            messages=[Message(role="user", content="ping")],
+            max_tokens=2048,
+            reasoning_effort="low",
+        )
+        call_fn(req)
+        return True
+    except NotImplementedError:
+        return False
+    except Exception as exc:  # noqa: BLE001
+        message = str(exc).lower()
+        if "reasoning" in message and ("unsupported" in message or "not support" in message):
+            return False
+        _LOG.debug("reasoning probe failed for %s: %s", type(router).__name__, exc)
         return None
 
 

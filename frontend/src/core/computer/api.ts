@@ -189,6 +189,22 @@ function leaseOwnerBody(leaseOwner?: ComputerLeaseOwner | null) {
     : {};
 }
 
+type ComputerControlSessionOptions = {
+  controlSessionId?: string | null;
+  controlActionId?: string | null;
+};
+
+function controlSessionBody(options?: ComputerControlSessionOptions) {
+  return {
+    ...(options?.controlSessionId
+      ? { control_session_id: options.controlSessionId }
+      : {}),
+    ...(options?.controlActionId
+      ? { control_action_id: options.controlActionId }
+      : {}),
+  };
+}
+
 export async function getComputerStatus(): Promise<ComputerStatus> {
   const res = await fetch(`${BASE()}/status`, { headers: authHeaders() });
   if (!res.ok)
@@ -196,11 +212,13 @@ export async function getComputerStatus(): Promise<ComputerStatus> {
   return (await res.json()) as ComputerStatus;
 }
 
-export async function captureComputerScreen(): Promise<ComputerScreenshot> {
+export async function captureComputerScreen(
+  options: ComputerControlSessionOptions = {},
+): Promise<ComputerScreenshot> {
   const res = await fetch(`${BASE()}/screenshot`, {
     method: "POST",
     headers: jsonAuthHeaders(),
-    body: JSON.stringify({}),
+    body: JSON.stringify(controlSessionBody(options)),
   });
   if (!res.ok) throw new Error(`Failed to capture screen: ${res.statusText}`);
   return (await res.json()) as ComputerScreenshot;
@@ -208,12 +226,16 @@ export async function captureComputerScreen(): Promise<ComputerScreenshot> {
 
 export async function previewComputerAction(
   action: ComputerAction,
-  options: { leaseOwner?: ComputerLeaseOwner | null } = {},
+  options: { leaseOwner?: ComputerLeaseOwner | null } & ComputerControlSessionOptions = {},
 ): Promise<ComputerPreview> {
   const res = await fetch(`${BASE()}/actions/preview`, {
     method: "POST",
     headers: jsonAuthHeaders(),
-    body: JSON.stringify({ ...action, ...leaseOwnerBody(options.leaseOwner) }),
+    body: JSON.stringify({
+      ...action,
+      ...leaseOwnerBody(options.leaseOwner),
+      ...controlSessionBody(options),
+    }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -226,7 +248,10 @@ export async function previewComputerAction(
 
 export async function planComputerActions(
   goal: string,
-  options: { capture?: boolean; leaseOwner?: ComputerLeaseOwner | null } = {},
+  options: {
+    capture?: boolean;
+    leaseOwner?: ComputerLeaseOwner | null;
+  } & ComputerControlSessionOptions = {},
 ): Promise<ComputerActionPlan> {
   const res = await fetch(`${BASE()}/actions/plan`, {
     method: "POST",
@@ -235,6 +260,7 @@ export async function planComputerActions(
       goal,
       capture: options.capture ?? true,
       ...leaseOwnerBody(options.leaseOwner),
+      ...controlSessionBody(options),
     }),
   });
   if (!res.ok) {
@@ -249,7 +275,10 @@ export async function planComputerActions(
 export async function groundComputerActions(
   goal: string,
   output: string,
-  options: { capture?: boolean; leaseOwner?: ComputerLeaseOwner | null } = {},
+  options: {
+    capture?: boolean;
+    leaseOwner?: ComputerLeaseOwner | null;
+  } & ComputerControlSessionOptions = {},
 ): Promise<ComputerActionPlan> {
   const res = await fetch(`${BASE()}/actions/ground`, {
     method: "POST",
@@ -259,6 +288,7 @@ export async function groundComputerActions(
       output,
       capture: options.capture ?? true,
       ...leaseOwnerBody(options.leaseOwner),
+      ...controlSessionBody(options),
     }),
   });
   if (!res.ok) {
@@ -273,7 +303,7 @@ export async function groundComputerActions(
 export async function askVisionModelForComputerActions(
   goal: string,
   modelId: string,
-  options: { leaseOwner?: ComputerLeaseOwner | null } = {},
+  options: { leaseOwner?: ComputerLeaseOwner | null } & ComputerControlSessionOptions = {},
 ): Promise<ComputerActionPlan> {
   const res = await fetch(`${BASE()}/actions/vision`, {
     method: "POST",
@@ -282,6 +312,7 @@ export async function askVisionModelForComputerActions(
       goal,
       model_id: modelId,
       ...leaseOwnerBody(options.leaseOwner),
+      ...controlSessionBody(options),
     }),
   });
   if (!res.ok) {
@@ -295,12 +326,16 @@ export async function askVisionModelForComputerActions(
 
 export async function executeComputerAction(
   token: string,
-  options: { leaseOwner?: ComputerLeaseOwner | null } = {},
+  options: { leaseOwner?: ComputerLeaseOwner | null } & ComputerControlSessionOptions = {},
 ): Promise<ComputerExecuteResult> {
   const res = await fetch(`${BASE()}/actions/execute`, {
     method: "POST",
     headers: jsonAuthHeaders(),
-    body: JSON.stringify({ token, ...leaseOwnerBody(options.leaseOwner) }),
+    body: JSON.stringify({
+      token,
+      ...leaseOwnerBody(options.leaseOwner),
+      ...controlSessionBody(options),
+    }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -313,11 +348,15 @@ export async function executeComputerAction(
 
 export async function releaseComputerLease(
   leaseOwner: ComputerLeaseOwner,
+  options: ComputerControlSessionOptions = {},
 ): Promise<ComputerLeaseReleaseResult> {
   const res = await fetch(`${BASE()}/lease/release`, {
     method: "POST",
     headers: jsonAuthHeaders(),
-    body: JSON.stringify(leaseOwnerBody(leaseOwner)),
+    body: JSON.stringify({
+      ...leaseOwnerBody(leaseOwner),
+      ...controlSessionBody(options),
+    }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");

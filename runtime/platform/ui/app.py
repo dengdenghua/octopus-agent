@@ -1487,6 +1487,11 @@ def create_app(
         )
     )
 
+    # Unified control plane for browser / Chrome / webview / computer sessions.
+    from runtime.sensing.gateway.control_sessions_router import create_control_sessions_router
+
+    app.include_router(create_control_sessions_router())
+
     # Browser session and relay APIs.
     from runtime.platform.ui.browser_router import create_browser_router
 
@@ -1580,6 +1585,11 @@ def create_app(
             store=project_store,
             group_store=(
                 getattr(cowork_runtime, "group_store", None)
+                if cowork_runtime is not None
+                else None
+            ),
+            collaboration_store=(
+                getattr(cowork_runtime, "collaboration_store", None)
                 if cowork_runtime is not None
                 else None
             ),

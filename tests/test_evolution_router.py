@@ -120,6 +120,29 @@ def test_agent_scorecard_endpoint_defaults_to_e2e_target() -> None:
     assert data["octopus_focus_gaps"] == []
 
 
+def test_agent_benchmark_endpoint_and_scorecards_are_evidence_backed() -> None:
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    benchmark_response = client.get("/api/evolution/agent-benchmark")
+    benchmark = benchmark_response.json()
+
+    assert benchmark_response.status_code == 200
+    assert benchmark["ok"] is True
+    assert benchmark["schema"] == "octopus.agent_benchmark.v1"
+    assert benchmark["ready"] is True
+    assert benchmark["score"] == 1.0
+
+    scorecard = client.get("/api/evolution/agent-scorecard").json()
+    radar = client.get("/api/evolution/automation-radar").json()
+
+    assert scorecard["agent_benchmark"]["schema"] == "octopus.agent_benchmark.v1"
+    assert scorecard["agent_benchmark"]["ready"] is True
+    assert radar["agent_benchmark"]["schema"] == "octopus.agent_benchmark.v1"
+    assert radar["agent_benchmark"]["ready"] is True
+
+
 def test_e2e_surpass_certification_endpoint() -> None:
     app = FastAPI()
     app.include_router(create_evolution_router())
@@ -134,7 +157,8 @@ def test_e2e_surpass_certification_endpoint() -> None:
     assert data["ready"] is True
     assert data["verdict"] == "surpassed"
     assert data["summary"]["scorecard_octopus"] == 97
-    assert data["summary"]["automation_octopus"] == 95
+    assert data["summary"]["automation_octopus"] == 96
+    assert data["summary"]["automation_octopus"] >= data["target_score"]
     assert data["summary"]["quality_ready"] == data["summary"]["quality_total"]
     assert any(
         check["id"] == "scorecard_all_dimensions_surpassed"

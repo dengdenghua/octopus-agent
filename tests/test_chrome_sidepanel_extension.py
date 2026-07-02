@@ -72,6 +72,12 @@ def test_background_enforces_tab_control_lease() -> None:
     assert "tab_url_changed" in js
     assert 'type === "octopus.control"' in js
     assert 'type === "octopus.userActivity"' in js
+    assert "/api/control-sessions" in js
+    assert "ensureControlSessionForCommand" in js
+    assert "appendControlAction" in js
+    assert "appendControlEvidence" in js
+    assert "/takeover" in js
+    assert "chrome_human_interrupt" in js
 
 
 def test_content_script_reports_trusted_user_activity() -> None:

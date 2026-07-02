@@ -241,6 +241,7 @@ export default function ComputerAutomationPage() {
   const computerControlSession = useMemo<ControlSessionOptions>(
     () => ({
       sessionId: leaseOwner?.owner_id,
+      ownerId: leaseOwner?.owner_id,
       ownerLabel: leaseOwner?.owner_label ?? "本地电脑自动化页",
       surface: "computer",
       targetId: "local-pc",
@@ -493,7 +494,9 @@ export default function ComputerAutomationPage() {
   const capture = async () => {
     setBusy("capture");
     try {
-      const data = await captureComputerScreen();
+      const data = await captureComputerScreen({
+        controlSessionId: computerControlSession.sessionId,
+      });
       setScreenshot(data);
       setHighlightedAction(null);
       await computerControlSession.recordEvidence?.({
@@ -556,7 +559,10 @@ export default function ComputerAutomationPage() {
     clearPreview();
     try {
       const data = await runComputerControlAction("preview", () =>
-        previewComputerAction(action, { leaseOwner }),
+        previewComputerAction(action, {
+          leaseOwner,
+          controlSessionId: computerControlSession.sessionId,
+        }),
       );
       mergeLease(data.lease);
       applyPreview(data);
@@ -590,7 +596,10 @@ export default function ComputerAutomationPage() {
               button: "left",
               clicks: 1,
             },
-            { leaseOwner },
+            {
+              leaseOwner,
+              controlSessionId: computerControlSession.sessionId,
+            },
           ),
       );
       mergeLease(data.lease);
@@ -622,6 +631,7 @@ export default function ComputerAutomationPage() {
         planComputerActions(goal, {
           capture: true,
           leaseOwner,
+          controlSessionId: computerControlSession.sessionId,
         }),
       );
       setPlan(data);
@@ -660,6 +670,49 @@ export default function ComputerAutomationPage() {
     });
   };
 
+  const runAgentLoopPreview = async () => {
+    setBusy("plan");
+    setPlan(null);
+    setHighlightedAction(null);
+    clearPreview();
+    try {
+      const data = await runComputerControlAction("agent_loop_preview", () =>
+        planComputerActions(goal, {
+          capture: true,
+          leaseOwner,
+          controlSessionId: computerControlSession.sessionId,
+        }),
+      );
+      setPlan(data);
+      mergeLease(data.lease);
+      if (data.screenshot) setScreenshot(data.screenshot);
+      const first = data.suggestions[0];
+      if (first) {
+        acceptSuggestion(first);
+        addLog({
+          title: "Agent 已完成预演",
+          detail: "第一步已进入确认队列，需要你确认后才会执行。",
+          tone: "ok",
+        });
+      } else {
+        addLog({
+          title: "Agent 暂无可执行下一步",
+          detail: "没有生成候选动作，请补充更明确的目标。",
+          tone: "warn",
+        });
+      }
+    } catch (error) {
+      swallow(error);
+      addLog({
+        title: "Agent 循环预演失败",
+        detail: String(error),
+        tone: "error",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const groundVisionOutput = async () => {
     setBusy("ground");
     setPlan(null);
@@ -670,6 +723,7 @@ export default function ComputerAutomationPage() {
         groundComputerActions(goal, visionOutput, {
           capture: true,
           leaseOwner,
+          controlSessionId: computerControlSession.sessionId,
         }),
       );
       setPlan(data);
@@ -703,6 +757,7 @@ export default function ComputerAutomationPage() {
       const data = await runComputerControlAction("vision", () =>
         askVisionModelForComputerActions(goal, visionModelId, {
           leaseOwner,
+          controlSessionId: computerControlSession.sessionId,
         }),
       );
       setPlan(data);
@@ -798,7 +853,11 @@ export default function ComputerAutomationPage() {
     setBusy("execute");
     try {
       const data = await runComputerControlAction("execute", () =>
-        executeComputerAction(preview.token, { leaseOwner }),
+        executeComputerAction(preview.token, {
+          leaseOwner,
+          controlSessionId: computerControlSession.sessionId,
+          controlActionId: `computer-preview-${preview.token}`,
+        }),
       );
       mergeLease(data.lease);
       clearPreview();
@@ -819,7 +878,9 @@ export default function ComputerAutomationPage() {
     if (!leaseOwner) return;
     setBusy("release");
     try {
-      const data = await releaseComputerLease(leaseOwner);
+      const data = await releaseComputerLease(leaseOwner, {
+        controlSessionId: computerControlSession.sessionId,
+      });
       mergeLease(data.lease);
       addLog({
         title: "已释放电脑接管",
@@ -1202,13 +1263,23 @@ export default function ComputerAutomationPage() {
                     placeholder="例如：打开 Edge 并访问 https://gemini.google.com"
                     className="min-h-20"
                   />
-                  <Button
-                    onClick={planNextActions}
-                    disabled={computerActionDisabled}
-                  >
-                    <ListChecksIcon className="size-4" />
-                    观察并生成下一步
-                  </Button>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <Button
+                      onClick={runAgentLoopPreview}
+                      disabled={computerActionDisabled || !goal.trim()}
+                    >
+                      <PlayIcon className="size-4" />
+                      Agent 循环预演
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={planNextActions}
+                      disabled={computerActionDisabled}
+                    >
+                      <ListChecksIcon className="size-4" />
+                      观察并生成下一步
+                    </Button>
+                  </div>
                   {plan?.suggestions.length ? (
                     <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
                       {plan.suggestions.map((item) => (
