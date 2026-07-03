@@ -49,9 +49,7 @@ def invite_member(
     )
 
 
-def remove_member(
-    store: GroupStore, thread_id: str, *, actor: str, target_id: str
-) -> MemberEvent:
+def remove_member(store: GroupStore, thread_id: str, *, actor: str, target_id: str) -> MemberEvent:
     return store.append(
         thread_id,
         MemberEvent(action="leave", actor=actor or "system", target_id=target_id),

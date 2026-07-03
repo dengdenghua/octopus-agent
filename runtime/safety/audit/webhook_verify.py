@@ -97,7 +97,7 @@ def verify_github_signature(
         raise WebhookVerificationError("missing X-Hub-Signature-256 header")
     if not signature_header.startswith("sha256="):
         raise WebhookVerificationError("unexpected signature prefix")
-    provided = signature_header[len("sha256="):]
+    provided = signature_header[len("sha256=") :]
     expected = hmac.new(secret, body, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, provided):
         raise WebhookVerificationError("signature mismatch")
@@ -118,9 +118,7 @@ def verify_shopify_signature(
     """
     if not signature_header:
         raise WebhookVerificationError("missing X-Shopify-Hmac-SHA256 header")
-    expected = base64.b64encode(
-        hmac.new(secret, body, hashlib.sha256).digest()
-    ).decode("ascii")
+    expected = base64.b64encode(hmac.new(secret, body, hashlib.sha256).digest()).decode("ascii")
     if not hmac.compare_digest(expected, signature_header.strip()):
         raise WebhookVerificationError("signature mismatch")
 
@@ -196,7 +194,7 @@ def verify_generic_hmac(
     if not provided_hex:
         raise WebhookVerificationError("missing signature")
     if prefix and provided_hex.startswith(prefix):
-        provided_hex = provided_hex[len(prefix):]
+        provided_hex = provided_hex[len(prefix) :]
     try:
         hash_fn = getattr(hashlib, algo)
     except AttributeError:
@@ -296,8 +294,11 @@ def create_verify_dependency(
         headers = {k.lower(): v for k, v in request.headers.items()}
         try:
             verify_webhook(
-                scheme, secret=secret_getter(),
-                body=body, headers=headers, **extra,
+                scheme,
+                secret=secret_getter(),
+                body=body,
+                headers=headers,
+                **extra,
             )
         except WebhookVerificationError as err:
             _LOG.warning("webhook rejected (%s): %s", scheme, err)

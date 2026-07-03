@@ -27,6 +27,7 @@ Design notes
   second-resolution mtime — sleeping past the next tick is the
   cheapest robust way.
 """
+
 from __future__ import annotations
 
 import os
@@ -121,7 +122,8 @@ def _flag_off(monkeypatch: pytest.MonkeyPatch) -> None:
 
 class TestRoundTrip:
     def test_set_then_get_returns_body(
-        self, registry: PromptRegistry,
+        self,
+        registry: PromptRegistry,
     ) -> None:
         # ``atomic_write_text`` appends a trailing newline by design
         # (POSIX-friendly).  We assert by ``startswith`` so the test
@@ -141,7 +143,9 @@ def test_prompts_router_requires_auth_when_enabled(
     assert client.get("/api/prompts", headers=headers).status_code == 200
 
     def test_set_writes_md_file_to_disk(
-        self, registry: PromptRegistry, prompts_dir: Path,
+        self,
+        registry: PromptRegistry,
+        prompts_dir: Path,
     ) -> None:
         registry.set("hello", "hi there")
         assert (prompts_dir / "hello.md").exists()
@@ -151,13 +155,13 @@ def test_prompts_router_requires_auth_when_enabled(
         assert "hi there" in text
 
     def test_variant_set_lands_in_subdir(
-        self, registry: PromptRegistry, prompts_dir: Path,
+        self,
+        registry: PromptRegistry,
+        prompts_dir: Path,
     ) -> None:
         registry.set("sys", "base body")
         registry.set("sys", "friendly body", variant="friendly")
-        assert (
-            prompts_dir / "variants" / "sys" / "friendly.md"
-        ).exists()
+        assert (prompts_dir / "variants" / "sys" / "friendly.md").exists()
         assert registry.get("sys", variant="friendly").startswith(
             "friendly body",
         )
@@ -170,22 +174,26 @@ def test_prompts_router_requires_auth_when_enabled(
 
 class TestVariantFallback:
     def test_missing_variant_falls_back_to_base(
-        self, registry: PromptRegistry,
+        self,
+        registry: PromptRegistry,
     ) -> None:
         registry.set("greeting", "hello base")
         # No variant file exists
         assert registry.get(
-            "greeting", variant="cheerful",
+            "greeting",
+            variant="cheerful",
         ).startswith("hello base")
 
     def test_missing_everything_raises(
-        self, registry: PromptRegistry,
+        self,
+        registry: PromptRegistry,
     ) -> None:
         with pytest.raises(KeyError):
             registry.get("nonexistent")
 
     def test_variant_takes_precedence_over_base(
-        self, registry: PromptRegistry,
+        self,
+        registry: PromptRegistry,
     ) -> None:
         registry.set("greeting", "base")
         registry.set("greeting", "variant!", variant="alt")
@@ -280,14 +288,22 @@ class TestAtomicPut:
         )
         assert r2.status_code == 200
         assert (prompts_dir / "sys.md.bak").exists()
-        assert (prompts_dir / "sys.md").read_text(
-            encoding="utf-8",
-        ).startswith("second")
+        assert (
+            (prompts_dir / "sys.md")
+            .read_text(
+                encoding="utf-8",
+            )
+            .startswith("second")
+        )
         # The .bak holds the prior version (atomic_write_text appends
         # a trailing newline; assert by prefix to remain robust).
-        assert (prompts_dir / "sys.md.bak").read_text(
-            encoding="utf-8",
-        ).startswith("first")
+        assert (
+            (prompts_dir / "sys.md.bak")
+            .read_text(
+                encoding="utf-8",
+            )
+            .startswith("first")
+        )
 
 
 # ═══════════════════════════════════════════════════════════
@@ -415,7 +431,8 @@ class TestMtimeCaching:
         # External edit
         time.sleep(1.1)
         (prompts_dir / "ghost.md").write_text(
-            "v2-from-disk", encoding="utf-8",
+            "v2-from-disk",
+            encoding="utf-8",
         )
 
         # Still the cached version because no re-stat occurs
@@ -453,15 +470,14 @@ class TestConcurrentReads:
                             f"body-{i}",
                         )
                         assert registry.get(
-                            f"p{i}", variant="alt",
+                            f"p{i}",
+                            variant="alt",
                         ).startswith(f"v-{i}")
                     registry.list()
             except BaseException as exc:  # noqa: BLE001
                 errors.append(exc)
 
-        threads = [
-            threading.Thread(target=worker) for _ in range(8)
-        ]
+        threads = [threading.Thread(target=worker) for _ in range(8)]
         for t in threads:
             t.start()
         for t in threads:

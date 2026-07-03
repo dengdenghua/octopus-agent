@@ -16,9 +16,7 @@ import contextlib
 from common import format_timestamp
 from json_store import load_json, save_json
 
-ACTIVITY_FILE = os.path.expanduser(
-    "~/.openclaw/workspace/memory/email-to-calendar/activity.json"
-)
+ACTIVITY_FILE = os.path.expanduser("~/.openclaw/workspace/memory/email-to-calendar/activity.json")
 SESSION_FILE = os.path.expanduser(
     "~/.openclaw/workspace/memory/email-to-calendar/.current_session.json"
 )
@@ -32,7 +30,7 @@ def start_session() -> None:
         "emails_scanned": 0,
         "emails_with_events": 0,
         "skipped": [],
-        "events_extracted": []
+        "events_extracted": [],
     }
     save_json(SESSION_FILE, session)
     print("Session started")
@@ -46,20 +44,11 @@ def log_skip(email_id: str, subject: str, reason: str) -> None:
         sys.exit(1)
 
     session["emails_scanned"] = session.get("emails_scanned", 0) + 1
-    session["skipped"].append({
-        "email_id": email_id,
-        "subject": subject,
-        "reason": reason
-    })
+    session["skipped"].append({"email_id": email_id, "subject": subject, "reason": reason})
     save_json(SESSION_FILE, session)
 
 
-def log_event(
-    email_id: str,
-    title: str,
-    action: str = "pending",
-    reason: str = ""
-) -> None:
+def log_event(email_id: str, title: str, action: str = "pending", reason: str = "") -> None:
     """Log an extracted event."""
     session = load_json(SESSION_FILE, None)
     if session is None:
@@ -67,17 +56,11 @@ def log_event(
         sys.exit(1)
 
     # Only increment emails_with_events once per email
-    existing_emails = set(
-        e.get("email_id") for e in session.get("events_extracted", [])
-    )
+    existing_emails = set(e.get("email_id") for e in session.get("events_extracted", []))
     if email_id not in existing_emails:
         session["emails_with_events"] = session.get("emails_with_events", 0) + 1
 
-    entry = {
-        "email_id": email_id,
-        "title": title,
-        "action": action
-    }
+    entry = {"email_id": email_id, "title": title, "action": action}
     if reason:
         entry["reason"] = reason
 
@@ -111,7 +94,9 @@ def end_session() -> None:
     emails_scanned = session.get("emails_scanned", 0)
     emails_with_events = session.get("emails_with_events", 0)
     skipped = len(session.get("skipped", []))
-    print(f"Session ended: {emails_scanned} scanned, {emails_with_events} with events, {skipped} skipped")
+    print(
+        f"Session ended: {emails_scanned} scanned, {emails_with_events} with events, {skipped} skipped"
+    )
 
 
 def show_activity(last_n: int = 1) -> None:
@@ -184,11 +169,7 @@ def main():
         if not args.get("email_id") or not args.get("reason"):
             print("Error: --email-id and --reason are required", file=sys.stderr)
             sys.exit(1)
-        log_skip(
-            email_id=args["email_id"],
-            subject=args.get("subject", ""),
-            reason=args["reason"]
-        )
+        log_skip(email_id=args["email_id"], subject=args.get("subject", ""), reason=args["reason"])
 
     elif action == "log-event":
         if not args.get("email_id") or not args.get("title"):
@@ -198,7 +179,7 @@ def main():
             email_id=args["email_id"],
             title=args["title"],
             action=args.get("action", "pending"),
-            reason=args.get("reason", "")
+            reason=args.get("reason", ""),
         )
 
     elif action == "end-session":

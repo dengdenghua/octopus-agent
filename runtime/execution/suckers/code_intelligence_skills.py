@@ -30,6 +30,7 @@ from .testing import SkillExpect, SkillTestCase
 # ═══════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════
 
+
 def _code_analyze(
     path: str = "",
     *,
@@ -59,10 +60,18 @@ def _code_analyze(
 def _guess_language(path: str) -> str:
     ext = Path(path).suffix.lower() if path else ""
     return {
-        ".py": "python", ".js": "javascript", ".ts": "typescript",
-        ".tsx": "typescript", ".jsx": "javascript", ".go": "go",
-        ".rs": "rust", ".java": "java", ".rb": "ruby",
-        ".cpp": "cpp", ".c": "c", ".h": "c",
+        ".py": "python",
+        ".js": "javascript",
+        ".ts": "typescript",
+        ".tsx": "typescript",
+        ".jsx": "javascript",
+        ".go": "go",
+        ".rs": "rust",
+        ".java": "java",
+        ".rb": "ruby",
+        ".cpp": "cpp",
+        ".c": "c",
+        ".h": "c",
     }.get(ext, "unknown")
 
 
@@ -86,22 +95,27 @@ def _analyze_python(content: str, path: str) -> dict[str, Any]:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             args = [a.arg for a in node.args.args]
             decorators = [
-                ast.dump(d) if not isinstance(d, ast.Name) else d.id
-                for d in node.decorator_list
+                ast.dump(d) if not isinstance(d, ast.Name) else d.id for d in node.decorator_list
             ]
-            functions.append({
-                "name": node.name,
-                "line": node.lineno,
-                "end_line": getattr(node, "end_lineno", None),
-                "args": args,
-                "decorators": decorators[:3],
-                "is_async": isinstance(node, ast.AsyncFunctionDef),
-                "docstring": ast.get_docstring(node) or "",
-            })
-            symbols.append({
-                "name": node.name, "kind": "function",
-                "line": node.lineno, "scope": current_scope,
-            })
+            functions.append(
+                {
+                    "name": node.name,
+                    "line": node.lineno,
+                    "end_line": getattr(node, "end_lineno", None),
+                    "args": args,
+                    "decorators": decorators[:3],
+                    "is_async": isinstance(node, ast.AsyncFunctionDef),
+                    "docstring": ast.get_docstring(node) or "",
+                }
+            )
+            symbols.append(
+                {
+                    "name": node.name,
+                    "kind": "function",
+                    "line": node.lineno,
+                    "scope": current_scope,
+                }
+            )
             for child in ast.walk(node):
                 if isinstance(child, ast.Call):
                     callee = ""
@@ -110,29 +124,36 @@ def _analyze_python(content: str, path: str) -> dict[str, Any]:
                     elif isinstance(child.func, ast.Attribute):
                         callee = child.func.attr
                     if callee:
-                        call_edges.append({
-                            "caller": node.name,
-                            "callee": callee,
-                            "line": getattr(child, "lineno", 0),
-                        })
+                        call_edges.append(
+                            {
+                                "caller": node.name,
+                                "callee": callee,
+                                "line": getattr(child, "lineno", 0),
+                            }
+                        )
         elif isinstance(node, ast.ClassDef):
             methods = [
-                n.name for n in node.body
-                if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
+                n.name for n in node.body if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
             ]
             bases = [ast.dump(b) for b in node.bases]
-            classes.append({
-                "name": node.name,
-                "line": node.lineno,
-                "end_line": getattr(node, "end_lineno", None),
-                "methods": methods,
-                "bases": bases[:5],
-                "docstring": ast.get_docstring(node) or "",
-            })
-            symbols.append({
-                "name": node.name, "kind": "class",
-                "line": node.lineno, "scope": current_scope,
-            })
+            classes.append(
+                {
+                    "name": node.name,
+                    "line": node.lineno,
+                    "end_line": getattr(node, "end_lineno", None),
+                    "methods": methods,
+                    "bases": bases[:5],
+                    "docstring": ast.get_docstring(node) or "",
+                }
+            )
+            symbols.append(
+                {
+                    "name": node.name,
+                    "kind": "class",
+                    "line": node.lineno,
+                    "scope": current_scope,
+                }
+            )
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 imports.append(alias.name)
@@ -151,10 +172,14 @@ def _analyze_python(content: str, path: str) -> dict[str, Any]:
             for target in node.targets:
                 if isinstance(target, ast.Name):
                     top_vars.append(target.id)
-                    symbols.append({
-                        "name": target.id, "kind": "variable",
-                        "line": node.lineno, "scope": "<module>",
-                    })
+                    symbols.append(
+                        {
+                            "name": target.id,
+                            "kind": "variable",
+                            "line": node.lineno,
+                            "scope": "<module>",
+                        }
+                    )
 
     unique_edges = {(e["caller"], e["callee"]): e for e in call_edges}
 
@@ -261,13 +286,11 @@ def _load_persisted_index() -> list[tuple[str, str, Any]]:
         import sqlite3
 
         import numpy as np
+
         conn = sqlite3.connect(str(_INDEX_DB_PATH))
         rows = conn.execute("SELECT path, chunk, embedding FROM code_chunks").fetchall()
         conn.close()
-        return [
-            (r[0], r[1], np.frombuffer(r[2], dtype=np.float32))
-            for r in rows
-        ]
+        return [(r[0], r[1], np.frombuffer(r[2], dtype=np.float32)) for r in rows]
     except Exception:  # noqa: BLE001
         return []
 
@@ -275,9 +298,12 @@ def _load_persisted_index() -> list[tuple[str, str, Any]]:
 def _save_persisted_index(index: list[tuple[str, str, Any]]) -> None:
     try:
         import sqlite3
+
         _INDEX_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(_INDEX_DB_PATH))
-        conn.execute("CREATE TABLE IF NOT EXISTS code_chunks (path TEXT, chunk TEXT, embedding BLOB)")
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS code_chunks (path TEXT, chunk TEXT, embedding BLOB)"
+        )
         conn.execute("DELETE FROM code_chunks")
         for path, chunk, emb in index:
             conn.execute(
@@ -348,8 +374,9 @@ def _ast_search(
         for p in root_path.glob(pat):
             if not p.is_file():
                 continue
-            if any(part.startswith(".") or part in ("node_modules", "__pycache__")
-                   for part in p.parts):
+            if any(
+                part.startswith(".") or part in ("node_modules", "__pycache__") for part in p.parts
+            ):
                 continue
             if sandbox_root is not None:
                 try:
@@ -406,7 +433,11 @@ def _ast_search(
             rel_path = str(f)
 
         for m in _walk_ast_for_query(
-            tree.root_node, source_bytes, language, query_type, target_name,
+            tree.root_node,
+            source_bytes,
+            language,
+            query_type,
+            target_name,
         ):
             m["path"] = rel_path.replace("\\", "/")
             matches.append(m)
@@ -439,8 +470,8 @@ def _expand_brace_glob(pattern: str) -> list[str]:
     start = pattern.index("{")
     end = pattern.index("}", start)
     prefix = pattern[:start]
-    suffix = pattern[end + 1:]
-    options = pattern[start + 1:end].split(",")
+    suffix = pattern[end + 1 :]
+    options = pattern[start + 1 : end].split(",")
     out: list[str] = []
     for opt in options:
         sub = f"{prefix}{opt.strip()}{suffix}"
@@ -449,7 +480,7 @@ def _expand_brace_glob(pattern: str) -> list[str]:
 
 
 def _node_text(node: Any, source: bytes) -> str:
-    return source[node.start_byte:node.end_byte].decode("utf-8", errors="replace")
+    return source[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
 
 
 def _line_snippet(source: bytes, line_idx0: int, max_len: int = 200) -> str:
@@ -470,9 +501,8 @@ def _call_target_name(call_node: Any, source: bytes, language: str) -> str:
     if func_child.type == "identifier":
         return _node_text(func_child, source)
     if func_child.type in ("attribute", "member_expression"):
-        attr = (
-            func_child.child_by_field_name("attribute")
-            or func_child.child_by_field_name("property")
+        attr = func_child.child_by_field_name("attribute") or func_child.child_by_field_name(
+            "property"
         )
         if attr is not None:
             return _node_text(attr, source)
@@ -560,41 +590,53 @@ def _walk_ast_for_query(
             name = _call_target_name(node, source, language)
             if name == target_name:
                 line0 = node.start_point[0]
-                out.append({
-                    "line": line0 + 1,
-                    "column": node.start_point[1],
-                    "kind": "call",
-                    "snippet": _line_snippet(source, line0),
-                })
-        elif query_type == "function_definitions" and node_type in _FUNC_DEF_TYPES.get(language, set()):
+                out.append(
+                    {
+                        "line": line0 + 1,
+                        "column": node.start_point[1],
+                        "kind": "call",
+                        "snippet": _line_snippet(source, line0),
+                    }
+                )
+        elif query_type == "function_definitions" and node_type in _FUNC_DEF_TYPES.get(
+            language, set()
+        ):
             name = _def_name(node, source)
             if name == target_name:
                 line0 = node.start_point[0]
-                out.append({
-                    "line": line0 + 1,
-                    "column": node.start_point[1],
-                    "kind": "function_definition",
-                    "snippet": _line_snippet(source, line0),
-                })
-        elif query_type == "class_definitions" and node_type in _CLASS_DEF_TYPES.get(language, set()):
+                out.append(
+                    {
+                        "line": line0 + 1,
+                        "column": node.start_point[1],
+                        "kind": "function_definition",
+                        "snippet": _line_snippet(source, line0),
+                    }
+                )
+        elif query_type == "class_definitions" and node_type in _CLASS_DEF_TYPES.get(
+            language, set()
+        ):
             name = _def_name(node, source)
             if name == target_name:
                 line0 = node.start_point[0]
-                out.append({
-                    "line": line0 + 1,
-                    "column": node.start_point[1],
-                    "kind": "class_definition",
-                    "snippet": _line_snippet(source, line0),
-                })
+                out.append(
+                    {
+                        "line": line0 + 1,
+                        "column": node.start_point[1],
+                        "kind": "class_definition",
+                        "snippet": _line_snippet(source, line0),
+                    }
+                )
         elif query_type == "imports" and node_type in _IMPORT_TYPES.get(language, set()):
             if _import_mentions_target(node, source, target_name):
                 line0 = node.start_point[0]
-                out.append({
-                    "line": line0 + 1,
-                    "column": node.start_point[1],
-                    "kind": "import",
-                    "snippet": _line_snippet(source, line0),
-                })
+                out.append(
+                    {
+                        "line": line0 + 1,
+                        "column": node.start_point[1],
+                        "kind": "import",
+                        "snippet": _line_snippet(source, line0),
+                    }
+                )
 
         stack.extend(node.children)
 
@@ -650,6 +692,7 @@ def _code_search(
         return {"results": [], "count": 0, "backend": "embedding", "note": "no files indexed"}
 
     import numpy as np
+
     q_emb = embedder.encode([effective_query])[0]
     scores = []
     for path, chunk, emb in _INDEX:
@@ -657,10 +700,7 @@ def _code_search(
         scores.append((sim, path, chunk))
     scores.sort(reverse=True)
 
-    results = [
-        {"path": p, "score": round(s, 4), "snippet": c[:300]}
-        for s, p, c in scores[:top_k]
-    ]
+    results = [{"path": p, "score": round(s, 4), "snippet": c[:300]} for s, p, c in scores[:top_k]]
     return {"results": results, "count": len(results), "backend": "embedding"}
 
 
@@ -673,8 +713,10 @@ def _build_index(embedder: Any, directory: str, exts: set[str]) -> list[tuple[st
     for p in root.rglob("*"):
         if not p.is_file() or p.suffix not in exts:
             continue
-        if any(part.startswith(".") or part == "node_modules" or part == "__pycache__"
-               for part in p.parts):
+        if any(
+            part.startswith(".") or part == "node_modules" or part == "__pycache__"
+            for part in p.parts
+        ):
             continue
         if p.stat().st_size > 200_000:
             continue
@@ -717,7 +759,10 @@ def _split_into_chunks(content: str, path: str) -> list[str]:
 
 
 def _fallback_text_search(
-    query: str, directory: str, extensions: str, top_k: int,
+    query: str,
+    directory: str,
+    extensions: str,
+    top_k: int,
 ) -> dict[str, Any]:
     results: list[dict] = []
     exts = set(extensions.split(","))
@@ -740,18 +785,25 @@ def _fallback_text_search(
         if q_lower in content.lower():
             for i, line in enumerate(content.splitlines(), 1):
                 if q_lower in line.lower():
-                    results.append({
-                        "path": str(p.relative_to(root)),
-                        "line": i,
-                        "snippet": line.strip()[:200],
-                    })
+                    results.append(
+                        {
+                            "path": str(p.relative_to(root)),
+                            "line": i,
+                            "snippet": line.strip()[:200],
+                        }
+                    )
                     if len(results) >= top_k:
-                        return {"results": results, "count": len(results), "backend": "text_fallback"}
+                        return {
+                            "results": results,
+                            "count": len(results),
+                            "backend": "text_fallback",
+                        }
     return {"results": results[:top_k], "count": len(results), "backend": "text_fallback"}
 
 
 # ═══════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════
+
 
 def _code_edit_diff(
     path: str = "",
@@ -831,6 +883,7 @@ def _apply_unified_diff(original: str, diff_text: str) -> str:
 # ═══════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════
 
+
 def _code_find_symbol(
     symbol: str = "",
     *,
@@ -851,8 +904,7 @@ def _code_find_symbol(
     for p in root.rglob("*"):
         if not p.is_file() or p.suffix not in exts:
             continue
-        if any(part.startswith(".") or part in ("node_modules", "__pycache__")
-               for part in p.parts):
+        if any(part.startswith(".") or part in ("node_modules", "__pycache__") for part in p.parts):
             continue
         if p.stat().st_size > 500_000:
             continue
@@ -869,36 +921,44 @@ def _code_find_symbol(
             for node in ast.walk(tree):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     if node.name == symbol:
-                        results.append({
-                            "path": str(p.relative_to(root)),
-                            "line": node.lineno,
-                            "kind": "function",
-                            "signature": f"def {node.name}({', '.join(a.arg for a in node.args.args)})",
-                        })
+                        results.append(
+                            {
+                                "path": str(p.relative_to(root)),
+                                "line": node.lineno,
+                                "kind": "function",
+                                "signature": f"def {node.name}({', '.join(a.arg for a in node.args.args)})",
+                            }
+                        )
                 elif isinstance(node, ast.ClassDef):
                     if node.name == symbol:
-                        results.append({
-                            "path": str(p.relative_to(root)),
-                            "line": node.lineno,
-                            "kind": "class",
-                        })
+                        results.append(
+                            {
+                                "path": str(p.relative_to(root)),
+                                "line": node.lineno,
+                                "kind": "class",
+                            }
+                        )
                 elif isinstance(node, ast.Assign):
                     for target in node.targets:
                         if isinstance(target, ast.Name) and target.id == symbol:
-                            results.append({
-                                "path": str(p.relative_to(root)),
-                                "line": node.lineno,
-                                "kind": "variable",
-                            })
+                            results.append(
+                                {
+                                    "path": str(p.relative_to(root)),
+                                    "line": node.lineno,
+                                    "kind": "variable",
+                                }
+                            )
         else:
             for i, line in enumerate(content.splitlines(), 1):
                 if re.search(rf"\b{re.escape(symbol)}\b", line):
-                    results.append({
-                        "path": str(p.relative_to(root)),
-                        "line": i,
-                        "kind": "reference",
-                        "snippet": line.strip()[:150],
-                    })
+                    results.append(
+                        {
+                            "path": str(p.relative_to(root)),
+                            "line": i,
+                            "kind": "reference",
+                            "snippet": line.strip()[:150],
+                        }
+                    )
 
         if len(results) >= 50:
             break
@@ -908,6 +968,7 @@ def _code_find_symbol(
 
 # ═══════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════
+
 
 def _code_dependency_graph(
     directory: str = ".",
@@ -924,8 +985,7 @@ def _code_dependency_graph(
     file_modules: dict[str, str] = {}
 
     for p in sorted(root.rglob("*.py")):
-        if any(part.startswith(".") or part in ("node_modules", "__pycache__")
-               for part in p.parts):
+        if any(part.startswith(".") or part in ("node_modules", "__pycache__") for part in p.parts):
             continue
         if p.stat().st_size > 500_000:
             continue
@@ -957,15 +1017,19 @@ def _code_dependency_graph(
             if package and not target_mod.startswith(package):
                 continue
             for known_mod, known_file in file_modules.items():
-                if (target_mod == known_mod
+                if (
+                    target_mod == known_mod
                     or target_mod.startswith(known_mod + ".")
                     or target_mod.endswith("." + known_mod)
-                    or target_mod.endswith("." + known_mod.split(".")[-1])):
-                    edges.append({
-                        "source": node_info["id"],
-                        "target": known_file,
-                        "import": target_mod,
-                    })
+                    or target_mod.endswith("." + known_mod.split(".")[-1])
+                ):
+                    edges.append(
+                        {
+                            "source": node_info["id"],
+                            "target": known_file,
+                            "import": target_mod,
+                        }
+                    )
                     break
 
     unique_edges = {(e["source"], e["target"]): e for e in edges}

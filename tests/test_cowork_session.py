@@ -16,8 +16,9 @@ from runtime.sensing.gateway.cowork_group_router import create_cowork_group_rout
 
 def test_room_link_event_sets_room_id(tmp_path) -> None:
     store = GroupStore(base_dir=tmp_path)
-    store.append("t1", MemberEvent(action="invite", actor="u", target_id="alice",
-                                   target_kind="agent"))
+    store.append(
+        "t1", MemberEvent(action="invite", actor="u", target_id="alice", target_kind="agent")
+    )
     assert store.state("t1").room_id is None
     link_room(store, "t1", "room-42")
     assert store.state("t1").room_id == "room-42"
@@ -30,8 +31,9 @@ def test_resolve_session_composes_surfaces(tmp_path) -> None:
     store = GroupStore(base_dir=tmp_path)
     aw = AsyncWorkStore(base_dir=store.base_dir, group_store=store)
     ps = PresenceStore(base_dir=tmp_path)
-    store.append("t1", MemberEvent(action="invite", actor="u", target_id="alice",
-                                   target_kind="agent"))
+    store.append(
+        "t1", MemberEvent(action="invite", actor="u", target_id="alice", target_kind="agent")
+    )
     store.append("t1", MemberEvent(action="mode", actor="u", mode="swarm"))
     store.blackboard("t1").write("plan", "ship it", writer="alice")
     aw.assign("t1", "alice", "do x", actor="u")
@@ -53,8 +55,9 @@ def test_resolve_session_composes_surfaces(tmp_path) -> None:
 
 def test_unlinked_session_has_no_room_messages(tmp_path) -> None:
     store = GroupStore(base_dir=tmp_path)
-    store.append("t1", MemberEvent(action="invite", actor="u", target_id="alice",
-                                   target_kind="agent"))
+    store.append(
+        "t1", MemberEvent(action="invite", actor="u", target_id="alice", target_kind="agent")
+    )
     rms = RoomMessageStore(base_dir=tmp_path)
     rms.append("room-9", text="orphan", participant_id="p", display_name="P")
     # no link → the room's messages are NOT pulled in
@@ -64,11 +67,13 @@ def test_unlinked_session_has_no_room_messages(tmp_path) -> None:
 
 def test_session_folds_room_participants_via_provider(tmp_path) -> None:
     store = GroupStore(base_dir=tmp_path)
-    store.append("t1", MemberEvent(action="invite", actor="u", target_id="alice",
-                                   target_kind="agent"))
+    store.append(
+        "t1", MemberEvent(action="invite", actor="u", target_id="alice", target_kind="agent")
+    )
     link_room(store, "t1", "room-9")
     s = resolve_session(
-        store, "t1",
+        store,
+        "t1",
         room_participants_provider=lambda rid: (
             [{"id": "p1", "display_name": "Bob"}] if rid == "room-9" else []
         ),
@@ -78,14 +83,17 @@ def test_session_folds_room_participants_via_provider(tmp_path) -> None:
 
 def test_session_folds_room_tasks_via_provider(tmp_path) -> None:
     store = GroupStore(base_dir=tmp_path)
-    store.append("t1", MemberEvent(action="invite", actor="u", target_id="alice",
-                                   target_kind="agent"))
+    store.append(
+        "t1", MemberEvent(action="invite", actor="u", target_id="alice", target_kind="agent")
+    )
     link_room(store, "t1", "room-9")
     s = resolve_session(
-        store, "t1",
+        store,
+        "t1",
         room_tasks_provider=lambda rid: (
             [{"id": "task-1", "title": "ship report", "status": "running"}]
-            if rid == "room-9" else []
+            if rid == "room-9"
+            else []
         ),
     )
     assert [t["title"] for t in s.room_tasks] == ["ship report"]
@@ -105,19 +113,29 @@ def test_collab_endpoint_includes_room_tasks(tmp_path) -> None:
     # Seed the team_tasks store the cowork router will read.
     tt_path = tmp_path / "team_tasks.json"
     task = TeamTaskWire(
-        id="task-1", room_id="room-9", title="evaluate the merger",
-        status="running", created_at="t0", updated_at="t1",
+        id="task-1",
+        room_id="room-9",
+        title="evaluate the merger",
+        status="running",
+        created_at="t0",
+        updated_at="t1",
     )
     other = TeamTaskWire(
-        id="task-2", room_id="room-OTHER", title="unrelated",
-        created_at="t0", updated_at="t0",
+        id="task-2",
+        room_id="room-OTHER",
+        title="unrelated",
+        created_at="t0",
+        updated_at="t0",
     )
     _save_tasks(tt_path, {"task-1": task, "task-2": other})
 
     app = FastAPI()
-    app.include_router(create_cowork_group_router(
-        store=GroupStore(base_dir=tmp_path), team_tasks_state_path=tt_path,
-    ))
+    app.include_router(
+        create_cowork_group_router(
+            store=GroupStore(base_dir=tmp_path),
+            team_tasks_state_path=tt_path,
+        )
+    )
     c = TestClient(app)
     c.post("/api/cowork/t1/members", json={"target_id": "alice", "kind": "agent"})
     c.post("/api/collab/t1/link-room", json={"room_id": "room-9"})
@@ -141,9 +159,12 @@ def _client(tmp_path) -> TestClient:
 def test_collab_endpoints(tmp_path) -> None:
     rms = RoomMessageStore(base_dir=tmp_path / "rooms")
     app = FastAPI()
-    app.include_router(create_cowork_group_router(
-        store=GroupStore(base_dir=tmp_path), room_message_store=rms,
-    ))
+    app.include_router(
+        create_cowork_group_router(
+            store=GroupStore(base_dir=tmp_path),
+            room_message_store=rms,
+        )
+    )
     c = TestClient(app)
     t = "thread-collab"
     c.post(f"/api/cowork/{t}/members", json={"target_id": "alice", "kind": "agent"})
@@ -163,10 +184,12 @@ def test_collab_endpoints(tmp_path) -> None:
 
 def test_post_room_message_requires_linked_room(tmp_path) -> None:
     app = FastAPI()
-    app.include_router(create_cowork_group_router(
-        store=GroupStore(base_dir=tmp_path),
-        room_message_store=RoomMessageStore(base_dir=tmp_path / "rooms"),
-    ))
+    app.include_router(
+        create_cowork_group_router(
+            store=GroupStore(base_dir=tmp_path),
+            room_message_store=RoomMessageStore(base_dir=tmp_path / "rooms"),
+        )
+    )
     c = TestClient(app)
     # No room linked yet → the write side refuses (409), pointing at /link-room.
     r = c.post("/api/collab/t1/room-message", json={"text": "hello"})
@@ -179,11 +202,13 @@ def test_post_room_message_writes_into_session_transcript(tmp_path) -> None:
     rms = RoomMessageStore(base_dir=tmp_path / "rooms")
     collab_store = CollaborationStore(base_dir=tmp_path / "cowork")
     app = FastAPI()
-    app.include_router(create_cowork_group_router(
-        store=GroupStore(base_dir=tmp_path),
-        collaboration_store=collab_store,
-        room_message_store=rms,
-    ))
+    app.include_router(
+        create_cowork_group_router(
+            store=GroupStore(base_dir=tmp_path),
+            collaboration_store=collab_store,
+            room_message_store=rms,
+        )
+    )
     c = TestClient(app)
     t = "thread-write"
     assert c.post(f"/api/collab/{t}/link-room", json={"room_id": "room-w"}).status_code == 200
@@ -195,9 +220,7 @@ def test_post_room_message_writes_into_session_transcript(tmp_path) -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["room_id"] == "room-w" and body["seq"] == 1
-    assert [m["text"] for m in collab_store.messages_for_session(t)] == [
-        "summary from the group"
-    ]
+    assert [m["text"] for m in collab_store.messages_for_session(t)] == ["summary from the group"]
 
     # The write lands in the SAME transcript the unified read surfaces.
     sess = c.get(f"/api/collab/{t}").json()
@@ -217,15 +240,21 @@ def test_collab_endpoint_includes_room_participants(tmp_path) -> None:
     # Seed the team_rooms store the cowork router will read.
     tr_path = tmp_path / "team_rooms.json"
     room = TeamRoomWire(
-        id="room-9", name="R", created_at="t0", updated_at="t0",
+        id="room-9",
+        name="R",
+        created_at="t0",
+        updated_at="t0",
         participants=[TeamParticipantWire(id="p1", display_name="Bob", joined_at="t0")],
     )
     _save_state(tr_path, {"room-9": room})
 
     app = FastAPI()
-    app.include_router(create_cowork_group_router(
-        store=GroupStore(base_dir=tmp_path), team_rooms_state_path=tr_path,
-    ))
+    app.include_router(
+        create_cowork_group_router(
+            store=GroupStore(base_dir=tmp_path),
+            team_rooms_state_path=tr_path,
+        )
+    )
     c = TestClient(app)
     c.post("/api/cowork/t1/members", json={"target_id": "alice", "kind": "agent"})
     c.post("/api/collab/t1/link-room", json={"room_id": "room-9"})
@@ -242,11 +271,13 @@ def test_collab_room_endpoint_creates_and_links_persistent_room(tmp_path) -> Non
     rooms = create_team_rooms_router(state_path=tmp_path / "team_rooms.json")
     app = FastAPI()
     app.include_router(rooms)
-    app.include_router(create_cowork_group_router(
-        store=store,
-        team_rooms_state_path=tmp_path / "team_rooms.json",
-        team_rooms_router=rooms,
-    ))
+    app.include_router(
+        create_cowork_group_router(
+            store=store,
+            team_rooms_state_path=tmp_path / "team_rooms.json",
+            team_rooms_router=rooms,
+        )
+    )
     c = TestClient(app)
     c.post("/api/cowork/t1/members", json={"target_id": "alice", "kind": "agent"})
 
@@ -284,14 +315,16 @@ def test_collab_task_endpoint_auto_creates_room_and_folds_task(tmp_path) -> None
     app = FastAPI()
     app.include_router(rooms)
     app.include_router(tasks)
-    app.include_router(create_cowork_group_router(
-        store=store,
-        collaboration_store=collab_store,
-        team_rooms_state_path=tmp_path / "team_rooms.json",
-        team_tasks_state_path=tmp_path / "team_tasks.json",
-        team_rooms_router=rooms,
-        team_tasks_router=tasks,
-    ))
+    app.include_router(
+        create_cowork_group_router(
+            store=store,
+            collaboration_store=collab_store,
+            team_rooms_state_path=tmp_path / "team_rooms.json",
+            team_tasks_state_path=tmp_path / "team_tasks.json",
+            team_rooms_router=rooms,
+            team_tasks_router=tasks,
+        )
+    )
     c = TestClient(app)
     c.post("/api/cowork/t1/members", json={"target_id": "alice", "kind": "agent"})
 
@@ -342,10 +375,12 @@ def test_collab_session_prefers_unified_task_store(tmp_path) -> None:
         },
     )
     app = FastAPI()
-    app.include_router(create_cowork_group_router(
-        store=store,
-        collaboration_store=collab_store,
-    ))
+    app.include_router(
+        create_cowork_group_router(
+            store=store,
+            collaboration_store=collab_store,
+        )
+    )
     c = TestClient(app)
     c.post("/api/collab/t1/link-room", json={"room_id": "room-1"})
 
@@ -373,11 +408,13 @@ def test_collab_session_prefers_unified_message_store(tmp_path) -> None:
     legacy.append("room-1", text="legacy transcript line", participant_id="old", display_name="Old")
 
     app = FastAPI()
-    app.include_router(create_cowork_group_router(
-        store=store,
-        collaboration_store=collab_store,
-        room_message_store=legacy,
-    ))
+    app.include_router(
+        create_cowork_group_router(
+            store=store,
+            collaboration_store=collab_store,
+            room_message_store=legacy,
+        )
+    )
     c = TestClient(app)
     c.post("/api/collab/t1/link-room", json={"room_id": "room-1"})
 
@@ -455,9 +492,7 @@ def test_team_room_projection_can_promote_to_thread_session(tmp_path) -> None:
 
     assert collab_store.session_id_for_room("room-1") == "thread-1"
     assert collab_store.room_for_session("team:room-1") is None
-    assert [t["title"] for t in collab_store.tasks_for_session("thread-1")] == [
-        "created from team"
-    ]
+    assert [t["title"] for t in collab_store.tasks_for_session("thread-1")] == ["created from team"]
 
 
 def test_team_room_delete_projection_removes_unified_room_state(tmp_path) -> None:

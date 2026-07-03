@@ -283,9 +283,9 @@ class DeepResearchPlanner:
             materials=materials,
             sources=sources,
         )
-        roles = _normalize_roles(
-            request.roles or _default_roles(request.topic, subagent_budget)
-        )[:subagent_budget]
+        roles = _normalize_roles(request.roles or _default_roles(request.topic, subagent_budget))[
+            :subagent_budget
+        ]
         steps = [
             _step_for_role(
                 role,
@@ -326,13 +326,15 @@ class DeepResearchPlanner:
             if step.role_id == "synthesis":
                 continue
             role = next((r for r in job.roles if r.id == step.role_id), None)
-            tasks.append({
-                "task_id": step.id,
-                "description": step.prompt,
-                "subagent_name": role.subagent_name if role else "virtual-researcher",
-                "priority": 0,
-                "depends_on": [],
-            })
+            tasks.append(
+                {
+                    "task_id": step.id,
+                    "description": step.prompt,
+                    "subagent_name": role.subagent_name if role else "virtual-researcher",
+                    "priority": 0,
+                    "depends_on": [],
+                }
+            )
         return tasks
 
     def attach_evidence_pool(
@@ -428,7 +430,7 @@ class DeepResearchPlanner:
             line = raw_line.strip()
             if not line.upper().startswith("EVIDENCE"):
                 continue
-            payload = line[len("EVIDENCE"):].strip(" :-")
+            payload = line[len("EVIDENCE") :].strip(" :-")
             try:
                 data = json.loads(payload)
             except json.JSONDecodeError:
@@ -458,16 +460,18 @@ class DeepResearchPlanner:
             if key in seen:
                 continue
             seen.add(key)
-            evidence.append(ResearchEvidence(
-                job_id=job.job_id,
-                title=url,
-                url=url,
-                source_kind="web",
-                quote_or_summary="URL mentioned by a virtual research worker.",
-                claim=job.topic,
-                stance="context",
-                confidence=0.4,
-            ))
+            evidence.append(
+                ResearchEvidence(
+                    job_id=job.job_id,
+                    title=url,
+                    url=url,
+                    source_kind="web",
+                    quote_or_summary="URL mentioned by a virtual research worker.",
+                    claim=job.topic,
+                    stance="context",
+                    confidence=0.4,
+                )
+            )
         return evidence
 
     def build_lead_memory_entry(self, job: ResearchJob) -> str:
@@ -520,10 +524,12 @@ class DeepResearchPlanner:
                 job.memory_path = str(path)
                 return job
             if "_No memories yet._" in text:
-                cleaned = "\n".join(
-                    ln for ln in text.splitlines()
-                    if ln.strip() != "_No memories yet._"
-                ).rstrip() + "\n"
+                cleaned = (
+                    "\n".join(
+                        ln for ln in text.splitlines() if ln.strip() != "_No memories yet._"
+                    ).rstrip()
+                    + "\n"
+                )
                 path.write_text(cleaned, encoding="utf-8")
 
         with path.open("a", encoding="utf-8") as fh:
@@ -548,13 +554,7 @@ def _dedupe_materials(materials: list[ResearchMaterial]) -> list[ResearchMateria
     seen: set[tuple[str, str]] = set()
     out: list[ResearchMaterial] = []
     for material in materials:
-        key_value = (
-            material.url
-            or material.path
-            or material.text
-            or material.title
-            or material.id
-        )
+        key_value = material.url or material.path or material.text or material.title or material.id
         key = (material.kind, key_value.strip() if isinstance(key_value, str) else str(key_value))
         if key in seen:
             continue
@@ -573,26 +573,30 @@ def _seed_evidence(
     for mat in materials:
         if mat.kind not in ("url", "site") or not mat.url:
             continue
-        evidence.append(ResearchEvidence(
-            title=mat.title or mat.url,
-            url=mat.url,
-            source_kind="provided_url",
-            quote_or_summary=mat.notes or "User-provided source for this research run.",
-            claim=topic,
-            stance="context",
-            confidence=0.6,
-            step_id=None,
-            role_id=None,
-        ))
+        evidence.append(
+            ResearchEvidence(
+                title=mat.title or mat.url,
+                url=mat.url,
+                source_kind="provided_url",
+                quote_or_summary=mat.notes or "User-provided source for this research run.",
+                claim=topic,
+                stance="context",
+                confidence=0.6,
+                step_id=None,
+                role_id=None,
+            )
+        )
     if not evidence and provided is not None:
-        evidence.append(ResearchEvidence(
-            title=provided.label,
-            source_kind=provided.kind,
-            quote_or_summary=provided.query_hint,
-            claim=topic,
-            stance="context",
-            confidence=0.3,
-        ))
+        evidence.append(
+            ResearchEvidence(
+                title=provided.label,
+                source_kind=provided.kind,
+                quote_or_summary=provided.query_hint,
+                claim=topic,
+                stance="context",
+                confidence=0.3,
+            )
+        )
     return evidence
 
 
@@ -632,15 +636,17 @@ def _default_sources(
         if kind == "provided_url" and not any(m.kind in ("url", "site") for m in materials):
             continue
         route = _source_route(topic, kind, materials)
-        sources.append(ResearchSource(
-            kind=kind,
-            label=labels[kind],
-            query_hint=_query_hint(topic, kind),
-            provider=route["provider"],
-            query_templates=route["query_templates"],
-            site_filters=route["site_filters"],
-            freshness_days=route["freshness_days"],
-        ))
+        sources.append(
+            ResearchSource(
+                kind=kind,
+                label=labels[kind],
+                query_hint=_query_hint(topic, kind),
+                provider=route["provider"],
+                query_templates=route["query_templates"],
+                site_filters=route["site_filters"],
+                freshness_days=route["freshness_days"],
+            )
+        )
     return sources
 
 
@@ -843,20 +849,26 @@ def _normalize_roles(roles: list[ResearchRole]) -> list[ResearchRole]:
         seen_ids.add(role_id)
 
         subagent_name = _virtual_subagent_name(role.subagent_name, role_id)
-        normalized.append(role.model_copy(update={
-            "id": role_id,
-            "name": role.name.strip() or role_id.replace("_", " ").title(),
-            "subagent_name": subagent_name,
-            "focus": role.focus.strip() or "General research and source verification.",
-            "deliverable": role.deliverable.strip() or "Research findings with evidence.",
-            "search_angles": [angle.strip() for angle in role.search_angles if angle.strip()],
-        }))
+        normalized.append(
+            role.model_copy(
+                update={
+                    "id": role_id,
+                    "name": role.name.strip() or role_id.replace("_", " ").title(),
+                    "subagent_name": subagent_name,
+                    "focus": role.focus.strip() or "General research and source verification.",
+                    "deliverable": role.deliverable.strip() or "Research findings with evidence.",
+                    "search_angles": [
+                        angle.strip() for angle in role.search_angles if angle.strip()
+                    ],
+                }
+            )
+        )
     return normalized
 
 
 def _virtual_subagent_name(value: str, role_id: str) -> str:
     raw = (value or "").strip()
-    suffix = raw[len("virtual-research-"):] if raw.startswith("virtual-research-") else role_id
+    suffix = raw[len("virtual-research-") :] if raw.startswith("virtual-research-") else role_id
     suffix = _slug_role_id(suffix) or role_id
     return f"virtual-research-{suffix}"
 
@@ -998,11 +1010,7 @@ def _source_instruction_lines(sources: list[ResearchSource]) -> str:
             continue
         queries = "; ".join(source.query_templates[:3]) or source.query_hint
         filters = ", ".join(source.site_filters[:6])
-        freshness = (
-            f"; freshness <= {source.freshness_days} days"
-            if source.freshness_days
-            else ""
-        )
+        freshness = f"; freshness <= {source.freshness_days} days" if source.freshness_days else ""
         suffix = f"; filters: {filters}" if filters else ""
         lines.append(
             f"- {source.label} [{source.provider}]: {source.query_hint}"
@@ -1130,9 +1138,7 @@ def _evidence_table(evidence: list[ResearchEvidence]) -> str:
         source = _escape_table(ev.title or ev.url or ev.source_kind or "Source")
         if ev.url:
             source = f"[{source}]({ev.url})"
-        lines.append(
-            f"| {claim} | {source} | {ev.stance} | {ev.confidence:.2f} |"
-        )
+        lines.append(f"| {claim} | {source} | {ev.stance} | {ev.confidence:.2f} |")
     return "\n".join(lines)
 
 

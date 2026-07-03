@@ -103,7 +103,6 @@ _init_builtins()
 
 
 class PromptLoader:
-
     def __init__(
         self,
         search_dirs: list[Path | str] | None = None,
@@ -204,7 +203,6 @@ class PromptLoader:
         return dict(self._file_map)
 
 
-
 _default_loader: PromptLoader | None = None
 
 
@@ -222,9 +220,9 @@ def _load_content_from_yaml_subset(text: str) -> str | None:
         stripped = line.strip()
         if not stripped.startswith("content:"):
             continue
-        suffix = stripped[len("content:"):].strip()
+        suffix = stripped[len("content:") :].strip()
         if suffix in {"|", "|-", "|+"}:
-            return _read_yaml_block_scalar(lines[index + 1:])
+            return _read_yaml_block_scalar(lines[index + 1 :])
         if suffix in {'""', "''"}:
             return ""
         if suffix:

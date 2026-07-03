@@ -342,7 +342,9 @@ def _probe_process(pid: int | None) -> tuple[bool, int | None]:
         waited_pid, status = os.waitpid(pid, os.WNOHANG)
         if waited_pid == pid:
             return False, os.waitstatus_to_exitcode(status)
-    except ChildProcessError:  # expected · already reaped elsewhere, falls through to the liveness probe
+    except (
+        ChildProcessError
+    ):  # expected · already reaped elsewhere, falls through to the liveness probe
         pass
     except OSError:  # expected · falls through to the liveness probe below
         pass

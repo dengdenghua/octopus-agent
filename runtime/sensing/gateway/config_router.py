@@ -37,6 +37,7 @@ Design notes
   matches the pre-split behavior. Tests rely on this to exercise
   persistence without needing a full execution stack.
 """
+
 from __future__ import annotations
 
 import json
@@ -75,6 +76,7 @@ except ImportError:  # pragma: no cover
 
 
 if FASTAPI_AVAILABLE:
+
     class CustomModelEntry(BaseModel):
         """One custom-model row as shown to the UI. ``api_key`` is
         intentionally absent · ``has_api_key`` reports presence
@@ -213,6 +215,7 @@ class ConfigRouter:
     happen only through the PUT/DELETE handlers so the on-disk file
     stays authoritative.
     """
+
     router: Any
     custom_models: dict[str, dict[str, Any]]
 
@@ -304,7 +307,11 @@ def create_config_router(
             raise HTTPException(403, "admin role required")
 
     router = APIRouter(tags=["config"], dependencies=[Depends(_auth_dep)])
-    path = Path(custom_models_path) if custom_models_path is not None else app_paths().custom_models_path
+    path = (
+        Path(custom_models_path)
+        if custom_models_path is not None
+        else app_paths().custom_models_path
+    )
     custom_models_state: dict[str, dict[str, Any]] = {}
 
     # ─── Persistence helpers ────────────────────────────────
@@ -333,9 +340,7 @@ def create_config_router(
                 for entry in data.values():
                     if isinstance(entry, dict):
                         entry.pop("max_tokens", None)
-                custom_models_state.update(
-                    {k: v for k, v in data.items() if isinstance(v, dict)}
-                )
+                custom_models_state.update({k: v for k, v in data.items() if isinstance(v, dict)})
                 _save()
         except (OSError, json.JSONDecodeError):  # noqa: BLE001 — fresh install or corrupt file; start empty rather than crash boot
             # Fresh install (no file) or corrupted file — start empty
@@ -354,7 +359,9 @@ def create_config_router(
 
     def _dispatcher() -> Any:
         return getattr(
-            getattr(stack, "planner", None) if stack else None, "router", None,
+            getattr(stack, "planner", None) if stack else None,
+            "router",
+            None,
         )
 
     def _entry_model_id(entry: dict[str, Any]) -> str:
@@ -368,20 +375,14 @@ def create_config_router(
         # doesn't lose user config.
         raw_models = entry.get("models")
         if isinstance(raw_models, list) and raw_models:
-            upstreams: list[str] = [
-                str(m).strip() for m in raw_models if str(m or "").strip()
-            ]
+            upstreams: list[str] = [str(m).strip() for m in raw_models if str(m or "").strip()]
         else:
             legacy: list[str] = []
             primary = entry.get("model")
             if isinstance(primary, str) and primary.strip():
                 legacy.append(primary.strip())
             perf = entry.get("model_performance")
-            if (
-                isinstance(perf, str)
-                and perf.strip()
-                and perf.strip() != primary
-            ):
+            if isinstance(perf, str) and perf.strip() and perf.strip() != primary:
                 legacy.append(perf.strip())
             upstreams = legacy or [model_id]
         return upstreams
@@ -435,6 +436,7 @@ def create_config_router(
                 from runtime.sensing.model_router.anthropic_router import (
                     AnthropicModelRouter,
                 )
+
                 sub_router = AnthropicModelRouter(
                     api_key=api_key,
                     default_model=primary_model,
@@ -444,6 +446,7 @@ def create_config_router(
                 from runtime.sensing.model_router.gemini_router import (
                     GeminiModelRouter,
                 )
+
                 sub_router = GeminiModelRouter(
                     api_key=api_key,
                     default_model=primary_model,
@@ -454,6 +457,7 @@ def create_config_router(
                 from runtime.sensing.model_router.openai_router import (
                     OpenAIModelRouter,
                 )
+
                 if not base_url:
                     return {
                         "ok": False,
@@ -544,9 +548,7 @@ def create_config_router(
         base_url = str(entry.get("base_url") or "")
         upstreams = _entry_upstreams(entry, model_id)
         header_names = sorted(
-            str(name)
-            for name in (entry.get("default_headers") or {})
-            if str(name).strip()
+            str(name) for name in (entry.get("default_headers") or {}) if str(name).strip()
         )
         if provider not in {"openai", "openai-compatible", "openai_compat", "custom"}:
             return {
@@ -577,36 +579,38 @@ def create_config_router(
                 profile,
                 upstream,
             )
-            rows.append({
-                "model": upstream,
-                "profile": profile.id,
-                "profile_display_name": profile.display_name,
-                "profile_summary": profile_summary,
-                "compat_score": profile_summary["compat_score"],
-                "normalization_hints": profile_summary["normalization_hints"],
-                "compatibility_notes": profile_summary["notes"],
-                "thinking_request_style": profile.thinking_request_style,
-                "omit_sampling_parameters": profile.omit_sampling_parameters,
-                "drop_tool_choice": profile.drop_tool_choice,
-                "strict_tool_schema": profile.strict_tool_schema,
-                "max_temperature": profile.max_temperature,
-                "unsupported_request_fields": list(
-                    profile.unsupported_request_fields,
-                ),
-                "dry_run": True,
-                "risk_level": request_contract["risk_level"],
-                "risk_reasons": request_contract["risk_reasons"],
-                "capability_matrix": request_contract["capability_matrix"],
-                "request_contract": request_contract,
-                "normalization": {
-                    "removed_fields": request_contract["removed_fields"],
-                    "added_fields": request_contract["added_fields"],
-                    "changed_fields": request_contract["changed_fields"],
-                    "normalized_fields": request_contract["normalized_fields"],
-                    "payload": request_contract["normalized_payload"],
-                },
-                "fallback_retries": request_contract["fallback_retries"],
-            })
+            rows.append(
+                {
+                    "model": upstream,
+                    "profile": profile.id,
+                    "profile_display_name": profile.display_name,
+                    "profile_summary": profile_summary,
+                    "compat_score": profile_summary["compat_score"],
+                    "normalization_hints": profile_summary["normalization_hints"],
+                    "compatibility_notes": profile_summary["notes"],
+                    "thinking_request_style": profile.thinking_request_style,
+                    "omit_sampling_parameters": profile.omit_sampling_parameters,
+                    "drop_tool_choice": profile.drop_tool_choice,
+                    "strict_tool_schema": profile.strict_tool_schema,
+                    "max_temperature": profile.max_temperature,
+                    "unsupported_request_fields": list(
+                        profile.unsupported_request_fields,
+                    ),
+                    "dry_run": True,
+                    "risk_level": request_contract["risk_level"],
+                    "risk_reasons": request_contract["risk_reasons"],
+                    "capability_matrix": request_contract["capability_matrix"],
+                    "request_contract": request_contract,
+                    "normalization": {
+                        "removed_fields": request_contract["removed_fields"],
+                        "added_fields": request_contract["added_fields"],
+                        "changed_fields": request_contract["changed_fields"],
+                        "normalized_fields": request_contract["normalized_fields"],
+                        "payload": request_contract["normalized_payload"],
+                    },
+                    "fallback_retries": request_contract["fallback_retries"],
+                }
+            )
         return {
             "id": model_id,
             "provider": provider,
@@ -632,11 +636,7 @@ def create_config_router(
         wire.
         """
         header_names = _default_header_names(entry)
-        safe = {
-            k: v
-            for k, v in entry.items()
-            if k not in {"api_key", "default_headers"}
-        }
+        safe = {k: v for k, v in entry.items() if k not in {"api_key", "default_headers"}}
         safe["has_api_key"] = bool(entry.get("api_key"))
         safe["default_header_names"] = header_names
         safe["has_default_headers"] = bool(header_names)
@@ -651,14 +651,16 @@ def create_config_router(
         catalog: list[dict[str, Any]] = []
         for profile in known_openai_compat_profiles():
             probe = sample_openai_compat_profile_probe(profile)
-            diagnostic = _compat_diagnostic_for_entry({
-                "id": profile.id,
-                "name": profile.display_name,
-                "provider": "openai",
-                "base_url": probe.base_url,
-                "models": [probe.model],
-                "compat_profile": profile.id,
-            })
+            diagnostic = _compat_diagnostic_for_entry(
+                {
+                    "id": profile.id,
+                    "name": profile.display_name,
+                    "provider": "openai",
+                    "base_url": probe.base_url,
+                    "models": [probe.model],
+                    "compat_profile": profile.id,
+                }
+            )
             diagnostic["built_in"] = True
             diagnostic["sample_base_url"] = probe.base_url
             diagnostic["sample_model"] = probe.model
@@ -681,7 +683,8 @@ def create_config_router(
     # ═══ Endpoints ═══════════════════════════════════════════
 
     @router.get(
-        "/api/config/identity-lock", response_model=IdentityLockResponse,
+        "/api/config/identity-lock",
+        response_model=IdentityLockResponse,
     )
     def api_identity_lock_get() -> dict[str, Any]:
         """Report current identity-lock state.
@@ -721,7 +724,8 @@ def create_config_router(
         }
 
     @router.put(
-        "/api/config/identity-lock", response_model=IdentityLockResponse,
+        "/api/config/identity-lock",
+        response_model=IdentityLockResponse,
     )
     def api_identity_lock_put(body: dict[str, Any]) -> dict[str, Any]:
         """Admin · toggle identity lock at runtime.
@@ -739,7 +743,8 @@ def create_config_router(
             _idf.set_runtime_lock(raw)
         else:
             raise HTTPException(
-                400, "body.locked must be true / false / null",
+                400,
+                "body.locked must be true / false / null",
             )
         return api_identity_lock_get()
 
@@ -755,8 +760,8 @@ def create_config_router(
         providers: list[dict[str, Any]] = []
         _specs: list[tuple[str, str, str]] = [
             ("anthropic", "runtime.sensing.model_router.anthropic_router", "AnthropicModelRouter"),
-            ("openai",    "runtime.sensing.model_router.openai_router",    "OpenAIModelRouter"),
-            ("gemini",    "runtime.sensing.model_router.gemini_router",    "GeminiModelRouter"),
+            ("openai", "runtime.sensing.model_router.openai_router", "OpenAIModelRouter"),
+            ("gemini", "runtime.sensing.model_router.gemini_router", "GeminiModelRouter"),
         ]
         for name, modpath, classname in _specs:
             try:
@@ -767,31 +772,31 @@ def create_config_router(
                 caps = getattr(cls, "capabilities", None)
                 if caps is None:
                     continue
-                providers.append({
-                    "name": getattr(cls, "provider_name", name),
-                    "supports_vision": caps.supports_vision,
-                    "supports_tool_use": caps.supports_tool_use,
-                    "supports_streaming": caps.supports_streaming,
-                    "supports_prompt_cache": caps.supports_prompt_cache,
-                    "supports_structured_output": caps.supports_structured_output,
-                    "default_model": caps.default_model,
-                    "pricing_hint": caps.pricing_hint,
-                })
+                providers.append(
+                    {
+                        "name": getattr(cls, "provider_name", name),
+                        "supports_vision": caps.supports_vision,
+                        "supports_tool_use": caps.supports_tool_use,
+                        "supports_streaming": caps.supports_streaming,
+                        "supports_prompt_cache": caps.supports_prompt_cache,
+                        "supports_structured_output": caps.supports_structured_output,
+                        "default_model": caps.default_model,
+                        "pricing_hint": caps.pricing_hint,
+                    }
+                )
             except (OSError, ValueError, AttributeError):  # noqa: BLE001
                 continue
         return {"providers": providers}
 
     @router.get(
-        "/api/config/custom-models", response_model=CustomModelsList,
+        "/api/config/custom-models",
+        response_model=CustomModelsList,
     )
     def api_list_custom_models() -> dict[str, Any]:
         """List user-added models. ``api_key`` is NEVER echoed back —
         presence reported as ``has_api_key`` boolean only."""
         return {
-            "models": [
-                _custom_model_wire_entry(entry)
-                for entry in custom_models_state.values()
-            ],
+            "models": [_custom_model_wire_entry(entry) for entry in custom_models_state.values()],
         }
 
     @router.get("/api/config/custom-models/compat-diagnostics")
@@ -814,9 +819,7 @@ def create_config_router(
         return {
             "schema": "octopus.openai_compat_diagnostics.v1",
             "total": len(entries),
-            "diagnostics": [
-                _compat_diagnostic_for_entry(entry) for entry in entries
-            ],
+            "diagnostics": [_compat_diagnostic_for_entry(entry) for entry in entries],
         }
 
     @router.get("/api/config/openai-compat-profiles")
@@ -842,7 +845,8 @@ def create_config_router(
 
     @router.put("/api/config/custom-models/{model_id}")
     def api_upsert_custom_model(
-        model_id: str, body: dict[str, Any],
+        model_id: str,
+        body: dict[str, Any],
     ) -> dict[str, Any]:
         """Upsert a custom model. Missing fields in ``body`` are
         preserved from the prior entry (so a PUT without api_key keeps
@@ -895,9 +899,7 @@ def create_config_router(
             "base_url": body.get("base_url") or prev.get("base_url") or "",
             "api_key": body.get("api_key") or prev.get("api_key") or "",
             "models": models,
-            "display_name": (
-                body.get("display_name") or body.get("name") or model_id
-            ),
+            "display_name": (body.get("display_name") or body.get("name") or model_id),
             "supports_thinking": (
                 body["supports_thinking"]
                 if "supports_thinking" in body
@@ -919,9 +921,7 @@ def create_config_router(
                 else prev.get("omit_sampling_parameters")
             ),
             "compat_profile": (
-                body["compat_profile"]
-                if "compat_profile" in body
-                else prev.get("compat_profile")
+                body["compat_profile"] if "compat_profile" in body else prev.get("compat_profile")
             ),
             "thinking_request_style": (
                 body["thinking_request_style"]
@@ -1047,7 +1047,9 @@ def create_config_router(
         ollama_native = ("openai", "http://127.0.0.1:11434", "/api/tags")
 
         def _probe(
-            base: str, path: str, timeout: float = 0.6,
+            base: str,
+            path: str,
+            timeout: float = 0.6,
         ) -> tuple[list[str], str | None]:
             url = base.rstrip("/") + path
             try:
@@ -1085,8 +1087,7 @@ def create_config_router(
         results: list[dict[str, Any]] = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
             futures = {
-                ex.submit(_probe, base, path): (base, path)
-                for (provider, base, path) in candidates
+                ex.submit(_probe, base, path): (base, path) for (provider, base, path) in candidates
             }
             for fut in concurrent.futures.as_completed(futures):
                 base, path = futures[fut]
@@ -1114,9 +1115,7 @@ def create_config_router(
                 )
         # Ollama native fallback — only when nothing on 11434's
         # v1 surface came back. Avoids double-reporting.
-        if not any(
-            r["base_url"].startswith("http://127.0.0.1:11434") for r in results
-        ):
+        if not any(r["base_url"].startswith("http://127.0.0.1:11434") for r in results):
             # Tuple is (provider_hint, base_url, probe_path); we
             # want the base_url and probe_path here.
             _, ollama_base, ollama_path = ollama_native
@@ -1164,6 +1163,7 @@ def create_config_router(
         # of stacking duplicate rows). The user can still rename
         # in the edit form afterwards.
         from urllib.parse import urlparse
+
         parsed = urlparse(base_url)
         host = parsed.hostname or "localhost"
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
@@ -1179,9 +1179,13 @@ def create_config_router(
         # caller can re-run scan to refresh its models list and
         # we'll just update in place).
         suffix = 1
-        while model_id in custom_models_state and custom_models_state[model_id].get(
-            "base_url",
-        ) != base_url:
+        while (
+            model_id in custom_models_state
+            and custom_models_state[model_id].get(
+                "base_url",
+            )
+            != base_url
+        ):
             suffix += 1
             model_id = f"{id_seed}-{suffix}"
         entry = {
@@ -1230,11 +1234,7 @@ def create_config_router(
         import time
 
         model_id = body.get("id")
-        prev = (
-            custom_models_state.get(model_id)
-            if isinstance(model_id, str)
-            else {}
-        ) or {}
+        prev = (custom_models_state.get(model_id) if isinstance(model_id, str) else {}) or {}
         provider = str(
             body.get("provider") or prev.get("provider") or "openai",
         ).lower()
@@ -1283,6 +1283,7 @@ def create_config_router(
                 from runtime.sensing.model_router.anthropic_router import (
                     AnthropicModelRouter,
                 )
+
                 router_for_test = AnthropicModelRouter(
                     api_key=api_key,
                     default_model=upstream_model,
@@ -1293,13 +1294,11 @@ def create_config_router(
                 from runtime.sensing.model_router.gemini_router import (
                     GeminiModelRouter,
                 )
+
                 router_for_test = GeminiModelRouter(
                     api_key=api_key,
                     default_model=upstream_model,
-                    base_url=(
-                        base_url
-                        or "https://generativelanguage.googleapis.com/v1beta"
-                    ),
+                    base_url=(base_url or "https://generativelanguage.googleapis.com/v1beta"),
                     extra_headers=default_headers,
                 )
                 provider_name = "gemini"
@@ -1307,6 +1306,7 @@ def create_config_router(
                 from runtime.sensing.model_router.openai_router import (
                     OpenAIModelRouter,
                 )
+
                 router_for_test = OpenAIModelRouter(
                     base_url=base_url,
                     api_key=api_key,
@@ -1317,12 +1317,14 @@ def create_config_router(
                 provider_name = "openai"
 
             started = time.perf_counter()
-            resp = router_for_test.call(ModelRequest(
-                model=upstream_model,
-                messages=[Message(role="user", content="ping")],
-                max_tokens=8,
-                temperature=0,
-            ))
+            resp = router_for_test.call(
+                ModelRequest(
+                    model=upstream_model,
+                    messages=[Message(role="user", content="ping")],
+                    max_tokens=8,
+                    temperature=0,
+                )
+            )
             latency_ms = int((time.perf_counter() - started) * 1000)
             return {
                 "ok": True,
@@ -1380,35 +1382,39 @@ def create_config_router(
                 # model entry the variant came from (e.g. credentials
                 # / base_url lookup).
                 display = entry_label if len(variants) == 1 else (variant or entry_label)
-                custom.append({
-                    "id": variant,
-                    "name": variant,
-                    "display_name": display,
-                    "provider": provider,
-                    "supports_thinking": supports_thinking,
-                    "supports_vision": supports_vision,
-                    "supports_tool_use": supports_tool_use,
-                    "omit_sampling_parameters": (
-                        bool(omit_sampling_parameters)
-                        if omit_sampling_parameters is not None
-                        else None
-                    ),
-                    "compat_profile": e.get("compat_profile"),
-                    "thinking_request_style": e.get("thinking_request_style"),
-                    "drop_tool_choice": e.get("drop_tool_choice"),
-                    "strict_tool_schema": e.get("strict_tool_schema"),
-                    "max_temperature": e.get("max_temperature"),
-                    "custom": True,
-                    "entry_id": entry_id,
-                })
+                custom.append(
+                    {
+                        "id": variant,
+                        "name": variant,
+                        "display_name": display,
+                        "provider": provider,
+                        "supports_thinking": supports_thinking,
+                        "supports_vision": supports_vision,
+                        "supports_tool_use": supports_tool_use,
+                        "omit_sampling_parameters": (
+                            bool(omit_sampling_parameters)
+                            if omit_sampling_parameters is not None
+                            else None
+                        ),
+                        "compat_profile": e.get("compat_profile"),
+                        "thinking_request_style": e.get("thinking_request_style"),
+                        "drop_tool_choice": e.get("drop_tool_choice"),
+                        "strict_tool_schema": e.get("strict_tool_schema"),
+                        "max_temperature": e.get("max_temperature"),
+                        "custom": True,
+                        "entry_id": entry_id,
+                    }
+                )
         # Octopus Mix — built-in mixture-of-agents virtual model. Selecting
         # it routes /v1/chat/completions through proposers + aggregator
         # (see openai_gateway/mix.py). Listed first as the octopus-native
         # flagship; degrades to a single model if no proposer pool is set.
         from runtime.sensing.gateway.openai_gateway.mix import MIX_MODEL_ID
+
         mix_presets = [
             {
-                "id": MIX_MODEL_ID, "name": MIX_MODEL_ID,
+                "id": MIX_MODEL_ID,
+                "name": MIX_MODEL_ID,
                 "display_name": "Octopus Mix · 多模型协同",
                 "provider": "octopus",
                 "supports_thinking": True,
@@ -1444,6 +1450,7 @@ def create_config_router(
     )
     def api_constitution_profile_put(body: dict[str, Any]) -> dict[str, Any]:
         from runtime.safety.validation import get_profile, set_profile
+
         raw = body.get("profile") if isinstance(body, dict) else None
         if not isinstance(raw, str):
             raise HTTPException(400, "body.profile must be a string")
@@ -1520,6 +1527,7 @@ def create_config_router(
         description, experimental, primary_env, legacy_env }, ... ] }``
         """
         from runtime.platform import feature_flags as _ff
+
         return {"flags": _ff.describe()}
 
     @router.post("/api/feature-flags/reload")
@@ -1531,6 +1539,7 @@ def create_config_router(
         endpoint.
         """
         from runtime.platform import feature_flags as _ff
+
         _ff.reload()
         return {"flags": _ff.describe()}
 
@@ -1561,6 +1570,7 @@ def create_config_router(
             get_tier_config,
             is_smart_routing_enabled,
         )
+
         return {
             "enabled": is_smart_routing_enabled(),
             "tiers": get_tier_config(),
@@ -1586,6 +1596,7 @@ def create_config_router(
             detect_device_summary,
             recommend_mode,
         )
+
         summary = detect_device_summary()
         return {
             "mode": current_ai_mode(),
@@ -1596,18 +1607,14 @@ def create_config_router(
                     "id": "efficiency",
                     "label": "效率模式",
                     "description": (
-                        "融合端侧的极致响应与云端的强大算力，"
-                        "效果更好，速度更快，绝大多数用户的首选"
+                        "融合端侧的极致响应与云端的强大算力，效果更好，速度更快，绝大多数用户的首选"
                     ),
                     "recommended_default": True,
                 },
                 {
                     "id": "privacy",
                     "label": "隐私模式",
-                    "description": (
-                        "专为保密场景设计，使用本地模型，"
-                        "全部文件均在本地处理和分析"
-                    ),
+                    "description": ("专为保密场景设计，使用本地模型，全部文件均在本地处理和分析"),
                     "recommended_default": False,
                 },
             ],
@@ -1617,10 +1624,12 @@ def create_config_router(
     def api_ai_mode_set(payload: dict[str, Any]) -> dict[str, Any]:
         """Persist the user's AI mode choice."""
         from runtime.core.cerebrum.ai_mode import set_ai_mode
+
         try:
             canonical = set_ai_mode(payload.get("mode", ""))
         except ValueError as exc:
             from fastapi import HTTPException
+
             raise HTTPException(400, str(exc)) from exc
         return {"mode": canonical, "ok": True}
 
@@ -1634,15 +1643,18 @@ def create_config_router(
         "新增 / 删除" affordance.
         """
         from runtime.safety.auth.path_denylist import get_user_denylist
+
         return {"paths": get_user_denylist()}
 
     @router.post("/api/path-denylist", dependencies=[Depends(_require_admin)])
     def api_path_denylist_add(payload: dict[str, Any]) -> dict[str, Any]:
         """Append a path to the user denylist."""
         from runtime.safety.auth.path_denylist import add_user_denylist_entry
+
         path = payload.get("path", "")
         if not isinstance(path, str) or not path.strip():
             from fastapi import HTTPException
+
             raise HTTPException(400, "path must be a non-empty string")
         return {"paths": add_user_denylist_entry(path), "ok": True}
 
@@ -1650,9 +1662,11 @@ def create_config_router(
     def api_path_denylist_remove(payload: dict[str, Any]) -> dict[str, Any]:
         """Remove a path from the user denylist."""
         from runtime.safety.auth.path_denylist import remove_user_denylist_entry
+
         path = payload.get("path", "")
         if not isinstance(path, str) or not path.strip():
             from fastapi import HTTPException
+
             raise HTTPException(400, "path must be a non-empty string")
         return {"paths": remove_user_denylist_entry(path), "ok": True}
 

@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -13,13 +12,12 @@ TripleStatus = Literal["active", "archived", "disputed", "superseded"]
 
 
 class Triple(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     triple_id: UUID = Field(default_factory=new_id)
     subject: str = Field(..., min_length=1)
     predicate: str = Field(..., min_length=1)
-    object: str = Field(..., min_length=1)      # Implementation note.
+    object: str = Field(..., min_length=1)  # Implementation note.
     confidence: float = Field(default=0.75, ge=0.0, le=1.0)
     source: Source
     ts: datetime = Field(default_factory=now_utc)

@@ -96,9 +96,9 @@ def resolve_work_mode(user_context: dict[str, Any] | None) -> WorkMode:
         or uc.get("cwd")
         or metadata.get("cwd")
     )
-    workspace_scope_value = str(
-        uc.get("workspace_scope") or metadata.get("workspace_scope") or ""
-    ).strip().lower()
+    workspace_scope_value = (
+        str(uc.get("workspace_scope") or metadata.get("workspace_scope") or "").strip().lower()
+    )
 
     effective_wp = project_wp
     if not (isinstance(effective_wp, str) and effective_wp.strip()):
@@ -114,17 +114,17 @@ def resolve_work_mode(user_context: dict[str, Any] | None) -> WorkMode:
     mode = _lc(uc, metadata, "mode")
     capability_mode = _lc(uc, metadata, "capability_mode")
     agent_mode = str(uc.get("agent_mode") or metadata.get("agent_mode") or "coder").lower()
-    workflow_preset = str(
-        uc.get("workflow_preset") or metadata.get("workflow_preset") or ""
-    ).strip().lower()
+    workflow_preset = (
+        str(uc.get("workflow_preset") or metadata.get("workflow_preset") or "").strip().lower()
+    )
     codex_mode = str(uc.get("codex_mode") or metadata.get("codex_mode") or "").strip().lower()
-    completion_policy = str(
-        uc.get("completion_policy") or metadata.get("completion_policy") or ""
-    ).strip().lower()
+    completion_policy = (
+        str(uc.get("completion_policy") or metadata.get("completion_policy") or "").strip().lower()
+    )
     mode_contract = str(uc.get("mode_contract") or metadata.get("mode_contract") or "").strip()
-    personal_mode = str(
-        uc.get("personal_mode") or metadata.get("personal_mode") or ""
-    ).strip().lower()
+    personal_mode = (
+        str(uc.get("personal_mode") or metadata.get("personal_mode") or "").strip().lower()
+    )
     project_signals = uc.get("project_signals") or metadata.get("project_signals")
 
     # ── Derived ──────────────────────────────────────────────────────────────
@@ -136,7 +136,10 @@ def resolve_work_mode(user_context: dict[str, Any] | None) -> WorkMode:
     )
     is_goal = (
         goal_mode_value is True
-        or (isinstance(goal_mode_value, str) and goal_mode_value.lower() in {"goal", "goal_mode", "true"})
+        or (
+            isinstance(goal_mode_value, str)
+            and goal_mode_value.lower() in {"goal", "goal_mode", "true"}
+        )
         or codex_mode == "goal"
         or completion_policy == "goal"
     )

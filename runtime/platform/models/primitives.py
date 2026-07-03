@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -24,12 +23,10 @@ def now_utc() -> datetime:
     return datetime.now(UTC)
 
 
-
 SourceType = Literal["user", "tool", "doc", "trajectory", "inference", "system"]
 
 
 class Source(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     source_id: str = Field(..., min_length=1)
@@ -37,9 +34,7 @@ class Source(BaseModel):
     trust_score: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
-
 class CostEntry(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     tokens_in: int = Field(default=0, ge=0)
@@ -60,14 +55,13 @@ class CostEntry(BaseModel):
         )
 
 
-
 TRUST_USER_DEFAULT = 0.80
 TRUST_TOOL_DEFAULT = 0.75
 TRUST_DOC_DEFAULT = 0.60
 TRUST_TRAJECTORY_DEFAULT = 0.55
 TRUST_INFERENCE_DEFAULT = 0.50  # Implementation note.
-TRUST_INFERENCE_CAP = 0.50      # Implementation note.
-TRUST_REM_CAP = 0.40            # Implementation note.
+TRUST_INFERENCE_CAP = 0.50  # Implementation note.
+TRUST_REM_CAP = 0.40  # Implementation note.
 
 
 DEFAULT_TRUST_BY_TYPE: dict[SourceType, float] = {

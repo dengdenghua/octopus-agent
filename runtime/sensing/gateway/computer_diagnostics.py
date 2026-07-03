@@ -8,6 +8,7 @@ dicts from their own arguments. Used by computer_router.py's route
 handlers, computer_lease.py (conflict diagnostics), and
 computer_runtime_readiness.py (capability rows).
 """
+
 from __future__ import annotations
 
 from typing import Any

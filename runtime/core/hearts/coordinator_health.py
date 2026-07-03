@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -47,7 +46,6 @@ class CoordinatorHealthReport:
 
 
 class LeaseGuardian:
-
     def __init__(
         self,
         coordinator: Coordinator,
@@ -124,7 +122,8 @@ class LeaseGuardian:
                 continue
             try:
                 new_lease = self.coordinator.renew_lease(
-                    info.lease, ttl=original_ttl,
+                    info.lease,
+                    ttl=original_ttl,
                 )
                 if new_lease is not None:
                     with self._lock:
@@ -139,7 +138,8 @@ class LeaseGuardian:
                             if self._watches[scope].renew_failures >= self.max_renew_failures:
                                 _LOG.error(
                                     "lease guardian: scope %s lost after %d renew failures",
-                                    scope, self.max_renew_failures,
+                                    scope,
+                                    self.max_renew_failures,
                                 )
                                 del self._watches[scope]
             except Exception as exc:
@@ -150,7 +150,6 @@ class LeaseGuardian:
 
 
 class CoordinatorHealth:
-
     def __init__(
         self,
         coordinator: Coordinator,
@@ -199,16 +198,12 @@ class CoordinatorHealth:
                 errors.append(f"lease expired: {scope}")
             elif remaining < self.warning_threshold:
                 detail["status"] = "warning"
-                errors.append(
-                    f"lease expiring soon: {scope} ({remaining:.1f}s remaining)"
-                )
+                errors.append(f"lease expiring soon: {scope} ({remaining:.1f}s remaining)")
             if info.renew_failures > 0:
                 detail["status"] = "degraded"
             lease_details.append(detail)
 
-        healthy = connectivity_ok and not any(
-            d["status"] in ("expired",) for d in lease_details
-        )
+        healthy = connectivity_ok and not any(d["status"] in ("expired",) for d in lease_details)
 
         return CoordinatorHealthReport(
             healthy=healthy,

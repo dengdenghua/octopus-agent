@@ -59,7 +59,8 @@ if TYPE_CHECKING:
 # immunity gate is skipped (the other, stateless gates still apply),
 # exactly the no-op the direct dispatch already had.
 _active_trust_engine: ContextVar[TrustEngine | None] = ContextVar(
-    "octopus_active_trust_engine", default=None,
+    "octopus_active_trust_engine",
+    default=None,
 )
 
 
@@ -113,14 +114,8 @@ def antigen_for(skill: Any) -> AntigenSignature:
     return AntigenSignature(
         entity_id=skill.trusted_source,
         entity_type="skill",
-        content_hash=hashlib.blake2b(
-            skill.name.encode("utf-8"), digest_size=8
-        ).hexdigest(),
-        origin=(
-            "public"
-            if skill.trusted_source.startswith("skill://public")
-            else "custom"
-        ),
+        content_hash=hashlib.blake2b(skill.name.encode("utf-8"), digest_size=8).hexdigest(),
+        origin=("public" if skill.trusted_source.startswith("skill://public") else "custom"),
     )
 
 
@@ -204,7 +199,9 @@ def gate_inner_dispatch(
 
     # 2. Indirect prompt-injection taint.
     inj = injection_taint_block(
-        skill_id, str(args)[:500], defer_if_handled=defer_taint_if_handled,
+        skill_id,
+        str(args)[:500],
+        defer_if_handled=defer_taint_if_handled,
     )
     if inj is not None:
         return GateBlock(GATE_INJECTION_TAINT, inj)
@@ -218,7 +215,8 @@ def gate_inner_dispatch(
         )
         if report.verdict == "reject":
             return GateBlock(
-                GATE_IMMUNE, report.reason or "rejected by trust engine",
+                GATE_IMMUNE,
+                report.reason or "rejected by trust engine",
             )
 
     # 4. Credential-file denylist.

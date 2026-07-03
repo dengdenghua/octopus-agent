@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from utils.json_store import ensure_dir, load_json, save_json
 
@@ -53,7 +53,7 @@ class TestLoadJson(unittest.TestCase):
         """Test loading a valid JSON file."""
         filepath = os.path.join(self.temp_dir, "data.json")
         test_data = {"key": "value", "number": 42}
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(test_data, f)
 
         result = load_json(filepath)
@@ -74,7 +74,7 @@ class TestLoadJson(unittest.TestCase):
     def test_load_malformed_json_returns_default(self):
         """Test that malformed JSON returns default value."""
         filepath = os.path.join(self.temp_dir, "bad.json")
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             f.write("{invalid json")
 
         result = load_json(filepath, default={"fallback": True})
@@ -83,7 +83,7 @@ class TestLoadJson(unittest.TestCase):
     def test_load_empty_file_returns_default(self):
         """Test that empty file returns default value."""
         filepath = os.path.join(self.temp_dir, "empty.json")
-        with open(filepath, 'w'):
+        with open(filepath, "w"):
             pass  # Create empty file
 
         result = load_json(filepath, default={"empty": True})
@@ -99,16 +99,10 @@ class TestLoadJson(unittest.TestCase):
         """Test loading complex nested JSON structure."""
         filepath = os.path.join(self.temp_dir, "complex.json")
         test_data = {
-            "events": [
-                {"id": 1, "name": "Event 1"},
-                {"id": 2, "name": "Event 2"}
-            ],
-            "metadata": {
-                "version": "1.0",
-                "nested": {"deep": True}
-            }
+            "events": [{"id": 1, "name": "Event 1"}, {"id": 2, "name": "Event 2"}],
+            "metadata": {"version": "1.0", "nested": {"deep": True}},
         }
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(test_data, f)
 
         result = load_json(filepath)
@@ -148,7 +142,7 @@ class TestSaveJson(unittest.TestCase):
     def test_save_overwrites_existing(self):
         """Test that save_json overwrites existing file."""
         filepath = os.path.join(self.temp_dir, "existing.json")
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump({"old": "data"}, f)
 
         new_data = {"new": "data"}
@@ -189,12 +183,12 @@ class TestSaveJson(unittest.TestCase):
             "boolean": True,
             "null": None,
             "array": [1, 2, 3],
-            "object": {"nested": "value"}
+            "object": {"nested": "value"},
         }
         save_json(filepath, test_data)
         loaded = load_json(filepath)
         self.assertEqual(loaded, test_data)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

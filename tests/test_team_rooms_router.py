@@ -110,13 +110,17 @@ def test_team_room_websocket_presence_and_events(tmp_path: Path) -> None:
     team = client.post("/api/teams", json=_team_body()).json()
     url = f"/api/teams/{team['id']}/ws"
 
-    with client.websocket_connect(f"{url}?participant_id=alice&display_name=Alice&thread_id=thread-a") as alice:
+    with client.websocket_connect(
+        f"{url}?participant_id=alice&display_name=Alice&thread_id=thread-a"
+    ) as alice:
         ready = alice.receive_json()
         assert ready["type"] == "ready"
         assert ready["participant"]["id"] == "alice"
         assert alice.receive_json()["type"] == "presence"
 
-        with client.websocket_connect(f"{url}?participant_id=bob&display_name=Bob&thread_id=thread-a") as bob:
+        with client.websocket_connect(
+            f"{url}?participant_id=bob&display_name=Bob&thread_id=thread-a"
+        ) as bob:
             bob_ready = bob.receive_json()
             assert bob_ready["participant"]["id"] == "bob"
             alice_presence = alice.receive_json()
@@ -428,9 +432,7 @@ def test_can_speak_moderated_floor_holder_and_moderator() -> None:
 # ── turn engine: end-to-end over the WebSocket (single-socket, drained) ──
 
 
-def _room_with_two_members(
-    tmp_path: Path, *, twin_responder=None
-) -> tuple[TestClient, str]:
+def _room_with_two_members(tmp_path: Path, *, twin_responder=None) -> tuple[TestClient, str]:
     """Team + two human members joined via invite (ids 'alice','bob')."""
     client = _client(tmp_path, twin_responder=twin_responder)
     tid = client.post("/api/teams", json=_team_body()).json()["id"]
@@ -606,11 +608,13 @@ def _recording_responder(reply: str | None = "On it — I'll take that."):
     calls: list[dict] = []
 
     async def responder(team, participant, transcript) -> str | None:
-        calls.append({
-            "participant_id": participant.id,
-            "twin_agent_id": getattr(participant, "twin_agent_id", None),
-            "transcript": [dict(e) for e in transcript],
-        })
+        calls.append(
+            {
+                "participant_id": participant.id,
+                "twin_agent_id": getattr(participant, "twin_agent_id", None),
+                "transcript": [dict(e) for e in transcript],
+            }
+        )
         return reply
 
     return responder, calls
@@ -656,8 +660,8 @@ def test_twin_speaks_when_floor_granted_over_ws(tmp_path: Path) -> None:
         # the bound twin generated + emitted a line on bob's behalf
         msg = mod.receive_json()
         assert msg["type"] == "message"
-        assert msg["participant_id"] == "bob"     # attributed to bob
-        assert msg["spoken_by"] == "general"      # ...by his twin agent
+        assert msg["participant_id"] == "bob"  # attributed to bob
+        assert msg["spoken_by"] == "general"  # ...by his twin agent
         assert msg["via"] == "twin"
         assert msg["text"] == "I'll handle the deploy."
     assert [c["participant_id"] for c in calls] == ["bob"]
@@ -675,8 +679,7 @@ def test_twin_speaks_in_round_robin_over_ws(tmp_path: Path) -> None:
     seated = team["current_speaker_id"]
     assert seated is not None
     others = [
-        p["id"] for p in team["participants"]
-        if p["id"] != seated and p["status"] != "removed"
+        p["id"] for p in team["participants"] if p["id"] != seated and p["status"] != "removed"
     ]
     # Everyone except the seated speaker delegates to the 'general' twin, so
     # wherever the floor advances next it lands on a twin.

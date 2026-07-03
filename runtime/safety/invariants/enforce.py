@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import functools
@@ -18,13 +17,13 @@ def _enabled() -> bool:
     """
     try:
         from runtime.platform import feature_flags as _ff
+
         return _ff.is_on("safety.invariants_enabled")
     except (ImportError, AttributeError, OSError, ValueError, TypeError):
         return os.environ.get("OCTOPUS_INVARIANTS", "on") != "off"
 
 
 class InvariantViolation(RuntimeError):
-
     def __init__(self, rule_id: str, message: str) -> None:
         self.rule_id = rule_id
         super().__init__(f"[{rule_id}] {message}")
@@ -162,8 +161,7 @@ def append_only(
             if len(after) < before_len:
                 raise InvariantViolation(
                     rule_id,
-                    f"{self.__class__.__name__}.{attr}: length shrank "
-                    f"{before_len} → {len(after)}",
+                    f"{self.__class__.__name__}.{attr}: length shrank {before_len} → {len(after)}",
                 )
             for i, old in enumerate(before_list):
                 if after[i] != old:

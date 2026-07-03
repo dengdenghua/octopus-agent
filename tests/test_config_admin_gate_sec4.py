@@ -6,6 +6,7 @@ role check — so any authenticated non-admin user could `POST`/`DELETE`
 path-denylist endpoints now carry `_require_admin` (mirroring system_router);
 dev mode (`require_auth=False`) stays a no-op.
 """
+
 from __future__ import annotations
 
 import pytest

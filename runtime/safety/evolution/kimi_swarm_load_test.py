@@ -29,6 +29,7 @@ see their ``KimiSwarmEvidenceCheck``/``AgentBenchmarkCase`` ``paths``/
 sibling file, add that file to the relevant check's ``paths`` tuple, or the
 certification will report a false regression despite nothing breaking.
 """
+
 from __future__ import annotations
 
 import time
@@ -215,7 +216,8 @@ def build_kimi_swarm_load_test_preflight(
     return {
         "schema": _PREFLIGHT_SCHEMA,
         "ready": not blocking_failures,
-        "provider_ready": (not provider_needed) or (
+        "provider_ready": (not provider_needed)
+        or (
             bool(cfg.confirm_real_provider)
             and configured
             and int(cfg.max_provider_calls or 0) >= selected_step_count
@@ -301,7 +303,7 @@ def run_kimi_swarm_quota_probe(
                 messages=[
                     Message(
                         role="user",
-                        content="Quota probe. Reply with compact JSON: {\"ok\":true}.",
+                        content='Quota probe. Reply with compact JSON: {"ok":true}.',
                     )
                 ],
             )
@@ -498,10 +500,8 @@ def recommend_kimi_swarm_next_stage(
             isinstance(best_full, dict)
             and str(best_full.get("provider_id") or "") == str(provider_id or "")
             and str(best_full.get("model") or "") == str(model or "")
-            and int(best_full.get("requested_agent_count") or 0)
-            == requested_agent_count
-            and int(best_full.get("requested_step_count") or 0)
-            == requested_step_count
+            and int(best_full.get("requested_agent_count") or 0) == requested_agent_count
+            and int(best_full.get("requested_step_count") or 0) == requested_step_count
         ):
             proofs["provider_full_reference"] = best_full
     if proofs["provider_full_reference"] is not None:
@@ -642,16 +642,13 @@ def recommend_kimi_swarm_next_stage(
             "max_concurrency": requested_max_concurrency,
         },
         "stage_proofs": {
-            key: _proof_without_session(value) if value else None
-            for key, value in proofs.items()
+            key: _proof_without_session(value) if value else None for key, value in proofs.items()
         },
         "recommended_payload": payload,
         "recommended_preflight": preflight,
         "resume_plan": resume_plan,
         "recommended_chunk_payload": (
-            resume_plan.get("recommended_chunk_payload")
-            if isinstance(resume_plan, dict)
-            else None
+            resume_plan.get("recommended_chunk_payload") if isinstance(resume_plan, dict) else None
         ),
         "quota_probe_payload": quota_probe_payload,
         "latest_blocking_failure": blocking_failure,
@@ -691,7 +688,11 @@ def _next_stage_action(
                 f"{next_stage} attempt; run the quota probe after refresh before rerun."
             )
         if category == "provider_rate_limit":
-            chunk = resume_plan.get("recommended_chunk_payload") if isinstance(resume_plan, dict) else None
+            chunk = (
+                resume_plan.get("recommended_chunk_payload")
+                if isinstance(resume_plan, dict)
+                else None
+            )
             if isinstance(chunk, dict):
                 return (
                     "Kimi provider is rate-limiting; wait briefly, then run the "
@@ -703,9 +704,7 @@ def _next_stage_action(
                 "resume concurrency."
             )
         if category == "token_budget_exceeded":
-            return (
-                f"Increase the recommended {next_stage} token budget before rerun."
-            )
+            return f"Increase the recommended {next_stage} token budget before rerun."
         return f"Resolve the latest {next_stage} provider failure before rerun."
     if provider_state == "missing":
         return (
@@ -713,10 +712,7 @@ def _next_stage_action(
             f"{next_stage} payload."
         )
     if provider_state == "unknown":
-        return (
-            "Check custom model configuration, then run the recommended "
-            f"{next_stage} payload."
-        )
+        return f"Check custom model configuration, then run the recommended {next_stage} payload."
     if can_run and isinstance(resume_plan, dict) and resume_plan.get("ready"):
         chunk = resume_plan.get("recommended_chunk_payload")
         if isinstance(chunk, dict) and chunk.get("chunked"):

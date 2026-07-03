@@ -38,18 +38,22 @@ class _SuccessRunner:
     def run(self, topology, task: str, *, context: dict[str, Any] | None = None):
         role, spec = next(iter(topology.agents.items()))
         if self._event_emitter is not None:
-            self._event_emitter({
-                "type": "team_role_start",
-                "role": str(role),
-                "agent_id": spec.agent_id,
-            })
-            self._event_emitter({
-                "type": "team_role_end",
-                "role": str(role),
-                "agent_id": spec.agent_id,
-                "status": "success",
-                "output": "role output",
-            })
+            self._event_emitter(
+                {
+                    "type": "team_role_start",
+                    "role": str(role),
+                    "agent_id": spec.agent_id,
+                }
+            )
+            self._event_emitter(
+                {
+                    "type": "team_role_end",
+                    "role": str(role),
+                    "agent_id": spec.agent_id,
+                    "status": "success",
+                    "output": "role output",
+                }
+            )
         return TeamRunResult(
             topology_name=topology.name,
             topology_fingerprint=topology.fingerprint,
@@ -81,13 +85,15 @@ class _FailureRunner:
     def run(self, topology, task: str, *, context: dict[str, Any] | None = None):
         role, spec = next(iter(topology.agents.items()))
         if self._event_emitter is not None:
-            self._event_emitter({
-                "type": "team_role_end",
-                "role": str(role),
-                "agent_id": spec.agent_id,
-                "status": "error",
-                "error": "boom",
-            })
+            self._event_emitter(
+                {
+                    "type": "team_role_end",
+                    "role": str(role),
+                    "agent_id": spec.agent_id,
+                    "status": "error",
+                    "error": "boom",
+                }
+            )
         return TeamRunResult(
             topology_name=topology.name,
             topology_fingerprint=topology.fingerprint,
@@ -217,8 +223,7 @@ def _wait_for_event(
             return
         time.sleep(0.02)
     raise AssertionError(
-        f"event {expected!r} not observed; "
-        f"events={[payload['event'] for _, payload in events]}",
+        f"event {expected!r} not observed; events={[payload['event'] for _, payload in events]}",
     )
 
 
@@ -435,12 +440,10 @@ def test_run_task_executes_runner_and_writes_done_state(tmp_path: Path) -> None:
     done = _wait_for_status(client, task["id"], "done")
     assert done["completed_at"]
     assert done["produced_artifacts"][0]["type"] == "team_runner_output"
-    assert "final output for zzzz private runner smoke" in (
-        done["produced_artifacts"][0]["content"]
+    assert (
+        "final output for zzzz private runner smoke" in (done["produced_artifacts"][0]["content"])
     )
-    assert done["metadata"]["runner"]["topology"]["agents"]["planner"][
-        "agent_id"
-    ] == "agent-a"
+    assert done["metadata"]["runner"]["topology"]["agents"]["planner"]["agent_id"] == "agent-a"
 
     _wait_for_event(events, "run_done")
     event_names = [payload["event"] for _, payload in events]
@@ -474,10 +477,7 @@ def test_team_task_process_timeline_persists_runner_events_and_artifacts(
     lanes = {node["lane"] for node in timeline["timeline"]}
     assert {"task_created", "run_started", "team_role_start", "team_role_end", "run_done"} <= kinds
     assert {"workflow", "agent", "artifact"} <= lanes
-    artifact_nodes = [
-        node for node in timeline["timeline"]
-        if node["lane"] == "artifact"
-    ]
+    artifact_nodes = [node for node in timeline["timeline"] if node["lane"] == "artifact"]
     assert artifact_nodes
     assert "final output for timeline evidence smoke" in done["produced_artifacts"][0]["content"]
 

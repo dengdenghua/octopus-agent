@@ -78,9 +78,7 @@ class TestDockerCompose:
         doc = yaml.safe_load((REPO / "docker-compose.yml").read_text(encoding="utf-8"))
         svc = doc["services"]["octopus-agent"]
         vols = svc.get("volumes", [])
-        assert any("./data:/data" in v for v in vols), (
-            "需要把 ./data:/data 挂上做 journal 持久化"
-        )
+        assert any("./data:/data" in v for v in vols), "需要把 ./data:/data 挂上做 journal 持久化"
 
     def test_compose_mounts_config_readonly(self):
         yaml = pytest.importorskip("yaml")
@@ -134,15 +132,15 @@ class TestPyproject:
 
     def test_anthropic_extra_declared(self):
         text = (REPO / "pyproject.toml").read_text(encoding="utf-8")
-        assert 'anthropic = [' in text
+        assert "anthropic = [" in text
 
     def test_mcp_extra_declared(self):
         text = (REPO / "pyproject.toml").read_text(encoding="utf-8")
-        assert 'mcp = [' in text
+        assert "mcp = [" in text
 
     def test_browser_extra_declared(self):
         text = (REPO / "pyproject.toml").read_text(encoding="utf-8")
-        assert 'browser = [' in text
+        assert "browser = [" in text
         assert "playwright" in text
 
 

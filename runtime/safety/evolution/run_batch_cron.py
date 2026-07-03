@@ -25,6 +25,7 @@ Exit codes
 * 0 — ran successfully (including no-op when no judge is configured)
 * 1 — uncaught failure (telemetry I/O, etc.). Cron should alert.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -53,6 +54,7 @@ def _resolve_judge() -> GuardJudge:
     """
     with contextlib.suppress(Exception):
         from runtime.platform.process.service_provider import get_provider
+
         judge = get_provider().get("guard_judge", default=None)
         if callable(judge):
             return judge
@@ -65,19 +67,26 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Drain unjudged guard hits through the LLM judge.",
     )
     parser.add_argument(
-        "--max-hits", type=int, default=50,
+        "--max-hits",
+        type=int,
+        default=50,
         help="Cap hits processed per run (default 50).",
     )
     parser.add_argument(
-        "--failure-streak-limit", type=int, default=5,
+        "--failure-streak-limit",
+        type=int,
+        default=5,
         help="Abort after this many consecutive router errors (default 5).",
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Plan only — count candidates and exit without calling judge.",
     )
     parser.add_argument(
-        "--verbose", "-v", action="store_true",
+        "--verbose",
+        "-v",
+        action="store_true",
         help="Log at INFO level instead of WARNING.",
     )
     return parser.parse_args(argv)

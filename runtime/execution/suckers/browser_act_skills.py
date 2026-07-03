@@ -25,11 +25,11 @@ _BRIDGE_TIMEOUT = 30  # Implementation note.
 # and, when present, calls it with the artifact event dict so the
 # frontend receives a streamed ``artifact`` event inline. None means
 # "no active stream" → file-only behavior, same as before.
-_ACTIVE_ARTIFACT_EMITTER: ContextVar[Callable[[dict[str, Any]], None] | None] = (
-    ContextVar("active_artifact_emitter", default=None)
+_ACTIVE_ARTIFACT_EMITTER: ContextVar[Callable[[dict[str, Any]], None] | None] = ContextVar(
+    "active_artifact_emitter", default=None
 )
-_LAST_SCREENSHOT_ARTIFACT: ContextVar[Path | None] = (
-    ContextVar("last_screenshot_artifact", default=None)
+_LAST_SCREENSHOT_ARTIFACT: ContextVar[Path | None] = ContextVar(
+    "last_screenshot_artifact", default=None
 )
 
 
@@ -113,8 +113,6 @@ def _bridge_call(action: str, params: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": f"bridge timeout/error: {e}"}
 
 
-
-
 def _h_click(selector: str) -> dict[str, Any]:
     return _bridge_call("click", {"selector": selector})
 
@@ -156,6 +154,7 @@ def _h_screenshot() -> dict[str, Any]:
 
 def _artifacts_root() -> Path:
     from runtime.platform.process.paths import app_paths
+
     return app_paths().data_dir / "browser_artifacts"
 
 
@@ -327,6 +326,7 @@ def _emit_screenshot_artifact(bridge_response: dict[str, Any]) -> None:
                 current_agent_id,
                 current_conversation_id,
             )
+
             _thread_id = current_conversation_id() or ""
             _agent_id = current_agent_id() or ""
         except (ImportError, AttributeError):
@@ -384,6 +384,7 @@ def _emit_screenshot_artifact(bridge_response: dict[str, Any]) -> None:
         # screenshot to the inline chat stream.
         try:
             from runtime.memory.journal import BrowserArtifactEvent
+
             # The browser artifact journal comes off the current Session
             # metadata (set by the worker loop). A former
             # ``sensing.gateway._active_streaming_journal`` singleton
@@ -393,6 +394,7 @@ def _emit_screenshot_artifact(bridge_response: dict[str, Any]) -> None:
             journal = None
             try:
                 from runtime.platform.process.session import current_session
+
                 sess = current_session()
                 if sess is not None:
                     meta = getattr(sess, "metadata", None) or {}
@@ -499,146 +501,164 @@ def _h_state(max_items: int = 30, **_: Any) -> dict[str, Any]:
 def register_browser_act_skills(registry: SkillRegistry) -> int:
     items: list[Skill] = []
 
-    items.append(Skill(
-        name="live_browser_click",
-        description=(
-            "Click an element on the **current active browser tab** by "
-            "CSS selector. The agent's request is delivered via local "
-            "HTTP bridge to the desktop Octopus app's webview.\n"
-            "Args: {selector: CSS selector, e.g. 'button[type=submit]' "
-            "or '#login'}.\n"
-            "Returns {ok, tag, text, error?}. Use `browser_extract` "
-            "after click to read the resulting page."
-        ),
-        affinity=["browser", "automation", "web"],
-        cost_profile="low",
-        trusted_source="skill://browser_act/click",
-        handler=_h_click,
-    ))
+    items.append(
+        Skill(
+            name="live_browser_click",
+            description=(
+                "Click an element on the **current active browser tab** by "
+                "CSS selector. The agent's request is delivered via local "
+                "HTTP bridge to the desktop Octopus app's webview.\n"
+                "Args: {selector: CSS selector, e.g. 'button[type=submit]' "
+                "or '#login'}.\n"
+                "Returns {ok, tag, text, error?}. Use `browser_extract` "
+                "after click to read the resulting page."
+            ),
+            affinity=["browser", "automation", "web"],
+            cost_profile="low",
+            trusted_source="skill://browser_act/click",
+            handler=_h_click,
+        )
+    )
 
-    items.append(Skill(
-        name="live_browser_type",
-        description=(
-            "Type text into an input/textarea on the current active "
-            "browser tab.\nArgs: {selector: CSS, text: string to type, "
-            "clear?: bool (default false; true clears existing first)}.\n"
-            "Triggers `input` and `change` events so React/Vue forms see "
-            "the change. Returns {ok, value, error?}."
-        ),
-        affinity=["browser", "automation", "form"],
-        cost_profile="low",
-        trusted_source="skill://browser_act/type",
-        handler=_h_type,
-    ))
+    items.append(
+        Skill(
+            name="live_browser_type",
+            description=(
+                "Type text into an input/textarea on the current active "
+                "browser tab.\nArgs: {selector: CSS, text: string to type, "
+                "clear?: bool (default false; true clears existing first)}.\n"
+                "Triggers `input` and `change` events so React/Vue forms see "
+                "the change. Returns {ok, value, error?}."
+            ),
+            affinity=["browser", "automation", "form"],
+            cost_profile="low",
+            trusted_source="skill://browser_act/type",
+            handler=_h_type,
+        )
+    )
 
-    items.append(Skill(
-        name="live_browser_wait",
-        description=(
-            "Poll for a CSS selector to appear (and be visible) on the "
-            "current page. Use after navigation or click when the next "
-            "step needs an element that loads async.\n"
-            "Args: {selector: CSS, timeout?: ms (default 10000)}.\n"
-            "Returns {ok, elapsed, error?}."
-        ),
-        affinity=["browser", "automation", "wait"],
-        cost_profile="low",
-        trusted_source="skill://browser_act/wait",
-        handler=_h_wait,
-    ))
+    items.append(
+        Skill(
+            name="live_browser_wait",
+            description=(
+                "Poll for a CSS selector to appear (and be visible) on the "
+                "current page. Use after navigation or click when the next "
+                "step needs an element that loads async.\n"
+                "Args: {selector: CSS, timeout?: ms (default 10000)}.\n"
+                "Returns {ok, elapsed, error?}."
+            ),
+            affinity=["browser", "automation", "wait"],
+            cost_profile="low",
+            trusted_source="skill://browser_act/wait",
+            handler=_h_wait,
+        )
+    )
 
-    items.append(Skill(
-        name="live_browser_scroll",
-        description=(
-            "Scroll the current page. Two modes:\n"
-            "- {selector: CSS} · scroll the element into view (smooth)\n"
-            "- {delta_y: pixels} · scroll the page by N pixels (positive=down)\n"
-            "Returns {ok, y?, error?}."
-        ),
-        affinity=["browser", "automation"],
-        cost_profile="low",
-        trusted_source="skill://browser_act/scroll",
-        handler=_h_scroll,
-    ))
+    items.append(
+        Skill(
+            name="live_browser_scroll",
+            description=(
+                "Scroll the current page. Two modes:\n"
+                "- {selector: CSS} · scroll the element into view (smooth)\n"
+                "- {delta_y: pixels} · scroll the page by N pixels (positive=down)\n"
+                "Returns {ok, y?, error?}."
+            ),
+            affinity=["browser", "automation"],
+            cost_profile="low",
+            trusted_source="skill://browser_act/scroll",
+            handler=_h_scroll,
+        )
+    )
 
-    items.append(Skill(
-        name="live_browser_navigate",
-        description=(
-            "Load a new URL in the current active tab.\n"
-            "Args: {url: full https://... URL}.\n"
-            "Returns {ok, url, error?}. Follow with `browser_extract` "
-            "or `browser_wait` to confirm load."
-        ),
-        affinity=["browser", "navigation"],
-        cost_profile="low",
-        trusted_source="skill://browser_act/navigate",
-        handler=_h_navigate,
-    ))
+    items.append(
+        Skill(
+            name="live_browser_navigate",
+            description=(
+                "Load a new URL in the current active tab.\n"
+                "Args: {url: full https://... URL}.\n"
+                "Returns {ok, url, error?}. Follow with `browser_extract` "
+                "or `browser_wait` to confirm load."
+            ),
+            affinity=["browser", "navigation"],
+            cost_profile="low",
+            trusted_source="skill://browser_act/navigate",
+            handler=_h_navigate,
+        )
+    )
 
-    items.append(Skill(
-        name="live_browser_extract",
-        description=(
-            "Read the current page's text content (article body or main, "
-            "fall back to body). Excludes scripts/styles/iframes. "
-            "Truncated to 20K chars.\n"
-            "Args: {} (none).\n"
-            "Returns {ok, url, title, text, truncated, textLength, error?}.\n"
-            "Use this as the agent's primary 'see the page' primitive — "
-            "cheap, fast, no LLM-vision cost."
-        ),
-        affinity=["browser", "read", "extract"],
-        cost_profile="low",
-        trusted_source="skill://browser_act/extract",
-        handler=_h_extract,
-    ))
+    items.append(
+        Skill(
+            name="live_browser_extract",
+            description=(
+                "Read the current page's text content (article body or main, "
+                "fall back to body). Excludes scripts/styles/iframes. "
+                "Truncated to 20K chars.\n"
+                "Args: {} (none).\n"
+                "Returns {ok, url, title, text, truncated, textLength, error?}.\n"
+                "Use this as the agent's primary 'see the page' primitive — "
+                "cheap, fast, no LLM-vision cost."
+            ),
+            affinity=["browser", "read", "extract"],
+            cost_profile="low",
+            trusted_source="skill://browser_act/extract",
+            handler=_h_extract,
+        )
+    )
 
-    items.append(Skill(
-        name="live_browser_screenshot",
-        description=(
-            "Capture a screenshot of the current active tab as a base64 "
-            "PNG data URL. EXPENSIVE in context (data URL ~hundreds of "
-            "KB chars). Prefer `browser_extract` for text-based reasoning. "
-            "Use screenshot only when visual layout / image content "
-            "actually matters.\nArgs: {} (none).\n"
-            "Returns {ok, dataUrl, width, height, error?}."
-        ),
-        affinity=["browser", "vision", "screenshot"],
-        cost_profile="mid",
-        trusted_source="skill://browser_act/screenshot",
-        handler=_h_screenshot,
-    ))
+    items.append(
+        Skill(
+            name="live_browser_screenshot",
+            description=(
+                "Capture a screenshot of the current active tab as a base64 "
+                "PNG data URL. EXPENSIVE in context (data URL ~hundreds of "
+                "KB chars). Prefer `browser_extract` for text-based reasoning. "
+                "Use screenshot only when visual layout / image content "
+                "actually matters.\nArgs: {} (none).\n"
+                "Returns {ok, dataUrl, width, height, error?}."
+            ),
+            affinity=["browser", "vision", "screenshot"],
+            cost_profile="mid",
+            trusted_source="skill://browser_act/screenshot",
+            handler=_h_screenshot,
+        )
+    )
 
-    items.append(Skill(
-        name="live_browser_execute_js",
-        description=(
-            "Run arbitrary JavaScript in the current page's main world. "
-            "Escape hatch for things not covered by other primitives. "
-            "Returns {ok, result, error?} where `result` is the JS "
-            "expression's return value (must be JSON-serializable).\n"
-            "Args: {code: JavaScript expression or IIFE}.\n"
-            "Examples:\n"
-            "- code='document.querySelectorAll(\"a\").length' → count links\n"
-            "- code='[...document.querySelectorAll(\"h1\")].map(el=>el.innerText)' → all H1 text\n"
-            "USE WITH CAUTION · arbitrary JS can break the page."
-        ),
-        affinity=["browser", "advanced", "automation"],
-        cost_profile="low",
-        trusted_source="skill://browser_act/execute_js",
-        handler=_h_execute_js,
-    ))
+    items.append(
+        Skill(
+            name="live_browser_execute_js",
+            description=(
+                "Run arbitrary JavaScript in the current page's main world. "
+                "Escape hatch for things not covered by other primitives. "
+                "Returns {ok, result, error?} where `result` is the JS "
+                "expression's return value (must be JSON-serializable).\n"
+                "Args: {code: JavaScript expression or IIFE}.\n"
+                "Examples:\n"
+                "- code='document.querySelectorAll(\"a\").length' → count links\n"
+                "- code='[...document.querySelectorAll(\"h1\")].map(el=>el.innerText)' → all H1 text\n"
+                "USE WITH CAUTION · arbitrary JS can break the page."
+            ),
+            affinity=["browser", "advanced", "automation"],
+            cost_profile="low",
+            trusted_source="skill://browser_act/execute_js",
+            handler=_h_execute_js,
+        )
+    )
 
-    items.append(Skill(
-        name="live_browser_current_url",
-        description=(
-            "Return the URL and title of the current active browser tab. "
-            "Cheap probe — use to verify navigation succeeded or to "
-            "remember where you are without re-reading content.\n"
-            "Args: {} (none).\nReturns {ok, url, title, error?}."
-        ),
-        affinity=["browser", "probe"],
-        cost_profile="low",
-        trusted_source="skill://browser_act/current_url",
-        handler=_h_current_url,
-    ))
+    items.append(
+        Skill(
+            name="live_browser_current_url",
+            description=(
+                "Return the URL and title of the current active browser tab. "
+                "Cheap probe — use to verify navigation succeeded or to "
+                "remember where you are without re-reading content.\n"
+                "Args: {} (none).\nReturns {ok, url, title, error?}."
+            ),
+            affinity=["browser", "probe"],
+            cost_profile="low",
+            trusted_source="skill://browser_act/current_url",
+            handler=_h_current_url,
+        )
+    )
 
     find_description = (
         "Find text on the current active browser tab and return match "
@@ -649,40 +669,48 @@ def register_browser_act_skills(registry: SkillRegistry) -> int:
         "Return the current active browser tab state: URL, title, viewport, "
         "scroll, and visible links/buttons/inputs/headings. Args: {max_items?}."
     )
-    items.append(Skill(
-        name="live_browser_find",
-        description=find_description,
-        affinity=["browser", "read", "find"],
-        cost_profile="low",
-        trusted_source="skill://browser_act/find",
-        handler=_h_find,
-    ))
-    items.append(Skill(
-        name="live_browser_state",
-        description=state_description,
-        affinity=["browser", "read", "observe"],
-        cost_profile="low",
-        trusted_source="skill://browser_act/state",
-        handler=_h_state,
-    ))
-    if not registry.has("browser_find"):
-        items.append(Skill(
-            name="browser_find",
+    items.append(
+        Skill(
+            name="live_browser_find",
             description=find_description,
             affinity=["browser", "read", "find"],
             cost_profile="low",
-            trusted_source="skill://browser_act/browser_find_alias",
+            trusted_source="skill://browser_act/find",
             handler=_h_find,
-        ))
-    if not registry.has("browser_state"):
-        items.append(Skill(
-            name="browser_state",
+        )
+    )
+    items.append(
+        Skill(
+            name="live_browser_state",
             description=state_description,
             affinity=["browser", "read", "observe"],
             cost_profile="low",
-            trusted_source="skill://browser_act/browser_state_alias",
+            trusted_source="skill://browser_act/state",
             handler=_h_state,
-        ))
+        )
+    )
+    if not registry.has("browser_find"):
+        items.append(
+            Skill(
+                name="browser_find",
+                description=find_description,
+                affinity=["browser", "read", "find"],
+                cost_profile="low",
+                trusted_source="skill://browser_act/browser_find_alias",
+                handler=_h_find,
+            )
+        )
+    if not registry.has("browser_state"):
+        items.append(
+            Skill(
+                name="browser_state",
+                description=state_description,
+                affinity=["browser", "read", "observe"],
+                cost_profile="low",
+                trusted_source="skill://browser_act/browser_state_alias",
+                handler=_h_state,
+            )
+        )
 
     for skill in items:
         registry.register(skill)

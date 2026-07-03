@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import asyncio
@@ -89,6 +88,7 @@ def _route_decision(agent_id: str, context: dict[str, Any]) -> dict[str, Any]:
         from runtime.safety.evolution.subagent_routing import (
             decide_subagent_route,
         )
+
         decision = decide_subagent_route(
             role=agent_id,
             risk_level=_context_risk_level(context),
@@ -114,8 +114,6 @@ def _route_decision(agent_id: str, context: dict[str, Any]) -> dict[str, Any]:
             "confidence": 0.0,
             "evidence_item_ids": [],
         }
-
-
 
 
 @dataclass
@@ -170,8 +168,7 @@ class _BatchEntry:
     conflicts: list[str] = field(default_factory=list)
     plan: BatchPlan | None = None
     runtime_session_metadata: dict[str, Any] = field(default_factory=dict)
-    subscribers: list[tuple[asyncio.Queue, asyncio.AbstractEventLoop]] = \
-        field(default_factory=list)
+    subscribers: list[tuple[asyncio.Queue, asyncio.AbstractEventLoop]] = field(default_factory=list)
     event_log: list[Any] = field(default_factory=list)
     event_sequence: int = 0
     # Owner enforcement: set by dispatch() from the calling actor's id.
@@ -186,16 +183,10 @@ class _BatchEntry:
         return converge_run_state([t.status for t in self.tasks.values()]).state
 
     def validation_issues(self) -> list[str]:
-        return (
-            list(self.plan.validation_issues)
-            if self.plan is not None else []
-        )
+        return list(self.plan.validation_issues) if self.plan is not None else []
 
     def validation_warnings(self) -> list[str]:
-        return (
-            list(self.plan.validation_warnings)
-            if self.plan is not None else []
-        )
+        return list(self.plan.validation_warnings) if self.plan is not None else []
 
     def artifact_count(self) -> int:
         return sum(
@@ -217,13 +208,8 @@ class _BatchEntry:
         """(total, completed, failed, cancelled)."""
         total = len(self.tasks)
         completed = sum(1 for t in self.tasks.values() if t.status == "completed")
-        failed = sum(
-            1 for t in self.tasks.values()
-            if t.status in ("failed", "timed_out")
-        )
-        cancelled = sum(
-            1 for t in self.tasks.values() if t.status == "cancelled"
-        )
+        failed = sum(1 for t in self.tasks.values() if t.status in ("failed", "timed_out"))
+        cancelled = sum(1 for t in self.tasks.values() if t.status == "cancelled")
         return total, completed, failed, cancelled
 
     def to_wire(self) -> BatchResult:
@@ -278,7 +264,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
         )
         self._lock = threading.RLock()
         self._batches: dict[str, _BatchEntry] = {}
-        self._task_index: dict[str, str] = {}    # task_id → batch_id
+        self._task_index: dict[str, str] = {}  # task_id → batch_id
         self._runner: TaskRunner = task_runner or _default_runner
         self._splitter = splitter
         self._closed = False
@@ -293,7 +279,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
         self,
         tasks: list[DispatchTaskInput] | list[dict[str, Any]],
         *,
-        max_concurrency: int | None = None,   # Implementation note.
+        max_concurrency: int | None = None,  # Implementation note.
         aggregation_strategy: str | None = None,
         execution_mode: str | None = None,
         thread_id: str | None = None,
@@ -311,8 +297,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
         self._guard_open()
 
         raw: list[DispatchTaskInput] = [
-            t if isinstance(t, DispatchTaskInput) else DispatchTaskInput(**t)
-            for t in tasks
+            t if isinstance(t, DispatchTaskInput) else DispatchTaskInput(**t) for t in tasks
         ]
         if not raw:
             raise ValueError("dispatch: tasks must be non-empty")
@@ -371,6 +356,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
             from runtime.safety.validation.prompt_injection import (
                 current_injection_taint,
             )
+
             _taint = current_injection_taint()
             if _taint and _taint != "none":
                 run_context.setdefault("_inherited_injection_taint", _taint)
@@ -401,10 +387,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
                     batch,
                     entry,
                     phase="planned",
-                    message=(
-                        f"{entry.subagent_name} queued for a focused "
-                        "research lane"
-                    ),
+                    message=(f"{entry.subagent_name} queued for a focused research lane"),
                 )
             self._publish_stage_change_locked(
                 batch,
@@ -487,9 +470,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
                             batch,
                             entry,
                             phase="cancelled",
-                            message=(
-                                f"{entry.subagent_name} cancelled before start"
-                            ),
+                            message=(f"{entry.subagent_name} cancelled before start"),
                         )
                 self._maybe_close_batch_locked(batch)
         return True
@@ -546,18 +527,20 @@ class ParallelAgentOrchestrator(OwnershipMixin):
                     context=context,
                     model_name=model_name,
                 )
-            except Exception as e:   # noqa: BLE001
+            except Exception as e:  # noqa: BLE001
                 _log.warning("splitter failed · fallback stub · err=%s", e)
 
         tid = f"task_{uuid.uuid4().hex[:10]}"
         return SplitResult(
-            tasks=[SplitTask(
-                task_id=tid,
-                description=task,
-                subagent_name="general-purpose",
-                depends_on=[],
-                priority=0,
-            )],
+            tasks=[
+                SplitTask(
+                    task_id=tid,
+                    description=task,
+                    subagent_name="general-purpose",
+                    depends_on=[],
+                    priority=0,
+                )
+            ],
             dag_levels=[[tid]],
             total_levels=1,
             is_parallelizable=False,
@@ -600,7 +583,6 @@ class ParallelAgentOrchestrator(OwnershipMixin):
     def shutdown(self, wait: bool = False) -> None:
         self._closed = True
         self._pool.shutdown(wait=wait, cancel_futures=True)
-
 
     def _guard_open(self) -> None:
         if self._closed:
@@ -683,9 +665,9 @@ class ParallelAgentOrchestrator(OwnershipMixin):
                     subagent_name=entry.subagent_name,
                     context=run_context,
                 )
-            except Exception as e:   # noqa: BLE001
+            except Exception as e:  # noqa: BLE001
                 error = f"{type(e).__name__}: {e}"
-        except Exception as e:   # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
             error = f"{type(e).__name__}: {e}"
 
         with self._lock:
@@ -721,17 +703,22 @@ class ParallelAgentOrchestrator(OwnershipMixin):
                 if batch is None or batch.completed_at is not None:
                     return
                 ready = [
-                    entry for entry in batch.tasks.values()
+                    entry
+                    for entry in batch.tasks.values()
                     if entry.status == "pending"
                     and entry.future is None
                     and _deps_terminal_success(batch, entry)
                 ]
                 blocked_failed = [
-                    entry for entry in batch.tasks.values()
+                    entry
+                    for entry in batch.tasks.values()
                     if entry.status == "pending"
                     and any(
-                        batch.tasks[dep].status in {
-                            "failed", "cancelled", "timed_out",
+                        batch.tasks[dep].status
+                        in {
+                            "failed",
+                            "cancelled",
+                            "timed_out",
                         }
                         for dep in entry.depends_on
                         if dep in batch.tasks
@@ -756,7 +743,9 @@ class ParallelAgentOrchestrator(OwnershipMixin):
                     for entry in ready:
                         try:
                             entry.future = self._pool.submit(
-                                self._run_task, entry, context,
+                                self._run_task,
+                                entry,
+                                context,
                             )
                         except RuntimeError:
                             return
@@ -767,9 +756,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
     def _maybe_close_batch_locked(self, batch: _BatchEntry) -> None:
         if batch.completed_at is not None:
             return
-        if any(
-            t.status in ("pending", "running") for t in batch.tasks.values()
-        ):
+        if any(t.status in ("pending", "running") for t in batch.tasks.values()):
             return
         batch.completed_at = _now()
         batch.aggregated_content = self._aggregate_locked(batch)
@@ -801,7 +788,8 @@ class ParallelAgentOrchestrator(OwnershipMixin):
 
     def _unrunnable_plan_issues(self, batch: _BatchEntry) -> list[str]:
         return [
-            issue for issue in batch.validation_issues()
+            issue
+            for issue in batch.validation_issues()
             if issue.startswith(_UNRUNNABLE_PLAN_ISSUE_PREFIXES)
         ]
 
@@ -832,22 +820,19 @@ class ParallelAgentOrchestrator(OwnershipMixin):
         if batch.completed_at is not None:
             return False
         active = any(
-            entry.status == "running"
-            or (entry.future is not None and not entry.future.done())
+            entry.status == "running" or (entry.future is not None and not entry.future.done())
             for entry in batch.tasks.values()
         )
         stalled = [
-            entry for entry in batch.tasks.values()
+            entry
+            for entry in batch.tasks.values()
             if entry.status == "pending" and entry.future is None
         ]
         if active or not stalled:
             return False
 
         issues = self._unrunnable_plan_issues(batch)
-        error = (
-            "invalid_work_plan:" + ";".join(issues)
-            if issues else "dependency_unresolvable"
-        )
+        error = "invalid_work_plan:" + ";".join(issues) if issues else "dependency_unresolvable"
         now = _now()
         for entry in stalled:
             entry.status = "failed"
@@ -881,9 +866,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
     ) -> BatchRecoverySnapshot:
         total, completed, failed, cancelled = batch.counts()
         run_state = converge_run_state([t.status for t in batch.tasks.values()])
-        artifacts_by_task: dict[str, list[str]] = {
-            task_id: [] for task_id in batch.tasks
-        }
+        artifacts_by_task: dict[str, list[str]] = {task_id: [] for task_id in batch.tasks}
         event_types: dict[str, int] = {}
         first_sequence: int | None = None
         last_sequence: int | None = None
@@ -892,13 +875,9 @@ class ParallelAgentOrchestrator(OwnershipMixin):
             sequence = event.sequence or 0
             if sequence > 0:
                 first_sequence = (
-                    sequence if first_sequence is None
-                    else min(first_sequence, sequence)
+                    sequence if first_sequence is None else min(first_sequence, sequence)
                 )
-                last_sequence = (
-                    sequence if last_sequence is None
-                    else max(last_sequence, sequence)
-                )
+                last_sequence = sequence if last_sequence is None else max(last_sequence, sequence)
             if event.task_id and event.artifact_paths:
                 bucket = artifacts_by_task.setdefault(event.task_id, [])
                 for path in event.artifact_paths:
@@ -912,27 +891,25 @@ class ParallelAgentOrchestrator(OwnershipMixin):
                     all_artifacts.append(path)
 
         failed_task_ids = [
-            entry.task_id for entry in batch.tasks.values()
+            entry.task_id
+            for entry in batch.tasks.values()
             if entry.status in {"failed", "timed_out"}
         ]
         cancelled_task_ids = [
-            entry.task_id for entry in batch.tasks.values()
-            if entry.status == "cancelled"
+            entry.task_id for entry in batch.tasks.values() if entry.status == "cancelled"
         ]
         pending_task_ids = [
-            entry.task_id for entry in batch.tasks.values()
-            if entry.status == "pending"
+            entry.task_id for entry in batch.tasks.values() if entry.status == "pending"
         ]
         running_task_ids = [
-            entry.task_id for entry in batch.tasks.values()
-            if entry.status == "running"
+            entry.task_id for entry in batch.tasks.values() if entry.status == "running"
         ]
         blocked_by_dependency = [
-            entry.task_id for entry in batch.tasks.values()
-            if entry.error == "dependency_failed"
+            entry.task_id for entry in batch.tasks.values() if entry.error == "dependency_failed"
         ]
         rerunnable_task_ids = [
-            entry.task_id for entry in batch.tasks.values()
+            entry.task_id
+            for entry in batch.tasks.values()
             if entry.status in {"failed", "cancelled", "timed_out", "pending"}
         ]
 
@@ -947,14 +924,8 @@ class ParallelAgentOrchestrator(OwnershipMixin):
             completed_tasks=completed,
             failed_tasks=failed,
             cancelled_tasks=cancelled,
-            running_tasks=sum(
-                1 for entry in batch.tasks.values()
-                if entry.status == "running"
-            ),
-            pending_tasks=sum(
-                1 for entry in batch.tasks.values()
-                if entry.status == "pending"
-            ),
+            running_tasks=sum(1 for entry in batch.tasks.values() if entry.status == "running"),
+            pending_tasks=sum(1 for entry in batch.tasks.values() if entry.status == "pending"),
             tasks=[
                 BatchRecoveryTask(
                     task_id=entry.task_id,
@@ -975,10 +946,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
                 )
                 for entry in batch.tasks.values()
             ],
-            dag={
-                task_id: list(entry.depends_on)
-                for task_id, entry in batch.tasks.items()
-            },
+            dag={task_id: list(entry.depends_on) for task_id, entry in batch.tasks.items()},
             plan=batch.plan,
             event_sequence={
                 "event_count": len(batch.event_log),
@@ -1036,17 +1004,20 @@ class ParallelAgentOrchestrator(OwnershipMixin):
             payload={
                 "contract_id": (
                     entry.work_contract.contract_id
-                    if entry.work_contract is not None else entry.task_id
+                    if entry.work_contract is not None
+                    else entry.task_id
                 ),
                 "depends_on": list(entry.depends_on),
                 "owned_scope": (
                     list(entry.work_contract.owned_scope)
-                    if entry.work_contract is not None else [f"task:{entry.task_id}"]
+                    if entry.work_contract is not None
+                    else [f"task:{entry.task_id}"]
                 ),
                 "write_paths": list(entry.write_paths),
                 **(
                     {"subagent_route_decision": entry.route_decision}
-                    if entry.route_decision is not None else {}
+                    if entry.route_decision is not None
+                    else {}
                 ),
             },
             message=message,
@@ -1085,7 +1056,8 @@ class ParallelAgentOrchestrator(OwnershipMixin):
         self._broadcast_locked(batch, ev)
 
     def _make_tool_event_emitter(
-        self, entry: _TaskEntry,
+        self,
+        entry: _TaskEntry,
     ) -> Callable[..., None]:
         def emit_tool_event(
             *,
@@ -1122,7 +1094,9 @@ class ParallelAgentOrchestrator(OwnershipMixin):
         return emit_tool_event
 
     def _broadcast_locked(
-        self, batch: _BatchEntry, ev: BatchStreamEvent,
+        self,
+        batch: _BatchEntry,
+        ev: BatchStreamEvent,
     ) -> None:
         batch.event_sequence += 1
         ev.sequence = batch.event_sequence
@@ -1135,9 +1109,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
             except RuntimeError:
                 dead.append((queue, loop))
         if dead:
-            batch.subscribers = [
-                x for x in batch.subscribers if x not in dead
-            ]
+            batch.subscribers = [x for x in batch.subscribers if x not in dead]
 
 
 def _task_row(entry: _TaskEntry) -> dict[str, object]:
@@ -1200,16 +1172,11 @@ def _build_coordination_summary(batch: _BatchEntry) -> dict[str, object]:
     """Machine-readable task-level arbitration for a parallel batch."""
     rows = [_task_row(entry) for entry in batch.tasks.values()]
     failed_task_ids = [
-        str(row["task_id"]) for row in rows
-        if row["status"] in {"failed", "timed_out"}
+        str(row["task_id"]) for row in rows if row["status"] in {"failed", "timed_out"}
     ]
-    cancelled_task_ids = [
-        str(row["task_id"]) for row in rows
-        if row["status"] == "cancelled"
-    ]
+    cancelled_task_ids = [str(row["task_id"]) for row in rows if row["status"] == "cancelled"]
     dependency_blocked_task_ids = [
-        entry.task_id for entry in batch.tasks.values()
-        if entry.error == "dependency_failed"
+        entry.task_id for entry in batch.tasks.values() if entry.error == "dependency_failed"
     ]
     receipt = batch.completion_receipt()
     file_obs = file_write_lease_snapshot(batch.runtime_session_metadata)
@@ -1230,9 +1197,7 @@ def _build_coordination_summary(batch: _BatchEntry) -> dict[str, object]:
         "ready": bool(receipt.get("ready")),
         "primary_task_id": primary_task_id,
         "recommended_next_action": next_action,
-        "completed_task_ids": [
-            str(row["task_id"]) for row in rows if row["status"] == "completed"
-        ],
+        "completed_task_ids": [str(row["task_id"]) for row in rows if row["status"] == "completed"],
         "failed_task_ids": failed_task_ids,
         "cancelled_task_ids": cancelled_task_ids,
         "dependency_blocked_task_ids": dependency_blocked_task_ids,

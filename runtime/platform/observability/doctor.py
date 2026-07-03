@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import os
@@ -52,7 +51,6 @@ class DoctorReport:
 
 
 class Doctor:
-
     def __init__(self, config_path: str | Path | None = None) -> None:
         self._config_path = Path(config_path) if config_path else None
 
@@ -70,22 +68,31 @@ class Doctor:
     def _check_python(self, report: DoctorReport) -> None:
         major, minor = sys.version_info[:2]
         if (major, minor) >= (3, 11):
-            report.results.append(CheckResult(
-                name="Python", status="ok",
-                message=f"{major}.{minor}.{sys.version_info.micro}",
-            ))
+            report.results.append(
+                CheckResult(
+                    name="Python",
+                    status="ok",
+                    message=f"{major}.{minor}.{sys.version_info.micro}",
+                )
+            )
         elif (major, minor) >= (3, 10):
-            report.results.append(CheckResult(
-                name="Python", status="warn",
-                message=f"{major}.{minor} (3.11+ recommended)",
-                fix_hint="Upgrade to Python 3.11+",
-            ))
+            report.results.append(
+                CheckResult(
+                    name="Python",
+                    status="warn",
+                    message=f"{major}.{minor} (3.11+ recommended)",
+                    fix_hint="Upgrade to Python 3.11+",
+                )
+            )
         else:
-            report.results.append(CheckResult(
-                name="Python", status="fail",
-                message=f"{major}.{minor} (3.11+ required)",
-                fix_hint="Install Python 3.11 or later",
-            ))
+            report.results.append(
+                CheckResult(
+                    name="Python",
+                    status="fail",
+                    message=f"{major}.{minor} (3.11+ required)",
+                    fix_hint="Install Python 3.11 or later",
+                )
+            )
 
     def _check_core_deps(self, report: DoctorReport) -> None:
         core = [
@@ -97,15 +104,22 @@ class Doctor:
             try:
                 mod = __import__(module)
                 version = getattr(mod, "__version__", "installed")
-                report.results.append(CheckResult(
-                    name=pip_name, status="ok", message=version,
-                ))
+                report.results.append(
+                    CheckResult(
+                        name=pip_name,
+                        status="ok",
+                        message=version,
+                    )
+                )
             except ImportError:
-                report.results.append(CheckResult(
-                    name=pip_name, status="fail",
-                    message="not installed",
-                    fix_hint=f"pip install {pip_name}",
-                ))
+                report.results.append(
+                    CheckResult(
+                        name=pip_name,
+                        status="fail",
+                        message="not installed",
+                        fix_hint=f"pip install {pip_name}",
+                    )
+                )
 
     def _check_optional_deps(self, report: DoctorReport) -> None:
         optional = [
@@ -118,15 +132,22 @@ class Doctor:
             try:
                 mod = __import__(module)
                 version = getattr(mod, "__version__", "installed")
-                report.results.append(CheckResult(
-                    name=desc, status="ok", message=version,
-                ))
+                report.results.append(
+                    CheckResult(
+                        name=desc,
+                        status="ok",
+                        message=version,
+                    )
+                )
             except ImportError:
-                report.results.append(CheckResult(
-                    name=desc, status="warn",
-                    message="not installed",
-                    fix_hint=f"pip install {pip_name} (optional)",
-                ))
+                report.results.append(
+                    CheckResult(
+                        name=desc,
+                        status="warn",
+                        message="not installed",
+                        fix_hint=f"pip install {pip_name} (optional)",
+                    )
+                )
 
     def _check_api_keys(self, report: DoctorReport) -> None:
         keys = [
@@ -137,21 +158,28 @@ class Doctor:
         any_set = False
         for env_var, provider in keys:
             if os.environ.get(env_var):
-                report.results.append(CheckResult(
-                    name=f"{provider} API Key", status="ok",
-                    message=f"{env_var} is set",
-                ))
+                report.results.append(
+                    CheckResult(
+                        name=f"{provider} API Key",
+                        status="ok",
+                        message=f"{env_var} is set",
+                    )
+                )
                 any_set = True
         if not any_set:
-            report.results.append(CheckResult(
-                name="API Keys", status="warn",
-                message="no API keys detected",
-                fix_hint="Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or use Ollama for free local inference",
-            ))
+            report.results.append(
+                CheckResult(
+                    name="API Keys",
+                    status="warn",
+                    message="no API keys detected",
+                    fix_hint="Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or use Ollama for free local inference",
+                )
+            )
 
     def _check_ollama(self, report: DoctorReport) -> None:
         try:
             import httpx
+
             resp = httpx.get(
                 f"{os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')}/api/tags",
                 timeout=3.0,
@@ -159,22 +187,31 @@ class Doctor:
             if resp.status_code == 200:
                 models = resp.json().get("models", [])
                 names = [m.get("name", "?") for m in models[:5]]
-                report.results.append(CheckResult(
-                    name="Ollama", status="ok",
-                    message=f"running ({len(models)} models: {', '.join(names)})",
-                ))
+                report.results.append(
+                    CheckResult(
+                        name="Ollama",
+                        status="ok",
+                        message=f"running ({len(models)} models: {', '.join(names)})",
+                    )
+                )
             else:
-                report.results.append(CheckResult(
-                    name="Ollama", status="warn",
-                    message="not running",
-                    fix_hint="Start Ollama: ollama serve",
-                ))
+                report.results.append(
+                    CheckResult(
+                        name="Ollama",
+                        status="warn",
+                        message="not running",
+                        fix_hint="Start Ollama: ollama serve",
+                    )
+                )
         except Exception:  # noqa: BLE001 — Ollama probe must always degrade to "not running" warn, never abort doctor
-            report.results.append(CheckResult(
-                name="Ollama", status="warn",
-                message="not running",
-                fix_hint="Install Ollama from https://ollama.com (optional, free local inference)",
-            ))
+            report.results.append(
+                CheckResult(
+                    name="Ollama",
+                    status="warn",
+                    message="not running",
+                    fix_hint="Install Ollama from https://ollama.com (optional, free local inference)",
+                )
+            )
 
     def _check_config(self, report: DoctorReport) -> None:
         if self._config_path is None:
@@ -184,11 +221,14 @@ class Doctor:
                     break
 
         if self._config_path is None or not self._config_path.exists():
-            report.results.append(CheckResult(
-                name="Config", status="warn",
-                message="no config.yaml found",
-                fix_hint="Run: python -m runtime setup",
-            ))
+            report.results.append(
+                CheckResult(
+                    name="Config",
+                    status="warn",
+                    message="no config.yaml found",
+                    fix_hint="Run: python -m runtime setup",
+                )
+            )
             return
 
         try:
@@ -199,17 +239,24 @@ class Doctor:
             # this check always failed with ModuleNotFoundError and aborted
             # `quickstart`. Match the canonical import used across the CLI.
             from runtime.platform.config import load_from_yaml
+
             load_from_yaml(self._config_path)
-            report.results.append(CheckResult(
-                name="Config", status="ok",
-                message=f"{self._config_path} valid",
-            ))
+            report.results.append(
+                CheckResult(
+                    name="Config",
+                    status="ok",
+                    message=f"{self._config_path} valid",
+                )
+            )
         except Exception as e:
-            report.results.append(CheckResult(
-                name="Config", status="fail",
-                message=f"{self._config_path}: {e}",
-                fix_hint="Fix config or run: python -m runtime setup",
-            ))
+            report.results.append(
+                CheckResult(
+                    name="Config",
+                    status="fail",
+                    message=f"{self._config_path}: {e}",
+                    fix_hint="Fix config or run: python -m runtime setup",
+                )
+            )
 
     def _check_data_dir(self, report: DoctorReport) -> None:
         data_dir = Path(os.path.expanduser("~/.octopus"))
@@ -218,13 +265,19 @@ class Doctor:
             test_file = data_dir / ".doctor_test"
             test_file.write_text("ok", encoding="utf-8")
             test_file.unlink()
-            report.results.append(CheckResult(
-                name="Data Dir", status="ok",
-                message=f"{data_dir} writable",
-            ))
+            report.results.append(
+                CheckResult(
+                    name="Data Dir",
+                    status="ok",
+                    message=f"{data_dir} writable",
+                )
+            )
         except (OSError, ValueError, TypeError) as exc:
-            report.results.append(CheckResult(
-                name="Data Dir", status="fail",
-                message=f"{data_dir}: {exc}",
-                fix_hint=f"Check permissions: {data_dir}",
-            ))
+            report.results.append(
+                CheckResult(
+                    name="Data Dir",
+                    status="fail",
+                    message=f"{data_dir}: {exc}",
+                    fix_hint=f"Check permissions: {data_dir}",
+                )
+            )

@@ -30,6 +30,7 @@ When NOT to enable
   see prior internal context) should pass ``share_history=False`` at the
   call site.
 """
+
 from __future__ import annotations
 
 import logging
@@ -58,6 +59,7 @@ class SubagentTurn:
     aggregate memory footprint stays bounded even when callers pass
     huge prompts or get verbose outputs.
     """
+
     prompt: str
     output: str
     success: bool
@@ -69,6 +71,7 @@ class SubagentTurn:
 @dataclass(slots=True)
 class _Bucket:
     """Per-key storage with last-touched timestamp for TTL cleanup."""
+
     turns: deque[SubagentTurn]
     last_touched: float
 
@@ -120,7 +123,10 @@ def record_turn(
         bucket.last_touched = turn.timestamp
     _log.debug(
         "recorded subagent turn · thread=%s role=%s success=%s rounds=%d",
-        thread_id, role_id, success, rounds,
+        thread_id,
+        role_id,
+        success,
+        rounds,
     )
 
 
@@ -172,8 +178,8 @@ def recent_turns_prompt(
         "",
         (
             "You have been called before in this thread. The user may "
-            "reference prior outputs (\"that patent\", \"the second "
-            "candidate\", \"continue from where you left off\"). Use "
+            'reference prior outputs ("that patent", "the second '
+            'candidate", "continue from where you left off"). Use '
             "this history to resolve such references; do NOT re-run "
             "work that already produced a result."
         ),

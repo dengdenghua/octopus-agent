@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import asyncio
@@ -46,8 +45,11 @@ def create_parallel_agents_router(
         so dev workflows are unchanged.
         """
         from .openai_gateway_router import _resolve_actor
+
         return _resolve_actor(
-            request, identity_store, require_auth,
+            request,
+            identity_store,
+            require_auth,
             jwt_secret=jwt_secret,
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
@@ -94,7 +96,6 @@ def create_parallel_agents_router(
             raise HTTPException(403, "not the owner of the task's batch")
         return actor
 
-
     @router.get("/api/agents/parallel/status")
     def status(request: Request) -> dict:
         _auth(request)  # AUTH-OK: actor-agnostic — returns aggregate counts only, no user data
@@ -137,7 +138,9 @@ def create_parallel_agents_router(
 
     @router.post("/api/agents/parallel/split")
     def split(request: Request, body: SplitRequest) -> dict:
-        _auth(request)  # AUTH-OK: actor-agnostic — split is a planning-only operation, doesn't create batches
+        _auth(
+            request
+        )  # AUTH-OK: actor-agnostic — split is a planning-only operation, doesn't create batches
         result = orchestrator.split(
             body.task,
             max_subtasks=body.max_subtasks,

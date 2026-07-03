@@ -125,8 +125,7 @@ class PresenceStore:
         member_id = require_cowork_id(member_id, label="member_id")
         with self._lock, self._connect() as conn:
             row = conn.execute(
-                "SELECT last_read, last_seen_at FROM read_state "
-                "WHERE thread_id=? AND member_id=?",
+                "SELECT last_read, last_seen_at FROM read_state WHERE thread_id=? AND member_id=?",
                 (thread_id, member_id),
             ).fetchone()
         if not row:
@@ -141,9 +140,7 @@ class PresenceStore:
                 "SELECT member_id, last_read, last_seen_at FROM read_state WHERE thread_id=?",
                 (thread_id,),
             ).fetchall()
-        return {
-            r[0]: {"last_read": int(r[1]), "last_seen_at": r[2]} for r in rows
-        }
+        return {r[0]: {"last_read": int(r[1]), "last_seen_at": r[2]} for r in rows}
 
 
 def _is_online(last_seen_at: str | None, now: datetime, window_s: int) -> bool:
@@ -219,8 +216,11 @@ def notify_targets(
     return [
         p.member_id
         for p in group_presence(
-            group_store, presence_store, thread_id,
-            online_window_s=online_window_s, now=now,
+            group_store,
+            presence_store,
+            thread_id,
+            online_window_s=online_window_s,
+            now=now,
         )
         if not p.online and p.unread > 0
     ]

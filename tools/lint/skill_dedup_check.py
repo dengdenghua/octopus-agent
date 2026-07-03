@@ -62,7 +62,7 @@ def _strip_frontmatter(text: str) -> str:
     end = text.find("\n---", 3)
     if end < 0:
         return text
-    return text[end + 4:].strip()
+    return text[end + 4 :].strip()
 
 
 def _prose_ratio(a: Path, b: Path) -> float:
@@ -104,11 +104,14 @@ def find_duplicates(threshold: float = 0.85) -> list[tuple[Path, Path, float]]:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
-        "--threshold", type=float, default=0.85,
+        "--threshold",
+        type=float,
+        default=0.85,
         help="prose-similarity ratio above which a sibling pair is flagged",
     )
     p.add_argument(
-        "--strict", action="store_true",
+        "--strict",
+        action="store_true",
         help="exit 1 if any duplicates are found",
     )
     args = p.parse_args()
@@ -121,8 +124,7 @@ def main() -> int:
     print(f"Found {len(pairs)} likely duplicate pair(s):")
     for a, b, ratio in pairs:
         print(
-            f"  {a.name} ↔ {b.name}  "
-            f"(prose ratio {ratio:.2f}, scripts byte-identical)",
+            f"  {a.name} ↔ {b.name}  (prose ratio {ratio:.2f}, scripts byte-identical)",
         )
     print(
         "\nFix: pick one canonical name, add the other under the SKILL.md "

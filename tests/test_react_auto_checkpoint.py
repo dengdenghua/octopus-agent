@@ -11,6 +11,7 @@ These are deliberately tiny pure functions so we can exercise the
 lifecycle without spinning up the full react_loop generator (which
 needs a full stack + journal + LLM router).
 """
+
 from __future__ import annotations
 
 import pytest
@@ -36,31 +37,36 @@ class TestCheckpointInterval:
         assert _checkpoint_interval() == _DEFAULT_CHECKPOINT_INTERVAL
 
     def test_explicit_zero_disables(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("OCTOPUS_CHECKPOINT_EVERY_N", "0")
         assert _checkpoint_interval() == 0
 
     def test_negative_returns_default(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("OCTOPUS_CHECKPOINT_EVERY_N", "-3")
         assert _checkpoint_interval() == _DEFAULT_CHECKPOINT_INTERVAL
 
     def test_positive_int_returned(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("OCTOPUS_CHECKPOINT_EVERY_N", "5")
         assert _checkpoint_interval() == 5
 
     def test_garbage_returns_default(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("OCTOPUS_CHECKPOINT_EVERY_N", "not-a-number")
         assert _checkpoint_interval() == _DEFAULT_CHECKPOINT_INTERVAL
 
     def test_re_read_each_call(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         # No caching — operator can flip mid-flight.
         monkeypatch.setenv("OCTOPUS_CHECKPOINT_EVERY_N", "3")

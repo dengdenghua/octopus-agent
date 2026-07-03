@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import re
@@ -93,9 +92,7 @@ class SuggestionTracker:
         """
         with self._lock:
             items = [
-                (k, dict(v))
-                for k, v in self._counts.items()
-                if int(v.get("count", 0)) >= min_count
+                (k, dict(v)) for k, v in self._counts.items() if int(v.get("count", 0)) >= min_count
             ]
         items.sort(
             key=lambda kv: (-kv[1]["count"], -kv[1]["last_seen"]),
@@ -104,14 +101,16 @@ class SuggestionTracker:
             return _cluster_suggestions(items, similarity=similarity, limit=limit)
         out: list[dict[str, Any]] = []
         for key, e in items[:limit]:
-            out.append({
-                "prompt": e["example"],
-                "normalized": key,
-                "count": e["count"],
-                "first_seen": e["first_seen"],
-                "last_seen": e["last_seen"],
-                "suggested_yaml": _build_suggested_yaml(e["example"]),
-            })
+            out.append(
+                {
+                    "prompt": e["example"],
+                    "normalized": key,
+                    "count": e["count"],
+                    "first_seen": e["first_seen"],
+                    "last_seen": e["last_seen"],
+                    "suggested_yaml": _build_suggested_yaml(e["example"]),
+                }
+            )
         return out
 
     def reset(self) -> int:
@@ -131,9 +130,7 @@ class SuggestionTracker:
             return {
                 "tracked": len(self._counts),
                 "capacity": self._max,
-                "total_misses": sum(
-                    int(e.get("count", 0)) for e in self._counts.values()
-                ),
+                "total_misses": sum(int(e.get("count", 0)) for e in self._counts.values()),
             }
 
 
@@ -145,7 +142,7 @@ def _bigrams(text: str) -> set[str]:
     s = text.strip().lower()
     if len(s) < 2:
         return {s} if s else set()
-    return {s[i:i + 2] for i in range(len(s) - 1)}
+    return {s[i : i + 2] for i in range(len(s) - 1)}
 
 
 def _jaccard(a: set[str], b: set[str]) -> float:
@@ -191,29 +188,33 @@ def _cluster_suggestions(
                 attached = True
                 break
         if not attached:
-            clusters.append({
-                "rep": prompt,
-                "_rep_bigrams": bg,
-                "members": [prompt],
-                "count": int(entry["count"]),
-                "first_seen": entry["first_seen"],
-                "last_seen": entry["last_seen"],
-            })
+            clusters.append(
+                {
+                    "rep": prompt,
+                    "_rep_bigrams": bg,
+                    "members": [prompt],
+                    "count": int(entry["count"]),
+                    "first_seen": entry["first_seen"],
+                    "last_seen": entry["last_seen"],
+                }
+            )
     # Sort by total count desc · ties by recency.
     clusters.sort(key=lambda c: (-c["count"], -c["last_seen"]))
     out: list[dict[str, Any]] = []
     for c in clusters[:limit]:
         members = sorted(set(c["members"]))
-        out.append({
-            "prompt": c["rep"],
-            "normalized": c["rep"].strip().lower(),
-            "count": c["count"],
-            "first_seen": c["first_seen"],
-            "last_seen": c["last_seen"],
-            "aliases": members,
-            "cluster_size": len(members),
-            "suggested_yaml": _build_clustered_yaml(c["rep"], members),
-        })
+        out.append(
+            {
+                "prompt": c["rep"],
+                "normalized": c["rep"].strip().lower(),
+                "count": c["count"],
+                "first_seen": c["first_seen"],
+                "last_seen": c["last_seen"],
+                "aliases": members,
+                "cluster_size": len(members),
+                "suggested_yaml": _build_clustered_yaml(c["rep"], members),
+            }
+        )
     return out
 
 
@@ -229,15 +230,19 @@ def _build_clustered_yaml(rep: str, members: list[str]) -> str:
     rid = rid_raw[:24].strip("_").lower()
     if not rid or rid.isdigit():
         import hashlib
-        rid = "auto_" + hashlib.sha1(
-            rep.encode("utf-8"),
-        ).hexdigest()[:8]
+
+        rid = (
+            "auto_"
+            + hashlib.sha1(
+                rep.encode("utf-8"),
+            ).hexdigest()[:8]
+        )
     alts = "|".join(re.escape(m.strip()) for m in members)
     return (
         f"  - id: {rid}\n"
         f"    type: regex\n"
         f"    pattern: '^({alts})$'\n"
-        f"    reply: \"TODO · 写一个对该 prompt 的标准回复\"\n"
+        f'    reply: "TODO · 写一个对该 prompt 的标准回复"\n'
         f"    priority: 20\n"
         f"    # auto-clustered from {len(members)} similar prompts:\n"
         + "".join(f"    #   {m!r}\n" for m in members)
@@ -263,9 +268,13 @@ def _build_suggested_yaml(prompt: str) -> str:
     if not rid or rid.isdigit():
         # Pure-numeric or empty slug · fall back to a hash for stability.
         import hashlib
-        rid = "auto_" + hashlib.sha1(
-            prompt.encode("utf-8"),
-        ).hexdigest()[:8]
+
+        rid = (
+            "auto_"
+            + hashlib.sha1(
+                prompt.encode("utf-8"),
+            ).hexdigest()[:8]
+        )
     pattern = re.escape(prompt.strip())
     # Use single-quoted YAML for the pattern so backslashes survive
     # round-tripping. Reply is a TODO so the operator picks the right
@@ -274,7 +283,7 @@ def _build_suggested_yaml(prompt: str) -> str:
         f"  - id: {rid}\n"
         f"    type: regex\n"
         f"    pattern: '^{pattern}$'\n"
-        f"    reply: \"TODO · 写一个对该 prompt 的标准回复\"\n"
+        f'    reply: "TODO · 写一个对该 prompt 的标准回复"\n'
         f"    priority: 20\n"
     )
 

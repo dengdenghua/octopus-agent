@@ -157,7 +157,8 @@ def _failure_coverage_score(prompt: str, failures: list[dict[str, Any]]) -> floa
     hits = 0
     for cluster in clusters:
         words = [
-            part for part in cluster.replace(":", " ").replace("_", " ").split()
+            part
+            for part in cluster.replace(":", " ").replace("_", " ").split()
             if len(part) >= 4 and part not in {"error", "failed", "failure"}
         ]
         if any(word in text for word in words):

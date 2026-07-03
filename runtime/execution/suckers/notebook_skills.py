@@ -22,7 +22,9 @@ def _safe_resolve(
     from runtime.safety.auth.path_guard import check_path
 
     verdict = check_path(
-        path, sandbox_dir=sandbox_dir, allow_sensitive=allow_sensitive,
+        path,
+        sandbox_dir=sandbox_dir,
+        allow_sensitive=allow_sensitive,
     )
     if not verdict.allow:
         return None, f"path_blocked: {verdict.reason}"

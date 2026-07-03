@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import threading
@@ -11,7 +10,6 @@ CircuitState = Literal["closed", "open", "half_open"]
 
 
 class CircuitOpen(RuntimeError):
-
     def __init__(
         self,
         reason: str,
@@ -33,7 +31,6 @@ class _Event:
 
 
 class CircuitBreaker:
-
     def __init__(
         self,
         *,
@@ -57,7 +54,6 @@ class CircuitBreaker:
         self._opened_at: float = 0.0
         self._open_reason: str = ""
         self._probe_pending: bool = False
-
 
     @property
     def state(self) -> CircuitState:
@@ -125,7 +121,6 @@ class CircuitBreaker:
                 if tripped is not None:
                     self._trip(reason=tripped, now=now)
 
-
     def reset(self) -> None:
         with self._lock:
             self._events.clear()
@@ -133,7 +128,6 @@ class CircuitBreaker:
             self._opened_at = 0.0
             self._open_reason = ""
             self._probe_pending = False
-
 
     def _prune(self, now: float) -> None:
         threshold = now - self.window_seconds

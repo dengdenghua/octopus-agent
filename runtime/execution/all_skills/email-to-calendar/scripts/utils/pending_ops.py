@@ -35,10 +35,7 @@ def add_pending_invite(email_id: str, email_subject: str, events: list[dict]) ->
     data = load_json(PENDING_FILE, {"invites": []})
 
     # Check if invite already exists for this email
-    existing = next(
-        (inv for inv in data["invites"] if inv.get("email_id") == email_id),
-        None
-    )
+    existing = next((inv for inv in data["invites"] if inv.get("email_id") == email_id), None)
 
     if existing:
         # Update existing invite
@@ -47,25 +44,25 @@ def add_pending_invite(email_id: str, email_subject: str, events: list[dict]) ->
         invite_id = existing["id"]
     else:
         # Create new invite
-        invite_id = f"inv_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{len(data['invites'])+1:03d}"
-        data["invites"].append({
-            "id": invite_id,
-            "email_id": email_id,
-            "email_subject": email_subject,
-            "events": events,
-            "created_at": datetime.now().isoformat(),
-            "reminder_count": 0,
-            "last_reminded": None
-        })
+        invite_id = f"inv_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{len(data['invites']) + 1:03d}"
+        data["invites"].append(
+            {
+                "id": invite_id,
+                "email_id": email_id,
+                "email_subject": email_subject,
+                "events": events,
+                "created_at": datetime.now().isoformat(),
+                "reminder_count": 0,
+                "last_reminded": None,
+            }
+        )
 
     save_json(PENDING_FILE, data)
     return invite_id
 
 
 def list_pending_summary(
-    today: str,
-    update_reminded: bool = False,
-    auto_dismiss: bool = False
+    today: str, update_reminded: bool = False, auto_dismiss: bool = False
 ) -> None:
     """Print human-readable summary of pending invites."""
     data = load_json(PENDING_FILE, {"invites": []})
@@ -93,15 +90,17 @@ def list_pending_summary(
             event_date = event.get("date", "")
             if event.get("status") == "pending" and event_date >= today:
                 day_of_week = get_day_of_week(event_date)
-                pending_events.append({
-                    "title": event.get("title", "Untitled"),
-                    "date": event_date,
-                    "day": day_of_week,
-                    "time": event.get("time", ""),
-                    "source": email_subject,
-                    "email_id": email_id,
-                    "reminder_count": reminder_count
-                })
+                pending_events.append(
+                    {
+                        "title": event.get("title", "Untitled"),
+                        "date": event_date,
+                        "day": day_of_week,
+                        "time": event.get("time", ""),
+                        "source": email_subject,
+                        "email_id": email_id,
+                        "reminder_count": reminder_count,
+                    }
+                )
 
     # Update reminder tracking if requested
     if update_reminded and pending_events:
@@ -120,7 +119,9 @@ def list_pending_summary(
         save_json(PENDING_FILE, data)
 
     if auto_dismissed_count > 0:
-        print(f"({auto_dismissed_count} event(s) auto-dismissed after {MAX_REMINDERS} ignored reminders)\n")
+        print(
+            f"({auto_dismissed_count} event(s) auto-dismissed after {MAX_REMINDERS} ignored reminders)\n"
+        )
 
     if not pending_events:
         print("No pending invites found.")
@@ -129,7 +130,9 @@ def list_pending_summary(
         for i, evt in enumerate(pending_events, 1):
             time_str = f" at {evt['time']}" if evt["time"] else ""
             day_str = f" ({evt['day']})" if evt["day"] else ""
-            reminder_marker = f" [reminded {evt['reminder_count']}x]" if evt["reminder_count"] > 0 else ""
+            reminder_marker = (
+                f" [reminded {evt['reminder_count']}x]" if evt["reminder_count"] > 0 else ""
+            )
 
             print(f"{i}. {evt['title']} - {evt['date']}{day_str}{time_str}{reminder_marker}")
             print(f"   From: {evt['source']}")
@@ -138,9 +141,7 @@ def list_pending_summary(
 
 
 def list_pending_json(
-    today: str,
-    update_reminded: bool = False,
-    auto_dismiss: bool = False
+    today: str, update_reminded: bool = False, auto_dismiss: bool = False
 ) -> None:
     """Print JSON array of pending invites."""
     data = load_json(PENDING_FILE, {"invites": []})
@@ -167,17 +168,19 @@ def list_pending_json(
         for event in invite.get("events", []):
             event_date = event.get("date", "")
             if event.get("status") == "pending" and event_date >= today:
-                pending_events.append({
-                    "invite_id": invite_id,
-                    "email_id": email_id,
-                    "email_subject": email_subject,
-                    "title": event.get("title", ""),
-                    "date": event_date,
-                    "day_of_week": get_day_of_week(event_date),
-                    "time": event.get("time", ""),
-                    "reminder_count": reminder_count,
-                    "last_reminded": last_reminded
-                })
+                pending_events.append(
+                    {
+                        "invite_id": invite_id,
+                        "email_id": email_id,
+                        "email_subject": email_subject,
+                        "title": event.get("title", ""),
+                        "date": event_date,
+                        "day_of_week": get_day_of_week(event_date),
+                        "time": event.get("time", ""),
+                        "reminder_count": reminder_count,
+                        "last_reminded": last_reminded,
+                    }
+                )
 
     # Update reminder tracking if requested
     if update_reminded and pending_events:

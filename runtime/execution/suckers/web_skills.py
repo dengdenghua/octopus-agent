@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import os
@@ -112,12 +111,14 @@ def _fetch_url(
             truncated = len(text) > max_bytes
             if truncated:
                 text = text[:max_bytes]
-            result.update({
-                "extracted": True,
-                "truncated": truncated,
-                "content": text,
-                "metadata": extracted["metadata"],
-            })
+            result.update(
+                {
+                    "extracted": True,
+                    "truncated": truncated,
+                    "content": text,
+                    "metadata": extracted["metadata"],
+                }
+            )
             return result
         result["extract_failed"] = (
             "trafilatura_unavailable" if not TRAFILATURA_AVAILABLE else "no_main_content"
@@ -127,11 +128,13 @@ def _fetch_url(
     truncated = len(body) > max_bytes
     if truncated:
         body = body[:max_bytes]
-    result.update({
-        "extracted": False,
-        "truncated": truncated,
-        "content": body,
-    })
+    result.update(
+        {
+            "extracted": False,
+            "truncated": truncated,
+            "content": body,
+        }
+    )
     return result
 
 
@@ -325,9 +328,7 @@ def _ddg_search(client: Any, query: str, max_results: int) -> dict[str, Any]:
         text,
         flags=re.DOTALL,
     )
-    snippets = re.findall(
-        r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>', text, flags=re.DOTALL
-    )
+    snippets = re.findall(r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>', text, flags=re.DOTALL)
 
     def _clean(s: str) -> str:
         s = re.sub(r"<[^>]+>", "", s)
@@ -336,11 +337,13 @@ def _ddg_search(client: Any, query: str, max_results: int) -> dict[str, Any]:
     results: list[dict[str, str]] = []
     for i, (url, title) in enumerate(items[:max_results]):
         snippet = snippets[i] if i < len(snippets) else ""
-        results.append({
-            "title": _clean(title),
-            "url": url,
-            "snippet": _clean(snippet)[:400],
-        })
+        results.append(
+            {
+                "title": _clean(title),
+                "url": url,
+                "snippet": _clean(snippet)[:400],
+            }
+        )
     return {"query": query, "backend": "ddg", "results": results}
 
 
@@ -474,6 +477,7 @@ def _web_fetch(
     if caller is None:
         try:
             from runtime.platform.llm_infra.llm_caller import LLMCaller
+
             caller = LLMCaller("web_fetch_cheap", "web_fetch_default_model")
         except Exception as exc:  # noqa: BLE001
             return {
@@ -483,9 +487,7 @@ def _web_fetch(
                 "fallback_extract": extracted_text,
             }
 
-    user_msg = (
-        f"URL: {final_url}\nQuestion: {prompt}\n\nPage content:\n{extracted_text}"
-    )
+    user_msg = f"URL: {final_url}\nQuestion: {prompt}\n\nPage content:\n{extracted_text}"
     try:
         answer_text, meta = caller.call(
             system=_WEB_FETCH_SYSTEM,
@@ -542,7 +544,7 @@ def register_web_skills(registry: SkillRegistry) -> int:
                 "用途: 对一个已知 URL 发 HTTP GET；默认返回原始 body 文本 (有上限)。开 extract=true 走 trafilatura 抽取正文 + 元数据 (title/author/date/sitename/description/language)，把导航/广告/页脚剥掉。\n"
                 "何时不用: 不知道目标网址、要先「搜一下」用 web_search；要执行本地命令用 exec_shell (curl/wget 不要绕道这里)；私网地址默认被 SSRF 拦截，需要时显式 allow_private=true。\n"
                 "关键参数: url (必填); extract (默认 False, 阅读文章问答时建议 True); timeout_ms (默认 5000); max_bytes (默认 100000)。\n"
-                "示例: fetch_url({\"url\": \"https://example.com/post\", \"extract\": true})"
+                '示例: fetch_url({"url": "https://example.com/post", "extract": true})'
             ),
             affinity=["web", "io"],
             cost_profile="low",
@@ -565,7 +567,7 @@ def register_web_skills(registry: SkillRegistry) -> int:
                 "用途: 网上检索 — 任何「需要谷歌一下」的查询 (新闻、价格、定义、X 的现状、近期事件、产品对比) 都走这里；返回结构化 [{title, url, snippet}]。\n"
                 "何时不用: 已经知道具体 URL 直接读用 fetch_url；不要用 exec_shell 跑 curl/wget 拿 HTML (没法解析)；查本地代码/配置用 grep_text 或 glob_files。\n"
                 "关键参数: query (必填); max_results (默认 5); backend (可选, 留空时按环境变量自动选 tavily/brave/serper/searxng/ddg)。\n"
-                "示例: web_search({\"query\": \"langgraph 0.2 release notes\", \"max_results\": 5})"
+                '示例: web_search({"query": "langgraph 0.2 release notes", "max_results": 5})'
             ),
             affinity=["web", "search"],
             cost_profile="low",
@@ -588,7 +590,7 @@ def register_web_skills(registry: SkillRegistry) -> int:
                 "用途: 给一个 URL + 一个问题，由廉价 LLM 在页面正文里抽出答案；只把 answer 字符串回给主模型，不再让主模型啃 50KB 原始 HTML。\n"
                 "何时不用: 只想拿原文 / 自己解析用 fetch_url(extract=true)；不知道目标网址先用 web_search；要本地文件 Q&A 用 read_file 自己问。\n"
                 "关键参数: url (必填); prompt (必填, 你想从页面里得到的答案); max_chars (送进 LLM 的正文上限, 默认 16000); cheap_model (可选, 留空走 web_fetch_default_model)。\n"
-                "示例: web_fetch({\"url\": \"https://docs.example.com/limits\", \"prompt\": \"What is the rate limit?\"})"
+                '示例: web_fetch({"url": "https://docs.example.com/limits", "prompt": "What is the rate limit?"})'
             ),
             affinity=["web", "io", "llm"],
             cost_profile="mid",

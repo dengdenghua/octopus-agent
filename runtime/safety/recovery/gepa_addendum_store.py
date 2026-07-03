@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -11,7 +10,7 @@ _LOG = logging.getLogger("octopus.gepa.addendum")
 
 
 _LEGACY_DIR_NAME = "gepa_addendums"  # pre-rebrand path
-_DIR_NAME = "forge_addendums"        # current name (parallels SkillForge)
+_DIR_NAME = "forge_addendums"  # current name (parallels SkillForge)
 
 
 def _root() -> Path:
@@ -33,7 +32,8 @@ def _root() -> Path:
                 "legacy addendum dir migration failed · %s · falling "
                 "back to %s (new writes land here; legacy reads still "
                 "work via the legacy path below)",
-                exc, legacy,
+                exc,
+                legacy,
             )
             return legacy
     return root
@@ -64,8 +64,9 @@ def legacy_global_path() -> Path:
             _LOG.info("migrated %s → %s", legacy, current)
         except OSError as exc:
             _LOG.warning(
-                "legacy global addendum migration failed · %s · "
-                "falling back to %s", exc, legacy,
+                "legacy global addendum migration failed · %s · falling back to %s",
+                exc,
+                legacy,
             )
             return legacy
     return current
@@ -171,14 +172,16 @@ def list_all() -> list[dict[str, Any]]:
         try:
             stat = glob.stat()
             content = glob.read_text(encoding="utf-8")
-            out.append({
-                "scope": "global",
-                "recipe_id": None,
-                "path": str(glob),
-                "size": stat.st_size,
-                "mtime": stat.st_mtime,
-                "preview": content[:400],
-            })
+            out.append(
+                {
+                    "scope": "global",
+                    "recipe_id": None,
+                    "path": str(glob),
+                    "size": stat.st_size,
+                    "mtime": stat.st_mtime,
+                    "preview": content[:400],
+                }
+            )
         except OSError:  # noqa: BLE001 — addendum file lock best-effort
             pass
     # Per-recipe entries.
@@ -203,14 +206,16 @@ def list_all() -> list[dict[str, Any]]:
                 # Convention: we sanitise "llm@hex" → "llm_hex" on
                 # write · best-effort reverse for display.
                 display_id = stem.replace("_", "@", 1) if "_" in stem else stem
-                out.append({
-                    "scope": "per_recipe",
-                    "recipe_id": display_id,
-                    "path": str(f),
-                    "size": stat.st_size,
-                    "mtime": stat.st_mtime,
-                    "preview": content[:400],
-                })
+                out.append(
+                    {
+                        "scope": "per_recipe",
+                        "recipe_id": display_id,
+                        "path": str(f),
+                        "size": stat.st_size,
+                        "mtime": stat.st_mtime,
+                        "preview": content[:400],
+                    }
+                )
             except OSError:
                 continue
     return out

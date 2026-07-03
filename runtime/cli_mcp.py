@@ -32,7 +32,10 @@ def run_mcp_command(args: Any) -> int:
 def _add_server(args: Any) -> int:
     tail_options, command = _split_add_tail(getattr(args, "server_command", None) or [])
     if not command:
-        print("missing command: use `octopus-agent mcp add NAME -- COMMAND [ARGS...]`", file=sys.stderr)
+        print(
+            "missing command: use `octopus-agent mcp add NAME -- COMMAND [ARGS...]`",
+            file=sys.stderr,
+        )
         return 2
 
     env_items = list(getattr(args, "env", None) or []) + tail_options["env"]
@@ -67,15 +70,17 @@ def _list_servers(args: Any) -> int:
     rows: list[dict[str, Any]] = []
     for name, cfg in sorted(servers.items()):
         entry = trust.get(name)
-        rows.append({
-            "name": name,
-            "command": cfg.get("command"),
-            "args": list(cfg.get("args") or []),
-            "enabled": bool(cfg.get("enabled", True)),
-            "trusted": bool(entry.approved) if entry else False,
-            "trust_level": cfg.get("trust_level") or "custom",
-            "timeout_ms": cfg.get("timeout_ms"),
-        })
+        rows.append(
+            {
+                "name": name,
+                "command": cfg.get("command"),
+                "args": list(cfg.get("args") or []),
+                "enabled": bool(cfg.get("enabled", True)),
+                "trusted": bool(entry.approved) if entry else False,
+                "trust_level": cfg.get("trust_level") or "custom",
+                "timeout_ms": cfg.get("timeout_ms"),
+            }
+        )
 
     if getattr(args, "output_format", "text") == "json":
         print(json.dumps({"mcpServers": rows}, ensure_ascii=False, indent=2))
@@ -165,7 +170,7 @@ def _split_add_tail(raw: list[str]) -> tuple[dict[str, Any], list[str]]:
     }
     if "--" in raw:
         marker = raw.index("--")
-        prefix, command = raw[:marker], raw[marker + 1:]
+        prefix, command = raw[:marker], raw[marker + 1 :]
     else:
         prefix, command = [], raw
 
@@ -278,13 +283,18 @@ async def _run_sse_server(host: str, port: int) -> None:
     print(f"  WebSocket port: {port - 1}")
     print()
     print("Claude Desktop / Cursor 配置:")
-    print(json.dumps({
-        "mcpServers": {
-            "octopus-tentacle": {
-                "url": f"http://localhost:{port}/api/tentacle/mcp/sse",
-            }
-        }
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "octopus-tentacle": {
+                        "url": f"http://localhost:{port}/api/tentacle/mcp/sse",
+                    }
+                }
+            },
+            indent=2,
+        )
+    )
 
     await coordinator.start()
 

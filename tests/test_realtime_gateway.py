@@ -288,9 +288,7 @@ def test_turn_lifecycle_with_approval_accept(gateway_client: Any) -> None:
 
     # Agent message deltas accumulate to the input text.
     deltas = [
-        n.params["delta"]
-        for n in outcome["notifications"]
-        if n.method == "item/agentMessage/delta"
+        n.params["delta"] for n in outcome["notifications"] if n.method == "item/agentMessage/delta"
     ]
     assert "".join(deltas) == "hello world"
 
@@ -868,14 +866,17 @@ class TestCreateAppApprovalBypassDefault:
         )
         cfg = AgentConfig(
             planner=PlannerConfig(
-                type="llm", model="mock/ob",
+                type="llm",
+                model="mock/ob",
                 mock_response='{"reasoning":"r","nodes":[]}',
             ),
             safety=safety,
         )
         stack = build_from_config(cfg)
         return create_app(
-            journal=stack.journal, registry=stack.registry, stack=stack,
+            journal=stack.journal,
+            registry=stack.registry,
+            stack=stack,
         )
 
     def test_secure_default_is_no_bypass(self, tmp_path: Path, monkeypatch: Any):

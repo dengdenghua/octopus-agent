@@ -73,7 +73,13 @@ def test_search_returns_cited_hits(monkeypatch) -> None:
             "query": payload["query"],
             "mode": "efficiency",
             "hits": [
-                {"path": "/d/a.pdf", "title": "A", "snippet": "x" * 999, "score": 0.9, "citation": {"page": 3}},
+                {
+                    "path": "/d/a.pdf",
+                    "title": "A",
+                    "snippet": "x" * 999,
+                    "score": 0.9,
+                    "citation": {"page": 3},
+                },
                 "garbage",  # non-dict hit is dropped
                 {"path": "/d/b.md", "title": "B", "snippet": "y", "score": 0.5, "citation": None},
             ],

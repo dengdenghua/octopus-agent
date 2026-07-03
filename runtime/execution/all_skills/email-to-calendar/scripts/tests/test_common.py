@@ -7,7 +7,7 @@ import unittest
 from datetime import datetime, timedelta
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from utils.common import (
     format_timestamp,
@@ -170,5 +170,5 @@ class TestTimeAgo(unittest.TestCase):
         self.assertEqual(time_ago(None), "")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

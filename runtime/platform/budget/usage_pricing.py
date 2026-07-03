@@ -63,6 +63,7 @@ class UsagePricing:
     def get(cls) -> UsagePricing:
         if cls._instance is None:
             import os
+
             raw = os.environ.get("OCTOPUS_MAX_COST_USD", "").strip()
             budget: float | None = None
             if raw:
@@ -149,7 +150,9 @@ class UsagePricing:
             "total_calls": len(self._records),
             "by_model": by_model,
             "budget_usd": self.config.budget_usd,
-            "budget_used_pct": round(self._total_cost / self.config.budget_usd * 100, 1) if self.config.budget_usd else None,
+            "budget_used_pct": round(self._total_cost / self.config.budget_usd * 100, 1)
+            if self.config.budget_usd
+            else None,
         }
 
     def is_over_budget(self) -> bool:
@@ -164,7 +167,12 @@ class UsagePricing:
         if pct >= 1.0:
             _LOG.warning("BUDGET EXCEEDED: $%.4f / $%.2f", self._total_cost, self.config.budget_usd)
         elif pct >= self.config.warn_at_percent:
-            _LOG.warning("budget at %.0f%%: $%.4f / $%.2f", pct * 100, self._total_cost, self.config.budget_usd)
+            _LOG.warning(
+                "budget at %.0f%%: $%.4f / $%.2f",
+                pct * 100,
+                self._total_cost,
+                self.config.budget_usd,
+            )
 
     def _persist(self, rec: UsageRecord) -> None:
         if not self.config.log_path:

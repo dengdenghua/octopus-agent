@@ -36,7 +36,7 @@ def get_disposition_settings(config_file: str | None = None) -> dict[str, bool]:
     return {
         "mark_read": email_handling.get("mark_read", True),
         "archive": email_handling.get("archive", True),
-        "auto_dispose_calendar_replies": email_handling.get("auto_dispose_calendar_replies", True)
+        "auto_dispose_calendar_replies": email_handling.get("auto_dispose_calendar_replies", True),
     }
 
 
@@ -45,7 +45,7 @@ def disposition_email(
     settings: dict[str, bool] | None = None,
     mark_read: bool | None = None,
     archive: bool | None = None,
-    provider: str | None = None
+    provider: str | None = None,
 ) -> dict[str, Any]:
     """
     Apply disposition (mark read/archive) to an email based on config.
@@ -95,13 +95,13 @@ def disposition_email(
             "success": True,
             "actions": actions,
             "email_id": email_id,
-            "labels_removed": remove_labels
+            "labels_removed": remove_labels,
         }
     return {
         "success": False,
         "error": result.get("error", "Unknown error"),
         "actions": [],
-        "email_id": email_id
+        "email_id": email_id,
     }
 
 
@@ -175,10 +175,7 @@ def main():
             archive = False
 
         result = disposition_email(
-            email_id,
-            mark_read=mark_read,
-            archive=archive,
-            provider=args.get("provider")
+            email_id, mark_read=mark_read, archive=archive, provider=args.get("provider")
         )
 
     elif action == "settings":

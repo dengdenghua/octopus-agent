@@ -5,11 +5,13 @@ import logging
 
 def _obfuscate(value: str) -> str:
     import base64
+
     return base64.b64encode(value.encode()).decode()
 
 
 def _deobfuscate(value: str) -> str:
     import base64
+
     return base64.b64decode(value.encode()).decode()
 
 
@@ -54,6 +56,7 @@ class CredentialPool:
 
     def add_from_env(self, env_var: str, provider: str = "") -> CredentialEntry | None:
         import os
+
         secret = os.environ.get(env_var)
         if not secret:
             return None
@@ -69,7 +72,8 @@ class CredentialPool:
     def get(self, provider: str | None = None) -> CredentialEntry | None:
         with self._lock:
             available = [
-                e for e in self._entries
+                e
+                for e in self._entries
                 if e.is_available and (provider is None or e.provider == provider)
             ]
             if not available:
@@ -95,7 +99,9 @@ class CredentialPool:
                     e.cooldown_until = time.time() + cooldown_sec
                     _LOG.info(
                         "credential %s error #%d · cooldown %.0fs",
-                        key_id, e.error_count, cooldown_sec,
+                        key_id,
+                        e.error_count,
+                        cooldown_sec,
                     )
                     break
 

@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from unittest.mock import patch
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from utils import undo_ops
 
@@ -24,7 +24,7 @@ class TestFindLastUndoable(unittest.TestCase):
         """Create temp directory and patch file path."""
         self.temp_dir = tempfile.mkdtemp()
         self.changelog_file = os.path.join(self.temp_dir, "changelog.json")
-        self.patcher = patch.object(undo_ops, 'CHANGELOG_FILE', self.changelog_file)
+        self.patcher = patch.object(undo_ops, "CHANGELOG_FILE", self.changelog_file)
         self.patcher.start()
 
     def tearDown(self):
@@ -37,16 +37,24 @@ class TestFindLastUndoable(unittest.TestCase):
         now = datetime.now()
         test_data = {
             "changes": [
-                {"id": "chg_001", "timestamp": (now - timedelta(hours=2)).isoformat(), "can_undo": True},
-                {"id": "chg_002", "timestamp": (now - timedelta(hours=1)).isoformat(), "can_undo": True},
-                {"id": "chg_003", "timestamp": now.isoformat(), "can_undo": True}
+                {
+                    "id": "chg_001",
+                    "timestamp": (now - timedelta(hours=2)).isoformat(),
+                    "can_undo": True,
+                },
+                {
+                    "id": "chg_002",
+                    "timestamp": (now - timedelta(hours=1)).isoformat(),
+                    "can_undo": True,
+                },
+                {"id": "chg_003", "timestamp": now.isoformat(), "can_undo": True},
             ]
         }
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             undo_ops.find_last_undoable()
 
         output = captured.getvalue().strip()
@@ -58,14 +66,18 @@ class TestFindLastUndoable(unittest.TestCase):
         test_data = {
             "changes": [
                 {"id": "chg_001", "timestamp": now.isoformat(), "can_undo": True},
-                {"id": "chg_002", "timestamp": now.isoformat(), "can_undo": False}  # Already undone
+                {
+                    "id": "chg_002",
+                    "timestamp": now.isoformat(),
+                    "can_undo": False,
+                },  # Already undone
             ]
         }
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             undo_ops.find_last_undoable()
 
         output = captured.getvalue().strip()
@@ -76,15 +88,23 @@ class TestFindLastUndoable(unittest.TestCase):
         now = datetime.now()
         test_data = {
             "changes": [
-                {"id": "chg_001", "timestamp": (now - timedelta(hours=25)).isoformat(), "can_undo": True},
-                {"id": "chg_002", "timestamp": (now - timedelta(hours=1)).isoformat(), "can_undo": True}
+                {
+                    "id": "chg_001",
+                    "timestamp": (now - timedelta(hours=25)).isoformat(),
+                    "can_undo": True,
+                },
+                {
+                    "id": "chg_002",
+                    "timestamp": (now - timedelta(hours=1)).isoformat(),
+                    "can_undo": True,
+                },
             ]
         }
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             undo_ops.find_last_undoable()
 
         output = captured.getvalue().strip()
@@ -92,7 +112,7 @@ class TestFindLastUndoable(unittest.TestCase):
 
     def test_exits_when_no_undoable(self):
         """Test that SystemExit raised when no undoable changes exist."""
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump({"changes": []}, f)
 
         with self.assertRaises(SystemExit) as cm:
@@ -103,12 +123,8 @@ class TestFindLastUndoable(unittest.TestCase):
     def test_exits_when_all_too_old(self):
         """Test that SystemExit raised when all changes are too old."""
         old_time = (datetime.now() - timedelta(hours=25)).isoformat()
-        test_data = {
-            "changes": [
-                {"id": "chg_001", "timestamp": old_time, "can_undo": True}
-            ]
-        }
-        with open(self.changelog_file, 'w') as f:
+        test_data = {"changes": [{"id": "chg_001", "timestamp": old_time, "can_undo": True}]}
+        with open(self.changelog_file, "w") as f:
             json.dump(test_data, f)
 
         with self.assertRaises(SystemExit) as cm:
@@ -124,7 +140,7 @@ class TestListUndoable(unittest.TestCase):
         """Create temp directory and patch file path."""
         self.temp_dir = tempfile.mkdtemp()
         self.changelog_file = os.path.join(self.temp_dir, "changelog.json")
-        self.patcher = patch.object(undo_ops, 'CHANGELOG_FILE', self.changelog_file)
+        self.patcher = patch.object(undo_ops, "CHANGELOG_FILE", self.changelog_file)
         self.patcher.start()
 
     def tearDown(self):
@@ -137,17 +153,28 @@ class TestListUndoable(unittest.TestCase):
         now = datetime.now()
         test_data = {
             "changes": [
-                {"id": "chg_001", "timestamp": now.isoformat(), "action": "create",
-                 "after": {"summary": "Event 1"}, "can_undo": True},
-                {"id": "chg_002", "timestamp": now.isoformat(), "action": "update",
-                 "before": {"summary": "Old"}, "after": {"summary": "New"}, "can_undo": True}
+                {
+                    "id": "chg_001",
+                    "timestamp": now.isoformat(),
+                    "action": "create",
+                    "after": {"summary": "Event 1"},
+                    "can_undo": True,
+                },
+                {
+                    "id": "chg_002",
+                    "timestamp": now.isoformat(),
+                    "action": "update",
+                    "before": {"summary": "Old"},
+                    "after": {"summary": "New"},
+                    "can_undo": True,
+                },
             ]
         }
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             undo_ops.list_undoable()
 
         output = captured.getvalue()
@@ -158,11 +185,11 @@ class TestListUndoable(unittest.TestCase):
 
     def test_empty_when_no_undoable(self):
         """Test message when no undoable changes."""
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump({"changes": []}, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             undo_ops.list_undoable()
 
         output = captured.getvalue()
@@ -173,15 +200,20 @@ class TestListUndoable(unittest.TestCase):
         now = datetime.now()
         test_data = {
             "changes": [
-                {"id": "chg_001", "timestamp": now.isoformat(), "action": "delete",
-                 "before": {"summary": "Deleted Event"}, "can_undo": True}
+                {
+                    "id": "chg_001",
+                    "timestamp": now.isoformat(),
+                    "action": "delete",
+                    "before": {"summary": "Deleted Event"},
+                    "can_undo": True,
+                }
             ]
         }
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             undo_ops.list_undoable()
 
         output = captured.getvalue()
@@ -196,7 +228,7 @@ class TestMarkUndone(unittest.TestCase):
         """Create temp directory and patch file path."""
         self.temp_dir = tempfile.mkdtemp()
         self.changelog_file = os.path.join(self.temp_dir, "changelog.json")
-        self.patcher = patch.object(undo_ops, 'CHANGELOG_FILE', self.changelog_file)
+        self.patcher = patch.object(undo_ops, "CHANGELOG_FILE", self.changelog_file)
         self.patcher.start()
 
     def tearDown(self):
@@ -206,12 +238,8 @@ class TestMarkUndone(unittest.TestCase):
 
     def test_sets_can_undo_false(self):
         """Test that mark_undone sets can_undo to False."""
-        test_data = {
-            "changes": [
-                {"id": "chg_001", "can_undo": True}
-            ]
-        }
-        with open(self.changelog_file, 'w') as f:
+        test_data = {"changes": [{"id": "chg_001", "can_undo": True}]}
+        with open(self.changelog_file, "w") as f:
             json.dump(test_data, f)
 
         undo_ops.mark_undone("chg_001")
@@ -223,12 +251,8 @@ class TestMarkUndone(unittest.TestCase):
 
     def test_sets_undone_at_timestamp(self):
         """Test that mark_undone sets undone_at timestamp."""
-        test_data = {
-            "changes": [
-                {"id": "chg_001", "can_undo": True}
-            ]
-        }
-        with open(self.changelog_file, 'w') as f:
+        test_data = {"changes": [{"id": "chg_001", "can_undo": True}]}
+        with open(self.changelog_file, "w") as f:
             json.dump(test_data, f)
 
         undo_ops.mark_undone("chg_001")
@@ -241,7 +265,7 @@ class TestMarkUndone(unittest.TestCase):
     def test_nonexistent_change_no_error(self):
         """Test that marking nonexistent change doesn't crash."""
         test_data = {"changes": []}
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump(test_data, f)
 
         # Should not raise
@@ -253,10 +277,10 @@ class TestMarkUndone(unittest.TestCase):
             "changes": [
                 {"id": "chg_001", "can_undo": True},
                 {"id": "chg_002", "can_undo": True},
-                {"id": "chg_003", "can_undo": True}
+                {"id": "chg_003", "can_undo": True},
             ]
         }
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump(test_data, f)
 
         undo_ops.mark_undone("chg_002")
@@ -269,5 +293,5 @@ class TestMarkUndone(unittest.TestCase):
         self.assertTrue(data["changes"][2]["can_undo"])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

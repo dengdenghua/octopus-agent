@@ -184,7 +184,9 @@ def _is_allowed_pnpm_command(parts: list[str]) -> bool:
 
 def _verification_kind(command: dict[str, Any]) -> str:
     kind = str(command.get("kind") or "manual")
-    return kind if kind in {"test", "lint", "typecheck", "build", "diagnostic", "manual"} else "manual"
+    return (
+        kind if kind in {"test", "lint", "typecheck", "build", "diagnostic", "manual"} else "manual"
+    )
 
 
 def _record_metric(

@@ -29,12 +29,29 @@ from runtime.sensing.model_router.devices import (
 )
 
 _VALID_ANDROID_ACTIONS = {
-    "tap", "long_press", "swipe", "input_text", "system_key",
-    "open_app", "get_screen_info", "take_screenshot", "find_node",
-    "find_text", "scroll_to_find", "find_and_tap", "get_current_app",
-    "get_installed_apps", "install_app", "wait", "finish",
-    "browser_navigate", "browser_get_dom", "browser_click",
-    "browser_type", "browser_screenshot", "browser_evaluate",
+    "tap",
+    "long_press",
+    "swipe",
+    "input_text",
+    "system_key",
+    "open_app",
+    "get_screen_info",
+    "take_screenshot",
+    "find_node",
+    "find_text",
+    "scroll_to_find",
+    "find_and_tap",
+    "get_current_app",
+    "get_installed_apps",
+    "install_app",
+    "wait",
+    "finish",
+    "browser_navigate",
+    "browser_get_dom",
+    "browser_click",
+    "browser_type",
+    "browser_screenshot",
+    "browser_evaluate",
     "browser_install_extension",
 }
 
@@ -189,7 +206,9 @@ def create_android_router(
 
         # Cleanup old tokens
         now = time.time()
-        expired = [t for t, v in pending_previews.items() if now - v["created_at"] > _PENDING_TTL_SECONDS]
+        expired = [
+            t for t, v in pending_previews.items() if now - v["created_at"] > _PENDING_TTL_SECONDS
+        ]
         for t in expired:
             pending_previews.pop(t, None)
 

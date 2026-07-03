@@ -4,6 +4,7 @@ The catalog should only list ``name + ≤30字 short description`` to
 keep the system-prompt block small (better prompt-cache hit rate)
 and stable. Full schema is fetched on-demand via ``query_skill``.
 """
+
 from __future__ import annotations
 
 from runtime.core.cerebrum.react_context import _format_skill_catalog
@@ -33,9 +34,11 @@ class _FakeRegistry:
 
 
 def test_uses_summary_when_available() -> None:
-    reg = _FakeRegistry([
-        _FakeSkill(name="read_file", description="A long " * 50, summary="读文件"),
-    ])
+    reg = _FakeRegistry(
+        [
+            _FakeSkill(name="read_file", description="A long " * 50, summary="读文件"),
+        ]
+    )
     out = _format_skill_catalog(reg)
     assert "- read_file: 读文件" in out
     assert "A long " not in out
@@ -47,9 +50,11 @@ def test_falls_back_to_truncated_description_when_no_summary() -> None:
         "何时不用: 多文件用 glob_files。"
         "关键参数: path, offset, limit。"
     )
-    reg = _FakeRegistry([
-        _FakeSkill(name="read_file", description=long_desc),
-    ])
+    reg = _FakeRegistry(
+        [
+            _FakeSkill(name="read_file", description=long_desc),
+        ]
+    )
     out = _format_skill_catalog(reg)
     # Should appear in the catalog under read_file
     assert "- read_file:" in out
@@ -65,9 +70,11 @@ def test_falls_back_to_truncated_description_when_no_summary() -> None:
 
 def test_breaks_at_first_sentence_terminator() -> None:
     desc = "短句一。这是后面被截掉的内容很长很长不应该出现在 catalog 中"
-    reg = _FakeRegistry([
-        _FakeSkill(name="x", description=desc),
-    ])
+    reg = _FakeRegistry(
+        [
+            _FakeSkill(name="x", description=desc),
+        ]
+    )
     out = _format_skill_catalog(reg)
     line = next(L for L in out.splitlines() if L.startswith("  - x:"))
     short = line.split(":", 1)[1].strip()
@@ -75,26 +82,27 @@ def test_breaks_at_first_sentence_terminator() -> None:
 
 
 def test_appends_query_skill_hint() -> None:
-    reg = _FakeRegistry([
-        _FakeSkill(name="some_skill", summary="example"),
-    ])
+    reg = _FakeRegistry(
+        [
+            _FakeSkill(name="some_skill", summary="example"),
+        ]
+    )
     out = _format_skill_catalog(reg)
     assert "query_skill" in out
 
 
 def test_prioritizes_delegation_tools_before_catalog_truncation() -> None:
-    skills = [
-        _FakeSkill(name=f"filler_{i}", summary="filler")
-        for i in range(80)
-    ]
-    skills.extend([
-        _FakeSkill(name="call_agent", summary="serial delegation"),
-        _FakeSkill(name="call_agent_parallel", summary="parallel delegation"),
-        _FakeSkill(name="bb_write", summary="write blackboard"),
-        _FakeSkill(name="bb_read", summary="read blackboard"),
-        _FakeSkill(name="bb_keys", summary="list blackboard keys"),
-        _FakeSkill(name="search_skills", summary="search all skills"),
-    ])
+    skills = [_FakeSkill(name=f"filler_{i}", summary="filler") for i in range(80)]
+    skills.extend(
+        [
+            _FakeSkill(name="call_agent", summary="serial delegation"),
+            _FakeSkill(name="call_agent_parallel", summary="parallel delegation"),
+            _FakeSkill(name="bb_write", summary="write blackboard"),
+            _FakeSkill(name="bb_read", summary="read blackboard"),
+            _FakeSkill(name="bb_keys", summary="list blackboard keys"),
+            _FakeSkill(name="search_skills", summary="search all skills"),
+        ]
+    )
     reg = _FakeRegistry(skills)
 
     out = _format_skill_catalog(reg, max_skills=40)
@@ -121,17 +129,11 @@ def test_prioritizes_common_general_tools_in_toolbar_order() -> None:
         "query_skill",
         "todo_write",
     ]
-    reg = _FakeRegistry([
-        _FakeSkill(name=name, summary=f"{name} summary")
-        for name in names
-    ])
+    reg = _FakeRegistry([_FakeSkill(name=name, summary=f"{name} summary") for name in names])
 
     out = _format_skill_catalog(reg, max_skills=12)
     lines = [line for line in out.splitlines() if line.startswith("  - ")]
-    visible_names = [
-        line.split(":", 1)[0].replace("  - ", "")
-        for line in lines
-    ]
+    visible_names = [line.split(":", 1)[0].replace("  - ", "") for line in lines]
 
     assert visible_names[:10] == [
         "todo_write",
@@ -148,10 +150,7 @@ def test_prioritizes_common_general_tools_in_toolbar_order() -> None:
 
 
 def test_default_catalog_limit_is_one_hundred() -> None:
-    reg = _FakeRegistry([
-        _FakeSkill(name=f"skill_{i:03d}", summary="sample")
-        for i in range(120)
-    ])
+    reg = _FakeRegistry([_FakeSkill(name=f"skill_{i:03d}", summary="sample") for i in range(120)])
 
     out = _format_skill_catalog(reg)
     lines = [line for line in out.splitlines() if line.startswith("  - ")]
@@ -173,10 +172,7 @@ def test_goal_activation_promotes_relevant_catalog_entries() -> None:
         "deep-research",
         "query_skill",
     ]
-    reg = _FakeRegistry([
-        _FakeSkill(name=name, summary=f"{name} summary")
-        for name in names
-    ])
+    reg = _FakeRegistry([_FakeSkill(name=name, summary=f"{name} summary") for name in names])
 
     out = _format_skill_catalog(
         reg,
@@ -190,8 +186,10 @@ def test_goal_activation_promotes_relevant_catalog_entries() -> None:
 
 
 def test_no_description_at_all_falls_back_to_marker() -> None:
-    reg = _FakeRegistry([
-        _FakeSkill(name="bare"),
-    ])
+    reg = _FakeRegistry(
+        [
+            _FakeSkill(name="bare"),
+        ]
+    )
     out = _format_skill_catalog(reg)
     assert "- bare: (无描述)" in out

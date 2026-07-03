@@ -71,7 +71,9 @@ def test_rebuilds_state_from_snapshot(monkeypatch):
             working_set_snapshot=[{"path": "x.py"}],
         ),
     )
-    monkeypatch.setattr(checkpoint_integrity, "validate_checkpoint_state", lambda *a, **k: _OkIntegrity())
+    monkeypatch.setattr(
+        checkpoint_integrity, "validate_checkpoint_state", lambda *a, **k: _OkIntegrity()
+    )
     # Keep the message rehydration a no-op — it has its own tests and needs
     # real Message objects we don't want to fabricate here.
     monkeypatch.setattr(react_loop, "_rehydrate_messages_from_steps", lambda m, s: m)
@@ -95,9 +97,13 @@ def test_final_answer_checkpoint_short_circuits_loop(monkeypatch):
     monkeypatch.setattr(
         react_loop,
         "_load_resume_checkpoint_snapshot",
-        lambda *a, **k: _snapshot(iteration_completed=5, has_final_answer=True, final_answer="done"),
+        lambda *a, **k: _snapshot(
+            iteration_completed=5, has_final_answer=True, final_answer="done"
+        ),
     )
-    monkeypatch.setattr(checkpoint_integrity, "validate_checkpoint_state", lambda *a, **k: _OkIntegrity())
+    monkeypatch.setattr(
+        checkpoint_integrity, "validate_checkpoint_state", lambda *a, **k: _OkIntegrity()
+    )
 
     out = _call(max_iterations=30)
 
@@ -110,7 +116,9 @@ def test_final_answer_checkpoint_short_circuits_loop(monkeypatch):
 
 def test_unsafe_checkpoint_raises(monkeypatch):
     monkeypatch.setattr(react_loop, "_load_resume_checkpoint_snapshot", lambda *a, **k: _snapshot())
-    monkeypatch.setattr(checkpoint_integrity, "validate_checkpoint_state", lambda *a, **k: _BadIntegrity())
+    monkeypatch.setattr(
+        checkpoint_integrity, "validate_checkpoint_state", lambda *a, **k: _BadIntegrity()
+    )
 
     with pytest.raises(ValueError, match="unsafe checkpoint"):
         _call()

@@ -115,34 +115,15 @@ def compute_agent_loop_quality(
         "total": len(checks),
         "ready": all(row["passed"] for row in checks),
         "checks": checks,
-        "next_actions": [
-            str(row["next_action"])
-            for row in checks
-            if not row["passed"]
-        ],
+        "next_actions": [str(row["next_action"]) for row in checks if not row["passed"]],
     }
 
 
 def _check_row(base: Path, check: AgentLoopCheck) -> dict[str, Any]:
-    paths = [
-        {"path": path, "exists": (base / path).exists()}
-        for path in check.paths
-    ]
-    text = "\n".join(
-        _read_text(base / row["path"])
-        for row in paths
-        if row["exists"]
-    ).lower()
-    missing_paths = [
-        str(row["path"])
-        for row in paths
-        if not row["exists"]
-    ]
-    missing_terms = [
-        term
-        for term in check.required_terms
-        if term.lower() not in text
-    ]
+    paths = [{"path": path, "exists": (base / path).exists()} for path in check.paths]
+    text = "\n".join(_read_text(base / row["path"]) for row in paths if row["exists"]).lower()
+    missing_paths = [str(row["path"]) for row in paths if not row["exists"]]
+    missing_terms = [term for term in check.required_terms if term.lower() not in text]
     return {
         "id": check.id,
         "title": check.title,

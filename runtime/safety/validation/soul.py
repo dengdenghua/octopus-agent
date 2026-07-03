@@ -21,6 +21,7 @@ in every system prompt). The full constitution (~1800 tokens at
 ``docs/constitution.md``) stays out of context · agents read it
 explicitly via ``read_file`` if they need the full rationale.
 """
+
 from __future__ import annotations
 
 # The compact principle summary · kept under 250 tokens so it costs

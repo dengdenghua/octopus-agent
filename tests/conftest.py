@@ -45,6 +45,7 @@ def _reset_module_state():
         state, or anthropic SDK lazy-imports surviving across tests.
     """
     from runtime.platform import identity_filter as _idf
+
     _idf.set_runtime_lock(None)
     _reset_injection_taint()
     _reset_delegation_budget()
@@ -110,6 +111,7 @@ def _reset_injection_taint() -> None:
     tools. Reset every test for isolation."""
     try:
         from runtime.safety.validation import prompt_injection as _pi
+
         _pi.reset_injection_taint()
         _pi.set_injection_gate_handled(False)
     except Exception:  # noqa: BLE001 — never let cleanup break a test
@@ -125,6 +127,7 @@ def _reset_delegation_budget() -> None:
     """
     try:
         from runtime.execution.suckers import delegation_budget as _db
+
         _db._TURN_DELEGATIONS.clear()
         _db._TURN_FAILED_FINGERPRINTS.clear()
     except Exception:  # noqa: BLE001 — never let cleanup break a test
@@ -140,6 +143,7 @@ def _reset_singletons() -> None:
     methods themselves are documented as test-only.
     """
     import logging
+
     _log = logging.getLogger(__name__)
 
     # (module_path, attr) tuples — imported lazily so a missing
@@ -157,6 +161,7 @@ def _reset_singletons() -> None:
     for mod_path, cls_name in _SINGLETONS:
         try:
             import importlib
+
             mod = importlib.import_module(mod_path)
             cls = getattr(mod, cls_name, None)
             if cls is None:
@@ -172,6 +177,7 @@ def _reset_singletons() -> None:
     # provider is also stale.
     try:
         from runtime.platform import service_provider as _sp
+
         _sp._PROVIDER = None  # noqa: SLF001 — test reset only
     except Exception as exc:  # noqa: BLE001
         _log.debug("service_provider reset skipped: %s", exc)

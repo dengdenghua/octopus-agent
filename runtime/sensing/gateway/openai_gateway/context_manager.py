@@ -11,6 +11,7 @@ def _runtime_soul_for_agent(agent: Any) -> str:
         return ""
     try:
         from runtime.execution.agents.loader import compose_runtime_soul
+
         return compose_runtime_soul(agent)
     except Exception as _e:  # noqa: BLE001
         _logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ def _build_messages_for_llm(
     messages = _conversation_messages_for_model(intent)
     try:
         from runtime.core.cerebrum.llm_planner import _render_team_roster_section
+
         team_section = _render_team_roster_section(intent.user_context or {})
     except Exception as _e:  # noqa: BLE001
         _logger = logging.getLogger(__name__)
@@ -43,11 +45,13 @@ def _build_messages_for_llm(
     if runtime_soul:
         messages.insert(0, Message(role="system", content=runtime_soul))
     from runtime.memory.users.profile import render_profile_memories
+
     profile_section = render_profile_memories(_profile_memories_payload(intent))
     if profile_section:
         messages.insert(0, Message(role="system", content=profile_section))
     try:
         from runtime.core.cerebrum.thinking_mode import render_thinking_guidance
+
         thinking_section = render_thinking_guidance(
             (intent.user_context or {}).get("thinking_plan"),
         )
@@ -60,19 +64,22 @@ def _build_messages_for_llm(
     interaction_profile = _interaction_profile_prompt(intent.user_context)
     if interaction_profile:
         messages.insert(0, Message(role="system", content=interaction_profile))
-    messages.insert(0, Message(
-        role="system",
-        content=(
-            "Follow the user's requested language, length, and format exactly. "
-            "Keep ordinary chat replies concise unless the user explicitly asks "
-            "for detail. Render substantive answers, analyses, project reports, "
-            "and summaries as clean GitHub-flavored Markdown: start with a short "
-            "descriptive heading, use compact sections, bullet lists, numbered "
-            "steps, tables, and fenced code blocks when useful. Do not wrap the "
-            "entire answer in a markdown code fence. Put a blank line before "
-            "each heading, list, table, horizontal rule, and code block."
+    messages.insert(
+        0,
+        Message(
+            role="system",
+            content=(
+                "Follow the user's requested language, length, and format exactly. "
+                "Keep ordinary chat replies concise unless the user explicitly asks "
+                "for detail. Render substantive answers, analyses, project reports, "
+                "and summaries as clean GitHub-flavored Markdown: start with a short "
+                "descriptive heading, use compact sections, bullet lists, numbered "
+                "steps, tables, and fenced code blocks when useful. Do not wrap the "
+                "entire answer in a markdown code fence. Put a blank line before "
+                "each heading, list, table, horizontal rule, and code block."
+            ),
         ),
-    ))
+    )
     if not messages:
         messages.append(Message(role="user", content=intent.normalized_goal))
     return messages

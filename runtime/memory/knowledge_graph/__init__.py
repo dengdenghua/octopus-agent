@@ -1,4 +1,3 @@
-
 from .kg import AddResult, KnowledgeGraph
 from .prompt import format_triples_for_prompt
 from .sqlite_kg import SqliteKnowledgeGraph

@@ -1,4 +1,5 @@
 """Conflict resolution — 6-strategy decision tree (protocols/conflict_resolution.md)."""
+
 from __future__ import annotations
 
 from .resolver import (

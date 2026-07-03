@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -48,7 +47,6 @@ _SCHEMA_TABLES = [
 
 
 class KuzuKnowledgeGraph(KnowledgeGraph):
-
     def __init__(
         self,
         db_path: str | Path,
@@ -57,8 +55,7 @@ class KuzuKnowledgeGraph(KnowledgeGraph):
     ) -> None:
         if not KUZU_AVAILABLE:
             raise ImportError(
-                "kuzu not installed · pip install kuzu · "
-                "或使用 SqliteKnowledgeGraph 作为替代后端",
+                "kuzu not installed · pip install kuzu · 或使用 SqliteKnowledgeGraph 作为替代后端",
             )
         super().__init__(multi_valued_predicates=multi_valued_predicates)
         self.db_path = Path(db_path)
@@ -205,22 +202,40 @@ class KuzuKnowledgeGraph(KnowledgeGraph):
         matches: list[dict[str, Any]] = []
         while result.has_next():
             row = result.get_next()
-            matches.append({
-                "subject": row[0],
-                "predicate": row[1],
-                "object": row[2],
-                "confidence": row[3],
-                "status": row[4],
-            })
+            matches.append(
+                {
+                    "subject": row[0],
+                    "predicate": row[1],
+                    "object": row[2],
+                    "confidence": row[3],
+                    "status": row[4],
+                }
+            )
         return matches
 
 
 def _kuzu_row_to_triple(row: list) -> Triple | None:
     try:
-        subject, predicate, object_, confidence, triple_id, status, ts, source_json, \
-            valid_from, valid_until, superseded_by = row
-        source = Source(**json.loads(source_json)) if source_json else Source(
-            source_id="kuzu", source_type="system",
+        (
+            subject,
+            predicate,
+            object_,
+            confidence,
+            triple_id,
+            status,
+            ts,
+            source_json,
+            valid_from,
+            valid_until,
+            superseded_by,
+        ) = row
+        source = (
+            Source(**json.loads(source_json))
+            if source_json
+            else Source(
+                source_id="kuzu",
+                source_type="system",
+            )
         )
         return Triple(
             triple_id=UUID(triple_id) if triple_id else UUID(int=0),
@@ -230,8 +245,12 @@ def _kuzu_row_to_triple(row: list) -> Triple | None:
             confidence=float(confidence) if confidence else 0.75,
             source=source,
             ts=datetime.fromisoformat(ts) if ts else datetime.now(),
-            valid_from=datetime.fromisoformat(valid_from) if valid_from and valid_from != "" else None,
-            valid_until=datetime.fromisoformat(valid_until) if valid_until and valid_until != "" else None,
+            valid_from=datetime.fromisoformat(valid_from)
+            if valid_from and valid_from != ""
+            else None,
+            valid_until=datetime.fromisoformat(valid_until)
+            if valid_until and valid_until != ""
+            else None,
             status=status or "active",
             superseded_by=UUID(superseded_by) if superseded_by and superseded_by != "" else None,
         )
@@ -253,11 +272,13 @@ def _parse_kuzu_path(raw: Any) -> list[dict[str, str]]:
                     src_name = rel.src_node.name
                 if hasattr(rel, "dst_node") and hasattr(rel.dst_node, "name"):
                     dst_name = rel.dst_node.name
-                edges.append({
-                    "subject": src_name,
-                    "predicate": getattr(rel, "predicate", ""),
-                    "object": dst_name,
-                })
+                edges.append(
+                    {
+                        "subject": src_name,
+                        "predicate": getattr(rel, "predicate", ""),
+                        "object": dst_name,
+                    }
+                )
     except Exception as exc:
         _LOG.warning("kuzu path parse failed: %s", exc)
     return edges

@@ -23,7 +23,7 @@ def update_invite_status(
     email_id: str = "",
     event_title: str = "",
     new_status: str = "",
-    calendar_event_id: str = ""
+    calendar_event_id: str = "",
 ) -> None:
     """Update the status of a pending invite event."""
     data = load_json(PENDING_FILE, {"invites": []})
@@ -95,7 +95,7 @@ def main():
         email_id=args.get("email_id", ""),
         event_title=args.get("event_title", ""),
         new_status=args.get("status", ""),
-        calendar_event_id=args.get("event_id", "")
+        calendar_event_id=args.get("event_id", ""),
     )
 
 

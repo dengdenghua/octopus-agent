@@ -31,6 +31,7 @@ When a tier resolves to None (operator hasn't configured a local
 model, etc.), the router falls back to the next tier up — never
 down — so we never demote to "no model".
 """
+
 from __future__ import annotations
 
 import os
@@ -78,6 +79,7 @@ def is_smart_routing_enabled() -> bool:
         return env_val.strip().lower() not in {"0", "false", "off", "no", "disabled"}
     try:
         from runtime.platform.process.service_provider import get_provider
+
         cfg_val = get_provider().get("smart_routing_enabled")
         if cfg_val is False:
             return False
@@ -126,6 +128,7 @@ def _resolve_tier_model(tier: str) -> str | None:
         return _resolve_tier_value(val.strip(), tier)
     try:
         from runtime.platform.process.service_provider import get_provider
+
         cfg_val = get_provider().get(f"smart_routing.{tier}")
         if isinstance(cfg_val, str) and cfg_val.strip():
             return _resolve_tier_value(cfg_val.strip(), tier)
@@ -179,10 +182,12 @@ def _auto_derive_tier_from_custom_models(tier: str) -> str | None:
     """
     try:
         from runtime.platform.process.paths import app_paths
+
         path = app_paths().custom_models_path
         if not path.exists():
             return None
         import json
+
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
         return None
@@ -196,9 +201,7 @@ def _auto_derive_tier_from_custom_models(tier: str) -> str | None:
             continue
         raw_models = entry.get("models")
         if isinstance(raw_models, list) and raw_models:
-            upstreams = [
-                str(m).strip() for m in raw_models if str(m or "").strip()
-            ]
+            upstreams = [str(m).strip() for m in raw_models if str(m or "").strip()]
             if not upstreams:
                 continue
             if tier == "performance":
@@ -266,10 +269,12 @@ def _lookup_entry_reference(name: str, tier: str) -> tuple[str | None, bool]:
     """
     try:
         from runtime.platform.process.paths import app_paths
+
         path = app_paths().custom_models_path
         if not path.exists():
             return None, True
         import json
+
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
         return None, True
@@ -280,9 +285,7 @@ def _lookup_entry_reference(name: str, tier: str) -> tuple[str | None, bool]:
         return None, True
     raw_models = entry.get("models")
     if isinstance(raw_models, list) and raw_models:
-        upstreams = [
-            str(m).strip() for m in raw_models if str(m or "").strip()
-        ]
+        upstreams = [str(m).strip() for m in raw_models if str(m or "").strip()]
         if not upstreams:
             return None, False
         if tier == "performance":

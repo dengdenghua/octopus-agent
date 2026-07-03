@@ -70,12 +70,14 @@ class TestDesktopOperatorAgent:
     def test_not_in_default_preset_list(self):
         """desktop_operator is a special persona, not part of the default roster."""
         from runtime.execution.agents import make_all_agent_presets
+
         roster_ids = {getattr(a, "agent_id", None) for a in make_all_agent_presets(_rt())}
         assert "desktop_operator" not in roster_ids
 
     def test_general_agent_has_desktop_arm(self):
         """Implementation note."""
         from runtime.execution.agents import make_general_agent
+
         agent = make_general_agent(_rt())
         arm_ids = [str(a.arm_id) for a in agent.arms]
         assert "desktop_operator_arm" in arm_ids
@@ -108,6 +110,7 @@ class TestHealthEndpoint:
 
     def test_reports_agents_count_when_registered(self, tmp_path: Path):
         from runtime.execution.agents import make_all_agent_presets
+
         presets = make_all_agent_presets(_rt())
         reg = AgentRegistry()
         reg.register_all(presets)
@@ -132,13 +135,19 @@ class TestHealthEndpoint:
         class _Fake(Channel):
             channel_id = "fake_x"
 
-            def start(self): pass
-            def stop(self): pass
-            def send(self, msg: OutboundMessage): pass
+            def start(self):
+                pass
+
+            def stop(self):
+                pass
+
+            def send(self, msg: OutboundMessage):
+                pass
 
         # Implementation note.
         class _S:
             pass
+
         s = _S()
         s.planner = None
         s.runtime = None

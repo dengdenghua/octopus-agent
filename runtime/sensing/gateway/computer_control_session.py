@@ -7,6 +7,7 @@ action → evidence), and keeps the router's own bounded in-memory activity
 log (``state.activity``, capped at 500 entries) that powers the
 status/activity endpoints and replay-case queueing.
 """
+
 from __future__ import annotations
 
 import time
@@ -163,19 +164,21 @@ def _record_activity(
     detail: dict[str, Any] | None = None,
     proof: dict[str, Any] | None = None,
 ) -> None:
-    state.activity.append({
-        "id": uuid.uuid4().hex,
-        "event": event,
-        "ok": ok,
-        "action": action or {},
-        "token": token,
-        "risk": risk or {},
-        "lease": lease_state or _public_lease(state),
-        "error": error,
-        "detail": detail or {},
-        "proof": proof or {},
-        "created_at": time.time(),
-    })
+    state.activity.append(
+        {
+            "id": uuid.uuid4().hex,
+            "event": event,
+            "ok": ok,
+            "action": action or {},
+            "token": token,
+            "risk": risk or {},
+            "lease": lease_state or _public_lease(state),
+            "error": error,
+            "detail": detail or {},
+            "proof": proof or {},
+            "created_at": time.time(),
+        }
+    )
     if len(state.activity) > 500:
         del state.activity[:-500]
 
@@ -189,10 +192,7 @@ def _queue_activity_replay_case(
     items = replay_case.get("items") if isinstance(replay_case.get("items"), list) else []
     last_activity = replay_case.get("last_activity")
     last_activity = last_activity if isinstance(last_activity, dict) else {}
-    has_failure = any(
-        isinstance(item, dict) and item.get("ok") is False
-        for item in items
-    )
+    has_failure = any(isinstance(item, dict) and item.get("ok") is False for item in items)
     chosen_priority = priority or ("P0" if has_failure else "P1")
     last_event = str(last_activity.get("event") or "no activity")
     last_action = last_activity.get("action")
@@ -225,7 +225,9 @@ def _queue_activity_replay_case(
             "pending_count": replay_case.get("pending_count"),
             "lease": replay_case.get("lease"),
             "last_activity": last_activity,
-            "proof": last_activity.get("proof") if isinstance(last_activity.get("proof"), dict) else {},
+            "proof": last_activity.get("proof")
+            if isinstance(last_activity.get("proof"), dict)
+            else {},
         },
         tags=[
             "computer",
@@ -258,16 +260,15 @@ def _queue_uia_replay_assertion(
         priority="P0",
         target_bucket="browser_desktop_replay",
         title=f"Review desktop UIA replay assertion: {label}",
-        text=(
-            f"Desktop UIA replay assertion failed for `{label}`.\n"
-            f"Reason: {reason[:500]}."
-        ),
+        text=(f"Desktop UIA replay assertion failed for `{label}`.\nReason: {reason[:500]}."),
         metadata={
             "schema": "octopus.computer_uia_replay_assertion_queue.v1",
             "trace_id": assertion.get("trace_id"),
             "action": action,
             "replay_assertion": assertion,
-            "source_trace": assertion.get("source_trace") if isinstance(assertion.get("source_trace"), dict) else {},
+            "source_trace": assertion.get("source_trace")
+            if isinstance(assertion.get("source_trace"), dict)
+            else {},
             "matched_control": matched,
         },
         tags=[

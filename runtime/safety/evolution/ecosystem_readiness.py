@@ -78,11 +78,7 @@ def compute_ecosystem_readiness(
 def _topic_status(base: Path, topic: ReadinessTopic) -> dict[str, Any]:
     path = base / topic.path
     text = path.read_text(encoding="utf-8").lower() if path.exists() else ""
-    missing_terms = [
-        term
-        for term in topic.required_terms
-        if term.lower() not in text
-    ]
+    missing_terms = [term for term in topic.required_terms if term.lower() not in text]
     return {
         "id": topic.id,
         "title": topic.title,
@@ -102,9 +98,7 @@ def _next_actions(topics: list[dict[str, Any]]) -> list[str]:
         if not topic["exists"]:
             actions.append(f"Create {topic['path']} for {topic['title']}.")
         elif topic["missing_terms"]:
-            actions.append(
-                f"Update {topic['path']} with {', '.join(topic['missing_terms'])}."
-            )
+            actions.append(f"Update {topic['path']} with {', '.join(topic['missing_terms'])}.")
     return actions
 
 

@@ -1,4 +1,5 @@
 """Unit tests for tool guardrails and file safety."""
+
 from __future__ import annotations
 
 import os
@@ -231,6 +232,7 @@ class TestFileWriteSafety:
 
     def test_etc_passwd_denied(self):
         import platform
+
         if platform.system() == "Windows":
             v = check_file_write("C:/etc/passwd")
             if not v.allow:

@@ -13,6 +13,7 @@ the same bus — that shared bus IS the mesh substrate — and which arms exist 
 the caller's decision); this wires boids + ``SwarmRuntime`` + the signal tap
 on top.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -118,6 +119,7 @@ def run_swarm(
 
     skill_resources = None
     if registry is not None:
+
         def skill_resources(skill_ref: str) -> list[str]:
             try:
                 res = registry.get(skill_ref).exclusive_resource

@@ -32,6 +32,7 @@ class ProviderCapabilities:
         Free-form labels like ``"low"`` / ``"mid"`` / ``"high"`` · used
         by the model picker UI for cost indicators.
     """
+
     supports_vision: bool = False
     supports_tool_use: bool = False
     supports_streaming: bool = False

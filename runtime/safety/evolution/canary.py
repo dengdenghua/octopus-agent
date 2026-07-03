@@ -28,12 +28,14 @@ class CanaryPhase(StrEnum):
 class CanaryConfig:
     shadow_runs: int = 10
     shadow_pass_rate: float = 0.70
-    promotion_thresholds: dict[str, float] = field(default_factory=lambda: {
-        "canary_5": 0.80,
-        "canary_25": 0.80,
-        "canary_50": 0.85,
-        "full": 0.90,
-    })
+    promotion_thresholds: dict[str, float] = field(
+        default_factory=lambda: {
+            "canary_5": 0.80,
+            "canary_25": 0.80,
+            "canary_50": 0.85,
+            "full": 0.90,
+        }
+    )
     sample_window: int = 20
     rollback_threshold: float = 0.50
     state_dir: str = "data/canary_states"
@@ -130,7 +132,9 @@ class CanaryManager:
                 state.metadata["last_rollback_reason"] = self.config.auto_rollback_reason
                 _LOG.warning(
                     "canary ROLLBACK for %s: rate=%.2f < threshold=%.2f",
-                    skill_name, state.current_rate, self.config.rollback_threshold,
+                    skill_name,
+                    state.current_rate,
+                    self.config.rollback_threshold,
                 )
                 self._persist_state(state)
                 handler = self.config.rollback_handler
@@ -142,7 +146,9 @@ class CanaryManager:
                 return state
 
             threshold = self._promotion_threshold(state.phase)
-            if state.current_rate >= threshold and state.sample_count >= self._min_samples(state.phase):
+            if state.current_rate >= threshold and state.sample_count >= self._min_samples(
+                state.phase
+            ):
                 self._promote(state)
 
             self._persist_state(state)
@@ -169,13 +175,15 @@ class CanaryManager:
                 return True
 
             import random
+
             traffic_pct = self._traffic_percent(state.phase)
             return random.random() < traffic_pct
 
     def list_active(self) -> list[CanaryState]:
         with self._lock:
             return [
-                s for s in self._states.values()
+                s
+                for s in self._states.values()
                 if s.phase not in (CanaryPhase.FULL, CanaryPhase.ROLLED_BACK)
             ]
 
@@ -200,9 +208,7 @@ class CanaryManager:
             state.phase = CanaryPhase.ROLLED_BACK
             state.entered_ts = datetime.now().isoformat(timespec="seconds")
             state.metadata["last_rollback_reason"] = (
-                reason
-                or state.metadata.get("last_rollback_reason")
-                or "operator rollback"
+                reason or state.metadata.get("last_rollback_reason") or "operator rollback"
             )
             if metadata:
                 state.metadata.update(metadata)
@@ -222,7 +228,9 @@ class CanaryManager:
             state.metadata["outcome_window"] = []
             _LOG.info(
                 "canary PROMOTE %s: %s -> %s",
-                state.skill_name, old_phase.value, state.phase.value,
+                state.skill_name,
+                old_phase.value,
+                state.phase.value,
             )
 
     @staticmethod

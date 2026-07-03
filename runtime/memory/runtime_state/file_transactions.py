@@ -119,7 +119,8 @@ def summarize_file_ops(events: list[Any]) -> FileTransactionSummary:
             rollback_unavailable += 1
 
     contested = [
-        path for path, actors in actors_by_path.items()
+        path
+        for path, actors in actors_by_path.items()
         if len({actor for actor in actors if actor}) > 1
     ]
 
@@ -160,13 +161,15 @@ def build_file_rollback_ledger(events: list[Any]) -> tuple[FileRollbackEntry, ..
         content = rollback.get("content")
         if content is not None and not isinstance(content, str):
             continue
-        entries.append(FileRollbackEntry(
-            path=path,
-            action=action,
-            expected_current_sha256=str(rollback.get("expected_current_sha256") or ""),
-            content=content,
-            source_event_id=str(getattr(event, "event_id", "") or ""),
-        ))
+        entries.append(
+            FileRollbackEntry(
+                path=path,
+                action=action,
+                expected_current_sha256=str(rollback.get("expected_current_sha256") or ""),
+                content=content,
+                source_event_id=str(getattr(event, "event_id", "") or ""),
+            )
+        )
     return tuple(entries)
 
 

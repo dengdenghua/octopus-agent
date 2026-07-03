@@ -53,8 +53,16 @@ def test_detect_existing_project_recommends_coder(tmp_path: Path) -> None:
     assert "package.json" in body["signals"]["manifests"]
     assert "pnpm-lock.yaml" in body["signals"]["lock_files"]
     commands = body["signals"]["commands"]
-    assert {"kind": "typecheck", "command": "pnpm run typecheck", "source": "package.json scripts.typecheck"} in commands
-    assert {"kind": "test", "command": "pnpm run test", "source": "package.json scripts.test"} in commands
+    assert {
+        "kind": "typecheck",
+        "command": "pnpm run typecheck",
+        "source": "package.json scripts.typecheck",
+    } in commands
+    assert {
+        "kind": "test",
+        "command": "pnpm run test",
+        "source": "package.json scripts.test",
+    } in commands
 
 
 def test_detect_python_project_surfaces_local_verification_commands(tmp_path: Path) -> None:
@@ -80,9 +88,19 @@ python_version = "3.11"
 
     assert res.status_code == 200
     commands = res.json()["signals"]["commands"]
-    assert {"kind": "lint", "command": "ruff check .", "source": "pyproject.toml/requirements"} in commands
-    assert {"kind": "typecheck", "command": "mypy .", "source": "pyproject.toml/requirements"} in commands
-    assert any(item["kind"] == "test" and item["command"] == "python -m pytest" for item in commands)
+    assert {
+        "kind": "lint",
+        "command": "ruff check .",
+        "source": "pyproject.toml/requirements",
+    } in commands
+    assert {
+        "kind": "typecheck",
+        "command": "mypy .",
+        "source": "pyproject.toml/requirements",
+    } in commands
+    assert any(
+        item["kind"] == "test" and item["command"] == "python -m pytest" for item in commands
+    )
 
 
 def test_detect_rejects_relative_workspace_path() -> None:

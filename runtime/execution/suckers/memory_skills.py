@@ -80,8 +80,7 @@ def _agent_core_dir() -> Path:
     sess = current_session()
     if sess is None or sess.agent is None:
         raise RuntimeError(
-            "memory skills require an active agent session "
-            "(no current_session or no agent bound)"
+            "memory skills require an active agent session (no current_session or no agent bound)"
         )
     agent_id = sess.agent.agent_id
     if not agent_id:
@@ -95,8 +94,7 @@ def _current_agent_and_metadata() -> tuple[str, dict[str, Any]]:
     sess = current_session()
     if sess is None or sess.agent is None:
         raise RuntimeError(
-            "memory skills require an active agent session "
-            "(no current_session or no agent bound)"
+            "memory skills require an active agent session (no current_session or no agent bound)"
         )
     agent_id = sess.agent.agent_id
     if not agent_id:
@@ -140,10 +138,12 @@ def _append_memory_line(
     if path.exists():
         existing = path.read_text(encoding="utf-8")
         if "_No memories yet._" in existing:
-            cleaned = "\n".join(
-                ln for ln in existing.splitlines()
-                if ln.strip() != "_No memories yet._"
-            ).rstrip() + "\n"
+            cleaned = (
+                "\n".join(
+                    ln for ln in existing.splitlines() if ln.strip() != "_No memories yet._"
+                ).rstrip()
+                + "\n"
+            )
             path.write_text(cleaned, encoding="utf-8")
 
     tag_str = ",".join(str(t) for t in tags)
@@ -178,10 +178,12 @@ def _remember(fact: str, tags: list[str] | None = None, **_kw: Any) -> dict[str,
     if path.exists():
         existing = path.read_text(encoding="utf-8")
         if "_No memories yet._" in existing:
-            cleaned = "\n".join(
-                ln for ln in existing.splitlines()
-                if ln.strip() != "_No memories yet._"
-            ).rstrip() + "\n"
+            cleaned = (
+                "\n".join(
+                    ln for ln in existing.splitlines() if ln.strip() != "_No memories yet._"
+                ).rstrip()
+                + "\n"
+            )
             path.write_text(cleaned, encoding="utf-8")
 
     tag_str = ",".join(str(t) for t in tags)
@@ -324,9 +326,7 @@ def _snapshot_soul(reason: str = "") -> Path | None:
     slug = ""
     if reason:
         # Sanitise reason for filename (alnum/dash only, max 30 chars).
-        slug = "-" + "".join(
-            c if c.isalnum() else "-" for c in reason
-        )[:30].strip("-")
+        slug = "-" + "".join(c if c.isalnum() else "-" for c in reason)[:30].strip("-")
     snap = hist / f"{ts}{slug}.md"
     snap.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
     return snap
@@ -437,18 +437,20 @@ def _list_soul_history(limit: int = 10, **_kw: Any) -> dict[str, Any]:
     agent (or the operator) to inspect what changed and pick a
     revert target.
     """
-    snaps = _list_soul_snapshots()[:max(1, int(limit) if limit else 10)]
+    snaps = _list_soul_snapshots()[: max(1, int(limit) if limit else 10)]
     out: list[dict[str, Any]] = []
     for s in snaps:
         try:
             stat = s.stat()
-            out.append({
-                "filename": s.name,
-                "size_bytes": stat.st_size,
-                "mtime_iso": datetime.fromtimestamp(
-                    stat.st_mtime,
-                ).isoformat(timespec="seconds"),
-            })
+            out.append(
+                {
+                    "filename": s.name,
+                    "size_bytes": stat.st_size,
+                    "mtime_iso": datetime.fromtimestamp(
+                        stat.st_mtime,
+                    ).isoformat(timespec="seconds"),
+                }
+            )
         except Exception:  # noqa: BLE001
             continue
     return {"ok": True, "count": len(out), "snapshots": out}
@@ -464,8 +466,10 @@ def _recall_scores(limit: int = 20, **_kw: Any) -> dict[str, Any]:
     from dataclasses import asdict
 
     from runtime.memory.learning.turn_scoring import read_recent_scores
+
     rows = read_recent_scores(
-        agent_id, limit=max(1, int(limit) if limit else 20),
+        agent_id,
+        limit=max(1, int(limit) if limit else 20),
     )
     return {
         "ok": True,
@@ -483,6 +487,7 @@ def _analyze_soul_impact(
     core = _agent_core_dir()
     agent_id = core.parent.name
     from runtime.memory.learning.turn_scoring import analyze_soul_impact
+
     return analyze_soul_impact(
         agent_id,
         window=max(1, int(window) if window else 20),
@@ -547,8 +552,7 @@ def _auto_regression_check(
 
     if should_revert:
         reason = (
-            f"auto-revert · delta={delta:+.2f} over {after_n} turns "
-            f"(≥ {drop_threshold} threshold)"
+            f"auto-revert · delta={delta:+.2f} over {after_n} turns (≥ {drop_threshold} threshold)"
         )[:80]
         if dry_run:
             action = "would_revert"
@@ -582,6 +586,7 @@ def _deep_reflect(
     core = _agent_core_dir()
     agent_id = core.parent.name
     from runtime.memory.learning.deep_evolution import deep_reflect
+
     return deep_reflect(
         agent_id=agent_id,
         window=max(1, int(window) if window else 20),
@@ -607,6 +612,7 @@ def _deep_evolve(
     core = _agent_core_dir()
     agent_id = core.parent.name
     from runtime.memory.learning.deep_evolution import deep_evolve
+
     # Coerce dry_run · LLMs sometimes pass strings.
     if isinstance(dry_run, str):
         dry_run = dry_run.lower() not in ("false", "no", "0", "")
@@ -614,7 +620,8 @@ def _deep_evolve(
         agent_id=agent_id,
         window=max(1, int(window) if window else 20),
         candidates_per_round=max(
-            1, min(5, int(candidates_per_round) if candidates_per_round else 3),
+            1,
+            min(5, int(candidates_per_round) if candidates_per_round else 3),
         ),
         max_rounds=max(1, min(10, int(max_rounds) if max_rounds else 1)),
         dry_run=bool(dry_run),
@@ -653,10 +660,7 @@ def _revert_soul(
     if steps_back > len(snaps):
         return {
             "ok": False,
-            "error": (
-                f"can't step back {steps_back} · only {len(snaps)} "
-                f"snapshots exist"
-            ),
+            "error": (f"can't step back {steps_back} · only {len(snaps)} snapshots exist"),
         }
     target = snaps[steps_back - 1]
 
@@ -848,9 +852,7 @@ def register_memory_skills(registry: SkillRegistry) -> int:
                     tier="golden",
                     args={"lesson": ""},
                     expect=SkillExpect(schema_keys=["ok", "error"]),
-                    custom_predicate=lambda r: (
-                        isinstance(r, dict) and r.get("ok") is False
-                    ),
+                    custom_predicate=lambda r: isinstance(r, dict) and r.get("ok") is False,
                 ),
             ],
         )
@@ -1076,6 +1078,7 @@ def register_memory_skills(registry: SkillRegistry) -> int:
     # KG query · on-demand knowledge graph lookup
     try:
         from runtime.execution.suckers.kg_skill import register_kg_skill
+
         register_kg_skill(registry)
     except Exception:  # noqa: BLE001
         pass  # KG module optional

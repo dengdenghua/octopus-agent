@@ -98,9 +98,7 @@ _SAFE_TASK_ID_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,239}$")
 def _require_task_id(value: str, *, label: str = "task_id") -> str:
     task_id = str(value or "").strip()
     if not _SAFE_TASK_ID_RE.fullmatch(task_id):
-        raise ValueError(
-            f"invalid {label}: use letters, numbers, dot, underscore, or hyphen"
-        )
+        raise ValueError(f"invalid {label}: use letters, numbers, dot, underscore, or hyphen")
     return task_id
 
 

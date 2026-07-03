@@ -1,4 +1,3 @@
-
 from .containers import AppendOnlyList, AppendOnlyMapping
 from .enforce import (
     InvariantViolation,

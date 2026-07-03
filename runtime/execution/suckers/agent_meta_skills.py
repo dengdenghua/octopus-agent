@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -121,11 +120,13 @@ def _todo_write(
             else:
                 saw_in_progress = True
         active = str(t.get("activeForm") or t.get("active_form") or content).strip()
-        out.append({
-            "content": content,
-            "status": status,
-            "activeForm": active,
-        })
+        out.append(
+            {
+                "content": content,
+                "status": status,
+                "activeForm": active,
+            }
+        )
     scope = _todo_scope()
     with _TODO_LOCK:
         _TODO_BY_SCOPE[scope] = [dict(item) for item in out]
@@ -217,12 +218,14 @@ def _search_skills_for_registry(registry: SkillRegistry):
                 continue
             summary = skill.effective_summary
             affinity = list(skill.affinity)
-            haystack = " ".join([
-                skill.name,
-                summary,
-                skill.description or "",
-                " ".join(affinity),
-            ]).lower()
+            haystack = " ".join(
+                [
+                    skill.name,
+                    summary,
+                    skill.description or "",
+                    " ".join(affinity),
+                ]
+            ).lower()
 
             if not q:
                 score = 1
@@ -240,16 +243,18 @@ def _search_skills_for_registry(registry: SkillRegistry):
                 if all(token in haystack for token in tokens):
                     score += 20
 
-            matches.append((
-                score,
-                {
-                    "name": skill.name,
-                    "summary": summary,
-                    "affinity": affinity,
-                    "cost_profile": skill.cost_profile,
-                    "enabled": enabled,
-                },
-            ))
+            matches.append(
+                (
+                    score,
+                    {
+                        "name": skill.name,
+                        "summary": summary,
+                        "affinity": affinity,
+                        "cost_profile": skill.cost_profile,
+                        "enabled": enabled,
+                    },
+                )
+            )
 
         matches.sort(key=lambda item: (-item[0], item[1]["name"]))
         results = [item for _, item in matches[:lim]]
@@ -267,119 +272,133 @@ def _search_skills_for_registry(registry: SkillRegistry):
 def register_agent_meta_skills(registry: SkillRegistry) -> int:
     """Register the agent-meta skills. Returns the count registered."""
     capability_count = register_capability_skills(registry)
-    registry.register(Skill(
-        name="todo_read",
-        description=(
-            "用途: 读取当前 turn / thread 的实时任务计划 (上次 todo_write 的最新快照)；恢复长任务、检查清单状态时调用。\n"
-            "何时不用: 想新建或更新任务清单用 todo_write (传完整新列表)；想看某个 skill 的元数据用 query_skill；这不是给用户的「最终答复」，只是内部进度查询。\n"
-            "关键参数: 无必填参数 (按当前会话作用域自动定位)。\n"
-            "示例: todo_read({})"
-        ),
-        affinity=["meta", "plan", "ui"],
-        cost_profile="low",
-        trusted_source="skill://public/todo_read",
-        handler=_todo_read,
-        tests=[
-            SkillTestCase(
-                name="empty_initial_list_is_ok",
-                tier="golden",
-                args={},
-                expect=SkillExpect(schema_keys=["ok", "count", "todos"]),
+    registry.register(
+        Skill(
+            name="todo_read",
+            description=(
+                "用途: 读取当前 turn / thread 的实时任务计划 (上次 todo_write 的最新快照)；恢复长任务、检查清单状态时调用。\n"
+                "何时不用: 想新建或更新任务清单用 todo_write (传完整新列表)；想看某个 skill 的元数据用 query_skill；这不是给用户的「最终答复」，只是内部进度查询。\n"
+                "关键参数: 无必填参数 (按当前会话作用域自动定位)。\n"
+                "示例: todo_read({})"
             ),
-        ],
-    ))
-    registry.register(Skill(
-        name="todo_write",
-        description=(
-            "用途: 维护 agent 的任务清单 (实时进度面板) — 多步任务一开始全列出 (pending)，每完成 / 切换一步重传完整列表 (一项 in_progress, 完成的 completed)。\n"
-            "何时不用: 只是看当前清单用 todo_read；单步小任务不必拆；不要拿这个工具传 diff (必须传完整列表)；最终答复仍走正常输出，不要塞这里。\n"
-            "关键参数: items (必填, list[{content, status: pending|in_progress|completed, activeForm}]; todos 是兼容别名; 同时只能一个 in_progress, 否则后续被降级为 pending)。\n"
-            "示例: todo_write({\"items\": [{\"content\": \"Run tests\", \"status\": \"in_progress\", \"activeForm\": \"Running tests\"}]})"
-        ),
-        affinity=["meta", "plan", "ui"],
-        cost_profile="low",
-        trusted_source="skill://public/todo_write",
-        handler=_todo_write,
-        tests=[
-            SkillTestCase(
-                name="empty_list_is_ok",
-                tier="golden",
-                args={"items": []},
-                expect=SkillExpect(schema_keys=["ok", "count", "todos"]),
+            affinity=["meta", "plan", "ui"],
+            cost_profile="low",
+            trusted_source="skill://public/todo_read",
+            handler=_todo_read,
+            tests=[
+                SkillTestCase(
+                    name="empty_initial_list_is_ok",
+                    tier="golden",
+                    args={},
+                    expect=SkillExpect(schema_keys=["ok", "count", "todos"]),
+                ),
+            ],
+        )
+    )
+    registry.register(
+        Skill(
+            name="todo_write",
+            description=(
+                "用途: 维护 agent 的任务清单 (实时进度面板) — 多步任务一开始全列出 (pending)，每完成 / 切换一步重传完整列表 (一项 in_progress, 完成的 completed)。\n"
+                "何时不用: 只是看当前清单用 todo_read；单步小任务不必拆；不要拿这个工具传 diff (必须传完整列表)；最终答复仍走正常输出，不要塞这里。\n"
+                "关键参数: items (必填, list[{content, status: pending|in_progress|completed, activeForm}]; todos 是兼容别名; 同时只能一个 in_progress, 否则后续被降级为 pending)。\n"
+                '示例: todo_write({"items": [{"content": "Run tests", "status": "in_progress", "activeForm": "Running tests"}]})'
             ),
-            SkillTestCase(
-                name="happy_path_three_items",
-                tier="golden",
-                args={"items": [
-                    {"content": "Read README", "status": "completed",
-                     "activeForm": "Reading README"},
-                    {"content": "Run tests", "status": "in_progress",
-                     "activeForm": "Running tests"},
-                    {"content": "Commit", "status": "pending",
-                     "activeForm": "Committing"},
-                ]},
-                expect=SkillExpect(schema_keys=["ok", "count", "todos"]),
+            affinity=["meta", "plan", "ui"],
+            cost_profile="low",
+            trusted_source="skill://public/todo_write",
+            handler=_todo_write,
+            tests=[
+                SkillTestCase(
+                    name="empty_list_is_ok",
+                    tier="golden",
+                    args={"items": []},
+                    expect=SkillExpect(schema_keys=["ok", "count", "todos"]),
+                ),
+                SkillTestCase(
+                    name="happy_path_three_items",
+                    tier="golden",
+                    args={
+                        "items": [
+                            {
+                                "content": "Read README",
+                                "status": "completed",
+                                "activeForm": "Reading README",
+                            },
+                            {
+                                "content": "Run tests",
+                                "status": "in_progress",
+                                "activeForm": "Running tests",
+                            },
+                            {"content": "Commit", "status": "pending", "activeForm": "Committing"},
+                        ]
+                    },
+                    expect=SkillExpect(schema_keys=["ok", "count", "todos"]),
+                ),
+                SkillTestCase(
+                    name="invalid_status_coerces_to_pending",
+                    tier="golden",
+                    args={"items": [{"content": "x", "status": "bogus", "activeForm": "X-ing"}]},
+                    expect=SkillExpect(schema_keys=["ok", "count", "todos"]),
+                ),
+            ],
+        )
+    )
+    registry.register(
+        Skill(
+            name="search_skills",
+            summary="Search the full registered skill catalog by keyword.",
+            description=(
+                "Purpose: search the entire registered skill catalog by keyword "
+                "when the compact prompt catalog was truncated or you do not know "
+                "the exact skill name. Search matches name, summary, affinity, "
+                "and description, then returns compact candidates. Call "
+                "query_skill(name=...) for full details before using an unfamiliar "
+                "candidate.\n"
+                "When not to use: if the needed skill is already visible and its "
+                "parameters are obvious; call that skill directly.\n"
+                "Key params: query (keyword), limit (1-25, default 10), "
+                "include_disabled (default false).\n"
+                'Example: search_skills({"query": "subagent parallel"})'
             ),
-            SkillTestCase(
-                name="invalid_status_coerces_to_pending",
-                tier="golden",
-                args={"items": [{"content": "x", "status": "bogus",
-                                 "activeForm": "X-ing"}]},
-                expect=SkillExpect(schema_keys=["ok", "count", "todos"]),
+            affinity=["meta", "skill", "catalog", "search"],
+            cost_profile="low",
+            trusted_source="skill://public/search_skills",
+            handler=_search_skills_for_registry(registry),
+            tests=[
+                SkillTestCase(
+                    name="empty_query_lists_candidates",
+                    tier="golden",
+                    args={"query": "", "limit": 3},
+                    expect=SkillExpect(schema_keys=["ok", "count", "results"]),
+                ),
+            ],
+        )
+    )
+    registry.register(
+        Skill(
+            name="query_skill",
+            summary="Load full details for one registered skill.",
+            description=(
+                "用途: 当 catalog 里的简短 summary 不够用时，按名字拉一个已注册 skill 的完整元数据 (description / 参数契约 / affinity / 是否启用)；调不熟的工具前先查一查。\n"
+                "何时不用: 列出全部 skill 不要用本工具 (走 catalog / registry.list)；要执行 skill 直接调用对应工具名，不要先 query 再调 (浪费 token)；skill 不存在会返回 ok=false。\n"
+                "关键参数: name (必填, 已注册的 skill 名)。\n"
+                '示例: query_skill({"name": "edit_file"})'
             ),
-        ],
-    ))
-    registry.register(Skill(
-        name="search_skills",
-        summary="Search the full registered skill catalog by keyword.",
-        description=(
-            "Purpose: search the entire registered skill catalog by keyword "
-            "when the compact prompt catalog was truncated or you do not know "
-            "the exact skill name. Search matches name, summary, affinity, "
-            "and description, then returns compact candidates. Call "
-            "query_skill(name=...) for full details before using an unfamiliar "
-            "candidate.\n"
-            "When not to use: if the needed skill is already visible and its "
-            "parameters are obvious; call that skill directly.\n"
-            "Key params: query (keyword), limit (1-25, default 10), "
-            "include_disabled (default false).\n"
-            "Example: search_skills({\"query\": \"subagent parallel\"})"
-        ),
-        affinity=["meta", "skill", "catalog", "search"],
-        cost_profile="low",
-        trusted_source="skill://public/search_skills",
-        handler=_search_skills_for_registry(registry),
-        tests=[
-            SkillTestCase(
-                name="empty_query_lists_candidates",
-                tier="golden",
-                args={"query": "", "limit": 3},
-                expect=SkillExpect(schema_keys=["ok", "count", "results"]),
-            ),
-        ],
-    ))
-    registry.register(Skill(
-        name="query_skill",
-        summary="Load full details for one registered skill.",
-        description=(
-            "用途: 当 catalog 里的简短 summary 不够用时，按名字拉一个已注册 skill 的完整元数据 (description / 参数契约 / affinity / 是否启用)；调不熟的工具前先查一查。\n"
-            "何时不用: 列出全部 skill 不要用本工具 (走 catalog / registry.list)；要执行 skill 直接调用对应工具名，不要先 query 再调 (浪费 token)；skill 不存在会返回 ok=false。\n"
-            "关键参数: name (必填, 已注册的 skill 名)。\n"
-            "示例: query_skill({\"name\": \"edit_file\"})"
-        ),
-        affinity=["meta", "skill", "catalog"],
-        cost_profile="low",
-        trusted_source="skill://public/query_skill",
-        handler=_query_skill_for_registry(registry),
-        tests=[
-            SkillTestCase(
-                name="missing_name_returns_error",
-                tier="golden",
-                args={"name": ""},
-                expect=SkillExpect(schema_keys=["ok", "error"]),
-            ),
-        ],
-    ))
+            affinity=["meta", "skill", "catalog"],
+            cost_profile="low",
+            trusted_source="skill://public/query_skill",
+            handler=_query_skill_for_registry(registry),
+            tests=[
+                SkillTestCase(
+                    name="missing_name_returns_error",
+                    tier="golden",
+                    args={"name": ""},
+                    expect=SkillExpect(schema_keys=["ok", "error"]),
+                ),
+            ],
+        )
+    )
     return capability_count + 4
 
 

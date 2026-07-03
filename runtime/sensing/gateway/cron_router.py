@@ -10,6 +10,7 @@ and binds the job to the creator's actor id.  A user can only delete
 their own jobs (an identity without ``admin`` role is scoped to its own
 actor); an admin may delete anything.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -72,7 +73,9 @@ def create_cron_router(
 
             force = True if identity_store is not None else require_auth
             return _resolve_actor(
-                request, identity_store, force,
+                request,
+                identity_store,
+                force,
                 jwt_secret=jwt_secret,
                 jwt_issuer=jwt_issuer,
                 jwt_audience=jwt_audience,
@@ -90,7 +93,8 @@ def create_cron_router(
         if _actor_is_admin(identity_store, actor):
             return jobs
         return [
-            j for j in jobs
+            j
+            for j in jobs
             if j.get("creator_actor") == actor
             or j.get("creator_actor") in (None, "*")  # legacy / anon
         ]
@@ -125,10 +129,7 @@ def create_cron_router(
             if j.get("name") != name:
                 continue
             owner = j.get("creator_actor")
-            if (
-                owner not in (None, "*", actor)
-                and not _actor_is_admin(identity_store, actor)
-            ):
+            if owner not in (None, "*", actor) and not _actor_is_admin(identity_store, actor):
                 raise HTTPException(
                     409,
                     "cron job name already used by another actor",

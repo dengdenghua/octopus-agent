@@ -34,8 +34,9 @@ def test_pull_someone_in_then_remove_folds_roster() -> None:
         MemberEvent(action="invite", actor="user", target_id="user", target_kind="human"),
         MemberEvent(action="invite", actor="user", target_id="alice", target_kind="agent"),
         # mid-conversation, pull in a second agent
-        MemberEvent(action="invite", actor="user", target_id="bob", target_kind="agent",
-                    at_message=42),
+        MemberEvent(
+            action="invite", actor="user", target_id="bob", target_kind="agent", at_message=42
+        ),
         MemberEvent(action="leave", actor="user", target_id="alice"),
     )
     state = fold_state(events)
@@ -48,11 +49,11 @@ def test_pull_someone_in_then_remove_folds_roster() -> None:
 
 def test_reinvite_after_leave_refreshes_join_anchor() -> None:
     events = _seq(
-        MemberEvent(action="invite", actor="u", target_id="bob", target_kind="agent",
-                    at_message=1),
+        MemberEvent(action="invite", actor="u", target_id="bob", target_kind="agent", at_message=1),
         MemberEvent(action="leave", actor="u", target_id="bob"),
-        MemberEvent(action="invite", actor="u", target_id="bob", target_kind="agent",
-                    at_message=99),
+        MemberEvent(
+            action="invite", actor="u", target_id="bob", target_kind="agent", at_message=99
+        ),
     )
     state = fold_state(events)
     bob = state.member("bob")
@@ -74,8 +75,13 @@ def test_mute_and_mode_fold() -> None:
 
 def test_context_grant_ranges() -> None:
     def m(scope, **kw):
-        return Member("x", "agent", "participant", joined_at_message=kw.get("join", 10),
-                      grant=ContextGrant(scope=scope, from_msg=kw.get("f"), to_msg=kw.get("t")))
+        return Member(
+            "x",
+            "agent",
+            "participant",
+            joined_at_message=kw.get("join", 10),
+            grant=ContextGrant(scope=scope, from_msg=kw.get("f"), to_msg=kw.get("t")),
+        )
 
     assert visible_message_range(m("all"), 100) == (0, 100)
     assert visible_message_range(m("from_join", join=10), 100) == (10, 100)
@@ -92,8 +98,9 @@ def _agents(*specs):
 def test_responders_follow_mode_and_addressing() -> None:
     from runtime.memory.cowork.group import GroupState
 
-    roster = _agents(("a", "participant", False), ("b", "participant", False),
-                     ("c", "observer", False))
+    roster = _agents(
+        ("a", "participant", False), ("b", "participant", False), ("c", "observer", False)
+    )
     roster.append(Member("human", "human", "participant", 0, ContextGrant()))
 
     chat = GroupState(roster=roster, mode="chat")

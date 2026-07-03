@@ -7,6 +7,7 @@ execution-layer cron skills depend upward on the web layer. It depends
 only on stdlib + ``platform.io``, so it belongs with the cron domain
 logic in execution. The router now imports it from here.
 """
+
 from __future__ import annotations
 
 import json
@@ -34,18 +35,20 @@ def _read_cron_jobs(path: Path) -> list[dict[str, Any]]:
         command = str(item.get("command") or "").strip()
         if not name or not command:
             continue
-        jobs.append({
-            "name": name,
-            "command": command,
-            "cron_expression": str(item.get("cron_expression") or "0 * * * *"),
-            "last_run": item.get("last_run"),
-            "last_status": item.get("last_status"),
-            # ``creator_actor`` ties a job back to the identity that
-            # registered it. ``None`` is legacy (pre-auth) data that
-            # only an admin can delete. Anonymous deployments with
-            # ``require_auth=False`` all share the ``"*"`` bucket.
-            "creator_actor": item.get("creator_actor"),
-        })
+        jobs.append(
+            {
+                "name": name,
+                "command": command,
+                "cron_expression": str(item.get("cron_expression") or "0 * * * *"),
+                "last_run": item.get("last_run"),
+                "last_status": item.get("last_status"),
+                # ``creator_actor`` ties a job back to the identity that
+                # registered it. ``None`` is legacy (pre-auth) data that
+                # only an admin can delete. Anonymous deployments with
+                # ``require_auth=False`` all share the ``"*"`` bucket.
+                "creator_actor": item.get("creator_actor"),
+            }
+        )
     return jobs
 
 

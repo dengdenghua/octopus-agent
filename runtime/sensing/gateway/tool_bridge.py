@@ -146,21 +146,21 @@ PARALLEL_TOOL_USE_MAX_WORKERS = 8
 # are state-machine operations that downstream actions in the same
 # round may semantically depend on (or that have UI side effects
 # the model expects to land in narrative order).
-_SERIAL_BARRIER_TOOLS: frozenset[str] = frozenset({
-    "todo_write",
-    "use_capability",
-    "exit_plan_mode",
-    "update_soul",
-    "revert_soul",
-})
+_SERIAL_BARRIER_TOOLS: frozenset[str] = frozenset(
+    {
+        "todo_write",
+        "use_capability",
+        "exit_plan_mode",
+        "update_soul",
+        "revert_soul",
+    }
+)
 
 
 #: UI/meta skills that are ALWAYS surfaced to the model, regardless
 #: of cap. ``todo_write`` drives the live task-checklist panel —
 #: clipping it from the catalog because of registration order would
 #: silently kill the agent's ability to plan in the UI.
-
-
 
 
 def _reflection_checkpoint_message(round_i: int, max_rounds: int) -> str:
@@ -194,13 +194,9 @@ def _reflection_checkpoint_message(round_i: int, max_rounds: int) -> str:
     )
 
 
-
-
-
-
-
 def _execute_tool_call(
-    stack: Any, call: ToolCall | NormalizedToolCall | dict[str, Any],
+    stack: Any,
+    call: ToolCall | NormalizedToolCall | dict[str, Any],
 ) -> tuple[str, bool]:
     """Run one tool_use via the existing executor.
 
@@ -380,9 +376,7 @@ def _browser_operation_guidance(user_context: dict[str, Any]) -> str:
     """Prompt fragment for Codex-style thread-native browser operation."""
     surfaces = user_context.get("runtime_surfaces")
     surface_names = (
-        {str(item).lower() for item in surfaces}
-        if isinstance(surfaces, list)
-        else set()
+        {str(item).lower() for item in surfaces} if isinstance(surfaces, list) else set()
     )
     browser_surface = str(user_context.get("browser_surface") or "").lower()
     has_chrome_surface = (
@@ -520,12 +514,14 @@ def stream_agentic_fallback(
         _conversation_messages_for_model,
         _profile_memories_payload,
     )
+
     messages: list[Message] = _conversation_messages_for_model(intent)
 
     try:
         from runtime.core.cerebrum.llm_planner import (
             _render_team_roster_section,
         )
+
         team_section = _render_team_roster_section(
             intent.user_context or {},
         )
@@ -544,6 +540,7 @@ def stream_agentic_fallback(
         soul_text = agent.soul
         try:
             from pathlib import Path
+
             _agent_id = getattr(agent, "agent_id", "") or ""
             if _agent_id:
                 _project_root = Path(__file__).resolve().parents[3]
@@ -561,6 +558,7 @@ def stream_agentic_fallback(
             pass
         try:
             from runtime.execution.agents.loader import compose_runtime_soul
+
             soul_text = compose_runtime_soul(agent)
         except (ImportError, AttributeError):  # noqa: BLE001 — compose_runtime_soul unavailable; proceed without soul prefix
             pass
@@ -574,30 +572,30 @@ def stream_agentic_fallback(
     # the premise. Cheap (a few tokens) and only loaded when
     # memory tools exist in the registry.
     try:
-        _has_mem = any(
-            stack.executor.registry.has(n)
-            for n in ("remember", "recall", "note_user")
-        )
+        _has_mem = any(stack.executor.registry.has(n) for n in ("remember", "recall", "note_user"))
     except (AttributeError, TypeError, KeyError):
         _has_mem = False
     if _has_mem:
-        messages.insert(0, Message(
-            role="system",
-            content=(
-                "CAPABILITIES · cross-conversation memory:\n"
-                "You DO have persistent memory via the `remember`, "
-                "`recall`, and `note_user` tools. They write to "
-                "disk files that survive across turns and threads. "
-                "When the user asks you to remember something or "
-                "references past context, CALL THESE TOOLS — do "
-                "not say 'I don't have persistent memory' or 'each "
-                "conversation is fresh.' That denial was trained in "
-                "before you had these tools; it is no longer true.\n"
-                "- User asks to remember a fact → call `remember`\n"
-                "- User mentions a preference / style → call `note_user`\n"
-                "- User references past context → call `recall` first\n"
+        messages.insert(
+            0,
+            Message(
+                role="system",
+                content=(
+                    "CAPABILITIES · cross-conversation memory:\n"
+                    "You DO have persistent memory via the `remember`, "
+                    "`recall`, and `note_user` tools. They write to "
+                    "disk files that survive across turns and threads. "
+                    "When the user asks you to remember something or "
+                    "references past context, CALL THESE TOOLS — do "
+                    "not say 'I don't have persistent memory' or 'each "
+                    "conversation is fresh.' That denial was trained in "
+                    "before you had these tools; it is no longer true.\n"
+                    "- User asks to remember a fact → call `remember`\n"
+                    "- User mentions a preference / style → call `note_user`\n"
+                    "- User references past context → call `recall` first\n"
+                ),
             ),
-        ))
+        )
 
     # Same anti-denial pattern for the `call_agent` (subagent
     # delegation) tool. Without this, when the user asks for multiple
@@ -612,27 +610,30 @@ def stream_agentic_fallback(
     except (AttributeError, TypeError, KeyError):
         _has_delegation = False
     if _has_delegation:
-        messages.insert(0, Message(
-            role="system",
-            content=(
-                "CAPABILITIES · sub-agent delegation:\n"
-                "You DO have a `call_agent` tool that spawns an "
-                "isolated specialist subagent (architect / "
-                "security-review). When the user asks you to "
-                "delegate something appropriate, CALL THE TOOL — "
-                "do not say 'I am Claude, I cannot dispatch to "
-                "subagents' or 'I don't have that capability.' "
-                "That denial is wrong; the tool is in your tool "
-                "list.\n"
-                "Delegation is optional, not a template. Use it only "
-                "when the task is large, long-running, or naturally "
-                "parallel. For one focused specialist task, call_agent "
-                "is enough. For several independent subtasks, prefer "
-                "the parallel delegation tool when available and choose "
-                "the number of subagents from the actual task split; "
-                "do not spawn helpers just to fill a fixed swarm shape."
+        messages.insert(
+            0,
+            Message(
+                role="system",
+                content=(
+                    "CAPABILITIES · sub-agent delegation:\n"
+                    "You DO have a `call_agent` tool that spawns an "
+                    "isolated specialist subagent (architect / "
+                    "security-review). When the user asks you to "
+                    "delegate something appropriate, CALL THE TOOL — "
+                    "do not say 'I am Claude, I cannot dispatch to "
+                    "subagents' or 'I don't have that capability.' "
+                    "That denial is wrong; the tool is in your tool "
+                    "list.\n"
+                    "Delegation is optional, not a template. Use it only "
+                    "when the task is large, long-running, or naturally "
+                    "parallel. For one focused specialist task, call_agent "
+                    "is enough. For several independent subtasks, prefer "
+                    "the parallel delegation tool when available and choose "
+                    "the number of subagents from the actual task split; "
+                    "do not spawn helpers just to fill a fixed swarm shape."
+                ),
             ),
-        ))
+        )
 
     # Same anti-denial pattern for the SOUL.md self-evolution
     # tools (`update_soul` / `revert_soul` / `list_soul_history`).
@@ -655,83 +656,90 @@ def stream_agentic_fallback(
     except (AttributeError, TypeError, KeyError):
         _has_skill_lib = False
     if _has_skill_lib:
-        messages.insert(0, Message(
-            role="system",
-            content=(
-                "CAPABILITIES · learned skill library:\n"
-                "You have a per-agent skill library at "
-                "agents/<your_id>/skills/. When the user asks for "
-                "output that matches a learned template (tech "
-                "comparison, report format, slide outline, anything "
-                "you've previously taught yourself via "
-                "`learn_skill_from_text`), DON'T re-invent the shape "
-                "from scratch. Workflow:\n"
-                "  1. `list_learned_skills` to see what you already "
-                "know. **This is free (0 tokens) — call it whenever "
-                "the user asks for structured output**.\n"
-                "  2. Pick the matching skill from that list.\n"
-                "  3. `apply_skill(name=<skill>, user_request=...)` "
-                "to produce the output. Pass the user's specific "
-                "request as user_request — apply_skill will fill in "
-                "the template for you.\n"
-                "  4. When LEARNING a new skill, pass "
-                "`golden_samples=['req A', 'req B', 'req C']` so the "
-                "C1 gate verifies the template actually reproduces "
-                "on 3 different topics before persisting. The skill "
-                "is dropped (not saved) if it fails the gate.\n\n"
-                "TRIGGERS · phrases that should ALWAYS make you "
-                "`list_learned_skills` first:\n"
-                "  · \"write a report on…\" / \"写一份…报告\"\n"
-                "  · \"compare X and Y and Z\" / \"对比…/评估…\"\n"
-                "  · \"summarize X same as Y\" / \"像…一样写\"\n"
-                "  · \"做成 X 那样的\" / \"以后按这个格式做\"\n"
-                "  · \"同 Y 一样的\" / \"templatize this\"\n\n"
-                "Do NOT manually compose markdown when a saved skill "
-                "covers the shape · the whole point of learning a "
-                "skill is to enforce its discipline on every reuse. "
-                "If the existing skill needs improvement, "
-                "`learn_skill_from_text` again to overwrite."
+        messages.insert(
+            0,
+            Message(
+                role="system",
+                content=(
+                    "CAPABILITIES · learned skill library:\n"
+                    "You have a per-agent skill library at "
+                    "agents/<your_id>/skills/. When the user asks for "
+                    "output that matches a learned template (tech "
+                    "comparison, report format, slide outline, anything "
+                    "you've previously taught yourself via "
+                    "`learn_skill_from_text`), DON'T re-invent the shape "
+                    "from scratch. Workflow:\n"
+                    "  1. `list_learned_skills` to see what you already "
+                    "know. **This is free (0 tokens) — call it whenever "
+                    "the user asks for structured output**.\n"
+                    "  2. Pick the matching skill from that list.\n"
+                    "  3. `apply_skill(name=<skill>, user_request=...)` "
+                    "to produce the output. Pass the user's specific "
+                    "request as user_request — apply_skill will fill in "
+                    "the template for you.\n"
+                    "  4. When LEARNING a new skill, pass "
+                    "`golden_samples=['req A', 'req B', 'req C']` so the "
+                    "C1 gate verifies the template actually reproduces "
+                    "on 3 different topics before persisting. The skill "
+                    "is dropped (not saved) if it fails the gate.\n\n"
+                    "TRIGGERS · phrases that should ALWAYS make you "
+                    "`list_learned_skills` first:\n"
+                    '  · "write a report on…" / "写一份…报告"\n'
+                    '  · "compare X and Y and Z" / "对比…/评估…"\n'
+                    '  · "summarize X same as Y" / "像…一样写"\n'
+                    '  · "做成 X 那样的" / "以后按这个格式做"\n'
+                    '  · "同 Y 一样的" / "templatize this"\n\n'
+                    "Do NOT manually compose markdown when a saved skill "
+                    "covers the shape · the whole point of learning a "
+                    "skill is to enforce its discipline on every reuse. "
+                    "If the existing skill needs improvement, "
+                    "`learn_skill_from_text` again to overwrite."
+                ),
             ),
-        ))
+        )
 
     if _has_soul:
-        messages.insert(0, Message(
-            role="system",
-            content=(
-                "CAPABILITIES · self-evolution via SOUL.md:\n"
-                "You DO have `update_soul`, `revert_soul`, "
-                "`list_soul_history`, `recall_scores`, "
-                "`analyze_soul_impact`, `deep_reflect`, and "
-                "`deep_evolve` tools. They edit a real file at "
-                "agents/<your_id>/agent-core/SOUL.md that gets "
-                "auto-loaded into your system prompt on the very "
-                "NEXT turn (hot-reloaded · no restart needed). "
-                "Per-turn quality scores live in `.scores.jsonl` "
-                "next to it. When the user asks you to record a "
-                "self-lesson, roll back, inspect history, OR "
-                "evaluate your own performance — CALL THE TOOL. "
-                "Do not say 'I'm Claude, I don't have a soul' or "
-                "'I have no such tool.' Those denials are wrong; "
-                "the tools are in your tool list and they really "
-                "modify your future behavior. Every successful "
-                "update_soul auto-snapshots the prior state into "
-                ".soul_history/, so revert_soul is always safe.\n"
-                "Reflection cost ladder · pick the cheapest that "
-                "can answer the question:\n"
-                "  - `analyze_soul_impact` · zero LLM cost · "
-                "heuristic before/after delta on score history\n"
-                "  - `deep_reflect` · 1 cheap LLM call (~2-3¢) · "
-                "use when heuristic says 'inconclusive'\n"
-                "  - `deep_evolve` · expensive autonomous loop "
-                "(~10-30¢) · ONLY when user explicitly asks for "
-                "'deep evolution' / '深度演化' / similar. Default "
-                "dry_run=True · returns proposals without mutating "
-                "SOUL · review first, then re-run with dry_run=False "
-                "if you want to commit."
+        messages.insert(
+            0,
+            Message(
+                role="system",
+                content=(
+                    "CAPABILITIES · self-evolution via SOUL.md:\n"
+                    "You DO have `update_soul`, `revert_soul`, "
+                    "`list_soul_history`, `recall_scores`, "
+                    "`analyze_soul_impact`, `deep_reflect`, and "
+                    "`deep_evolve` tools. They edit a real file at "
+                    "agents/<your_id>/agent-core/SOUL.md that gets "
+                    "auto-loaded into your system prompt on the very "
+                    "NEXT turn (hot-reloaded · no restart needed). "
+                    "Per-turn quality scores live in `.scores.jsonl` "
+                    "next to it. When the user asks you to record a "
+                    "self-lesson, roll back, inspect history, OR "
+                    "evaluate your own performance — CALL THE TOOL. "
+                    "Do not say 'I'm Claude, I don't have a soul' or "
+                    "'I have no such tool.' Those denials are wrong; "
+                    "the tools are in your tool list and they really "
+                    "modify your future behavior. Every successful "
+                    "update_soul auto-snapshots the prior state into "
+                    ".soul_history/, so revert_soul is always safe.\n"
+                    "Reflection cost ladder · pick the cheapest that "
+                    "can answer the question:\n"
+                    "  - `analyze_soul_impact` · zero LLM cost · "
+                    "heuristic before/after delta on score history\n"
+                    "  - `deep_reflect` · 1 cheap LLM call (~2-3¢) · "
+                    "use when heuristic says 'inconclusive'\n"
+                    "  - `deep_evolve` · expensive autonomous loop "
+                    "(~10-30¢) · ONLY when user explicitly asks for "
+                    "'deep evolution' / '深度演化' / similar. Default "
+                    "dry_run=True · returns proposals without mutating "
+                    "SOUL · review first, then re-run with dry_run=False "
+                    "if you want to commit."
+                ),
             ),
-        ))
+        )
 
     from runtime.memory.users.profile import render_profile_memories
+
     profile_section = render_profile_memories(
         _profile_memories_payload(intent),
     )
@@ -744,12 +752,12 @@ def stream_agentic_fallback(
             MemoryQuery,
             format_records_for_prompt,
         )
+
         _metadata_for_memory = _session_metadata_from_intent(intent)
         _workspace_for_memory = _metadata_for_memory.get("workspace_path")
         _project_for_memory = (
             str(_workspace_for_memory).strip()
-            if isinstance(_workspace_for_memory, str)
-            and str(_workspace_for_memory).strip()
+            if isinstance(_workspace_for_memory, str) and str(_workspace_for_memory).strip()
             else None
         )
         _agent_id_for_memory = (
@@ -758,8 +766,7 @@ def stream_agentic_fallback(
         _team_id_for_memory = _metadata_for_memory.get("team_id")
         _team_id_for_memory = (
             str(_team_id_for_memory).strip()
-            if isinstance(_team_id_for_memory, str)
-            and str(_team_id_for_memory).strip()
+            if isinstance(_team_id_for_memory, str) and str(_team_id_for_memory).strip()
             else None
         )
         memory_section = format_records_for_prompt(
@@ -783,9 +790,12 @@ def stream_agentic_fallback(
         messages.insert(0, Message(role="system", content=memory_section))
 
     if not messages:
-        messages.append(Message(
-            role="user", content=intent.normalized_goal,
-        ))
+        messages.append(
+            Message(
+                role="user",
+                content=intent.normalized_goal,
+            )
+        )
 
     _intent_user_context = intent.user_context or {}
     _browser_prompt = _browser_operation_guidance(_intent_user_context)
@@ -798,10 +808,13 @@ def stream_agentic_fallback(
     )
     _capability_activation_prompt = _capability_activation.render_prompt()
     if _capability_activation_prompt:
-        messages.insert(0, Message(
-            role="system",
-            content=_capability_activation_prompt,
-        ))
+        messages.insert(
+            0,
+            Message(
+                role="system",
+                content=_capability_activation_prompt,
+            ),
+        )
     _todo_protocol_mode = context_mode(_intent_user_context)
     _todo_protocol_required = False
 
@@ -818,29 +831,32 @@ def stream_agentic_fallback(
             intent.normalized_goal,
             _intent_user_context,
         )
-        messages.insert(0, Message(
-            role="system",
-            content=(
-                "CAPABILITIES · task checklist:\n"
-                "You DO have a `todo_write` tool. It records the live "
-                "task checklist shown to the user during multi-step work. "
-                "When a task has several steps, CALL `todo_write` at the "
-                "start, then call it again when one item becomes "
-                "`in_progress` or `completed`. Do not say `todo_write` is "
-                "unavailable; that denial is wrong because the tool is in "
-                "your tool list.\n"
-                "Accepted payloads: prefer `items=[...]` or `todos=[...]` "
-                "as arrays; JSON strings are tolerated for compatibility. Each "
-                "item may use `content`, `text`, `title`, or `task`, plus "
-                "`status` (`pending` / `in_progress` / `completed`) and "
-                "optional `activeForm` / `active_form`. Always pass the "
-                "complete list, not a diff.\n\n"
-                + render_todo_protocol_guidance(
-                    required=_todo_protocol_required,
-                    mode=_todo_protocol_mode,
-                )
+        messages.insert(
+            0,
+            Message(
+                role="system",
+                content=(
+                    "CAPABILITIES · task checklist:\n"
+                    "You DO have a `todo_write` tool. It records the live "
+                    "task checklist shown to the user during multi-step work. "
+                    "When a task has several steps, CALL `todo_write` at the "
+                    "start, then call it again when one item becomes "
+                    "`in_progress` or `completed`. Do not say `todo_write` is "
+                    "unavailable; that denial is wrong because the tool is in "
+                    "your tool list.\n"
+                    "Accepted payloads: prefer `items=[...]` or `todos=[...]` "
+                    "as arrays; JSON strings are tolerated for compatibility. Each "
+                    "item may use `content`, `text`, `title`, or `task`, plus "
+                    "`status` (`pending` / `in_progress` / `completed`) and "
+                    "optional `activeForm` / `active_form`. Always pass the "
+                    "complete list, not a diff.\n\n"
+                    + render_todo_protocol_guidance(
+                        required=_todo_protocol_required,
+                        mode=_todo_protocol_mode,
+                    )
+                ),
             ),
-        ))
+        )
 
     # Bind the agent into a Session for the duration of this stream
     # so memory skills (`remember`, `recall`, `note_user`,
@@ -850,6 +866,7 @@ def stream_agentic_fallback(
     # no ContextVar from its parent. Scoped to this function so it
     # tears down cleanly when the stream ends.
     from runtime.platform.process.session import Session
+
     user_context = _intent_user_context
     _session_obj = Session(
         actor=getattr(intent, "actor", None),
@@ -874,7 +891,8 @@ def stream_agentic_fallback(
     # know whether we're talking to an Anthropic-family model
     # (the only one that honors ``tools=``).
     effective_model = (
-        model if model and model not in ("octopus-agent", "")
+        model
+        if model and model not in ("octopus-agent", "")
         else getattr(stack.planner, "planner_model", None) or "molili"
     )
 
@@ -917,6 +935,7 @@ def stream_agentic_fallback(
     # the live ContextVar; we own the token and reset it when the
     # generator is GC'd or completes (try/finally below).
     from runtime.platform.process.session import _current_session  # noqa: PLC0415
+
     _session_token = _current_session.set(_session_obj)
 
     for round_i in range(MAX_TOOL_ROUNDS):
@@ -928,13 +947,15 @@ def stream_agentic_fallback(
         # done. Skip round 0 — the first round can never be a
         # "continuation", so the prompt is just noise.
         if round_i > 0 and round_i % REFLECTION_INTERVAL == 0:
-            messages.append(Message(
-                role="user",
-                content=_reflection_checkpoint_message(
-                    round_i,
-                    MAX_TOOL_ROUNDS,
-                ),
-            ))
+            messages.append(
+                Message(
+                    role="user",
+                    content=_reflection_checkpoint_message(
+                        round_i,
+                        MAX_TOOL_ROUNDS,
+                    ),
+                )
+            )
         req = ModelRequest(
             model=effective_model,
             messages=messages,
@@ -979,12 +1000,8 @@ def stream_agentic_fallback(
                     # silently for routers that don't track).
                     fin = getattr(event, "final", None)
                     if fin is not None:
-                        _total_in_tokens += int(
-                            getattr(fin, "input_tokens", 0) or 0
-                        )
-                        _total_out_tokens += int(
-                            getattr(fin, "output_tokens", 0) or 0
-                        )
+                        _total_in_tokens += int(getattr(fin, "input_tokens", 0) or 0)
+                        _total_out_tokens += int(getattr(fin, "output_tokens", 0) or 0)
                     break
         except (ConnectionError, TimeoutError, OSError) as exc:
             _logger.warning("agentic round %d stream failed: %s", round_i, exc)
@@ -1012,19 +1029,25 @@ def stream_agentic_fallback(
                 if _todo_guard_message and _todo_guard_nudges < 2:
                     _todo_guard_nudges += 1
                     accumulated_text = ""
-                    messages.append(Message(
-                        role="user",
-                        content=_todo_guard_message,
-                    ))
+                    messages.append(
+                        Message(
+                            role="user",
+                            content=_todo_guard_message,
+                        )
+                    )
                     continue
             # Model replied with pure text · conversation is done.
             _final_duration = int((time.monotonic() - _started_at) * 1000)
-            yield ("stats", {
-                "input_tokens": _total_in_tokens,
-                "output_tokens": _total_out_tokens,
-                "duration_ms": _final_duration,
-                "rounds": round_i + 1,
-            }, None)
+            yield (
+                "stats",
+                {
+                    "input_tokens": _total_in_tokens,
+                    "output_tokens": _total_out_tokens,
+                    "duration_ms": _final_duration,
+                    "rounds": round_i + 1,
+                },
+                None,
+            )
             # Per-turn quality score · zero-cost heuristic that
             # feeds the SOUL self-evolution feedback loop. See
             # ``runtime/memory/turn_scoring.py`` · best-effort,
@@ -1061,16 +1084,21 @@ def stream_agentic_fallback(
         if round_text:
             assistant_blocks.append({"type": "text", "text": round_text})
         for call in round_tool_calls:
-            assistant_blocks.append({
-                "type": "tool_use",
-                "id": call.id,
-                "name": call.name,
-                "input": call.input,
-            })
+            assistant_blocks.append(
+                {
+                    "type": "tool_use",
+                    "id": call.id,
+                    "name": call.name,
+                    "input": call.input,
+                }
+            )
         if assistant_blocks:
-            messages.append(Message(
-                role="assistant", content=assistant_blocks,
-            ))
+            messages.append(
+                Message(
+                    role="assistant",
+                    content=assistant_blocks,
+                )
+            )
 
         # Execute each tool, build matching tool_result blocks.
         # Concurrency policy (octopus optimisation lane B):
@@ -1083,12 +1111,13 @@ def stream_agentic_fallback(
         _parallel_enabled = (
             PARALLEL_TOOL_USE_DEFAULT
             and len(round_tool_calls) >= 2
-            and not any(
-                c.name in _SERIAL_BARRIER_TOOLS for c in round_tool_calls
+            and not any(c.name in _SERIAL_BARRIER_TOOLS for c in round_tool_calls)
+            and bool(
+                getattr(stack, "metadata", {}).get(
+                    "parallel_tool_use",
+                    True,
+                )
             )
-            and bool(getattr(stack, "metadata", {}).get(
-                "parallel_tool_use", True,
-            ))
         )
 
         if _parallel_enabled:
@@ -1130,7 +1159,8 @@ def stream_agentic_fallback(
                     except Exception as exc:  # noqa: BLE001 — surface as tool failure
                         _outputs[""] = (f"(parallel exec error: {exc})", True)
                         _logger.warning(
-                            "parallel tool exec future failed: %s", exc,
+                            "parallel tool exec future failed: %s",
+                            exc,
                         )
                         continue
                     with _outputs_lock:
@@ -1149,7 +1179,8 @@ def stream_agentic_fallback(
                 else:
                     _tool_work_since_todo = True
                 output, is_error = _outputs.get(
-                    call.id, ("(no result)", True),
+                    call.id,
+                    ("(no result)", True),
                 )
                 yield (
                     "tool_end",
@@ -1194,7 +1225,8 @@ def stream_agentic_fallback(
                     output, is_error = _execute_tool_call(stack, call)
                 finally:
                     _session_obj.metadata.pop(
-                        "_active_parent_tool_use_id", None,
+                        "_active_parent_tool_use_id",
+                        None,
                     )
                 yield (
                     "tool_end",
@@ -1217,9 +1249,12 @@ def stream_agentic_fallback(
                     _tool_error_count += 1
                 tool_result_blocks.append(block)
 
-        messages.append(Message(
-            role="user", content=tool_result_blocks,
-        ))
+        messages.append(
+            Message(
+                role="user",
+                content=tool_result_blocks,
+            )
+        )
 
     # Exceeded max rounds. Pause instead of pretending the turn is
     # complete: ask the user whether to spend another work budget or
@@ -1227,22 +1262,24 @@ def stream_agentic_fallback(
     # no-tool checkpoint call lets the model summarize the current
     # evidence while preventing another unbounded tool loop.
     checkpoint_chunks: list[str] = []
-    messages.append(Message(
-        role="user",
-        content=(
-            "[SYSTEM CHECK - user decision required]\n"
-            f"The tool loop reached its {MAX_TOOL_ROUNDS}-round limit. "
-            "Do not call more tools. Do not write the final report yet. "
-            "Using only the observations and tool results above, write a "
-            "concise checkpoint for the user:\n"
-            "1. What has been completed.\n"
-            "2. The key findings or evidence collected so far.\n"
-            "3. What remains uncertain or worth checking next.\n"
-            "4. Ask the user to choose: reply `继续` to spend another "
-            "work budget, or reply `生成报告` / `就此生成报告` to "
-            "synthesize the final report from the current evidence."
-        ),
-    ))
+    messages.append(
+        Message(
+            role="user",
+            content=(
+                "[SYSTEM CHECK - user decision required]\n"
+                f"The tool loop reached its {MAX_TOOL_ROUNDS}-round limit. "
+                "Do not call more tools. Do not write the final report yet. "
+                "Using only the observations and tool results above, write a "
+                "concise checkpoint for the user:\n"
+                "1. What has been completed.\n"
+                "2. The key findings or evidence collected so far.\n"
+                "3. What remains uncertain or worth checking next.\n"
+                "4. Ask the user to choose: reply `继续` to spend another "
+                "work budget, or reply `生成报告` / `就此生成报告` to "
+                "synthesize the final report from the current evidence."
+            ),
+        )
+    )
     checkpoint_req = ModelRequest(
         model=effective_model,
         messages=messages,
@@ -1262,12 +1299,8 @@ def stream_agentic_fallback(
             elif etype == "done":
                 fin = getattr(event, "final", None)
                 if fin is not None:
-                    _total_in_tokens += int(
-                        getattr(fin, "input_tokens", 0) or 0
-                    )
-                    _total_out_tokens += int(
-                        getattr(fin, "output_tokens", 0) or 0
-                    )
+                    _total_in_tokens += int(getattr(fin, "input_tokens", 0) or 0)
+                    _total_out_tokens += int(getattr(fin, "output_tokens", 0) or 0)
                     if not checkpoint_chunks:
                         checkpoint_text = getattr(fin, "text", "") or ""
                         if checkpoint_text:
@@ -1284,12 +1317,16 @@ def stream_agentic_fallback(
     )
 
     _final_duration = int((time.monotonic() - _started_at) * 1000)
-    yield ("stats", {
-        "input_tokens": _total_in_tokens,
-        "output_tokens": _total_out_tokens,
-        "duration_ms": _final_duration,
-        "rounds": MAX_TOOL_ROUNDS,
-    }, None)
+    yield (
+        "stats",
+        {
+            "input_tokens": _total_in_tokens,
+            "output_tokens": _total_out_tokens,
+            "duration_ms": _final_duration,
+            "rounds": MAX_TOOL_ROUNDS,
+        },
+        None,
+    )
     # Per-turn quality score · this exit means we hit the round
     # cap without a clean final reply, so it'll be scored low
     # ("round_cap" reason).
@@ -1325,6 +1362,7 @@ def _record_score_safe(
             record_turn_score,
             score_turn_outcome,
         )
+
         agent_id = getattr(agent, "agent_id", "") if agent else ""
         if not agent_id:
             return
@@ -1337,9 +1375,7 @@ def _record_score_safe(
             duration_ms=duration_ms,
         )
         thread_id = (
-            getattr(intent, "thread_id", None)
-            or getattr(intent, "conversation_id", None)
-            or ""
+            getattr(intent, "thread_id", None) or getattr(intent, "conversation_id", None) or ""
         )
         record_turn_score(
             agent_id=agent_id,
@@ -1377,6 +1413,7 @@ def _auto_evolve_tick_safe(agent_id: str, *, every: int = 5, min_total: int = 15
     """
     try:
         from runtime.memory.learning.turn_scoring import read_recent_scores
+
         scores = read_recent_scores(agent_id, limit=max(min_total * 2, 40))
         if len(scores) < min_total or len(scores) % every != 0:
             return
@@ -1388,11 +1425,15 @@ def _auto_evolve_tick_safe(agent_id: str, *, every: int = 5, min_total: int = 15
         # Session context (the skill uses it internally).
         import runtime.execution.suckers.memory_skills as _m
         from runtime.execution.suckers.memory_skills import _auto_regression_check
+
         original = _m._agent_core_dir
         _m._agent_core_dir = lambda: Path("agents") / agent_id / "agent-core"
         try:
             res = _auto_regression_check(
-                window=20, drop_threshold=0.2, min_samples=5, dry_run=False,
+                window=20,
+                drop_threshold=0.2,
+                min_samples=5,
+                dry_run=False,
             )
             action = res.get("action")
             if action == "reverted":

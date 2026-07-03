@@ -12,13 +12,17 @@ _LOG = logging.getLogger
 
 def _publish_skill_event(rec: SkillUsageRecord) -> None:
     from runtime.platform.process.eventbus import SkillUsed, publish_event
-    publish_event(SkillUsed(
-        event_type="skill.used",
-        skill_name=rec.skill_name,
-        success=rec.success,
-        duration_sec=rec.duration_sec,
-        agent_id=rec.agent_id,
-    ), logger=_LOG)
+
+    publish_event(
+        SkillUsed(
+            event_type="skill.used",
+            skill_name=rec.skill_name,
+            success=rec.success,
+            duration_sec=rec.duration_sec,
+            agent_id=rec.agent_id,
+        ),
+        logger=_LOG,
+    )
 
 
 _LOG = logging.getLogger("octopus.evolution.skill_usage")
@@ -90,15 +94,19 @@ class SkillUsageTracker:
             total = len(recs)
             successes = sum(1 for r in recs if r.success)
             durations = [r.duration_sec for r in recs if r.duration_sec > 0]
-            result.append(SkillUsageStats(
-                skill_name=name,
-                total_calls=total,
-                success_count=successes,
-                failure_count=total - successes,
-                success_rate=round(successes / max(1, total), 3),
-                avg_duration=round(sum(durations) / max(1, len(durations)), 3) if durations else 0.0,
-                last_called=recs[-1].ts if recs else "",
-            ))
+            result.append(
+                SkillUsageStats(
+                    skill_name=name,
+                    total_calls=total,
+                    success_count=successes,
+                    failure_count=total - successes,
+                    success_rate=round(successes / max(1, total), 3),
+                    avg_duration=round(sum(durations) / max(1, len(durations)), 3)
+                    if durations
+                    else 0.0,
+                    last_called=recs[-1].ts if recs else "",
+                )
+            )
         return sorted(result, key=lambda s: s.total_calls, reverse=True)
 
     def top_skills(self, limit: int = 10) -> list[SkillUsageStats]:

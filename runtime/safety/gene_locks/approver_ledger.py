@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import threading
@@ -23,9 +22,10 @@ MAX_ENTRIES = 500
 @dataclass
 class ApprovalRecord:
     """One signature · operator name + what they were approving."""
+
     approver: str
-    kind: str           # MutationKind string
-    target: str         # recipe_id or "__global__"
+    kind: str  # MutationKind string
+    target: str  # recipe_id or "__global__"
     ts: float
 
     def matches(self, kind: str, target: str) -> bool:
@@ -35,6 +35,7 @@ class ApprovalRecord:
 @dataclass
 class ApproverLedger:
     """Ring buffer of approvals · thread-safe."""
+
     window_s: float = DEFAULT_WINDOW_S
     max_entries: int = MAX_ENTRIES
     _entries: deque[ApprovalRecord] = field(
@@ -48,25 +49,37 @@ class ApproverLedger:
         if not a:
             return
         with self._lock:
-            self._entries.append(ApprovalRecord(
-                approver=a, kind=kind, target=target, ts=time.time(),
-            ))
+            self._entries.append(
+                ApprovalRecord(
+                    approver=a,
+                    kind=kind,
+                    target=target,
+                    ts=time.time(),
+                )
+            )
 
     def count_distinct(
-        self, kind: str, target: str, *, now: float | None = None,
+        self,
+        kind: str,
+        target: str,
+        *,
+        now: float | None = None,
     ) -> int:
         """Count distinct approvers who signed THIS (kind, target)
         within the current window. Used by the gate to decide if
         quorum is satisfied."""
         cutoff = (now if now is not None else time.time()) - self.window_s
         with self._lock:
-            return len({
-                r.approver for r in self._entries
-                if r.matches(kind, target) and r.ts >= cutoff
-            })
+            return len(
+                {r.approver for r in self._entries if r.matches(kind, target) and r.ts >= cutoff}
+            )
 
     def distinct_approvers(
-        self, kind: str, target: str, *, now: float | None = None,
+        self,
+        kind: str,
+        target: str,
+        *,
+        now: float | None = None,
     ) -> list[str]:
         """The actual approver names · for audit / gate warning
         messages. Stable alphabetical order so test output is
@@ -74,8 +87,7 @@ class ApproverLedger:
         cutoff = (now if now is not None else time.time()) - self.window_s
         with self._lock:
             names = {
-                r.approver for r in self._entries
-                if r.matches(kind, target) and r.ts >= cutoff
+                r.approver for r in self._entries if r.matches(kind, target) and r.ts >= cutoff
             }
         return sorted(names)
 
@@ -117,5 +129,4 @@ def get_ledger() -> ApproverLedger:
         return _LEDGER
 
 
-__all__ = ["ApprovalRecord", "ApproverLedger", "get_ledger",
-           "DEFAULT_WINDOW_S"]
+__all__ = ["ApprovalRecord", "ApproverLedger", "get_ledger", "DEFAULT_WINDOW_S"]

@@ -282,9 +282,9 @@ def test_materialize_skill_extracts_full_bundle_under_matching_slug(tmp_path) ->
 
     assert md == tmp_path / "skills" / "research-pack" / "SKILL.md"
     assert md.read_text(encoding="utf-8").endswith("Use sources.")
-    assert (
-        tmp_path / "skills" / "research-pack" / "references" / "source-policy.md"
-    ).read_text(encoding="utf-8") == "cite primary sources"
+    assert (tmp_path / "skills" / "research-pack" / "references" / "source-policy.md").read_text(
+        encoding="utf-8"
+    ) == "cite primary sources"
 
 
 def test_materialize_skill_rejects_bundle_that_writes_other_skill_dir(tmp_path) -> None:

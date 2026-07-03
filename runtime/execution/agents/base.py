@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import threading
@@ -9,7 +8,6 @@ from runtime.execution.arms.base import ArmPool, Worker
 
 
 class Agent:
-
     def __init__(
         self,
         *,
@@ -50,7 +48,6 @@ class Agent:
         self.capabilities: dict[str, Any] = dict(capabilities or {})
         self.budget: dict[str, Any] = dict(budget or {})
 
-
     def affinity(self) -> list[str]:
         agg: set[str] = set(self.extra_affinity)
         for arm in self.arms:
@@ -70,13 +67,11 @@ class Agent:
     def can_use(self, skill_ref: Any) -> bool:
         return any(arm.can_use(skill_ref) for arm in self.arms)
 
-
     def pick_arm_for(self, assignment: Any) -> Worker | None:
         return self.arms.pick_for(assignment)
 
     def pick_arm_for_intent(self, intent: Any) -> Worker | None:
         return self.arms.pick_for_intent(intent)
-
 
     def __iter__(self):
         return iter(self.arms)
@@ -100,12 +95,10 @@ class AgentNotFound(KeyError):
 
 
 class AgentRegistry:
-
     def __init__(self, *, event_bus: Any = None) -> None:
         self._by_id: dict[str, Agent] = {}
         self._lock = threading.RLock()
         self._event_bus = event_bus
-
 
     def register(self, agent: Agent) -> None:
         with self._lock:
@@ -116,10 +109,13 @@ class AgentRegistry:
         if self._event_bus is not None:
             try:
                 from runtime.core.nerves import AgentAdded
-                self._event_bus.publish(AgentAdded(
-                    agent_id=agent.agent_id,
-                    display_name=agent.display_name,
-                ))
+
+                self._event_bus.publish(
+                    AgentAdded(
+                        agent_id=agent.agent_id,
+                        display_name=agent.display_name,
+                    )
+                )
             except Exception:  # noqa: BLE001 — bus is best-effort; never break register
                 pass
 
@@ -136,6 +132,7 @@ class AgentRegistry:
         if existed and self._event_bus is not None:
             try:
                 from runtime.core.nerves import AgentRemoved
+
                 self._event_bus.publish(AgentRemoved(agent_id=agent_id))
             except (ImportError, TypeError, AttributeError, OSError):  # noqa: BLE001
                 pass
@@ -158,10 +155,13 @@ class AgentRegistry:
         if self._event_bus is not None:
             try:
                 from runtime.core.nerves import AgentAdded
-                self._event_bus.publish(AgentAdded(
-                    agent_id=agent.agent_id,
-                    display_name=agent.display_name,
-                ))
+
+                self._event_bus.publish(
+                    AgentAdded(
+                        agent_id=agent.agent_id,
+                        display_name=agent.display_name,
+                    )
+                )
             except (TypeError, ValueError, AttributeError):  # noqa: BLE001
                 pass
         return prev
@@ -191,7 +191,6 @@ class AgentRegistry:
         with self._lock:
             return iter(list(self._by_id.values()))
 
-
     def pick_for_intent(self, intent: Any) -> Agent | None:
         goal = ""
         itype = ""
@@ -214,9 +213,7 @@ class AgentRegistry:
         scored: list[tuple[int, int, int, Agent]] = []
         for idx, agent in enumerate(agents_in_order):
             tags = agent.affinity()
-            score = sum(
-                1 for tag in tags if tag and tag.lower() in haystack
-            )
+            score = sum(1 for tag in tags if tag and tag.lower() in haystack)
             if score > 0:
                 scored.append((score, len(tags), -idx, agent))
 

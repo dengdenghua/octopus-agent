@@ -34,6 +34,7 @@ Injection
 code. Default ``null_judge`` never blocks · deployments without
 an LLM budget for this layer pay nothing.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -112,7 +113,8 @@ def build_judge_from_llm_fn(
 
     def _judge(message: str, destination: str, session: Any) -> JudgeVerdict:
         prompt = prompt_template.format(
-            destination=destination, message=message[:4000],
+            destination=destination,
+            message=message[:4000],
         )
         try:
             reply = llm_call(prompt) or ""

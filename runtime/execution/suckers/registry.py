@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -18,7 +17,6 @@ CostProfile = Literal["low", "mid", "high"]
 
 
 class Skill(BaseModel):
-
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     name: str = Field(..., min_length=1)
@@ -77,7 +75,6 @@ class SkillNotFound(KeyError):
 
 
 class SkillRegistry:
-
     def __init__(
         self,
         strict_mode: bool = False,
@@ -120,11 +117,14 @@ class SkillRegistry:
         if self._event_bus is not None:
             try:
                 from runtime.core.nerves import SkillRegistered
-                self._event_bus.publish(SkillRegistered(
-                    skill_name=skill.name,
-                    trusted_source=skill.trusted_source,
-                    forged="forged" in skill.affinity,
-                ))
+
+                self._event_bus.publish(
+                    SkillRegistered(
+                        skill_name=skill.name,
+                        trusted_source=skill.trusted_source,
+                        forged="forged" in skill.affinity,
+                    )
+                )
             except Exception:  # noqa: BLE001 — bus is best-effort; never break register
                 pass
 
@@ -224,7 +224,9 @@ class SkillRegistry:
     # called explicitly (e.g. from a skill_inspect tool).
 
     def index(
-        self, *, only_enabled: bool = True,
+        self,
+        *,
+        only_enabled: bool = True,
     ) -> list[dict[str, str]]:
         """Return a compact index of all skills · always-on slot
         for the planner system prompt.
@@ -238,13 +240,15 @@ class SkillRegistry:
             for name, skill in self._by_name.items():
                 if only_enabled and not self.is_enabled(name):
                     continue
-                out.append({
-                    "name": skill.name,
-                    "summary": skill.effective_summary,
-                    "cost_profile": skill.cost_profile,
-                    # Cap affinity to 3 tags · index stays compact.
-                    "affinity": ",".join(skill.affinity[:3]),
-                })
+                out.append(
+                    {
+                        "name": skill.name,
+                        "summary": skill.effective_summary,
+                        "cost_profile": skill.cost_profile,
+                        # Cap affinity to 3 tags · index stays compact.
+                        "affinity": ",".join(skill.affinity[:3]),
+                    }
+                )
         return out
 
     def load_full_description(self, name: str) -> str:

@@ -12,6 +12,7 @@ The real Playwright / Electron / extension adapters belong next to
 this file once a machine with those runtimes can verify them
 end-to-end; they implement the same :class:`BrowserBackend` Protocol.
 """
+
 from __future__ import annotations
 
 from typing import Any

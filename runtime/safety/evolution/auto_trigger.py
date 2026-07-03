@@ -65,6 +65,7 @@ class EvolutionAutoTrigger:
             return
         try:
             from runtime.platform import feature_flags as _ff
+
             if not _ff.is_on(self._config.feature_flag):
                 _LOG.info("evolution auto-trigger disabled by feature flag")
                 return
@@ -115,21 +116,27 @@ class EvolutionAutoTrigger:
     def _tick(self) -> None:
         self._tick_count += 1
         agent_id = getattr(
-            getattr(self._stack, "config", None), "name", "default",
+            getattr(self._stack, "config", None),
+            "name",
+            "default",
         )
 
         from runtime.safety.evolution.fitness import FitnessConfig, compute_fitness
+
         report = compute_fitness(agent_id, FitnessConfig(window=self._config.fitness_window))
 
         if report.combined < self._config.fitness_threshold:
             _LOG.warning(
                 "fitness below threshold: %.2f < %.2f · triggering deep_evolve for %s",
-                report.combined, self._config.fitness_threshold, agent_id,
+                report.combined,
+                self._config.fitness_threshold,
+                agent_id,
             )
             self._trigger_evolve(agent_id)
 
         if self._config.drift_critical_auto_rollback:
             from runtime.safety.evolution.drift_monitor import DriftMonitor
+
             drift = DriftMonitor(agent_id).check()
             if drift.has_drift and drift.max_severity == "critical":
                 _LOG.warning(
@@ -141,6 +148,7 @@ class EvolutionAutoTrigger:
     def _wire_events(self) -> None:
         try:
             from runtime.platform.process.eventbus import get_eventbus
+
             bus = get_eventbus()
             bus.subscribe("fitness.computed", self._on_fitness_event)
             bus.subscribe("drift.detected", self._on_drift_event)
@@ -153,7 +161,9 @@ class EvolutionAutoTrigger:
         if score < self._config.fitness_threshold:
             _LOG.warning(
                 "fitness event below threshold: %.2f < %.2f for %s",
-                score, self._config.fitness_threshold, agent_id,
+                score,
+                self._config.fitness_threshold,
+                agent_id,
             )
             self._trigger_evolve(agent_id)
 
@@ -170,6 +180,7 @@ class EvolutionAutoTrigger:
         if drift_kind == "genome_change":
             try:
                 from runtime.safety.recovery.genome_registry import GenomeRegistry
+
                 registry = GenomeRegistry()
                 latest = registry.latest_version()
                 if latest and latest > 1:
@@ -177,12 +188,15 @@ class EvolutionAutoTrigger:
                     _LOG.info("auto-rolled back genome to v%d", latest - 1)
                     try:
                         from runtime.platform.process.eventbus import GenomeRolledBack, get_eventbus
-                        get_eventbus().publish(GenomeRolledBack(
-                            event_type="genome.rolled_back",
-                            from_version=latest,
-                            to_version=latest - 1,
-                            agent_id=agent_id,
-                        ))
+
+                        get_eventbus().publish(
+                            GenomeRolledBack(
+                                event_type="genome.rolled_back",
+                                from_version=latest,
+                                to_version=latest - 1,
+                                agent_id=agent_id,
+                            )
+                        )
                     except Exception as _exc:
                         _LOG.debug("genome rollback event publish failed: %s", _exc)
             except Exception as exc:
@@ -191,6 +205,7 @@ class EvolutionAutoTrigger:
         if drift_kind == "soul_change":
             try:
                 from runtime.execution.suckers.memory_skills import _revert_soul
+
                 _revert_soul(steps_back=1, reason="auto-rollback: critical soul drift")
                 _LOG.info("auto-reverted SOUL.md by 1 step")
             except Exception as exc:
@@ -199,6 +214,7 @@ class EvolutionAutoTrigger:
     def _trigger_evolve(self, agent_id: str) -> None:
         try:
             from runtime.memory.learning.deep_evolution import deep_evolve
+
             result = deep_evolve(
                 agent_id=agent_id,
                 window=self._config.fitness_window,
@@ -207,13 +223,16 @@ class EvolutionAutoTrigger:
             )
             try:
                 from runtime.platform.process.eventbus import EvolutionCompleted, get_eventbus
-                get_eventbus().publish(EvolutionCompleted(
-                    event_type="evolution.completed",
-                    rounds_run=result.get("rounds_run", 0),
-                    applied_count=len(result.get("applied", [])),
-                    ok=result.get("ok", False),
-                    agent_id=agent_id,
-                ))
+
+                get_eventbus().publish(
+                    EvolutionCompleted(
+                        event_type="evolution.completed",
+                        rounds_run=result.get("rounds_run", 0),
+                        applied_count=len(result.get("applied", [])),
+                        ok=result.get("ok", False),
+                        agent_id=agent_id,
+                    )
+                )
             except Exception:  # noqa: BLE001 — event publish best-effort
                 pass
             applied_n = len(result.get("applied", []))
@@ -224,12 +243,15 @@ class EvolutionAutoTrigger:
                 _LOG.info(
                     "auto-evolve: no changes applied for %s "
                     "(rounds=%s · all proposals rejected by judge)",
-                    agent_id, result.get("rounds_run"),
+                    agent_id,
+                    result.get("rounds_run"),
                 )
             else:
                 _LOG.info(
                     "auto-evolve result: ok=%s rounds=%s applied=%d",
-                    result.get("ok"), result.get("rounds_run"), applied_n,
+                    result.get("ok"),
+                    result.get("rounds_run"),
+                    applied_n,
                 )
         except Exception as exc:
             _LOG.warning("auto-evolve failed: %s", exc)
@@ -239,6 +261,7 @@ class EvolutionAutoTrigger:
             if event.kind == "genome_change" and event.severity == "critical":
                 try:
                     from runtime.safety.recovery.genome_registry import GenomeRegistry
+
                     registry = GenomeRegistry()
                     latest = registry.latest_version()
                     if latest and latest > 1:
@@ -250,6 +273,7 @@ class EvolutionAutoTrigger:
             if event.kind == "soul_change" and event.severity == "critical":
                 try:
                     from runtime.execution.suckers.memory_skills import _revert_soul
+
                     _revert_soul(steps_back=1, reason="auto-rollback: critical soul drift")
                     _LOG.info("auto-reverted SOUL.md by 1 step")
                 except Exception as exc:

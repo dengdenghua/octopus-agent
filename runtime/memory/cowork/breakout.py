@@ -34,9 +34,14 @@ def fork(
         if not mid:
             continue
         invite_member(
-            store, child_thread, actor=actor, target_id=mid,
-            kind=str(m.get("kind") or "agent"), role=str(m.get("role") or "participant"),
-            grant=grant, at_message=0,
+            store,
+            child_thread,
+            actor=actor,
+            target_id=mid,
+            kind=str(m.get("kind") or "agent"),
+            role=str(m.get("role") or "participant"),
+            grant=grant,
+            at_message=0,
         )
         seeded.append(mid)
     # Cross-link via the shared boards (attributed, durable).
@@ -70,7 +75,5 @@ def merge_back(
     marker = store.blackboard(parent_thread).read(f"breakout:{child_thread}")
     if isinstance(marker, dict):
         marker["status"] = "merged"
-        store.blackboard(parent_thread).write(
-            f"breakout:{child_thread}", marker, writer=actor
-        )
+        store.blackboard(parent_thread).write(f"breakout:{child_thread}", marker, writer=actor)
     return {"merged_into": parent_thread, "key": result_key}

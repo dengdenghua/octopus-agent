@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -16,17 +15,16 @@ from runtime.platform.process.service_provider import get_provider
 _log = logging.getLogger(__name__)
 
 PauseReason = Literal[
-    "user_request",          # Implementation note.
-    "budget_near_limit",     # Implementation note.
+    "user_request",  # Implementation note.
+    "budget_near_limit",  # Implementation note.
     "iteration_near_limit",  # Implementation note.
-    "client_disconnect",     # Implementation note.
-    "external",              # Implementation note.
+    "client_disconnect",  # Implementation note.
+    "external",  # Implementation note.
 ]
 
 
 @dataclass
 class ActiveTask:
-
     task_id: str
     thread_id: str = ""
     agent_id: str = ""
@@ -35,7 +33,7 @@ class ActiveTask:
     max_iterations: int = 0
     tokens_spent: int = 0
     cost_usd: float = 0.0
-    max_tokens: int = 50000   # Implementation note.
+    max_tokens: int = 50000  # Implementation note.
     max_usd: float = 0.5
 
     def to_dict(self) -> dict:
@@ -55,14 +53,13 @@ class ActiveTask:
 
 @dataclass
 class PauseRequest:
-
     task_id: str
     reason: PauseReason = "user_request"
     requested_at: float = field(default_factory=time.time)
     requested_by: str = ""  # Implementation note.
-    note: str = ""          # Implementation note.
-    thread_id: str = ""     # Implementation note.
-    agent_id: str = ""      # Implementation note.
+    note: str = ""  # Implementation note.
+    thread_id: str = ""  # Implementation note.
+    agent_id: str = ""  # Implementation note.
 
     def to_dict(self) -> dict:
         return {
@@ -81,7 +78,6 @@ def _default_store_path() -> Path:
 
 
 class PauseController:
-
     # Expire granted iteration/token/usd extensions and pending resume
     # handoffs after this long, so a crashed task can't leak dicts
     # forever. Observed pause cycles are seconds; 7 days is a generous
@@ -116,7 +112,6 @@ class PauseController:
             self._pending_resumes.pop(k, None)
             self._pending_resumes_ts.pop(k, None)
 
-
     def _load(self) -> None:
         path = self._store_path
         if path is None or not path.is_file():
@@ -147,7 +142,8 @@ class PauseController:
         except (OSError, json.JSONDecodeError, TypeError) as exc:
             _log.warning(
                 "pause_control load failed (%s: %s) — starting empty",
-                type(exc).__name__, exc,
+                type(exc).__name__,
+                exc,
             )
 
     def _persist_locked(self) -> None:
@@ -163,9 +159,9 @@ class PauseController:
         except Exception as exc:  # noqa: BLE001
             _log.warning(
                 "pause_control persist failed (%s: %s) — in-memory state still correct",
-                type(exc).__name__, exc,
+                type(exc).__name__,
+                exc,
             )
-
 
     def request_pause(
         self,
@@ -228,11 +224,14 @@ class PauseController:
     def consume_grant(self, task_id: str) -> dict[str, int | float]:
         with self._lock:
             self._grants_ts.pop(task_id, None)
-            return self._grants.pop(task_id, {
-                "extra_iterations": 0,
-                "extra_tokens": 0,
-                "extra_usd": 0.0,
-            })
+            return self._grants.pop(
+                task_id,
+                {
+                    "extra_iterations": 0,
+                    "extra_tokens": 0,
+                    "extra_usd": 0.0,
+                },
+            )
 
     def set_pending_resume(self, thread_id: str, task_id: str) -> None:
         if not thread_id or not task_id:
@@ -374,7 +373,6 @@ class PauseController:
     def list_active(self) -> list[ActiveTask]:
         with self._lock:
             return list(self._active.values())
-
 
     def is_pause_requested(self, task_id: str | None) -> bool:
         if not task_id:

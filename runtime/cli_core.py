@@ -120,6 +120,7 @@ def _build_reflex_router() -> ReflexRouter:
             load_rules_from_file,
             merge_with_defaults,
         )
+
         path = find_default_rules_file()
         file_rules = load_rules_from_file(path) if path else []
         merged = merge_with_defaults(defaults, file_rules)
@@ -286,6 +287,7 @@ def _slug_query(q: str, max_len: int = 20) -> str:
 
 def _graph_has_template_deps(graph) -> bool:
     import re
+
     pattern = re.compile(r"\{n\d+(\.\w+)*\}")
     for node in graph.nodes:
         for value in (node.args_template or {}).values():
@@ -296,6 +298,7 @@ def _graph_has_template_deps(graph) -> bool:
 
 def _speedup_estimate(result) -> float:
     from runtime.execution.swarm import SwarmResult
+
     if not isinstance(result, SwarmResult):
         return 1.0
     if result.total_wall_ms <= 0:
@@ -318,6 +321,7 @@ def _short_output(output: Any) -> str:
 def _export_winning_variants(journal_path, out_dir):
     import json
     import os
+
     results = []
     try:
         with open(journal_path, encoding="utf-8") as f:
@@ -359,11 +363,14 @@ def print_cost_breakdown(steps: list, budget, c: _Colors | None = None) -> None:
         ok = s.success
         status = c.green("\u2713") if ok else c.red("\u2717")
         cost_info = f"{s.result.cost.tokens} tok \u00b7 ${s.result.cost.usd:.4f} \u00b7 {s.result.cost.latency_ms:.1f} ms"
-        print(
-            f"  [{i}] {status} {skill}({_short_output(args)}) "
-            f"{c.dim(cost_info)}"
+        print(f"  [{i}] {status} {skill}({_short_output(args)}) {c.dim(cost_info)}")
+    print(
+        c.bold(
+            "\u2500" * 40
+            + "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+            + "\u2500" * 40
         )
-    print(c.bold("\u2500" * 40 + "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" + "\u2500" * 40))
+    )
     budget_max_tokens = getattr(budget, "tokens", None)
     if budget_max_tokens is None and hasattr(budget, "limits"):
         budget_max_tokens = getattr(budget.limits, "tokens", 0)

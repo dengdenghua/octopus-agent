@@ -160,9 +160,7 @@ def test_trust_denial_summary_groups_static_denies(tmp_path: Path) -> None:
 def test_trust_gateway_provider_delegates_policy_miss() -> None:
     fallback = _FallbackProvider()
     provider = TrustGatewayApprovalProvider(
-        static_policy=ApprovalPolicy(
-            rules=(ApprovalRule(effect="allow", tool="read_*"),)
-        ),
+        static_policy=ApprovalPolicy(rules=(ApprovalRule(effect="allow", tool="read_*"),)),
         fallback=fallback,
     )
 

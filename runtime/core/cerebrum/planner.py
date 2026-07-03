@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -20,11 +19,8 @@ class PlannerError(RuntimeError):
     pass
 
 
-
-
 @dataclass(frozen=True)
 class Rule:
-
     name: str
     intent_types: list[str] = field(default_factory=list)
     keywords: list[str] = field(default_factory=list)
@@ -57,7 +53,6 @@ class Rule:
 
 
 class StaticPlanner:
-
     def __init__(
         self,
         rules: list[Rule] | None = None,
@@ -85,7 +80,8 @@ class StaticPlanner:
                 # so operators notice.
                 self._logger.warning(
                     "rules auto-load failed from %s: %s",
-                    auto_persist_rules_path, e,
+                    auto_persist_rules_path,
+                    e,
                 )
 
         self.rules = sorted(initial, key=lambda r: -r.priority)
@@ -115,9 +111,7 @@ class StaticPlanner:
             skills = matched.skill_sequence
             rule_name = matched.name
             source_rule: Rule | None = matched
-        elif self.fallback_skill and (
-            allow_set is None or str(self.fallback_skill) in allow_set
-        ):
+        elif self.fallback_skill and (allow_set is None or str(self.fallback_skill) in allow_set):
             skills = [self.fallback_skill]
             rule_name = "fallback"
             source_rule = None
@@ -142,8 +136,7 @@ class StaticPlanner:
             for i, s in enumerate(skills)
         ]
         edges = [
-            WorkflowEdge(from_node=f"n{i}", to_node=f"n{i+1}")
-            for i in range(len(skills) - 1)
+            WorkflowEdge(from_node=f"n{i}", to_node=f"n{i + 1}") for i in range(len(skills) - 1)
         ]
 
         return TaskGraph(
@@ -153,7 +146,6 @@ class StaticPlanner:
             strategy=rule_name,
             task_type=_derive_task_type(intent, self.task_type_default),
         )
-
 
     def apply_rewrite_proposals(
         self,
@@ -220,7 +212,6 @@ class StaticPlanner:
             self._autosave_rules()
         return result
 
-
     def _autosave_rules(self) -> None:
         if self.auto_persist_rules_path is None:
             return
@@ -233,7 +224,9 @@ class StaticPlanner:
             # memory; next autosave will retry. Log so repeated
             # failures are visible.
             self._logger.warning(
-                "rules autosave failed (%s): %s", type(e).__name__, e,
+                "rules autosave failed (%s): %s",
+                type(e).__name__,
+                e,
             )
 
     def rewrite_from_journal(
@@ -257,23 +250,14 @@ if TYPE_CHECKING:
     from runtime.safety.recovery import ApplyResult
 
 
-
-
 def _render_intent_placeholders(value: Any, intent: ParsedIntent) -> Any:
     """Replace intent-level placeholders in static rule templates."""
     if isinstance(value, str):
-        return (
-            value
-            .replace("{intent_goal}", intent.normalized_goal)
-            .replace("{raw}", intent.raw)
-        )
+        return value.replace("{intent_goal}", intent.normalized_goal).replace("{raw}", intent.raw)
     if isinstance(value, list):
         return [_render_intent_placeholders(v, intent) for v in value]
     if isinstance(value, dict):
-        return {
-            k: _render_intent_placeholders(v, intent)
-            for k, v in value.items()
-        }
+        return {k: _render_intent_placeholders(v, intent) for k, v in value.items()}
     return value
 
 

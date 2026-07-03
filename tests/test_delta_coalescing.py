@@ -37,11 +37,7 @@ class _StubEmitter:
         self.notified.append((str(method), params))
 
     def deltas(self, method_suffix: str = "delta") -> list[str]:
-        return [
-            p["delta"]
-            for m, p in self.notified
-            if method_suffix.lower() in m.lower()
-        ]
+        return [p["delta"] for m, p in self.notified if method_suffix.lower() in m.lower()]
 
 
 def _make_turn() -> Turn:

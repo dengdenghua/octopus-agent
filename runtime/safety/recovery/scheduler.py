@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -14,7 +13,6 @@ _LOG = logging.getLogger("octopus.regeneration.scheduler")
 
 @dataclass
 class SchedulerConfig:
-
     interval_sec: int = 600
     initial_delay_sec: int = 30
     output_dir: str = "data"
@@ -49,6 +47,7 @@ def _atomic_write_json(path: Path, payload: Any) -> None:
     strings via ``default=str``.
     """
     from runtime.platform.io import atomic_write_json
+
     atomic_write_json(path, payload, default=str)
 
 
@@ -88,7 +87,6 @@ class RegenerationScheduler:
         self._tick_count = 0
         self._last_summary: dict[str, Any] = {}
         self._lock = threading.RLock()
-
 
     def start(
         self,
@@ -139,7 +137,6 @@ class RegenerationScheduler:
                 "interval_sec": self._config.interval_sec,
             }
 
-
     def _run_loop(self) -> None:
         if self._stop_event.wait(timeout=self._config.initial_delay_sec):
             return
@@ -162,6 +159,7 @@ class RegenerationScheduler:
         # ─── 1. RuleExtractor ────────────────────
         try:
             from runtime.safety.recovery.rule_extractor import RuleExtractor
+
             r = RuleExtractor(journal=journal).extract()
             rules_obj = getattr(r, "rules_produced", []) or []
             payload = {
@@ -190,12 +188,9 @@ class RegenerationScheduler:
             from runtime.safety.recovery.memory_consolidator import (
                 MemoryConsolidator,
             )
+
             r = MemoryConsolidator(journal=journal).consolidate()
-            mem_obj = (
-                getattr(r, "memories", None)
-                or getattr(r, "consolidated", None)
-                or []
-            )
+            mem_obj = getattr(r, "memories", None) or getattr(r, "consolidated", None) or []
             payload = {
                 "tick": n,
                 "ts": time.time(),
@@ -205,15 +200,11 @@ class RegenerationScheduler:
             }
             _atomic_write_json(out_dir / "learned_memories.json", payload)
             summary["memories"] = (
-                len(payload["memories"])
-                if isinstance(payload["memories"], list) else 0
+                len(payload["memories"]) if isinstance(payload["memories"], list) else 0
             )
             try:
                 planner = getattr(self._stack, "planner", None)
-                if (
-                    planner is not None
-                    and hasattr(planner, "update_learned_memories")
-                ):
+                if planner is not None and hasattr(planner, "update_learned_memories"):
                     planner.update_learned_memories(mem_obj)
                     summary["memories_to_planner"] = (
                         len(mem_obj) if isinstance(mem_obj, list) else 0
@@ -228,6 +219,7 @@ class RegenerationScheduler:
             from runtime.safety.recovery.workflow_rewriter import (
                 WorkflowRewriter,
             )
+
             try:
                 with open(out_dir / "learned_rules.json", encoding="utf-8") as fh:
                     _rl = json.load(fh).get("rules", []) or []
@@ -242,13 +234,13 @@ class RegenerationScheduler:
                 ),
                 "summary": _to_jsonable(
                     {k: v for k, v in vars(r).items() if k != "proposals"}
-                    if hasattr(r, "__dict__") else {},
+                    if hasattr(r, "__dict__")
+                    else {},
                 ),
             }
             _atomic_write_json(out_dir / "workflow_proposals.json", payload)
             summary["proposals"] = (
-                len(payload["proposals"])
-                if isinstance(payload["proposals"], list) else 0
+                len(payload["proposals"]) if isinstance(payload["proposals"], list) else 0
             )
         except Exception as exc:  # noqa: BLE001
             _LOG.warning("WorkflowRewriter tick failed: %s", exc)
@@ -259,6 +251,7 @@ class RegenerationScheduler:
             from runtime.safety.recovery.recipe_evaluator import (
                 RecipeEvaluator,
             )
+
             r = RecipeEvaluator(journal=journal).evaluate()
             payload = {
                 "tick": n,
@@ -267,8 +260,7 @@ class RegenerationScheduler:
             }
             _atomic_write_json(out_dir / "recipe_scores.json", payload)
             summary["recipe_scores"] = (
-                len(payload["scores"])
-                if isinstance(payload["scores"], list) else 0
+                len(payload["scores"]) if isinstance(payload["scores"], list) else 0
             )
         except Exception as exc:  # noqa: BLE001
             _LOG.warning("RecipeEvaluator tick failed: %s", exc)
@@ -277,6 +269,7 @@ class RegenerationScheduler:
         try:
             from runtime.platform import feature_flags as _ff
             from runtime.safety.recovery import forge_auto_tick as _fat
+
             _fat.bind_stack(self._stack)
             # Source of truth is the feature-flag system (env → legacy_env →
             # file → default); reading os.environ directly ignored runtime
@@ -302,10 +295,13 @@ class RegenerationScheduler:
         # ─── 6. SkillForge (need registry) ─────────
         try:
             registry = getattr(
-                getattr(self._stack, "executor", None), "registry", None,
+                getattr(self._stack, "executor", None),
+                "registry",
+                None,
             )
             if registry is not None:
                 from runtime.safety.recovery.skill_forge import SkillForge
+
                 r = SkillForge(journal=journal, registry=registry).run()
                 payload = {
                     "tick": n,
@@ -316,14 +312,15 @@ class RegenerationScheduler:
                 }
                 _atomic_write_json(out_dir / "forged_skills.json", payload)
                 summary["forged"] = (
-                    len(payload["candidates"])
-                    if isinstance(payload["candidates"], list) else 0
+                    len(payload["candidates"]) if isinstance(payload["candidates"], list) else 0
                 )
             else:
                 summary["forged"] = "skip(no_registry)"
         except Exception as exc:  # noqa: BLE001
             _LOG.warning(
-                "SkillForge tick failed (%s): %s", type(exc).__name__, exc,
+                "SkillForge tick failed (%s): %s",
+                type(exc).__name__,
+                exc,
             )
             # Keep the exception type in the summary so recurring patterns
             # (e.g. a duplicate-name crash loop) are visible without grepping
@@ -357,8 +354,11 @@ class RegenerationScheduler:
         # ─── 8. Evolution Fitness ─────────────────
         try:
             from runtime.safety.evolution.fitness import compute_fitness
+
             agent_id = getattr(
-                getattr(self._stack, "config", None), "name", "default",
+                getattr(self._stack, "config", None),
+                "name",
+                "default",
             )
             report = compute_fitness(agent_id)
             payload = {
@@ -369,12 +369,8 @@ class RegenerationScheduler:
                 "l1_trend": report.l1.trend,
                 "l2_score": report.l2.score if report.l2 else None,
                 "governance_score": report.governance.score if report.governance else None,
-                "governance_penalty": (
-                    report.governance.penalty if report.governance else None
-                ),
-                "governance_reasons": (
-                    report.governance.reasons if report.governance else []
-                ),
+                "governance_penalty": (report.governance.penalty if report.governance else None),
+                "governance_reasons": (report.governance.reasons if report.governance else []),
                 "combined": report.combined,
                 "verdict": report.verdict,
             }
@@ -388,8 +384,11 @@ class RegenerationScheduler:
         # ─── 9. Drift Monitor ───────────────────
         try:
             from runtime.safety.evolution.drift_monitor import DriftMonitor
+
             agent_id = getattr(
-                getattr(self._stack, "config", None), "name", "default",
+                getattr(self._stack, "config", None),
+                "name",
+                "default",
             )
             drift_report = DriftMonitor(agent_id).check()
             payload = {
@@ -411,6 +410,7 @@ class RegenerationScheduler:
         # ─── 10. Canary Check ───────────────────
         try:
             from runtime.safety.evolution.canary import CanaryManager
+
             cm = CanaryManager()
             active = cm.list_active()
             payload = {

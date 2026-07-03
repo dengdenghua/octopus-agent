@@ -27,15 +27,19 @@ from runtime.sensing.gateway import StreamingJournal
 def _mk_step() -> Step:
     call = ToolCall(caller="arms/x", sucker_id="list_cwd", args={})
     return Step(
-        step_id=0, node_id="n0", action=call,
+        step_id=0,
+        node_id="n0",
+        action=call,
         result=ExecutionResult(call_id=call.call_id, status="success"),
     )
 
 
 def _mk_traj() -> Trajectory:
     return Trajectory(
-        task_id=TaskId(uuid4()), arm_id=ArmId("a"),
-        steps=[_mk_step()], outcome=TrajectoryOutcome(success=True),
+        task_id=TaskId(uuid4()),
+        arm_id=ArmId("a"),
+        steps=[_mk_step()],
+        outcome=TrajectoryOutcome(success=True),
     )
 
 

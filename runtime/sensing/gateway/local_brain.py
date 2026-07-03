@@ -107,7 +107,9 @@ def local_brain_status(
             "ok": ollama_up and bool(chat_models),
             "detail": (", ".join(chat_models[:3]) if chat_models else "还没有"),
             "action": (
-                "" if (ollama_up and chat_models) else "终端运行:`ollama pull qwen2.5`(下载一个对话模型)。"
+                ""
+                if (ollama_up and chat_models)
+                else "终端运行:`ollama pull qwen2.5`(下载一个对话模型)。"
             ),
         }
     )

@@ -4,6 +4,7 @@ Returns the current execution context for a thread so the frontend
 can show users exactly what the agent sees: cwd, scope roots,
 sandbox mode, project type, session metadata, rejected paths, etc.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -52,7 +53,9 @@ def create_debug_router(
             from runtime.sensing.gateway.openai_gateway import _resolve_actor
 
             _resolve_actor(  # AUTH-OK: actor-agnostic — server-level diagnostic, not per-user
-                request, identity_store, require_auth,
+                request,
+                identity_store,
+                require_auth,
                 jwt_secret=jwt_secret,
                 jwt_issuer=jwt_issuer,
                 jwt_audience=jwt_audience,
@@ -71,6 +74,7 @@ def create_debug_router(
 
             try:
                 from runtime.execution.suckers.verify_skills import detect_project
+
                 profile = detect_project(workspace_path)
                 info["project"] = {
                     "kind": profile.kind,
@@ -106,6 +110,7 @@ def create_debug_router(
             try:
                 scope_info: dict[str, Any] = {}
                 from runtime.platform.process.session import Session
+
                 session = Session(
                     thread_id=thread_id or "debug",
                     metadata={
@@ -115,6 +120,7 @@ def create_debug_router(
                     },
                 )
                 from runtime.platform.process.scope import resolve_write_scope
+
                 scope = resolve_write_scope(session)
                 scope_info["mode"] = scope.mode
                 scope_info["roots"] = [str(r) for r in scope.roots]
@@ -124,6 +130,7 @@ def create_debug_router(
                 info["write_scope"] = {"error": str(exc)}
 
         import os
+
         info["server_cwd"] = os.getcwd()
         info["python_executable"] = os.sys.executable
 

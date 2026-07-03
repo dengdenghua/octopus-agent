@@ -9,6 +9,7 @@ weren't a member of.
 Companion to ``test_team_tasks_router_security.py`` — both routers
 share the same underlying authz model.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

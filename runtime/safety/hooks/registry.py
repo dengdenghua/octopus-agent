@@ -1,4 +1,5 @@
 """Hook registry · where handlers register · and dispatch resolves."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -27,6 +28,7 @@ class HookDecision:
     kept on the same dataclass so handlers can declare a single
     return type (easier API than 4 different decision subclasses).
     """
+
     cancelled: bool = False
     reason: str = ""
     modified_args: dict[str, Any] | None = None
@@ -67,6 +69,7 @@ class HookRegistry:
     ``HookDecision.pass_through()`` let the next handler in the
     chain decide.
     """
+
     _handlers: dict[type, list[HookHandler]] = field(default_factory=dict)
 
     def register(
@@ -118,7 +121,9 @@ def register_hook(
                     return HookDecision.cancel("refuse rm -rf /")
             return HookDecision.pass_through()
     """
+
     def _decorator(handler: HookHandler) -> HookHandler:
         get_global_registry().register(event_type, handler)
         return handler
+
     return _decorator

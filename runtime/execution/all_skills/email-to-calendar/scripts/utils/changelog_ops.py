@@ -15,9 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from common import format_timestamp, generate_indexed_id
 from json_store import load_json, save_json
 
-CHANGELOG_FILE = os.path.expanduser(
-    "~/.openclaw/workspace/memory/email-to-calendar/changelog.json"
-)
+CHANGELOG_FILE = os.path.expanduser("~/.openclaw/workspace/memory/email-to-calendar/changelog.json")
 UNDO_WINDOW_HOURS = 24
 MAX_CHANGES = 100
 
@@ -28,7 +26,7 @@ def log_create(
     summary: str,
     start_time: str = "",
     end_time: str = "",
-    email_id: str = ""
+    email_id: str = "",
 ) -> str:
     """Log a create action. Returns the change ID."""
     changelog = load_json(CHANGELOG_FILE, {"changes": []})
@@ -42,13 +40,9 @@ def log_create(
         "event_id": event_id,
         "calendar_id": calendar_id or "primary",
         "before": None,
-        "after": {
-            "summary": summary,
-            "start": start_time,
-            "end": end_time
-        },
+        "after": {"summary": summary, "start": start_time, "end": end_time},
         "source_email_id": email_id if email_id else None,
-        "can_undo": True
+        "can_undo": True,
     }
 
     changelog["changes"].append(change)
@@ -59,11 +53,7 @@ def log_create(
 
 
 def log_update(
-    event_id: str,
-    calendar_id: str,
-    before_json: str = "",
-    after_json: str = "",
-    email_id: str = ""
+    event_id: str, calendar_id: str, before_json: str = "", after_json: str = "", email_id: str = ""
 ) -> str:
     """Log an update action. Returns the change ID."""
     changelog = load_json(CHANGELOG_FILE, {"changes": []})
@@ -90,7 +80,7 @@ def log_update(
         "before": before,
         "after": after,
         "source_email_id": email_id if email_id else None,
-        "can_undo": True
+        "can_undo": True,
     }
 
     changelog["changes"].append(change)
@@ -100,11 +90,7 @@ def log_update(
     return change_id
 
 
-def log_delete(
-    event_id: str,
-    calendar_id: str,
-    before_json: str = ""
-) -> str:
+def log_delete(event_id: str, calendar_id: str, before_json: str = "") -> str:
     """Log a delete action. Returns the change ID."""
     changelog = load_json(CHANGELOG_FILE, {"changes": []})
 
@@ -124,7 +110,7 @@ def log_delete(
         "before": before,
         "after": None,
         "source_email_id": None,
-        "can_undo": True
+        "can_undo": True,
     }
 
     changelog["changes"].append(change)
@@ -169,9 +155,8 @@ def list_changes(last_n: int = 10) -> None:
         if action == "create":
             summary = change.get("after", {}).get("summary", "Unknown")
         elif action == "update":
-            summary = (
-                change.get("after", {}).get("summary") or
-                change.get("before", {}).get("summary", "Unknown")
+            summary = change.get("after", {}).get("summary") or change.get("before", {}).get(
+                "summary", "Unknown"
             )
         else:  # delete
             summary = change.get("before", {}).get("summary", "Unknown")
@@ -185,13 +170,9 @@ def list_changes(last_n: int = 10) -> None:
             after = change.get("after", {})
             changes_made = []
             if before.get("summary") != after.get("summary"):
-                changes_made.append(
-                    f'title: "{before.get("summary")}" -> "{after.get("summary")}"'
-                )
+                changes_made.append(f'title: "{before.get("summary")}" -> "{after.get("summary")}"')
             if before.get("start") != after.get("start"):
-                changes_made.append(
-                    f"start: {before.get('start')} -> {after.get('start')}"
-                )
+                changes_made.append(f"start: {before.get('start')} -> {after.get('start')}")
             if changes_made:
                 print(f"  Changes: {'; '.join(changes_made)}")
 
@@ -267,7 +248,7 @@ def main():
             summary=args.get("summary", ""),
             start_time=args.get("start", ""),
             end_time=args.get("end", ""),
-            email_id=args.get("email_id", "")
+            email_id=args.get("email_id", ""),
         )
         print(change_id)
 
@@ -277,7 +258,7 @@ def main():
             calendar_id=args.get("calendar_id", "primary"),
             before_json=args.get("before_json", ""),
             after_json=args.get("after_json", ""),
-            email_id=args.get("email_id", "")
+            email_id=args.get("email_id", ""),
         )
         print(change_id)
 
@@ -285,7 +266,7 @@ def main():
         change_id = log_delete(
             event_id=args.get("event_id", ""),
             calendar_id=args.get("calendar_id", "primary"),
-            before_json=args.get("before_json", "")
+            before_json=args.get("before_json", ""),
         )
         print(change_id)
 

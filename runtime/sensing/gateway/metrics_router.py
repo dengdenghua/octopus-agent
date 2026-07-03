@@ -35,6 +35,7 @@ from typing import Any
 try:
     from fastapi import APIRouter
     from fastapi.responses import JSONResponse, PlainTextResponse, Response
+
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
@@ -164,25 +165,29 @@ def _samples_of(instr: Any) -> list[dict[str, Any]]:
         for label_key in list(instr._series.keys()):  # noqa: SLF001
             labels = dict(label_key) if label_key else {}
             snap = instr.snapshot(labels=labels or None)
-            out.append({
-                "labels": labels,
-                "count": snap["count"],
-                "sum": snap["sum"],
-                # JSON keys must be strings; convert bucket bound to str.
-                "buckets": {
-                    (str(k) if k != float("inf") else "+Inf"): v
-                    for k, v in snap["buckets"].items()
-                },
-            })
+            out.append(
+                {
+                    "labels": labels,
+                    "count": snap["count"],
+                    "sum": snap["sum"],
+                    # JSON keys must be strings; convert bucket bound to str.
+                    "buckets": {
+                        (str(k) if k != float("inf") else "+Inf"): v
+                        for k, v in snap["buckets"].items()
+                    },
+                }
+            )
         return out
     # Counter or Gauge → simple value lookup per labelset.
     out2: list[dict[str, Any]] = []
     for label_key in list(instr._values.keys()):  # noqa: SLF001
         labels = dict(label_key) if label_key else {}
-        out2.append({
-            "labels": labels,
-            "value": instr.value(labels=labels or None),
-        })
+        out2.append(
+            {
+                "labels": labels,
+                "value": instr.value(labels=labels or None),
+            }
+        )
     return out2
 
 

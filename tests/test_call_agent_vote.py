@@ -5,6 +5,7 @@ Spawn N independent voters on the SAME question, parse each one's
 aggregation (``_extract_verdict`` / ``_tally_votes``) is tested directly;
 the spawn path is exercised end-to-end with a mocked ``call_subagent``.
 """
+
 from __future__ import annotations
 
 import json
@@ -58,7 +59,8 @@ def _patch_voters(monkeypatch, outputs: list[str]):
 
     monkeypatch.setattr("runtime.execution.subagents.call_subagent", _fake)
     monkeypatch.setattr(
-        "runtime.execution.subagents.bridge.call_subagent", _fake,
+        "runtime.execution.subagents.bridge.call_subagent",
+        _fake,
     )
 
 
@@ -146,11 +148,14 @@ def test_tally_all_abstain():
 
 
 def test_vote_majority_end_to_end(monkeypatch):
-    _patch_voters(monkeypatch, [
-        "VERDICT: yes\nREASON: a",
-        "VERDICT: yes\nREASON: b",
-        "VERDICT: no\nREASON: c",
-    ])
+    _patch_voters(
+        monkeypatch,
+        [
+            "VERDICT: yes\nREASON: a",
+            "VERDICT: yes\nREASON: b",
+            "VERDICT: no\nREASON: c",
+        ],
+    )
     r = ds._call_agent_vote(question="is the bug real?", n=3, choices=["yes", "no"])
     assert r["ok"] is True
     assert r["verdict"] == "yes"
@@ -161,10 +166,13 @@ def test_vote_majority_end_to_end(monkeypatch):
 
 
 def test_vote_tie_end_to_end(monkeypatch):
-    _patch_voters(monkeypatch, [
-        "VERDICT: yes\nREASON: a",
-        "VERDICT: no\nREASON: b",
-    ])
+    _patch_voters(
+        monkeypatch,
+        [
+            "VERDICT: yes\nREASON: a",
+            "VERDICT: no\nREASON: b",
+        ],
+    )
     r = ds._call_agent_vote(question="A or B?", n=2, choices=["yes", "no"])
     assert r["ok"] is True  # the vote ran...
     assert r["verdict"] is None  # ...but produced no decision
@@ -173,11 +181,14 @@ def test_vote_tie_end_to_end(monkeypatch):
 
 
 def test_vote_unanimous_end_to_end(monkeypatch):
-    _patch_voters(monkeypatch, [
-        "VERDICT: yes\nREASON: a",
-        "VERDICT: yes\nREASON: b",
-        "VERDICT: yes\nREASON: c",
-    ])
+    _patch_voters(
+        monkeypatch,
+        [
+            "VERDICT: yes\nREASON: a",
+            "VERDICT: yes\nREASON: b",
+            "VERDICT: yes\nREASON: c",
+        ],
+    )
     r = ds._call_agent_vote(question="correct?", n=3, choices=["yes", "no"])
     assert r["verdict"] == "yes"
     assert r["unanimous"] is True
@@ -234,10 +245,13 @@ def test_vote_reads_schema_parsed(monkeypatch):
 def test_vote_falls_back_when_no_parsed(monkeypatch):
     """If call_subagent could not validate (no ``parsed`` key), the vote still
     parses the raw VERDICT text rather than hard-abstaining."""
-    _patch_voters(monkeypatch, [
-        "VERDICT: yes\nREASON: a",
-        "VERDICT: yes\nREASON: b",
-    ])
+    _patch_voters(
+        monkeypatch,
+        [
+            "VERDICT: yes\nREASON: a",
+            "VERDICT: yes\nREASON: b",
+        ],
+    )
     r = ds._call_agent_vote(question="real?", n=2, choices=["yes", "no"])
     assert r["verdict"] == "yes"
     assert r["votes_cast"] == 2

@@ -8,6 +8,7 @@ Community users can drop files in `~/.octopus/commands/` and
 every agent instance picks them up. Zero coupling to our
 internal skill registry.
 """
+
 from __future__ import annotations
 
 import os
@@ -26,13 +27,14 @@ from typing import Any
 class SlashCommand:
     """A loaded command. Immutable so the registry can be shared
     across threads without copying."""
+
     name: str
     body: str
     description: str = ""
     argument_hint: str = ""
     allowed_tools: tuple[str, ...] = ()
     model: str = ""
-    source: str = ""   # "global" | "project"
+    source: str = ""  # "global" | "project"
     path: str = ""
 
     def as_dict(self) -> dict[str, Any]:
@@ -82,9 +84,7 @@ def _coerce_tool_list(raw: str) -> tuple[str, ...]:
     empties. Accept `a, b, c` or `a,b,c`."""
     if not raw:
         return ()
-    return tuple(
-        part.strip() for part in raw.split(",") if part.strip()
-    )
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
 
 
 # ═══════════════════════════════════════════════════════════
@@ -220,6 +220,7 @@ def expand(
 
     # $<name> → dict lookup · unresolved names stay verbatim
     if named:
+
         def _sub_named(m: re.Match[str]) -> str:
             key = m.group(1)
             if key == "ARGUMENTS":  # already handled

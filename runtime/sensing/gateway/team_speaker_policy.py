@@ -192,9 +192,7 @@ def _normalize_speak_mode(value: str | None) -> str:
     return normalized if normalized in _SPEAK_MODES else "manual"
 
 
-def _authorized_to_speak_for(
-    sender: TeamParticipantWire, target: TeamParticipantWire
-) -> bool:
+def _authorized_to_speak_for(sender: TeamParticipantWire, target: TeamParticipantWire) -> bool:
     """Whether ``sender`` may speak on ``target``'s behalf. Honors the
     target's OWN opt-in: hosted → the bound human host, twin → the bound
     agent. Identity matches either the participant id or the actor id, so
@@ -234,9 +232,7 @@ def _caller_is_team_admin(team: Any, actor: str | None) -> bool:
 # persist — that stays with the caller, under its lock.
 
 
-def apply_floor_request(
-    team: TeamRoomWire | None, participant_id: str
-) -> TeamRoomWire | None:
+def apply_floor_request(team: TeamRoomWire | None, participant_id: str) -> TeamRoomWire | None:
     """Queue a raised hand for the moderator (``moderated`` policy only).
     None when there's nothing to do — no room, wrong policy, or the hand is
     already up."""
@@ -246,15 +242,15 @@ def apply_floor_request(
         return None
     if participant_id in (team.floor_requests or []):
         return None
-    return team.model_copy(update={
-        "floor_requests": [*(team.floor_requests or []), participant_id],
-        "updated_at": _now(),
-    })
+    return team.model_copy(
+        update={
+            "floor_requests": [*(team.floor_requests or []), participant_id],
+            "updated_at": _now(),
+        }
+    )
 
 
-def apply_floor_yield(
-    team: TeamRoomWire | None, participant_id: str
-) -> TeamRoomWire | None:
+def apply_floor_yield(team: TeamRoomWire | None, participant_id: str) -> TeamRoomWire | None:
     """Release the floor ``participant_id`` holds: round_robin advances to
     the next seat, the other turn modes re-open the floor. None when the
     caller doesn't currently hold it."""
@@ -262,10 +258,12 @@ def apply_floor_yield(
         return None
     policy = _normalize_speaker_policy(team.speaker_policy)
     nxt = _next_speaker(team, participant_id) if policy == "round_robin" else None
-    return team.model_copy(update={
-        "current_speaker_id": nxt,
-        "updated_at": _now(),
-    })
+    return team.model_copy(
+        update={
+            "current_speaker_id": nxt,
+            "updated_at": _now(),
+        }
+    )
 
 
 def apply_floor_grant(
@@ -283,17 +281,21 @@ def apply_floor_grant(
         return None
     if not _is_moderator(team, actor_participant):
         return None
-    return team.model_copy(update={
-        "current_speaker_id": target,
-        "floor_requests": [q for q in (team.floor_requests or []) if q != target],
-        "updated_at": _now(),
-    })
+    return team.model_copy(
+        update={
+            "current_speaker_id": target,
+            "floor_requests": [q for q in (team.floor_requests or []) if q != target],
+            "updated_at": _now(),
+        }
+    )
 
 
 def advance_round_robin(team: TeamRoomWire, participant_id: str) -> TeamRoomWire:
     """Hand the round_robin floor to the next eligible speaker after
     ``participant_id`` — called once a message lands."""
-    return team.model_copy(update={
-        "current_speaker_id": _next_speaker(team, participant_id),
-        "updated_at": _now(),
-    })
+    return team.model_copy(
+        update={
+            "current_speaker_id": _next_speaker(team, participant_id),
+            "updated_at": _now(),
+        }
+    )

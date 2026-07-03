@@ -106,9 +106,7 @@ def test_agent_scorecard_endpoint() -> None:
     assert data["ecosystem_readiness"]["score"] == 1.0
     assert data["parity_certification"]["ready"] is True
     assert data["parity_certification"]["passed"] == 17
-    assert data["parity_certification"]["by_kind"]["operational_excellence"][
-        "passed"
-    ] == 4
+    assert data["parity_certification"]["by_kind"]["operational_excellence"]["passed"] == 4
     assert data["parity_certification"]["by_kind"]["advantage"]["passed"] == 7
 
 
@@ -169,9 +167,7 @@ def test_kimi_swarm_certification_endpoint(monkeypatch, tmp_path) -> None:
     assert data["summary"]["benchmark_case_ready"] is True
     assert data["remaining_proof"][0]["id"] == "provider_backed_300_agent_load_test"
     assert "provider_load_test_proof" in data
-    assert data["provider_load_test_next_stage"]["schema"] == (
-        "octopus.kimi_swarm_next_stage.v1"
-    )
+    assert data["provider_load_test_next_stage"]["schema"] == ("octopus.kimi_swarm_next_stage.v1")
     assert data["provider_load_test_next_stage"]["next_stage"] == "provider_canary"
     assert data["provider_load_test_next_stage"]["provider_id"] == "kimi_coding"
     assert data["provider_load_test_next_stage"]["model"] == "kimi-for-coding"
@@ -204,9 +200,7 @@ def test_kimi_swarm_next_stage_endpoint_reports_default_kimi_coding_path(
     assert data["provider_configured"] is False
     assert data["can_run_recommended_payload"] is False
     assert data["recommended_payload"]["stage_id"] == "provider_canary"
-    assert data["recommended_preflight"]["blocking_failures"][0]["id"] == (
-        "provider_configured"
-    )
+    assert data["recommended_preflight"]["blocking_failures"][0]["id"] == ("provider_configured")
 
 
 def test_kimi_swarm_next_stage_endpoint_marks_configured_payload_runnable(
@@ -666,8 +660,7 @@ def test_e2e_surpass_certification_endpoint() -> None:
     assert data["summary"]["automation_octopus"] >= data["target_score"]
     assert data["summary"]["quality_ready"] == data["summary"]["quality_total"]
     assert any(
-        check["id"] == "scorecard_all_dimensions_surpassed"
-        and check["passed"] is True
+        check["id"] == "scorecard_all_dimensions_surpassed" and check["passed"] is True
         for check in data["checks"]
     )
 
@@ -696,10 +689,7 @@ def test_agent_scorecard_gaps_can_queue_real_baseline_backlog(
     assert data["scorecard"]["below_target_count"] == 14
     assert data["scorecard"]["external_gap_count"] == 0
     assert data["scorecard"]["focus_gap_count"] == 14
-    assert [
-        item["candidate_kind"]
-        for item in data["items"]
-    ] == [
+    assert [item["candidate_kind"] for item in data["items"]] == [
         "scorecard_gap:permissions_sandbox",
         "scorecard_gap:record_replay_audit",
         "scorecard_gap:governance_operator",
@@ -888,7 +878,8 @@ def test_automation_policy_rule_drafts_endpoint_and_install(
     drafts_response = client.get("/api/evolution/automation-policy-rule-drafts")
     drafts = drafts_response.json()
     draft = next(
-        item for item in drafts["drafts"]
+        item
+        for item in drafts["drafts"]
         if item["signed_payload"]["rule"]["tool"] == "computer_execute_token"
     )
     missing_confirm = client.post(
@@ -1070,9 +1061,7 @@ def test_browser_desktop_repair_recipe_evidence_endpoint(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert data["ok"] is True
-    assert data["schema"] == (
-        "octopus.browser_desktop_repair_recipe_evidence_attachment.v1"
-    )
+    assert data["schema"] == ("octopus.browser_desktop_repair_recipe_evidence_attachment.v1")
     assert data["item"]["id"] == "rq_recipe"
     assert data["evidence"]["provided"] == ["fresh_screenshot"]
     assert data["verification"]["status"] == "verified"

@@ -46,10 +46,7 @@ def default_runner(
         if cancel_event is not None and getattr(cancel_event, "is_set", lambda: False)():
             return ""
         time.sleep(0.01)
-    return (
-        f"[stub subagent={subagent_name}] "
-        f"received: {description[:120]}"
-    )
+    return f"[stub subagent={subagent_name}] received: {description[:120]}"
 
 
 def preview(value: str | None, max_chars: int = 420) -> str | None:
@@ -79,7 +76,8 @@ def build_plan(
     phase_index = 0
     while remaining:
         ready = sorted(
-            task_id for task_id in remaining
+            task_id
+            for task_id in remaining
             if all(dep in completed or dep not in entries for dep in entries[task_id].depends_on)
         )
         if not ready:
@@ -105,8 +103,7 @@ def build_plan(
             depends_on=list(entry.depends_on),
             owned_scope=[f"task:{entry.task_id}"],
             forbidden_scope=[
-                f"task:{task_id}" for task_id in all_task_ids
-                if task_id != entry.task_id
+                f"task:{task_id}" for task_id in all_task_ids if task_id != entry.task_id
             ],
             write_paths=list(entry.write_paths),
             success_criteria=[

@@ -42,8 +42,8 @@ _LOG = logging.getLogger("octopus.ambient_suggestions.scheduler")
 class AmbientSchedulerConfig:
     """Tunables for the ambient-suggestions background scheduler."""
 
-    interval_sec: int = 21600       # 6 hours; mirrors the flag default
-    initial_delay_sec: int = 300    # 5 minutes after boot
+    interval_sec: int = 21600  # 6 hours; mirrors the flag default
+    initial_delay_sec: int = 300  # 5 minutes after boot
     max_agents_per_tick: int = 10
     enabled: bool = True
 
@@ -154,9 +154,13 @@ def _discover_active_agents(project_root: Path) -> list[str]:
         scores_path = agent_path / "agent-core" / ".scores.jsonl"
         if not scores_path.is_file():
             continue
-        if _count_recent_turns(
-            scores_path, lookback_days=_ACTIVE_LOOKBACK_DAYS,
-        ) >= _MIN_TURNS_FOR_ACTIVE:
+        if (
+            _count_recent_turns(
+                scores_path,
+                lookback_days=_ACTIVE_LOOKBACK_DAYS,
+            )
+            >= _MIN_TURNS_FOR_ACTIVE
+        ):
             out.append(agent_id)
     return out
 
@@ -331,7 +335,8 @@ class AmbientScheduler:
             except Exception as exc:
                 _LOG.warning(
                     "ambient: generate_suggestions failed for %s: %s",
-                    agent_id, exc,
+                    agent_id,
+                    exc,
                 )
                 result["errors"].append(
                     {"agent_id": agent_id, "error": str(exc)},
@@ -377,9 +382,7 @@ class AmbientScheduler:
             except Exception as exc:  # noqa: BLE001
                 _LOG.warning("ambient suggestions tick failed: %s", exc)
                 with self._lock:
-                    self._last_error = (
-                        f"tick_failed: {type(exc).__name__}: {exc}"
-                    )
+                    self._last_error = f"tick_failed: {type(exc).__name__}: {exc}"
                 interval = self._current_interval()
             if self._stop_event.wait(timeout=interval):
                 return
@@ -390,6 +393,7 @@ class AmbientScheduler:
         runaway misconfiguration from busy-looping."""
         try:
             from runtime.platform import feature_flags as _ff
+
             raw = _ff.value(
                 "ui.ambient_suggestions_interval_sec",
                 self._config.interval_sec,

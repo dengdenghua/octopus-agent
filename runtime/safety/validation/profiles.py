@@ -27,6 +27,7 @@ Per-agent or per-session overrides can be added later (the
 gate accepts a ``profile`` kwarg that falls back to the global
 setting).
 """
+
 from __future__ import annotations
 
 from typing import Literal
@@ -43,9 +44,7 @@ def set_profile(name: ProfileName) -> None:
     unknown names · callers should surface that to the user
     rather than silently fall back."""
     if name not in _VALID_PROFILES:
-        raise ValueError(
-            f"unknown profile {name!r} · must be one of {_VALID_PROFILES}"
-        )
+        raise ValueError(f"unknown profile {name!r} · must be one of {_VALID_PROFILES}")
     get_provider().register_instance("constitution_profile", name)
 
 

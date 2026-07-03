@@ -23,6 +23,7 @@ Why not collapse them into one big format() method:
     each call site pick what it needs. Inlining would duplicate
     the prioritization rules.
 """
+
 from __future__ import annotations
 
 import time
@@ -79,11 +80,13 @@ def chat_completion_envelope(
         "object": "chat.completion",
         "created": int(time.time()),
         "model": model,
-        "choices": [{
-            "index": 0,
-            "message": {"role": "assistant", "content": reply},
-            "finish_reason": "stop",
-        }],
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": reply},
+                "finish_reason": "stop",
+            }
+        ],
         "usage": {
             "prompt_tokens": 0,
             "completion_tokens": 0,

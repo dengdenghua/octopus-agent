@@ -27,15 +27,11 @@ def test_kimi_swarm_certification_is_evidence_backed(tmp_path) -> None:
     assert report["summary"]["kimi_reference_tool_calls"] == 4000
     assert report["summary"]["benchmark_ready"] is True
     assert report["summary"]["benchmark_case_ready"] is True
-    assert report["provider_load_test_next_stage"]["schema"] == (
-        "octopus.kimi_swarm_next_stage.v1"
-    )
+    assert report["provider_load_test_next_stage"]["schema"] == ("octopus.kimi_swarm_next_stage.v1")
     assert report["provider_load_test_next_stage"]["next_stage"] == "provider_canary"
     assert report["provider_load_test_next_stage"]["provider_id"] == "kimi_coding"
     assert report["provider_load_test_next_stage"]["model"] == "kimi-for-coding"
-    assert report["provider_load_test_next_stage"]["recommended_payload"][
-        "real_provider"
-    ] is True
+    assert report["provider_load_test_next_stage"]["recommended_payload"]["real_provider"] is True
     assert report["provider_load_test_resume_plan"]["schema"] == (
         "octopus.kimi_swarm_resume_plan.v1"
     )
@@ -99,6 +95,7 @@ def test_kimi_swarm_certification_reports_provider_quota_limit(
     assert report["remaining_proof"][0]["failure_summary"]["primary_category"] == (
         "provider_quota_limit"
     )
-    assert report["provider_load_test_next_stage"]["latest_blocking_failure"][
-        "category"
-    ] == "provider_quota_limit"
+    assert (
+        report["provider_load_test_next_stage"]["latest_blocking_failure"]["category"]
+        == "provider_quota_limit"
+    )

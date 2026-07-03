@@ -74,10 +74,7 @@ def _ask_user_question(
     if not (2 <= len(cleaned) <= 6):
         return {
             "ok": False,
-            "error": (
-                f"options must contain 2..6 non-empty strings "
-                f"(got {len(cleaned)} valid)"
-            ),
+            "error": (f"options must contain 2..6 non-empty strings (got {len(cleaned)} valid)"),
             "error_type": "invalid_argument",
         }
 
@@ -87,16 +84,19 @@ def _ask_user_question(
     posted = False
     try:
         from runtime.platform.process.session import current_session
+
         session = current_session()
         if session is not None:
             emitter = (session.metadata or {}).get("event_emitter")
             if callable(emitter):
-                emitter({
-                    "type": "user_question",
-                    "question": question.strip(),
-                    "options": cleaned,
-                    "allow_other": bool(allow_other),
-                })
+                emitter(
+                    {
+                        "type": "user_question",
+                        "question": question.strip(),
+                        "options": cleaned,
+                        "allow_other": bool(allow_other),
+                    }
+                )
                 posted = True
     except Exception:  # noqa: BLE001 — best-effort emit must not fail the skill
         posted = False
@@ -135,8 +135,8 @@ def register_ask_user_question_skill(registry: SkillRegistry) -> int:
                 " - yes/no 工具批准: 用 request_approval。\n"
                 "关键参数: question (字符串, 非空); options (2-6 字符串列表, "
                 "每项是一个互斥的具体方案); allow_other (默认 True, 允许用户填自定义答案)。\n"
-                "示例: ask_user_question({\"question\":\"用哪个数据库?\","
-                "\"options\":[\"PostgreSQL\",\"SQLite\",\"MySQL\"]})"
+                '示例: ask_user_question({"question":"用哪个数据库?",'
+                '"options":["PostgreSQL","SQLite","MySQL"]})'
             ),
             affinity=["interaction", "ui", "ask_user"],
             cost_profile="low",

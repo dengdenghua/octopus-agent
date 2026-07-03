@@ -120,34 +120,15 @@ def compute_repo_context_quality(
         "ready": all(row["passed"] for row in checks),
         "checks": checks,
         "dirty_worktree": _dirty_worktree(base),
-        "next_actions": [
-            str(row["next_action"])
-            for row in checks
-            if not row["passed"]
-        ],
+        "next_actions": [str(row["next_action"]) for row in checks if not row["passed"]],
     }
 
 
 def _check_row(base: Path, check: RepoContextCheck) -> dict[str, Any]:
-    paths = [
-        {"path": path, "exists": (base / path).exists()}
-        for path in check.paths
-    ]
-    text = "\n".join(
-        _read_text(base / row["path"])
-        for row in paths
-        if row["exists"]
-    ).lower()
-    missing_paths = [
-        str(row["path"])
-        for row in paths
-        if not row["exists"]
-    ]
-    missing_terms = [
-        term
-        for term in check.required_terms
-        if term.lower() not in text
-    ]
+    paths = [{"path": path, "exists": (base / path).exists()} for path in check.paths]
+    text = "\n".join(_read_text(base / row["path"]) for row in paths if row["exists"]).lower()
+    missing_paths = [str(row["path"]) for row in paths if not row["exists"]]
+    missing_terms = [term for term in check.required_terms if term.lower() not in text]
     return {
         "id": check.id,
         "title": check.title,
@@ -181,11 +162,7 @@ def _dirty_worktree(base: Path) -> dict[str, Any]:
             "status_sample": [],
             "error": f"{type(exc).__name__}: {exc}",
         }
-    lines = [
-        line
-        for line in result.stdout.splitlines()
-        if line.strip()
-    ]
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
     return {
         "schema": "octopus.dirty_worktree_awareness.v1",
         "available": result.returncode == 0,

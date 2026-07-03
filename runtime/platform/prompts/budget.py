@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,7 +5,6 @@ from dataclasses import dataclass
 
 @dataclass
 class PromptBudgetConfig:
-
     # RuleExtractor → learned_rules_section
     learned_rules_max_chars: int = 2000
 

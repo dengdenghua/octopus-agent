@@ -62,6 +62,7 @@ AUTO_DEFAULT_INTERVAL_HOURS = 24.0
 @dataclass
 class TickResult:
     """One tick's outcome · per-recipe actions + timing."""
+
     ts: float
     elapsed_s: float
     recipes_scanned: int = 0
@@ -73,6 +74,7 @@ class TickResult:
 class SchedulerState:
     """Singleton state for the scheduler · exposed to the admin
     endpoint so the panel can show when the next tick is."""
+
     enabled: bool = False
     interval_hours: float = AUTO_DEFAULT_INTERVAL_HOURS
     min_uses: int = AUTO_MIN_USES
@@ -125,12 +127,11 @@ def run_tick(
     mu = min_uses if min_uses is not None else _STATE.min_uses
     ml = min_lead if min_lead is not None else _STATE.min_lead
     _stack = get_provider().get("stack")
-    j = journal if journal is not None else (
-        _stack.journal if _stack is not None else None
-    )
+    j = journal if journal is not None else (_stack.journal if _stack is not None else None)
     if j is None:
         return TickResult(
-            ts=t0, elapsed_s=0.0,
+            ts=t0,
+            elapsed_s=0.0,
             results=[{"ok": False, "error": "no journal bound"}],
         )
 
@@ -146,21 +147,29 @@ def run_tick(
         try:
             comps = collect_variant_stats(j, base_recipe_id=rid)
             if not comps:
-                results.append({
-                    "recipe_id": rid, "ok": False, "skipped": True,
-                    "reason": "no trajectories yet",
-                })
+                results.append(
+                    {
+                        "recipe_id": rid,
+                        "ok": False,
+                        "skipped": True,
+                        "reason": "no trajectories yet",
+                    }
+                )
                 continue
             proposal = propose_weights(
-                comps[0], min_uses=mu, min_lead=ml,
+                comps[0],
+                min_uses=mu,
+                min_lead=ml,
             )
             if proposal is None:
-                results.append({
-                    "recipe_id": rid, "ok": False, "skipped": True,
-                    "reason": (
-                        f"no winner yet (min_uses={mu} min_lead={ml})"
-                    ),
-                })
+                results.append(
+                    {
+                        "recipe_id": rid,
+                        "ok": False,
+                        "skipped": True,
+                        "reason": (f"no winner yet (min_uses={mu} min_lead={ml})"),
+                    }
+                )
                 continue
             action: dict[str, Any] = {
                 "recipe_id": rid,
@@ -183,17 +192,17 @@ def run_tick(
                         gate_mutation,
                         record_mutation,
                     )
+
                     gate_mutation(
                         kind=MutationKind.AUTO_PROMOTE,
-                        target=rid, autonomous=True,
+                        target=rid,
+                        autonomous=True,
                     )
                 except LockViolation as lv:
                     action["ok"] = False
                     action["applied"] = False
                     action["skipped"] = True
-                    action["reason"] = (
-                        f"gene-lock: {lv.code} · {lv.message}"
-                    )
+                    action["reason"] = f"gene-lock: {lv.code} · {lv.message}"
                     results.append(action)
                     continue
                 m = set_weights(rid, weights=proposal.weights)
@@ -222,18 +231,24 @@ def run_tick(
                         store.add(rec)
                     except Exception as exc:  # noqa: BLE001
                         _LOG.warning(
-                            "auto-tick: run record failed · %s", exc,
+                            "auto-tick: run record failed · %s",
+                            exc,
                         )
             results.append(action)
         except Exception as exc:  # noqa: BLE001
             _LOG.warning(
                 "auto-tick: recipe %s failed · %s: %s",
-                rid, type(exc).__name__, exc,
+                rid,
+                type(exc).__name__,
+                exc,
             )
-            results.append({
-                "recipe_id": rid, "ok": False,
-                "error": f"{type(exc).__name__}: {exc}",
-            })
+            results.append(
+                {
+                    "recipe_id": rid,
+                    "ok": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
 
     tr = TickResult(
         ts=t0,
@@ -275,9 +290,12 @@ def _scheduler_loop() -> None:
                 return
 
 
-def enable(*, interval_hours: float | None = None,
-           min_uses: int | None = None,
-           min_lead: float | None = None) -> dict[str, Any]:
+def enable(
+    *,
+    interval_hours: float | None = None,
+    min_uses: int | None = None,
+    min_lead: float | None = None,
+) -> dict[str, Any]:
     """Start the scheduler thread · idempotent (repeat calls
     adjust config without spawning a new thread)."""
     with _STATE._lock:  # noqa: SLF001
@@ -292,7 +310,8 @@ def enable(*, interval_hours: float | None = None,
             # return full state so the caller sees the new thresholds
             # (not just interval_hours).
             return {
-                "ok": True, "already_running": True,
+                "ok": True,
+                "already_running": True,
                 "interval_hours": _STATE.interval_hours,
                 "min_uses": _STATE.min_uses,
                 "min_lead": _STATE.min_lead,
@@ -329,13 +348,9 @@ def get_status() -> dict[str, Any]:
     with _STATE._lock:  # noqa: SLF001
         next_tick_at: float | None = None
         if _STATE.enabled and _STATE.last_tick:
-            next_tick_at = (
-                _STATE.last_tick.ts + _STATE.interval_hours * 3600
-            )
+            next_tick_at = _STATE.last_tick.ts + _STATE.interval_hours * 3600
         elif _STATE.enabled and _STATE.started_at:
-            next_tick_at = (
-                _STATE.started_at + _STATE.interval_hours * 3600
-            )
+            next_tick_at = _STATE.started_at + _STATE.interval_hours * 3600
         return {
             "enabled": _STATE.enabled,
             "interval_hours": _STATE.interval_hours,
@@ -352,7 +367,8 @@ def get_status() -> dict[str, Any]:
                     "recipes_promoted": _STATE.last_tick.recipes_promoted,
                     "results": _STATE.last_tick.results,
                 }
-                if _STATE.last_tick else None
+                if _STATE.last_tick
+                else None
             ),
         }
 

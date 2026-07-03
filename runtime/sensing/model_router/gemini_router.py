@@ -39,13 +39,12 @@ from .provider import Provider, ProviderCapabilities
 
 
 class GeminiModelRouter(Provider, ModelRouter):
-
     provider_name = "gemini"
     capabilities = ProviderCapabilities(
         supports_vision=True,
         supports_tool_use=True,
         supports_streaming=True,
-        supports_prompt_cache=False,   # Gemini has explicit cache API but not auto
+        supports_prompt_cache=False,  # Gemini has explicit cache API but not auto
         supports_structured_output=True,
         default_model="gemini-2.5-flash",
         pricing_hint="low",
@@ -65,20 +64,15 @@ class GeminiModelRouter(Provider, ModelRouter):
     ) -> None:
         if not HTTPX_AVAILABLE:
             raise GeminiRouterError(
-                "httpx not installed · `pip install httpx` "
-                "(or install extras: '.[web]')",
+                "httpx not installed · `pip install httpx` (or install extras: '.[web]')",
             )
         self.base_url = base_url.rstrip("/")
-        self.api_key = (
-            api_key if api_key is not None
-            else os.environ.get(env_var_name, "")
-        )
+        self.api_key = api_key if api_key is not None else os.environ.get(env_var_name, "")
         self.default_model = default_model
         self.timeout_seconds = timeout_seconds
         self.pricing_per_1k = pricing_per_1k or {}
         self.extra_headers = dict(extra_headers or {})
         self._client = client
-
 
     def call(self, request: ModelRequest) -> ModelResponse:
         model = request.model or self.default_model
@@ -92,7 +86,8 @@ class GeminiModelRouter(Provider, ModelRouter):
             params = {"key": self.api_key} if self.api_key else None
 
             client = (
-                self._client if self._client is not None
+                self._client
+                if self._client is not None
                 else httpx.Client(timeout=self.timeout_seconds)
             )
             try:
@@ -152,7 +147,6 @@ class GeminiModelRouter(Provider, ModelRouter):
                 provider="gemini",
             )
 
-
     def _build_payload(self, request: ModelRequest) -> dict[str, Any]:
         system_parts, contents = _split_system_and_contents(request.messages)
 
@@ -176,16 +170,18 @@ class GeminiModelRouter(Provider, ModelRouter):
         # ``parameters`` field follows a subset of JSON Schema;
         # our permissive ``{type:"object"}`` fits fine.
         if request.tools:
-            payload["tools"] = [{
-                "functionDeclarations": [
-                    {
-                        "name": t.name,
-                        "description": t.description,
-                        "parameters": t.input_schema,
-                    }
-                    for t in request.tools
-                ],
-            }]
+            payload["tools"] = [
+                {
+                    "functionDeclarations": [
+                        {
+                            "name": t.name,
+                            "description": t.description,
+                            "parameters": t.input_schema,
+                        }
+                        for t in request.tools
+                    ],
+                }
+            ]
             # toolConfig.functionCallingConfig.mode = "AUTO" is the
             # default when tools are present; we set it explicitly
             # to match Anthropic's ``tool_choice=auto`` semantics.
@@ -200,7 +196,6 @@ class GeminiModelRouter(Provider, ModelRouter):
             headers["x-goog-api-key"] = self.api_key
         headers.update(self.extra_headers)
         return headers
-
 
     def _extract_text(self, data: dict[str, Any]) -> tuple[str, str]:
         candidates = data.get("candidates") or []
@@ -233,6 +228,7 @@ class GeminiModelRouter(Provider, ModelRouter):
         · sufficient for echoing back in the next-turn
         ``functionResponse`` block."""
         from .models import ToolCall
+
         candidates = data.get("candidates") or []
         if not candidates:
             return []
@@ -249,24 +245,25 @@ class GeminiModelRouter(Provider, ModelRouter):
                 continue
             name = fn.get("name") or ""
             args = fn.get("args") or {}
-            out.append(ToolCall(
-                id=f"gemfn_{name}_{idx}",
-                name=str(name),
-                input=args if isinstance(args, dict) else {},
-            ))
+            out.append(
+                ToolCall(
+                    id=f"gemfn_{name}_{idx}",
+                    name=str(name),
+                    input=args if isinstance(args, dict) else {},
+                )
+            )
         return out
 
-
     def _estimate_cost(
-        self, model: str, input_tokens: int, output_tokens: int,
+        self,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
     ) -> float:
         pricing = self.pricing_per_1k.get(model)
         if pricing is not None:
             in_usd, out_usd = pricing
-            return (
-                (input_tokens / 1000) * in_usd
-                + (output_tokens / 1000) * out_usd
-            )
+            return (input_tokens / 1000) * in_usd + (output_tokens / 1000) * out_usd
         return (
             input_tokens * _DEFAULT_INPUT_USD_PER_TOKEN
             + output_tokens * _DEFAULT_OUTPUT_USD_PER_TOKEN
@@ -284,10 +281,7 @@ def _split_system_and_contents(
     contents: list[dict[str, Any]] = []
     for m in messages:
         if m.role == "system":
-            sys_text = (
-                m.content if isinstance(m.content, str)
-                else _flatten_text_blocks(m.content)
-            )
+            sys_text = m.content if isinstance(m.content, str) else _flatten_text_blocks(m.content)
             system_parts.append(sys_text)
             continue
 
@@ -295,15 +289,17 @@ def _split_system_and_contents(
 
         # Plain-string fast path.
         if isinstance(m.content, str):
-            contents.append({
-                "role": role,
-                "parts": [{"text": m.content}],
-            })
+            contents.append(
+                {
+                    "role": role,
+                    "parts": [{"text": m.content}],
+                }
+            )
             continue
 
         # Block-list content · translate per-block to Gemini parts.
         parts: list[dict[str, Any]] = []
-        for b in (m.content if isinstance(m.content, list) else []):
+        for b in m.content if isinstance(m.content, list) else []:
             if not isinstance(b, dict):
                 continue
             btype = b.get("type")
@@ -313,12 +309,14 @@ def _split_system_and_contents(
                     parts.append({"text": txt})
             elif btype == "tool_use":
                 # Assistant calling a function.
-                parts.append({
-                    "functionCall": {
-                        "name": b.get("name") or "",
-                        "args": b.get("input") or {},
-                    },
-                })
+                parts.append(
+                    {
+                        "functionCall": {
+                            "name": b.get("name") or "",
+                            "args": b.get("input") or {},
+                        },
+                    }
+                )
             elif btype == "tool_result":
                 # User returning function result. Gemini wants
                 # ``response`` as a JSON-serializable object, so
@@ -330,20 +328,23 @@ def _split_system_and_contents(
                     response_obj = raw
                 else:
                     response_obj = {"result": str(raw)}
-                parts.append({
-                    "functionResponse": {
-                        # Gemini identifies by name, not by id;
-                        # our synthesized ``gemfn_<name>_<idx>``
-                        # id from ``_extract_tool_calls`` encodes
-                        # the name so we peel it back out here.
-                        "name": (
-                            (b.get("tool_use_id") or "")
-                            .removeprefix("gemfn_")
-                            .rsplit("_", 1)[0]
-                        ) or "unknown",
-                        "response": response_obj,
-                    },
-                })
+                parts.append(
+                    {
+                        "functionResponse": {
+                            # Gemini identifies by name, not by id;
+                            # our synthesized ``gemfn_<name>_<idx>``
+                            # id from ``_extract_tool_calls`` encodes
+                            # the name so we peel it back out here.
+                            "name": (
+                                (b.get("tool_use_id") or "")
+                                .removeprefix("gemfn_")
+                                .rsplit("_", 1)[0]
+                            )
+                            or "unknown",
+                            "response": response_obj,
+                        },
+                    }
+                )
         if not parts:
             parts = [{"text": ""}]
         contents.append({"role": role, "parts": parts})
@@ -355,24 +356,25 @@ def _flatten_text_blocks(content: Any) -> str:
     if not isinstance(content, list):
         return ""
     return "".join(
-        str(b.get("text", ""))
-        for b in content
-        if isinstance(b, dict) and b.get("type") == "text"
+        str(b.get("text", "")) for b in content if isinstance(b, dict) and b.get("type") == "text"
     )
 
 
 def _attach_images_to_last_user_gemini(
-    contents: list[dict[str, Any]], images_b64: list[str],
+    contents: list[dict[str, Any]],
+    images_b64: list[str],
 ) -> None:
     for i in range(len(contents) - 1, -1, -1):
         if contents[i].get("role") == "user":
             existing_parts = list(contents[i].get("parts") or [])
             for b64 in images_b64:
-                existing_parts.append({
-                    "inlineData": {
-                        "mimeType": "image/png",
-                        "data": b64,
-                    },
-                })
+                existing_parts.append(
+                    {
+                        "inlineData": {
+                            "mimeType": "image/png",
+                            "data": b64,
+                        },
+                    }
+                )
             contents[i]["parts"] = existing_parts
             return

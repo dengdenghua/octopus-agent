@@ -37,6 +37,7 @@ Convention for the hook script:
 * exit 0 + ``{"allow": false, "reason": "..."}`` on stdout = veto.
 * non-zero exit = veto with stderr as the reason.
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -61,17 +62,19 @@ _logger = logging.getLogger(__name__)
 
 ToolEdgeEvent = Literal["preToolUse", "postToolUse"]
 
-_POST_WRITE_TOOLS: frozenset[str] = frozenset({
-    "write_file",
-    "create_file",
-    "write_text_file",
-    "append_text_file",
-    "edit_text_file",
-    "edit_file",
-    "multi_edit_file",
-    "edit_code",
-    "str_replace",
-})
+_POST_WRITE_TOOLS: frozenset[str] = frozenset(
+    {
+        "write_file",
+        "create_file",
+        "write_text_file",
+        "append_text_file",
+        "edit_text_file",
+        "edit_file",
+        "multi_edit_file",
+        "edit_code",
+        "str_replace",
+    }
+)
 
 _DIAGNOSTIC_RECORD_SCHEMA = "octopus.post_write_diagnostic_record.v1"
 
@@ -149,6 +152,7 @@ def post_write_diagnostics(
         suffix = target.suffix.lower()
         try:
             from runtime.execution.suckers.verify_skills import detect_project
+
             profile = detect_project(str(workspace_path))
         except Exception:  # noqa: BLE001 — diagnostics must never raise
             return None
@@ -193,6 +197,7 @@ def post_write_diagnostic_record(
             )
         try:
             from runtime.execution.suckers.verify_skills import detect_project
+
             profile = detect_project(str(workspace_path))
         except Exception as exc:  # noqa: BLE001
             return _diagnostic_record(
@@ -304,31 +309,39 @@ def regression_matrix_for_path(
 
     suffix = path.suffix.lower()
     if suffix == ".py":
-        checks.append(RegressionCheck(
-            kind="lint",
-            command=_python_module_cmd("ruff", f"check {rel}"),
-            reason="edited Python file",
-            priority=1,
-        ))
+        checks.append(
+            RegressionCheck(
+                kind="lint",
+                command=_python_module_cmd("ruff", f"check {rel}"),
+                reason="edited Python file",
+                priority=1,
+            )
+        )
         checks.extend(_python_regression_checks(rel, workspace))
     elif suffix in {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}:
         frontend_root = _frontend_root_for(path, workspace)
         checks.extend(_frontend_regression_checks(path, workspace, frontend_root))
     elif path.name in {"package.json", "pnpm-lock.yaml", "vite.config.ts", "tsconfig.json"}:
         frontend_root = _frontend_root_for(path, workspace)
-        checks.append(RegressionCheck(
-            kind="typecheck",
-            command=_frontend_cmd("pnpm check", frontend_root, workspace),
-            reason="frontend dependency or compiler configuration changed",
-            priority=1,
-        ))
+        checks.append(
+            RegressionCheck(
+                kind="typecheck",
+                command=_frontend_cmd("pnpm check", frontend_root, workspace),
+                reason="frontend dependency or compiler configuration changed",
+                priority=1,
+            )
+        )
     elif path.name in {"pyproject.toml", "requirements.txt", "uv.lock"}:
-        checks.append(RegressionCheck(
-            kind="test",
-            command=_python_module_cmd("pytest", "tests/test_config.py tests/test_cli_smoke.py -q"),
-            reason="Python project configuration changed",
-            priority=1,
-        ))
+        checks.append(
+            RegressionCheck(
+                kind="test",
+                command=_python_module_cmd(
+                    "pytest", "tests/test_config.py tests/test_cli_smoke.py -q"
+                ),
+                reason="Python project configuration changed",
+                priority=1,
+            )
+        )
 
     return RegressionMatrix(target=rel, checks=tuple(_dedupe_checks(checks)))
 
@@ -383,34 +396,40 @@ def _python_regression_checks(rel: str, workspace: Path) -> list[RegressionCheck
     checks: list[RegressionCheck] = []
     path = Path(rel)
     if rel.startswith("tests/") and path.name.startswith("test_"):
-        checks.append(RegressionCheck(
-            kind="test",
-            command=_python_module_cmd("pytest", f"{rel} -q"),
-            reason="edited test file",
-            priority=1,
-        ))
+        checks.append(
+            RegressionCheck(
+                kind="test",
+                command=_python_module_cmd("pytest", f"{rel} -q"),
+                reason="edited test file",
+                priority=1,
+            )
+        )
         return checks
 
     candidates = _python_test_candidates(rel)
     existing = [candidate for candidate in candidates if (workspace / candidate).is_file()]
     for test_path in existing[:4]:
-        checks.append(RegressionCheck(
-            kind="test",
-            command=_python_module_cmd("pytest", f"{test_path} -q"),
-            reason="mapped from edited Python module",
-            priority=1,
-        ))
+        checks.append(
+            RegressionCheck(
+                kind="test",
+                command=_python_module_cmd("pytest", f"{test_path} -q"),
+                reason="mapped from edited Python module",
+                priority=1,
+            )
+        )
 
     def add_existing(test_paths: list[str], *, reason: str) -> None:
         existing_paths = [test for test in test_paths if (workspace / test).is_file()]
         if not existing_paths:
             return
-        checks.append(RegressionCheck(
-            kind="test",
-            command=_python_module_cmd("pytest", f"{' '.join(existing_paths)} -q"),
-            reason=reason,
-            priority=2,
-        ))
+        checks.append(
+            RegressionCheck(
+                kind="test",
+                command=_python_module_cmd("pytest", f"{' '.join(existing_paths)} -q"),
+                reason=reason,
+                priority=2,
+            )
+        )
 
     if rel.startswith("runtime/sensing/gateway/"):
         add_existing(
@@ -463,32 +482,38 @@ def _frontend_regression_checks(
     checks: list[RegressionCheck] = []
     frontend_rel = _safe_relative(path, frontend_root)
     if ".test." in path.name or path.name.endswith(".test.ts") or path.name.endswith(".test.tsx"):
-        checks.append(RegressionCheck(
-            kind="test",
-            command=_frontend_cmd(f"pnpm vitest run {frontend_rel}", frontend_root, workspace),
-            reason="edited frontend test file",
-            priority=1,
-        ))
+        checks.append(
+            RegressionCheck(
+                kind="test",
+                command=_frontend_cmd(f"pnpm vitest run {frontend_rel}", frontend_root, workspace),
+                reason="edited frontend test file",
+                priority=1,
+            )
+        )
     else:
         for test_path in _frontend_test_candidates(path):
             if test_path.is_file():
-                checks.append(RegressionCheck(
-                    kind="test",
-                    command=_frontend_cmd(
-                        f"pnpm vitest run {_safe_relative(test_path, frontend_root)}",
-                        frontend_root,
-                        workspace,
-                    ),
-                    reason="co-located frontend test",
-                    priority=1,
-                ))
+                checks.append(
+                    RegressionCheck(
+                        kind="test",
+                        command=_frontend_cmd(
+                            f"pnpm vitest run {_safe_relative(test_path, frontend_root)}",
+                            frontend_root,
+                            workspace,
+                        ),
+                        reason="co-located frontend test",
+                        priority=1,
+                    )
+                )
                 break
-    checks.append(RegressionCheck(
-        kind="typecheck",
-        command=_frontend_cmd("pnpm check", frontend_root, workspace),
-        reason=f"TypeScript surface changed: {rel}",
-        priority=2,
-    ))
+    checks.append(
+        RegressionCheck(
+            kind="typecheck",
+            command=_frontend_cmd("pnpm check", frontend_root, workspace),
+            reason=f"TypeScript surface changed: {rel}",
+            priority=2,
+        )
+    )
     return checks
 
 
@@ -766,9 +791,7 @@ class ToolEdgeHookRunner:
         return _parse_tool_edge_result(result, spec)
 
 
-def _parse_tool_edge_result(
-    result: SandboxResult, spec: ToolEdgeHookSpec
-) -> ToolEdgeHookOutcome:
+def _parse_tool_edge_result(result: SandboxResult, spec: ToolEdgeHookSpec) -> ToolEdgeHookOutcome:
     text = (result.stdout or "").strip()
     decision: dict[str, Any] = {}
     if text.startswith("{") and text.endswith("}"):

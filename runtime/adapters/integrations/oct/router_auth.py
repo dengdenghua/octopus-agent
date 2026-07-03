@@ -204,7 +204,10 @@ def create_auth_router(
 
         logger.info(
             "oct email_login ok · total_ms=%d created=%s new=%s email=%s",
-            int((time.perf_counter() - t0) * 1000), created, is_new, mask_email(email),
+            int((time.perf_counter() - t0) * 1000),
+            created,
+            is_new,
+            mask_email(email),
         )
         _ = request  # audit hook placeholder
         return EmailLoginResponse(

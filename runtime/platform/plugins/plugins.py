@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -48,7 +47,6 @@ class PluginMeta(BaseModel):
 
 
 class Plugin:
-
     name: str = "unnamed-plugin"
     version: str = "0.1.0"
     description: str = ""
@@ -98,7 +96,6 @@ HookCallback = Callable[[HookContext], None]
 
 
 class PluginManager:
-
     def __init__(self, plugin_dir: str | Path | None = None) -> None:
         if plugin_dir is None:
             plugin_dir = Path(os.path.expanduser("~/.octopus/plugins"))
@@ -144,11 +141,14 @@ class PluginManager:
                 handler(ctx)
             except Exception as exc:
                 if point != HookPoint.ON_ERROR:
-                    self.fire(HookPoint.ON_ERROR, HookContext(
-                        hook=HookPoint.ON_ERROR,
-                        error=exc,
-                        data={"source_plugin": plugin.name, "original_hook": point.value},
-                    ))
+                    self.fire(
+                        HookPoint.ON_ERROR,
+                        HookContext(
+                            hook=HookPoint.ON_ERROR,
+                            error=exc,
+                            data={"source_plugin": plugin.name, "original_hook": point.value},
+                        ),
+                    )
 
         for callback in self._extra_hooks.get(point, []):
             with contextlib.suppress(Exception):
@@ -229,11 +229,7 @@ class PluginManager:
     def _find_plugin_class(mod: Any) -> type[Plugin] | None:
         for attr_name in dir(mod):
             attr = getattr(mod, attr_name)
-            if (
-                isinstance(attr, type)
-                and issubclass(attr, Plugin)
-                and attr is not Plugin
-            ):
+            if isinstance(attr, type) and issubclass(attr, Plugin) and attr is not Plugin:
                 return attr
         return None
 

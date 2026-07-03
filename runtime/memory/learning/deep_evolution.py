@@ -41,6 +41,7 @@ The wiring happens in ``app.py`` like the ephemeral runner — see
 exposes them as ``deep_reflect`` / ``deep_evolve`` skills with a
 clean error if the router isn't wired.
 """
+
 from __future__ import annotations
 
 import json
@@ -95,10 +96,9 @@ def _build_holdout_runner(*, model: str | None = None):
     any LLM. The returned callable uses ``LLMCaller.call`` (text mode,
     not JSON) and feeds the SOUL as a system prompt envelope.
     """
+
     def _runner(soul_text: str, prompt: str) -> str:
-        system = (
-            "<your-soul>\n" + (soul_text or "") + "\n</your-soul>"
-        )
+        system = "<your-soul>\n" + (soul_text or "") + "\n</your-soul>"
         text, _meta = _EVOLVE_CALLER.call(
             system=system,
             user=prompt,
@@ -107,6 +107,7 @@ def _build_holdout_runner(*, model: str | None = None):
             temperature=0.2,
         )
         return text or ""
+
     return _runner
 
 
@@ -134,7 +135,9 @@ Schema:
 
 
 def deep_reflect(
-    *, agent_id: str, window: int = 20,
+    *,
+    agent_id: str,
+    window: int = 20,
     model: str | None = None,
 ) -> dict[str, Any]:
     """LLM-judged review of recent turns. Cheap (single LLM call).
@@ -151,8 +154,7 @@ def deep_reflect(
     if get_provider().get("evolve_router") is None:
         return {
             "ok": False,
-            "error": "deep_reflect router not configured · "
-                     "call set_evolve_router(router) at boot",
+            "error": "deep_reflect router not configured · call set_evolve_router(router) at boot",
         }
     from pathlib import Path
 
@@ -162,6 +164,7 @@ def deep_reflect(
     from runtime.memory.learning.turn_scoring import (
         read_recent_scores,
     )
+
     scores = read_recent_scores(agent_id, limit=window)
     if not scores:
         return {
@@ -172,8 +175,7 @@ def deep_reflect(
                 "dominant_failure_mode": None,
                 "lesson_quality": "no_recent_lesson",
                 "action": "no_action",
-                "action_detail": "no scored turns yet · run a few "
-                                 "first then re-evaluate",
+                "action_detail": "no scored turns yet · run a few first then re-evaluate",
                 "rationale": "insufficient data",
             },
             "scores_count": 0,
@@ -277,7 +279,8 @@ Be conservative · "needs_more_data" is fine when uncertain."""
 
 
 def deep_evolve(
-    *, agent_id: str,
+    *,
+    agent_id: str,
     window: int = 20,
     candidates_per_round: int = 3,
     max_rounds: int = 1,
@@ -327,14 +330,15 @@ def deep_evolve(
     for round_i in range(max(1, int(max_rounds))):
         scores = read_recent_scores(agent_id, limit=window)
         if not scores:
-            audit.append({
-                "round": round_i + 1,
-                "skipped": "no scored turns yet",
-            })
+            audit.append(
+                {
+                    "round": round_i + 1,
+                    "skipped": "no scored turns yet",
+                }
+            )
             break
         soul_content = (
-            soul_path.read_text(encoding="utf-8")
-            if soul_path.exists() else "(no SOUL.md)"
+            soul_path.read_text(encoding="utf-8") if soul_path.exists() else "(no SOUL.md)"
         )
         heuristic = _analyze(agent_id, window=window)
 
@@ -364,19 +368,23 @@ def deep_evolve(
         total_out += int(p_meta.get("output_tokens", 0) or 0)
         cost_model = cost_model or p_meta.get("model") or model
         if proposal is None:
-            audit.append({
-                "round": round_i + 1,
-                "stage": "propose",
-                "error": p_meta.get("error") or p_meta.get("parse_error"),
-            })
+            audit.append(
+                {
+                    "round": round_i + 1,
+                    "stage": "propose",
+                    "error": p_meta.get("error") or p_meta.get("parse_error"),
+                }
+            )
             break
         candidates = proposal.get("candidates", [])
         if not candidates:
-            audit.append({
-                "round": round_i + 1,
-                "stage": "propose",
-                "result": "no candidates produced",
-            })
+            audit.append(
+                {
+                    "round": round_i + 1,
+                    "stage": "propose",
+                    "result": "no candidates produced",
+                }
+            )
             break
 
         # Judge each candidate.
@@ -398,10 +406,12 @@ def deep_evolve(
             )
             total_in += int(j_meta.get("input_tokens", 0) or 0)
             total_out += int(j_meta.get("output_tokens", 0) or 0)
-            judgments.append({
-                "candidate": cand,
-                "judgment": judgment or {"verdict": "judge_failed"},
-            })
+            judgments.append(
+                {
+                    "candidate": cand,
+                    "judgment": judgment or {"verdict": "judge_failed"},
+                }
+            )
 
         # Pick the best apply-verdict, prefer high confidence.
         winner = None
@@ -445,21 +455,32 @@ def deep_evolve(
                     from runtime.memory.learning.soul_holdout import (
                         gate as _holdout_gate,
                     )
+
                     entries = load_holdout(agent_id)
                     if entries:
                         lesson_line = str(cand.get("lesson") or "").strip()
                         proposed_soul = (
-                            soul_content.rstrip() + "\n- " + lesson_line + "\n"
-                        ) if lesson_line else soul_content
+                            (soul_content.rstrip() + "\n- " + lesson_line + "\n")
+                            if lesson_line
+                            else soul_content
+                        )
                         runner = _build_holdout_runner(model=model)
                         old_result = evaluate_against_holdout(
-                            agent_id, soul_content, runner, entries,
+                            agent_id,
+                            soul_content,
+                            runner,
+                            entries,
                         )
                         new_result = evaluate_against_holdout(
-                            agent_id, proposed_soul, runner, entries,
+                            agent_id,
+                            proposed_soul,
+                            runner,
+                            entries,
                         )
                         allowed, reason = _holdout_gate(
-                            new_result, old_result, GatePolicy(),
+                            new_result,
+                            old_result,
+                            GatePolicy(),
                         )
                         if not allowed:
                             round_record["applied"] = {
@@ -469,10 +490,7 @@ def deep_evolve(
                                 "reason": reason,
                                 "old_pass_rate": old_result.pass_rate,
                                 "new_pass_rate": new_result.pass_rate,
-                                "regressions": [
-                                    d for d in new_result.detail
-                                    if d["score"] == 0
-                                ],
+                                "regressions": [d for d in new_result.detail if d["score"] == 0],
                             }
                             audit.append(round_record)
                             continue
@@ -483,6 +501,7 @@ def deep_evolve(
                     _revert_soul,
                     _update_soul,
                 )
+
                 if kind == "add_lesson":
                     res = _update_soul(
                         lesson=str(cand.get("lesson") or ""),
@@ -492,6 +511,7 @@ def deep_evolve(
                     applied.append(round_record["applied"])
                     try:
                         from runtime.safety.evolution.proposal_ledger import ProposalLedger
+
                         _ledger = ProposalLedger()
                         _ledger.propose(
                             kind="deep_evolve_add_lesson",

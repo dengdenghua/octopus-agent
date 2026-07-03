@@ -10,6 +10,7 @@ The actual evolution algorithms (mutation, crossover, pareto frontier) live in
 The genome registry stores the configuration that evolution may modify, but the
 evolution engine itself is a separate module.
 """
+
 from __future__ import annotations
 
 import json
@@ -39,8 +40,10 @@ class GenomeRegistry:
     def _init_git(self) -> None:
         if not (self._dir / ".git").exists():
             subprocess.run(
-                ["git", "init"], cwd=str(self._dir),
-                capture_output=True, timeout=10,
+                ["git", "init"],
+                cwd=str(self._dir),
+                capture_output=True,
+                timeout=10,
             )
             _LOG.info("initialized git repo at %s", self._dir)
 
@@ -67,10 +70,7 @@ class GenomeRegistry:
         g2 = self.rollback(v2) or {}
         added = {k: v2[k] for k in g2 if k not in g1}
         removed = {k: g1[k] for k in g1 if k not in g2}
-        changed = {
-            k: {"from": g1[k], "to": g2[k]}
-            for k in g1 if k in g2 and g1[k] != g2[k]
-        }
+        changed = {k: {"from": g1[k], "to": g2[k]} for k in g1 if k in g2 and g1[k] != g2[k]}
         return {"added": added, "removed": removed, "changed": changed}
 
     def latest_version(self) -> int:
@@ -87,11 +87,13 @@ class GenomeRegistry:
         for v in reversed(versions[-limit:]):
             path = self._dir / f"v{v}.json"
             stat = path.stat()
-            entries.append({
-                "version": v,
-                "size_bytes": stat.st_size,
-                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-            })
+            entries.append(
+                {
+                    "version": v,
+                    "size_bytes": stat.st_size,
+                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                }
+            )
         return entries
 
     def _next_version(self) -> int:
@@ -109,13 +111,25 @@ class GenomeRegistry:
     def _git_add_and_commit(self, filename: str, message: str) -> None:
         try:
             subprocess.run(
-                ["git", "add", filename], cwd=str(self._dir),
-                capture_output=True, timeout=10,
+                ["git", "add", filename],
+                cwd=str(self._dir),
+                capture_output=True,
+                timeout=10,
             )
             subprocess.run(
-                ["git", "-c", "user.email=octopus@agent", "-c",
-                 "user.name=octopus-agent", "commit", "-m", message],
-                cwd=str(self._dir), capture_output=True, timeout=10,
+                [
+                    "git",
+                    "-c",
+                    "user.email=octopus@agent",
+                    "-c",
+                    "user.name=octopus-agent",
+                    "commit",
+                    "-m",
+                    message,
+                ],
+                cwd=str(self._dir),
+                capture_output=True,
+                timeout=10,
             )
         except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
             _LOG.warning("git commit failed: %s", exc)

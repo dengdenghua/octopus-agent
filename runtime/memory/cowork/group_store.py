@@ -90,8 +90,7 @@ class GroupStore:
         thread_id = require_cowork_id(thread_id, label="thread_id")
         with self._lock, self._connect() as conn:
             rows = conn.execute(
-                "SELECT event_json, seq, ts FROM group_events "
-                "WHERE thread_id = ? ORDER BY seq",
+                "SELECT event_json, seq, ts FROM group_events WHERE thread_id = ? ORDER BY seq",
                 (thread_id,),
             ).fetchall()
         out: list[MemberEvent] = []

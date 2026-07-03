@@ -5,6 +5,7 @@ This router provides the small local detector used by the frontend mode
 switcher so the runtime can start with concrete project signals instead
 of guessing from the prompt alone.
 """
+
 from __future__ import annotations
 
 import json
@@ -82,6 +83,7 @@ ARCHITECTURE_DIR_HINTS = {
 
 
 if FASTAPI_AVAILABLE:
+
     class VerificationCommand(BaseModel):
         kind: str
         command: str
@@ -265,8 +267,7 @@ def _scan_project(root: Path) -> Any:
                 break
 
     has_readme = any(
-        child.is_file() and child.name.lower().startswith("readme")
-        for child in top_children
+        child.is_file() and child.name.lower().startswith("readme") for child in top_children
     )
     git_commits = _git_commit_count(root)
     raw_score = min(
@@ -336,11 +337,13 @@ def _commands_from_package_json(root: Path, locks: list[str]) -> list[dict[str, 
         script_name = next((name for name in names if isinstance(scripts.get(name), str)), "")
         if not script_name:
             continue
-        commands.append({
-            "kind": kind,
-            "command": _node_script_command(package_manager, script_name),
-            "source": f"package.json scripts.{script_name}",
-        })
+        commands.append(
+            {
+                "kind": kind,
+                "command": _node_script_command(package_manager, script_name),
+                "source": f"package.json scripts.{script_name}",
+            }
+        )
     return commands
 
 
@@ -383,15 +386,19 @@ def _commands_from_makefile(root: Path) -> list[dict[str, str]]:
     for kind, names in aliases.items():
         target = next((name for name in names if name in targets), "")
         if target:
-            commands.append({
-                "kind": kind,
-                "command": f"make {target}",
-                "source": f"Makefile target {target}",
-            })
+            commands.append(
+                {
+                    "kind": kind,
+                    "command": f"make {target}",
+                    "source": f"Makefile target {target}",
+                }
+            )
     return commands
 
 
-def _commands_from_python(root: Path, manifests: list[str], locks: list[str]) -> list[dict[str, str]]:
+def _commands_from_python(
+    root: Path, manifests: list[str], locks: list[str]
+) -> list[dict[str, str]]:
     has_pyproject = "pyproject.toml" in {Path(path).name for path in manifests}
     has_requirements = "requirements.txt" in {Path(path).name for path in manifests}
     has_poetry = "poetry.lock" in {Path(path).name for path in locks + manifests}
@@ -411,29 +418,37 @@ def _commands_from_python(root: Path, manifests: list[str], locks: list[str]) ->
     )
     commands: list[dict[str, str]] = []
     if "pytest" in combined or (root / "tests").is_dir():
-        commands.append({
-            "kind": "test",
-            "command": pytest_command,
-            "source": "pyproject.toml/requirements/tests",
-        })
+        commands.append(
+            {
+                "kind": "test",
+                "command": pytest_command,
+                "source": "pyproject.toml/requirements/tests",
+            }
+        )
     if "ruff" in combined or "[tool.ruff" in combined:
-        commands.append({
-            "kind": "lint",
-            "command": f"{runner}ruff check .".strip(),
-            "source": "pyproject.toml/requirements",
-        })
+        commands.append(
+            {
+                "kind": "lint",
+                "command": f"{runner}ruff check .".strip(),
+                "source": "pyproject.toml/requirements",
+            }
+        )
     if "mypy" in combined or "[tool.mypy" in combined:
-        commands.append({
-            "kind": "typecheck",
-            "command": f"{runner}mypy .".strip(),
-            "source": "pyproject.toml/requirements",
-        })
+        commands.append(
+            {
+                "kind": "typecheck",
+                "command": f"{runner}mypy .".strip(),
+                "source": "pyproject.toml/requirements",
+            }
+        )
     if has_pyproject and ("build-system" in combined or "[build-system]" in combined):
-        commands.append({
-            "kind": "build",
-            "command": f"{runner}python -m build".strip(),
-            "source": "pyproject.toml build-system",
-        })
+        commands.append(
+            {
+                "kind": "build",
+                "command": f"{runner}python -m build".strip(),
+                "source": "pyproject.toml build-system",
+            }
+        )
     return commands
 
 

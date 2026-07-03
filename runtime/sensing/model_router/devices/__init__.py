@@ -62,11 +62,11 @@ class ConnectedDevice:
 
     device_id: str
     kind: DeviceKind = DeviceKind.CUSTOM
-    label: str = ""          # Human-readable name (e.g. "Pixel 8 Pro")
+    label: str = ""  # Human-readable name (e.g. "Pixel 8 Pro")
     state: DeviceState = DeviceState.ONLINE
     last_heartbeat: float = field(default_factory=time.time)
     connected_at: float = field(default_factory=time.time)
-    ws: Any = None           # WebSocket handle
+    ws: Any = None  # WebSocket handle
     pending_calls: dict[str, asyncio.Future] = field(default_factory=dict)
     capabilities: list[str] = field(default_factory=list)  # e.g. ["tap","swipe","browser_navigate"]
     metadata: dict[str, Any] = field(default_factory=dict)  # Extensible key-value store
@@ -94,21 +94,25 @@ class ConnectedDevice:
 @dataclass
 class AndroidDevice(ConnectedDevice):
     """An Android phone running Octopus Mobile."""
+
     kind: DeviceKind = DeviceKind.ANDROID
-    model: str = ""          # Device model name, e.g. "Pixel 8 Pro"
+    model: str = ""  # Device model name, e.g. "Pixel 8 Pro"
     android_version: str = ""
     sdk_version: int = 0
 
     def __post_init__(self) -> None:
         if not self.label:
             self.label = self.model or (
-                f"Android {self.android_version}" if self.android_version else f"Phone {self.device_id[:8]}"
+                f"Android {self.android_version}"
+                if self.android_version
+                else f"Phone {self.device_id[:8]}"
             )
 
 
 @dataclass
 class RobotDevice(ConnectedDevice):
     """A robot (arm / drone / rover / humanoid)."""
+
     kind: DeviceKind = DeviceKind.ROBOT
     firmware_version: str = ""
     joint_count: int = 0
@@ -116,12 +120,17 @@ class RobotDevice(ConnectedDevice):
 
     def __post_init__(self) -> None:
         if not self.label:
-            self.label = f"Robot {self.robot_type} {self.device_id[:8]}" if self.robot_type else f"Robot {self.device_id[:8]}"
+            self.label = (
+                f"Robot {self.robot_type} {self.device_id[:8]}"
+                if self.robot_type
+                else f"Robot {self.device_id[:8]}"
+            )
 
 
 @dataclass
 class CarDevice(ConnectedDevice):
     """A connected vehicle."""
+
     kind: DeviceKind = DeviceKind.CAR
     vin: str = ""
     make: str = ""
@@ -135,6 +144,7 @@ class CarDevice(ConnectedDevice):
 @dataclass
 class DesktopDevice(ConnectedDevice):
     """A desktop computer (self-referencing for local desktop_operator)."""
+
     kind: DeviceKind = DeviceKind.DESKTOP
     os_name: str = ""
     hostname: str = ""
@@ -147,13 +157,18 @@ class DesktopDevice(ConnectedDevice):
 @dataclass
 class IoTDevice(ConnectedDevice):
     """An IoT device (smart home / sensor / industrial controller)."""
+
     kind: DeviceKind = DeviceKind.IOT
     protocol: str = ""  # "zigbee" / "mqtt" / "ble" / "wifi"
     device_class: str = ""  # "light" / "sensor" / "switch" / "camera"
 
     def __post_init__(self) -> None:
         if not self.label:
-            self.label = f"IoT {self.device_class} {self.device_id[:8]}" if self.device_class else f"IoT {self.device_id[:8]}"
+            self.label = (
+                f"IoT {self.device_class} {self.device_id[:8]}"
+                if self.device_class
+                else f"IoT {self.device_id[:8]}"
+            )
 
 
 # ── Events ──────────────────────────────────────────────
@@ -208,11 +223,13 @@ class DevicePool:
 
     def register(self, device: ConnectedDevice) -> None:
         self._devices[device.device_id] = device
-        self._bus.publish(DeviceOnlineEvent(
-            device_id=device.device_id,
-            kind=device.kind.value,
-            label=device.label,
-        ))
+        self._bus.publish(
+            DeviceOnlineEvent(
+                device_id=device.device_id,
+                kind=device.kind.value,
+                label=device.label,
+            )
+        )
 
     def unregister(self, device_id: str, reason: str = "disconnect") -> None:
         dev = self._devices.pop(device_id, None)
@@ -221,11 +238,13 @@ class DevicePool:
                 if not fut.done():
                     fut.set_exception(ConnectionError(f"Device {device_id} disconnected"))
             dev.pending_calls.clear()
-            self._bus.publish(DeviceOfflineEvent(
-                device_id=device_id,
-                kind=dev.kind.value,
-                reason=reason,
-            ))
+            self._bus.publish(
+                DeviceOfflineEvent(
+                    device_id=device_id,
+                    kind=dev.kind.value,
+                    reason=reason,
+                )
+            )
 
     def get(self, device_id: str) -> ConnectedDevice | None:
         return self._devices.get(device_id)
@@ -305,7 +324,7 @@ class DevicePool:
             kind_hint = f" kind={kind.value}" if kind else ""
             raise RuntimeError(f"No online device available{kind_hint}")
 
-        call_id = f"call-{int(time.time()*1000)}-{id(dev)}"
+        call_id = f"call-{int(time.time() * 1000)}-{id(dev)}"
         fut: asyncio.Future = asyncio.get_event_loop().create_future()
         dev.pending_calls[call_id] = fut
 

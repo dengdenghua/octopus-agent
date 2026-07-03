@@ -155,8 +155,10 @@ def _lib_importable(name: str) -> bool:
 def available() -> bool:
     """True when SOME embedding backend is reachable — a remote endpoint is set,
     or fastembed / sentence-transformers is importable. Cheap; doesn't embed."""
-    return bool(embed_endpoint()) or _lib_importable("fastembed") or _lib_importable(
-        "sentence_transformers"
+    return (
+        bool(embed_endpoint())
+        or _lib_importable("fastembed")
+        or _lib_importable("sentence_transformers")
     )
 
 

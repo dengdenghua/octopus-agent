@@ -37,10 +37,7 @@ def _check_send_updates_support() -> bool:
     """Check if gog supports --send-updates flag (tonimelisma fork)."""
     try:
         result = subprocess.run(
-            ["gog", "calendar", "create", "--help"],
-            capture_output=True,
-            text=True,
-            timeout=10
+            ["gog", "calendar", "create", "--help"], capture_output=True, text=True, timeout=10
         )
         return "--send-updates" in result.stdout or "--send-updates" in result.stderr
     except Exception:
@@ -50,12 +47,7 @@ def _check_send_updates_support() -> bool:
 def _run_gog_command(args: list[str]) -> dict[str, Any]:
     """Run a gog command and return structured result."""
     try:
-        result = subprocess.run(
-            ["gog"] + args,
-            capture_output=True,
-            text=True,
-            timeout=120
-        )
+        result = subprocess.run(["gog"] + args, capture_output=True, text=True, timeout=120)
 
         if result.returncode == 0:
             # Try to parse as JSON
@@ -67,18 +59,17 @@ def _run_gog_command(args: list[str]) -> dict[str, Any]:
         else:
             error_text = result.stderr or result.stdout
             # Check for 404/410 (event deleted externally)
-            if any(x in error_text.lower() for x in ["404", "not found", "410", "gone", "does not exist", "deleted"]):
+            if any(
+                x in error_text.lower()
+                for x in ["404", "not found", "410", "gone", "does not exist", "deleted"]
+            ):
                 return {
                     "success": False,
                     "error": error_text,
                     "error_type": "not_found",
-                    "returncode": result.returncode
+                    "returncode": result.returncode,
                 }
-            return {
-                "success": False,
-                "error": error_text,
-                "returncode": result.returncode
-            }
+            return {"success": False, "error": error_text, "returncode": result.returncode}
     except subprocess.TimeoutExpired:
         return {"success": False, "error": "Command timed out"}
     except FileNotFoundError:
@@ -91,7 +82,7 @@ def search_events(
     calendar_id: str | None = None,
     from_dt: str | None = None,
     to_dt: str | None = None,
-    provider: str | None = None
+    provider: str | None = None,
 ) -> dict[str, Any]:
     """
     Search for calendar events in a date range.
@@ -127,7 +118,7 @@ def create_event(
     calendar_id: str | None = None,
     reminders: list[str] | None = None,
     rrule: str | None = None,
-    provider: str | None = None
+    provider: str | None = None,
 ) -> dict[str, Any]:
     """
     Create a new calendar event.
@@ -150,11 +141,18 @@ def create_event(
     calendar_id = calendar_id or get_calendar_id()
 
     if provider == "gog":
-        args = ["calendar", "create", calendar_id,
-                "--summary", summary,
-                "--from", from_dt,
-                "--to", to_dt,
-                "--json"]
+        args = [
+            "calendar",
+            "create",
+            calendar_id,
+            "--summary",
+            summary,
+            "--from",
+            from_dt,
+            "--to",
+            to_dt,
+            "--json",
+        ]
 
         if description:
             args.extend(["--description", description])
@@ -184,7 +182,7 @@ def update_event(
     description: str | None = None,
     add_attendees: list[str] | None = None,
     calendar_id: str | None = None,
-    provider: str | None = None
+    provider: str | None = None,
 ) -> dict[str, Any]:
     """
     Update an existing calendar event.
@@ -227,9 +225,7 @@ def update_event(
 
 
 def delete_event(
-    event_id: str,
-    calendar_id: str | None = None,
-    provider: str | None = None
+    event_id: str, calendar_id: str | None = None, provider: str | None = None
 ) -> dict[str, Any]:
     """
     Delete a calendar event.
@@ -294,8 +290,9 @@ def main():
         attendees = args.get("attendees", "").split(",") if args.get("attendees") else None
         reminders = args.get("reminders", "").split(",") if args.get("reminders") else None
         rrule = args.get("rrule")
-        result = create_event(summary, from_dt, to_dt, description, attendees,
-                             calendar_id, reminders, rrule, provider)
+        result = create_event(
+            summary, from_dt, to_dt, description, attendees, calendar_id, reminders, rrule, provider
+        )
 
     elif action == "update":
         event_id = args.get("event_id", "")
@@ -306,9 +303,12 @@ def main():
         from_dt = args.get("from")
         to_dt = args.get("to")
         description = args.get("description")
-        add_attendees = args.get("add_attendees", "").split(",") if args.get("add_attendees") else None
-        result = update_event(event_id, summary, from_dt, to_dt, description,
-                             add_attendees, calendar_id, provider)
+        add_attendees = (
+            args.get("add_attendees", "").split(",") if args.get("add_attendees") else None
+        )
+        result = update_event(
+            event_id, summary, from_dt, to_dt, description, add_attendees, calendar_id, provider
+        )
 
     elif action == "delete":
         event_id = args.get("event_id", "")

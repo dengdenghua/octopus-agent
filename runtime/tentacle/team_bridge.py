@@ -29,7 +29,10 @@ def get_or_create_tentacle_token() -> str:
         existing = path.read_text(encoding="utf-8").strip()
         if existing:
             return existing
-    except (FileNotFoundError, OSError):  # best-effort · no token on disk yet, fall through to mint one
+    except (
+        FileNotFoundError,
+        OSError,
+    ):  # best-effort · no token on disk yet, fall through to mint one
         pass
     token = secrets.token_urlsafe(18)
     try:
@@ -55,9 +58,7 @@ def device_id_from_ref(ref: str) -> str:
     return ref[len("mobile_") :] if ref.startswith("mobile_") else ref
 
 
-async def run_device_task(
-    coordinator: Any, tentacle_id: str, task: str
-) -> dict[str, Any]:
+async def run_device_task(coordinator: Any, tentacle_id: str, task: str) -> dict[str, Any]:
     """Run a natural-language task on one device. Mirrors the dashboard
     ``/task`` flow: decision engine → ordered tool calls → execute on device.
     Returns ``{ok, output, error}`` — never raises (failures are captured)."""

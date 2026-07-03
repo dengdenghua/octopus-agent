@@ -134,13 +134,26 @@ def test_cli_team_skill_judges_a_winner(monkeypatch) -> None:
             "count": 2,
             "succeeded": 2,
             "members": [
-                {"agent_id": "local_claude_code", "partner_id": "claude-code", "ok": True, "diff": "diff A", "files": ["a.py"]},
-                {"agent_id": "local_codex_cli", "partner_id": "codex-cli", "ok": True, "diff": "diff B", "files": ["b.py"]},
+                {
+                    "agent_id": "local_claude_code",
+                    "partner_id": "claude-code",
+                    "ok": True,
+                    "diff": "diff A",
+                    "files": ["a.py"],
+                },
+                {
+                    "agent_id": "local_codex_cli",
+                    "partner_id": "codex-cli",
+                    "ok": True,
+                    "diff": "diff B",
+                    "files": ["b.py"],
+                },
             ],
         },
     )
     monkeypatch.setattr(
-        ds, "_call_agent_vote",
+        ds,
+        "_call_agent_vote",
         lambda **kw: {"ok": True, "verdict": "local_codex_cli", "confidence": 0.8, "votes": []},
     )
     r = ds._run_cli_team(goal="implement X")
@@ -186,10 +199,13 @@ def test_router_requires_auth_when_enabled() -> None:
     client = TestClient(app)
 
     assert client.get("/api/cli-team/status").status_code == 401
-    assert client.get(
-        "/api/cli-team/status",
-        headers={"Authorization": "Bearer sk-alice"},
-    ).status_code == 200
+    assert (
+        client.get(
+            "/api/cli-team/status",
+            headers={"Authorization": "Bearer sk-alice"},
+        ).status_code
+        == 200
+    )
 
 
 # ── team-task routing: local_* assignees → run_cli_team ───────────────
@@ -257,8 +273,21 @@ def test_cli_team_artifacts_one_per_member_diff_first() -> None:
     arts = _cli_team_artifacts(
         {
             "members": [
-                {"agent_id": "local_codex_cli", "partner_id": "codex-cli", "ok": True, "diff": "DIFF-X", "files": ["x.py"]},
-                {"agent_id": "local_claude_code", "partner_id": "claude-code", "ok": False, "diff": "", "output": "n/c", "error": "boom"},
+                {
+                    "agent_id": "local_codex_cli",
+                    "partner_id": "codex-cli",
+                    "ok": True,
+                    "diff": "DIFF-X",
+                    "files": ["x.py"],
+                },
+                {
+                    "agent_id": "local_claude_code",
+                    "partner_id": "claude-code",
+                    "ok": False,
+                    "diff": "",
+                    "output": "n/c",
+                    "error": "boom",
+                },
             ]
         }
     )

@@ -55,9 +55,7 @@ def load_app_extensions(app: Any, context: AppExtensionContext) -> int:
             count += 1
             _logger.info("app extension loaded: %s:%s", module_name, func_name)
         except Exception as exc:  # noqa: BLE001 — 扩展失败不应拖垮启动
-            _logger.warning(
-                "app extension %s:%s failed: %s", module_name, func_name, exc
-            )
+            _logger.warning("app extension %s:%s failed: %s", module_name, func_name, exc)
     return count
 
 
@@ -72,7 +70,5 @@ def load_skill_extensions(registry: Any) -> int:
             total += int(getattr(module, func_name)(registry) or 0)
             _logger.info("skill extension loaded: %s:%s", module_name, func_name)
         except Exception as exc:  # noqa: BLE001
-            _logger.warning(
-                "skill extension %s:%s failed: %s", module_name, func_name, exc
-            )
+            _logger.warning("skill extension %s:%s failed: %s", module_name, func_name, exc)
     return total

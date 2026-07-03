@@ -21,6 +21,7 @@ write ransomware" or "asked to scrape a login-walled site") is
 a later iteration that will plug in behind the same Verdict
 interface.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -45,6 +46,7 @@ class Verdict:
                        never returned by the rule layer (will come
                        from LLM-judge layer).
     """
+
     action: ActionKind
     sanitized_text: str
     violations: list[RuleHit] = field(default_factory=list)
@@ -110,6 +112,7 @@ def _trust_signal_enabled(explicit: bool | None) -> bool:
     if explicit is not None:
         return explicit
     import os
+
     raw_env = os.environ.get("OCTOPUS_ENABLE_TRUST_SIGNAL", "").strip().lower()
     if raw_env in ("1", "true", "yes", "on"):
         return True
@@ -121,6 +124,7 @@ def _trust_signal_enabled(explicit: bool | None) -> bool:
             if not os.path.exists(path):
                 continue
             import yaml  # type: ignore[import-untyped]
+
             with open(path, encoding="utf-8") as fh:
                 data = yaml.safe_load(fh.read()) or {}
             if not isinstance(data, dict):
@@ -211,11 +215,11 @@ def check_outbound(
         # We explicitly log an attempt rather than silently
         # promoting · so misconfiguration gets noticed.
         journal_attempts = [
-            h for h in secret_hits
-            if clause_overrides.get(h.clause_id) == "journal"
+            h for h in secret_hits if clause_overrides.get(h.clause_id) == "journal"
         ]
         if journal_attempts:
             import logging
+
             logging.getLogger(
                 "runtime.safety.validation.gate",
             ).warning(
@@ -223,11 +227,8 @@ def check_outbound(
                 "secrets always block (hard floor)",
                 len(journal_attempts),
             )
-        reason = (
-            f"blocked: {len(secret_hits)} secret pattern(s) · "
-            + ", ".join(
-                sorted({h.description for h in secret_hits})
-            )
+        reason = f"blocked: {len(secret_hits)} secret pattern(s) · " + ", ".join(
+            sorted({h.description for h in secret_hits})
         )
         return Verdict(
             action="block",
@@ -257,10 +258,7 @@ def check_outbound(
     if pii_hits:
         # Clause-level "block" override · any hit on an overridden
         # clause forces a block (even if profile would just scrub).
-        blocking_hits = [
-            h for h in pii_hits
-            if clause_overrides.get(h.clause_id) == "block"
-        ]
+        blocking_hits = [h for h in pii_hits if clause_overrides.get(h.clause_id) == "block"]
         if blocking_hits:
             return Verdict(
                 action="block",
@@ -276,10 +274,7 @@ def check_outbound(
         # overridden, downgrade to audit-only allow. Mixed case
         # (some journal + some not) falls through to the profile's
         # rewrite behavior on the non-overridden hits.
-        non_journal_hits = [
-            h for h in pii_hits
-            if clause_overrides.get(h.clause_id) != "journal"
-        ]
+        non_journal_hits = [h for h in pii_hits if clause_overrides.get(h.clause_id) != "journal"]
         if not non_journal_hits and pii_hits:
             return Verdict(
                 action="allow",
@@ -293,11 +288,8 @@ def check_outbound(
             )
         if enforces_pii_rewrite():
             sanitized_hash = _hash(sanitized)
-            reason = (
-                f"rewrote: {len(pii_hits)} PII match(es) · "
-                + ", ".join(
-                    sorted({h.description for h in pii_hits})
-                )
+            reason = f"rewrote: {len(pii_hits)} PII match(es) · " + ", ".join(
+                sorted({h.description for h in pii_hits})
             )
             return Verdict(
                 action="rewrite",
@@ -313,10 +305,7 @@ def check_outbound(
             action="allow",
             sanitized_text=message,
             violations=list(pii_hits),
-            reason=(
-                f"audit_only: {len(pii_hits)} PII match(es) · "
-                "profile=lax · not rewritten"
-            ),
+            reason=(f"audit_only: {len(pii_hits)} PII match(es) · profile=lax · not rewritten"),
             original_text_hash=orig_hash,
         )
 
@@ -328,6 +317,7 @@ def check_outbound(
     try:
         from .judge import get_judge
         from .profiles import enforces_judge_verdict
+
         jv = get_judge()(message, destination, session)
         judge_hard = enforces_judge_verdict()
         if jv.action == "block":
@@ -382,6 +372,7 @@ def check_outbound(
                 classify_trust_score,
                 fetch_current_trust_score,
             )
+
             score = fetch_current_trust_score()
             if classify_trust_score(score) == "suspect":
                 return Verdict(

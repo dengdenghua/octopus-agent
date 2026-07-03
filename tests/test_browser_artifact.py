@@ -31,7 +31,7 @@ def _make_valid_png_b64(black_pixels: int = 1) -> str:
     rows = []
     for y in range(4):
         row = bytearray([0])
-        for pixel in pixels[y * 4: (y + 1) * 4]:
+        for pixel in pixels[y * 4 : (y + 1) * 4]:
             row.extend(pixel)
         rows.append(bytes(row))
     payload = b"".join(rows)
@@ -141,9 +141,7 @@ def test_screenshot_artifact_includes_replay_gate_case_for_blank_pixels(
 
     assert len(events) == 1
     assert events[0]["pixel_assertion"]["ok"] is False
-    assert events[0]["replay_gate_case"]["schema"] == (
-        "octopus.browser_pixel_replay_gate_case.v1"
-    )
+    assert events[0]["replay_gate_case"]["schema"] == ("octopus.browser_pixel_replay_gate_case.v1")
     assert events[0]["replay_gate_case"]["replay_gate"]["passed"] is False
     assert events[0]["replay_gate_queue"]["created"] == 1
 
@@ -152,9 +150,7 @@ def test_screenshot_artifact_includes_replay_gate_case_for_blank_pixels(
     assert queue["items"][0]["target_bucket"] == "browser_desktop_replay"
     assert queue["items"][0]["candidate_kind"] == "browser_pixel_replay_gate_case"
     assert queue["items"][0]["metadata"]["case_id"].startswith("browser-pixel::")
-    assert queue["items"][0]["metadata"]["replay"]["case_id"].startswith(
-        "browser-pixel::"
-    )
+    assert queue["items"][0]["metadata"]["replay"]["case_id"].startswith("browser-pixel::")
     assert len(queue["items"][0]["metadata"]["replay"]["fingerprint"]) == 16
     assert queue["items"][0]["metadata"]["replay_gate"]["passed"] is False
     assert queue["items"][0]["metadata"]["replay_gate_case"]["replay_gate"]["reason"] == (
@@ -222,7 +218,9 @@ def test_screenshot_ok_false_no_emit(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert not (tmp_path / "artifacts").exists()
 
 
-def test_screenshot_journal_broadcast_called(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_screenshot_journal_broadcast_called(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """When a journal with _broadcast is available, _emit_screenshot_artifact
     calls _broadcast with the artifact event dict."""
     from runtime.execution.suckers import browser_act_skills as bas
@@ -240,11 +238,14 @@ def test_screenshot_journal_broadcast_called(tmp_path: Path, monkeypatch: pytest
     def fake_active_journal():
         return fake_journal
 
-    with patch.dict("sys.modules", {
-        "runtime.sensing.gateway": MagicMock(
-            _active_streaming_journal=fake_active_journal,
-        ),
-    }):
+    with patch.dict(
+        "sys.modules",
+        {
+            "runtime.sensing.gateway": MagicMock(
+                _active_streaming_journal=fake_active_journal,
+            ),
+        },
+    ):
         # Re-import to pick up the patched module
         # We call _emit directly after patching _artifacts_root
         response = {
@@ -254,7 +255,9 @@ def test_screenshot_journal_broadcast_called(tmp_path: Path, monkeypatch: pytest
             "height": 900,
         }
         # Patch the journal lookup within the function
-        with patch("runtime.sensing.gateway._active_streaming_journal", fake_active_journal, create=True):
+        with patch(
+            "runtime.sensing.gateway._active_streaming_journal", fake_active_journal, create=True
+        ):
             bas._emit_screenshot_artifact(response)
 
     # The journal broadcast might not fire (patching the import is tricky),
@@ -293,6 +296,7 @@ def test_artifact_endpoint_serves_png(tmp_path: Path, monkeypatch: pytest.Monkey
     (artifacts / "screenshot-test.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 20)
 
     from runtime.execution.suckers import browser_act_skills as bas
+
     monkeypatch.setattr(bas, "_artifacts_root", lambda: artifacts)
 
     app = FastAPI()

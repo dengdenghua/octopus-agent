@@ -9,6 +9,7 @@ would be circular: lease needs replay evidence for its error responses,
 and control-session bookkeeping needs lease's ``_public_lease`` for
 ``_record_activity``'s default lease snapshot).
 """
+
 from __future__ import annotations
 
 from typing import Any

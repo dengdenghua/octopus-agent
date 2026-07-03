@@ -7,6 +7,7 @@ kimi_swarm_failure_taxonomy.py, and kimi_swarm_resume_planner.py (turning a
 ``provider_full_reference_resume`` config into the execution indices to
 run); used by kimi_swarm_load_test.py's public API.
 """
+
 from __future__ import annotations
 
 import concurrent.futures as _cf
@@ -50,9 +51,7 @@ def run_kimi_swarm_load_test(
     same replay schema.
     """
     cfg = config or KimiSwarmLoadTestConfig()
-    requested_agent_count, requested_step_count, requested_max_concurrency = (
-        _normalize_counts(cfg)
-    )
+    requested_agent_count, requested_step_count, requested_max_concurrency = _normalize_counts(cfg)
     stage = _resolve_stage(
         config=cfg,
         requested_agent_count=requested_agent_count,
@@ -290,8 +289,7 @@ def run_kimi_swarm_load_test(
                 action="kimi_swarm_load_step",
                 ok=bool(record["ok"]),
                 summary=(
-                    f"{record['agent_id']} {record['step_id']} "
-                    f"{'ok' if record['ok'] else 'failed'}"
+                    f"{record['agent_id']} {record['step_id']} {'ok' if record['ok'] else 'failed'}"
                 ),
                 detail=record,
             )
@@ -337,15 +335,9 @@ def run_kimi_swarm_load_test(
         "per_step_output_budget": per_step_output_budget,
         "elapsed_ms": elapsed_ms,
         "meets_kimi_reference": (
-            stage["id"] == "provider_full_reference"
-            and agent_count >= 300
-            and step_count >= 4000
+            stage["id"] == "provider_full_reference" and agent_count >= 300 and step_count >= 4000
         )
-        or (
-            not cfg.real_provider
-            and agent_count >= 300
-            and step_count >= 4000
-        ),
+        or (not cfg.real_provider and agent_count >= 300 and step_count >= 4000),
         "provider_backed": bool(cfg.real_provider),
         "control_session_replay": {
             "session_id": cfg.session_id,
@@ -361,8 +353,7 @@ def run_kimi_swarm_load_test(
         action="kimi_swarm_load_test_summary",
         ok=failures == 0,
         summary=(
-            f"Kimi swarm load test: {success_count}/{step_count} steps across "
-            f"{agent_count} agents"
+            f"Kimi swarm load test: {success_count}/{step_count} steps across {agent_count} agents"
         ),
         detail={**summary, "schema": _SUMMARY_EVIDENCE_SCHEMA},
     )

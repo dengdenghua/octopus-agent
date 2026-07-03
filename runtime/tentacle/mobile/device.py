@@ -32,26 +32,41 @@ logger = logging.getLogger(__name__)
 # 30 个 Android 技能的标准清单（与 Octopus Mobile 现有 BaseTool 一一对应）
 ANDROID_CAPABILITIES: list[str] = [
     # 基础操作
-    "android.tap", "android.swipe", "android.input_text",
-    "android.long_press", "android.system_key",
+    "android.tap",
+    "android.swipe",
+    "android.input_text",
+    "android.long_press",
+    "android.system_key",
     # 屏幕感知
-    "android.get_screen_info", "android.take_screenshot",
-    "android.find_node", "android.find_text",
+    "android.get_screen_info",
+    "android.take_screenshot",
+    "android.find_node",
+    "android.find_text",
     # 应用管理
-    "android.open_app", "android.install_app",
-    "android.get_installed_apps", "android.wait",
+    "android.open_app",
+    "android.install_app",
+    "android.get_installed_apps",
+    "android.wait",
     # 智能复合
-    "android.scroll_to_find", "android.detect_dialog",
-    "android.find_and_tap", "android.get_current_app",
+    "android.scroll_to_find",
+    "android.detect_dialog",
+    "android.find_and_tap",
+    "android.get_current_app",
     # 任务控制
-    "android.finish", "android.fail",
+    "android.finish",
+    "android.fail",
     # 文件 / 剪贴板
-    "android.read_file", "android.write_file",
-    "android.get_clipboard", "android.set_clipboard",
+    "android.read_file",
+    "android.write_file",
+    "android.get_clipboard",
+    "android.set_clipboard",
     # 浏览器（Phase 7，远期）
-    "android.browser.navigate", "android.browser.get_dom",
-    "android.browser.click", "android.browser.type",
-    "android.browser.screenshot", "android.browser.evaluate",
+    "android.browser.navigate",
+    "android.browser.get_dom",
+    "android.browser.click",
+    "android.browser.type",
+    "android.browser.screenshot",
+    "android.browser.evaluate",
     "android.browser.install_extension",
 ]
 
@@ -163,13 +178,9 @@ class MobileDevice:
         """
         start = time.time()
         if not self.is_online:
-            return ToolResult.fail(
-                call.call_id, -32011, "Device offline", 0
-            )
+            return ToolResult.fail(call.call_id, -32011, "Device offline", 0)
         if call.tool not in self._capabilities:
-            return ToolResult.fail(
-                call.call_id, -32003, f"Unknown tool: {call.tool}", 0
-            )
+            return ToolResult.fail(call.call_id, -32003, f"Unknown tool: {call.tool}", 0)
         if self._ws_server is None:
             # Mock 模式：模拟成功执行
             return ToolResult(

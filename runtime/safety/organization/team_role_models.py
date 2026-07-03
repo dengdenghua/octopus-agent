@@ -9,6 +9,7 @@ The team-role-models settings panel needs three tiny helpers:
 Storage lives in ``data/team_role_models.json`` beside the other small
 runtime-owned JSON settings files.
 """
+
 from __future__ import annotations
 
 import json
@@ -21,11 +22,13 @@ from runtime.platform.process.paths import app_paths
 from runtime.safety.organization.topology import Role
 
 _OVERRIDE_TIERS = frozenset({"cheap", "primary"})
-_DEFAULT_PRIMARY_ROLES = frozenset({
-    Role.PLANNER.value,
-    Role.GENERATOR.value,
-    Role.SYNTHESIZER.value,
-})
+_DEFAULT_PRIMARY_ROLES = frozenset(
+    {
+        Role.PLANNER.value,
+        Role.GENERATOR.value,
+        Role.SYNTHESIZER.value,
+    }
+)
 _ROLE_ORDER: tuple[str, ...] = (
     Role.PLANNER.value,
     Role.GENERATOR.value,
@@ -69,8 +72,7 @@ def _normalize_overrides(raw: object) -> dict[str, str]:
 
 def role_defaults() -> dict[str, str]:
     return {
-        role: ("primary" if role in _DEFAULT_PRIMARY_ROLES else "cheap")
-        for role in _ROLE_ORDER
+        role: ("primary" if role in _DEFAULT_PRIMARY_ROLES else "cheap") for role in _ROLE_ORDER
     }
 
 

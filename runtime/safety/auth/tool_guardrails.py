@@ -12,11 +12,15 @@ _LOG = logging.getLogger
 
 def _publish_tool_blocked_event(tool_name: str, reason: str) -> None:
     from runtime.platform.process.eventbus import ToolCallBlocked, publish_event
-    publish_event(ToolCallBlocked(
-        event_type="tool_call.blocked",
-        tool_name=tool_name,
-        reason=reason,
-    ), logger=_LOG)
+
+    publish_event(
+        ToolCallBlocked(
+            event_type="tool_call.blocked",
+            tool_name=tool_name,
+            reason=reason,
+        ),
+        logger=_LOG,
+    )
 
 
 _LOG = logging.getLogger("octopus.safety.tool_guardrails")
@@ -85,6 +89,7 @@ def classify_tool(tool_name: str) -> str:
     if tool_name in MUTATING_TOOLS:
         return "mutating"
     from runtime.safety.approval.approval_gate import is_dangerous_tool
+
     if is_dangerous_tool(tool_name):
         return "dangerous"
     return "unknown"
@@ -162,46 +167,66 @@ class ToolCallGuardrailController:
         return GuardrailDecision(action="allow", tool_name=tool_name)
 
     def _handle_failure(
-        self, sig: ToolCallSignature, tool_name: str, result: str | None,
+        self,
+        sig: ToolCallSignature,
+        tool_name: str,
+        result: str | None,
     ) -> GuardrailDecision:
         self._exact_failure_counts[sig] = self._exact_failure_counts.get(sig, 0) + 1
-        self._same_tool_failure_counts[tool_name] = self._same_tool_failure_counts.get(tool_name, 0) + 1
+        self._same_tool_failure_counts[tool_name] = (
+            self._same_tool_failure_counts.get(tool_name, 0) + 1
+        )
 
         exact_count = self._exact_failure_counts[sig]
         same_count = self._same_tool_failure_counts[tool_name]
 
         if self.config.hard_stop_enabled and exact_count >= self.config.exact_failure_block_after:
             return GuardrailDecision(
-                action="block", code="exact_failure_block",
+                action="block",
+                code="exact_failure_block",
                 message=f"Exact same call failed {exact_count}x · blocking to prevent loop",
-                tool_name=tool_name, count=exact_count, signature=sig,
+                tool_name=tool_name,
+                count=exact_count,
+                signature=sig,
             )
 
         if self.config.hard_stop_enabled and same_count >= self.config.same_tool_failure_halt_after:
             return GuardrailDecision(
-                action="halt", code="same_tool_halt",
+                action="halt",
+                code="same_tool_halt",
                 message=f"Tool '{tool_name}' failed {same_count}x · halting turn",
-                tool_name=tool_name, count=same_count, signature=sig,
+                tool_name=tool_name,
+                count=same_count,
+                signature=sig,
             )
 
         if self.config.warnings_enabled and exact_count >= self.config.exact_failure_warn_after:
             return GuardrailDecision(
-                action="warn", code="exact_failure_warn",
+                action="warn",
+                code="exact_failure_warn",
                 message=f"Exact same call failed {exact_count}x · possible loop",
-                tool_name=tool_name, count=exact_count, signature=sig,
+                tool_name=tool_name,
+                count=exact_count,
+                signature=sig,
             )
 
         if self.config.warnings_enabled and same_count >= self.config.same_tool_failure_warn_after:
             return GuardrailDecision(
-                action="warn", code="same_tool_warn",
+                action="warn",
+                code="same_tool_warn",
                 message=f"Tool '{tool_name}' failed {same_count}x · check approach",
-                tool_name=tool_name, count=same_count, signature=sig,
+                tool_name=tool_name,
+                count=same_count,
+                signature=sig,
             )
 
         return GuardrailDecision(action="allow", tool_name=tool_name, count=exact_count)
 
     def _handle_no_progress(
-        self, sig: ToolCallSignature, tool_name: str, result: str | None,
+        self,
+        sig: ToolCallSignature,
+        tool_name: str,
+        result: str | None,
     ) -> GuardrailDecision:
         prev_result, prev_count = self._no_progress.get(sig, ("", 0))
         new_count = prev_count + 1
@@ -213,16 +238,22 @@ class ToolCallGuardrailController:
 
         if self.config.hard_stop_enabled and new_count >= self.config.no_progress_block_after:
             return GuardrailDecision(
-                action="block", code="no_progress_block",
+                action="block",
+                code="no_progress_block",
                 message=f"Idempotent tool '{tool_name}' called {new_count}x with same args · no progress",
-                tool_name=tool_name, count=new_count, signature=sig,
+                tool_name=tool_name,
+                count=new_count,
+                signature=sig,
             )
 
         if self.config.warnings_enabled:
             return GuardrailDecision(
-                action="warn", code="no_progress_warn",
+                action="warn",
+                code="no_progress_warn",
                 message=f"Idempotent tool '{tool_name}' called {new_count}x · no progress detected",
-                tool_name=tool_name, count=new_count, signature=sig,
+                tool_name=tool_name,
+                count=new_count,
+                signature=sig,
             )
 
         return GuardrailDecision(action="allow", tool_name=tool_name, count=new_count)

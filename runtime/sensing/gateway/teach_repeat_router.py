@@ -251,7 +251,9 @@ def create_teach_repeat_router(
         _auth(request)
         if template_id not in _TEMPLATES:
             raise HTTPException(404, "Template not found")
-        _TEMPLATES[template_id]["use_count"] = int(_TEMPLATES[template_id].get("use_count") or 0) + 1
+        _TEMPLATES[template_id]["use_count"] = (
+            int(_TEMPLATES[template_id].get("use_count") or 0) + 1
+        )
         _TEMPLATES[template_id]["last_used_at"] = _now()
         return {
             "workflow_id": template_id,
@@ -279,7 +281,13 @@ def create_teach_repeat_router(
         if template is None:
             raise HTTPException(404, "Template not found")
         new_id = f"rec_{uuid4().hex[:12]}"
-        clone = {**template, "id": new_id, "name": f"{template['name']} copy", "created_at": _now(), "updated_at": _now()}
+        clone = {
+            **template,
+            "id": new_id,
+            "name": f"{template['name']} copy",
+            "created_at": _now(),
+            "updated_at": _now(),
+        }
         _TEMPLATES[new_id] = clone
         return clone
 

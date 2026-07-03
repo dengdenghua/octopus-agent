@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -23,7 +22,6 @@ class HotCacheEntry(BaseModel):
 
 
 class SessionHotCache:
-
     def __init__(
         self,
         path: str = "~/.octopus/hot_cache",
@@ -78,11 +76,7 @@ class SessionHotCache:
     def list_agents(self) -> list[str]:
         if not self._path.exists():
             return []
-        return [
-            f.stem
-            for f in self._path.glob("*.json")
-            if f.is_file()
-        ]
+        return [f.stem for f in self._path.glob("*.json") if f.is_file()]
 
     def _truncate(self, text: str) -> str:
         words = text.split()

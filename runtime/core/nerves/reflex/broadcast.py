@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -79,8 +78,7 @@ class ReflexBroadcaster:
         out: list[dict[str, Any]] = []
         for d in self._destinations:
             sanitized = {
-                k: v for k, v in d.items()
-                if k not in ("password", "client_secret", "token")
+                k: v for k, v in d.items() if k not in ("password", "client_secret", "token")
             }
             out.append(sanitized)
         return {"enabled": True, "destinations": out}
@@ -130,11 +128,15 @@ class ReflexBroadcaster:
                 # reflex hot path.
                 _LOG.warning(
                     "reflex broadcast destination %s failed: %s",
-                    d_kind, exc,
+                    d_kind,
+                    exc,
                 )
 
     def _publish_mqtt(
-        self, cfg: dict[str, Any], rule_id: str, payload_obj: dict[str, Any],
+        self,
+        cfg: dict[str, Any],
+        rule_id: str,
+        payload_obj: dict[str, Any],
     ) -> None:
         try:
             import paho.mqtt.publish as mqtt_publish  # type: ignore[import]
@@ -174,24 +176,34 @@ class ReflexBroadcaster:
             mqtt_publish.single(
                 topic=topic,
                 payload=json.dumps(payload_obj, ensure_ascii=False),
-                qos=qos, retain=retain,
-                hostname=host, port=port, auth=auth,
-                keepalive=2, client_id="octopus-reflex-broadcast",
+                qos=qos,
+                retain=retain,
+                hostname=host,
+                port=port,
+                auth=auth,
+                keepalive=2,
+                client_id="octopus-reflex-broadcast",
             )
         except Exception as exc:  # noqa: BLE001
             _LOG.warning(
                 "reflex mqtt publish failed (%s:%s topic=%s): %s",
-                host, port, topic, exc,
+                host,
+                port,
+                topic,
+                exc,
             )
 
     def _publish_webhook(
-        self, cfg: dict[str, Any], payload_obj: dict[str, Any],
+        self,
+        cfg: dict[str, Any],
+        payload_obj: dict[str, Any],
     ) -> None:
         """Fire a one-shot HTTP request · stdlib urllib so no extra
         deps. Reuses the same JSON envelope as the MQTT path · only
         the transport differs."""
         import urllib.error as _ue
         import urllib.request as _u
+
         url = str(cfg.get("url") or "").strip()
         if not url:
             return
@@ -199,7 +211,8 @@ class ReflexBroadcaster:
         timeout_s = float(cfg.get("timeout_ms") or 1000) / 1000.0
         body = json.dumps(payload_obj, ensure_ascii=False).encode("utf-8")
         req = _u.Request(
-            url, data=body if method != "GET" else None,
+            url,
+            data=body if method != "GET" else None,
             method=method,
             headers={"Content-Type": "application/json"},
         )
@@ -208,7 +221,9 @@ class ReflexBroadcaster:
                 status = getattr(resp, "status", 0)
                 if not (200 <= status < 300):
                     _LOG.warning(
-                        "reflex webhook publish %s → HTTP %s", url, status,
+                        "reflex webhook publish %s → HTTP %s",
+                        url,
+                        status,
                     )
         except _ue.HTTPError as exc:
             _LOG.warning("reflex webhook %s HTTP error: %s", url, exc)

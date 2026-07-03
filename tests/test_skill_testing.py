@@ -194,6 +194,7 @@ class TestTierThresholds:
 
     def test_regression_allows_95_percent(self):
         """Implementation note."""
+
         def handler(**kw):
             idx = kw.get("idx", 0)
             return "ok" if idx < 95 else "fail"

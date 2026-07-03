@@ -167,9 +167,7 @@ class TestWebFetchHappyPath:
 
     def test_truncates_to_max_chars(self) -> None:
         big_text = "<html><body><p>" + ("x " * 50000) + "</p></body></html>"
-        client = _MockClient(
-            get_response=_MockResponse(status_code=200, text=big_text)
-        )
+        client = _MockClient(get_response=_MockResponse(status_code=200, text=big_text))
         stub = _StubLLMCaller(answer="ok")
         result = _web_fetch(
             url="https://example.com/",
@@ -186,9 +184,7 @@ class TestWebFetchHappyPath:
 class TestWebFetchTrafilaturaMissing:
     def test_falls_back_to_regex_extraction(self) -> None:
         # _trafilatura_override=None forces fallback path even if the lib is present.
-        client = _MockClient(
-            get_response=_MockResponse(status_code=200, text=_SAMPLE_HTML)
-        )
+        client = _MockClient(get_response=_MockResponse(status_code=200, text=_SAMPLE_HTML))
         stub = _StubLLMCaller(answer="1000 rpm")
         result = _web_fetch(
             url="https://example.com/limits",
@@ -207,9 +203,7 @@ class TestWebFetchTrafilaturaMissing:
 @pytest.mark.skipif(not HTTPX_AVAILABLE, reason="httpx not installed")
 class TestWebFetchLLMFailure:
     def test_llm_raise_returns_llm_failed(self) -> None:
-        client = _MockClient(
-            get_response=_MockResponse(status_code=200, text=_SAMPLE_HTML)
-        )
+        client = _MockClient(get_response=_MockResponse(status_code=200, text=_SAMPLE_HTML))
         stub = _StubLLMCaller(raise_exc=RuntimeError("router down"))
         result = _web_fetch(
             url="https://example.com/",
@@ -224,9 +218,7 @@ class TestWebFetchLLMFailure:
         assert len(result["fallback_extract"]) > 0
 
     def test_llm_meta_error_returns_llm_failed(self) -> None:
-        client = _MockClient(
-            get_response=_MockResponse(status_code=200, text=_SAMPLE_HTML)
-        )
+        client = _MockClient(get_response=_MockResponse(status_code=200, text=_SAMPLE_HTML))
         stub = _StubLLMCaller(meta_error="no model resolved")
         result = _web_fetch(
             url="https://example.com/",

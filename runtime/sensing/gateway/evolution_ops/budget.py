@@ -40,9 +40,7 @@ def _budget_snapshot(journal: Any) -> dict[str, Any]:
         component = str(row.get("component") or "runtime")
         rows_by_component.setdefault(component, []).append(row)
         if component != "runtime":
-            rows_by_component.setdefault("runtime", []).append(
-                {**row, "aggregate_of": component}
-            )
+            rows_by_component.setdefault("runtime", []).append({**row, "aggregate_of": component})
 
     ordered_components = list(_BUDGET_COMPONENTS)
     ordered_components.extend(
@@ -88,9 +86,7 @@ def _budget_component(
     )
     breaker_state = "closed"
     if consecutive_failures >= _BUDGET_BREAKER_FAILURE_THRESHOLD and opened_at is not None:
-        cooldown_until = opened_at + timedelta(
-            seconds=_BUDGET_BREAKER_COOLDOWN_SECONDS
-        )
+        cooldown_until = opened_at + timedelta(seconds=_BUDGET_BREAKER_COOLDOWN_SECONDS)
         breaker_state = "open" if now < cooldown_until else "half_open"
 
     return {

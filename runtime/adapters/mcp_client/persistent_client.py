@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import asyncio
@@ -56,7 +55,6 @@ def _should_reconnect(exc: BaseException) -> bool:
 
 
 class PersistentStdioMCPClient(MCPClient):
-
     def __init__(
         self,
         config: MCPServerConfig,
@@ -64,9 +62,7 @@ class PersistentStdioMCPClient(MCPClient):
         connect_timeout_ms: int = 10_000,
     ) -> None:
         if not STDIO_AVAILABLE:
-            raise MCPClientError(
-                "mcp SDK not installed · `pip install mcp` or use MockMCPClient"
-            )
+            raise MCPClientError("mcp SDK not installed · `pip install mcp` or use MockMCPClient")
         self.config = config
         self.connect_timeout_ms = connect_timeout_ms
         self._closed = False
@@ -81,7 +77,6 @@ class PersistentStdioMCPClient(MCPClient):
         self._connect_sync()
         with _LIVE_LOCK:
             _LIVE_CLIENTS.add(self)
-
 
     def _start_background_loop(self) -> None:
         self._loop = asyncio.new_event_loop()
@@ -159,11 +154,12 @@ class PersistentStdioMCPClient(MCPClient):
         with contextlib.suppress(Exception):
             self.close()
 
-
     def list_tools(self) -> list[MCPTool]:
         self._check_alive()
         return self._call_with_reconnect(
-            self._list_tools_async, (), self.config.timeout_ms / 1000,
+            self._list_tools_async,
+            (),
+            self.config.timeout_ms / 1000,
         )
 
     def call_tool(self, name: str, args: dict[str, Any]) -> MCPInvocationResult:
@@ -174,7 +170,8 @@ class PersistentStdioMCPClient(MCPClient):
             span.set_attribute("octopus.mcp.tool", name)
             try:
                 result: MCPInvocationResult = self._call_with_reconnect(
-                    self._call_tool_async, (name, args),
+                    self._call_tool_async,
+                    (name, args),
                     self.config.timeout_ms / 1000,
                 )
             except Exception as e:  # noqa: BLE001
@@ -184,9 +181,7 @@ class PersistentStdioMCPClient(MCPClient):
                     error=f"{type(e).__name__}: {e}",
                     latency_ms=(time.monotonic() - t0) * 1000,
                 )
-            return result.model_copy(
-                update={"latency_ms": (time.monotonic() - t0) * 1000}
-            )
+            return result.model_copy(update={"latency_ms": (time.monotonic() - t0) * 1000})
 
     def _call_with_reconnect(
         self,
@@ -201,16 +196,15 @@ class PersistentStdioMCPClient(MCPClient):
                 raise
             _LOG.warning(
                 "MCP %s · connection lost (%s: %s) · reconnecting once",
-                self.config.name, type(e).__name__, e,
+                self.config.name,
+                type(e).__name__,
+                e,
             )
             try:
                 self._run_in_loop(self._reconnect_async(), self.connect_timeout_ms / 1000)
             except Exception as rc:  # noqa: BLE001
-                raise MCPClientError(
-                    f"reconnect failed: {type(rc).__name__}: {rc}"
-                ) from rc
+                raise MCPClientError(f"reconnect failed: {type(rc).__name__}: {rc}") from rc
             return self._run_in_loop(factory(*args), timeout)
-
 
     async def _list_tools_async(self) -> list[MCPTool]:
         result = await self._session.list_tools()
@@ -224,19 +218,14 @@ class PersistentStdioMCPClient(MCPClient):
             for t in result.tools
         ]
 
-    async def _call_tool_async(
-        self, name: str, args: dict[str, Any]
-    ) -> MCPInvocationResult:
+    async def _call_tool_async(self, name: str, args: dict[str, Any]) -> MCPInvocationResult:
         result = await self._session.call_tool(name, args)
         text = "\n".join(
             getattr(b, "text", "")
             for b in result.content
             if hasattr(b, "text") and getattr(b, "text", None)
         )
-        raw = [
-            b.model_dump() if hasattr(b, "model_dump") else str(b)
-            for b in result.content
-        ]
+        raw = [b.model_dump() if hasattr(b, "model_dump") else str(b) for b in result.content]
         is_err = bool(getattr(result, "isError", False))
         return MCPInvocationResult(
             tool_name=name,

@@ -14,9 +14,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(__file__))
 from json_store import load_json, save_json
 
-EVENTS_FILE = os.path.expanduser(
-    "~/.openclaw/workspace/memory/email-to-calendar/events.json"
-)
+EVENTS_FILE = os.path.expanduser("~/.openclaw/workspace/memory/email-to-calendar/events.json")
 
 
 def track_event(
@@ -24,17 +22,14 @@ def track_event(
     calendar_id: str = "primary",
     email_id: str = "",
     summary: str = "",
-    start: str = ""
+    start: str = "",
 ) -> None:
     """Track a new or updated event."""
     data = load_json(EVENTS_FILE, {"events": []})
     created_at = datetime.now().isoformat()
 
     # Check if event already tracked
-    existing = next(
-        (e for e in data["events"] if e["event_id"] == event_id),
-        None
-    )
+    existing = next((e for e in data["events"] if e["event_id"] == event_id), None)
 
     if existing:
         # Update existing entry
@@ -52,7 +47,7 @@ def track_event(
             "summary": summary,
             "start": start,
             "created_at": created_at,
-            "updated_at": None
+            "updated_at": None,
         }
         data["events"].append(new_event)
 
@@ -60,11 +55,7 @@ def track_event(
     print(f"Tracked event: {event_id}")
 
 
-def update_tracked_event(
-    event_id: str,
-    summary: str = "",
-    start: str = ""
-) -> None:
+def update_tracked_event(event_id: str, summary: str = "", start: str = "") -> None:
     """Update a tracked event's metadata."""
     data = load_json(EVENTS_FILE, {"events": []})
 
@@ -92,10 +83,7 @@ def delete_tracked_event(event_id: str) -> None:
     data = load_json(EVENTS_FILE, {"events": []})
 
     original_count = len(data.get("events", []))
-    data["events"] = [
-        e for e in data.get("events", [])
-        if e.get("event_id") != event_id
-    ]
+    data["events"] = [e for e in data.get("events", []) if e.get("event_id") != event_id]
     new_count = len(data["events"])
 
     if original_count == new_count:
@@ -110,7 +98,7 @@ def lookup_events(
     search_value: str = "",
     validate: bool = False,
     script_dir: str = "",
-    provider: str = ""
+    provider: str = "",
 ) -> None:
     """Look up tracked events and print as JSON."""
     import subprocess
@@ -129,10 +117,7 @@ def lookup_events(
         results = [e for e in events if e.get("event_id") == search_value]
     elif search_type == "summary":
         search_lower = search_value.lower()
-        results = [
-            e for e in events
-            if search_lower in e.get("summary", "").lower()
-        ]
+        results = [e for e in events if search_lower in e.get("summary", "").lower()]
     else:
         results = []
 
@@ -155,7 +140,7 @@ def lookup_events(
                         calendar_id=calendar_id,
                         from_dt=from_dt,
                         to_dt=to_dt,
-                        provider=provider if provider else None
+                        provider=provider if provider else None,
                     )
 
                     if search_result.get("success"):
@@ -164,11 +149,15 @@ def lookup_events(
                         if found:
                             valid_results.append(event)
                         else:
-                            print(f"Orphaned event detected: {event_id} - removing from tracking", file=sys.stderr)
+                            print(
+                                f"Orphaned event detected: {event_id} - removing from tracking",
+                                file=sys.stderr,
+                            )
                             if script_dir:
                                 subprocess.run(
                                     f'{script_dir}/delete_tracked_event.sh --event-id "{event_id}"',
-                                    shell=True, capture_output=True
+                                    shell=True,
+                                    capture_output=True,
                                 )
                     else:
                         # On error, assume event still exists
@@ -211,14 +200,14 @@ def main():
             calendar_id=args.get("calendar_id", "primary"),
             email_id=args.get("email_id", ""),
             summary=args.get("summary", ""),
-            start=args.get("start", "")
+            start=args.get("start", ""),
         )
 
     elif action == "update":
         update_tracked_event(
             event_id=args.get("event_id", ""),
             summary=args.get("summary", ""),
-            start=args.get("start", "")
+            start=args.get("start", ""),
         )
 
     elif action == "delete":
@@ -230,7 +219,7 @@ def main():
             search_value=args.get("value", ""),
             validate=args.get("validate", False) or args.get("validate", "") == "true",
             script_dir=args.get("script_dir", ""),
-            provider=args.get("provider", "")
+            provider=args.get("provider", ""),
         )
 
     else:

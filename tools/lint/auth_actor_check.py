@@ -36,6 +36,7 @@ Run::
     python tools/lint/auth_actor_check.py --strict   # exit 1 on regression
     python tools/lint/auth_actor_check.py --update-baseline  # rewrite baseline
 """
+
 from __future__ import annotations
 
 import argparse
@@ -72,8 +73,7 @@ NOQA_MARKER = "AUTH-OK: actor-agnostic"
 #     the endpoint is genuinely actor-agnostic.
 #
 # Last refresh: 2026-06-06 — see CHANGELOG.
-BASELINE: dict[str, int] = {
-}
+BASELINE: dict[str, int] = {}
 
 
 class _DiscardedAuthVisitor(ast.NodeVisitor):
@@ -90,8 +90,10 @@ class _DiscardedAuthVisitor(ast.NodeVisitor):
             return
         func = call.func
         name = (
-            func.id if isinstance(func, ast.Name)
-            else func.attr if isinstance(func, ast.Attribute)
+            func.id
+            if isinstance(func, ast.Name)
+            else func.attr
+            if isinstance(func, ast.Attribute)
             else None
         )
         if name not in AUTH_FUNCS:
@@ -99,11 +101,7 @@ class _DiscardedAuthVisitor(ast.NodeVisitor):
             return
         # Allow opt-out: noqa marker on the same line.
         line_no = node.lineno
-        line = (
-            self._source_lines[line_no - 1]
-            if 0 < line_no <= len(self._source_lines)
-            else ""
-        )
+        line = self._source_lines[line_no - 1] if 0 < line_no <= len(self._source_lines) else ""
         if NOQA_MARKER in line:
             self.generic_visit(node)
             return
@@ -168,17 +166,14 @@ def main() -> int:
         allowed = BASELINE.get(rel, 0)
         if current > allowed:
             regressions.append(
-                f"  {rel}: {current} bare _auth/_resolve_actor calls "
-                f"(baseline allows {allowed})"
+                f"  {rel}: {current} bare _auth/_resolve_actor calls (baseline allows {allowed})"
             )
     for rel, allowed in BASELINE.items():
         if rel not in counts:
             cleared.append(rel)
             continue
         if counts[rel] < allowed:
-            cleared.append(
-                f"{rel}: {counts[rel]} (baseline {allowed} — drop the baseline)"
-            )
+            cleared.append(f"{rel}: {counts[rel]} (baseline {allowed} — drop the baseline)")
 
     if not regressions:
         if cleared:
@@ -191,10 +186,7 @@ def main() -> int:
             )
         else:
             total = sum(counts.values())
-            print(
-                f"OK · {total} bare _auth(...) calls match baseline. "
-                "No regression."
-            )
+            print(f"OK · {total} bare _auth(...) calls match baseline. No regression.")
         return 0
 
     print(f"{len(regressions)} file(s) regressed:")

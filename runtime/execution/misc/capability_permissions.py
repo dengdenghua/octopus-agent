@@ -84,12 +84,14 @@ def list_capability_permissions(
     for group in CONTROLLED_CAPABILITY_GROUPS:
         known = sorted(skills_in_group(group))
         available = [name for name in known if name in registered]
-        out.append({
-            "id": group,
-            "enabled": is_capability_group_enabled(group),
-            "available": bool(available),
-            "skill_names": available or known,
-        })
+        out.append(
+            {
+                "id": group,
+                "enabled": is_capability_group_enabled(group),
+                "available": bool(available),
+                "skill_names": available or known,
+            }
+        )
     return out
 
 

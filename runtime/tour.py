@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import sys
@@ -37,10 +36,14 @@ def _ch_suckers(color: bool) -> None:
     register_all(reg)
     names = sorted(reg.all_names())
     print(_("cli.tour.skill_count", n=len(names)))
-    print(_("cli.tour.skill_preview", names=', '.join(names[:10])))
-    print(_color(
-        _("cli.tour.suckers_conclusion"), "32", color,
-    ))
+    print(_("cli.tour.skill_preview", names=", ".join(names[:10])))
+    print(
+        _color(
+            _("cli.tour.suckers_conclusion"),
+            "32",
+            color,
+        )
+    )
 
 
 def _ch_cerebrum(color: bool) -> None:
@@ -48,35 +51,49 @@ def _ch_cerebrum(color: bool) -> None:
     from runtime.core.cerebrum.planner import Rule
     from runtime.platform.models import ParsedIntent, SkillId
 
-    planner = StaticPlanner(rules=[
-        Rule(
-            name="describe",
-            intent_types=["task"],
-            keywords=["describe"],
-            skill_sequence=[
-                SkillId("list_cwd"), SkillId("read_file"), SkillId("count_words"),
-            ],
-        ),
-    ])
+    planner = StaticPlanner(
+        rules=[
+            Rule(
+                name="describe",
+                intent_types=["task"],
+                keywords=["describe"],
+                skill_sequence=[
+                    SkillId("list_cwd"),
+                    SkillId("read_file"),
+                    SkillId("count_words"),
+                ],
+            ),
+        ]
+    )
     intent = ParsedIntent(
-        raw="describe README", intent_type="task", normalized_goal="describe README",
+        raw="describe README",
+        intent_type="task",
+        normalized_goal="describe README",
     )
     graph = planner.plan(intent)
     print(_("cli.tour.cerebrum_nodes", n=len(graph.nodes)))
     for n in graph.nodes:
         print(_("cli.tour.cerebrum_node_detail", node_id=n.node_id, skill_ref=n.skill_ref))
-    print(_color(
-        _("cli.tour.cerebrum_conclusion"), "32", color,
-    ))
+    print(
+        _color(
+            _("cli.tour.cerebrum_conclusion"),
+            "32",
+            color,
+        )
+    )
 
 
 def _ch_ganglia(color: bool) -> None:
     print(_("cli.tour.ganglia_desc1"))
     print(_("cli.tour.ganglia_desc2"))
     print(_("cli.tour.ganglia_desc3"))
-    print(_color(
-        _("cli.tour.ganglia_conclusion"), "32", color,
-    ))
+    print(
+        _color(
+            _("cli.tour.ganglia_conclusion"),
+            "32",
+            color,
+        )
+    )
 
 
 def _ch_journal(color: bool) -> None:
@@ -88,9 +105,13 @@ def _ch_journal(color: bool) -> None:
         print(_("cli.tour.journal_desc1"))
     print(_("cli.tour.journal_desc2"))
     print(_("cli.tour.journal_desc3"))
-    print(_color(
-        _("cli.tour.journal_conclusion"), "32", color,
-    ))
+    print(
+        _color(
+            _("cli.tour.journal_conclusion"),
+            "32",
+            color,
+        )
+    )
 
 
 def _ch_hemolymph(color: bool) -> None:
@@ -100,9 +121,13 @@ def _ch_hemolymph(color: bool) -> None:
     ContextComposer(registry=SkillRegistry())
     print(_("cli.tour.hemolymph_desc1"))
     print(_("cli.tour.hemolymph_desc2"))
-    print(_color(
-        _("cli.tour.hemolymph_conclusion"), "32", color,
-    ))
+    print(
+        _color(
+            _("cli.tour.hemolymph_conclusion"),
+            "32",
+            color,
+        )
+    )
 
 
 def _ch_immunity(color: bool) -> None:
@@ -111,9 +136,13 @@ def _ch_immunity(color: bool) -> None:
     TrustEngine()
     print(_("cli.tour.immunity_desc1"))
     print(_("cli.tour.immunity_desc2"))
-    print(_color(
-        _("cli.tour.immunity_conclusion"), "32", color,
-    ))
+    print(
+        _color(
+            _("cli.tour.immunity_conclusion"),
+            "32",
+            color,
+        )
+    )
 
 
 def _ch_ink(color: bool) -> None:
@@ -123,9 +152,13 @@ def _ch_ink(color: bool) -> None:
     print(_("cli.tour.ink_desc1"))
     print(_("cli.tour.ink_desc2"))
     print(_("cli.tour.ink_desc3"))
-    print(_color(
-        _("cli.tour.ink_conclusion"), "32", color,
-    ))
+    print(
+        _color(
+            _("cli.tour.ink_conclusion"),
+            "32",
+            color,
+        )
+    )
 
 
 def _ch_hearts(color: bool) -> None:
@@ -139,27 +172,39 @@ def _ch_hearts(color: bool) -> None:
         print(_("cli.tour.hearts_desc1", holder=lease.holder_id, ttl=5, token=lease.fencing_token))
         print(_("cli.tour.hearts_desc2"))
         coord.release_lease(lease)
-    print(_color(
-        _("cli.tour.hearts_conclusion"), "32", color,
-    ))
+    print(
+        _color(
+            _("cli.tour.hearts_conclusion"),
+            "32",
+            color,
+        )
+    )
 
 
 def _ch_camouflage(color: bool) -> None:
     from runtime.safety.experiments import ABSplitter, Variant
 
-    splitter = ABSplitter([
-        Variant(name="baseline", weight=1.0, payload=None),
-        Variant(name="aggressive", weight=2.0, payload=None),
-    ])
+    splitter = ABSplitter(
+        [
+            Variant(name="baseline", weight=1.0, payload=None),
+            Variant(name="aggressive", weight=2.0, payload=None),
+        ]
+    )
     counts: dict[str, int] = {"baseline": 0, "aggressive": 0}
     for i in range(300):
         v = splitter.assign_for(f"t-{i}")
         counts[v.name] += 1
-    print(_("cli.tour.camouflage_desc1", baseline=counts['baseline'], aggressive=counts['aggressive']))
+    print(
+        _("cli.tour.camouflage_desc1", baseline=counts["baseline"], aggressive=counts["aggressive"])
+    )
     print(_("cli.tour.camouflage_desc2"))
-    print(_color(
-        _("cli.tour.camouflage_conclusion"), "32", color,
-    ))
+    print(
+        _color(
+            _("cli.tour.camouflage_conclusion"),
+            "32",
+            color,
+        )
+    )
 
 
 def _ch_skin(color: bool) -> None:
@@ -174,9 +219,14 @@ def _ch_skin(color: bool) -> None:
 
     with tempfile.TemporaryDirectory() as d:
         mgr = SensorManager(bus=bus)
-        mgr.register(FileWatcherSensor(
-            paths=[d], poll_interval_seconds=0.1, debounce_ms=0, force_polling=True,
-        ))
+        mgr.register(
+            FileWatcherSensor(
+                paths=[d],
+                poll_interval_seconds=0.1,
+                debounce_ms=0,
+                force_polling=True,
+            )
+        )
         mgr.start_all()
         try:
             time.sleep(0.2)
@@ -188,10 +238,16 @@ def _ch_skin(color: bool) -> None:
             mgr.stop_all()
     print(_("cli.tour.skin_desc1", n=len(events)))
     if events:
-        print(_("cli.tour.skin_desc2", change=events[0].change_type, name=Path(events[0].path).name))
-    print(_color(
-        _("cli.tour.skin_conclusion"), "32", color,
-    ))
+        print(
+            _("cli.tour.skin_desc2", change=events[0].change_type, name=Path(events[0].path).name)
+        )
+    print(
+        _color(
+            _("cli.tour.skin_conclusion"),
+            "32",
+            color,
+        )
+    )
 
 
 CHAPTERS: list[tuple[str, callable]] = [
@@ -217,12 +273,20 @@ def run_tour(
     all_ch = CHAPTERS if chapters is None else CHAPTERS[:chapters]
     total = len(all_ch)
     print()
-    print(_color(
-        _("cli.tour.title"), "1;36", color,
-    ))
-    print(_color(
-        _("cli.tour.subtitle", total=total), "2", color,
-    ))
+    print(
+        _color(
+            _("cli.tour.title"),
+            "1;36",
+            color,
+        )
+    )
+    print(
+        _color(
+            _("cli.tour.subtitle", total=total),
+            "2",
+            color,
+        )
+    )
     if pause:
         _pause(color)
 
@@ -234,14 +298,20 @@ def run_tour(
             print()
             return 0
         except Exception as e:  # noqa: BLE001
-            print(_color(_("cli.tour.chapter_failed", error=f"{type(e).__name__}: {e}"), "31", color))
+            print(
+                _color(_("cli.tour.chapter_failed", error=f"{type(e).__name__}: {e}"), "31", color)
+            )
         if pause and i < total:
             _pause(color)
 
     print()
     print(_color("═" * 60, "32", color))
-    print(_color(
-        _("cli.tour.end"), "1;32", color,
-    ))
+    print(
+        _color(
+            _("cli.tour.end"),
+            "1;32",
+            color,
+        )
+    )
     print(_color("═" * 60, "32", color))
     return 0

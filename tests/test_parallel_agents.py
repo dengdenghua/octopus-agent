@@ -28,20 +28,24 @@ from runtime.sensing.gateway.parallel_agents_router import (
 @pytest.fixture
 def echo_runner():
     """Implementation note."""
+
     def runner(description, *, subagent_name, context=None, cancel_event=None):
         return f"ECHO[{subagent_name}]: {description}"
+
     return runner
 
 
 @pytest.fixture
 def slow_runner():
     """Implementation note."""
+
     def runner(description, *, subagent_name, context=None, cancel_event=None):
         for _ in range(50):
             if cancel_event is not None and cancel_event.is_set():
                 return ""
             time.sleep(0.02)
         return f"slow-done: {description}"
+
     return runner
 
 
@@ -67,19 +71,21 @@ def app_client(orch):
 
 class TestDispatch:
     def test_dispatch_exposes_plan_and_work_contracts(self, orch):
-        batch = orch.dispatch([
-            DispatchTaskInput(
-                task_id="design",
-                description="draft the design",
-                subagent_name="Pro_Designer",
-            ),
-            DispatchTaskInput(
-                task_id="build",
-                description="implement the design",
-                subagent_name="Scaffold_Dev",
-                depends_on=["design"],
-            ),
-        ])
+        batch = orch.dispatch(
+            [
+                DispatchTaskInput(
+                    task_id="design",
+                    description="draft the design",
+                    subagent_name="Pro_Designer",
+                ),
+                DispatchTaskInput(
+                    task_id="build",
+                    description="implement the design",
+                    subagent_name="Scaffold_Dev",
+                    depends_on=["design"],
+                ),
+            ]
+        )
 
         assert batch.plan is not None
         assert batch.plan.strategy == "parallel_agents"
@@ -116,19 +122,21 @@ class TestDispatch:
 
         o = ParallelAgentOrchestrator(max_concurrency=2, task_runner=runner)
         try:
-            batch = o.dispatch([
-                DispatchTaskInput(
-                    task_id="a",
-                    description="first",
-                    subagent_name="alpha",
-                ),
-                DispatchTaskInput(
-                    task_id="b",
-                    description="second",
-                    subagent_name="beta",
-                    depends_on=["a"],
-                ),
-            ])
+            batch = o.dispatch(
+                [
+                    DispatchTaskInput(
+                        task_id="a",
+                        description="first",
+                        subagent_name="alpha",
+                    ),
+                    DispatchTaskInput(
+                        task_id="b",
+                        description="second",
+                        subagent_name="beta",
+                        depends_on=["a"],
+                    ),
+                ]
+            )
 
             for _ in range(100):
                 snap = o.get_batch(batch.batch_id)
@@ -207,10 +215,12 @@ class TestDispatch:
             o.shutdown(wait=False)
 
     def test_dispatch_runs_to_completion(self, orch):
-        batch = orch.dispatch([
-            DispatchTaskInput(description="hello", subagent_name="writer"),
-            DispatchTaskInput(description="world", subagent_name="coder"),
-        ])
+        batch = orch.dispatch(
+            [
+                DispatchTaskInput(description="hello", subagent_name="writer"),
+                DispatchTaskInput(description="world", subagent_name="coder"),
+            ]
+        )
         assert batch.total_tasks == 2
         assert batch.status in ("running", "completed")
         # Implementation note.
@@ -232,9 +242,7 @@ class TestDispatch:
         summary = snap.coordination_summary
         assert summary["schema"] == "octopus.parallel_batch_coordination.v1"
         assert summary["ready"] is True
-        assert summary["primary_task_id"] in {
-            result.task_id for result in snap.results
-        }
+        assert summary["primary_task_id"] in {result.task_id for result in snap.results}
         assert summary["recommended_next_action"] == "use_aggregated_result"
         assert summary["failed_task_ids"] == []
         assert summary["conflict_count"] == 0
@@ -271,10 +279,7 @@ class TestDispatch:
 
             snap = o.get_batch(batch.batch_id)
             assert snap is not None
-            tool_events = [
-                event for event in snap.event_log
-                if event.type == "tool_call"
-            ]
+            tool_events = [event for event in snap.event_log if event.type == "tool_call"]
             assert len(tool_events) == 1
             event = tool_events[0]
             assert event.lane == "computer"
@@ -293,18 +298,21 @@ class TestDispatch:
 
     def test_dispatch_duplicate_task_id_rejected(self, orch):
         with pytest.raises(ValueError, match="duplicate task_id"):
-            orch.dispatch([
-                DispatchTaskInput(task_id="same", description="first"),
-                DispatchTaskInput(task_id="same", description="second"),
-            ])
+            orch.dispatch(
+                [
+                    DispatchTaskInput(task_id="same", description="first"),
+                    DispatchTaskInput(task_id="same", description="second"),
+                ]
+            )
 
     def test_dispatch_accepts_dict_input(self, orch):
         """Implementation note."""
-        batch = orch.dispatch([
-            {"description": "dict-form", "subagent_name": "x"},
-        ])
+        batch = orch.dispatch(
+            [
+                {"description": "dict-form", "subagent_name": "x"},
+            ]
+        )
         assert batch.total_tasks == 1
-
 
     def test_dispatch_merges_extra_context(self):
         seen: list[dict] = []
@@ -340,10 +348,12 @@ class TestCancel:
         # Implementation note.
         o = ParallelAgentOrchestrator(max_concurrency=1, task_runner=slow_runner)
         try:
-            batch = o.dispatch([
-                DispatchTaskInput(description="t1"),
-                DispatchTaskInput(description="t2"),
-            ])
+            batch = o.dispatch(
+                [
+                    DispatchTaskInput(description="t1"),
+                    DispatchTaskInput(description="t2"),
+                ]
+            )
             # Implementation note.
             t2_id = batch.results[1].task_id
             ok = o.cancel_task(t2_id)
@@ -367,9 +377,7 @@ class TestCancel:
     def test_cancel_all(self, slow_runner):
         o = ParallelAgentOrchestrator(max_concurrency=2, task_runner=slow_runner)
         try:
-            o.dispatch([
-                DispatchTaskInput(description=f"t{i}") for i in range(5)
-            ])
+            o.dispatch([DispatchTaskInput(description=f"t{i}") for i in range(5)])
             o.cancel_all()
             # Implementation note.
             time.sleep(0.3)
@@ -382,9 +390,7 @@ class TestCancel:
 
 class TestStatus:
     def test_status_counts(self, orch):
-        batch = orch.dispatch([
-            DispatchTaskInput(description=f"t{i}") for i in range(3)
-        ])
+        batch = orch.dispatch([DispatchTaskInput(description=f"t{i}") for i in range(3)])
         # Implementation note.
         for _ in range(100):
             if orch.get_batch(batch.batch_id).status == "completed":
@@ -410,6 +416,7 @@ class TestSplit:
                 SplitResult,
                 SplitTask,
             )
+
             return SplitResult(
                 tasks=[
                     SplitTask(task_id="a", description="sub-a"),
@@ -419,6 +426,7 @@ class TestSplit:
                 total_levels=2,
                 is_parallelizable=True,
             )
+
         o = ParallelAgentOrchestrator(splitter=my_split)
         try:
             r = o.split("parent")
@@ -433,6 +441,7 @@ class TestRunnerError:
     def test_runner_exception_marks_failed(self):
         def boom(description, *, subagent_name, context=None, cancel_event=None):
             raise RuntimeError("boom!")
+
         o = ParallelAgentOrchestrator(max_concurrency=2, task_runner=boom)
         try:
             batch = o.dispatch([DispatchTaskInput(description="x")])
@@ -450,10 +459,7 @@ class TestRunnerError:
             assert snap.coordination_summary["failed_task_ids"] == [
                 snap.results[0].task_id,
             ]
-            assert (
-                snap.coordination_summary["recommended_next_action"]
-                == "retry_failed_tasks"
-            )
+            assert snap.coordination_summary["recommended_next_action"] == "retry_failed_tasks"
         finally:
             o.shutdown(wait=False)
 
@@ -484,7 +490,8 @@ class TestRunnerError:
         assert snap.completion_receipt["state"]["failed"] == 1
         assert "failed_work_items" in snap.completion_receipt["issues"]
         final_stage = [
-            event for event in snap.event_log
+            event
+            for event in snap.event_log
             if event.type == "stage_change" and event.stage == "final_report"
         ][-1]
         assert final_stage.status == "failed"
@@ -502,10 +509,12 @@ class TestRunnerError:
 
         o = ParallelAgentOrchestrator(max_concurrency=2, task_runner=runner)
         try:
-            batch = o.dispatch([
-                DispatchTaskInput(task_id="a", description="first", depends_on=["b"]),
-                DispatchTaskInput(task_id="b", description="second", depends_on=["a"]),
-            ])
+            batch = o.dispatch(
+                [
+                    DispatchTaskInput(task_id="a", description="first", depends_on=["b"]),
+                    DispatchTaskInput(task_id="b", description="second", depends_on=["a"]),
+                ]
+            )
 
             snap = o.get_batch(batch.batch_id)
             assert snap is not None
@@ -515,20 +524,15 @@ class TestRunnerError:
             assert calls == []
             assert snap.plan is not None
             assert any(
-                issue.startswith("dependency_cycle:")
-                for issue in snap.plan.validation_issues
+                issue.startswith("dependency_cycle:") for issue in snap.plan.validation_issues
             )
             assert snap.completion_receipt["ready"] is False
             assert "failed_work_items" in snap.completion_receipt["issues"]
             assert any(
-                issue.startswith("dependency_cycle:")
-                for issue in snap.completion_receipt["issues"]
+                issue.startswith("dependency_cycle:") for issue in snap.completion_receipt["issues"]
             )
             assert [r.status for r in snap.results] == ["failed", "failed"]
-            assert all(
-                (r.error or "").startswith("invalid_work_plan:")
-                for r in snap.results
-            )
+            assert all((r.error or "").startswith("invalid_work_plan:") for r in snap.results)
             assert snap.event_log[-1].type == "batch_complete"
             assert snap.event_log[-1].status == "failed"
             assert snap.event_log[-1].payload["failed_tasks"] == 2
@@ -597,19 +601,21 @@ class TestRecoverySnapshot:
 
         o = ParallelAgentOrchestrator(max_concurrency=2, task_runner=runner)
         try:
-            batch = o.dispatch([
-                DispatchTaskInput(task_id="ok", description="safe output"),
-                DispatchTaskInput(
-                    task_id="bad",
-                    description="explode",
-                    subagent_name="breaker",
-                ),
-                DispatchTaskInput(
-                    task_id="child",
-                    description="depends on failure",
-                    depends_on=["bad"],
-                ),
-            ])
+            batch = o.dispatch(
+                [
+                    DispatchTaskInput(task_id="ok", description="safe output"),
+                    DispatchTaskInput(
+                        task_id="bad",
+                        description="explode",
+                        subagent_name="breaker",
+                    ),
+                    DispatchTaskInput(
+                        task_id="child",
+                        description="depends on failure",
+                        depends_on=["bad"],
+                    ),
+                ]
+            )
 
             snapshot = None
             for _ in range(100):
@@ -664,8 +670,7 @@ class TestRecoverySnapshot:
             assert summary["cancelled_task_ids"] == ["child"]
             assert summary["dependency_blocked_task_ids"] == ["child"]
             assert (
-                summary["recommended_next_action"]
-                == "use_completed_outputs_and_retry_failed_tasks"
+                summary["recommended_next_action"] == "use_completed_outputs_and_retry_failed_tasks"
             )
             assert summary["checkpoint"]["batch_id"] == batch.batch_id
             assert data["safety"]["raw_subagent_outputs_included"] is False
@@ -870,7 +875,8 @@ class TestSSE:
         bid = r.json()["batch_id"]
 
         with app_client.stream(
-            "GET", f"/api/agents/parallel/stream/{bid}",
+            "GET",
+            f"/api/agents/parallel/stream/{bid}",
         ) as resp:
             assert resp.status_code == 200
             events: list[dict] = []
@@ -892,25 +898,15 @@ class TestSSE:
             assert "batch_complete" in types
             assert all(e["data"]["sequence"] for e in events)
             assert all(e["data"]["created_at"] for e in events)
-            stages = [
-                e["data"].get("stage")
-                for e in events
-                if e["event"] == "stage_change"
-            ]
+            stages = [e["data"].get("stage") for e in events if e["event"] == "stage_change"]
             assert "matching_agents" in stages
             assert "final_report" in stages
             stage_payloads = [
-                e["data"].get("payload", {})
-                for e in events
-                if e["event"] == "stage_change"
+                e["data"].get("payload", {}) for e in events if e["event"] == "stage_change"
             ]
             assert all("total_tasks" in payload for payload in stage_payloads)
             assert stage_payloads[-1]["completed_tasks"] == 1
-            task_payloads = [
-                e["data"]
-                for e in events
-                if e["event"] == "task_update"
-            ]
+            task_payloads = [e["data"] for e in events if e["event"] == "task_update"]
             assert task_payloads
             assert task_payloads[0]["lane"] == "agent"
             assert task_payloads[0]["node_ids"]
@@ -950,9 +946,7 @@ class TestSSE:
         assert sequences
         assert min(sequences) > last_seen
         assert sequences == [
-            event["sequence"]
-            for event in g["event_log"]
-            if event["sequence"] > last_seen
+            event["sequence"] for event in g["event_log"] if event["sequence"] > last_seen
         ]
 
     def test_stream_unknown_batch_404(self, app_client):

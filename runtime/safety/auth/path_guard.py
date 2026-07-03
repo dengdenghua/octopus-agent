@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import os
@@ -13,7 +12,7 @@ _SENSITIVE_HOME_SUFFIXES = (
     ".kube",
     ".docker",
     ".gnupg",
-    ".config/gh",      # GitHub CLI
+    ".config/gh",  # GitHub CLI
     ".netrc",
     ".pgpass",
 )
@@ -28,16 +27,36 @@ _SENSITIVE_ABS_PREFIXES_UNIX = (
     "/var/log/auth",
 )
 
-_DOS_DEVICE_NAMES = frozenset({
-    "con", "prn", "aux", "nul",
-    "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
-    "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
-})
+_DOS_DEVICE_NAMES = frozenset(
+    {
+        "con",
+        "prn",
+        "aux",
+        "nul",
+        "com1",
+        "com2",
+        "com3",
+        "com4",
+        "com5",
+        "com6",
+        "com7",
+        "com8",
+        "com9",
+        "lpt1",
+        "lpt2",
+        "lpt3",
+        "lpt4",
+        "lpt5",
+        "lpt6",
+        "lpt7",
+        "lpt8",
+        "lpt9",
+    }
+)
 
 
 @dataclass(frozen=True)
 class PathVerdict:
-
     allow: bool
     path: str
     resolved: str | None = None
@@ -75,7 +94,9 @@ def check_path(
             resolved.relative_to(base)
         except ValueError:
             return PathVerdict(
-                False, p_in, resolved=resolved_str,
+                False,
+                p_in,
+                resolved=resolved_str,
                 reason=f"escapes_sandbox: not under {base}",
             )
 
@@ -83,7 +104,10 @@ def check_path(
         reason = _check_sensitive(resolved, original=p_in)
         if reason:
             return PathVerdict(
-                False, p_in, resolved=resolved_str, reason=reason,
+                False,
+                p_in,
+                resolved=resolved_str,
+                reason=reason,
             )
 
         # User-defined denylist (Marvis-style "不可读取文件夹"). Applies
@@ -99,10 +123,13 @@ def check_path(
         # callers can still reach denied paths intentionally.
         try:
             from runtime.safety.auth.path_denylist import is_blocked
+
             blocked, prefix = is_blocked(resolved)
             if blocked:
                 return PathVerdict(
-                    False, p_in, resolved=resolved_str,
+                    False,
+                    p_in,
+                    resolved=resolved_str,
                     reason=f"denylist_blocked: {prefix}",
                 )
         except ImportError:  # noqa: BLE001 — denylist is optional, skip if missing
@@ -111,7 +138,10 @@ def check_path(
     # 5. must_exist
     if must_exist and not resolved.exists():
         return PathVerdict(
-            False, p_in, resolved=resolved_str, reason="not_found",
+            False,
+            p_in,
+            resolved=resolved_str,
+            reason="not_found",
         )
 
     return PathVerdict(True, p_in, resolved=resolved_str)
@@ -124,7 +154,9 @@ def is_safe_path(
     allow_sensitive: bool = False,
 ) -> bool:
     return check_path(
-        path, sandbox_dir=sandbox_dir, allow_sensitive=allow_sensitive,
+        path,
+        sandbox_dir=sandbox_dir,
+        allow_sensitive=allow_sensitive,
     ).allow
 
 
@@ -137,7 +169,7 @@ def _has_dos_device(path_str: str) -> bool:
     for part in normalized.split("/"):
         if not part:
             continue
-        stem = part.split(".")[0]   # con.txt → con
+        stem = part.split(".")[0]  # con.txt → con
         if stem in _DOS_DEVICE_NAMES:
             return True
     return False
@@ -155,7 +187,7 @@ def _abs_match_candidates(resolved_norm: str, original: str) -> list[str]:
     """
     candidates = [resolved_norm]
     if resolved_norm.startswith("/private/"):
-        candidates.append(resolved_norm[len("/private"):])
+        candidates.append(resolved_norm[len("/private") :])
     if original:
         in_norm = os.path.normpath(original).replace("\\", "/").lower()
         if in_norm.startswith("/"):
@@ -187,6 +219,5 @@ def _check_sensitive(resolved: Path, original: str = "") -> str:
             for suf in _SENSITIVE_HOME_SUFFIXES:
                 if rel_str == suf.lower() or rel_str.startswith(suf.lower() + "/"):
                     return f"sensitive_home_path: ~/{suf}"
-
 
     return ""

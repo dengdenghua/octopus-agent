@@ -342,8 +342,7 @@ def test_request_contract_probe_exposes_provider_specific_degradations() -> None
     assert "sampling_parameters_removed" in kimi_contract["risk_reasons"]
     assert "parallel_tool_calls_removed" in kimi_contract["risk_reasons"]
     capability_status = {
-        item["capability"]: item["status"]
-        for item in kimi_contract["capability_matrix"]
+        item["capability"]: item["status"] for item in kimi_contract["capability_matrix"]
     }
     assert capability_status["chat_completion"] == "pass"
     assert capability_status["tool_calling"] == "warn"
@@ -471,8 +470,7 @@ def test_retry_plan_drops_named_optional_fields_on_generic_proxy() -> None:
     )
 
     assert plan[0].reason == (
-        "drop_unsupported_fields:"
-        "parallel_tool_calls,response_format,stream_options"
+        "drop_unsupported_fields:parallel_tool_calls,response_format,stream_options"
     )
     assert plan[0].removed_fields == (
         "parallel_tool_calls",
@@ -499,8 +497,7 @@ def test_retry_plan_drops_optional_fields_on_unnamed_strict_validation_error() -
     )
 
     assert plan[0].reason == (
-        "drop_unsupported_fields:"
-        "parallel_tool_calls,response_format,stream_options"
+        "drop_unsupported_fields:parallel_tool_calls,response_format,stream_options"
     )
     assert plan[0].removed_fields == (
         "parallel_tool_calls",
@@ -559,16 +556,11 @@ def test_retry_plan_adds_combined_fallback_for_multi_field_rejections() -> None:
             "thinking": {"type": "enabled"},
         },
         status_code=400,
-        body=(
-            "unsupported reasoning_effort, tool_choice, temperature and "
-            "max_completion_tokens"
-        ),
+        body=("unsupported reasoning_effort, tool_choice, temperature and max_completion_tokens"),
         profile=profile,
     )
 
-    combined = next(
-        item for item in plan if item.reason == "combined_compatibility_fallback"
-    )
+    combined = next(item for item in plan if item.reason == "combined_compatibility_fallback")
     assert combined.removed_fields == (
         "max_tokens",
         "reasoning_effort",
@@ -620,17 +612,21 @@ def test_extract_reasoning_from_common_domestic_response_shapes() -> None:
     assert extract_openai_compat_reasoning({"reasoning": "glm"}) == "glm"
     assert extract_openai_compat_reasoning({"thinking": "minimax"}) == "minimax"
     assert (
-        extract_openai_compat_reasoning({
-            "reasoning_details": [{"text": "step 1"}, {"content": "step 2"}],
-        })
+        extract_openai_compat_reasoning(
+            {
+                "reasoning_details": [{"text": "step 1"}, {"content": "step 2"}],
+            }
+        )
         == "step 1\nstep 2"
     )
 
 
 def test_extract_usage_from_nonstandard_usage_keys() -> None:
-    assert extract_openai_compat_usage({
-        "choices": [{"usage": {"input_tokens": "12", "output_tokens": 7}}],
-    }) == (12, 7)
+    assert extract_openai_compat_usage(
+        {
+            "choices": [{"usage": {"input_tokens": "12", "output_tokens": 7}}],
+        }
+    ) == (12, 7)
 
 
 def test_parse_tool_call_arguments_accepts_json_and_python_repr() -> None:

@@ -64,21 +64,23 @@ def _model_benchmark_rows(journal: Any) -> list[dict[str, Any]]:
             - min(25.0, avg_cost * 250.0)
             - min(15.0, avg_tokens / 20000.0)
         )
-        scored.append({
-            "model": model,
-            "task_count": task_count,
-            "known_count": known_count,
-            "success_count": success_count,
-            "success_rate": success_rate,
-            "input_tokens": int(bucket["input_tokens"]),
-            "output_tokens": int(bucket["output_tokens"]),
-            "total_tokens": total_tokens,
-            "cost_usd": cost_usd,
-            "avg_tokens": avg_tokens,
-            "avg_cost": avg_cost,
-            "score": score,
-            "last_seen": bucket["last_seen"],
-        })
+        scored.append(
+            {
+                "model": model,
+                "task_count": task_count,
+                "known_count": known_count,
+                "success_count": success_count,
+                "success_rate": success_rate,
+                "input_tokens": int(bucket["input_tokens"]),
+                "output_tokens": int(bucket["output_tokens"]),
+                "total_tokens": total_tokens,
+                "cost_usd": cost_usd,
+                "avg_tokens": avg_tokens,
+                "avg_cost": avg_cost,
+                "score": score,
+                "last_seen": bucket["last_seen"],
+            }
+        )
 
     scored.sort(key=lambda r: (-float(r["score"]), str(r["model"])))
     best_model = scored[0]["model"] if scored else None
@@ -93,29 +95,27 @@ def _model_benchmark_rows(journal: Any) -> list[dict[str, Any]]:
             f"tasks: {row['task_count']} ({row['known_count']} with outcomes)",
             (
                 "success_rate: "
-                + (
-                    f"{row['success_rate']:.0%}"
-                    if row["success_rate"] is not None
-                    else "unknown"
-                )
+                + (f"{row['success_rate']:.0%}" if row["success_rate"] is not None else "unknown")
             ),
             f"tokens: {row['total_tokens']} total / {row['avg_tokens']:.0f} avg",
             f"cost: ${row['cost_usd']:.4f} total / ${row['avg_cost']:.4f} avg",
             f"score: {row['score']:.1f}",
         ]
-        rows.append({
-            "id": _stable_int_id(f"model:{row['model']}"),
-            "model_label": row["model"],
-            "created_at": _iso(row["last_seen"]),
-            "status": status,
-            "benchmark_notes": "\n".join(notes),
-            "task_count": row["task_count"],
-            "known_outcomes": row["known_count"],
-            "success_rate": row["success_rate"],
-            "avg_cost_usd": round(row["avg_cost"], 6),
-            "avg_tokens": round(row["avg_tokens"], 2),
-            "score": round(row["score"], 2),
-        })
+        rows.append(
+            {
+                "id": _stable_int_id(f"model:{row['model']}"),
+                "model_label": row["model"],
+                "created_at": _iso(row["last_seen"]),
+                "status": status,
+                "benchmark_notes": "\n".join(notes),
+                "task_count": row["task_count"],
+                "known_outcomes": row["known_count"],
+                "success_rate": row["success_rate"],
+                "avg_cost_usd": round(row["avg_cost"], 6),
+                "avg_tokens": round(row["avg_tokens"], 2),
+                "score": round(row["score"], 2),
+            }
+        )
     return rows
 
 
@@ -144,29 +144,29 @@ def _framework_benchmark_rows(journal: Any) -> list[dict[str, Any]]:
         else:
             decision = "prefer_a"
 
-        row_id = _stable_int_id(
-            f"framework:{pair['family_key']}:{a['label']}:{b['label']}"
+        row_id = _stable_int_id(f"framework:{pair['family_key']}:{a['label']}:{b['label']}")
+        rows.append(
+            {
+                "id": row_id,
+                "strategy_a": a["label"],
+                "strategy_b": b["label"],
+                "base_model": pair["base_model"],
+                "strategy_family": pair["strategy_family"],
+                "a_wins": a_success,
+                "b_wins": b_success,
+                "ties": ties,
+                "total_tasks": total,
+                "win_rate_b": round(win_rate_b, 4),
+                "decision": decision,
+                "a_assigned": a_total,
+                "b_assigned": b_total,
+                "a_success_rate": round(a_rate, 4),
+                "b_success_rate": round(b_rate, 4),
+                "a_avg_steps": round(float(a["steps"]) / a_total, 2) if a_total else 0.0,
+                "b_avg_steps": round(float(b["steps"]) / b_total, 2) if b_total else 0.0,
+                "last_seen": _iso(max(a["last_seen"], b["last_seen"])),
+            }
         )
-        rows.append({
-            "id": row_id,
-            "strategy_a": a["label"],
-            "strategy_b": b["label"],
-            "base_model": pair["base_model"],
-            "strategy_family": pair["strategy_family"],
-            "a_wins": a_success,
-            "b_wins": b_success,
-            "ties": ties,
-            "total_tasks": total,
-            "win_rate_b": round(win_rate_b, 4),
-            "decision": decision,
-            "a_assigned": a_total,
-            "b_assigned": b_total,
-            "a_success_rate": round(a_rate, 4),
-            "b_success_rate": round(b_rate, 4),
-            "a_avg_steps": round(float(a["steps"]) / a_total, 2) if a_total else 0.0,
-            "b_avg_steps": round(float(b["steps"]) / b_total, 2) if b_total else 0.0,
-            "last_seen": _iso(max(a["last_seen"], b["last_seen"])),
-        })
 
     rows.sort(
         key=lambda row: (
@@ -226,13 +226,15 @@ def _framework_benchmark_pairs(journal: Any) -> list[dict[str, Any]]:
         )
         anchor = buckets[0]
         for bucket in buckets[1:]:
-            pairs.append({
-                "family_key": family_key,
-                "base_model": family["base_model"],
-                "strategy_family": family["strategy_family"],
-                "a": anchor,
-                "b": bucket,
-            })
+            pairs.append(
+                {
+                    "family_key": family_key,
+                    "base_model": family["base_model"],
+                    "strategy_family": family["strategy_family"],
+                    "a": anchor,
+                    "b": bucket,
+                }
+            )
     return pairs
 
 

@@ -33,9 +33,7 @@ def compute_repair_route_quality(
     failed_verification_total = sum(int(row["failed_verification_count"]) for row in failures)
     code_change_failures = sum(1 for row in failures if row["has_code_changes"])
     unverified_code_changes = sum(
-        1
-        for row in failures
-        if row["has_code_changes"] and int(row["verification_count"]) <= 0
+        1 for row in failures if row["has_code_changes"] and int(row["verification_count"]) <= 0
     )
 
     routes = [
@@ -65,12 +63,13 @@ def compute_repair_route_quality(
             "avg_failed_verifications": round(
                 failed_verification_total / total,
                 3,
-            ) if total else 0.0,
+            )
+            if total
+            else 0.0,
             "code_change_failures": code_change_failures,
             "unverified_code_changes": unverified_code_changes,
             "top_failure_sources": [
-                {"source": source, "count": count}
-                for source, count in source_counts.most_common(5)
+                {"source": source, "count": count} for source, count in source_counts.most_common(5)
             ],
             "governed_route_count": sum(
                 1 for route in routes if route.get("governance", {}).get("covered")
@@ -89,48 +88,32 @@ def _quality_gate(
     promotion_candidates: list[dict[str, Any]],
     governance: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
-    governed_routes = {
-        route
-        for route, state in governance.items()
-        if state.get("covered")
-    }
+    governed_routes = {route for route, state in governance.items() if state.get("covered")}
     unresolved_routes = [
-        route
-        for route in routes
-        if str(route.get("route") or "") not in governed_routes
+        route for route in routes if str(route.get("route") or "") not in governed_routes
     ]
     unresolved_failures = sum(int(route.get("count") or 0) for route in unresolved_routes)
     unresolved_failed_verification_total = sum(
-        int(route.get("failed_verification_count") or 0)
-        for route in unresolved_routes
+        int(route.get("failed_verification_count") or 0) for route in unresolved_routes
     )
     unresolved_unverified_code_changes = sum(
-        int(route.get("unverified_code_changes") or 0)
-        for route in unresolved_routes
+        int(route.get("unverified_code_changes") or 0) for route in unresolved_routes
     )
-    top_share = (
-        float(unresolved_routes[0].get("share") or 0.0)
-        if unresolved_routes
-        else 0.0
-    )
+    top_share = float(unresolved_routes[0].get("share") or 0.0) if unresolved_routes else 0.0
     failure_denominator = max(1, total_failures)
-    failed_verification_rate = (
-        unresolved_failed_verification_total / failure_denominator
-    )
-    unverified_code_change_rate = (
-        unresolved_unverified_code_changes / failure_denominator
-    )
+    failed_verification_rate = unresolved_failed_verification_total / failure_denominator
+    unverified_code_change_rate = unresolved_unverified_code_changes / failure_denominator
     unresolved_candidates = [
         candidate
         for candidate in promotion_candidates
         if str(candidate.get("route") or "") not in governed_routes
     ]
     p0_candidate_count = sum(
-        1 for candidate in unresolved_candidates
-        if str(candidate.get("priority") or "") == "P0"
+        1 for candidate in unresolved_candidates if str(candidate.get("priority") or "") == "P0"
     )
     pending_governance_count = sum(
-        1 for state in governance.values()
+        1
+        for state in governance.values()
         if state.get("covered") and str(state.get("status") or "") == "pending"
     )
     penalty = min(
@@ -185,10 +168,7 @@ def queue_repair_route_promotion_candidates(
         review_queue_path=review_queue_path,
         limit=limit,
     )
-    candidates = [
-        row for row in report.get("promotion_candidates") or []
-        if isinstance(row, dict)
-    ]
+    candidates = [row for row in report.get("promotion_candidates") or [] if isinstance(row, dict)]
     if not candidates:
         return {
             "schema": PROMOTION_QUEUE_SCHEMA,
@@ -206,9 +186,7 @@ def queue_repair_route_promotion_candidates(
     from runtime.platform.process.paths import app_paths
 
     queue = ReviewQueue(
-        Path(review_queue_path)
-        if review_queue_path is not None
-        else app_paths().review_queue_path,
+        Path(review_queue_path) if review_queue_path is not None else app_paths().review_queue_path,
     )
     created = 0
     updated = 0
@@ -301,15 +279,11 @@ def _route_summary(
     rows = [row for row in failures if row["route"] == route]
     failed_verifications = sum(int(row["failed_verification_count"]) for row in rows)
     unverified = sum(
-        1
-        for row in rows
-        if row["has_code_changes"] and int(row["verification_count"]) <= 0
+        1 for row in rows if row["has_code_changes"] and int(row["verification_count"]) <= 0
     )
     sources = Counter(str(row["failure_source"]) for row in rows)
     plan_commands = Counter(
-        command
-        for row in rows
-        for command in row["verification_plan_commands"]
+        command for row in rows for command in row["verification_plan_commands"]
     )
     governed = governance.get(route) or {}
     return {
@@ -320,12 +294,10 @@ def _route_summary(
         "unverified_code_changes": unverified,
         "latest_ts": rows[-1]["ts"] if rows else "",
         "recommended_commands": [
-            {"command": command, "count": count}
-            for command, count in plan_commands.most_common(5)
+            {"command": command, "count": count} for command, count in plan_commands.most_common(5)
         ],
         "failure_sources": [
-            {"source": source, "count": count}
-            for source, count in sources.most_common(3)
+            {"source": source, "count": count} for source, count in sources.most_common(3)
         ],
         "examples": [
             {
@@ -336,7 +308,8 @@ def _route_summary(
             }
             for row in rows[-3:]
         ],
-        "governance": governed or {
+        "governance": governed
+        or {
             "covered": False,
             "status": "uncovered",
             "item_id": "",
@@ -390,32 +363,34 @@ def _promotion_candidates(routes: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if governance.get("covered")
             else "needs_operator_review"
         )
-        candidates.append({
-            "schema": PROMOTION_CANDIDATE_SCHEMA,
-            "route": str(route.get("route") or "unknown"),
-            "priority": priority,
-            "status": status,
-            "governance": governance,
-            "evidence": {
-                "count": count,
-                "share": share,
-                "failed_verification_count": failed_verifications,
-                "unverified_code_changes": unverified,
-                "failure_sources": route.get("failure_sources") or [],
-                "recommended_commands": recommended_commands,
-                "example_proposal_ids": [
-                    str(example.get("proposal_id") or "")
-                    for example in examples
-                    if isinstance(example, dict) and example.get("proposal_id")
-                ],
-            },
-            "promotion_gate": {
-                "schema": "octopus.repair_route_promotion_gate.v1",
-                "requires_operator_review": True,
-                "requires_passing_rerun": True,
-                "blocks_auto_promotion": failed_verifications > 0 or unverified > 0,
-            },
-        })
+        candidates.append(
+            {
+                "schema": PROMOTION_CANDIDATE_SCHEMA,
+                "route": str(route.get("route") or "unknown"),
+                "priority": priority,
+                "status": status,
+                "governance": governance,
+                "evidence": {
+                    "count": count,
+                    "share": share,
+                    "failed_verification_count": failed_verifications,
+                    "unverified_code_changes": unverified,
+                    "failure_sources": route.get("failure_sources") or [],
+                    "recommended_commands": recommended_commands,
+                    "example_proposal_ids": [
+                        str(example.get("proposal_id") or "")
+                        for example in examples
+                        if isinstance(example, dict) and example.get("proposal_id")
+                    ],
+                },
+                "promotion_gate": {
+                    "schema": "octopus.repair_route_promotion_gate.v1",
+                    "requires_operator_review": True,
+                    "requires_passing_rerun": True,
+                    "blocks_auto_promotion": failed_verifications > 0 or unverified > 0,
+                },
+            }
+        )
     return candidates
 
 
@@ -450,7 +425,7 @@ def _repair_route_governance(
         candidate = metadata.get("promotion_candidate")
         if not isinstance(candidate, dict):
             candidate = {}
-        route = str(candidate.get("route") or candidate_kind[len(prefix):]).strip()
+        route = str(candidate.get("route") or candidate_kind[len(prefix) :]).strip()
         if not route:
             continue
         status = str(row.get("status") or "pending")

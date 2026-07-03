@@ -34,9 +34,7 @@ def _lexical_score(query_tokens: set[str], text: str) -> float:
     return len(query_tokens & cand) / min(len(query_tokens), len(cand))
 
 
-def rank(
-    query: str, candidates: list[str], *, top_k: int | None = None
-) -> dict[str, Any]:
+def rank(query: str, candidates: list[str], *, top_k: int | None = None) -> dict[str, Any]:
     """Rank ``candidates`` by relevance to ``query``.
 
     Returns ``{"backend": "embed"|"lexical", "ranked": [{index, score, text}]}``
@@ -68,7 +66,6 @@ def rank(
     return {
         "backend": backend,
         "ranked": [
-            {"index": idx, "score": round(score, 4), "text": text}
-            for idx, score, text in scores
+            {"index": idx, "score": round(score, 4), "text": text} for idx, score, text in scores
         ],
     }

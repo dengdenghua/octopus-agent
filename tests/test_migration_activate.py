@@ -4,6 +4,7 @@ Hermetic — stages a fake ``.octopus/imported/`` under tmp_path and activates,
 asserting memory is indexed idempotently and MCP produces a paste snippet
 *without* touching config.yaml.
 """
+
 from __future__ import annotations
 
 import json
@@ -21,12 +22,22 @@ def _stage(proj: Path) -> None:
     base = proj / ".octopus" / "imported" / "codex"
     (base / "memory").mkdir(parents=True)
     (base / "memory" / "pref.md").write_text(
-        "---\nname: pref\ndescription: likes tests\n---\nbody\n", encoding="utf-8",
+        "---\nname: pref\ndescription: likes tests\n---\nbody\n",
+        encoding="utf-8",
     )
     (base / "mcp.disabled.json").write_text(
-        json.dumps({"mcp_servers": [
-            {"name": "node_repl", "needs": ["node"], "origin": "/x/config.toml", "enabled": False},
-        ]}),
+        json.dumps(
+            {
+                "mcp_servers": [
+                    {
+                        "name": "node_repl",
+                        "needs": ["node"],
+                        "origin": "/x/config.toml",
+                        "enabled": False,
+                    },
+                ]
+            }
+        ),
         encoding="utf-8",
     )
 

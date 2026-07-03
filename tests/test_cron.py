@@ -232,7 +232,8 @@ class TestRunnerIntegration:
         ev = threading.Event()
         r = BackgroundRunner()
         r.add_cron(
-            "noon", "0 12 * * *",  # Implementation note.
+            "noon",
+            "0 12 * * *",  # Implementation note.
             lambda: ev.set(),
             run_on_start=True,
         )
@@ -247,7 +248,8 @@ class TestRunnerIntegration:
         done = threading.Event()
         r = BackgroundRunner()
         r.add_cron(
-            "anyminute", "* * * * *",  # Implementation note.
+            "anyminute",
+            "* * * * *",  # Implementation note.
             lambda: done.set(),
             run_on_start=True,
         )

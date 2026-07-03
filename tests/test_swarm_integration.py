@@ -45,6 +45,7 @@ def journal():
 @pytest.fixture
 def registry():
     r = SkillRegistry()
+
     # Implementation note.
     def _slow_read(**kw):
         time.sleep(0.05)  # 50ms
@@ -148,15 +149,12 @@ def _mk_graph(skills: list[str]) -> TaskGraph:
 
 
 class TestArmsAndSwarmIntegration:
-    def test_three_arms_run_three_nodes_concurrently(
-        self, pool, signal_bus, boids, journal
-    ):
+    def test_three_arms_run_three_nodes_concurrently(self, pool, signal_bus, boids, journal):
         """Implementation note."""
         graph = _mk_graph(["read_file", "count_words", "hash_text"])
-        budget = Budget(
-            task_id=graph.task_id, limits=BudgetLimits(tokens=50_000, usd=0.50)
-        )
-        swarm = SwarmRuntime(arm_pool=pool,
+        budget = Budget(task_id=graph.task_id, limits=BudgetLimits(tokens=50_000, usd=0.50))
+        swarm = SwarmRuntime(
+            arm_pool=pool,
             signal_bus=signal_bus,
             boids=boids,
             journal=journal,
@@ -172,9 +170,7 @@ class TestArmsAndSwarmIntegration:
 
         # Implementation note.
 
-    def test_cross_layer_template_ref_resolves(
-        self, pool, signal_bus, boids, journal
-    ):
+    def test_cross_layer_template_ref_resolves(self, pool, signal_bus, boids, journal):
         """A node in a later topo-layer resolves a template ref to an EARLIER
         layer's output ({n0.path}). Regression: the swarm used to dispatch each
         layer in isolation, so the dependent node raised TemplateResolutionError
@@ -183,10 +179,13 @@ class TestArmsAndSwarmIntegration:
         from runtime.platform.models.pipeline import WorkflowEdge
 
         n0 = TaskNode(
-            node_id="n0", skill_ref=SkillId("read_file"), args_template={"path": "."},
+            node_id="n0",
+            skill_ref=SkillId("read_file"),
+            args_template={"path": "."},
         )
         n1 = TaskNode(
-            node_id="n1", skill_ref=SkillId("count_words"),
+            node_id="n1",
+            skill_ref=SkillId("count_words"),
             args_template={"text": "{n0.path}"},  # cross-layer ref to n0's output
         )
         graph = TaskGraph(
@@ -196,11 +195,15 @@ class TestArmsAndSwarmIntegration:
             task_type="mixed",
         )
         budget = Budget(
-            task_id=graph.task_id, limits=BudgetLimits(tokens=50_000, usd=0.50),
+            task_id=graph.task_id,
+            limits=BudgetLimits(tokens=50_000, usd=0.50),
         )
         swarm = SwarmRuntime(
-            arm_pool=pool, signal_bus=signal_bus, boids=boids,
-            journal=journal, max_workers=3,
+            arm_pool=pool,
+            signal_bus=signal_bus,
+            boids=boids,
+            journal=journal,
+            max_workers=3,
         )
         result = swarm.run(graph=graph, budget=budget, split_strategy="topo_layers")
         assert result.all_successful, (
@@ -211,9 +214,7 @@ class TestArmsAndSwarmIntegration:
             f"should be concurrent, but took {result.total_wall_ms}ms"
         )
 
-    def test_signal_bus_gets_busy_idle_events(
-        self, pool, signal_bus, journal
-    ):
+    def test_signal_bus_gets_busy_idle_events(self, pool, signal_bus, journal):
         """Implementation note."""
         busy_events = []
         idle_events = []
@@ -221,10 +222,9 @@ class TestArmsAndSwarmIntegration:
         signal_bus.subscribe(TOPIC_ARM_IDLE, lambda e: idle_events.append(e))
 
         graph = _mk_graph(["read_file", "count_words"])
-        budget = Budget(
-            task_id=graph.task_id, limits=BudgetLimits(tokens=10_000, usd=0.10)
-        )
-        SwarmRuntime(arm_pool=pool,
+        budget = Budget(task_id=graph.task_id, limits=BudgetLimits(tokens=10_000, usd=0.10))
+        SwarmRuntime(
+            arm_pool=pool,
             signal_bus=signal_bus,
             journal=journal,
         ).run(graph=graph, budget=budget)
@@ -233,9 +233,7 @@ class TestArmsAndSwarmIntegration:
         assert len(busy_events) == 2
         assert len(idle_events) == 2
 
-    def test_no_matching_arm_produces_failed_result(
-        self, pool, journal
-    ):
+    def test_no_matching_arm_produces_failed_result(self, pool, journal):
         """Implementation note."""
         # Implementation note.
         graph = _mk_graph(["read_file"])
@@ -252,21 +250,15 @@ class TestArmsAndSwarmIntegration:
             budget=graph.budget,
             task_type="mixed",
         )
-        budget = Budget(
-            task_id=graph.task_id, limits=BudgetLimits(tokens=1_000, usd=0.01)
-        )
-        result = SwarmRuntime(arm_pool=pool, journal=journal).run(
-            graph=graph, budget=budget
-        )
+        budget = Budget(task_id=graph.task_id, limits=BudgetLimits(tokens=1_000, usd=0.01))
+        result = SwarmRuntime(arm_pool=pool, journal=journal).run(graph=graph, budget=budget)
         assert not result.all_successful
         assert result.arm_results[0].status == "failed"
         assert "no_arm_matched" in result.arm_results[0].reason
 
 
 class TestBoidsArbitrationUnderContention:
-    def test_multiple_arms_claim_same_resource_single_winner(
-        self, boids, signal_bus
-    ):
+    def test_multiple_arms_claim_same_resource_single_winner(self, boids, signal_bus):
         """Implementation note."""
         claim_a = ResourceClaim(
             claim_id=new_id(),
@@ -315,9 +307,7 @@ class TestBoidsArbitrationUnderContention:
         assert boids.arbitrate(c1) in ("win", "coexist")
         assert boids.arbitrate(c2) == "coexist"
 
-    def test_signal_bus_receives_sucker_grabbed_on_win(
-        self, boids, signal_bus
-    ):
+    def test_signal_bus_receives_sucker_grabbed_on_win(self, boids, signal_bus):
         """Implementation note."""
         events = []
         signal_bus.subscribe("sucker.grabbed", lambda e: events.append(e))
@@ -338,12 +328,8 @@ class TestBudgetSharingAcrossArms:
     def test_shared_budget_accumulates(self, pool, journal):
         """Implementation note."""
         graph = _mk_graph(["read_file", "count_words", "hash_text"])
-        budget = Budget(
-            task_id=graph.task_id, limits=BudgetLimits(tokens=50_000, usd=0.50)
-        )
-        result = SwarmRuntime(arm_pool=pool, journal=journal).run(
-            graph=graph, budget=budget
-        )
+        budget = Budget(task_id=graph.task_id, limits=BudgetLimits(tokens=50_000, usd=0.50))
+        result = SwarmRuntime(arm_pool=pool, journal=journal).run(graph=graph, budget=budget)
 
         # Implementation note.
         assert budget.tokens_spent > 0
@@ -357,11 +343,10 @@ class TestSwarmFullStackTrajectory:
     def test_trajectory_events_in_journal(self, pool, signal_bus, journal):
         """Implementation note."""
         graph = _mk_graph(["read_file", "count_words"])
-        budget = Budget(
-            task_id=graph.task_id, limits=BudgetLimits(tokens=20_000, usd=0.20)
+        budget = Budget(task_id=graph.task_id, limits=BudgetLimits(tokens=20_000, usd=0.20))
+        SwarmRuntime(arm_pool=pool, signal_bus=signal_bus, journal=journal).run(
+            graph=graph, budget=budget
         )
-        SwarmRuntime(arm_pool=pool, signal_bus=signal_bus, journal=journal
-        ).run(graph=graph, budget=budget)
 
         # Implementation note.
         # Implementation note.
@@ -370,7 +355,7 @@ class TestSwarmFullStackTrajectory:
         budgets = journal.read_by_type("budget_commit")
         trajs = journal.read_by_type("trajectory")
 
-        assert len(steps) >= 2       # Implementation note.
+        assert len(steps) >= 2  # Implementation note.
         assert len(immunes) >= 2
         assert len(budgets) >= 2
-        assert len(trajs) >= 2        # Implementation note.
+        assert len(trajs) >= 2  # Implementation note.

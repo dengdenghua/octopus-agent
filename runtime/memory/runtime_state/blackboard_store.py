@@ -11,6 +11,7 @@ so one DB file holds many turns.
 Opt-in: ``get_blackboard`` uses this only when ``OCTOPUS_BLACKBOARD_DB`` points
 at a file; otherwise the fast in-memory board is unchanged.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -47,8 +48,8 @@ class SqliteBlackboard:
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(
             str(self.db_path),
-            isolation_level=None,      # manual transactions
-            check_same_thread=False,   # guarded by self._lock
+            isolation_level=None,  # manual transactions
+            check_same_thread=False,  # guarded by self._lock
             timeout=5.0,
         )
         self._conn.execute("PRAGMA journal_mode=WAL")

@@ -6,13 +6,15 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-FULL_ACCESS_MARKERS: frozenset[str] = frozenset({
-    "*",
-    "all",
-    "full",
-    "inherit_all",
-    "\u5168\u90e8",
-})
+FULL_ACCESS_MARKERS: frozenset[str] = frozenset(
+    {
+        "*",
+        "all",
+        "full",
+        "inherit_all",
+        "\u5168\u90e8",
+    }
+)
 
 
 def normalize_skill_name(value: Any) -> str:
@@ -57,11 +59,9 @@ def coerce_skill_names(value: Any) -> list[str]:
 
 
 def dedupe_skill_names(names: Iterable[Any]) -> list[str]:
-    return list(OrderedDict(
-        (name, None)
-        for raw in names
-        if (name := normalize_skill_name(raw))
-    ).keys())
+    return list(
+        OrderedDict((name, None) for raw in names if (name := normalize_skill_name(raw))).keys()
+    )
 
 
 @dataclass
@@ -105,14 +105,11 @@ def build_skill_policy(
             reason_lists.setdefault(name, []).append(str(source))
 
     reason_map = {
-        name: tuple(dedupe_skill_names(reasons))
-        for name, reasons in reason_lists.items()
+        name: tuple(dedupe_skill_names(reasons)) for name, reasons in reason_lists.items()
     }
     unique_ordered = dedupe_skill_names(ordered)
     allowed = (
-        ("*",)
-        if allow_all
-        else tuple(sorted(unique_ordered) if sort_allowed else unique_ordered)
+        ("*",) if allow_all else tuple(sorted(unique_ordered) if sort_allowed else unique_ordered)
     )
     return SkillPolicy(
         allowed=allowed,

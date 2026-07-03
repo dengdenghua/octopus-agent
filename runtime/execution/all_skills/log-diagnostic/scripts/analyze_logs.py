@@ -11,8 +11,18 @@ from datetime import datetime
 from pathlib import Path
 
 SYSLOG_MONTHS = {
-    "Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6,
-    "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12,
+    "Jan": 1,
+    "Feb": 2,
+    "Mar": 3,
+    "Apr": 4,
+    "May": 5,
+    "Jun": 6,
+    "Jul": 7,
+    "Aug": 8,
+    "Sep": 9,
+    "Oct": 10,
+    "Nov": 11,
+    "Dec": 12,
 }
 
 SYSLOG_RE = re.compile(
@@ -24,10 +34,10 @@ SYSLOG_RE = re.compile(
 )
 
 NGINX_ACCESS_RE = re.compile(
-    r'^(?P<ip>\S+)\s+\S+\s+\S+\s+'
-    r'\[(?P<time>[^\]]+)\]\s+'
+    r"^(?P<ip>\S+)\s+\S+\s+\S+\s+"
+    r"\[(?P<time>[^\]]+)\]\s+"
     r'"(?P<method>\S+)\s+(?P<path>\S+)\s+\S+"\s+'
-    r'(?P<status>\d{3})\s+(?P<size>\d+)'
+    r"(?P<status>\d{3})\s+(?P<size>\d+)"
     r'(?:\s+"(?P<referer>[^"]*)"\s+"(?P<ua>[^"]*)")?'
 )
 
@@ -41,10 +51,16 @@ NGINX_ERROR_RE = re.compile(
 
 NORMALIZE_PATTERNS = [
     (re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b"), "<IP>"),
-    (re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I), "<UUID>"),
+    (
+        re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I),
+        "<UUID>",
+    ),
     (re.compile(r"\b0x[0-9a-fA-F]+\b"), "<HEX>"),
     (re.compile(r"(?<=/)\d+(?=/|$|\s)"), "<ID>"),
-    (re.compile(r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?\b"), "<TIMESTAMP>"),
+    (
+        re.compile(r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?\b"),
+        "<TIMESTAMP>",
+    ),
     (re.compile(r"\b\d{10,13}\b"), "<EPOCH>"),
     (re.compile(r"\b\d+\.\d+(?:ms|s|m)\b"), "<DURATION>"),
     (re.compile(r"\b\d{4,}\b"), "<NUM>"),
@@ -58,11 +74,16 @@ ERROR_KEYWORDS = re.compile(
 )
 
 LEVEL_PRIORITY = {
-    "EMERGENCY": 0, "EMERG": 0,
+    "EMERGENCY": 0,
+    "EMERG": 0,
     "ALERT": 1,
-    "CRITICAL": 2, "CRIT": 2, "FATAL": 2,
-    "ERROR": 3, "ERR": 3,
-    "WARNING": 4, "WARN": 4,
+    "CRITICAL": 2,
+    "CRIT": 2,
+    "FATAL": 2,
+    "ERROR": 3,
+    "ERR": 3,
+    "WARNING": 4,
+    "WARN": 4,
     "NOTICE": 5,
     "INFO": 6,
     "DEBUG": 7,
@@ -143,7 +164,9 @@ def parse_syslog_line(line: str) -> dict | None:
     time_parts = m.group("time").split(":")
     now = datetime.now()
     try:
-        ts = datetime(now.year, month, day, int(time_parts[0]), int(time_parts[1]), int(time_parts[2]))
+        ts = datetime(
+            now.year, month, day, int(time_parts[0]), int(time_parts[1]), int(time_parts[2])
+        )
     except (ValueError, IndexError):
         ts = None
 
@@ -186,7 +209,7 @@ def parse_nginx_line(line: str) -> dict | None:
         else:
             level = "INFO"
 
-        msg = f'{m.group("method")} {m.group("path")} -> {status}'
+        msg = f"{m.group('method')} {m.group('path')} -> {status}"
         return {"timestamp": ts, "level": level, "message": msg, "raw": line}
 
     return None
@@ -204,8 +227,13 @@ def is_error_level(level: str) -> bool:
     return LEVEL_PRIORITY.get(normalized, 99) <= 3
 
 
-def parse_file(filepath: str, fmt: str, level_filter: str | None,
-               since: datetime | None, until: datetime | None) -> tuple:
+def parse_file(
+    filepath: str,
+    fmt: str,
+    level_filter: str | None,
+    since: datetime | None,
+    until: datetime | None,
+) -> tuple:
     path = Path(filepath)
     if not path.is_file():
         print(f"错误: 文件不存在 - {filepath}", file=sys.stderr)
@@ -248,7 +276,11 @@ def parse_file(filepath: str, fmt: str, level_filter: str | None,
 
 
 def cluster_errors(entries: list[dict]) -> list[dict]:
-    error_entries = [e for e in entries if is_error_level(e.get("level", "")) or ERROR_KEYWORDS.search(e["message"])]
+    error_entries = [
+        e
+        for e in entries
+        if is_error_level(e.get("level", "")) or ERROR_KEYWORDS.search(e["message"])
+    ]
 
     cluster_map = defaultdict(list)
     for entry in error_entries:
@@ -259,13 +291,15 @@ def cluster_errors(entries: list[dict]) -> list[dict]:
     for normalized, members in cluster_map.items():
         sample = members[0]["message"]
         timestamps = [m["timestamp"] for m in members if m["timestamp"]]
-        clusters.append({
-            "pattern": normalized,
-            "sample": sample,
-            "count": len(members),
-            "first_seen": min(timestamps).isoformat() if timestamps else None,
-            "last_seen": max(timestamps).isoformat() if timestamps else None,
-        })
+        clusters.append(
+            {
+                "pattern": normalized,
+                "sample": sample,
+                "count": len(members),
+                "first_seen": min(timestamps).isoformat() if timestamps else None,
+                "last_seen": max(timestamps).isoformat() if timestamps else None,
+            }
+        )
 
     clusters.sort(key=lambda c: c["count"], reverse=True)
     return clusters
@@ -274,7 +308,11 @@ def cluster_errors(entries: list[dict]) -> list[dict]:
 def compute_time_distribution(entries: list[dict]) -> tuple:
     hourly = Counter()
     daily = Counter()
-    error_entries = [e for e in entries if is_error_level(e.get("level", "")) or ERROR_KEYWORDS.search(e["message"])]
+    error_entries = [
+        e
+        for e in entries
+        if is_error_level(e.get("level", "")) or ERROR_KEYWORDS.search(e["message"])
+    ]
 
     for entry in error_entries:
         ts = entry.get("timestamp")
@@ -308,7 +346,9 @@ def print_report(entries, total_lines, parse_fail, fmt, clusters, hourly, daily,
     print(f"  匹配条目: {len(entries):,}")
     print(f"  错误数:   {error_count:,}")
     if timestamps:
-        print(f"  时间范围: {min(timestamps).strftime('%Y-%m-%d %H:%M:%S')} ~ {max(timestamps).strftime('%Y-%m-%d %H:%M:%S')}")
+        print(
+            f"  时间范围: {min(timestamps).strftime('%Y-%m-%d %H:%M:%S')} ~ {max(timestamps).strftime('%Y-%m-%d %H:%M:%S')}"
+        )
 
     if clusters:
         print(f"\n🔴 Top 错误聚类 (共 {len(clusters)} 类)")
@@ -365,12 +405,14 @@ def build_json_report(entries, total_lines, parse_fail, fmt, clusters, hourly, d
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="日志分析工具：错误聚类 + 频率统计 + 时间分布"
-    )
+    parser = argparse.ArgumentParser(description="日志分析工具：错误聚类 + 频率统计 + 时间分布")
     parser.add_argument("log_file", help="日志文件路径")
-    parser.add_argument("--format", choices=["auto", "json", "syslog", "nginx"],
-                        default="auto", help="日志格式 (默认: auto)")
+    parser.add_argument(
+        "--format",
+        choices=["auto", "json", "syslog", "nginx"],
+        default="auto",
+        help="日志格式 (默认: auto)",
+    )
     parser.add_argument("--top", type=int, default=20, help="显示 Top N 错误聚类 (默认: 20)")
     parser.add_argument("--output", help="输出 JSON 报告到文件")
     parser.add_argument("--level", help="过滤日志级别 (如 ERROR, WARN)")

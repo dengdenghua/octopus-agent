@@ -124,6 +124,7 @@ class _FakeTrack:
 
     def __init__(self, *, fail_navigate: bool = False):
         from runtime.execution.suckers.browser_backend import Track
+
         self.track = Track.ELECTRON
         self.calls = []
         self.fail_navigate = fail_navigate
@@ -133,6 +134,7 @@ class _FakeTrack:
 
     def _record(self, action, payload, *, ok=True, error=""):
         from runtime.execution.suckers.browser_backend import BrowserResult, Track
+
         self.calls.append((action, dict(payload)))
         response = {"ok": ok, "action": action}
         if error:
@@ -177,11 +179,14 @@ def test_with_page_navigate_then_acts_on_higher_track(monkeypatch):
     monkeypatch.setattr(bs, "_higher_track_backends", lambda: [fake])
     # PW closure must NOT run — the higher track serves it.
     out = bs._with_page(
-        None, lambda p: {"pw": True}, verb="click",
-        payload={"selector": "#go"}, url="http://h.test",
+        None,
+        lambda p: {"pw": True},
+        verb="click",
+        payload={"selector": "#go"},
+        url="http://h.test",
     )
     assert ("navigate", {"url": "http://h.test"}) in fake.calls  # navigate first
-    assert ("click", {"selector": "#go"}) in fake.calls           # then act
+    assert ("click", {"selector": "#go"}) in fake.calls  # then act
     assert out.get("action") == "click" and out.get("pw") is None
 
 
@@ -190,8 +195,13 @@ def test_navigate_verb_has_no_separate_prenavigate(monkeypatch):
 
     fake = _FakeTrack()
     monkeypatch.setattr(bs, "_higher_track_backends", lambda: [fake])
-    bs._with_page(None, lambda p: {"pw": True}, verb="navigate",
-                  payload={"url": "http://h.test"}, url="http://h.test")
+    bs._with_page(
+        None,
+        lambda p: {"pw": True},
+        verb="navigate",
+        payload={"url": "http://h.test"},
+        url="http://h.test",
+    )
     assert fake.calls == [("navigate", {"url": "http://h.test"})]
 
 
@@ -202,8 +212,11 @@ def test_higher_track_navigation_failure_stops_followup_action(monkeypatch):
     monkeypatch.setattr(bs, "_higher_track_backends", lambda: [fake])
 
     out = bs._with_page(
-        None, lambda p: {"pw": True}, verb="click",
-        payload={"selector": "#go"}, url="http://h.test",
+        None,
+        lambda p: {"pw": True},
+        verb="click",
+        payload={"selector": "#go"},
+        url="http://h.test",
     )
 
     assert fake.calls == [("navigate", {"url": "http://h.test"})]
@@ -309,7 +322,8 @@ def test_planner_injects_grounding_into_prompt(tmp_path):
     shot.write_bytes(b"\x89PNG\r\n")
     rec = _RecordingRouter()
     planner = ModelRouterVisionPlanner(
-        router=rec, grounding=lambda: "On-screen windows:\n- Finder @ (0,0) 800x600",
+        router=rec,
+        grounding=lambda: "On-screen windows:\n- Finder @ (0,0) 800x600",
     )
     planner.next_action(goal="open a file", screenshot_path=str(shot), history=[])
 

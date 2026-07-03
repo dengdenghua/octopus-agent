@@ -7,6 +7,7 @@ and is plugin-domain logic, so it belongs under ``platform.plugins``
 alongside the plugin hub. ``plugins_router`` re-exports
 ``discover_codex_plugins`` (and helpers, for its asset endpoints).
 """
+
 from __future__ import annotations
 
 import json
@@ -56,23 +57,29 @@ def _capability_records(raw: Any, plugin_name: str) -> list[dict[str, Any]]:
     for item in raw:
         if isinstance(item, dict):
             name = _string(item.get("name") or item.get("type"), "capability")
-            out.append({
-                "name": name,
-                "type": _string(item.get("type"), "codex"),
-                "description": _string(item.get("description")),
-                "version": _string(item.get("version"), "1.0.0"),
-                "requires": item.get("requires") if isinstance(item.get("requires"), list) else [],
-                "provider": plugin_name,
-            })
+            out.append(
+                {
+                    "name": name,
+                    "type": _string(item.get("type"), "codex"),
+                    "description": _string(item.get("description")),
+                    "version": _string(item.get("version"), "1.0.0"),
+                    "requires": item.get("requires")
+                    if isinstance(item.get("requires"), list)
+                    else [],
+                    "provider": plugin_name,
+                }
+            )
         elif isinstance(item, str) and item.strip():
-            out.append({
-                "name": item.strip(),
-                "type": "codex",
-                "description": "",
-                "version": "1.0.0",
-                "requires": [],
-                "provider": plugin_name,
-            })
+            out.append(
+                {
+                    "name": item.strip(),
+                    "type": "codex",
+                    "description": "",
+                    "version": "1.0.0",
+                    "requires": [],
+                    "provider": plugin_name,
+                }
+            )
     return out
 
 
@@ -116,8 +123,7 @@ def _has_skill_files(plugin_dir: Path) -> bool:
 
 def _has_app_manifest(plugin_dir: Path) -> bool:
     return any(
-        (plugin_dir / name).is_file()
-        for name in (".app.json", "octopus-app.jsonc", "app.json")
+        (plugin_dir / name).is_file() for name in (".app.json", "octopus-app.jsonc", "app.json")
     )
 
 
@@ -154,9 +160,7 @@ def _plugin_smoke_check(
     has_mcp = bool(manifest.get("mcpServers")) or (plugin_dir / ".mcp.json").is_file()
     has_commands = (plugin_dir / "commands").is_dir()
     surface_count = sum(
-        1
-        for present in (has_capabilities, has_skills, has_apps, has_mcp, has_commands)
-        if present
+        1 for present in (has_capabilities, has_skills, has_apps, has_mcp, has_commands) if present
     )
     add(
         "capability_surface",
@@ -251,9 +255,7 @@ def _plugin_info(plugin_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     if not (plugin_dir / ".codex-plugin" / "plugin.json").is_file():
         error = "missing .codex-plugin/plugin.json"
     author = (
-        _author_name(manifest.get("author"))
-        or _string(interface.get("developerName"))
-        or "octopus"
+        _author_name(manifest.get("author")) or _string(interface.get("developerName")) or "octopus"
     )
     info = {
         "id": name,

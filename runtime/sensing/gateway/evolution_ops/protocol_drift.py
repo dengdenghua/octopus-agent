@@ -38,8 +38,7 @@ _PROTOCOL_DRIFT_RULES: tuple[dict[str, Any], ...] = (
             "4. Update the caller or router, then rerun typecheck and endpoint smoke."
         ),
         "rationale": (
-            "Repeated HTTP contract failures usually mean the UI and API "
-            "changed independently."
+            "Repeated HTTP contract failures usually mean the UI and API changed independently."
         ),
     },
     {
@@ -142,18 +141,20 @@ def _protocol_drift_rows(
         if acknowledged is not None and acknowledged != is_ack:
             continue
         rule = cluster["rule"]
-        rows.append({
-            "id": drift_id,
-            "protocol_id": rule["protocol_id"],
-            "detected_at": _iso(cluster["last_seen"]),
-            "summary": (
-                f"{rule['summary']} Observed {len(cluster['task_ids'])} "
-                f"related failure(s). Example: {cluster['examples'][0]}"
-            ),
-            "acknowledged": is_ack,
-            "failure_count": len(cluster["task_ids"]),
-            "examples": cluster["examples"],
-        })
+        rows.append(
+            {
+                "id": drift_id,
+                "protocol_id": rule["protocol_id"],
+                "detected_at": _iso(cluster["last_seen"]),
+                "summary": (
+                    f"{rule['summary']} Observed {len(cluster['task_ids'])} "
+                    f"related failure(s). Example: {cluster['examples'][0]}"
+                ),
+                "acknowledged": is_ack,
+                "failure_count": len(cluster["task_ids"]),
+                "examples": cluster["examples"],
+            }
+        )
     rows.sort(
         key=lambda row: (
             bool(row["acknowledged"]),
@@ -177,15 +178,17 @@ def _protocol_repair_rows(
         if status and status != current_status:
             continue
         rule = by_protocol.get(str(drift["protocol_id"]), {})
-        rows.append({
-            "id": _stable_int_id(f"repair:{drift['id']}"),
-            "drift_event_id": drift["id"],
-            "protocol_id": drift["protocol_id"],
-            "created_at": drift["detected_at"],
-            "suggested_diff": rule.get("suggested_diff", ""),
-            "rationale": rule.get("rationale", drift["summary"]),
-            "status": current_status,
-        })
+        rows.append(
+            {
+                "id": _stable_int_id(f"repair:{drift['id']}"),
+                "drift_event_id": drift["id"],
+                "protocol_id": drift["protocol_id"],
+                "created_at": drift["detected_at"],
+                "suggested_diff": rule.get("suggested_diff", ""),
+                "rationale": rule.get("rationale", drift["summary"]),
+                "status": current_status,
+            }
+        )
     rows.sort(key=lambda row: (str(row["status"]) != "pending", str(row["protocol_id"])))
     return rows
 
@@ -250,7 +253,7 @@ def _protocol_subject(text: str) -> str:
     for marker in ("/api/", "api/", "sse", "eventsource", "schema", "tool"):
         if marker in text:
             start = max(0, text.find(marker))
-            return _shorten_text(text[start:start + 80], 80)
+            return _shorten_text(text[start : start + 80], 80)
     return _shorten_text(text, 80)
 
 
@@ -262,7 +265,8 @@ def _protocol_drift_decision_map(journal: Any) -> dict[int, dict[str, Any]]:
         events = list(journal.read_by_type("protocol_drift_decision"))
     except (AttributeError, TypeError, OSError):
         events = [
-            event for event in _journal_events(journal)
+            event
+            for event in _journal_events(journal)
             if getattr(event, "event_type", "") == "protocol_drift_decision"
         ]
     for event in events:

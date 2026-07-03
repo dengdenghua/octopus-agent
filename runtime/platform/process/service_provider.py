@@ -62,12 +62,15 @@ _PROVIDER_LOCK = threading.Lock()
 def _bootstrap_services(provider: ServiceProvider) -> None:
     if not provider.has("eventbus"):
         from runtime.platform.process.eventbus import EventBus
+
         provider.register_instance("eventbus", EventBus.get())
     if not provider.has("statestore"):
         from runtime.platform.process.state import StateStore
+
         provider.register_instance("statestore", StateStore.get_instance())
     if not provider.has("plugin_loader"):
         from runtime.platform.plugins.plugin_loader import PluginLoader
+
         provider.register_instance("plugin_loader", PluginLoader.get())
 
 

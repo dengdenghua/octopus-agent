@@ -8,6 +8,7 @@ check. The published tool schema hides ``allow_sensitive`` but is
 privilege flags before ``handler(**args)``. The shared helper is unit tested
 directly as well.
 """
+
 from __future__ import annotations
 
 from uuid import uuid4

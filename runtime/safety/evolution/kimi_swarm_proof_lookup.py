@@ -7,6 +7,7 @@ kimi_swarm_types.py (schema constants) and kimi_swarm_failure_taxonomy.py
 (replay-derived failure summaries); used by kimi_swarm_resume_planner.py and
 by kimi_swarm_load_test.py's preflight/export/next-stage orchestration.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -170,9 +171,7 @@ def _composite_proof_for_source(
     if missing:
         return None
     resume_session_ids = [
-        str(row.get("session_id") or "")
-        for row in resume_rows
-        if str(row.get("session_id") or "")
+        str(row.get("session_id") or "") for row in resume_rows if str(row.get("session_id") or "")
     ]
     updated_at = max(
         [float((source.get("session") or {}).get("updated_at") or 0.0)]
@@ -201,16 +200,24 @@ def _composite_proof_for_source(
         "meets_kimi_reference": (
             int(source.get("agent_count") or 0) >= 300 and requested_step_count >= 4000
         ),
-        "total_input_tokens": sum(int(row.get("total_input_tokens") or 0) for row in [source, *resume_rows]),
-        "total_output_tokens": sum(int(row.get("total_output_tokens") or 0) for row in [source, *resume_rows]),
-        "estimated_max_tokens": sum(int(row.get("estimated_max_tokens") or 0) for row in [source, *resume_rows]),
+        "total_input_tokens": sum(
+            int(row.get("total_input_tokens") or 0) for row in [source, *resume_rows]
+        ),
+        "total_output_tokens": sum(
+            int(row.get("total_output_tokens") or 0) for row in [source, *resume_rows]
+        ),
+        "estimated_max_tokens": sum(
+            int(row.get("estimated_max_tokens") or 0) for row in [source, *resume_rows]
+        ),
         "updated_at": updated_at,
         "coverage": {
             "schema": "octopus.kimi_swarm_composite_coverage.v1",
             "covered_step_count": len(success_by_step),
             "missing_step_count": 0,
             "source_successful_steps": int(source.get("successful_steps") or 0),
-            "resume_successful_steps": sum(int(row.get("successful_steps") or 0) for row in resume_rows),
+            "resume_successful_steps": sum(
+                int(row.get("successful_steps") or 0) for row in resume_rows
+            ),
             "resume_failed_step_count": len(failed_by_step),
         },
     }
@@ -351,11 +358,7 @@ def _actual_step_evidence_count(replay: dict[str, Any] | None) -> int:
 
 
 def _proof_without_session(proof: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in proof.items()
-        if key not in {"session"}
-    }
+    return {key: value for key, value in proof.items() if key not in {"session"}}
 
 
 def _digest_json(value: Any) -> str:

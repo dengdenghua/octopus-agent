@@ -47,9 +47,7 @@ def composer(registry: SkillRegistry) -> ContextComposer:
 
 def _mk_planner(registry: SkillRegistry, composer: ContextComposer) -> LLMPlanner:
     router = MockModelRouter(
-        response=json.dumps(
-            {"reasoning": "r", "nodes": [{"skill": "read_file", "args": {}}]}
-        )
+        response=json.dumps({"reasoning": "r", "nodes": [{"skill": "read_file", "args": {}}]})
     )
     return LLMPlanner(router=router, registry=registry, composer=composer)
 
@@ -62,13 +60,15 @@ def planner(registry: SkillRegistry, composer: ContextComposer) -> LLMPlanner:
 def _journal(arm: str = "code_arm", strategy: str = "default") -> InMemoryJournal:
     """One successful trajectory → one ``(arm, completed_strategy, strategy)`` triple."""
     j = InMemoryJournal()
-    j.write_trajectory(Trajectory(
-        task_id=TaskId(uuid4()),
-        arm_id=ArmId(arm),
-        strategy_id=strategy,
-        steps=[],
-        outcome=TrajectoryOutcome(success=True),
-    ))
+    j.write_trajectory(
+        Trajectory(
+            task_id=TaskId(uuid4()),
+            arm_id=ArmId(arm),
+            strategy_id=strategy,
+            steps=[],
+            outcome=TrajectoryOutcome(success=True),
+        )
+    )
     return j
 
 

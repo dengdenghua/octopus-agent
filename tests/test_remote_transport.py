@@ -173,27 +173,21 @@ class _StubClient:
 
 def test_health_check_ok() -> None:
     backend = RemoteBackend(id="x", name="x", url="https://example.com")
-    status, detail = health_check(
-        backend, http_client=_StubClient(_StubResponse(200))
-    )
+    status, detail = health_check(backend, http_client=_StubClient(_StubResponse(200)))
     assert status == "ok"
     assert detail is None
 
 
 def test_health_check_non_2xx() -> None:
     backend = RemoteBackend(id="x", name="x", url="https://example.com")
-    status, detail = health_check(
-        backend, http_client=_StubClient(_StubResponse(503))
-    )
+    status, detail = health_check(backend, http_client=_StubClient(_StubResponse(503)))
     assert status == "error"
     assert "503" in (detail or "")
 
 
 def test_health_check_network_error() -> None:
     backend = RemoteBackend(id="x", name="x", url="https://example.com")
-    status, detail = health_check(
-        backend, http_client=_StubClient(ConnectionRefusedError("nope"))
-    )
+    status, detail = health_check(backend, http_client=_StubClient(ConnectionRefusedError("nope")))
     assert status == "error"
     assert "ConnectionRefusedError" in (detail or "")
 

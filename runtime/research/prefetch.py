@@ -73,12 +73,14 @@ class ResearchPrefetcher:
                 evidence.extend(result.evidence)
                 logs.extend(result.logs)
             else:
-                logs.append(_log_for_source(
-                    source,
-                    action="skip",
-                    status="skipped",
-                    error=f"provider unavailable: {source.provider}",
-                ))
+                logs.append(
+                    _log_for_source(
+                        source,
+                        action="skip",
+                        status="skipped",
+                        error=f"provider unavailable: {source.provider}",
+                    )
+                )
 
         return PrefetchResult(evidence=_dedupe_prefetch(evidence), logs=logs)
 
@@ -98,25 +100,29 @@ class ResearchPrefetcher:
             message = f"search_error: {type(exc).__name__}: {exc}"
             return PrefetchResult(
                 evidence=[_error_evidence(source, topic, message)],
-                logs=[_log_for_source(
-                    source,
-                    action="search",
-                    query=query,
-                    status="failed",
-                    error=message,
-                )],
+                logs=[
+                    _log_for_source(
+                        source,
+                        action="search",
+                        query=query,
+                        status="failed",
+                        error=message,
+                    )
+                ],
             )
         if payload.get("error"):
             message = str(payload["error"])
             return PrefetchResult(
                 evidence=[_error_evidence(source, topic, message)],
-                logs=[_log_for_source(
-                    source,
-                    action="search",
-                    query=query,
-                    status="failed",
-                    error=message,
-                )],
+                logs=[
+                    _log_for_source(
+                        source,
+                        action="search",
+                        query=query,
+                        status="failed",
+                        error=message,
+                    )
+                ],
             )
 
         backend = payload.get("backend") or "web_search"
@@ -130,27 +136,30 @@ class ResearchPrefetcher:
             snippet = _clean_str(item.get("snippet") or item.get("content"))
             if not title and not snippet:
                 continue
-            out.append(ResearchEvidence(
-                title=title,
-                url=url or None,
-                source_kind=source.kind,
-                quote_or_summary=(
-                    f"Prefetch hit via {backend} for query '{query}': "
-                    f"{snippet or title}"
-                ),
-                claim=topic,
-                stance="context",
-                confidence=0.45,
-            ))
+            out.append(
+                ResearchEvidence(
+                    title=title,
+                    url=url or None,
+                    source_kind=source.kind,
+                    quote_or_summary=(
+                        f"Prefetch hit via {backend} for query '{query}': {snippet or title}"
+                    ),
+                    claim=topic,
+                    stance="context",
+                    confidence=0.45,
+                )
+            )
         return PrefetchResult(
             evidence=out,
-            logs=[_log_for_source(
-                source,
-                action="search",
-                query=query,
-                result_count=len(results),
-                evidence_count=len(out),
-            )],
+            logs=[
+                _log_for_source(
+                    source,
+                    action="search",
+                    query=query,
+                    result_count=len(results),
+                    evidence_count=len(out),
+                )
+            ],
         )
 
     def _fetch_user_urls(
@@ -176,46 +185,54 @@ class ResearchPrefetcher:
             except Exception as exc:  # noqa: BLE001
                 message = f"fetch_error: {type(exc).__name__}: {exc}"
                 out.append(_error_evidence(source, job.topic, message))
-                logs.append(_log_for_source(
-                    source,
-                    action="fetch",
-                    url=material.url,
-                    status="failed",
-                    error=message,
-                ))
+                logs.append(
+                    _log_for_source(
+                        source,
+                        action="fetch",
+                        url=material.url,
+                        status="failed",
+                        error=message,
+                    )
+                )
                 continue
             if payload.get("error"):
                 message = str(payload["error"])
                 out.append(_error_evidence(source, job.topic, message))
-                logs.append(_log_for_source(
-                    source,
-                    action="fetch",
-                    url=material.url,
-                    status="failed",
-                    error=message,
-                ))
+                logs.append(
+                    _log_for_source(
+                        source,
+                        action="fetch",
+                        url=material.url,
+                        status="failed",
+                        error=message,
+                    )
+                )
                 continue
             content = _clean_str(payload.get("content"))[:700]
             status = payload.get("status_code")
-            out.append(ResearchEvidence(
-                title=material.title or material.url,
-                url=_clean_str(payload.get("url")) or material.url,
-                source_kind=source.kind,
-                quote_or_summary=(
-                    f"Fetched user-provided URL"
-                    f"{f' (status {status})' if status else ''}: {content}"
-                ),
-                claim=job.topic,
-                stance="context",
-                confidence=0.58,
-            ))
-            logs.append(_log_for_source(
-                source,
-                action="fetch",
-                url=material.url,
-                result_count=1,
-                evidence_count=1,
-            ))
+            out.append(
+                ResearchEvidence(
+                    title=material.title or material.url,
+                    url=_clean_str(payload.get("url")) or material.url,
+                    source_kind=source.kind,
+                    quote_or_summary=(
+                        f"Fetched user-provided URL"
+                        f"{f' (status {status})' if status else ''}: {content}"
+                    ),
+                    claim=job.topic,
+                    stance="context",
+                    confidence=0.58,
+                )
+            )
+            logs.append(
+                _log_for_source(
+                    source,
+                    action="fetch",
+                    url=material.url,
+                    result_count=1,
+                    evidence_count=1,
+                )
+            )
         return PrefetchResult(evidence=out, logs=logs)
 
 
@@ -265,22 +282,26 @@ def _material_evidence(source: ResearchSource, job: ResearchJob) -> PrefetchResu
         target = material.path or material.text or material.notes or material.title
         if not target:
             continue
-        out.append(ResearchEvidence(
-            title=material.title or material.id,
-            source_kind=source.kind,
-            quote_or_summary=f"User material available for extraction: {str(target)[:700]}",
-            claim=job.topic,
-            stance="context",
-            confidence=0.55,
-        ))
-    logs.append(_log_for_source(
-        source,
-        action="material",
-        result_count=len(out),
-        evidence_count=len(out),
-        status="completed" if out else "skipped",
-        error=None if out else "no matching user materials",
-    ))
+        out.append(
+            ResearchEvidence(
+                title=material.title or material.id,
+                source_kind=source.kind,
+                quote_or_summary=f"User material available for extraction: {str(target)[:700]}",
+                claim=job.topic,
+                stance="context",
+                confidence=0.55,
+            )
+        )
+    logs.append(
+        _log_for_source(
+            source,
+            action="material",
+            result_count=len(out),
+            evidence_count=len(out),
+            status="completed" if out else "skipped",
+            error=None if out else "no matching user materials",
+        )
+    )
     return PrefetchResult(evidence=out, logs=logs)
 
 

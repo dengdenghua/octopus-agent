@@ -78,18 +78,20 @@ def _execution_nodes(review: dict[str, Any]) -> list[dict[str, Any]]:
         status = str(step.get("status") or "")
         is_error = bool(step.get("is_error"))
         tool = _clean(step.get("tool"))
-        nodes.append({
-            "id": f"exec-{idx}",
-            "lane": "execution",
-            "kind": kind,
-            "ts": step.get("ts"),
-            "title": _execution_title(kind, tool, status, is_error),
-            "status": status or ("error" if is_error else "ok"),
-            "severity": "high" if is_error else "info",
-            "tool": tool or None,
-            "summary": _node_summary(step),
-            "data": _safe_step_data(step),
-        })
+        nodes.append(
+            {
+                "id": f"exec-{idx}",
+                "lane": "execution",
+                "kind": kind,
+                "ts": step.get("ts"),
+                "title": _execution_title(kind, tool, status, is_error),
+                "status": status or ("error" if is_error else "ok"),
+                "severity": "high" if is_error else "info",
+                "tool": tool or None,
+                "summary": _node_summary(step),
+                "data": _safe_step_data(step),
+            }
+        )
     return nodes
 
 
@@ -101,24 +103,26 @@ def _approval_nodes(approvals: list[dict[str, Any]]) -> list[dict[str, Any]]:
         risk_level = _clean(risk.get("level")) or _default_risk_level(row.get("tool_name"))
         decision = _clean(row.get("decision")) or "unknown"
         tool = _clean(row.get("tool_name")) or "tool"
-        nodes.append({
-            "id": f"approval-{row.get('id') or idx}",
-            "lane": "permission",
-            "kind": "approval",
-            "ts": row.get("decided_at") or row.get("requested_at"),
-            "title": f"Permission {decision}: {tool}",
-            "status": decision,
-            "severity": _severity_for_approval(decision, risk_level),
-            "tool": tool,
-            "summary": _clean(row.get("reason")) or _clean(trust.get("reason")),
-            "data": {
-                "tool_call_id": row.get("tool_call_id"),
-                "risk_level": risk_level,
-                "risk_categories": risk.get("categories") if isinstance(risk, dict) else [],
-                "trust_source": trust.get("source"),
-                "static_decision": trust.get("static_decision"),
-            },
-        })
+        nodes.append(
+            {
+                "id": f"approval-{row.get('id') or idx}",
+                "lane": "permission",
+                "kind": "approval",
+                "ts": row.get("decided_at") or row.get("requested_at"),
+                "title": f"Permission {decision}: {tool}",
+                "status": decision,
+                "severity": _severity_for_approval(decision, risk_level),
+                "tool": tool,
+                "summary": _clean(row.get("reason")) or _clean(trust.get("reason")),
+                "data": {
+                    "tool_call_id": row.get("tool_call_id"),
+                    "risk_level": risk_level,
+                    "risk_categories": risk.get("categories") if isinstance(risk, dict) else [],
+                    "trust_source": trust.get("source"),
+                    "static_decision": trust.get("static_decision"),
+                },
+            }
+        )
     return nodes
 
 
@@ -133,21 +137,23 @@ def _post_write_diagnostic_nodes(review: dict[str, Any]) -> list[dict[str, Any]]
         if not _looks_like_post_write_diagnostic(output):
             continue
         status = _post_write_diagnostic_status(output)
-        nodes.append({
-            "id": f"post-write-diagnostic-{idx}",
-            "lane": "verification",
-            "kind": "post_write_diagnostic",
-            "ts": step.get("ts"),
-            "title": f"Post-write diagnostic {status}",
-            "status": status,
-            "severity": "high" if status == "failed" else "info",
-            "tool": _clean(step.get("tool")) or None,
-            "summary": _post_write_diagnostic_summary(output),
-            "data": {
-                "tool_call_id": step.get("tool_call_id"),
-                "output_preview": output[:500],
-            },
-        })
+        nodes.append(
+            {
+                "id": f"post-write-diagnostic-{idx}",
+                "lane": "verification",
+                "kind": "post_write_diagnostic",
+                "ts": step.get("ts"),
+                "title": f"Post-write diagnostic {status}",
+                "status": status,
+                "severity": "high" if status == "failed" else "info",
+                "tool": _clean(step.get("tool")) or None,
+                "summary": _post_write_diagnostic_summary(output),
+                "data": {
+                    "tool_call_id": step.get("tool_call_id"),
+                    "output_preview": output[:500],
+                },
+            }
+        )
     return nodes
 
 
@@ -162,20 +168,24 @@ def _review_nodes(
         if not isinstance(finding, dict):
             continue
         severity = _clean(finding.get("severity")) or "info"
-        nodes.append({
-            "id": f"finding-{idx}",
-            "lane": "review",
-            "kind": _clean(finding.get("type")) or "finding",
-            "ts": ts,
-            "title": _clean(finding.get("title")) or "Review finding",
-            "status": "open",
-            "severity": severity,
-            "tool": _finding_tool(finding),
-            "summary": _clean(finding.get("recommendation")),
-            "data": {
-                "evidence": finding.get("evidence") if isinstance(finding.get("evidence"), dict) else {},
-            },
-        })
+        nodes.append(
+            {
+                "id": f"finding-{idx}",
+                "lane": "review",
+                "kind": _clean(finding.get("type")) or "finding",
+                "ts": ts,
+                "title": _clean(finding.get("title")) or "Review finding",
+                "status": "open",
+                "severity": severity,
+                "tool": _finding_tool(finding),
+                "summary": _clean(finding.get("recommendation")),
+                "data": {
+                    "evidence": finding.get("evidence")
+                    if isinstance(finding.get("evidence"), dict)
+                    else {},
+                },
+            }
+        )
     return nodes
 
 
@@ -188,63 +198,69 @@ def _candidate_nodes(
     for idx, item in enumerate(review.get("learning_candidates") or []):
         if not isinstance(item, dict):
             continue
-        nodes.append({
-            "id": f"learning-{idx}",
-            "lane": "learning",
-            "kind": _clean(item.get("kind")) or "learning_candidate",
-            "ts": ts,
-            "title": _clean(item.get("title")) or "Learning candidate",
-            "status": "candidate",
-            "severity": _severity_for_priority(item.get("priority")),
-            "tool": None,
-            "summary": _clean(item.get("text")),
-            "data": {
-                "priority": _clean(item.get("priority")) or "P2",
-                "memory_bucket": _clean(item.get("memory_bucket")) or "experience",
-            },
-        })
+        nodes.append(
+            {
+                "id": f"learning-{idx}",
+                "lane": "learning",
+                "kind": _clean(item.get("kind")) or "learning_candidate",
+                "ts": ts,
+                "title": _clean(item.get("title")) or "Learning candidate",
+                "status": "candidate",
+                "severity": _severity_for_priority(item.get("priority")),
+                "tool": None,
+                "summary": _clean(item.get("text")),
+                "data": {
+                    "priority": _clean(item.get("priority")) or "P2",
+                    "memory_bucket": _clean(item.get("memory_bucket")) or "experience",
+                },
+            }
+        )
     for idx, item in enumerate(review.get("backlog_candidates") or []):
         if not isinstance(item, dict):
             continue
-        nodes.append({
-            "id": f"backlog-{idx}",
-            "lane": "learning",
-            "kind": "backlog_candidate",
-            "ts": ts,
-            "title": _clean(item.get("experiment")) or "Experiment candidate",
-            "status": "candidate",
-            "severity": _severity_for_priority(item.get("priority")),
-            "tool": None,
-            "summary": _clean(item.get("hypothesis")),
-            "data": {
-                "priority": _clean(item.get("priority")) or "P2",
-                "minimal_implementation": _clean(item.get("minimal_implementation")),
-                "validation_metric": _clean(item.get("validation_metric")),
-            },
-        })
+        nodes.append(
+            {
+                "id": f"backlog-{idx}",
+                "lane": "learning",
+                "kind": "backlog_candidate",
+                "ts": ts,
+                "title": _clean(item.get("experiment")) or "Experiment candidate",
+                "status": "candidate",
+                "severity": _severity_for_priority(item.get("priority")),
+                "tool": None,
+                "summary": _clean(item.get("hypothesis")),
+                "data": {
+                    "priority": _clean(item.get("priority")) or "P2",
+                    "minimal_implementation": _clean(item.get("minimal_implementation")),
+                    "validation_metric": _clean(item.get("validation_metric")),
+                },
+            }
+        )
     return nodes
 
 
 def _experience_nodes(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     nodes: list[dict[str, Any]] = []
     for idx, row in enumerate(records):
-        nodes.append({
-            "id": f"experience-{row.get('id') or idx}",
-            "lane": "learning",
-            "kind": "experience_record",
-            "ts": row.get("last_seen_at") or row.get("created_at"),
-            "title": _clean(row.get("title")) or "Experience record",
-            "status": _clean(row.get("status")) or "active",
-            "severity": _severity_for_priority(row.get("priority")),
-            "tool": None,
-            "summary": _clean(row.get("text")),
-            "data": {
-                "record_id": row.get("id"),
-                "priority": row.get("priority"),
-                "memory_bucket": row.get("memory_bucket"),
-                "occurrences": row.get("occurrences"),
-            },
-        })
+        nodes.append(
+            {
+                "id": f"experience-{row.get('id') or idx}",
+                "lane": "learning",
+                "kind": "experience_record",
+                "ts": row.get("last_seen_at") or row.get("created_at"),
+                "title": _clean(row.get("title")) or "Experience record",
+                "status": _clean(row.get("status")) or "active",
+                "severity": _severity_for_priority(row.get("priority")),
+                "tool": None,
+                "summary": _clean(row.get("text")),
+                "data": {
+                    "record_id": row.get("id"),
+                    "priority": row.get("priority"),
+                    "memory_bucket": row.get("memory_bucket"),
+                    "occurrences": row.get("occurrences"),
+                },
+            }
+        )
     return nodes
 
 
@@ -284,18 +300,16 @@ def _capability_summary(
     task_run: dict[str, Any],
     approvals: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    tool_names = {
-        _clean(tool)
-        for tool in task_run.get("tool_names") or []
-        if _clean(tool)
-    }
+    tool_names = {_clean(tool) for tool in task_run.get("tool_names") or [] if _clean(tool)}
     for row in approvals:
         tool = _clean(row.get("tool_name"))
         if tool:
             tool_names.add(tool)
     out: list[dict[str, Any]] = []
     for tool in sorted(tool_names):
-        approval = next((_trust(row) for row in approvals if _clean(row.get("tool_name")) == tool), {})
+        approval = next(
+            (_trust(row) for row in approvals if _clean(row.get("tool_name")) == tool), {}
+        )
         risk = approval.get("risk") if isinstance(approval.get("risk"), dict) else {}
         if not risk:
             default_risk, action, policy = approval_action_for_tool(tool)
@@ -307,18 +321,20 @@ def _capability_summary(
             trust_source = approval.get("source")
             default_action = approval.get("action")
             risk_policy = approval.get("risk_policy")
-        out.append({
-            "tool": tool,
-            "risk": {
-                "level": risk.get("level"),
-                "categories": risk.get("categories") or [],
-                "reason": risk.get("reason") or "",
-                "requires_approval": bool(risk.get("requires_approval")),
-                "default_action": default_action,
-                "policy": risk_policy or {},
-                "source": trust_source,
-            },
-        })
+        out.append(
+            {
+                "tool": tool,
+                "risk": {
+                    "level": risk.get("level"),
+                    "categories": risk.get("categories") or [],
+                    "reason": risk.get("reason") or "",
+                    "requires_approval": bool(risk.get("requires_approval")),
+                    "default_action": default_action,
+                    "policy": risk_policy or {},
+                    "source": trust_source,
+                },
+            }
+        )
     return out
 
 

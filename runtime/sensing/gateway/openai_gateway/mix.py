@@ -112,11 +112,9 @@ def load_mix_config() -> dict[str, Any]:
 
 def save_mix_config(cfg: dict[str, Any]) -> dict[str, Any]:
     """Validate + persist the Mix preset; returns the cleaned config."""
-    proposers = [
-        str(m).strip()
-        for m in (cfg.get("proposers") or [])
-        if str(m or "").strip()
-    ][:_MAX_PROPOSERS]
+    proposers = [str(m).strip() for m in (cfg.get("proposers") or []) if str(m or "").strip()][
+        :_MAX_PROPOSERS
+    ]
     try:
         n = int(cfg.get("n") or _DEFAULT_N)
     except (TypeError, ValueError):
@@ -241,7 +239,10 @@ def run_mix_chat(
         model, lens = spec
         try:
             reply, _usage = _direct_llm_fallback_with_usage(
-                stack, _proposer_intent(intent, lens), agent, model=(model or None),
+                stack,
+                _proposer_intent(intent, lens),
+                agent,
+                model=(model or None),
                 max_tokens_cap=_PROPOSER_MAX_TOKENS,
             )
             return reply
@@ -266,7 +267,9 @@ def run_mix_chat(
         if not_done:
             _log.warning(
                 "mix: %d/%d proposer(s) still running after %.0fs, dropping their drafts",
-                len(not_done), len(futures), _PROPOSER_TIMEOUT_SECONDS,
+                len(not_done),
+                len(futures),
+                _PROPOSER_TIMEOUT_SECONDS,
             )
         # Iterate ``futures`` (lens order) rather than the ``done`` set —
         # set iteration order varies run-to-run and would shuffle the
@@ -293,8 +296,13 @@ def run_mix_chat(
     if not drafts:
         # Nothing usable to synthesize → just run one normal turn.
         result = run_chat(
-            stack, intent, aggregator_model, default_arm,
-            optimizer=optimizer, actor=actor, agent=agent,
+            stack,
+            intent,
+            aggregator_model,
+            default_arm,
+            optimizer=optimizer,
+            actor=actor,
+            agent=agent,
         )
         if isinstance(result, dict):
             result.setdefault("octopus", {})["mix"] = {
@@ -306,8 +314,13 @@ def run_mix_chat(
         return result
 
     result = run_chat(
-        stack, _aggregator_intent(intent, drafts), aggregator_model, default_arm,
-        optimizer=optimizer, actor=actor, agent=agent,
+        stack,
+        _aggregator_intent(intent, drafts),
+        aggregator_model,
+        default_arm,
+        optimizer=optimizer,
+        actor=actor,
+        agent=agent,
     )
     if isinstance(result, dict):
         result.setdefault("octopus", {})["mix"] = {

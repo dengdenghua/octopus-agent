@@ -40,6 +40,7 @@ routes:
     GET    /api/invariants/{rule_id}      · one rule's enforcers
     POST   /api/invariants/refresh        · invalidate + rebuild cache
 """
+
 from __future__ import annotations
 
 import inspect
@@ -265,10 +266,7 @@ def create_invariants_router(
     def _format_catalog() -> dict[str, Any]:
         rules_map = _build_or_get_cache()
         rule_ids_sorted = sorted(rules_map.keys())
-        rules_list = [
-            {"rule_id": rid, "enforcers": rules_map[rid]}
-            for rid in rule_ids_sorted
-        ]
+        rules_list = [{"rule_id": rid, "enforcers": rules_map[rid]} for rid in rule_ids_sorted]
         total_enforcers = sum(len(rules_map[r]) for r in rule_ids_sorted)
         return {
             "rules": rules_list,

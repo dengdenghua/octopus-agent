@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from typing import Any
@@ -23,6 +22,7 @@ def _node_status_from_events(
         NodeStartedEvent,
         StepEvent,
     )
+
     status = "pending"
     started_at: str | None = None
     completed_at: str | None = None
@@ -50,6 +50,7 @@ def _node_status_from_events(
                     if started_at and evt.ts:
                         try:
                             from datetime import datetime
+
                             s = datetime.fromisoformat(started_at)
                             e = datetime.fromisoformat(completed_at)
                             duration_ms = (e - s).total_seconds() * 1000
@@ -78,25 +79,29 @@ def _graph_to_dag_visual(graph: Any, node_statuses: list[dict]) -> dict[str, Any
             (s for s in node_statuses if s["node_id"] == n.node_id),
             {"node_id": n.node_id, "status": "pending"},
         )
-        nodes.append({
-            "id": n.node_id,
-            "kind": n.kind,
-            "skill_ref": str(n.skill_ref) if n.skill_ref else None,
-            "status": ns.get("status", "pending"),
-            "started_at": ns.get("started_at"),
-            "completed_at": ns.get("completed_at"),
-            "duration_ms": ns.get("duration_ms"),
-            "error": ns.get("error"),
-            "output_preview": ns.get("output_preview"),
-        })
+        nodes.append(
+            {
+                "id": n.node_id,
+                "kind": n.kind,
+                "skill_ref": str(n.skill_ref) if n.skill_ref else None,
+                "status": ns.get("status", "pending"),
+                "started_at": ns.get("started_at"),
+                "completed_at": ns.get("completed_at"),
+                "duration_ms": ns.get("duration_ms"),
+                "error": ns.get("error"),
+                "output_preview": ns.get("output_preview"),
+            }
+        )
     edges = []
     for e in graph.edges:
-        edges.append({
-            "from": e.from_node,
-            "to": e.to_node,
-            "kind": e.kind,
-            "condition": e.condition,
-        })
+        edges.append(
+            {
+                "from": e.from_node,
+                "to": e.to_node,
+                "kind": e.kind,
+                "condition": e.condition,
+            }
+        )
     return {
         "task_id": str(graph.task_id),
         "strategy": graph.strategy,
@@ -136,6 +141,7 @@ def create_dag_debugger_router(
 
         if graph is None:
             from runtime.memory.journal.journal import TrajectoryEvent
+
             for evt in events:
                 if isinstance(evt, TrajectoryEvent):
                     traj = getattr(evt, "trajectory", None)
@@ -153,10 +159,7 @@ def create_dag_debugger_router(
             }
 
         node_ids = [n.node_id for n in graph.nodes] if hasattr(graph, "nodes") else []
-        node_statuses = [
-            _node_status_from_events(task_id, nid, events)
-            for nid in node_ids
-        ]
+        node_statuses = [_node_status_from_events(task_id, nid, events) for nid in node_ids]
         return _graph_to_dag_visual(graph, node_statuses)
 
     @router.get("/api/dag/task/{task_id}/timeline")
@@ -205,6 +208,7 @@ def create_dag_debugger_router(
             TaskStartedEvent,
             TrajectoryEvent,
         )
+
         all_events = journal.read_all()
         started_tasks: dict[str, dict[str, Any]] = {}
         completed_tasks: set[str] = set()
@@ -241,6 +245,7 @@ def create_dag_debugger_router(
             TaskStartedEvent,
             TrajectoryEvent,
         )
+
         all_events = journal.read_all()
         total_tasks = 0
         completed_tasks = 0
@@ -276,7 +281,9 @@ def create_dag_debugger_router(
                     failed_steps += 1
 
         avg_duration = sum(durations) / len(durations) if durations else 0.0
-        success_rate = (completed_tasks - failed_tasks) / completed_tasks if completed_tasks else 0.0
+        success_rate = (
+            (completed_tasks - failed_tasks) / completed_tasks if completed_tasks else 0.0
+        )
 
         return {
             "total_tasks": total_tasks,
@@ -285,9 +292,9 @@ def create_dag_debugger_router(
             "success_rate": round(success_rate, 3),
             "total_steps": total_steps,
             "failed_steps": failed_steps,
-            "step_success_rate": round(
-                (total_steps - failed_steps) / total_steps, 3
-            ) if total_steps else 0.0,
+            "step_success_rate": round((total_steps - failed_steps) / total_steps, 3)
+            if total_steps
+            else 0.0,
             "total_tokens": total_tokens,
             "total_usd": round(total_usd, 4),
             "avg_duration_seconds": round(avg_duration, 2),
@@ -301,6 +308,7 @@ def create_dag_debugger_router(
             TaskNode,
             WorkflowEdge,
         )
+
         try:
             nodes_data = body.get("nodes", [])
             edges_data = body.get("edges", [])
@@ -337,6 +345,7 @@ def create_dag_debugger_router(
             raise HTTPException(400, f"invalid graph definition: {exc}") from exc
 
         from runtime.core.graph_runtime.runtime import _topo_layers
+
         layers = _topo_layers(graph.nodes, graph.edges)
         max_parallelism = max(len(layer) for layer in layers) if layers else 1
         critical_path_len = len(layers)

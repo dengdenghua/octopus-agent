@@ -37,10 +37,7 @@ def _require_flag() -> None:
             403,
             detail={
                 "error": "prompts_hot_reload_disabled",
-                "hint": (
-                    "set feature flag 'ui.prompts_hot_reload' to enable "
-                    "live prompt editing"
-                ),
+                "hint": ("set feature flag 'ui.prompts_hot_reload' to enable live prompt editing"),
             },
         )
 
@@ -59,6 +56,7 @@ def create_prompts_router(
     Tests inject an in-tmp-dir registry; production wires the
     application-wide one.
     """
+
     def _auth_dep(request: Request) -> None:
         from runtime.adapters.web_auth import _resolve_actor
 

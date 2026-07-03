@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -45,7 +44,6 @@ SwarmEventLane = Literal["workflow", "agent", "timeline"]
 
 
 class WorkContract(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     contract_id: str
@@ -59,7 +57,6 @@ class WorkContract(BaseModel):
 
 
 class SwarmPhase(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     phase_index: int = Field(ge=0)
@@ -69,7 +66,6 @@ class SwarmPhase(BaseModel):
 
 
 class SwarmPlan(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     task_id: TaskId
@@ -82,7 +78,6 @@ class SwarmPlan(BaseModel):
 
 
 class SwarmEvent(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     type: str
@@ -96,7 +91,6 @@ class SwarmEvent(BaseModel):
 
 
 class AgentHandoff(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     agent_id: str
@@ -111,7 +105,6 @@ class AgentHandoff(BaseModel):
 
 
 class SwarmPhaseReport(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     phase_index: int = Field(ge=0)
@@ -126,7 +119,6 @@ class SwarmPhaseReport(BaseModel):
 
 
 class SwarmResult(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     task_id: TaskId
@@ -160,7 +152,6 @@ _DEFAULT_MAX_WORKERS = 4
 
 
 class SwarmRuntime:
-
     def __init__(
         self,
         arm_pool: ArmPool,
@@ -182,7 +173,6 @@ class SwarmRuntime:
         # ⇒ assignments keep whatever exclusive_resources they were split with
         # (empty by default), so behaviour is unchanged.
         self._skill_resources = skill_resources
-
 
     def run(
         self,
@@ -211,10 +201,12 @@ class SwarmRuntime:
                 strategy=split_strategy,
             )
             validation = validate_work_plan(plan)
-            plan = plan.model_copy(update={
-                "validation_issues": list(validation.errors),
-                "validation_warnings": list(validation.warnings),
-            })
+            plan = plan.model_copy(
+                update={
+                    "validation_issues": list(validation.errors),
+                    "validation_warnings": list(validation.warnings),
+                }
+            )
             events: list[SwarmEvent] = [
                 SwarmEvent(
                     type="plan_created",
@@ -255,16 +247,22 @@ class SwarmRuntime:
                 )
                 events.extend(
                     _agent_assigned_events(
-                        graph.task_id, phase.phase_index, prepared.pairs,
+                        graph.task_id,
+                        phase.phase_index,
+                        prepared.pairs,
                     )
                 )
                 events.extend(
                     _agent_started_events(
-                        graph.task_id, phase.phase_index, prepared.pairs,
+                        graph.task_id,
+                        phase.phase_index,
+                        prepared.pairs,
                     )
                 )
                 dispatched_results = self._dispatch(
-                    prepared.pairs, budget, seed_outputs=accumulated_outputs,
+                    prepared.pairs,
+                    budget,
+                    seed_outputs=accumulated_outputs,
                 )
                 layer_results = [
                     *dispatched_results,
@@ -280,8 +278,9 @@ class SwarmRuntime:
                     [
                         *(
                             (assignment, result)
-                            for (assignment, _arm), result
-                            in zip(prepared.pairs, dispatched_results, strict=False)
+                            for (assignment, _arm), result in zip(
+                                prepared.pairs, dispatched_results, strict=False
+                            )
                         ),
                         *prepared.unmatched,
                     ],
@@ -289,11 +288,14 @@ class SwarmRuntime:
                 all_handoffs.extend(phase_handoffs)
                 events.extend(
                     _agent_finished_events(
-                        graph.task_id, phase.phase_index, layer_results,
+                        graph.task_id,
+                        phase.phase_index,
+                        layer_results,
                     )
                 )
                 max_layer_parallelism = max(
-                    max_layer_parallelism, self._count_parallelism(prepared.pairs),
+                    max_layer_parallelism,
+                    self._count_parallelism(prepared.pairs),
                 )
                 phase_report = _phase_report(
                     phase=phase,
@@ -326,12 +328,11 @@ class SwarmRuntime:
                 self._record_trajectories(graph.task_id, all_results)
 
             total_cost_usd = sum(r.cost.usd for r in all_results)
-            all_success = bool(all_results) and all(
-                r.status == "success" for r in all_results
-            )
+            all_success = bool(all_results) and all(r.status == "success" for r in all_results)
 
             span.set_attribute(
-                "octopus.swarm.parallelism", max_layer_parallelism,
+                "octopus.swarm.parallelism",
+                max_layer_parallelism,
             )
             span.set_attribute("octopus.swarm.total_cost_usd", total_cost_usd)
             span.set_attribute("octopus.swarm.all_successful", all_success)
@@ -340,7 +341,7 @@ class SwarmRuntime:
                     type="swarm_finished",
                     lane="timeline",
                     task_id=graph.task_id,
-                payload={
+                    payload={
                         "all_successful": all_success,
                         "total_cost_usd": total_cost_usd,
                         "total_wall_ms": elapsed_ms,
@@ -365,17 +366,13 @@ class SwarmRuntime:
                 contract_validation_issues=list(validation.errors),
                 contract_validation_warnings=list(validation.warnings),
                 completion_receipt=build_completion_receipt(
-                    [
-                        "completed" if r.status == "success" else r.status
-                        for r in all_results
-                    ],
+                    ["completed" if r.status == "success" else r.status for r in all_results],
                     contract_issues=list(validation.errors),
                     contract_warnings=list(validation.warnings),
                     artifact_count=sum(len(h.artifacts) for h in all_handoffs),
                     output_present=any(bool(h.summary) for h in all_handoffs),
                 ).to_dict(),
             )
-
 
     def _split_layers(
         self,
@@ -446,9 +443,7 @@ class SwarmRuntime:
                 parallel=len(layer) > 1,
             )
             phases.append(phase)
-            prepared_layers.append(
-                _PreparedLayer(phase=phase, pairs=pairs, unmatched=unmatched)
-            )
+            prepared_layers.append(_PreparedLayer(phase=phase, pairs=pairs, unmatched=unmatched))
 
         return prepared_layers, SwarmPlan(
             task_id=graph.task_id,
@@ -457,7 +452,6 @@ class SwarmRuntime:
             phases=phases,
             contracts=contracts,
         )
-
 
     def _dispatch(
         self,
@@ -474,8 +468,7 @@ class SwarmRuntime:
         # pairs in this layer dispatch together via ThreadPoolExecutor below.
         if self._boids is not None and self._signal_bus is not None:
             arm_affinities = [
-                (arm.arm_id, list(getattr(arm, "affinity", [])))
-                for _assignment, arm in pairs
+                (arm.arm_id, list(getattr(arm, "affinity", []))) for _assignment, arm in pairs
             ]
             groups = self._boids.alignment_groups(arm_affinities)
             for affinity, arm_ids in groups.items():
@@ -586,9 +579,7 @@ class SwarmRuntime:
     _CLAIM_TIMEOUT_S = 30.0
     _CLAIM_POLL_S = 0.02
 
-    def _claim_resources(
-        self, arm_id: ArmId, resources: list[str]
-    ) -> list[str]:
+    def _claim_resources(self, arm_id: ArmId, resources: list[str]) -> list[str]:
         """Claim each exclusive resource via the BoidsArbitrator, serialising on
         ``lose`` (poll until the holder releases, bounded by a timeout).
 
@@ -605,9 +596,7 @@ class SwarmRuntime:
             deadline = time.monotonic() + self._CLAIM_TIMEOUT_S
             while True:
                 verdict = self._boids.arbitrate(
-                    ResourceClaim(
-                        arm_id=arm_id, resource_uri=uri, ttl_ms=self._CLAIM_TTL_MS
-                    )
+                    ResourceClaim(arm_id=arm_id, resource_uri=uri, ttl_ms=self._CLAIM_TTL_MS)
                 )
                 if verdict in ("win", "coexist"):
                     held.append(uri)
@@ -645,10 +634,7 @@ class SwarmRuntime:
             return assignment
         # dedupe, preserve first-seen order; merge with any pre-set resources.
         merged = list(assignment.exclusive_resources) + uris
-        return assignment.model_copy(
-            update={"exclusive_resources": list(dict.fromkeys(merged))}
-        )
-
+        return assignment.model_copy(update={"exclusive_resources": list(dict.fromkeys(merged))})
 
     def _publish(self, topic: str, payload: dict[str, Any]) -> None:
         if self._signal_bus is None:
@@ -720,9 +706,7 @@ class SwarmRuntime:
             if r.status in {"partial", "failed"}:
                 degraded = True
 
-        all_steps.sort(
-            key=lambda s: (s.step_id, _node_sort_key(s.node_id), s.node_id)
-        )
+        all_steps.sort(key=lambda s: (s.step_id, _node_sort_key(s.node_id), s.node_id))
 
         # Aggregated swarm trajectories represent the swarm as a
         # whole, not any one contributing arm. Using a "lead" arm_id
@@ -839,9 +823,7 @@ def _split_topo_layers(graph: TaskGraph) -> list[list[ArmAssignment]]:
     while remaining:
         ready = [nid for nid, d in remaining.items() if d == 0]
         if not ready:
-            raise ValueError(
-                f"cycle in TaskGraph (unresolved nodes: {sorted(remaining)})"
-            )
+            raise ValueError(f"cycle in TaskGraph (unresolved nodes: {sorted(remaining)})")
         ready.sort()
         layer: list[ArmAssignment] = []
         for nid in ready:
@@ -873,9 +855,7 @@ def _assignment_node_ids(assignment: ArmAssignment) -> list[str]:
 
 def _assignment_role(assignment: ArmAssignment) -> str:
     skills = [
-        str(node.skill_ref)
-        for node in assignment.subgraph.nodes
-        if node.skill_ref is not None
+        str(node.skill_ref) for node in assignment.subgraph.nodes if node.skill_ref is not None
     ]
     if not skills:
         return assignment.subgraph.task_type
@@ -905,12 +885,9 @@ def _make_contract(
         node_ids=node_ids,
         depends_on=depends_on,
         owned_scope=[f"node:{node_id}" for node_id in node_ids],
-        forbidden_scope=[
-            f"node:{node_id}" for node_id in all_node_ids if node_id not in node_ids
-        ],
-        success_criteria=[
-            f"Complete node {node_id}" for node_id in node_ids
-        ] + ["Return an ArmResult with status=success"],
+        forbidden_scope=[f"node:{node_id}" for node_id in all_node_ids if node_id not in node_ids],
+        success_criteria=[f"Complete node {node_id}" for node_id in node_ids]
+        + ["Return an ArmResult with status=success"],
     )
 
 

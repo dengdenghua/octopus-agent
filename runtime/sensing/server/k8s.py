@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import shutil
@@ -28,7 +27,10 @@ def _kubectl_available(kubectl_bin: str = "kubectl") -> bool:
     try:
         r = subprocess.run(
             [exe, "version", "--client=true", "-o", "yaml"],
-            capture_output=True, timeout=5.0, text=True, check=False,
+            capture_output=True,
+            timeout=5.0,
+            text=True,
+            check=False,
         )
     except (subprocess.TimeoutExpired, OSError):
         return False
@@ -36,7 +38,6 @@ def _kubectl_available(kubectl_bin: str = "kubectl") -> bool:
 
 
 class K8sBackend(LocalBackend):
-
     def __init__(
         self,
         *,
@@ -47,8 +48,8 @@ class K8sBackend(LocalBackend):
         kubeconfig: str | Path | None = None,
         context: str | None = None,
         service_account: str | None = None,
-        cpu_request: str | None = None,         # e.g. "100m"
-        memory_request: str | None = None,      # e.g. "256Mi"
+        cpu_request: str | None = None,  # e.g. "100m"
+        memory_request: str | None = None,  # e.g. "256Mi"
         cpu_limit: str | None = None,
         memory_limit: str | None = None,
         node_selector: dict[str, str] | None = None,
@@ -107,7 +108,6 @@ class K8sBackend(LocalBackend):
 
 
 class K8sSandbox(Sandbox):
-
     def __init__(self, backend: K8sBackend, audit: BackendAudit, span: Any) -> None:
         super().__init__(backend=backend, audit=audit, span=span)
         self.backend: K8sBackend = backend  # type: ignore[assignment]
@@ -165,9 +165,11 @@ class K8sSandbox(Sandbox):
             span.set_attribute("octopus.backend.exit_code", result["exit_code"])
             return {**result, "pod": pod_name}
 
-
     def _build_kubectl_argv(
-        self, pod_name: str, cwd: str | None, inner_argv: list[str],
+        self,
+        pod_name: str,
+        cwd: str | None,
+        inner_argv: list[str],
     ) -> list[str]:
         m = self.backend
         args: list[str] = []
@@ -241,7 +243,6 @@ class K8sSandbox(Sandbox):
         overrides = {"apiVersion": "v1", "spec": spec}
         return json.dumps(overrides)
 
-
     def _best_effort_delete(self, pod_name: str) -> None:
         exe = shutil.which(self.backend.kubectl_bin)
         if exe is None:
@@ -255,7 +256,10 @@ class K8sSandbox(Sandbox):
         with suppress(subprocess.TimeoutExpired, OSError):
             subprocess.run(
                 args,
-                capture_output=True, text=True, timeout=10.0, check=False,
+                capture_output=True,
+                text=True,
+                timeout=10.0,
+                check=False,
             )
 
 

@@ -1,4 +1,3 @@
-
 from .boids import (
     BoidsArbitrator,
     ClaimVerdict,

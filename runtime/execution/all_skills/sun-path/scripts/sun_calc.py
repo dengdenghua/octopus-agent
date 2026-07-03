@@ -31,11 +31,14 @@ def calculate_sun_position(lat, lon, timezone_str):
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Calculate sun position.")
     parser.add_argument("--lat", type=float, required=True, help="Latitude")
     parser.add_argument("--lon", type=float, required=True, help="Longitude")
-    parser.add_argument("--timezone", type=str, default="UTC", help="Timezone string (e.g., America/Los_Angeles)")
+    parser.add_argument(
+        "--timezone", type=str, default="UTC", help="Timezone string (e.g., America/Los_Angeles)"
+    )
 
     args = parser.parse_args()
     calculate_sun_position(args.lat, args.lon, args.timezone)

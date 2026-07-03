@@ -25,6 +25,7 @@ Adding a new skill
    owns it) and ``atomic`` (True only if it's side-effect-free).
 3. If this is a new group, add its registrar to ``_GROUP_REGISTRARS``.
 """
+
 from __future__ import annotations
 
 import logging
@@ -112,195 +113,173 @@ _log = logging.getLogger(__name__)
 
 _CATALOG: dict[str, dict[str, Any]] = {
     # ── atomic base (no side effects · always-on) ─────────────
-    "list_cwd":       {"group": "builtin", "atomic": True},
-    "read_file":      {"group": "builtin", "atomic": True},
-    "file_stats":     {"group": "builtin", "atomic": True},
-    "count_words":    {"group": "builtin", "atomic": True},
-    "hash_text":      {"group": "builtin", "atomic": True},
-
+    "list_cwd": {"group": "builtin", "atomic": True},
+    "read_file": {"group": "builtin", "atomic": True},
+    "file_stats": {"group": "builtin", "atomic": True},
+    "count_words": {"group": "builtin", "atomic": True},
+    "hash_text": {"group": "builtin", "atomic": True},
     # File-system discovery/search. These are read-only and are mentioned by
     # the builtin tool descriptions, so they must be callable anywhere the
     # model can see those hints.
-    "glob_files":      {"group": "fs_search", "atomic": True},
-    "grep_text":       {"group": "fs_search", "atomic": True},
-    "tree":            {"group": "fs_search", "atomic": True},
+    "glob_files": {"group": "fs_search", "atomic": True},
+    "grep_text": {"group": "fs_search", "atomic": True},
+    "tree": {"group": "fs_search", "atomic": True},
     "read_file_range": {"group": "fs_search", "atomic": True},
-
     # ── web (httpx) ──────────────────────────────────────────
-    "fetch_url":      {"group": "web", "atomic": False},
-    "web_search":     {"group": "web", "atomic": False},
-    "web_fetch":      {"group": "web", "atomic": False},
-    "crawl_site":     {"group": "crawler", "atomic": False},
-    "search_image_by_text":  {"group": "kimi_compat", "atomic": False},
+    "fetch_url": {"group": "web", "atomic": False},
+    "web_search": {"group": "web", "atomic": False},
+    "web_fetch": {"group": "web", "atomic": False},
+    "crawl_site": {"group": "crawler", "atomic": False},
+    "search_image_by_text": {"group": "kimi_compat", "atomic": False},
     "search_image_by_image": {"group": "kimi_compat", "atomic": False},
-    "get_data_source_desc":  {"group": "kimi_compat", "atomic": True},
-    "get_data_source":       {"group": "kimi_compat", "atomic": False},
-    "deploy_website":        {"group": "kimi_compat", "atomic": False},
-
+    "get_data_source_desc": {"group": "kimi_compat", "atomic": True},
+    "get_data_source": {"group": "kimi_compat", "atomic": False},
+    "deploy_website": {"group": "kimi_compat", "atomic": False},
     # ── code intelligence ────────────────────────────────────
-    "code_analyze":       {"group": "code_intel", "atomic": True},
-    "code_search":        {"group": "code_intel", "atomic": True},
-    "code_edit_diff":     {"group": "code_intel", "atomic": False},
-    "code_find_symbol":   {"group": "code_intel", "atomic": True},
+    "code_analyze": {"group": "code_intel", "atomic": True},
+    "code_search": {"group": "code_intel", "atomic": True},
+    "code_edit_diff": {"group": "code_intel", "atomic": False},
+    "code_find_symbol": {"group": "code_intel", "atomic": True},
     "code_dependency_graph": {"group": "code_intel", "atomic": True},
-
     # ── LSP code navigation (one external server per language) ─
-    "lsp_definition":       {"group": "lsp", "atomic": False},
-    "lsp_references":       {"group": "lsp", "atomic": False},
-    "lsp_hover":            {"group": "lsp", "atomic": False},
+    "lsp_definition": {"group": "lsp", "atomic": False},
+    "lsp_references": {"group": "lsp", "atomic": False},
+    "lsp_hover": {"group": "lsp", "atomic": False},
     "lsp_document_symbols": {"group": "lsp", "atomic": False},
-
     # Public agent documentation skills (Google Gemini + Addy Osmani).
-    "frontend-ui-engineering":     {"group": "agent_docs", "atomic": False},
-    "api-and-interface-design":    {"group": "agent_docs", "atomic": False},
+    "frontend-ui-engineering": {"group": "agent_docs", "atomic": False},
+    "api-and-interface-design": {"group": "agent_docs", "atomic": False},
     "browser-testing-with-devtools": {"group": "agent_docs", "atomic": False},
-    "frontend-design":             {"group": "agent_docs", "atomic": False},
-    "react-best-practices":        {"group": "agent_docs", "atomic": False},
-    "typescript-best-practices":   {"group": "agent_docs", "atomic": False},
-    "code-quality":                {"group": "agent_docs", "atomic": False},
-
+    "frontend-design": {"group": "agent_docs", "atomic": False},
+    "react-best-practices": {"group": "agent_docs", "atomic": False},
+    "typescript-best-practices": {"group": "agent_docs", "atomic": False},
+    "code-quality": {"group": "agent_docs", "atomic": False},
     # ── filesystem write ─────────────────────────────────────
-    "write_text_file":  {"group": "fs_write", "atomic": False},
+    "write_text_file": {"group": "fs_write", "atomic": False},
     "append_text_file": {"group": "fs_write", "atomic": False},
-    "edit_text_file":   {"group": "fs_write", "atomic": False},
-    "edit_file":        {"group": "fs_write", "atomic": False},
-    "multi_edit_file":  {"group": "fs_write", "atomic": False},
-
+    "edit_text_file": {"group": "fs_write", "atomic": False},
+    "edit_file": {"group": "fs_write", "atomic": False},
+    "multi_edit_file": {"group": "fs_write", "atomic": False},
     # ── git ──────────────────────────────────────────────────
-    "git_status":     {"group": "git", "atomic": False},
-    "git_diff":       {"group": "git", "atomic": False},
-    "git_log":        {"group": "git", "atomic": False},
-    "git_add":        {"group": "git", "atomic": False},
-    "git_commit":     {"group": "git", "atomic": False},
-    "git_branch":     {"group": "git", "atomic": False},
-
+    "git_status": {"group": "git", "atomic": False},
+    "git_diff": {"group": "git", "atomic": False},
+    "git_log": {"group": "git", "atomic": False},
+    "git_add": {"group": "git", "atomic": False},
+    "git_commit": {"group": "git", "atomic": False},
+    "git_branch": {"group": "git", "atomic": False},
     # ── shell ────────────────────────────────────────────────
-    "exec_shell":             {"group": "shell", "atomic": False},
-    "ipython":                {"group": "shell", "atomic": False},
-    "background_exec":        {"group": "shell", "atomic": False},
+    "exec_shell": {"group": "shell", "atomic": False},
+    "ipython": {"group": "shell", "atomic": False},
+    "background_exec": {"group": "shell", "atomic": False},
     "read_background_output": {"group": "shell", "atomic": False},
-    "read_shell_output":      {"group": "shell", "atomic": False},
-    "kill_background_exec":   {"group": "shell", "atomic": False},
-    "kill_shell":             {"group": "shell", "atomic": False},
-
+    "read_shell_output": {"group": "shell", "atomic": False},
+    "kill_background_exec": {"group": "shell", "atomic": False},
+    "kill_shell": {"group": "shell", "atomic": False},
     # ── desktop automation (pyautogui) ───────────────────────
     "screen_capture": {"group": "computer", "atomic": False},
-    "screen_info":    {"group": "computer", "atomic": False},
-    "mouse_click":    {"group": "computer", "atomic": False},
-    "mouse_move":     {"group": "computer", "atomic": False},
-    "keyboard_type":  {"group": "computer", "atomic": False},
+    "screen_info": {"group": "computer", "atomic": False},
+    "mouse_click": {"group": "computer", "atomic": False},
+    "mouse_move": {"group": "computer", "atomic": False},
+    "keyboard_type": {"group": "computer", "atomic": False},
     "keyboard_press": {"group": "computer", "atomic": False},
-    "computer_observe":        {"group": "computer", "atomic": False},
-    "computer_plan_next":      {"group": "computer", "atomic": False},
+    "computer_observe": {"group": "computer", "atomic": False},
+    "computer_plan_next": {"group": "computer", "atomic": False},
     "computer_preview_action": {"group": "computer", "atomic": False},
-    "computer_execute_token":  {"group": "computer", "atomic": False},
-    "computer_uia_status":     {"group": "computer", "atomic": False},
-    "computer_uia_tree":       {"group": "computer", "atomic": False},
-    "computer_uia_find":       {"group": "computer", "atomic": False},
-
+    "computer_execute_token": {"group": "computer", "atomic": False},
+    "computer_uia_status": {"group": "computer", "atomic": False},
+    "computer_uia_tree": {"group": "computer", "atomic": False},
+    "computer_uia_find": {"group": "computer", "atomic": False},
     # ── browser automation (playwright headless) ─────────────
-    "browser_get":        {"group": "browser", "atomic": False},
-    "browser_extract":    {"group": "browser", "atomic": False},
-    "browser_navigate":   {"group": "browser", "atomic": False},
-    "browser_click":      {"group": "browser", "atomic": False},
-    "browser_type":       {"group": "browser", "atomic": False},
-    "browser_scroll":     {"group": "browser", "atomic": False},
-    "browser_wait":       {"group": "browser", "atomic": False},
+    "browser_get": {"group": "browser", "atomic": False},
+    "browser_extract": {"group": "browser", "atomic": False},
+    "browser_navigate": {"group": "browser", "atomic": False},
+    "browser_click": {"group": "browser", "atomic": False},
+    "browser_type": {"group": "browser", "atomic": False},
+    "browser_scroll": {"group": "browser", "atomic": False},
+    "browser_wait": {"group": "browser", "atomic": False},
     "browser_screenshot": {"group": "browser", "atomic": False},
-    "browser_find":       {"group": "browser", "atomic": False},
-    "browser_state":      {"group": "browser", "atomic": False},
+    "browser_find": {"group": "browser", "atomic": False},
+    "browser_state": {"group": "browser", "atomic": False},
     "screenshot_web_full_page": {"group": "kimi_compat", "atomic": False},
-
     # ── live browser bridge (Electron desktop's webview) ─────
-    "live_browser_click":       {"group": "browser_act", "atomic": False},
-    "live_browser_type":        {"group": "browser_act", "atomic": False},
-    "live_browser_wait":        {"group": "browser_act", "atomic": False},
-    "live_browser_scroll":      {"group": "browser_act", "atomic": False},
-    "live_browser_navigate":    {"group": "browser_act", "atomic": False},
-    "live_browser_extract":     {"group": "browser_act", "atomic": False},
-    "live_browser_screenshot":  {"group": "browser_act", "atomic": False},
-    "live_browser_execute_js":  {"group": "browser_act", "atomic": False},
+    "live_browser_click": {"group": "browser_act", "atomic": False},
+    "live_browser_type": {"group": "browser_act", "atomic": False},
+    "live_browser_wait": {"group": "browser_act", "atomic": False},
+    "live_browser_scroll": {"group": "browser_act", "atomic": False},
+    "live_browser_navigate": {"group": "browser_act", "atomic": False},
+    "live_browser_extract": {"group": "browser_act", "atomic": False},
+    "live_browser_screenshot": {"group": "browser_act", "atomic": False},
+    "live_browser_execute_js": {"group": "browser_act", "atomic": False},
     "live_browser_current_url": {"group": "browser_act", "atomic": False},
-    "live_browser_find":        {"group": "browser_act", "atomic": False},
-    "live_browser_state":       {"group": "browser_act", "atomic": False},
-
+    "live_browser_find": {"group": "browser_act", "atomic": False},
+    "live_browser_state": {"group": "browser_act", "atomic": False},
     # Kimi-compatible media / data / website helper tools.
-    "generate_image":        {"group": "kimi_compat", "atomic": False},
-    "generate_video":        {"group": "kimi_compat", "atomic": False},
-    "generate_speech":       {"group": "kimi_compat", "atomic": False},
-    "get_available_voices":  {"group": "kimi_compat", "atomic": True},
+    "generate_image": {"group": "kimi_compat", "atomic": False},
+    "generate_video": {"group": "kimi_compat", "atomic": False},
+    "generate_speech": {"group": "kimi_compat", "atomic": False},
+    "get_available_voices": {"group": "kimi_compat", "atomic": True},
     "generate_sound_effects": {"group": "kimi_compat", "atomic": False},
     "website_version_manager": {"group": "kimi_compat", "atomic": False},
-    "find_asset_bbox":       {"group": "kimi_compat", "atomic": False},
+    "find_asset_bbox": {"group": "kimi_compat", "atomic": False},
     "crop_and_replicate_assets_in_image": {"group": "kimi_compat", "atomic": False},
-
     # ── memory (per-agent state files) ───────────────────────
-    "remember":             {"group": "memory", "atomic": True},
-    "recall":               {"group": "memory", "atomic": True},
-    "note_user":            {"group": "memory", "atomic": True},
-    "diary_write":          {"group": "memory", "atomic": True},
-    "update_soul":          {"group": "memory", "atomic": True},
-    "list_soul_history":    {"group": "memory", "atomic": True},
-    "revert_soul":          {"group": "memory", "atomic": True},
-    "recall_scores":        {"group": "memory", "atomic": True},
-    "analyze_soul_impact":  {"group": "memory", "atomic": True},
-    "auto_regression_check":{"group": "memory", "atomic": True},
-    "deep_reflect":         {"group": "memory", "atomic": False},
-    "deep_evolve":          {"group": "memory", "atomic": False},
-
+    "remember": {"group": "memory", "atomic": True},
+    "recall": {"group": "memory", "atomic": True},
+    "note_user": {"group": "memory", "atomic": True},
+    "diary_write": {"group": "memory", "atomic": True},
+    "update_soul": {"group": "memory", "atomic": True},
+    "list_soul_history": {"group": "memory", "atomic": True},
+    "revert_soul": {"group": "memory", "atomic": True},
+    "recall_scores": {"group": "memory", "atomic": True},
+    "analyze_soul_impact": {"group": "memory", "atomic": True},
+    "auto_regression_check": {"group": "memory", "atomic": True},
+    "deep_reflect": {"group": "memory", "atomic": False},
+    "deep_evolve": {"group": "memory", "atomic": False},
     # ── learned-skill library (Kimi-style document templates) ──
     # ``learn_skill_from_text`` extracts a reusable template from a
     # high-quality sample doc; ``apply_skill`` reuses it for a new
     # request; ``list_learned_skills`` enumerates the agent's
     # library. All non-atomic (LLM-coupled).
     "learn_skill_from_text": {"group": "skill_library", "atomic": False},
-    "list_learned_skills":   {"group": "skill_library", "atomic": True},
-    "apply_skill":           {"group": "skill_library", "atomic": False},
-
+    "list_learned_skills": {"group": "skill_library", "atomic": True},
+    "apply_skill": {"group": "skill_library", "atomic": False},
     # ── knowledge graph (on-demand query) ───────────────────
-    "kg_query":       {"group": "memory", "atomic": True},
-
+    "kg_query": {"group": "memory", "atomic": True},
     # ── mode protocol (plan-mode exit) ───────────────────────
     "exit_plan_mode": {"group": "mode", "atomic": True},
-
     # ── interactive ask-user-question (pause-and-ask atomic) ───
     "ask_user_question": {"group": "ask_user", "atomic": True},
-
     # ── agent meta (self-management · UI surfacing) ──────────
     # ``todo_write`` is the task-plan surface · call it from any
     # multi-step agent turn to drive the UI's live checklist.
-    "todo_read":      {"group": "agent_meta", "atomic": True},
-    "todo_write":     {"group": "agent_meta", "atomic": True},
-    "search_skills":  {"group": "agent_meta", "atomic": True},
-    "query_skill":    {"group": "agent_meta", "atomic": True},
+    "todo_read": {"group": "agent_meta", "atomic": True},
+    "todo_write": {"group": "agent_meta", "atomic": True},
+    "search_skills": {"group": "agent_meta", "atomic": True},
+    "query_skill": {"group": "agent_meta", "atomic": True},
     "search_capabilities": {"group": "agent_meta", "atomic": True},
-    "query_capability":    {"group": "agent_meta", "atomic": True},
-    "use_capability":      {"group": "agent_meta", "atomic": True},
-
+    "query_capability": {"group": "agent_meta", "atomic": True},
+    "use_capability": {"group": "agent_meta", "atomic": True},
     # ── delegation (Claude-style sub-agent / Task tool) ─────
     # ``call_agent`` spawns a focused ephemeral role (researcher /
     # debugger / reviewer / ...). Backed by the existing
     # ``runtime.execution.subagents.call_subagent`` bridge + the
     # ephemeral role runner already wired up in app.py.
-    "call_agent":     {"group": "delegation", "atomic": False},
+    "call_agent": {"group": "delegation", "atomic": False},
     # ``call_agent_parallel`` spawns N sub-agents concurrently, all
     # sharing the same blackboard so they can pass partial findings
     # to each other. Counts as 1 against the per-turn delegation
     # budget regardless of N.
     "call_agent_parallel": {"group": "delegation", "atomic": False},
-
     # ── blackboard (turn-scoped shared state for multi-agent) ─
     # Substrate for parallel sub-agents to exchange findings.
     # Atomic-safe (no I/O outside in-process dict).
-    "bb_read":        {"group": "blackboard", "atomic": True},
-    "bb_write":       {"group": "blackboard", "atomic": True},
-    "bb_keys":        {"group": "blackboard", "atomic": True},
-
+    "bb_read": {"group": "blackboard", "atomic": True},
+    "bb_write": {"group": "blackboard", "atomic": True},
+    "bb_keys": {"group": "blackboard", "atomic": True},
     # ── self-scheduling (mid-turn cron · same store as the UI) ──
-    "schedule_task":          {"group": "cron", "atomic": False},
-    "list_scheduled_tasks":   {"group": "cron", "atomic": False},
-    "cancel_scheduled_task":  {"group": "cron", "atomic": False},
-
+    "schedule_task": {"group": "cron", "atomic": False},
+    "list_scheduled_tasks": {"group": "cron", "atomic": False},
+    "cancel_scheduled_task": {"group": "cron", "atomic": False},
 }
 
 
@@ -374,9 +353,7 @@ ALL_SKILL_IDS: frozenset[str] = frozenset(_CATALOG)
 # It must equal ATOMIC_SKILL_NAMES from suckers/layers.py — that module
 # is what Arm.can_use() consults for the "any arm implicitly allows these"
 # rule. Keeping them in sync is enforced by the assertion below.
-BASE_SKILL_IDS: frozenset[str] = frozenset(
-    sid for sid, meta in _CATALOG.items() if meta["atomic"]
-)
+BASE_SKILL_IDS: frozenset[str] = frozenset(sid for sid, meta in _CATALOG.items() if meta["atomic"])
 assert BASE_SKILL_IDS == ATOMIC_SKILL_NAMES, (
     f"all_skills.BASE_SKILL_IDS drift from suckers.layers.ATOMIC_SKILL_NAMES: "
     f"catalog={sorted(BASE_SKILL_IDS)} vs layers={sorted(ATOMIC_SKILL_NAMES)}"
@@ -391,9 +368,7 @@ def skill_group(skill_id: str) -> str | None:
 
 def skills_in_group(group: str) -> frozenset[str]:
     """All skill ids belonging to a group."""
-    return frozenset(
-        sid for sid, meta in _CATALOG.items() if meta["group"] == group
-    )
+    return frozenset(sid for sid, meta in _CATALOG.items() if meta["group"] == group)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -401,26 +376,26 @@ def skills_in_group(group: str) -> frozenset[str]:
 # ═══════════════════════════════════════════════════════════
 
 _GROUP_REGISTRARS: dict[str, Callable[[SkillRegistry], Any]] = {
-    "builtin":    _register_builtins,
-    "fs_search":  _register_fs_search,
-    "web":        _register_web,
-    "crawler":    _register_crawler,
-    "fs_write":   _register_fs_write,
-    "git":        _register_git,
-    "shell":      _register_shell,
-    "computer":   lambda registry: _register_computer(registry, verify_tests=False),
-    "browser":    _register_browser,
+    "builtin": _register_builtins,
+    "fs_search": _register_fs_search,
+    "web": _register_web,
+    "crawler": _register_crawler,
+    "fs_write": _register_fs_write,
+    "git": _register_git,
+    "shell": _register_shell,
+    "computer": lambda registry: _register_computer(registry, verify_tests=False),
+    "browser": _register_browser,
     "browser_act": _register_browser_act,
-    "memory":     _register_memory,
-    "mode":       _register_mode,
+    "memory": _register_memory,
+    "mode": _register_mode,
     "agent_meta": _register_agent_meta,
-    "ask_user":   _register_ask_user_question,
+    "ask_user": _register_ask_user_question,
     "delegation": _register_delegation,
     "blackboard": _register_blackboard,
     "kimi_compat": _register_kimi_compat,
     "skill_library": _register_skill_library,
     "code_intel": _register_code_intel,
-    "lsp":        _register_lsp,
+    "lsp": _register_lsp,
     "agent_docs": _register_agent_docs,
     "cron": _register_cron,
     "market": lambda registry: _register_market(
@@ -432,6 +407,7 @@ _GROUP_REGISTRARS: dict[str, Callable[[SkillRegistry], Any]] = {
 
 def register_all(registry: SkillRegistry) -> None:
     from runtime.platform import capabilities as _caps_mod
+
     disabled = _caps_mod.load().disabled_skill_groups()
 
     for name, fn in _GROUP_REGISTRARS.items():
@@ -447,7 +423,9 @@ def register_all(registry: SkillRegistry) -> None:
         except Exception as exc:  # noqa: BLE001
             _log.warning(
                 "skill group %r failed to register (%s: %s) — skipping",
-                name, type(exc).__name__, exc,
+                name,
+                type(exc).__name__,
+                exc,
             )
     try:
         from runtime.platform.process.paths import resources_root
@@ -461,7 +439,8 @@ def register_all(registry: SkillRegistry) -> None:
     except Exception as exc:  # noqa: BLE001
         _log.warning(
             "public prompt skills failed to register (%s: %s) — skipping",
-            type(exc).__name__, exc,
+            type(exc).__name__,
+            exc,
         )
 
 
@@ -505,7 +484,8 @@ def register_subset(
             needed_groups.add(g)
         else:
             _log.warning(
-                "register_subset: unknown skill id %r — skipping", sid,
+                "register_subset: unknown skill id %r — skipping",
+                sid,
             )
     for g in needed_groups:
         fn = _GROUP_REGISTRARS[g]
@@ -514,7 +494,9 @@ def register_subset(
         except Exception as exc:  # noqa: BLE001
             _log.warning(
                 "skill group %r failed (%s: %s) — skipping",
-                g, type(exc).__name__, exc,
+                g,
+                type(exc).__name__,
+                exc,
             )
 
 
@@ -539,30 +521,34 @@ def register_subset(
 # meta_router re-exports these for the /api/skills wire payload; react_loop
 # uses them to filter the ReAct catalog per-agent.
 
-_SYSTEM_GROUPS: frozenset[str] = frozenset({
-    "builtin",
-    "fs_search",
-    "memory",
-    "mode",
-    "agent_meta",
-    "delegation",
-    "blackboard",
-    "skill_library",
-    "code_intel",
-    "lsp",
-    "fs_write",
-    "git",
-    "shell",
-    "web",
-    "kimi_compat",
-    "cron",
-})
+_SYSTEM_GROUPS: frozenset[str] = frozenset(
+    {
+        "builtin",
+        "fs_search",
+        "memory",
+        "mode",
+        "agent_meta",
+        "delegation",
+        "blackboard",
+        "skill_library",
+        "code_intel",
+        "lsp",
+        "fs_write",
+        "git",
+        "shell",
+        "web",
+        "kimi_compat",
+        "cron",
+    }
+)
 
-_AUTOMATION_GROUPS: frozenset[str] = frozenset({
-    "browser",
-    "browser_act",
-    "computer",
-})
+_AUTOMATION_GROUPS: frozenset[str] = frozenset(
+    {
+        "browser",
+        "browser_act",
+        "computer",
+    }
+)
 
 import re as _re
 

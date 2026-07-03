@@ -9,6 +9,7 @@ These tests mock call_subagent so they run fast without spawning real
 subagents. The contract is that delegation_skills calls call_subagent
 with the right arguments and handles results correctly.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -415,12 +416,17 @@ def test_call_agent_threads_output_schema(mock_subagent, mock_builtins):
         "required": ["verdict"],
     }
     mock_subagent.return_value = {
-        "agent_id": "researcher", "output": '{"verdict": "yes"}',
-        "parsed": {"verdict": "yes"}, "schema_ok": True, "success": True,
+        "agent_id": "researcher",
+        "output": '{"verdict": "yes"}',
+        "parsed": {"verdict": "yes"},
+        "schema_ok": True,
+        "success": True,
     }
 
     result = _call_agent(
-        agent_id="researcher", prompt="decide", output_schema=schema,
+        agent_id="researcher",
+        prompt="decide",
+        output_schema=schema,
     )
 
     assert result["parsed"] == {"verdict": "yes"}
@@ -436,7 +442,8 @@ def test_call_agent_parses_stringified_schema(mock_subagent, mock_builtins):
     mock_subagent.return_value = {"agent_id": "researcher", "output": "x", "success": True}
 
     _call_agent(
-        agent_id="researcher", prompt="go",
+        agent_id="researcher",
+        prompt="go",
         output_schema='{"type": "object"}',
     )
 

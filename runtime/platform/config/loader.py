@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import os
@@ -26,9 +25,11 @@ class ConfigLoadError(ValueError):
 
 def _interpolate_env(value: Any) -> Any:
     if isinstance(value, str):
+
         def _sub(m: re.Match[str]) -> str:
             name = m.group(1) or m.group(2)
             return os.environ.get(name, "")
+
         return _ENV_PATTERN.sub(_sub, value)
     if isinstance(value, dict):
         return {k: _interpolate_env(v) for k, v in value.items()}
@@ -47,9 +48,7 @@ def load_from_dict(data: dict[str, Any]) -> AgentConfig:
 
 def load_from_yaml(path: str | Path) -> AgentConfig:
     if not YAML_AVAILABLE:
-        raise ConfigLoadError(
-            "PyYAML not installed · `pip install PyYAML` or use load_from_dict()"
-        )
+        raise ConfigLoadError("PyYAML not installed · `pip install PyYAML` or use load_from_dict()")
     p = Path(path)
     if not p.exists():
         raise ConfigLoadError(f"config file not found: {p}")
@@ -60,7 +59,5 @@ def load_from_yaml(path: str | Path) -> AgentConfig:
     if raw is None:
         raw = {}
     if not isinstance(raw, dict):
-        raise ConfigLoadError(
-            f"top-level YAML must be a mapping, got {type(raw).__name__}"
-        )
+        raise ConfigLoadError(f"top-level YAML must be a mapping, got {type(raw).__name__}")
     return load_from_dict(raw)

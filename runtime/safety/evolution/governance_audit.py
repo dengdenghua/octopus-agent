@@ -77,15 +77,14 @@ def append_governance_audit_event(
     raw = read_json_with_backup(path, default=None)
     payload = _empty_payload()
     if isinstance(raw, dict):
-        payload.update({
-            "schema": _clean(raw.get("schema"), limit=80) or _AUDIT_SCHEMA,
-            "version": int(raw.get("version") or 1),
-            "lastUpdated": _clean(raw.get("lastUpdated"), limit=80),
-            "records": [
-                row for row in (raw.get("records") or [])
-                if isinstance(row, dict)
-            ],
-        })
+        payload.update(
+            {
+                "schema": _clean(raw.get("schema"), limit=80) or _AUDIT_SCHEMA,
+                "version": int(raw.get("version") or 1),
+                "lastUpdated": _clean(raw.get("lastUpdated"), limit=80),
+                "records": [row for row in (raw.get("records") or []) if isinstance(row, dict)],
+            }
+        )
     records = list(payload.get("records") or [])
     records.append(record)
     payload["records"] = records
@@ -219,8 +218,7 @@ def _governance_audit_records(path: Path) -> list[dict[str, Any]]:
     if not isinstance(records, list):
         return []
     return [
-        row for row in records
-        if isinstance(row, dict) and _clean(row.get("event_type"), limit=80)
+        row for row in records if isinstance(row, dict) and _clean(row.get("event_type"), limit=80)
     ]
 
 
@@ -280,14 +278,10 @@ def _chain_comparable_record(row: dict[str, Any]) -> dict[str, Any]:
         "applied_at": _clean(row.get("applied_at"), limit=80),
         "artifact": row.get("artifact") if isinstance(row.get("artifact"), dict) else {},
         "decision_context": (
-            row.get("decision_context")
-            if isinstance(row.get("decision_context"), dict)
-            else {}
+            row.get("decision_context") if isinstance(row.get("decision_context"), dict) else {}
         ),
         "item_snapshot": (
-            row.get("item_snapshot")
-            if isinstance(row.get("item_snapshot"), dict)
-            else {}
+            row.get("item_snapshot") if isinstance(row.get("item_snapshot"), dict) else {}
         ),
     }
 

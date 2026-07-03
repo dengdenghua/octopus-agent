@@ -32,6 +32,7 @@ Run::
     python tools/lint/feature_flag_consumption_check.py --strict   # exit 1 on new
     python tools/lint/feature_flag_consumption_check.py --write-baseline
 """
+
 from __future__ import annotations
 
 import argparse
@@ -148,10 +149,14 @@ def _audit(strict: bool) -> int:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--strict", action="store_true",
-                   help="exit 1 on new unconsumed flags or stale baseline")
-    p.add_argument("--write-baseline", action="store_true",
-                   help="snapshot current unconsumed flags to the baseline file")
+    p.add_argument(
+        "--strict", action="store_true", help="exit 1 on new unconsumed flags or stale baseline"
+    )
+    p.add_argument(
+        "--write-baseline",
+        action="store_true",
+        help="snapshot current unconsumed flags to the baseline file",
+    )
     args = p.parse_args()
 
     if args.write_baseline:

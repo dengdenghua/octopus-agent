@@ -1,4 +1,3 @@
-
 from .bridge import register_mcp_tools_as_skills
 from .client import (
     HTTP_AVAILABLE,

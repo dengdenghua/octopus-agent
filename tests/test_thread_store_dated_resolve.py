@@ -30,14 +30,19 @@ def _session_record(thread_id: str, title: str, updated_at: str) -> str:
         "checkpoint_id": title,
         "tasks": [],
     }
-    return json.dumps({"type": "session_meta", "payload": {"id": thread_id}}) + "\n" + json.dumps(
-        {
-            "op": "upsert",
-            "thread_id": thread_id,
-            "thread": thread,
-            "state": state,
-        }
-    ) + "\n"
+    return (
+        json.dumps({"type": "session_meta", "payload": {"id": thread_id}})
+        + "\n"
+        + json.dumps(
+            {
+                "op": "upsert",
+                "thread_id": thread_id,
+                "thread": thread,
+                "state": state,
+            }
+        )
+        + "\n"
+    )
 
 
 def test_resolve_thread_file_picks_latest_dated_month(tmp_path):

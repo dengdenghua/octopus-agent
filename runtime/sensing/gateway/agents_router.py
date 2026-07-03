@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -112,6 +111,7 @@ def _soul_for_display(soul: str | None) -> str | None:
     txt = txt.strip()
     return txt or None
 
+
 try:
     from fastapi import APIRouter, HTTPException, Request
     from fastapi.responses import FileResponse, Response
@@ -136,6 +136,7 @@ def _avatar_url_for(agent_id: str) -> str | None:
     runtime the next list call reflects it · no caching.
     """
     from runtime.execution.agents.loader import default_agents_root
+
     try:
         root = default_agents_root()
     except (OSError, ImportError):
@@ -174,10 +175,7 @@ def _agent_visual_urls_for(agent_id: str) -> dict[str, str]:
         for ext in ("png", "jpg", "jpeg", "webp", "svg"):
             path = visuals_dir / f"{view}.{ext}"
             if path.is_file():
-                urls[view] = (
-                    f"/api/agents/{agent_id}/visuals/{view}"
-                    f"?v={int(path.stat().st_mtime)}"
-                )
+                urls[view] = f"/api/agents/{agent_id}/visuals/{view}?v={int(path.stat().st_mtime)}"
                 break
 
     reference = visuals_dir / "reference.png"
@@ -270,13 +268,9 @@ def _to_detail_wire(agent: Any) -> AgentDetailWire:
         allowed_skills = skill_policy_obj.as_list()
         skill_policy = {
             "allowed": allowed_skills,
-            "sources": {
-                source: list(names)
-                for source, names in skill_policy_obj.sources.items()
-            },
+            "sources": {source: list(names) for source, names in skill_policy_obj.sources.items()},
             "reason_map": {
-                name: list(sources)
-                for name, sources in skill_policy_obj.reason_map.items()
+                name: list(sources) for name, sources in skill_policy_obj.reason_map.items()
             },
             "allow_all": skill_policy_obj.allow_all,
         }
@@ -347,8 +341,11 @@ def create_agents_router(
 
     def _auth(request: Any) -> str | None:
         from .openai_gateway_router import _resolve_actor
+
         return _resolve_actor(
-            request, identity_store, require_auth,
+            request,
+            identity_store,
+            require_auth,
             jwt_secret=jwt_secret,
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
@@ -414,6 +411,7 @@ def create_agents_router(
         if not actor:
             raise HTTPException(401, "authentication required")
         from runtime.core.cerebrum.pause_control import get_pause_controller
+
         ctrl = get_pause_controller()
         thread_id = ctrl.get_task_thread_id(task_id)
         if thread_id is None:
@@ -468,9 +466,7 @@ def create_agents_router(
     def list_agents(request: Request) -> list[AgentWire]:
         _auth(request)  # AUTH-OK: actor-agnostic — agent registry is server-global
         return [
-            _to_wire(a)
-            for a in registry.all_agents()
-            if a.agent_id not in _AGENT_GALLERY_SKIP_IDS
+            _to_wire(a) for a in registry.all_agents() if a.agent_id not in _AGENT_GALLERY_SKIP_IDS
         ]
 
     @router.post("/api/agents", status_code=201)
@@ -482,9 +478,7 @@ def create_agents_router(
         """
         _require_admin(request)  # Mutation: writes to global agents/ dir + loads code
         if runtime is None:
-            raise HTTPException(
-                503, "agent creation needs a GraphRuntime in this router"
-            )
+            raise HTTPException(503, "agent creation needs a GraphRuntime in this router")
 
         agent_id = body.name.strip()
         if not agent_id:
@@ -532,12 +526,14 @@ def create_agents_router(
 
         # Generate a unique DID
         import uuid
+
         did = f"DID-{uuid.uuid4().hex[:12].upper()}-{uuid.uuid4().hex[:6].upper()}"
 
         # Build profile.jsonc
         import json
 
         from runtime.platform.io import atomic_write_text
+
         profile = {
             "id": agent_id,
             "templateId": agent_id,
@@ -547,24 +543,18 @@ def create_agents_router(
             "did": did,
             "description": body.description or f"A custom agent named {agent_id}.",
             "avatar": "avatar.svg",
-            "model": {
-                "provider": "auto",
-                "name": body.model or "auto"
-            },
+            "model": {"provider": "auto", "name": body.model or "auto"},
             "runtime": "local",
             "creator": "user",
-            "defaultProject": {
-                "dir": "project"
-            },
-            "capabilities": {}
+            "defaultProject": {"dir": "project"},
+            "capabilities": {},
         }
 
         profile_path = agent_dir / "profile.jsonc"
         try:
             profile_text = (
                 f"// Octopus Agent profile · {agent_id}\n"
-                "// Created by user via API\n\n"
-                + json.dumps(profile, ensure_ascii=False, indent=2)
+                "// Created by user via API\n\n" + json.dumps(profile, ensure_ascii=False, indent=2)
             )
             atomic_write_text(profile_path, profile_text)
         except OSError as exc:
@@ -574,7 +564,9 @@ def create_agents_router(
             ) from exc
 
         # Write SOUL.md
-        soul_content = body.soul or f"""# Soul
+        soul_content = (
+            body.soul
+            or f"""# Soul
 
 You are {agent_id}, a helpful AI assistant.
 
@@ -594,6 +586,7 @@ You are {agent_id}, a helpful AI assistant.
 
 _This file is yours to evolve. As you learn who you are, update it._
 """
+        )
         soul_path = agent_dir / "agent-core" / "SOUL.md"
         try:
             atomic_write_text(soul_path, soul_content, newline=None)
@@ -669,13 +662,12 @@ When making changes, first read the surrounding code.
             tool_registry = {
                 "arms": list(body.tool_groups),
                 "extra_affinity": [],
-                "private_skills": []
+                "private_skills": [],
             }
             tool_registry_path = agent_dir / "agent-core" / "tool-registry.jsonc"
             try:
-                tool_text = (
-                    "// Tool registry for this agent\n\n"
-                    + json.dumps(tool_registry, ensure_ascii=False, indent=2)
+                tool_text = "// Tool registry for this agent\n\n" + json.dumps(
+                    tool_registry, ensure_ascii=False, indent=2
                 )
                 atomic_write_text(tool_registry_path, tool_text)
             except OSError as exc:
@@ -761,36 +753,42 @@ When making changes, first read the surrounding code.
             spec = _LOCAL_PARTNER_SPECS.get(item.id)
             if spec is None:
                 skipped_count += 1
-                results.append(LocalPartnerRegisterResult(
-                    id=item.id,
-                    agent_id="",
-                    status="error",
-                    message=f"unknown local partner: {item.id}",
-                ))
+                results.append(
+                    LocalPartnerRegisterResult(
+                        id=item.id,
+                        agent_id="",
+                        status="error",
+                        message=f"unknown local partner: {item.id}",
+                    )
+                )
                 continue
 
             agent_id = str(spec["agent_id"])
             alias = validated_aliases[item.id] or str(spec["default_alias"])
             if registry.has(agent_id):
                 already_exists_count += 1
-                results.append(LocalPartnerRegisterResult(
-                    id=str(spec["id"]),
-                    agent_id=agent_id,
-                    status="already_exists",
-                    message="already registered",
-                    agent=_to_detail_wire(registry.get(agent_id)),
-                ))
+                results.append(
+                    LocalPartnerRegisterResult(
+                        id=str(spec["id"]),
+                        agent_id=agent_id,
+                        status="already_exists",
+                        message="already registered",
+                        agent=_to_detail_wire(registry.get(agent_id)),
+                    )
+                )
                 continue
 
             command, executable = _which_local_partner_command(list(spec["commands"]))
             if not executable or not command:
                 skipped_count += 1
-                results.append(LocalPartnerRegisterResult(
-                    id=str(spec["id"]),
-                    agent_id=agent_id,
-                    status="not_detected",
-                    message="local executable was not found on PATH",
-                ))
+                results.append(
+                    LocalPartnerRegisterResult(
+                        id=str(spec["id"]),
+                        agent_id=agent_id,
+                        status="not_detected",
+                        message="local executable was not found on PATH",
+                    )
+                )
                 continue
 
             # PATH-poisoning guard: reject executables that resolve into
@@ -799,15 +797,17 @@ When making changes, first read the surrounding code.
             # win the PATH race.
             if not _safe_local_partner_executable(executable):
                 skipped_count += 1
-                results.append(LocalPartnerRegisterResult(
-                    id=str(spec["id"]),
-                    agent_id=agent_id,
-                    status="error",
-                    message=(
-                        f"refusing to register executable from a user-writable "
-                        f"location: {executable}"
-                    ),
-                ))
+                results.append(
+                    LocalPartnerRegisterResult(
+                        id=str(spec["id"]),
+                        agent_id=agent_id,
+                        status="error",
+                        message=(
+                            f"refusing to register executable from a user-writable "
+                            f"location: {executable}"
+                        ),
+                    )
+                )
                 continue
 
             try:
@@ -821,22 +821,26 @@ When making changes, first read the surrounding code.
                 )
             except (OSError, ValueError, TypeError) as exc:
                 skipped_count += 1
-                results.append(LocalPartnerRegisterResult(
-                    id=str(spec["id"]),
-                    agent_id=agent_id,
-                    status="error",
-                    message=f"{type(exc).__name__}: {exc}",
-                ))
+                results.append(
+                    LocalPartnerRegisterResult(
+                        id=str(spec["id"]),
+                        agent_id=agent_id,
+                        status="error",
+                        message=f"{type(exc).__name__}: {exc}",
+                    )
+                )
                 continue
 
             registered_count += 1
-            results.append(LocalPartnerRegisterResult(
-                id=str(spec["id"]),
-                agent_id=agent_id,
-                status="registered",
-                message="registered",
-                agent=_to_detail_wire(agent),
-            ))
+            results.append(
+                LocalPartnerRegisterResult(
+                    id=str(spec["id"]),
+                    agent_id=agent_id,
+                    status="registered",
+                    message="registered",
+                    agent=_to_detail_wire(agent),
+                )
+            )
 
         return LocalPartnerRegisterResponse(
             results=results,
@@ -849,9 +853,7 @@ When making changes, first read the surrounding code.
     def update_agent(request: Request, agent_id: str, body: UpdateAgentRequest) -> AgentDetailWire:
         _require_admin(request)  # Mutation: rewrites profile.jsonc, reloads agent into registry
         if runtime is None:
-            raise HTTPException(
-                503, "agent update needs a GraphRuntime in this router"
-            )
+            raise HTTPException(503, "agent update needs a GraphRuntime in this router")
         agent_id = _require_safe_agent_id(agent_id)
 
         from runtime.execution.agents.loader import (
@@ -877,7 +879,9 @@ When making changes, first read the surrounding code.
                 500, f"failed to read profile.jsonc: {type(exc).__name__}: {exc}"
             ) from exc
 
-        provided_fields = set(getattr(body, "model_fields_set", None) or getattr(body, "__fields_set__", set()))
+        provided_fields = set(
+            getattr(body, "model_fields_set", None) or getattr(body, "__fields_set__", set())
+        )
         display_name = (body.display_name or "").strip()
         if "display_name" in provided_fields:
             if not display_name:
@@ -891,9 +895,8 @@ When making changes, first read the surrounding code.
             profile["capabilities"] = body.capabilities or {}
 
         try:
-            profile_text = (
-                f"// Octopus Agent profile · {agent_id}\n\n"
-                + json.dumps(profile, ensure_ascii=False, indent=2)
+            profile_text = f"// Octopus Agent profile · {agent_id}\n\n" + json.dumps(
+                profile, ensure_ascii=False, indent=2
             )
             atomic_write_text(profile_path, profile_text)
         except OSError as exc:
@@ -1056,7 +1059,9 @@ When making changes, first read the surrounding code.
             return FileResponse(str(reference), media_type="image/png")
         raise HTTPException(404, f"no {view} visual for agent: {agent_id}")
 
-    @router.delete("/api/agents/{agent_id}", status_code=204, response_class=Response, response_model=None)
+    @router.delete(
+        "/api/agents/{agent_id}", status_code=204, response_class=Response, response_model=None
+    )
     def delete_agent(request: Request, agent_id: str):
         _require_admin(request)  # Mutation: deletes agent directory + unloads from registry
         agent_id = _require_safe_agent_id(agent_id)
@@ -1106,6 +1111,7 @@ When making changes, first read the surrounding code.
         attacker can't enumerate paths outside ``agents/<id>/``.
         """
         from runtime.execution.agents.loader import default_agents_root
+
         try:
             root = default_agents_root()
         except OSError as exc:
@@ -1156,13 +1162,13 @@ When making changes, first read the surrounding code.
         if runtime is None:
             raise HTTPException(
                 503,
-                "hot reload needs a GraphRuntime · pass runtime=... to "
-                "create_agents_router",
+                "hot reload needs a GraphRuntime · pass runtime=... to create_agents_router",
             )
         from runtime.execution.agents.loader import (
             default_agents_root,
             load_agent,
         )
+
         root = default_agents_root()
         agent_dir = root / agent_id
         if not agent_dir.is_dir() or not (agent_dir / "profile.jsonc").exists():
@@ -1171,7 +1177,8 @@ When making changes, first read the surrounding code.
             new_agent = load_agent(agent_dir, runtime, root / "_shared")
         except (OSError, ValueError, TypeError) as exc:
             raise HTTPException(
-                400, f"agent rebuild failed: {type(exc).__name__}: {exc}",
+                400,
+                f"agent rebuild failed: {type(exc).__name__}: {exc}",
             ) from exc
         prev = registry.replace(new_agent)
         return {
@@ -1192,14 +1199,17 @@ When making changes, first read the surrounding code.
         _require_admin(request)  # Mutation: bulk hot-reload of all agents
         if runtime is None:
             raise HTTPException(
-                503, "hot reload needs a GraphRuntime in this router",
+                503,
+                "hot reload needs a GraphRuntime in this router",
             )
         from runtime.execution.agents.loader import load_all_agents
+
         try:
             rebuilt = load_all_agents(runtime)
         except (OSError, ValueError, TypeError) as exc:
             raise HTTPException(
-                400, f"agent scan failed: {type(exc).__name__}: {exc}",
+                400,
+                f"agent scan failed: {type(exc).__name__}: {exc}",
             ) from exc
         replaced = 0
         added = 0
@@ -1216,34 +1226,38 @@ When making changes, first read the surrounding code.
             "total": len(rebuilt),
         }
 
-
     @router.get("/api/arms")
     def list_arms(request: Request) -> list[ArmOptionWire]:
         _auth(request)  # AUTH-OK: actor-agnostic — arm registry is server-global
         if runtime is None:
             raise HTTPException(
-                503, "listing arms needs a GraphRuntime in this router",
+                503,
+                "listing arms needs a GraphRuntime in this router",
             )
         from runtime.execution.agents.loader import _ARM_FACTORIES
+
         out: list[ArmOptionWire] = []
         for arm_id, factory in _ARM_FACTORIES.items():
             try:
                 worker = factory(runtime)
             except (TypeError, ValueError, AttributeError):
                 continue
-            out.append(ArmOptionWire(
-                arm_id=arm_id,
-                display_name=getattr(worker, "display_name", "") or "",
-                description=getattr(worker, "description", "") or "",
-                affinity=list(worker.affinity),
-                icon=getattr(worker, "icon", "") or "",
-                skills=[str(s) for s in worker.allowed_skills],
-            ))
+            out.append(
+                ArmOptionWire(
+                    arm_id=arm_id,
+                    display_name=getattr(worker, "display_name", "") or "",
+                    description=getattr(worker, "description", "") or "",
+                    affinity=list(worker.affinity),
+                    icon=getattr(worker, "icon", "") or "",
+                    skills=[str(s) for s in worker.allowed_skills],
+                )
+            )
         return out
 
     @router.get("/api/agents/{agent_id}/tool-registry")
     def get_tool_registry(
-        request: Request, agent_id: str,
+        request: Request,
+        agent_id: str,
     ) -> ToolRegistryWire:
         _auth(request)  # AUTH-OK: actor-agnostic — tool-registry is read-only
         if "/" in agent_id or "\\" in agent_id or agent_id in ("", ".", ".."):
@@ -1252,6 +1266,7 @@ When making changes, first read the surrounding code.
             _parse_jsonc,
             default_agents_root,
         )
+
         path = default_agents_root() / agent_id / "agent-core" / "tool-registry.jsonc"
         if not path.is_file():
             return ToolRegistryWire()
@@ -1277,7 +1292,8 @@ When making changes, first read the surrounding code.
         _require_admin(request)  # Mutation: rewrites agent tool-registry config
         if runtime is None:
             raise HTTPException(
-                503, "tool-registry edits need a GraphRuntime in this router",
+                503,
+                "tool-registry edits need a GraphRuntime in this router",
             )
         agent_id = _require_safe_agent_id(agent_id)
         from runtime.execution.agents.loader import (
@@ -1285,6 +1301,7 @@ When making changes, first read the surrounding code.
             default_agents_root,
             load_agent,
         )
+
         root = default_agents_root().resolve()
         agent_dir = _require_real_agent_dir(root, agent_id)
         profile_path = agent_dir / "profile.jsonc"
@@ -1298,12 +1315,15 @@ When making changes, first read the surrounding code.
         if unknown:
             raise HTTPException(
                 400,
-                "unknown arm(s): " + ", ".join(sorted(set(unknown)))
-                + " · known: " + ", ".join(sorted(_ARM_FACTORIES)),
+                "unknown arm(s): "
+                + ", ".join(sorted(set(unknown)))
+                + " · known: "
+                + ", ".join(sorted(_ARM_FACTORIES)),
             )
 
         # Build JSON payload · preserve key order for git-friendly diffs
         import json
+
         payload = {
             "arms": list(body.arms),
             "extra_affinity": list(body.extra_affinity),
@@ -1318,12 +1338,11 @@ When making changes, first read the surrounding code.
         target = core_dir / "tool-registry.jsonc"
         if target.is_symlink():
             raise HTTPException(409, f"tool-registry is not a real file: {agent_id}")
-        original_tool_registry = (
-            target.read_text(encoding="utf-8") if target.is_file() else None
-        )
+        original_tool_registry = target.read_text(encoding="utf-8") if target.is_file() else None
 
         # Atomic write via shared utility (.bak rotation + fsync)
         from runtime.platform.io import atomic_write_text
+
         text = (
             "// arms reference factories in "
             "runtime/execution/arms/presets.py.\n"
@@ -1346,8 +1365,7 @@ When making changes, first read the surrounding code.
             _restore_text_file(target, original_tool_registry)
             raise HTTPException(
                 400,
-                f"agent rebuild failed after tool-registry save: "
-                f"{type(exc).__name__}: {exc}",
+                f"agent rebuild failed after tool-registry save: {type(exc).__name__}: {exc}",
             ) from exc
         try:
             registry.replace(new_agent)
@@ -1360,13 +1378,14 @@ When making changes, first read the surrounding code.
             ) from exc
         return _to_detail_wire(new_agent)
 
-
     @router.get("/api/tasks")
     def list_tasks(
-        request: Request, status: str | None = None,
+        request: Request,
+        status: str | None = None,
     ) -> dict[str, Any]:
         actor = _auth(request)
         from runtime.core.cerebrum.pause_control import get_pause_controller
+
         ctrl = get_pause_controller()
 
         # Filter to tasks owned by the caller. In dev mode (no auth) or
@@ -1404,23 +1423,18 @@ When making changes, first read the surrounding code.
 
         out: dict[str, Any] = {}
         if status in (None, "paused", "all"):
-            out["paused"] = [
-                _to_dict(r) for r in ctrl.list_paused() if _is_owned(r)
-            ]
+            out["paused"] = [_to_dict(r) for r in ctrl.list_paused() if _is_owned(r)]
         if status in (None, "pending", "all"):
-            out["pending"] = [
-                _to_dict(r) for r in ctrl.list_pending() if _is_owned(r)
-            ]
+            out["pending"] = [_to_dict(r) for r in ctrl.list_pending() if _is_owned(r)]
         if status in (None, "active", "all"):
-            out["active"] = [
-                t.to_dict() for t in ctrl.list_active() if _is_owned(t)
-            ]
+            out["active"] = [t.to_dict() for t in ctrl.list_active() if _is_owned(t)]
         return out
 
     @router.get("/api/tasks/{task_id}")
     def get_task(request: Request, task_id: str) -> dict[str, Any]:
         _require_task_owner(request, task_id)
         from runtime.core.cerebrum.pause_control import get_pause_controller
+
         ctrl = get_pause_controller()
         req = ctrl.get_request(task_id)
         out: dict[str, Any] = {
@@ -1433,7 +1447,8 @@ When making changes, first read the surrounding code.
         if journal is not None:
             try:
                 ckpts = [
-                    e for e in journal.read_by_type("react_checkpoint")
+                    e
+                    for e in journal.read_by_type("react_checkpoint")
                     if str(getattr(e, "task_id", "")) == task_id
                 ]
                 if ckpts:
@@ -1472,15 +1487,21 @@ When making changes, first read the surrounding code.
 
     @router.post("/api/tasks/{task_id}/pause")
     async def pause_task(
-        request: Request, task_id: str, body: PauseTaskBody = None,
+        request: Request,
+        task_id: str,
+        body: PauseTaskBody = None,
     ) -> dict[str, Any]:
         if body is None:
             body = PauseTaskBody()
         _require_task_owner(request, task_id)
         from runtime.core.cerebrum.pause_control import get_pause_controller
+
         ctrl = get_pause_controller()
         req = ctrl.request_pause(
-            task_id=task_id, reason=body.reason, requested_by="", note=body.note,
+            task_id=task_id,
+            reason=body.reason,
+            requested_by="",
+            note=body.note,
         )
         return {"ok": True, "request": req.to_dict()}
 
@@ -1488,6 +1509,7 @@ When making changes, first read the surrounding code.
     def delete_task(request: Request, task_id: str) -> dict[str, Any]:
         _require_task_owner(request, task_id)
         from runtime.core.cerebrum.pause_control import get_pause_controller
+
         ctrl = get_pause_controller()
         ctrl.clear(task_id)
         ctrl.unregister_active(task_id)
@@ -1495,12 +1517,15 @@ When making changes, first read the surrounding code.
 
     @router.post("/api/tasks/{task_id}/resume")
     async def resume_task(
-        request: Request, task_id: str, body: ResumeTaskBody = None,
+        request: Request,
+        task_id: str,
+        body: ResumeTaskBody = None,
     ) -> dict[str, Any]:
         if body is None:
             body = ResumeTaskBody()
         _require_task_owner(request, task_id)
         from runtime.core.cerebrum.pause_control import get_pause_controller
+
         ctrl = get_pause_controller()
 
         req = ctrl.get_request(task_id)
@@ -1529,11 +1554,9 @@ When making changes, first read the surrounding code.
             "extra_tokens": body.extra_tokens,
             "extra_iterations": body.extra_iterations,
             "message": (
-                f"登记 pending resume 到 thread {thread_id or '?'} · "
-                "下条消息 run_stream 会自动接续"
+                f"登记 pending resume 到 thread {thread_id or '?'} · 下条消息 run_stream 会自动接续"
             ),
         }
-
 
     @router.get("/api/regeneration/status")
     def evolution_status(request: Request) -> dict[str, Any]:
@@ -1541,6 +1564,7 @@ When making changes, first read the surrounding code.
         out: dict[str, Any] = {}
         try:
             from runtime.safety.recovery.scheduler import get_scheduler
+
             out["scheduler"] = get_scheduler().status()
         except (ImportError, AttributeError):
             out["scheduler"] = {"running": False, "error": "module load failed"}
@@ -1548,6 +1572,7 @@ When making changes, first read the surrounding code.
             from runtime.safety.experiments.scheduler import (
                 get_camouflage_scheduler,
             )
+
             out["camouflage"] = get_camouflage_scheduler().status()
         except (ImportError, AttributeError):
             out["camouflage"] = {
@@ -1559,6 +1584,7 @@ When making changes, first read the surrounding code.
         from pathlib import Path as _Path
 
         from runtime.execution.agents.loader import default_agents_root
+
         data_dir = _Path(default_agents_root()).parent / "data"
         files = {
             "learned_rules": "learned_rules.json",
@@ -1579,11 +1605,11 @@ When making changes, first read the surrounding code.
                 out[key] = None
         return out
 
-
     @router.get("/api/settings/capabilities")
     def get_capabilities(request: Request) -> CapabilitiesWire:
         _auth(request)  # AUTH-OK: actor-agnostic — capabilities config is server-global
         from runtime.platform.runtime_policy.capabilities import load as _load_caps
+
         caps = _load_caps()
         return CapabilitiesWire(
             browser_automation=caps.browser_automation,
@@ -1592,11 +1618,13 @@ When making changes, first read the surrounding code.
 
     @router.put("/api/settings/capabilities")
     def put_capabilities(
-        request: Request, body: CapabilitiesWire,
+        request: Request,
+        body: CapabilitiesWire,
     ) -> dict[str, Any]:
         _require_admin(request)  # Mutation: rewrites system-level capabilities
         from runtime.platform.runtime_policy.capabilities import Capabilities
         from runtime.platform.runtime_policy.capabilities import save as _save_caps
+
         caps = Capabilities(
             browser_automation=body.browser_automation,
             desktop_automation=body.desktop_automation,
@@ -1605,19 +1633,18 @@ When making changes, first read the surrounding code.
             _save_caps(caps)
         except OSError as exc:
             raise HTTPException(
-                500, f"failed to write capabilities file: {exc}",
+                500,
+                f"failed to write capabilities file: {exc}",
             ) from exc
         return {
             "ok": True,
             "capabilities": caps.to_dict(),
             "restart_required": True,
-            "message": (
-                "设置已保存 · 重启后端后生效(skill registry 只在启动时构造)"
-            ),
+            "message": ("设置已保存 · 重启后端后生效(skill registry 只在启动时构造)"),
         }
 
-
     if journal is not None:
+
         @router.get("/api/conversations")
         def list_conversations(
             request: Request,
@@ -1631,6 +1658,7 @@ When making changes, first read the surrounding code.
             owned_threads: set[str] | None = None
             if require_auth and actor and thread_store is not None:
                 from runtime.core.cerebrum.pause_control import get_pause_controller
+
                 ctrl = get_pause_controller()
                 owned_threads = ctrl.list_thread_ids_for_owner(thread_store, actor)
 
@@ -1643,13 +1671,15 @@ When making changes, first read the surrounding code.
                 if not events:
                     continue
                 agents = {e.agent_id for e in events if e.agent_id}
-                out.append({
-                    "conversation_id": cid,
-                    "agent_id": next(iter(agents)) if len(agents) == 1 else None,
-                    "first_ts": events[0].ts.isoformat(),
-                    "last_ts": events[-1].ts.isoformat(),
-                    "event_count": len(events),
-                })
+                out.append(
+                    {
+                        "conversation_id": cid,
+                        "agent_id": next(iter(agents)) if len(agents) == 1 else None,
+                        "first_ts": events[0].ts.isoformat(),
+                        "last_ts": events[-1].ts.isoformat(),
+                        "event_count": len(events),
+                    }
+                )
             return out
 
         @router.get("/api/conversations/{conversation_id}/events")
@@ -1662,7 +1692,8 @@ When making changes, first read the surrounding code.
             events = journal.read_by_conversation(conversation_id)
             if not events:
                 raise HTTPException(
-                    404, f"conversation not found: {conversation_id}",
+                    404,
+                    f"conversation not found: {conversation_id}",
                 )
             return {
                 "conversation_id": conversation_id,
@@ -1679,7 +1710,6 @@ When making changes, first read the surrounding code.
                     for e in events[:limit]
                 ],
             }
-
 
     if group_registry is not None:
         from runtime.execution.agents.groups import AgentGroup, AgentGroupNotFound
@@ -1700,16 +1730,19 @@ When making changes, first read the surrounding code.
 
         @router.post("/api/groups", status_code=201)
         def create_group(
-            request: Request, body: GroupCreate,
+            request: Request,
+            body: GroupCreate,
         ) -> GroupWire:
             _require_admin(request)  # Mutation: creates agent group in registry
             try:
-                group_registry.create(AgentGroup(
-                    group_id=body.group_id,
-                    display_name=body.display_name,
-                    description=body.description,
-                    members=body.members,
-                ))
+                group_registry.create(
+                    AgentGroup(
+                        group_id=body.group_id,
+                        display_name=body.display_name,
+                        description=body.description,
+                        members=body.members,
+                    )
+                )
             except ValueError as e:
                 msg = str(e)
                 code = 409 if "duplicate" in msg else 400
@@ -1718,7 +1751,9 @@ When making changes, first read the surrounding code.
 
         @router.put("/api/groups/{group_id}")
         def update_group(
-            request: Request, group_id: str, body: GroupUpdate,
+            request: Request,
+            group_id: str,
+            body: GroupUpdate,
         ) -> GroupWire:
             _require_admin(request)  # Mutation: updates agent group
             try:
@@ -1731,7 +1766,9 @@ When making changes, first read the surrounding code.
                 raise HTTPException(404, f"group not found: {group_id}") from e
             return _group_to_wire(g)
 
-        @router.delete("/api/groups/{group_id}", status_code=204, response_class=Response, response_model=None)
+        @router.delete(
+            "/api/groups/{group_id}", status_code=204, response_class=Response, response_model=None
+        )
         def delete_group(request: Request, group_id: str):
             _require_admin(request)  # Mutation: deletes agent group
             if not group_registry.remove(group_id):
@@ -1739,10 +1776,13 @@ When making changes, first read the surrounding code.
             return
 
         @router.post(
-            "/api/groups/{group_id}/members/{agent_id}", status_code=200,
+            "/api/groups/{group_id}/members/{agent_id}",
+            status_code=200,
         )
         def add_member(
-            request: Request, group_id: str, agent_id: str,
+            request: Request,
+            group_id: str,
+            agent_id: str,
         ) -> dict[str, Any]:
             _require_admin(request)  # Mutation: adds agent to group
             if not registry.has(agent_id):
@@ -1760,10 +1800,13 @@ When making changes, first read the surrounding code.
             }
 
         @router.delete(
-            "/api/groups/{group_id}/members/{agent_id}", status_code=200,
+            "/api/groups/{group_id}/members/{agent_id}",
+            status_code=200,
         )
         def remove_member(
-            request: Request, group_id: str, agent_id: str,
+            request: Request,
+            group_id: str,
+            agent_id: str,
         ) -> dict[str, Any]:
             _require_admin(request)  # Mutation: removes agent from group
             try:
@@ -1778,7 +1821,8 @@ When making changes, first read the surrounding code.
 
         @router.get("/api/groups/by-agent/{agent_id}")
         def groups_for_agent_ep(
-            request: Request, agent_id: str,
+            request: Request,
+            agent_id: str,
         ) -> dict[str, Any]:
             _auth(request)  # AUTH-OK: actor-agnostic — group membership is server-global
             static_groups: list[str] = []

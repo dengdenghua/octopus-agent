@@ -104,10 +104,7 @@ class TestRegistration:
 
     def test_model_override_reaches_request(self):
         router = _FakeRouter()
-        assert (
-            maybe_register_llm_judge(router, enabled=True, model="mock/fast")
-            is True
-        )
+        assert maybe_register_llm_judge(router, enabled=True, model="mock/fast") is True
         get_judge()("hi", "channels:slack:c2", None)
         assert router.calls[0].model == "mock/fast"
 

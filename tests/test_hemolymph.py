@@ -125,9 +125,7 @@ class TestBasicCompose:
 
         composer = ContextComposer(registry=registry, journal=None)
         packet = composer.compose(task_info=intent, budget_tokens=10_000)
-        sucker_text = "\n".join(
-            s.content for s in packet.segments if s.bucket == "suckers"
-        )
+        sucker_text = "\n".join(s.content for s in packet.segments if s.bucket == "suckers")
         assert "read_file" in sucker_text
         assert "call_agent" not in sucker_text
 
@@ -188,9 +186,7 @@ class TestBudgetAndCompression:
 
     def test_custom_quotas(self, registry_with_builtins, intent):
         custom = QuotaAllocation(system=0.50, suckers=0.30, memory=0.10, history=0.10)
-        composer = ContextComposer(
-            registry=registry_with_builtins, journal=None, quotas=custom
-        )
+        composer = ContextComposer(registry=registry_with_builtins, journal=None, quotas=custom)
         packet = composer.compose(task_info=intent, budget_tokens=10_000)
         assert packet.quotas == custom
 

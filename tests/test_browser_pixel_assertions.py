@@ -91,7 +91,7 @@ def _png(width: int, height: int, pixels: list[tuple[int, int, int]]) -> bytes:
     rows = []
     for y in range(height):
         row = bytearray([0])
-        for pixel in pixels[y * width: (y + 1) * width]:
+        for pixel in pixels[y * width : (y + 1) * width]:
             row.extend(pixel)
         rows.append(bytes(row))
     payload = b"".join(rows)

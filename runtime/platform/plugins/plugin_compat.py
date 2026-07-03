@@ -30,17 +30,20 @@ class PluginAdapter(OctopusPlugin):
 
     def on_load(self, ctx: PluginContext) -> None:
         from runtime.platform.plugins.plugins import HookContext
+
         hook_ctx = HookContext(hook=HookPoint.ON_INIT, data={"plugin_name": self.name})
         self._legacy.on_init(hook_ctx)
 
     def on_start(self, ctx: PluginContext) -> None:
         from runtime.platform.plugins.plugins import HookContext
+
         hook_ctx = HookContext(hook=HookPoint.ON_EXECUTE, data={"plugin_name": self.name})
         self._legacy.on_execute(hook_ctx)
         self._wire_hooks(ctx)
 
     def on_stop(self, ctx: PluginContext) -> None:
         from runtime.platform.plugins.plugins import HookContext
+
         hook_ctx = HookContext(hook=HookPoint.ON_SHUTDOWN, data={"plugin_name": self.name})
         self._legacy.on_shutdown(hook_ctx)
 
@@ -52,6 +55,7 @@ class PluginAdapter(OctopusPlugin):
         for hook_point, mapped_event in _HOOK_TO_EVENT.items():
             if event_type == mapped_event:
                 from runtime.platform.plugins.plugins import HookContext
+
                 hook_ctx = HookContext(hook=HookPoint(hook_point))
                 handler = getattr(self._legacy, hook_point, None)
                 if handler:

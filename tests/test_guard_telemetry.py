@@ -4,6 +4,7 @@ Covers the GuardTelemetry sink (record + stats + top_labels) and the
 evaluate_guards recorder hook — that a firing guard records exactly one
 (label, category) and that a recorder failure never breaks evaluation.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -74,8 +75,10 @@ class TestGuardTelemetrySink:
     def test_metadata_roundtrip(self, tmp_path: Path) -> None:
         sink = GuardTelemetry(path=tmp_path / "hits.jsonl")
         sink.record(
-            "secret-leak guard", "security",
-            goal_digest="abc123", iteration=7,
+            "secret-leak guard",
+            "security",
+            goal_digest="abc123",
+            iteration=7,
             metadata={"path": "runtime/foo.py"},
         )
         records = sink._read_all()  # type: ignore[attr-defined]

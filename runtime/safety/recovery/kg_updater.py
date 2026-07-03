@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,7 +11,6 @@ from runtime.platform.models import default_source
 
 
 class KGUpdateReport(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     events_scanned: int
@@ -23,11 +21,9 @@ class KGUpdateReport(BaseModel):
 
 
 class KGUpdater:
-
     def __init__(self, journal: Journal, kg: KnowledgeGraph) -> None:
         self.journal = journal
         self.kg = kg
-
 
     def update(self) -> KGUpdateReport:
         with trace_stage("regeneration.kg_updater.update"):
@@ -71,7 +67,6 @@ class KGUpdater:
                 triples_ignored=ignored,
             )
 
-
     def _triples_from_step(self, ev: StepEvent) -> list[Triple]:
         step = ev.step
         sucker = step.action.sucker_id
@@ -93,21 +88,25 @@ class KGUpdater:
                 title = r.get("title", "")
                 if not url:
                     continue
-                out.append(Triple(
-                    subject=f"query:{query}",
-                    predicate="returned",
-                    object=url,
-                    confidence=0.70,
-                    source=src,
-                ))
-                if title:
-                    out.append(Triple(
-                        subject=url,
-                        predicate="has_title",
-                        object=title[:200],
-                        confidence=0.80,
+                out.append(
+                    Triple(
+                        subject=f"query:{query}",
+                        predicate="returned",
+                        object=url,
+                        confidence=0.70,
                         source=src,
-                    ))
+                    )
+                )
+                if title:
+                    out.append(
+                        Triple(
+                            subject=url,
+                            predicate="has_title",
+                            object=title[:200],
+                            confidence=0.80,
+                            source=src,
+                        )
+                    )
 
         elif sucker == "fetch_url":
             url = output.get("url", "")
@@ -117,32 +116,37 @@ class KGUpdater:
                 return []
             src = default_source(f"fetch_url:{ev.arm_id or 'anon'}", "tool")
             if status is not None:
-                out.append(Triple(
-                    subject=url,
-                    predicate="has_status",
-                    object=str(status),
-                    confidence=0.95,
-                    source=src,
-                ))
+                out.append(
+                    Triple(
+                        subject=url,
+                        predicate="has_status",
+                        object=str(status),
+                        confidence=0.95,
+                        source=src,
+                    )
+                )
             if length is not None:
-                out.append(Triple(
-                    subject=url,
-                    predicate="has_size_bytes",
-                    object=str(length),
-                    confidence=0.90,
-                    source=src,
-                ))
+                out.append(
+                    Triple(
+                        subject=url,
+                        predicate="has_size_bytes",
+                        object=str(length),
+                        confidence=0.90,
+                        source=src,
+                    )
+                )
             ts_iso = step.ts.isoformat()
-            out.append(Triple(
-                subject=url,
-                predicate="fetched_at",
-                object=ts_iso,
-                confidence=1.0,
-                source=src,
-            ))
+            out.append(
+                Triple(
+                    subject=url,
+                    predicate="fetched_at",
+                    object=ts_iso,
+                    confidence=1.0,
+                    source=src,
+                )
+            )
 
         return out
-
 
     def _triples_from_trajectory(self, ev: TrajectoryEvent) -> list[Triple]:
         traj = ev.trajectory
@@ -182,7 +186,8 @@ def persist_kg_from_journal(
     from runtime.memory.knowledge_graph.sqlite_kg import SqliteKnowledgeGraph
 
     kg = SqliteKnowledgeGraph(
-        kg_db_path, multi_valued_predicates=multi_valued_predicates,
+        kg_db_path,
+        multi_valued_predicates=multi_valued_predicates,
     )
     try:
         return KGUpdater(journal, kg).update()

@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -16,7 +15,6 @@ ProcessState = Literal["started", "stopped", "crashed", "running"]
 
 
 class ProcessWatchSensor(EnvSensor):
-
     def __init__(
         self,
         *,
@@ -39,7 +37,6 @@ class ProcessWatchSensor(EnvSensor):
         self._stop_evt = threading.Event()
         self._last_state: ProcessState | None = None
 
-
     def is_alive(self) -> bool:
         try:
             if os.name == "nt":
@@ -47,14 +44,17 @@ class ProcessWatchSensor(EnvSensor):
 
                 process_query_information = 0x0400
                 h = ctypes.windll.kernel32.OpenProcess(
-                    process_query_information, False, self.pid,
+                    process_query_information,
+                    False,
+                    self.pid,
                 )
                 if not h:
                     return False
                 try:
                     code = ctypes.c_ulong()
                     ctypes.windll.kernel32.GetExitCodeProcess(
-                        h, ctypes.byref(code),
+                        h,
+                        ctypes.byref(code),
                     )
                     return code.value == 259
                 finally:
@@ -67,7 +67,6 @@ class ProcessWatchSensor(EnvSensor):
         except Exception as e:  # noqa: BLE001
             self._last_error = f"{type(e).__name__}: {e}"
             return False
-
 
     def check_once(self) -> ProcessStateChanged | None:
         alive = self.is_alive()
@@ -111,7 +110,9 @@ class ProcessWatchSensor(EnvSensor):
         self._last_state = "running" if self.is_alive() else "stopped"
 
         self._bg_thread = threading.Thread(
-            target=self._poll_loop, daemon=True, name=f"skin-{self.sensor_id}",
+            target=self._poll_loop,
+            daemon=True,
+            name=f"skin-{self.sensor_id}",
         )
         self._bg_thread.start()
 

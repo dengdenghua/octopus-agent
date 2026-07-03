@@ -4,6 +4,7 @@ Exposes project detection and verification check execution to the
 frontend. The code page calls these after AI edits to confirm the
 workspace still builds/passes.
 """
+
 from __future__ import annotations
 
 import time
@@ -24,6 +25,7 @@ except ImportError:  # pragma: no cover
 
 
 if FASTAPI_AVAILABLE:
+
     class VerifyDetectRequest(BaseModel):
         workspace: str
 
@@ -71,6 +73,7 @@ def create_verify_router(
     ) -> dict[str, Any]:
         _auth(request)
         from runtime.execution.suckers.verify_skills import detect_project
+
         profile = detect_project(body.workspace)
         return {
             "kind": profile.kind,
@@ -85,6 +88,7 @@ def create_verify_router(
             detect_project,
             run_checks,
         )
+
         profile = detect_project(body.workspace)
         if body.checks:
             profile.checks = [c for c in profile.checks if c["name"] in body.checks]
@@ -137,7 +141,13 @@ def _run_browser_regression_checks(body: Any) -> list[Any]:
         )
 
     if not url:
-        return [done(False, stderr="browser regression is enabled but no preview URL was provided", exit_code=-2)]
+        return [
+            done(
+                False,
+                stderr="browser regression is enabled but no preview URL was provided",
+                exit_code=-2,
+            )
+        ]
 
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
@@ -171,9 +181,7 @@ def _run_browser_regression_checks(body: Any) -> list[Any]:
                 page = browser.new_page(viewport={"width": 1280, "height": 800})
                 page.on(
                     "console",
-                    lambda msg: console_errors.append(msg.text)
-                    if msg.type == "error"
-                    else None,
+                    lambda msg: console_errors.append(msg.text) if msg.type == "error" else None,
                 )
                 page.on("pageerror", lambda exc: page_errors.append(str(exc)))
                 response = page.goto(
@@ -190,7 +198,13 @@ def _run_browser_regression_checks(body: Any) -> list[Any]:
             finally:
                 browser.close()
     except Exception as exc:  # noqa: BLE001
-        return [done(False, stderr=f"browser regression failed: {type(exc).__name__}: {exc}", exit_code=-1)]
+        return [
+            done(
+                False,
+                stderr=f"browser regression failed: {type(exc).__name__}: {exc}",
+                exit_code=-1,
+            )
+        ]
 
     details = [
         f"url: {url}",
@@ -208,7 +222,14 @@ def _run_browser_regression_checks(body: Any) -> list[Any]:
         stderr_parts.append("console errors:\n" + "\n".join(console_errors[:10]))
     if page_errors:
         stderr_parts.append("page errors:\n" + "\n".join(page_errors[:10]))
-    return [done(not stderr_parts, stdout="\n".join(details), stderr="\n\n".join(stderr_parts), exit_code=1 if stderr_parts else 0)]
+    return [
+        done(
+            not stderr_parts,
+            stdout="\n".join(details),
+            stderr="\n\n".join(stderr_parts),
+            exit_code=1 if stderr_parts else 0,
+        )
+    ]
 
 
 def _is_local_preview_host(host: str) -> bool:

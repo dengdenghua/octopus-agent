@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextvars
@@ -22,7 +21,6 @@ _MAIN_LOOP_MAX_SLEEP_S = 0.5
 
 @dataclass
 class TaskStats:
-
     name: str
     interval_s: float
     last_run_ts: float | None = None
@@ -31,12 +29,11 @@ class TaskStats:
     success_count: int = 0
     error_count: int = 0
     last_error: str | None = None
-    in_flight: int = 0              # Implementation note.
+    in_flight: int = 0  # Implementation note.
 
 
 @dataclass
 class PeriodicTask:
-
     name: str
     interval_s: float
     callback: Callable[[], None]
@@ -59,7 +56,6 @@ class PeriodicTask:
 
 
 class BackgroundRunner:
-
     def __init__(
         self,
         *,
@@ -77,7 +73,6 @@ class BackgroundRunner:
         self._state: str = "idle"  # idle | running | stopped
         self._pool: ThreadPoolExecutor | None = None
 
-
     def start(self) -> None:
         with self._lock:
             if self._state == "running":
@@ -94,7 +89,9 @@ class BackgroundRunner:
                     thread_name_prefix=f"{self.name}-worker",
                 )
             self._thread = threading.Thread(
-                target=self._run_loop, daemon=True, name=self.name,
+                target=self._run_loop,
+                daemon=True,
+                name=self.name,
             )
             self._thread.start()
 
@@ -129,7 +126,6 @@ class BackgroundRunner:
     @property
     def is_running(self) -> bool:
         return self._state == "running" and self._thread is not None and self._thread.is_alive()
-
 
     def add_periodic(
         self,
@@ -174,7 +170,7 @@ class BackgroundRunner:
                 raise ValueError(f"duplicate task name: {name!r}")
             task = PeriodicTask(
                 name=name,
-                interval_s=0.0,    # Implementation note.
+                interval_s=0.0,  # Implementation note.
                 callback=callback,
                 run_on_start=run_on_start,
                 cron_expr=cron,
@@ -193,7 +189,6 @@ class BackgroundRunner:
             self._tasks = [t for t in self._tasks if t.name != name]
             return len(self._tasks) < before
 
-
     def stats(self) -> dict[str, TaskStats]:
         with self._lock:
             return {t.name: t.stats for t in self._tasks}
@@ -201,7 +196,6 @@ class BackgroundRunner:
     def task_names(self) -> list[str]:
         with self._lock:
             return [t.name for t in self._tasks]
-
 
     def _run_loop(self) -> None:
         while not self._stop_event.is_set():

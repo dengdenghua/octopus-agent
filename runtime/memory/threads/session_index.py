@@ -96,11 +96,7 @@ def entry_from_thread(
         return None
     metadata = thread.get("metadata") or {}
     values = thread.get("values") or {}
-    extra = {
-        k: metadata.get(k)
-        for k in extra_keys
-        if metadata.get(k) is not None
-    }
+    extra = {k: metadata.get(k) for k in extra_keys if metadata.get(k) is not None}
     return IndexEntry(
         thread_id=thread_id,
         title=_safe_str(values.get("title"), ""),
@@ -146,9 +142,7 @@ class SessionIndex:
         if not self._path.exists():
             return
         try:
-            lines = self._path.read_text(
-                encoding="utf-8"
-            ).splitlines()
+            lines = self._path.read_text(encoding="utf-8").splitlines()
         except OSError:
             return
         for line in lines:
@@ -243,10 +237,8 @@ class SessionIndex:
         self._appended_records += 1
         if (
             self._compaction_threshold > 0
-            and self._appended_records
-            >= self._compaction_threshold
-            and self._appended_records
-            > 2 * max(len(self._entries), 1)
+            and self._appended_records >= self._compaction_threshold
+            and self._appended_records > 2 * max(len(self._entries), 1)
         ):
             self._compact_locked()
 

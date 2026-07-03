@@ -57,18 +57,21 @@ class EvolutionDataset:
                 if not line.strip():
                     continue
                 data = json.loads(line)
-                examples.append(EvolutionExample(
-                    task_input=str(data.get("task_input") or ""),
-                    expected_behavior=str(data.get("expected_behavior") or ""),
-                    source=str(data.get("source") or "golden"),
-                    difficulty=str(data.get("difficulty") or "medium"),
-                    category=str(data.get("category") or "general"),
-                    metadata=data.get("metadata") if isinstance(data.get("metadata"), dict) else {},
-                ))
-        return EvolutionDatasetBuilder()._split([
-            ex for ex in examples
-            if ex.task_input.strip() and ex.expected_behavior.strip()
-        ])
+                examples.append(
+                    EvolutionExample(
+                        task_input=str(data.get("task_input") or ""),
+                        expected_behavior=str(data.get("expected_behavior") or ""),
+                        source=str(data.get("source") or "golden"),
+                        difficulty=str(data.get("difficulty") or "medium"),
+                        category=str(data.get("category") or "general"),
+                        metadata=data.get("metadata")
+                        if isinstance(data.get("metadata"), dict)
+                        else {},
+                    )
+                )
+        return EvolutionDatasetBuilder()._split(
+            [ex for ex in examples if ex.task_input.strip() and ex.expected_behavior.strip()]
+        )
 
 
 @dataclass(frozen=True)
@@ -170,22 +173,24 @@ class EvolutionDatasetBuilder:
             seen.add(signature)
             action_chain = " -> ".join(actions)
             scope = rid or "__unscoped__"
-            examples.append(EvolutionExample(
-                task_input=f"Preserve successful recipe {scope}: {action_chain}",
-                expected_behavior=(
-                    "Keep this verified tool-chain behavior available while improving "
-                    "failure handling. Avoid regressions in the successful path."
-                ),
-                source="journal_success",
-                difficulty="medium",
-                category="successful_tool_chain",
-                metadata={
-                    "recipe_id": rid or None,
-                    "action_chain": list(actions),
-                    "trajectory_id": str(getattr(trajectory, "trajectory_id", "") or ""),
-                    "goal_available": False,
-                },
-            ))
+            examples.append(
+                EvolutionExample(
+                    task_input=f"Preserve successful recipe {scope}: {action_chain}",
+                    expected_behavior=(
+                        "Keep this verified tool-chain behavior available while improving "
+                        "failure handling. Avoid regressions in the successful path."
+                    ),
+                    source="journal_success",
+                    difficulty="medium",
+                    category="successful_tool_chain",
+                    metadata={
+                        "recipe_id": rid or None,
+                        "action_chain": list(actions),
+                        "trajectory_id": str(getattr(trajectory, "trajectory_id", "") or ""),
+                        "goal_available": False,
+                    },
+                )
+            )
             if len(examples) >= max(1, int(limit)):
                 break
         return self._split(examples)
@@ -213,24 +218,26 @@ class EvolutionDatasetBuilder:
             seen.add(goal)
             item_counts = metadata.get("item_counts")
             counts = item_counts if isinstance(item_counts, dict) else {}
-            examples.append(EvolutionExample(
-                task_input=goal,
-                expected_behavior=(
-                    "Preserve the behavior that made this turn complete successfully. "
-                    "Use it as a positive example while evolving failure handling."
-                ),
-                source="ledger_success",
-                difficulty="medium",
-                category="successful_turn",
-                metadata={
-                    "turn_id": metadata.get("turn_id"),
-                    "thread_id": metadata.get("thread_id"),
-                    "item_counts": counts,
-                    "code_change_paths": metadata.get("code_change_paths") or [],
-                    "verification_count": metadata.get("verification_count") or 0,
-                    "proposal_id": record.proposal_id,
-                },
-            ))
+            examples.append(
+                EvolutionExample(
+                    task_input=goal,
+                    expected_behavior=(
+                        "Preserve the behavior that made this turn complete successfully. "
+                        "Use it as a positive example while evolving failure handling."
+                    ),
+                    source="ledger_success",
+                    difficulty="medium",
+                    category="successful_turn",
+                    metadata={
+                        "turn_id": metadata.get("turn_id"),
+                        "thread_id": metadata.get("thread_id"),
+                        "item_counts": counts,
+                        "code_change_paths": metadata.get("code_change_paths") or [],
+                        "verification_count": metadata.get("verification_count") or 0,
+                        "proposal_id": record.proposal_id,
+                    },
+                )
+            )
         return self._split(examples)
 
     def build_positive_examples(
@@ -291,16 +298,18 @@ class EvolutionDatasetBuilder:
                 for sample in samples
                 if str(sample.get("turn_id") or sample.get("proposal_id") or "").strip()
             )
-            clusters.append(FailureCluster(
-                key=key,
-                count=len(samples),
-                category=key.split(":", 1)[0],
-                representative_goal=str(first.get("goal") or "").strip(),
-                representative_error=str(
-                    first.get("last_error") or first.get("error") or ""
-                ).strip(),
-                sample_ids=ids,
-            ))
+            clusters.append(
+                FailureCluster(
+                    key=key,
+                    count=len(samples),
+                    category=key.split(":", 1)[0],
+                    representative_goal=str(first.get("goal") or "").strip(),
+                    representative_error=str(
+                        first.get("last_error") or first.get("error") or ""
+                    ).strip(),
+                    sample_ids=ids,
+                )
+            )
         return sorted(clusters, key=lambda cluster: (-cluster.count, cluster.key))
 
     def annotate_failure_clusters(
@@ -315,11 +324,13 @@ class EvolutionDatasetBuilder:
             category = _failure_repair_category(failure)
             error = str(failure.get("last_error") or failure.get("error") or "").strip()
             key = f"{category}:{_normalize_cluster_text(error)[:120] or 'no_error'}"
-            annotated.append({
-                **failure,
-                "failure_cluster": key,
-                "failure_cluster_count": counts.get(key, 1),
-            })
+            annotated.append(
+                {
+                    **failure,
+                    "failure_cluster": key,
+                    "failure_cluster_count": counts.get(key, 1),
+                }
+            )
         return annotated
 
     def _normalize_failure(
@@ -338,9 +349,7 @@ class EvolutionDatasetBuilder:
         difficulty = "hard" if step_count >= 5 or error else "medium"
         expected = error or "Preserve the original intent and address the observed failure."
         repair_route = str(failure.get("primary_repair_route") or "").strip()
-        repair_hint = (
-            f" Use repair route `{repair_route}`." if repair_route else ""
-        )
+        repair_hint = f" Use repair route `{repair_route}`." if repair_route else ""
         expected_behavior = (
             "Produce a corrected plan/prompt that directly addresses the failure. "
             f"Observed issue: {expected}.{repair_hint}"

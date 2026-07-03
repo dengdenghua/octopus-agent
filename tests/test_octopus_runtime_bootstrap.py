@@ -69,9 +69,7 @@ def test_bootstrap_marks_present_for_bare_slug_and_asset_id(tmp_path) -> None:
     assert errors == []
 
 
-def test_bootstrap_surfaces_skipped_sync_results(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_bootstrap_surfaces_skipped_sync_results(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     lockfile = tmp_path / "skills.lock.json"
     lockfile.write_text('{"skills": ["research-pack"]}', encoding="utf-8")
 

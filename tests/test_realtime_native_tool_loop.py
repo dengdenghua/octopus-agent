@@ -209,18 +209,22 @@ def test_complex_turn_defaults_to_planning_mode_when_not_explicit():
 def test_explicit_planning_false_and_chat_mode_do_not_default():
     from runtime.protocol.items import TurnParams
 
-    explicit = TurnParams.model_validate({
-        "threadId": "t1",
-        "input": [{"type": "input_text", "text": "请完整实现这个功能并测试"}],
-        "planningMode": False,
-    })
+    explicit = TurnParams.model_validate(
+        {
+            "threadId": "t1",
+            "input": [{"type": "input_text", "text": "请完整实现这个功能并测试"}],
+            "planningMode": False,
+        }
+    )
     chat = TurnParams(
         threadId="t1",
-        input=[{
-            "type": "input_text",
-            "text": "请完整实现这个功能并测试",
-            "metadata": {"context": {"mode": "chat"}},
-        }],
+        input=[
+            {
+                "type": "input_text",
+                "text": "请完整实现这个功能并测试",
+                "metadata": {"context": {"mode": "chat"}},
+            }
+        ],
     )
 
     assert not _should_default_planning_mode("请完整实现这个功能并测试", explicit)
@@ -280,9 +284,7 @@ def test_agentic_session_metadata_preserves_browser_surface_context():
             "browser_operation_mode": True,
             "browser_surface": "browser",
             "browser_session_policy": "thread_native",
-            "browser_evidence_policy": (
-                "state_first_screenshot_only_for_visual_evidence"
-            ),
+            "browser_evidence_policy": ("state_first_screenshot_only_for_visual_evidence"),
         },
     )
 
@@ -318,9 +320,7 @@ def test_agentic_session_metadata_preserves_chrome_surface_context():
             "browser_session_policy": "thread_native_external_chrome",
             "browser_track_preference": "extension",
             "browser_permission_policy": "site_policy_required",
-            "browser_evidence_policy": (
-                "state_first_screenshot_only_for_visual_evidence"
-            ),
+            "browser_evidence_policy": ("state_first_screenshot_only_for_visual_evidence"),
         },
     )
 

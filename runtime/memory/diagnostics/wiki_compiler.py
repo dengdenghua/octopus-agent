@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import os
@@ -27,7 +26,6 @@ class WikiIndex(BaseModel):
 
 
 class WikiCompiler:
-
     def __init__(self, output_dir: str = "~/.octopus/wiki") -> None:
         self._dir = Path(os.path.expanduser(output_dir))
 
@@ -54,6 +52,7 @@ class WikiCompiler:
 
         try:
             from runtime.memory.knowledge_graph import KnowledgeGraph
+
             kg = KnowledgeGraph()
             results["kg"] = KGUpdater(journal, kg).update()
             results["kg_graph"] = kg

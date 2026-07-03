@@ -1102,7 +1102,14 @@ class CerebrumRuntime:
         model: str | None = None,
     ) -> None:
         await _drive_react(
-            self, turn, log, emitter, intent, provider, agent, model=model,
+            self,
+            turn,
+            log,
+            emitter,
+            intent,
+            provider,
+            agent,
+            model=model,
         )
 
     async def _apply_react_event(
@@ -1277,20 +1284,21 @@ class CerebrumRuntime:
                         str(event) for event in (intervention.get("events") or [])
                     ]
                     if any(
-                        event.startswith((
-                            "task_not_found:",
-                            "milestone_not_found:",
-                            "unknown_task_action:",
-                        ))
+                        event.startswith(
+                            (
+                                "task_not_found:",
+                                "milestone_not_found:",
+                                "unknown_task_action:",
+                            )
+                        )
                         for event in intervention_events
                     ):
                         state = full_project_state(self._project_store, project.id) or {}
                         return {
                             "ok": False,
                             "error": "project_task_intervention_failed",
-                            "message": "Project OS 任务控制命令未执行：" + ", ".join(
-                                intervention_events
-                            ),
+                            "message": "Project OS 任务控制命令未执行："
+                            + ", ".join(intervention_events),
                             "control": control,
                             "intervention": intervention,
                             **state,

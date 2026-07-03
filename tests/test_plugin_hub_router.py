@@ -47,7 +47,10 @@ def test_plugin_hub_router_requires_auth_when_enabled() -> None:
     client = TestClient(app)
 
     assert client.get("/api/plugin-hub/plugins").status_code == 401
-    assert client.get(
-        "/api/plugin-hub/plugins",
-        headers={"Authorization": "Bearer sk-alice"},
-    ).status_code == 200
+    assert (
+        client.get(
+            "/api/plugin-hub/plugins",
+            headers={"Authorization": "Bearer sk-alice"},
+        ).status_code
+        == 200
+    )

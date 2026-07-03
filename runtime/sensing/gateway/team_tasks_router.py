@@ -227,8 +227,7 @@ def create_team_tasks_router(
         if not _SOP_TEMPLATE_PATTERN.fullmatch(normalized):
             raise HTTPException(
                 400,
-                "sop_template must match [a-zA-Z0-9_.-]+ "
-                "(no slashes, no traversal)",
+                "sop_template must match [a-zA-Z0-9_.-]+ (no slashes, no traversal)",
             )
         return normalized
 
@@ -338,28 +337,29 @@ def create_team_tasks_router(
             completed_at = str(updates.get("completed_at") or _now())
             raw_metadata = updates.get("metadata")
             metadata = (
-                dict(raw_metadata)
-                if isinstance(raw_metadata, dict)
-                else dict(current.metadata)
+                dict(raw_metadata) if isinstance(raw_metadata, dict) else dict(current.metadata)
             )
-            events = [
-                item for item in metadata.get("process_events", [])
-                if isinstance(item, dict)
-            ]
-            events.append(_jsonable({
-                "ts": completed_at,
-                "type": f"run_{status}",
-                "status": status,
-                "error": error,
-            }))
+            events = [item for item in metadata.get("process_events", []) if isinstance(item, dict)]
+            events.append(
+                _jsonable(
+                    {
+                        "ts": completed_at,
+                        "type": f"run_{status}",
+                        "status": status,
+                        "error": error,
+                    }
+                )
+            )
             metadata["process_events"] = events[-300:]
-            return current.model_copy(update={
-                "updated_at": _now(),
-                **updates,
-                "status": status,
-                "completed_at": completed_at,
-                "metadata": metadata,
-            })
+            return current.model_copy(
+                update={
+                    "updated_at": _now(),
+                    **updates,
+                    "status": status,
+                    "completed_at": completed_at,
+                    "metadata": metadata,
+                }
+            )
 
     def _persist_prebuilt_task(task: TeamTaskWire) -> TeamTaskWire | None:
         with lock:
@@ -376,21 +376,22 @@ def create_team_tasks_router(
             if current is None:
                 return
             metadata = dict(current.metadata)
-            events = [
-                item for item in metadata.get("process_events", [])
-                if isinstance(item, dict)
-            ]
+            events = [item for item in metadata.get("process_events", []) if isinstance(item, dict)]
             events.append(_jsonable(event))
             metadata["process_events"] = events[-300:]
-            updated = current.model_copy(update={
-                "metadata": metadata,
-                "updated_at": _now(),
-            })
+            updated = current.model_copy(
+                update={
+                    "metadata": metadata,
+                    "updated_at": _now(),
+                }
+            )
             tasks[task_id] = updated
             _save()
             _project_task(updated)
 
-    def _current_metadata(task_id: str, *, fallback: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _current_metadata(
+        task_id: str, *, fallback: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         with lock:
             current = tasks.get(task_id)
             if current is None:
@@ -443,9 +444,7 @@ def create_team_tasks_router(
                 task.room_id,
                 _task_payload(
                     _current_task(),
-                    event="role_completed"
-                    if event_type == "team_role_end"
-                    else event_type,
+                    event="role_completed" if event_type == "team_role_end" else event_type,
                     extra={
                         "runner_event": event,
                         "role": role or None,
@@ -529,9 +528,7 @@ def create_team_tasks_router(
                             )
                 succeeded = sum(1 for r in records if r.get("ok"))
                 final_status = (
-                    "cancelled"
-                    if source.is_cancelled
-                    else ("done" if succeeded else "failed")
+                    "cancelled" if source.is_cancelled else ("done" if succeeded else "failed")
                 )
                 metadata = {
                     **_current_metadata(task.id, fallback=task.metadata),
@@ -630,17 +627,17 @@ def create_team_tasks_router(
                     prepared["task_input"],
                     context=prepared["context"],
                 )
-            final_status = "cancelled" if source.is_cancelled else (
-                "done" if _runner_result_success(result) else "failed"
+            final_status = (
+                "cancelled"
+                if source.is_cancelled
+                else ("done" if _runner_result_success(result) else "failed")
             )
             metadata = {
                 **_current_metadata(task.id, fallback=task.metadata),
                 "runner": _runner_metadata(result, prepared),
             }
             if final_status == "failed":
-                metadata["error"] = (
-                    _runner_result_error(result) or "TeamRunner reported failure"
-                )
+                metadata["error"] = _runner_result_error(result) or "TeamRunner reported failure"
             updates: dict[str, Any] = {
                 "status": final_status,
                 "completed_at": _now(),
@@ -693,14 +690,16 @@ def create_team_tasks_router(
                 # clause), mark it "failed" so it never gets stuck.
                 current = tasks.get(task.id)
                 if current is not None and current.status == "running":
-                    projected_after_exit = current.model_copy(update={
-                        "status": "failed",
-                        "completed_at": _now(),
-                        "metadata": {
-                            **dict(current.metadata),
-                            "error": "worker exited without setting terminal status",
-                        },
-                    })
+                    projected_after_exit = current.model_copy(
+                        update={
+                            "status": "failed",
+                            "completed_at": _now(),
+                            "metadata": {
+                                **dict(current.metadata),
+                                "error": "worker exited without setting terminal status",
+                            },
+                        }
+                    )
                     tasks[task.id] = projected_after_exit
                     _save()
             if projected_after_exit is not None:
@@ -794,13 +793,15 @@ def create_team_tasks_router(
                 raise HTTPException(404, f"task not found: {task_id}")
             if latest.status == "running":
                 return latest
-            updated = latest.model_copy(update={
-                "status": "running",
-                "started_at": now,
-                "completed_at": None,
-                "updated_at": now,
-                "metadata": metadata,
-            })
+            updated = latest.model_copy(
+                update={
+                    "status": "running",
+                    "started_at": now,
+                    "completed_at": None,
+                    "updated_at": now,
+                    "metadata": metadata,
+                }
+            )
             tasks[task_id] = updated
             running[task_id] = source
             _save()
@@ -1125,76 +1126,75 @@ def _prepare_team_run(task: TeamTaskWire) -> dict[str, Any]:
 
 def _team_task_process_timeline(task: dict[str, Any]) -> dict[str, Any]:
     metadata = task.get("metadata") if isinstance(task.get("metadata"), dict) else {}
-    process_events = [
-        item for item in metadata.get("process_events", [])
-        if isinstance(item, dict)
-    ]
-    artifacts = [
-        item for item in task.get("produced_artifacts", [])
-        if isinstance(item, dict)
-    ]
+    process_events = [item for item in metadata.get("process_events", []) if isinstance(item, dict)]
+    artifacts = [item for item in task.get("produced_artifacts", []) if isinstance(item, dict)]
     nodes: list[dict[str, Any]] = []
     created_at = str(task.get("created_at") or "")
     updated_at = str(task.get("updated_at") or "")
     if created_at:
-        nodes.append(_team_timeline_node(
-            node_id="task-created",
-            lane="workflow",
-            kind="task_created",
-            ts=created_at,
-            title="Task created",
-            status="pending",
-            severity="info",
-            summary=str(task.get("title") or ""),
-        ))
+        nodes.append(
+            _team_timeline_node(
+                node_id="task-created",
+                lane="workflow",
+                kind="task_created",
+                ts=created_at,
+                title="Task created",
+                status="pending",
+                severity="info",
+                summary=str(task.get("title") or ""),
+            )
+        )
     started_at = str(task.get("started_at") or "")
     if started_at:
-        nodes.append(_team_timeline_node(
-            node_id="run-started",
-            lane="workflow",
-            kind="run_started",
-            ts=started_at,
-            title="Run started",
-            status="running",
-            severity="info",
-            summary=_runner_summary(metadata.get("runner")),
-        ))
+        nodes.append(
+            _team_timeline_node(
+                node_id="run-started",
+                lane="workflow",
+                kind="run_started",
+                ts=started_at,
+                title="Run started",
+                status="running",
+                severity="info",
+                summary=_runner_summary(metadata.get("runner")),
+            )
+        )
     for idx, event in enumerate(process_events):
         nodes.append(_team_process_event_node(event, idx))
     for idx, artifact in enumerate(artifacts):
-        nodes.append(_team_timeline_node(
-            node_id=f"artifact-{artifact.get('id') or idx}",
-            lane="artifact",
-            kind=str(artifact.get("type") or "artifact"),
-            ts=str(artifact.get("created_at") or task.get("completed_at") or updated_at),
-            title=str(artifact.get("title") or "Produced artifact"),
-            status="ok" if artifact.get("ok", True) is not False else "failed",
-            severity="info" if artifact.get("ok", True) is not False else "high",
-            summary=str(artifact.get("content") or "")[:500],
-            data={
-                key: value
-                for key, value in artifact.items()
-                if key not in {"content"}
-            },
-        ))
+        nodes.append(
+            _team_timeline_node(
+                node_id=f"artifact-{artifact.get('id') or idx}",
+                lane="artifact",
+                kind=str(artifact.get("type") or "artifact"),
+                ts=str(artifact.get("created_at") or task.get("completed_at") or updated_at),
+                title=str(artifact.get("title") or "Produced artifact"),
+                status="ok" if artifact.get("ok", True) is not False else "failed",
+                severity="info" if artifact.get("ok", True) is not False else "high",
+                summary=str(artifact.get("content") or "")[:500],
+                data={key: value for key, value in artifact.items() if key not in {"content"}},
+            )
+        )
     completed_at = str(task.get("completed_at") or "")
     status = str(task.get("status") or "")
     if completed_at:
-        nodes.append(_team_timeline_node(
-            node_id="run-completed",
-            lane="workflow",
-            kind=f"run_{status or 'completed'}",
-            ts=completed_at,
-            title=f"Run {status or 'completed'}",
-            status=status or "done",
-            severity="high" if status == "failed" else "medium" if status == "cancelled" else "info",
-            summary=str(metadata.get("error") or ""),
-        ))
+        nodes.append(
+            _team_timeline_node(
+                node_id="run-completed",
+                lane="workflow",
+                kind=f"run_{status or 'completed'}",
+                ts=completed_at,
+                title=f"Run {status or 'completed'}",
+                status=status or "done",
+                severity="high"
+                if status == "failed"
+                else "medium"
+                if status == "cancelled"
+                else "info",
+                summary=str(metadata.get("error") or ""),
+            )
+        )
     nodes = sorted(nodes, key=_team_timeline_sort_key)
-    assignees = [
-        item for item in task.get("assignees", [])
-        if isinstance(item, dict)
-    ]
+    assignees = [item for item in task.get("assignees", []) if isinstance(item, dict)]
     return {
         "schema": "octopus.team_task_process_timeline.v1",
         "task_id": task.get("id"),
@@ -1215,10 +1215,7 @@ def _team_task_process_timeline(task: dict[str, Any]) -> dict[str, Any]:
         },
         "assignees": assignees,
         "artifacts": [
-            {
-                key: value for key, value in artifact.items()
-                if key != "content"
-            }
+            {key: value for key, value in artifact.items() if key != "content"}
             for artifact in artifacts
         ],
         "timeline": nodes,
@@ -1326,10 +1323,12 @@ def _task_output_contract_text(task: TeamTaskWire) -> str | None:
                 lines.append(f"- {text}")
     schema = contract.get("schema")
     if isinstance(schema, dict) and schema:
-        lines.extend([
-            "- JSON schema shape:",
-            json.dumps(schema, ensure_ascii=False, indent=2),
-        ])
+        lines.extend(
+            [
+                "- JSON schema shape:",
+                json.dumps(schema, ensure_ascii=False, indent=2),
+            ]
+        )
     return "\n".join(lines)
 
 
@@ -1359,21 +1358,26 @@ def _topology_from_task_graph(
     roles: list[Role] = []
     for node in getattr(graph, "nodes", []) or []:
         role = _role_for_graph_node(node)
-        node_roles.append({
-            "node_id": str(getattr(node, "node_id", "")),
-            "skill_ref": str(getattr(node, "skill_ref", "") or ""),
-            "role": str(role),
-        })
+        node_roles.append(
+            {
+                "node_id": str(getattr(node, "node_id", "")),
+                "skill_ref": str(getattr(node, "skill_ref", "") or ""),
+                "role": str(role),
+            }
+        )
         if role not in roles:
             roles.append(role)
 
     if not any(role in roles for role in (Role.PLANNER, Role.GENERATOR)):
         roles.insert(0, Role.PLANNER)
-    if not any(role in roles for role in (
-        Role.SYNTHESIZER,
-        Role.GENERATOR,
-        Role.EVALUATOR,
-    )):
+    if not any(
+        role in roles
+        for role in (
+            Role.SYNTHESIZER,
+            Role.GENERATOR,
+            Role.EVALUATOR,
+        )
+    ):
         roles.append(Role.SYNTHESIZER)
 
     roles = _ordered_unique_roles(roles)
@@ -1497,14 +1501,16 @@ def _system_addendum_for_role(task: TeamTaskWire, role: Role) -> str | None:
         if isinstance(schema, dict) and schema
         else "{}"
     )
-    return "\n".join([
-        f"You are the final synthesizer for output contract `{name}`.",
-        "Return a useful concise summary, then include exactly one fenced json block.",
-        "The fenced json block must be parseable JSON and must match this shape:",
-        schema_text,
-        "Use empty arrays when there is no concrete supported item.",
-        "Do not stop at a plan; convert concrete role outputs into the JSON fields.",
-    ])
+    return "\n".join(
+        [
+            f"You are the final synthesizer for output contract `{name}`.",
+            "Return a useful concise summary, then include exactly one fenced json block.",
+            "The fenced json block must be parseable JSON and must match this shape:",
+            schema_text,
+            "Use empty arrays when there is no concrete supported item.",
+            "Do not stop at a plan; convert concrete role outputs into the JSON fields.",
+        ]
+    )
 
 
 def _slugify(value: str, *, fallback: str) -> str:
@@ -1516,21 +1522,25 @@ def _slugify(value: str, *, fallback: str) -> str:
 def _task_graph_summary(graph: Any) -> dict[str, Any]:
     nodes = []
     for node in getattr(graph, "nodes", []) or []:
-        nodes.append({
-            "node_id": str(getattr(node, "node_id", "")),
-            "kind": str(getattr(node, "kind", "") or ""),
-            "skill_ref": str(getattr(node, "skill_ref", "") or ""),
-            "timeout_ms": getattr(node, "timeout_ms", None),
-            "failure_retry": getattr(node, "failure_retry", None),
-        })
+        nodes.append(
+            {
+                "node_id": str(getattr(node, "node_id", "")),
+                "kind": str(getattr(node, "kind", "") or ""),
+                "skill_ref": str(getattr(node, "skill_ref", "") or ""),
+                "timeout_ms": getattr(node, "timeout_ms", None),
+                "failure_retry": getattr(node, "failure_retry", None),
+            }
+        )
     edges = []
     for edge in getattr(graph, "edges", []) or []:
-        edges.append({
-            "from_node": str(getattr(edge, "from_node", "")),
-            "to_node": str(getattr(edge, "to_node", "")),
-            "kind": str(getattr(edge, "kind", "") or ""),
-            "condition": getattr(edge, "condition", None),
-        })
+        edges.append(
+            {
+                "from_node": str(getattr(edge, "from_node", "")),
+                "to_node": str(getattr(edge, "to_node", "")),
+                "kind": str(getattr(edge, "kind", "") or ""),
+                "condition": getattr(edge, "condition", None),
+            }
+        )
     return {
         "task_type": str(getattr(graph, "task_type", "") or ""),
         "strategy": str(getattr(graph, "strategy", "") or ""),
@@ -1640,17 +1650,19 @@ def _runner_artifacts(result: Any, prepared: dict[str, Any]) -> list[dict[str, A
     if not final_output.strip():
         return []
     topology = prepared["topology"]
-    return [{
-        "id": f"artifact-{uuid4().hex[:12]}",
-        "type": "team_runner_output",
-        "title": "TeamRunner final output",
-        "content": final_output,
-        "meta_skill": prepared.get("meta_skill"),
-        "topology": topology.name,
-        "topology_fingerprint": topology.fingerprint,
-        "role_outputs": _jsonable(_result_value(result, "role_outputs", [])),
-        "created_at": _now(),
-    }]
+    return [
+        {
+            "id": f"artifact-{uuid4().hex[:12]}",
+            "type": "team_runner_output",
+            "title": "TeamRunner final output",
+            "content": final_output,
+            "meta_skill": prepared.get("meta_skill"),
+            "topology": topology.name,
+            "topology_fingerprint": topology.fingerprint,
+            "role_outputs": _jsonable(_result_value(result, "role_outputs", [])),
+            "created_at": _now(),
+        }
+    ]
 
 
 def _result_value(result: Any, key: str, default: Any = None) -> Any:

@@ -23,9 +23,7 @@ def test_computer_api_base_url_defaults_to_local_gateway(monkeypatch) -> None:
     for key in computer_api_skills._BASE_URL_ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
 
-    assert computer_api_skills._computer_api_base_url() == (
-        "http://127.0.0.1:8000/api/computer"
-    )
+    assert computer_api_skills._computer_api_base_url() == ("http://127.0.0.1:8000/api/computer")
     assert computer_api_skills._computer_api_diagnostics()["configured_by"] == "default"
 
 
@@ -91,7 +89,9 @@ def test_computer_api_call_includes_bridge_diagnostics_on_unreachable(
 def test_computer_observe_exposes_bridge_without_capture(monkeypatch) -> None:
     monkeypatch.setenv("OCTOPUS_COMPUTER_API_BASE_URL", "http://localhost:8123")
 
-    def fake_call(method: str, path: str, body: dict[str, object] | None = None) -> dict[str, object]:
+    def fake_call(
+        method: str, path: str, body: dict[str, object] | None = None
+    ) -> dict[str, object]:
         assert method == "GET"
         assert path == "/status"
         assert body is None

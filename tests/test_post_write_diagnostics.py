@@ -5,6 +5,7 @@ successful code-write tool. The hook is best-effort — every failure
 mode (timeout, missing tool, no project, non-write skill) returns
 ``None`` rather than raising.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -90,9 +91,7 @@ def test_non_write_tool_returns_none(tmp_path: Path) -> None:
     # If the hook fired ruff on this bad file, we'd get a string back.
     # Asserting None proves the early-return for non-write tools fires
     # before any subprocess spawn.
-    with patch(
-        "runtime.execution.suckers.verify_skills.detect_project"
-    ) as mock_detect:
+    with patch("runtime.execution.suckers.verify_skills.detect_project") as mock_detect:
         out = post_write_diagnostics(
             "read_file",
             {"path": str(target)},
@@ -196,7 +195,9 @@ def test_regression_matrix_recommends_frontend_colocated_test(tmp_path: Path) ->
     source.parent.mkdir(parents=True)
     source.write_text("export function Widget() { return null }\n", encoding="utf-8")
     (source.parent / "widget.test.tsx").write_text("test('ok', () => {})\n", encoding="utf-8")
-    (frontend / "package.json").write_text('{"scripts":{"check":"tsc --noEmit"}}\n', encoding="utf-8")
+    (frontend / "package.json").write_text(
+        '{"scripts":{"check":"tsc --noEmit"}}\n', encoding="utf-8"
+    )
 
     matrix = regression_matrix_for_path(source, workspace_path=proj)
     rendered = matrix.render()

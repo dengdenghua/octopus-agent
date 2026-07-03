@@ -46,7 +46,7 @@ class ContextGrant:
 
     scope: GrantScope = "all"
     from_msg: int | None = None  # for scope="range"
-    to_msg: int | None = None    # for scope="range"
+    to_msg: int | None = None  # for scope="range"
 
     def to_dict(self) -> dict:
         return {"scope": self.scope, "from_msg": self.from_msg, "to_msg": self.to_msg}
@@ -214,14 +214,14 @@ def fold_state(events: list[MemberEvent], until_seq: int | None = None) -> Group
         elif ev.action == "room_link":
             room_id = ev.target_id or None
     return GroupState(
-        roster=list(members.values()), mode=mode,
-        event_count=len(scoped), room_id=room_id,
+        roster=list(members.values()),
+        mode=mode,
+        event_count=len(scoped),
+        room_id=room_id,
     )
 
 
-def visible_message_range(
-    member: Member, current_max_message: int
-) -> tuple[int, int] | None:
+def visible_message_range(member: Member, current_max_message: int) -> tuple[int, int] | None:
     """The [lo, hi] message indices ``member`` is allowed to see, from its grant.
 
     Returns ``None`` for scope="summary" (the member gets a summary, not raw
@@ -251,8 +251,7 @@ def responders(state: GroupState, addressed: list[str] | None = None) -> list[st
                  turn responders don't apply — returns [] (the Project OS drives).
     Observers and muted members never respond; humans aren't auto-driven."""
     agents = [
-        m for m in state.roster
-        if m.kind == "agent" and m.role == "participant" and not m.muted
+        m for m in state.roster if m.kind == "agent" and m.role == "participant" and not m.muted
     ]
     if state.mode == "project":
         return []  # the Project OS engine dispatches tasks, not the chat turn

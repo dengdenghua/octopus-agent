@@ -87,6 +87,7 @@ def _ws_request_path(ws: WebSocketConnection) -> str:
     path = getattr(ws, "path", None)
     return path if isinstance(path, str) else ""
 
+
 # ── 消息类型常量 ──────────────────────────────────────────
 
 MSG_DEVICE_HELLO = "device/hello"

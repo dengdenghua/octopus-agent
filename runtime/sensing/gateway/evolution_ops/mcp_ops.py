@@ -90,8 +90,7 @@ _MCP_CAPABILITY_CATALOG: tuple[dict[str, Any], ...] = (
         "suggested_cmd": "npx -y @modelcontextprotocol/server-notion",
         "keywords": ("notion", "workspace doc", "knowledge base"),
         "description": (
-            "Notion MCP access for workspace pages and docs. Requires a "
-            "scoped integration token."
+            "Notion MCP access for workspace pages and docs. Requires a scoped integration token."
         ),
         "risk_level": "medium",
     },
@@ -159,21 +158,20 @@ def _mcp_proposal_rows(journal: Any) -> list[dict[str, Any]]:
         decision = decisions.get(server_name, {})
         status = str(decision.get("status") or "pending_vet")
         failure_count = len(cluster["task_ids"])
-        description = (
-            f"{spec['description']} Observed {failure_count} related "
-            "failure(s)."
+        description = f"{spec['description']} Observed {failure_count} related failure(s)."
+        rows.append(
+            {
+                "id": _stable_int_id(f"mcp:{server_name}"),
+                "server_name": server_name,
+                "created_at": _iso(cluster["last_seen"]),
+                "suggested_cmd": spec["suggested_cmd"],
+                "description": description,
+                "status": status,
+                "risk_level": spec["risk_level"],
+                "failure_count": failure_count,
+                "examples": cluster["examples"],
+            }
         )
-        rows.append({
-            "id": _stable_int_id(f"mcp:{server_name}"),
-            "server_name": server_name,
-            "created_at": _iso(cluster["last_seen"]),
-            "suggested_cmd": spec["suggested_cmd"],
-            "description": description,
-            "status": status,
-            "risk_level": spec["risk_level"],
-            "failure_count": failure_count,
-            "examples": cluster["examples"],
-        })
 
     rows.sort(
         key=lambda row: (
@@ -219,7 +217,8 @@ def _mcp_proposal_decision_map(journal: Any) -> dict[str, dict[str, Any]]:
         events = list(journal.read_by_type("mcp_proposal_decision"))
     except (AttributeError, TypeError, OSError):
         events = [
-            event for event in _journal_events(journal)
+            event
+            for event in _journal_events(journal)
             if getattr(event, "event_type", "") == "mcp_proposal_decision"
         ]
     for event in events:

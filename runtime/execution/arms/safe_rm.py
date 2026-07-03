@@ -17,6 +17,7 @@ Supported shells
 - PowerShell / pwsh
 - cmd.exe
 """
+
 from __future__ import annotations
 
 import logging
@@ -28,27 +29,57 @@ _logger = logging.getLogger(__name__)
 # ── Dangerous commands per shell ──────────────────────────────
 
 _POSIX_DANGEROUS = {
-    "rm", "rmdir", "unlink",
-    "mv", "cp", "dd",
-    "chmod", "chown", "chgrp",
-    "truncate", "shred",
+    "rm",
+    "rmdir",
+    "unlink",
+    "mv",
+    "cp",
+    "dd",
+    "chmod",
+    "chown",
+    "chgrp",
+    "truncate",
+    "shred",
     "tee",
 }
 
 _POWERSHELL_DANGEROUS = {
-    "Remove-Item", "ri", "del", "rm", "rmdir", "rd",
-    "Move-Item", "mi", "move", "mv",
-    "Copy-Item", "ci", "copy", "cp", "cpi",
-    "Out-File", ">",
-    "Set-Content", "sc",
-    "Clear-Content", "clc",
-    "Add-Content", "ac",
+    "Remove-Item",
+    "ri",
+    "del",
+    "rm",
+    "rmdir",
+    "rd",
+    "Move-Item",
+    "mi",
+    "move",
+    "mv",
+    "Copy-Item",
+    "ci",
+    "copy",
+    "cp",
+    "cpi",
+    "Out-File",
+    ">",
+    "Set-Content",
+    "sc",
+    "Clear-Content",
+    "clc",
+    "Add-Content",
+    "ac",
 }
 
 _CMD_DANGEROUS = {
-    "del", "erase", "rd", "rmdir",
-    "move", "mv", "copy", "xcopy",
-    "format", "diskpart",
+    "del",
+    "erase",
+    "rd",
+    "rmdir",
+    "move",
+    "mv",
+    "copy",
+    "xcopy",
+    "format",
+    "diskpart",
 }
 
 # ── Default deny list (always blocked) ────────────────────────
@@ -147,9 +178,8 @@ class SafeRmProtector:
         if self._config.level != ProtectionLevel.STRICT and self._has_denied_path(user_command):
             return self._block_command(user_command)
 
-        if (
-            self._config.level == ProtectionLevel.MODERATE
-            and not self._has_allowed_path(user_command)
+        if self._config.level == ProtectionLevel.MODERATE and not self._has_allowed_path(
+            user_command
         ):
             return self._block_command(user_command)
 
@@ -163,10 +193,7 @@ class SafeRmProtector:
         base_command = os.path.basename(first_word)
 
         blocked_lower = {c.lower() for c in self._config.blocked_commands}
-        return (
-            base_command.lower() in blocked_lower
-            or first_word.lower() in blocked_lower
-        )
+        return base_command.lower() in blocked_lower or first_word.lower() in blocked_lower
 
     def _has_denied_path(self, command: str) -> bool:
         """Check if the command references any denied paths."""
@@ -202,16 +229,14 @@ class SafeRmProtector:
                 f'Write-Error "safe_rm: blocked dangerous command: '
                 f'{self._escape_ps(original[:80])}"; exit 1'
             )
-        return (
-                f'echo "safe_rm: blocked: {self._escape(original[:80])}" && exit 1'
-            )
+        return f'echo "safe_rm: blocked: {self._escape(original[:80])}" && exit 1'
 
     @staticmethod
     def _escape(s: str) -> str:
         """Escape for bash echo."""
-        return s.replace('"', '\\"').replace('`', '\\`').replace('$', '\\$')
+        return s.replace('"', '\\"').replace("`", "\\`").replace("$", "\\$")
 
     @staticmethod
     def _escape_ps(s: str) -> str:
         """Escape for PowerShell."""
-        return s.replace('"', '`"').replace('$', '`$').replace('`', '``')
+        return s.replace('"', '`"').replace("$", "`$").replace("`", "``")

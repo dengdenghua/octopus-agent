@@ -47,6 +47,7 @@ Not for
   durable, cross-process coordination set ``OCTOPUS_BLACKBOARD_DB`` to a
   file path; see ``blackboard_store.SqliteBlackboard``.
 """
+
 from __future__ import annotations
 
 import json
@@ -109,26 +110,18 @@ class Blackboard:
 
     def audit(self) -> dict[str, Any]:
         with self._lock:
-            value_sizes = {
-                key: _value_size(value)
-                for key, value in self._data.items()
-            }
+            value_sizes = {key: _value_size(value) for key, value in self._data.items()}
             return {
                 "key_count": len(self._data),
                 "write_count": self._write_count,
                 "overwrite_count": self._overwrite_count,
                 "contested_keys": [
-                    key for key, writers in self._key_writers.items()
-                    if len(writers) > 1
+                    key for key, writers in self._key_writers.items() if len(writers) > 1
                 ],
-                "large_value_keys": [
-                    key for key, size in value_sizes.items()
-                    if size > 8_000
-                ],
+                "large_value_keys": [key for key, size in value_sizes.items() if size > 8_000],
                 "value_sizes": value_sizes,
                 "writers_by_key": {
-                    key: sorted(writers)
-                    for key, writers in self._key_writers.items()
+                    key: sorted(writers) for key, writers in self._key_writers.items()
                 },
             }
 
@@ -186,7 +179,8 @@ def _evict_expired_locked() -> None:
     """Evict TTL-expired entries + cap by oldest. Caller holds lock."""
     now = time.monotonic()
     expired_keys = [
-        k for k, v in _BOARDS.items()
+        k
+        for k, v in _BOARDS.items()
         if (now - v._last_touched) > _TTL_SECONDS  # noqa: SLF001
     ]
     for k in expired_keys:
@@ -230,13 +224,15 @@ def list_active_turns() -> list[dict[str, Any]]:
             count = len(bb._data)  # noqa: SLF001
             write_count = bb._write_count  # noqa: SLF001
             overwrite_count = bb._overwrite_count  # noqa: SLF001
-        out.append({
-            "turn_id": turn_id,
-            "key_count": count,
-            "write_count": write_count,
-            "overwrite_count": overwrite_count,
-            "age_seconds": max(0.0, now - touched),
-        })
+        out.append(
+            {
+                "turn_id": turn_id,
+                "key_count": count,
+                "write_count": write_count,
+                "overwrite_count": overwrite_count,
+                "age_seconds": max(0.0, now - touched),
+            }
+        )
     return out
 
 

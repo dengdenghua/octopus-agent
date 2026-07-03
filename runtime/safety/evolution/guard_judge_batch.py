@@ -20,6 +20,7 @@ Invariants
   to prevent thundering herd against a degraded model.
 * Deterministic order — hits processed oldest-first by ``ts``.
 """
+
 from __future__ import annotations
 
 import logging
@@ -156,10 +157,12 @@ def run_judge_batch(
         except Exception as exc:  # noqa: BLE001 — fail-open
             _LOG.warning(
                 "judge raised for %s: %s — recording uncertain",
-                hit.label, exc,
+                hit.label,
+                exc,
             )
             verdict = GuardJudgeVerdict(
-                action="uncertain", reason="judge_exception",
+                action="uncertain",
+                reason="judge_exception",
             )
             result.errors += 1
             failure_streak += 1
@@ -171,8 +174,11 @@ def run_judge_batch(
 
         try:
             actual_sink.record_verdict(
-                hit.label, hit.ts, verdict.action,
-                reason=verdict.reason, confidence=verdict.confidence,
+                hit.label,
+                hit.ts,
+                verdict.action,
+                reason=verdict.reason,
+                confidence=verdict.confidence,
                 hit_seq=hit.seq,
             )
         except Exception as exc:  # noqa: BLE001 — fail-open
@@ -181,9 +187,7 @@ def run_judge_batch(
             continue
 
         result.total_judged += 1
-        result.by_action[verdict.action] = (
-            result.by_action.get(verdict.action, 0) + 1
-        )
+        result.by_action[verdict.action] = result.by_action.get(verdict.action, 0) + 1
 
         if failure_streak >= failure_streak_limit:
             _LOG.warning(

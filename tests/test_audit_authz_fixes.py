@@ -217,9 +217,7 @@ def test_app_wiring_enforces_jwt_claims_across_secured_routers(
         ok = client.request(method, path, headers=good_headers, **kwargs)
         denied = client.request(method, path, headers=bad_headers, **kwargs)
         assert ok.status_code != 401, f"{path} should accept a valid jwt"
-        assert denied.status_code == 401, (
-            f"{path} should reject jwt with mismatched {label}"
-        )
+        assert denied.status_code == 401, f"{path} should reject jwt with mismatched {label}"
 
 
 @pytest.mark.parametrize(
@@ -272,7 +270,8 @@ def test_stub_auth_me_only_resolves_identity_for_matching_jwt_claims(
 
 
 def test_workspace_routes_require_auth_and_respect_thread_owner(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     store, keys = _store_with_actors()
@@ -283,12 +282,14 @@ def test_workspace_routes_require_auth_and_respect_thread_owner(
         values={"title": "Workspace owner"},
     )
     app = FastAPI()
-    app.include_router(create_workspaces_router(
-        workspace_root=tmp_path / "workspaces",
-        thread_store=thread_store,
-        identity_store=store,
-        require_auth=True,
-    ))
+    app.include_router(
+        create_workspaces_router(
+            workspace_root=tmp_path / "workspaces",
+            thread_store=thread_store,
+            identity_store=store,
+            require_auth=True,
+        )
+    )
     client = TestClient(app)
 
     unauth = client.get("/api/workspaces/owned-thread")
@@ -333,19 +334,26 @@ def test_upload_routes_require_auth_and_respect_thread_owner(
     )
     client = TestClient(app)
 
-    assert client.get(
-        "/api/threads/th-upload/uploads/list",
-        headers=_bearer(keys["alice"]),
-    ).status_code == 200
-    assert client.get(
-        "/api/threads/th-upload/uploads/list",
-        headers=_bearer(keys["bob"]),
-    ).status_code == 404
+    assert (
+        client.get(
+            "/api/threads/th-upload/uploads/list",
+            headers=_bearer(keys["alice"]),
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            "/api/threads/th-upload/uploads/list",
+            headers=_bearer(keys["bob"]),
+        ).status_code
+        == 404
+    )
     assert client.get("/api/threads/th-upload/uploads/list").status_code == 401
 
 
 def test_legacy_control_plane_requires_auth_when_enabled(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     store, keys = _store_with_actors()
@@ -377,7 +385,8 @@ def test_legacy_control_plane_requires_auth_when_enabled(
 
 
 def test_legacy_control_plane_open_in_dev_mode(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     client = TestClient(create_app())
@@ -396,7 +405,8 @@ def test_legacy_control_plane_open_in_dev_mode(
 
 
 def test_local_auth_jwt_reaches_control_and_auth_aware_routes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from runtime.adapters.integrations.local_auth.config import LocalAuthConfig
 
@@ -421,7 +431,8 @@ def test_local_auth_jwt_reaches_control_and_auth_aware_routes(
 
 
 def test_local_auth_dev_mode_rejects_legacy_guest_token(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from runtime.adapters.integrations.local_auth.config import LocalAuthConfig
 
@@ -442,7 +453,8 @@ def test_local_auth_dev_mode_rejects_legacy_guest_token(
 
 
 def test_local_auth_jwt_audience_is_issued_and_enforced(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from runtime.adapters.integrations.local_auth.config import LocalAuthConfig
 
@@ -489,7 +501,8 @@ def test_local_auth_jwt_audience_is_issued_and_enforced(
 
 
 def test_android_device_ws_requires_token_when_auth_enabled(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The device-registration WebSocket is gated like the HTTP routes.
 
@@ -512,13 +525,15 @@ def test_android_device_ws_requires_token_when_auth_enabled(
 
     # Valid token → handshake accepted.
     with client.websocket_connect(
-        "/api/android/ws/dev1", headers=_bearer(keys["alice"]),
+        "/api/android/ws/dev1",
+        headers=_bearer(keys["alice"]),
     ) as ws:
         ws.send_json({"model": "Pixel", "android_version": "14"})
 
 
 def test_android_device_ws_open_in_dev_mode(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     client = TestClient(create_app())

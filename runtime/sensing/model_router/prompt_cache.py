@@ -89,7 +89,8 @@ def prepare_cached_tools(
     if not tools:
         return tools
     total = sum(
-        len(str(t.get("name", ""))) + len(str(t.get("description", "")))
+        len(str(t.get("name", "")))
+        + len(str(t.get("description", "")))
         + len(str(t.get("input_schema", "")))
         for t in tools
     )
@@ -174,10 +175,7 @@ def estimate_cache_savings(
     uncached = float(effective + reads + writes)
     actual = float(effective) + 0.10 * reads + 1.25 * writes
     savings = 1.0 - (actual / uncached) if uncached > 0 else 0.0
-    hit_ratio = (
-        reads / (effective + reads + writes)
-        if (effective + reads + writes) > 0 else 0.0
-    )
+    hit_ratio = reads / (effective + reads + writes) if (effective + reads + writes) > 0 else 0.0
     return {
         "uncached_cost": uncached,
         "actual_cost": actual,

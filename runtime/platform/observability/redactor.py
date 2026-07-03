@@ -128,9 +128,7 @@ _BUILTIN_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         # signature segment may be empty for alg=none tokens (still
         # leaks claims). First segment must look like a JOSE header
         # (eyJ...) to avoid matching arbitrary base64 dotted strings.
-        re.compile(
-            r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-=]{0,}"
-        ),
+        re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-=]{0,}"),
     ),
     (
         "email",
@@ -167,10 +165,18 @@ _BUILTIN_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 
 # Categories enabled by default. ``ipv4`` is off — many agents log
 # IPs for legitimate reasons and redacting them breaks debugging.
-DEFAULT_CATEGORIES: frozenset[str] = frozenset({
-    "private_key", "api_key", "aws_secret", "jwt",
-    "email", "ssn", "phone", "credit_card",
-})
+DEFAULT_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "private_key",
+        "api_key",
+        "aws_secret",
+        "jwt",
+        "email",
+        "ssn",
+        "phone",
+        "credit_card",
+    }
+)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -220,9 +226,7 @@ class Redactor:
         enabled_categories: set[str] | frozenset[str] | None = None,
         replacement_format: str = "[REDACTED:{category}]",
     ) -> None:
-        self._enabled = (
-            set(enabled_categories) if enabled_categories else set(DEFAULT_CATEGORIES)
-        )
+        self._enabled = set(enabled_categories) if enabled_categories else set(DEFAULT_CATEGORIES)
         self._fmt = replacement_format
         # Category → list of patterns (so users can add custom patterns).
         self._patterns: dict[str, list[re.Pattern[str]]] = {}
@@ -237,9 +241,7 @@ class Redactor:
         The category is auto-enabled. Accepts a raw string or a
         pre-compiled ``re.Pattern``.
         """
-        compiled = (
-            pattern if isinstance(pattern, re.Pattern) else re.compile(pattern)
-        )
+        compiled = pattern if isinstance(pattern, re.Pattern) else re.compile(pattern)
         self._patterns.setdefault(category, []).append(compiled)
         self._enabled.add(category)
 
@@ -262,9 +264,7 @@ class Redactor:
                 if category == "credit_card":
                     # Only replace matches that pass Luhn.
                     out = pat.sub(
-                        lambda m, r=replacement: (
-                            r if _passes_luhn(m.group(0)) else m.group(0)
-                        ),
+                        lambda m, r=replacement: r if _passes_luhn(m.group(0)) else m.group(0),
                         out,
                     )
                 elif category == "aws_secret":
@@ -274,6 +274,7 @@ class Redactor:
                         start = m.start(1) - m.start(0)
                         end = m.end(1) - m.start(0)
                         return m.group(0)[:start] + r + m.group(0)[end:]
+
                     out = pat.sub(_sub, out)
                 else:
                     out = pat.sub(replacement, out)
@@ -297,23 +298,31 @@ class Redactor:
             replacement = self._fmt.format(category=category)
             for pat in patterns:
                 if category == "credit_card":
+
                     def _sub_cc(m: re.Match[str], cat: str = category, r: str = replacement) -> str:
                         if _passes_luhn(m.group(0)):
                             counts[cat] = counts.get(cat, 0) + 1
                             return r
                         return m.group(0)
+
                     out = pat.sub(_sub_cc, out)
                 elif category == "aws_secret":
-                    def _sub_aws(m: re.Match[str], cat: str = category, r: str = replacement) -> str:
+
+                    def _sub_aws(
+                        m: re.Match[str], cat: str = category, r: str = replacement
+                    ) -> str:
                         counts[cat] = counts.get(cat, 0) + 1
                         start = m.start(1) - m.start(0)
                         end = m.end(1) - m.start(0)
                         return m.group(0)[:start] + r + m.group(0)[end:]
+
                     out = pat.sub(_sub_aws, out)
                 else:
+
                     def _sub(m: re.Match[str], cat: str = category, r: str = replacement) -> str:
                         counts[cat] = counts.get(cat, 0) + 1
                         return r
+
                     out = pat.sub(_sub, out)
         report = [{"category": c, "count": n} for c, n in sorted(counts.items())]
         return out, report

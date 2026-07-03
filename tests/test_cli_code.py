@@ -9,13 +9,15 @@ from runtime.cli import main
 def test_root_prompt_runs_code_session(monkeypatch, tmp_path: Path, capsys) -> None:
     monkeypatch.setenv("OCTOPUS_HOME", str(tmp_path / "home"))
 
-    rc = main([
-        "--no-color",
-        "--mock-response",
-        "Final Answer: rooted",
-        "--print",
-        "fix this from root",
-    ])
+    rc = main(
+        [
+            "--no-color",
+            "--mock-response",
+            "Final Answer: rooted",
+            "--print",
+            "fix this from root",
+        ]
+    )
 
     assert rc == 0
     assert capsys.readouterr().out.strip() == "rooted"
@@ -36,16 +38,18 @@ def test_pyproject_exposes_octopus_coding_binary() -> None:
 def test_code_print_saves_session(monkeypatch, tmp_path: Path, capsys) -> None:
     monkeypatch.setenv("OCTOPUS_HOME", str(tmp_path / "home"))
 
-    rc = main([
-        "--no-color",
-        "code",
-        "say hi",
-        "--mock-response",
-        "Final Answer: hi",
-        "--print",
-        "--max-iterations",
-        "3",
-    ])
+    rc = main(
+        [
+            "--no-color",
+            "code",
+            "say hi",
+            "--mock-response",
+            "Final Answer: hi",
+            "--print",
+            "--max-iterations",
+            "3",
+        ]
+    )
 
     assert rc == 0
     assert capsys.readouterr().out.strip() == "hi"
@@ -58,31 +62,35 @@ def test_code_print_saves_session(monkeypatch, tmp_path: Path, capsys) -> None:
 def test_code_continue_reuses_latest_session(monkeypatch, tmp_path: Path, capsys) -> None:
     monkeypatch.setenv("OCTOPUS_HOME", str(tmp_path / "home"))
 
-    first = main([
-        "--no-color",
-        "code",
-        "first",
-        "--mock-response",
-        "Final Answer: one",
-        "--print",
-        "--max-iterations",
-        "3",
-    ])
+    first = main(
+        [
+            "--no-color",
+            "code",
+            "first",
+            "--mock-response",
+            "Final Answer: one",
+            "--print",
+            "--max-iterations",
+            "3",
+        ]
+    )
     assert first == 0
     capsys.readouterr()
 
-    second = main([
-        "--no-color",
-        "code",
-        "second",
-        "--continue",
-        "--mock-response",
-        "Final Answer: two",
-        "--output-format",
-        "json",
-        "--max-iterations",
-        "3",
-    ])
+    second = main(
+        [
+            "--no-color",
+            "code",
+            "second",
+            "--continue",
+            "--mock-response",
+            "Final Answer: two",
+            "--output-format",
+            "json",
+            "--max-iterations",
+            "3",
+        ]
+    )
 
     assert second == 0
     payload = json.loads(capsys.readouterr().out)
@@ -96,14 +104,19 @@ def test_code_continue_reuses_latest_session(monkeypatch, tmp_path: Path, capsys
 
 def test_code_list_sessions_json(monkeypatch, tmp_path: Path, capsys) -> None:
     monkeypatch.setenv("OCTOPUS_HOME", str(tmp_path / "home"))
-    assert main([
-        "--no-color",
-        "code",
-        "task",
-        "--mock-response",
-        "Final Answer: done",
-        "--print",
-    ]) == 0
+    assert (
+        main(
+            [
+                "--no-color",
+                "code",
+                "task",
+                "--mock-response",
+                "Final Answer: done",
+                "--print",
+            ]
+        )
+        == 0
+    )
     capsys.readouterr()
 
     rc = main(["--no-color", "code", "--list-sessions", "--output-format", "json"])
@@ -118,15 +131,17 @@ def test_code_model_can_come_from_env(monkeypatch, tmp_path: Path, capsys) -> No
     monkeypatch.setenv("OCTOPUS_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("OCTOPUS_MODEL", "mock/env")
 
-    rc = main([
-        "--no-color",
-        "code",
-        "task",
-        "--mock-response",
-        "Final Answer: env model",
-        "--output-format",
-        "json",
-    ])
+    rc = main(
+        [
+            "--no-color",
+            "code",
+            "task",
+            "--mock-response",
+            "Final Answer: env model",
+            "--output-format",
+            "json",
+        ]
+    )
 
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)

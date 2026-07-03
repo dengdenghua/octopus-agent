@@ -7,6 +7,7 @@ rejection and re-emitted the same action until ``max_iter`` (livelock), and the
 denial was invisible to the step trace. ``_record_rejected_step`` now appends
 the step and surfaces the rejection to the model.
 """
+
 from __future__ import annotations
 
 from runtime.core.cerebrum.react_loop import _record_rejected_step
@@ -14,7 +15,7 @@ from runtime.core.cerebrum.react_types import ReActStep
 
 
 def test_rejected_step_recorded_and_surfaced_to_model() -> None:
-    step = ReActStep(iteration=1, action="exec_shell({\"cmd\": \"rm -rf /\"})")
+    step = ReActStep(iteration=1, action='exec_shell({"cmd": "rm -rf /"})')
     steps: list = []
     messages: list = []
 

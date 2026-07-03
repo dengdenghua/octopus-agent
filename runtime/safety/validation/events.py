@@ -1,4 +1,5 @@
 """Journal event types for constitution violations."""
+
 from __future__ import annotations
 
 from typing import Literal

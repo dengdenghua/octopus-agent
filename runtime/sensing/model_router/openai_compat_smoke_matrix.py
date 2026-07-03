@@ -5,6 +5,7 @@ matrix itself is checked in normal tests.  That keeps every built-in domestic
 compat profile tied to an executable probe instead of becoming a docs-only
 claim.
 """
+
 from __future__ import annotations
 
 import os
@@ -136,18 +137,20 @@ def openai_compat_smoke_readiness() -> dict[str, Any]:
         if has_api_key:
             configured += 1
         model_override = os.environ.get(provider.model_env, "").strip()
-        providers.append({
-            "id": provider.id,
-            "base_url": provider.base_url,
-            "api_key_env": list(provider.api_key_env),
-            "configured_api_key_env": key_env,
-            "has_api_key": has_api_key,
-            "model_env": provider.model_env,
-            "model": model_override or provider.default_model,
-            "uses_default_model": not bool(model_override),
-            "chat_smoke_runnable": chat_enabled and has_api_key,
-            "tool_smoke_runnable": chat_enabled and tool_enabled and has_api_key,
-        })
+        providers.append(
+            {
+                "id": provider.id,
+                "base_url": provider.base_url,
+                "api_key_env": list(provider.api_key_env),
+                "configured_api_key_env": key_env,
+                "has_api_key": has_api_key,
+                "model_env": provider.model_env,
+                "model": model_override or provider.default_model,
+                "uses_default_model": not bool(model_override),
+                "chat_smoke_runnable": chat_enabled and has_api_key,
+                "tool_smoke_runnable": chat_enabled and tool_enabled and has_api_key,
+            }
+        )
     return {
         "schema": "octopus.openai_compat_live_smoke_readiness.v1",
         "chat_smoke_enabled": chat_enabled,
@@ -155,12 +158,8 @@ def openai_compat_smoke_readiness() -> dict[str, Any]:
         "provider_count": len(_SMOKE_PROVIDERS),
         "configured_provider_count": configured,
         "missing_provider_count": len(_SMOKE_PROVIDERS) - configured,
-        "runnable_chat_provider_count": sum(
-            1 for row in providers if row["chat_smoke_runnable"]
-        ),
-        "runnable_tool_provider_count": sum(
-            1 for row in providers if row["tool_smoke_runnable"]
-        ),
+        "runnable_chat_provider_count": sum(1 for row in providers if row["chat_smoke_runnable"]),
+        "runnable_tool_provider_count": sum(1 for row in providers if row["tool_smoke_runnable"]),
         "providers": providers,
     }
 

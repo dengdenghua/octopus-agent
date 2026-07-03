@@ -4,6 +4,7 @@ Split out of the former ~1994-line computer_router.py. Combines screen /
 UIA / lease / replay-evidence checks into the single "is desktop
 automation usable right now" payload the /status endpoint returns.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -34,9 +35,7 @@ def _runtime_readiness(
             critical=True,
             mode="pyautogui_screen_info",
             reason=str(screen_info.get("error") or ""),
-            recommended_action=(
-                "check_display_or_desktop_permissions" if not screen_ok else ""
-            ),
+            recommended_action=("check_display_or_desktop_permissions" if not screen_ok else ""),
             metadata={
                 key: screen_info.get(key)
                 for key in ("width", "height", "cursor_x", "cursor_y")
@@ -75,9 +74,7 @@ def _runtime_readiness(
             critical=False,
             mode="accessibility_tree",
             reason=str(uia_status.get("error") or ""),
-            recommended_action=(
-                "install_or_enable_uia_backend" if not uia_ok else ""
-            ),
+            recommended_action=("install_or_enable_uia_backend" if not uia_ok else ""),
             metadata={
                 "platform": uia_status.get("platform"),
                 "available": uia_status.get("available"),
@@ -98,13 +95,9 @@ def _runtime_readiness(
         ),
     ]
     critical_blockers = [
-        item for item in capabilities
-        if item["critical"] and not item["available"]
+        item for item in capabilities if item["critical"] and not item["available"]
     ]
-    degraded = [
-        item for item in capabilities
-        if not item["available"] and not item["critical"]
-    ]
+    degraded = [item for item in capabilities if not item["available"] and not item["critical"]]
     if critical_blockers:
         health = "blocked"
     elif degraded:

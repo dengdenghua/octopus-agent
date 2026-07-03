@@ -140,7 +140,8 @@ class SkillRateLimiter:
             bucket = self._buckets.get(key)
             if bucket is None:
                 cap, rate = self._overrides.get(
-                    skill_name, (self._capacity, self._refill_per_sec),
+                    skill_name,
+                    (self._capacity, self._refill_per_sec),
                 )
                 bucket = _Bucket(
                     capacity=float(cap),
@@ -155,7 +156,9 @@ class SkillRateLimiter:
                 self._throttled_total += 1
                 _LOG.info(
                     "rate_limit: throttled skill=%s caller=%s retry_in=%.2fs",
-                    skill_name, caller, retry,
+                    skill_name,
+                    caller,
+                    retry,
                 )
             return ok, retry
 
@@ -196,9 +199,7 @@ class SkillRateLimiter:
             for b in self._buckets.values():
                 b.refill(now)
             total = self._calls_total
-            ratio = (
-                self._throttled_total / total if total > 0 else 0.0
-            )
+            ratio = self._throttled_total / total if total > 0 else 0.0
             return {
                 "calls_total": total,
                 "throttled_total": self._throttled_total,
@@ -210,7 +211,10 @@ class SkillRateLimiter:
             }
 
     def set_override(
-        self, skill_name: str, capacity: int, refill_per_sec: float,
+        self,
+        skill_name: str,
+        capacity: int,
+        refill_per_sec: float,
     ) -> None:
         """Install / update a per-skill limit override.
 

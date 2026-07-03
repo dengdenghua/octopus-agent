@@ -32,8 +32,8 @@ class _FakeResponse:
     ):
         self.status_code = status_code
         self._payload = payload
-        self.text = text if text else (
-            __import__("json").dumps(payload) if payload is not None else ""
+        self.text = (
+            text if text else (__import__("json").dumps(payload) if payload is not None else "")
         )
         self._lines = list(lines or [])
 
@@ -83,12 +83,14 @@ class _FakeClient:
         return self._response
 
     def stream(self, method: str, url: str, *, json=None, headers=None):
-        self.calls.append({
-            "method": method,
-            "url": url,
-            "json": json,
-            "headers": headers,
-        })
+        self.calls.append(
+            {
+                "method": method,
+                "url": url,
+                "json": json,
+                "headers": headers,
+            }
+        )
         if self._raise:
             raise self._raise
         if self._responses:
@@ -178,10 +180,12 @@ class TestRequestShape:
         assert payload["thinking"] == {"type": "enabled"}
 
     def test_thinking_400_retries_without_openai_extension_fields(self):
-        fake = _FakeClient(responses=[
-            _FakeResponse(400, {"error": {"message": "openai_error"}}),
-            _FakeResponse(200, _openai_response("fallback ok")),
-        ])
+        fake = _FakeClient(
+            responses=[
+                _FakeResponse(400, {"error": {"message": "openai_error"}}),
+                _FakeResponse(200, _openai_response("fallback ok")),
+            ]
+        )
         r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
 
         resp = r.call(
@@ -212,15 +216,17 @@ class TestRequestShape:
 
         custom_models_path = tmp_path / "custom_models.json"
         custom_models_path.write_text(
-            _json.dumps({
-                "kimi-code": {
-                    "id": "kimi-code",
-                    "name": "kimi-code",
-                    "provider": "openai",
-                    "models": ["kimi-k2.7-code"],
-                    "omit_sampling_parameters": True,
-                },
-            }),
+            _json.dumps(
+                {
+                    "kimi-code": {
+                        "id": "kimi-code",
+                        "name": "kimi-code",
+                        "provider": "openai",
+                        "models": ["kimi-k2.7-code"],
+                        "omit_sampling_parameters": True,
+                    },
+                }
+            ),
             encoding="utf-8",
         )
         from runtime.platform.process.paths import app_paths
@@ -260,17 +266,19 @@ class TestRequestShape:
 
         custom_models_path = tmp_path / "custom_models.json"
         custom_models_path.write_text(
-            _json.dumps({
-                "manual-kimi": {
-                    "id": "manual-kimi",
-                    "name": "manual-kimi",
-                    "provider": "openai",
-                    "models": ["manual-code-model"],
-                    "compat_profile": "kimi_coding",
-                    "drop_tool_choice": True,
-                    "unsupported_request_fields": ["parallel_tool_calls"],
-                },
-            }),
+            _json.dumps(
+                {
+                    "manual-kimi": {
+                        "id": "manual-kimi",
+                        "name": "manual-kimi",
+                        "provider": "openai",
+                        "models": ["manual-code-model"],
+                        "compat_profile": "kimi_coding",
+                        "drop_tool_choice": True,
+                        "unsupported_request_fields": ["parallel_tool_calls"],
+                    },
+                }
+            ),
             encoding="utf-8",
         )
         from runtime.platform.process.paths import app_paths
@@ -414,14 +422,19 @@ class TestRequestShape:
         assert payload["temperature"] == 1.0
 
     def test_qwen_retries_max_tokens_as_completion_tokens(self):
-        fake = _FakeClient(responses=[
-            _FakeResponse(400, {
-                "error": {
-                    "message": "max_completion_tokens is expected instead of max_tokens",
-                },
-            }),
-            _FakeResponse(200, _openai_response("qwen ok")),
-        ])
+        fake = _FakeClient(
+            responses=[
+                _FakeResponse(
+                    400,
+                    {
+                        "error": {
+                            "message": "max_completion_tokens is expected instead of max_tokens",
+                        },
+                    },
+                ),
+                _FakeResponse(200, _openai_response("qwen ok")),
+            ]
+        )
         r = OpenAIModelRouter(
             base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
             client=fake,
@@ -447,19 +460,27 @@ class TestRequestShape:
         ]
 
     def test_openai_compat_retries_can_chain_new_error_fields(self):
-        fake = _FakeClient(responses=[
-            _FakeResponse(400, {
-                "error": {
-                    "message": "max_completion_tokens is expected instead of max_tokens",
-                },
-            }),
-            _FakeResponse(400, {
-                "error": {
-                    "message": "unsupported parameter: response_format",
-                },
-            }),
-            _FakeResponse(200, _openai_response("compat ok")),
-        ])
+        fake = _FakeClient(
+            responses=[
+                _FakeResponse(
+                    400,
+                    {
+                        "error": {
+                            "message": "max_completion_tokens is expected instead of max_tokens",
+                        },
+                    },
+                ),
+                _FakeResponse(
+                    400,
+                    {
+                        "error": {
+                            "message": "unsupported parameter: response_format",
+                        },
+                    },
+                ),
+                _FakeResponse(200, _openai_response("compat ok")),
+            ]
+        )
         r = OpenAIModelRouter(
             base_url="https://plain-proxy.example/v1",
             client=fake,
@@ -487,14 +508,19 @@ class TestRequestShape:
         ]
 
     def test_openai_compat_retries_unnamed_strict_validation_optional_fields(self):
-        fake = _FakeClient(responses=[
-            _FakeResponse(400, {
-                "error": {
-                    "message": "extra inputs are not permitted",
-                },
-            }),
-            _FakeResponse(200, _openai_response("compat ok")),
-        ])
+        fake = _FakeClient(
+            responses=[
+                _FakeResponse(
+                    400,
+                    {
+                        "error": {
+                            "message": "extra inputs are not permitted",
+                        },
+                    },
+                ),
+                _FakeResponse(200, _openai_response("compat ok")),
+            ]
+        )
         r = OpenAIModelRouter(
             base_url="https://plain-proxy.example/v1",
             client=fake,
@@ -528,8 +554,7 @@ class TestRequestShape:
                 "model": "proxy-model",
                 "profile": "openai_compat",
                 "reason": (
-                    "drop_unsupported_fields:"
-                    "parallel_tool_calls,response_format,stream_options"
+                    "drop_unsupported_fields:parallel_tool_calls,response_format,stream_options"
                 ),
                 "removed_fields": [
                     "parallel_tool_calls",
@@ -613,16 +638,18 @@ class TestRequestShape:
 
         custom_models_path = tmp_path / "custom_models.json"
         custom_models_path.write_text(
-            _json.dumps({
-                "kimi-code": {
-                    "id": "kimi-code",
-                    "name": "kimi-code",
-                    "provider": "openai",
-                    "models": ["kimi-for-coding"],
-                    "supports_thinking": True,
-                    "omit_sampling_parameters": True,
-                },
-            }),
+            _json.dumps(
+                {
+                    "kimi-code": {
+                        "id": "kimi-code",
+                        "name": "kimi-code",
+                        "provider": "openai",
+                        "models": ["kimi-for-coding"],
+                        "supports_thinking": True,
+                        "omit_sampling_parameters": True,
+                    },
+                }
+            ),
             encoding="utf-8",
         )
         from runtime.platform.process.paths import app_paths
@@ -656,22 +683,28 @@ class TestRequestShape:
     def test_stream_thinking_400_retries_without_openai_extension_fields(self):
         import json as _json
 
-        fake = _FakeClient(responses=[
-            _FakeResponse(400, {"error": {"message": "openai_error"}}),
-            _FakeResponse(
-                200,
-                lines=[
-                    "data: "
-                    + _json.dumps({
-                        "choices": [{
-                            "delta": {"content": "stream ok"},
-                            "finish_reason": None,
-                        }],
-                    }),
-                    "data: [DONE]",
-                ],
-            ),
-        ])
+        fake = _FakeClient(
+            responses=[
+                _FakeResponse(400, {"error": {"message": "openai_error"}}),
+                _FakeResponse(
+                    200,
+                    lines=[
+                        "data: "
+                        + _json.dumps(
+                            {
+                                "choices": [
+                                    {
+                                        "delta": {"content": "stream ok"},
+                                        "finish_reason": None,
+                                    }
+                                ],
+                            }
+                        ),
+                        "data: [DONE]",
+                    ],
+                ),
+            ]
+        )
         r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
 
         events = list(
@@ -695,31 +728,43 @@ class TestRequestShape:
     def test_stream_openai_compat_retries_can_chain_new_error_fields(self):
         import json as _json
 
-        fake = _FakeClient(responses=[
-            _FakeResponse(400, {
-                "error": {
-                    "message": "max_completion_tokens is expected instead of max_tokens",
-                },
-            }),
-            _FakeResponse(400, {
-                "error": {
-                    "message": "unsupported parameter: response_format",
-                },
-            }),
-            _FakeResponse(
-                200,
-                lines=[
-                    "data: "
-                    + _json.dumps({
-                        "choices": [{
-                            "delta": {"content": "stream compat ok"},
-                            "finish_reason": None,
-                        }],
-                    }),
-                    "data: [DONE]",
-                ],
-            ),
-        ])
+        fake = _FakeClient(
+            responses=[
+                _FakeResponse(
+                    400,
+                    {
+                        "error": {
+                            "message": "max_completion_tokens is expected instead of max_tokens",
+                        },
+                    },
+                ),
+                _FakeResponse(
+                    400,
+                    {
+                        "error": {
+                            "message": "unsupported parameter: response_format",
+                        },
+                    },
+                ),
+                _FakeResponse(
+                    200,
+                    lines=[
+                        "data: "
+                        + _json.dumps(
+                            {
+                                "choices": [
+                                    {
+                                        "delta": {"content": "stream compat ok"},
+                                        "finish_reason": None,
+                                    }
+                                ],
+                            }
+                        ),
+                        "data: [DONE]",
+                    ],
+                ),
+            ]
+        )
         r = OpenAIModelRouter(
             base_url="https://plain-proxy.example/v1",
             client=fake,
@@ -747,17 +792,25 @@ class TestRequestShape:
         ]
 
     def test_final_http_error_includes_compat_retry_summary(self):
-        fake = _FakeClient(responses=[
-            _FakeResponse(400, {
-                "error": {
-                    "message": "max_completion_tokens is expected instead of max_tokens",
-                },
-            }),
-            _FakeResponse(400, {
-                "error": {"message": "unsupported parameter: response_format"},
-            }),
-            _FakeResponse(400, {"error": {"message": "openai_error"}}),
-        ])
+        fake = _FakeClient(
+            responses=[
+                _FakeResponse(
+                    400,
+                    {
+                        "error": {
+                            "message": "max_completion_tokens is expected instead of max_tokens",
+                        },
+                    },
+                ),
+                _FakeResponse(
+                    400,
+                    {
+                        "error": {"message": "unsupported parameter: response_format"},
+                    },
+                ),
+                _FakeResponse(400, {"error": {"message": "openai_error"}}),
+            ]
+        )
         r = OpenAIModelRouter(
             base_url="https://plain-proxy.example/v1",
             client=fake,
@@ -780,17 +833,25 @@ class TestRequestShape:
         assert "新增:max_completion_tokens" in message
 
     def test_stream_final_http_error_includes_compat_retry_summary(self):
-        fake = _FakeClient(responses=[
-            _FakeResponse(400, {
-                "error": {
-                    "message": "max_completion_tokens is expected instead of max_tokens",
-                },
-            }),
-            _FakeResponse(400, {
-                "error": {"message": "unsupported parameter: response_format"},
-            }),
-            _FakeResponse(400, {"error": {"message": "openai_error"}}),
-        ])
+        fake = _FakeClient(
+            responses=[
+                _FakeResponse(
+                    400,
+                    {
+                        "error": {
+                            "message": "max_completion_tokens is expected instead of max_tokens",
+                        },
+                    },
+                ),
+                _FakeResponse(
+                    400,
+                    {
+                        "error": {"message": "unsupported parameter: response_format"},
+                    },
+                ),
+                _FakeResponse(400, {"error": {"message": "openai_error"}}),
+            ]
+        )
         r = OpenAIModelRouter(
             base_url="https://plain-proxy.example/v1",
             client=fake,
@@ -858,9 +919,12 @@ class TestRequestShape:
 
 class TestResponseParsing:
     def test_extracts_content_and_cost(self):
-        fake = _FakeClient(response=_FakeResponse(
-            200, _openai_response(text="hi back", prompt_tokens=100, completion_tokens=50),
-        ))
+        fake = _FakeClient(
+            response=_FakeResponse(
+                200,
+                _openai_response(text="hi back", prompt_tokens=100, completion_tokens=50),
+            )
+        )
         r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
         resp = r.call(_req())
 
@@ -997,11 +1061,15 @@ class TestResponseParsing:
 
 class TestPricing:
     def test_per_model_pricing_overrides_default(self):
-        fake = _FakeClient(response=_FakeResponse(
-            200, _openai_response(prompt_tokens=1000, completion_tokens=500),
-        ))
+        fake = _FakeClient(
+            response=_FakeResponse(
+                200,
+                _openai_response(prompt_tokens=1000, completion_tokens=500),
+            )
+        )
         r = OpenAIModelRouter(
-            base_url="http://x/v1", client=fake,
+            base_url="http://x/v1",
+            client=fake,
             pricing_per_1k={"gpt-4o-mini": (0.15, 0.60)},  # USD / 1k tokens
         )
         resp = r.call(_req())
@@ -1009,11 +1077,15 @@ class TestPricing:
         assert abs(resp.cost.usd - 0.45) < 1e-9
 
     def test_unknown_model_falls_to_default_rate(self):
-        fake = _FakeClient(response=_FakeResponse(
-            200, _openai_response(prompt_tokens=100, completion_tokens=50),
-        ))
+        fake = _FakeClient(
+            response=_FakeResponse(
+                200,
+                _openai_response(prompt_tokens=100, completion_tokens=50),
+            )
+        )
         r = OpenAIModelRouter(
-            base_url="http://x/v1", client=fake,
+            base_url="http://x/v1",
+            client=fake,
             pricing_per_1k={"other-model": (1.0, 2.0)},  # Implementation note.
         )
         resp = r.call(_req())
@@ -1042,9 +1114,14 @@ class TestErrors:
 
     def test_http_error_redacts_provider_prefixed_api_keys(self):
         secret = "sk-kimi-" + ("A" * 32)
-        fake = _FakeClient(response=_FakeResponse(401, {
-            "error": {"message": f"invalid api key {secret}"},
-        }))
+        fake = _FakeClient(
+            response=_FakeResponse(
+                401,
+                {
+                    "error": {"message": f"invalid api key {secret}"},
+                },
+            )
+        )
         r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
 
         with pytest.raises(OpenAIRouterError) as exc:
@@ -1055,13 +1132,18 @@ class TestErrors:
         assert "[REDACTED:api_key]" in message
 
     def test_http_402_balance_error_is_user_readable(self):
-        fake = _FakeClient(response=_FakeResponse(402, {
-            "error": {
-                "code": "402",
-                "message": "Insufficient account balance",
-                "type": "insufficient_balance",
-            }
-        }))
+        fake = _FakeClient(
+            response=_FakeResponse(
+                402,
+                {
+                    "error": {
+                        "code": "402",
+                        "message": "Insufficient account balance",
+                        "type": "insufficient_balance",
+                    }
+                },
+            )
+        )
         r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
         with pytest.raises(OpenAIRouterError) as exc:
             r.call(_req())
@@ -1071,9 +1153,14 @@ class TestErrors:
         assert "Insufficient account balance" not in message
 
     def test_generic_openai_error_is_diagnostic(self):
-        fake = _FakeClient(response=_FakeResponse(400, {
-            "error": {"message": "openai_error"},
-        }))
+        fake = _FakeClient(
+            response=_FakeResponse(
+                400,
+                {
+                    "error": {"message": "openai_error"},
+                },
+            )
+        )
         r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
 
         with pytest.raises(OpenAIRouterError) as exc:
@@ -1132,7 +1219,9 @@ class TestAuthFromEnv:
         monkeypatch.setenv("OPENAI_API_KEY", "env-key")
         fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
         r = OpenAIModelRouter(
-            base_url="http://x/v1", api_key="explicit-key", client=fake,
+            base_url="http://x/v1",
+            api_key="explicit-key",
+            client=fake,
         )
         r.call(_req())
         assert fake.calls[0]["headers"]["Authorization"] == "Bearer explicit-key"
@@ -1154,10 +1243,12 @@ class TestMultiRouterIntegration:
         )
         mm = MultiModelRouter(primary=primary)
         # Implementation note.
-        mm.call(ModelRequest(
-            model="caller-specified",
-            messages=[Message(role="user", content="hi")],
-        ))
+        mm.call(
+            ModelRequest(
+                model="caller-specified",
+                messages=[Message(role="user", content="hi")],
+            )
+        )
         assert fake.calls[0]["json"]["model"] == "llama3.2:3b"
 
     def test_as_fallback_in_multi(self):
@@ -1170,11 +1261,16 @@ class TestMultiRouterIntegration:
 
         fake = _FakeClient(response=_FakeResponse(200, _openai_response("via-fallback")))
         openai = OpenAIModelRouter(
-            base_url="http://x/v1", default_model="gpt-4o-mini", client=fake,
+            base_url="http://x/v1",
+            default_model="gpt-4o-mini",
+            client=fake,
         )
         mm = MultiModelRouter(primary=_Bad(), fallbacks=[openai])
-        resp = mm.call(ModelRequest(
-            model="any", messages=[Message(role="user", content="hi")],
-        ))
+        resp = mm.call(
+            ModelRequest(
+                model="any",
+                messages=[Message(role="user", content="hi")],
+            )
+        )
         assert resp.text == "via-fallback"
         assert mm.dispatch_log[-1].final_role == "fallback[0]"

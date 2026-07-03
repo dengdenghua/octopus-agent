@@ -94,7 +94,8 @@ class OwnershipMixin:
             if owner_id is None:
                 return list(self._batches.keys())
             return [
-                bid for bid, batch in self._batches.items()
+                bid
+                for bid, batch in self._batches.items()
                 if batch.owner_id is None or batch.owner_id == owner_id
             ]
 
@@ -125,9 +126,7 @@ class OwnershipMixin:
                             batch,
                             entry,
                             phase="cancelled",
-                            message=(
-                                f"{entry.subagent_name} cancelled before start"
-                            ),
+                            message=(f"{entry.subagent_name} cancelled before start"),
                         )
                 self._maybe_close_batch_locked(batch)  # type: ignore[attr-defined]
         return True

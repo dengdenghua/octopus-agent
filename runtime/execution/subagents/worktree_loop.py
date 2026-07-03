@@ -20,6 +20,7 @@ runs with ``cwd`` = the worktree) needs per-worker ``workspace_path`` support
 in ``call_subagent`` and is a separate integration step; the loop machinery
 here is agnostic to what the worker is.
 """
+
 from __future__ import annotations
 
 import concurrent.futures as _cf
@@ -57,9 +58,9 @@ def is_git_repo(path: str) -> bool:
 
 
 def _slug(text: str, fallback: str) -> str:
-    cleaned = "".join(
-        ch if (ch.isalnum() or ch in "-_") else "-" for ch in str(text)
-    )[:32].strip("-")
+    cleaned = "".join(ch if (ch.isalnum() or ch in "-_") else "-" for ch in str(text))[:32].strip(
+        "-"
+    )
     return cleaned or fallback
 
 
@@ -90,7 +91,9 @@ def _capture_diff(worktree: str) -> tuple[str, list[str]]:
 
 
 def shell_worktree_worker(
-    command: list[str], *, timeout_s: int = 300,
+    command: list[str],
+    *,
+    timeout_s: int = 300,
 ) -> Callable[[str, Any], None]:
     """A ready-made worker that runs a FIXED argv inside each worktree
     (``cwd`` = the worktree), with the task exposed as the env var
@@ -105,15 +108,22 @@ def shell_worktree_worker(
     def _worker(path: str, task: Any) -> None:
         env = {**os.environ, "OCTOPUS_WORKTREE_TASK": str(task)}
         subprocess.run(
-            argv, cwd=path, env=env, timeout=timeout_s,
-            check=True, capture_output=True, text=True,
+            argv,
+            cwd=path,
+            env=env,
+            timeout=timeout_s,
+            check=True,
+            capture_output=True,
+            text=True,
         )
 
     return _worker
 
 
 def subagent_worktree_worker(
-    agent_id: str = "worktree_writer", *, timeout_s: int = 600,
+    agent_id: str = "worktree_writer",
+    *,
+    timeout_s: int = 600,
 ) -> Callable[[str, Any], None]:
     """A worker that runs an LLM sub-agent inside each worktree, with the
     sub-agent's OWN file tools confined to that worktree.
@@ -159,8 +169,13 @@ def run_worktree_loop(
         preview = (task if isinstance(task, str) else repr(task))[:200]
         name = f"{index}-{_slug(task if isinstance(task, str) else '', f't{index}')}"
         record: dict[str, Any] = {
-            "index": index, "task": preview, "branch": f"octo/wt-{name}",
-            "ok": False, "diff": "", "files": [], "error": None,
+            "index": index,
+            "task": preview,
+            "branch": f"octo/wt-{name}",
+            "ok": False,
+            "diff": "",
+            "files": [],
+            "error": None,
         }
         try:
             with worktree_scope(repo_root, name) as (path, branch):
@@ -175,7 +190,8 @@ def run_worktree_loop(
     results: list[dict[str, Any]] = []
     workers = max(1, min(int(max_workers), len(clean)))
     with _cf.ThreadPoolExecutor(
-        max_workers=workers, thread_name_prefix="worktree",
+        max_workers=workers,
+        thread_name_prefix="worktree",
     ) as pool:
         futures = [pool.submit(_run_one, i, t) for i, t in enumerate(clean)]
         for future in _cf.as_completed(futures):

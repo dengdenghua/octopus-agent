@@ -98,9 +98,7 @@ class TestFetchUrl:
 
     def test_truncation(self):
         big_body = "x" * 200_000
-        client = _MockClient(
-            get_response=_MockResponse(status_code=200, text=big_body)
-        )
+        client = _MockClient(get_response=_MockResponse(status_code=200, text=big_body))
         result = _fetch_url(url="https://x.com/", client=client, max_bytes=1000)
         assert result["truncated"] is True
         assert len(result["content"]) == 1000
@@ -154,9 +152,7 @@ class TestFetchUrlExtract:
                 url="https://example.com/article",
             )
         )
-        result = _fetch_url(
-            url="https://example.com/article", client=client, extract=True
-        )
+        result = _fetch_url(url="https://example.com/article", client=client, extract=True)
         assert result["extracted"] is True
         assert "main article body" in result["content"]
         assert "Home | About | Contact" not in result["content"]
@@ -190,9 +186,7 @@ class TestFetchUrlExtract:
                 url="https://example.com/empty",
             )
         )
-        result = _fetch_url(
-            url="https://example.com/empty", client=client, extract=True
-        )
+        result = _fetch_url(url="https://example.com/empty", client=client, extract=True)
         assert result["extracted"] is False
         assert result.get("extract_failed") == "no_main_content"
         assert "<html>" in result["content"]
@@ -219,9 +213,7 @@ _DDG_SAMPLE_HTML = """
 
 class TestDDGSearch:
     def test_parses_results(self):
-        client = _MockClient(
-            post_response=_MockResponse(status_code=200, text=_DDG_SAMPLE_HTML)
-        )
+        client = _MockClient(post_response=_MockResponse(status_code=200, text=_DDG_SAMPLE_HTML))
         result = _ddg_search(client, "test query", max_results=5)
         assert result["backend"] == "ddg"
         assert result["query"] == "test query"
@@ -231,17 +223,13 @@ class TestDDGSearch:
         assert "first result" in result["results"][0]["snippet"].lower()
 
     def test_cleans_html_tags_from_title(self):
-        client = _MockClient(
-            post_response=_MockResponse(status_code=200, text=_DDG_SAMPLE_HTML)
-        )
+        client = _MockClient(post_response=_MockResponse(status_code=200, text=_DDG_SAMPLE_HTML))
         result = _ddg_search(client, "q", max_results=5)
         # Implementation note.
         assert "<b>" not in result["results"][1]["title"]
 
     def test_max_results_cap(self):
-        client = _MockClient(
-            post_response=_MockResponse(status_code=200, text=_DDG_SAMPLE_HTML)
-        )
+        client = _MockClient(post_response=_MockResponse(status_code=200, text=_DDG_SAMPLE_HTML))
         result = _ddg_search(client, "q", max_results=1)
         assert len(result["results"]) == 1
 
@@ -262,9 +250,7 @@ class TestTavilySearch:
                 }
             ]
         }
-        client = _MockClient(
-            post_response=_MockResponse(status_code=200, json_data=tavily_json)
-        )
+        client = _MockClient(post_response=_MockResponse(status_code=200, json_data=tavily_json))
         result = _tavily_search(client, "fake-key", "ai news", max_results=5)
         assert result["backend"] == "tavily"
         assert result["results"][0]["title"] == "AI News"
@@ -290,9 +276,7 @@ class TestWebSearchRouting:
         monkeypatch.delenv("BRAVE_API_KEY", raising=False)
         monkeypatch.delenv("SERPER_API_KEY", raising=False)
         monkeypatch.delenv("SEARXNG_URL", raising=False)
-        client = _MockClient(
-            post_response=_MockResponse(status_code=200, text=_DDG_SAMPLE_HTML)
-        )
+        client = _MockClient(post_response=_MockResponse(status_code=200, text=_DDG_SAMPLE_HTML))
         result = _web_search(query="hi", client=client)
         assert result["backend"] == "ddg"
 
@@ -319,9 +303,7 @@ class TestBraveSearch:
                 ]
             }
         }
-        client = _MockClient(
-            get_response=_MockResponse(status_code=200, json_data=brave_json)
-        )
+        client = _MockClient(get_response=_MockResponse(status_code=200, json_data=brave_json))
         result = _brave_search(client, "fake-key", "q", max_results=5)
         assert result["backend"] == "brave"
         assert result["results"][0]["url"] == "https://example.com/brave"
@@ -350,9 +332,7 @@ class TestSerperSearch:
                 }
             ]
         }
-        client = _MockClient(
-            post_response=_MockResponse(status_code=200, json_data=serper_json)
-        )
+        client = _MockClient(post_response=_MockResponse(status_code=200, json_data=serper_json))
         result = _serper_search(client, "fake-key", "q", max_results=5)
         assert result["backend"] == "serper"
         assert result["results"][0]["url"] == "https://example.com/serper"
@@ -370,17 +350,13 @@ class TestSearxngSearch:
                 }
             ]
         }
-        client = _MockClient(
-            get_response=_MockResponse(status_code=200, json_data=sx_json)
-        )
+        client = _MockClient(get_response=_MockResponse(status_code=200, json_data=sx_json))
         result = _searxng_search(client, "https://searx.example/", "q", max_results=5)
         assert result["backend"] == "searxng"
         assert result["results"][0]["url"] == "https://example.com/sx"
 
     def test_searxng_strips_trailing_slash(self):
-        client = _MockClient(
-            get_response=_MockResponse(status_code=200, json_data={"results": []})
-        )
+        client = _MockClient(get_response=_MockResponse(status_code=200, json_data={"results": []}))
         _searxng_search(client, "https://searx.example/", "q", max_results=1)
         method, url, _ = client.calls[0]
         assert url == "https://searx.example/search"
@@ -393,8 +369,13 @@ class TestResolveBackend:
         assert _resolve_backend() == "brave"
 
     def test_priority_order(self, monkeypatch):
-        for k in ("WEB_SEARCH_BACKEND", "TAVILY_API_KEY", "BRAVE_API_KEY",
-                  "SERPER_API_KEY", "SEARXNG_URL"):
+        for k in (
+            "WEB_SEARCH_BACKEND",
+            "TAVILY_API_KEY",
+            "BRAVE_API_KEY",
+            "SERPER_API_KEY",
+            "SEARXNG_URL",
+        ):
             monkeypatch.delenv(k, raising=False)
         assert _resolve_backend() == "ddg"
         monkeypatch.setenv("SEARXNG_URL", "https://x")
@@ -445,9 +426,7 @@ class TestRegistryIntegration:
         for name in WEB_SKILL_NAMES:
             report = r.last_test_report(name)
             assert report is not None
-            assert report.overall_passed, (
-                f"{name} failed golden: {report.failed}"
-            )
+            assert report.overall_passed, f"{name} failed golden: {report.failed}"
 
     def test_register_all_includes_web(self):
         from runtime.execution.suckers.builtins import BUILTIN_NAMES, register_all

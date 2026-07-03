@@ -9,6 +9,7 @@ This test pins the contract that the ``_try_real_research_swarm``
 helper exists, validates input, and falls back gracefully when the
 multi-agent infra isn't available.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -44,6 +45,7 @@ def test_accepts_topic_under_alias_keys() -> None:
     ms.__dict__.get("load_registry")  # likely not directly importable here
     # Patch via the import path used inside the helper.
     import runtime.safety.organization.forge as forge
+
     monkey_orig = forge.load_registry
 
     try:
@@ -115,6 +117,7 @@ def test_returns_structured_result_on_success() -> None:
     orig_load = forge.load_registry
 
     import runtime.safety.organization.team_runner as tr
+
     orig_runner = tr.TeamRunner
 
     try:

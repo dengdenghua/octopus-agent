@@ -143,7 +143,9 @@ def _normalize_project(project: Project) -> Project:
     project_id = _require_id(project.id, label="project_id")
     return Project(
         id=project_id,
-        name=_text(project.name, label="project name", max_length=_MAX_NAME_LENGTH, default=project_id),
+        name=_text(
+            project.name, label="project name", max_length=_MAX_NAME_LENGTH, default=project_id
+        ),
         goal=_text(project.goal, label="project goal"),
         milestone_ids=_id_list(project.milestone_ids, label="milestone_id"),
         current_ms=_optional_id(project.current_ms, label="milestone_id"),
@@ -470,9 +472,7 @@ class ProjectStore:
     def tasks_for_milestone(self, ms_id: str) -> list[Task]:
         ms_id = _require_id(ms_id, label="milestone_id")
         with self._lock, self._conn() as conn:
-            rows = conn.execute(
-                "SELECT doc FROM tasks WHERE milestone_id=?", (ms_id,)
-            ).fetchall()
+            rows = conn.execute("SELECT doc FROM tasks WHERE milestone_id=?", (ms_id,)).fetchall()
         tasks: list[Task] = []
         for row in rows:
             task = _task_from_doc(row[0])

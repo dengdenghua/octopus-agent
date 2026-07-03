@@ -21,6 +21,7 @@ The delegation is always a hint to the runtime, not a hard override:
 callers are free to ignore the recommendation when other constraints
 (safety, mode, tool budget) demand model orchestration.
 """
+
 from __future__ import annotations
 
 import re
@@ -84,8 +85,10 @@ def plan_auto_delegation(
     # Heuristic 1: exactly one agent mention.
     if len(mentions.agents) != 1:
         return AgentDelegationPlan(
-            None, text,
-            "no single agent mention" if not mentions.agents
+            None,
+            text,
+            "no single agent mention"
+            if not mentions.agents
             else f"{len(mentions.agents)} agent mentions — needs orchestration",
         )
     target = mentions.agents[0]
@@ -96,7 +99,8 @@ def plan_auto_delegation(
     # agent that may or may not have access to them.)
     if mentions.skills or mentions.plugins or mentions.packs:
         return AgentDelegationPlan(
-            None, text,
+            None,
+            text,
             "competing skill/plugin/pack pin — let model orchestrate",
         )
 
@@ -104,7 +108,9 @@ def plan_auto_delegation(
     for pattern in _FAN_OUT_PATTERNS:
         if pattern.search(text):
             return AgentDelegationPlan(
-                None, text, "fan-out wording detected",
+                None,
+                text,
+                "fan-out wording detected",
             )
 
     # Heuristic 2: agent exists in the registry.
@@ -112,7 +118,8 @@ def plan_auto_delegation(
         try:
             if not registry.has(target):
                 return AgentDelegationPlan(
-                    None, text,
+                    None,
+                    text,
                     f"agent `{target}` not in registry",
                 )
         except (AttributeError, TypeError, ValueError):
@@ -120,7 +127,9 @@ def plan_auto_delegation(
             # — better to let the model reason than to forward to a
             # half-resolved target.
             return AgentDelegationPlan(
-                None, text, "registry lookup failed",
+                None,
+                text,
+                "registry lookup failed",
             )
 
     # Heuristic 3: substantive instruction beyond the mention itself.
@@ -128,7 +137,8 @@ def plan_auto_delegation(
     substantive = cleaned.strip()
     if len(substantive) < 8:
         return AgentDelegationPlan(
-            None, text,
+            None,
+            text,
             "prompt is just the mention — model should ask for context",
         )
 

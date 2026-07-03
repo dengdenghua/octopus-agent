@@ -38,6 +38,7 @@ _ensure_utf8_stdio()
 # Operators who prefer shell-wins policy can simply not create .env.
 try:
     from dotenv import load_dotenv as _load_dotenv
+
     _load_dotenv(override=True)
     del _load_dotenv
 except (ImportError, TypeError, AttributeError):  # noqa: BLE001 — dotenv optional; skip if module/env malformed
@@ -107,11 +108,18 @@ def run_status(*, color: bool = True) -> int:
     print(c.bold(_("cli.status.check_runtime")))
     ok, status = _check("pydantic", "pydantic")
     print(_line(ok, "pydantic (required)", status))
-    print(_line(
-        "✓" if OTEL_AVAILABLE else "✗",
-        "opentelemetry",
-        _("cli.status.otel_status", status=_("cli.status.otel_installed") if OTEL_AVAILABLE else _("cli.status.otel_missing")),
-    ))
+    print(
+        _line(
+            "✓" if OTEL_AVAILABLE else "✗",
+            "opentelemetry",
+            _(
+                "cli.status.otel_status",
+                status=_("cli.status.otel_installed")
+                if OTEL_AVAILABLE
+                else _("cli.status.otel_missing"),
+            ),
+        )
+    )
 
     print()
     print(c.bold(_("cli.status.check_llm")))
@@ -207,7 +215,13 @@ def run_kg(
     print(c.bold(_("cli.kg.title_fmt", path=from_journal)))
     print(c.dim("─" * 60))
     print(
-        _("cli.kg.scanned_fmt", scanned=report.events_scanned, accepted=report.triples_accepted, superseded=report.triples_superseded, ignored=report.triples_ignored)
+        _(
+            "cli.kg.scanned_fmt",
+            scanned=report.events_scanned,
+            accepted=report.triples_accepted,
+            superseded=report.triples_superseded,
+            ignored=report.triples_ignored,
+        )
     )
     print(c.dim(_("cli.kg.count_fmt", active=kg.count(), total=len(kg))))
     print()
@@ -236,11 +250,17 @@ def run_kg(
         s = t.subject[:40]
         p = t.predicate[:20]
         o = t.object[:60]
+
         def _identity(x: str) -> str:
             return x
-        conf_color = c.green if t.confidence >= 0.8 else (c.dim if t.confidence < 0.5 else _identity)
+
+        conf_color = (
+            c.green if t.confidence >= 0.8 else (c.dim if t.confidence < 0.5 else _identity)
+        )
         print(f"  {conf_color(c.bold(s)):<40}  {c.cyan(p):<20}  {o}")
-        print(c.dim(_("cli.kg.triple_detail_fmt", confidence=t.confidence, source=t.source.source_id)))
+        print(
+            c.dim(_("cli.kg.triple_detail_fmt", confidence=t.confidence, source=t.source.source_id))
+        )
     if len(triples) > limit:
         print(c.dim(_("cli.kg.more_fmt", n=len(triples) - limit)))
     return 0
@@ -346,39 +366,42 @@ def run_wiki(
         print(f"  - {page}")
     return 0
 
-_CLI_COMMANDS = frozenset({
-    "demo",
-    "code",
-    "mcp",
-    "tour",
-    "bugfix-demo",
-    "bugfix-demo-v2",
-    "reflection-demo",
-    "evolution-demo",
-    "run",
-    "bench",
-    "intel",
-    "status",
-    "quickstart",
-    "reflect",
-    "ui",
-    "migrate",
-    "optimize",
-    "resume",
-    "serve",
-    "loop",
-    "kg",
-    "project",
-    "backup",
-    "restore",
-    "export",
-    "wiki",
-    "setup",
-    "doctor",
-    "skills",
-    "bb",
-    "plugins",
-})
+
+_CLI_COMMANDS = frozenset(
+    {
+        "demo",
+        "code",
+        "mcp",
+        "tour",
+        "bugfix-demo",
+        "bugfix-demo-v2",
+        "reflection-demo",
+        "evolution-demo",
+        "run",
+        "bench",
+        "intel",
+        "status",
+        "quickstart",
+        "reflect",
+        "ui",
+        "migrate",
+        "optimize",
+        "resume",
+        "serve",
+        "loop",
+        "kg",
+        "project",
+        "backup",
+        "restore",
+        "export",
+        "wiki",
+        "setup",
+        "doctor",
+        "skills",
+        "bb",
+        "plugins",
+    }
+)
 
 
 def _normalize_cli_argv(argv: list[str]) -> list[str]:
@@ -435,7 +458,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--version", action="version", version=f"octopus-agent {__version__}")
     parser.add_argument("--no-color", action="store_true", help="disable ANSI colors")
     parser.add_argument(
-        "--lang", default="auto",
+        "--lang",
+        default="auto",
         choices=["auto", "en", "zh", "zh-CN", "ja", "ko"],
         help=_("cli.help.lang"),
     )
@@ -446,7 +470,9 @@ def main(argv: list[str] | None = None) -> int:
 
     codep = sub.add_parser("code", help="Run an agentic coding session.")
     codep.add_argument("prompt", nargs="*", help="coding task prompt; omit to read stdin")
-    codep.add_argument("--cwd", type=Path, default=None, help="workspace root (default: current directory)")
+    codep.add_argument(
+        "--cwd", type=Path, default=None, help="workspace root (default: current directory)"
+    )
     codep.add_argument("--model", default=None, help="model name for the ReAct planner")
     codep.add_argument(
         "--permission-mode",
@@ -454,7 +480,12 @@ def main(argv: list[str] | None = None) -> int:
         default="default",
         help="approval policy for tool use",
     )
-    codep.add_argument("--continue", dest="continue_session", action="store_true", help="resume latest coding session")
+    codep.add_argument(
+        "--continue",
+        dest="continue_session",
+        action="store_true",
+        help="resume latest coding session",
+    )
     codep.add_argument("--resume", default=None, help="resume a specific coding session id")
     codep.add_argument("--print", action="store_true", help="print only the final answer")
     codep.add_argument(
@@ -463,8 +494,12 @@ def main(argv: list[str] | None = None) -> int:
         default="text",
         help="output renderer",
     )
-    codep.add_argument("--add-dir", action="append", default=[], help="additional readable workspace directory")
-    codep.add_argument("--worktree", action="store_true", help="run with Octopus sandbox isolation metadata")
+    codep.add_argument(
+        "--add-dir", action="append", default=[], help="additional readable workspace directory"
+    )
+    codep.add_argument(
+        "--worktree", action="store_true", help="run with Octopus sandbox isolation metadata"
+    )
     codep.add_argument("--list-sessions", action="store_true", help="list saved coding sessions")
     codep.add_argument("--max-iterations", type=int, default=30)
     codep.add_argument("--max-tokens", type=int, default=50_000)
@@ -475,8 +510,12 @@ def main(argv: list[str] | None = None) -> int:
     mcp_sub = mcpp.add_subparsers(dest="mcp_op", required=True)
     mcp_add = mcp_sub.add_parser("add", help="Add an MCP stdio server.")
     mcp_add.add_argument("name", help="server name")
-    mcp_add.add_argument("--env", action="append", default=[], help="environment variable KEY=VALUE")
-    mcp_add.add_argument("--trust-level", default="custom", choices=["public", "custom", "external"])
+    mcp_add.add_argument(
+        "--env", action="append", default=[], help="environment variable KEY=VALUE"
+    )
+    mcp_add.add_argument(
+        "--trust-level", default="custom", choices=["public", "custom", "external"]
+    )
     mcp_add.add_argument("--timeout-ms", type=int, default=30_000)
     mcp_add.add_argument("--disabled", action="store_true", help="save disabled")
     mcp_add.add_argument("--trust", action="store_true", help="also mark this server trusted")
@@ -485,19 +524,36 @@ def main(argv: list[str] | None = None) -> int:
     mcp_list.add_argument("--output-format", choices=["text", "json"], default="text")
     mcp_remove = mcp_sub.add_parser("remove", help="Remove an MCP server.")
     mcp_remove.add_argument("name", help="server name")
-    mcp_remove.add_argument("--keep-trust", dest="forget_trust", action="store_false", help="keep trust entry")
+    mcp_remove.add_argument(
+        "--keep-trust", dest="forget_trust", action="store_false", help="keep trust entry"
+    )
     mcp_trust = mcp_sub.add_parser("trust", help="Trust an MCP server.")
     mcp_trust.add_argument("name", help="server name")
-    mcp_trust.add_argument("--tool", dest="tools", action="append", default=[], help="pin an exposed tool name")
+    mcp_trust.add_argument(
+        "--tool", dest="tools", action="append", default=[], help="pin an exposed tool name"
+    )
     mcp_trust.add_argument("--note", default="")
     mcp_revoke = mcp_sub.add_parser("revoke", help="Revoke MCP server trust.")
     mcp_revoke.add_argument("name", help="server name")
 
     mcp_serve = mcp_sub.add_parser("serve", help="Start Tentacle MCP Server (stdio or SSE mode).")
-    mcp_serve.add_argument("--stdio", action="store_true", help="Run in stdio mode (for Claude Desktop command)")
-    mcp_serve.add_argument("--host", default="127.0.0.1", help="Host for SSE mode (default: 127.0.0.1; pass 0.0.0.0 to expose on the network)")
-    mcp_serve.add_argument("--port", type=int, default=8766, help="Port for SSE mode (default: 8766)")
-    mcp_serve.add_argument("--log-level", default="warning", choices=["debug", "info", "warning", "error"], help="Log level")
+    mcp_serve.add_argument(
+        "--stdio", action="store_true", help="Run in stdio mode (for Claude Desktop command)"
+    )
+    mcp_serve.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host for SSE mode (default: 127.0.0.1; pass 0.0.0.0 to expose on the network)",
+    )
+    mcp_serve.add_argument(
+        "--port", type=int, default=8766, help="Port for SSE mode (default: 8766)"
+    )
+    mcp_serve.add_argument(
+        "--log-level",
+        default="warning",
+        choices=["debug", "info", "warning", "error"],
+        help="Log level",
+    )
 
     # tour · 5-minute interactive walkthrough
     tourp = sub.add_parser(
@@ -505,11 +561,14 @@ def main(argv: list[str] | None = None) -> int:
         help=_("cli.help.tour"),
     )
     tourp.add_argument(
-        "--chapters", type=int, default=0,
+        "--chapters",
+        type=int,
+        default=0,
         help="run only the first N chapters (0 = all)",
     )
     tourp.add_argument(
-        "--no-pause", action="store_true",
+        "--no-pause",
+        action="store_true",
         help="don't pause for Enter between chapters (for CI / screenshots)",
     )
     bugfixp = sub.add_parser(
@@ -517,11 +576,15 @@ def main(argv: list[str] | None = None) -> int:
         help=_("cli.help.bugfix_demo"),
     )
     bugfixp.add_argument(
-        "--workdir", type=Path, default=None,
+        "--workdir",
+        type=Path,
+        default=None,
         help="project root (default: tempdir)",
     )
     bugfixp.add_argument(
-        "--no-color", action="store_true", default=argparse.SUPPRESS,
+        "--no-color",
+        action="store_true",
+        default=argparse.SUPPRESS,
         help="disable ANSI colors",
     )
 
@@ -530,11 +593,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Bug fix + MiniMax-style evolution loop · fix → update_soul → apply learned lesson on a different bug",
     )
     bugfixp_v2.add_argument(
-        "--workdir", type=Path, default=None,
+        "--workdir",
+        type=Path,
+        default=None,
         help="project root (default: tempdir)",
     )
     bugfixp_v2.add_argument(
-        "--no-color", action="store_true", default=argparse.SUPPRESS,
+        "--no-color",
+        action="store_true",
+        default=argparse.SUPPRESS,
         help="disable ANSI colors",
     )
 
@@ -544,7 +611,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     reflectp_demo.add_argument("--workdir", type=Path, default=None)
     reflectp_demo.add_argument(
-        "--runs", type=int, default=3,
+        "--runs",
+        type=int,
+        default=3,
         help="how many bugfix runs to populate the journal (default: 3)",
     )
     reflectp_demo.add_argument("--no-color", action="store_true", default=argparse.SUPPRESS)
@@ -563,65 +632,81 @@ def main(argv: list[str] | None = None) -> int:
     runp.add_argument("--max-tokens", type=int, default=50_000)
     runp.add_argument("--max-usd", type=float, default=0.50)
     runp.add_argument(
-        "--planner", choices=["static", "llm"], default="static",
+        "--planner",
+        choices=["static", "llm"],
+        default="static",
         help="planning strategy (static=rule-based, llm=LLM-driven)",
     )
     runp.add_argument(
-        "--model", default="mock/planner",
+        "--model",
+        default="mock/planner",
         help="LLM model (e.g. claude-haiku-4-5-20251001, or mock/X)",
     )
     runp.add_argument(
-        "--mock-response", default=None,
+        "--mock-response",
+        default=None,
         help="use MockModelRouter with this literal JSON response",
     )
     runp.add_argument(
-        "--journal-file", type=Path, default=None,
+        "--journal-file",
+        type=Path,
+        default=None,
         help="persist all events to a JSON Lines file (append-only)",
     )
     runp.add_argument(
-        "--show-cost", action="store_true",
+        "--show-cost",
+        action="store_true",
         help="print a per-step cost breakdown after execution",
     )
     runp.add_argument(
-        "--swarm", action="store_true",
+        "--swarm",
+        action="store_true",
         help="dispatch TaskGraph nodes concurrently to multiple Arm workers",
     )
     runp.add_argument(
-        "--max-workers", type=int, default=3,
+        "--max-workers",
+        type=int,
+        default=3,
         help="max concurrent arms when --swarm (default 3)",
     )
     runp.add_argument(
-        "--learn-from", type=Path, default=None,
+        "--learn-from",
+        type=Path,
+        default=None,
         help="JSONL journal file · preload LearnedRules into LLMPlanner before planning",
     )
     runp.add_argument(
-        "--config", type=Path, default=None,
+        "--config",
+        type=Path,
+        default=None,
         help="YAML config file (overrides planner/budget/immunity/learn when set)",
     )
 
     # bench subcommand · real-sleep concurrency benchmark
-    benchp = sub.add_parser(
-        "bench", help=_("cli.help.bench")
-    )
+    benchp = sub.add_parser("bench", help=_("cli.help.bench"))
     benchp.add_argument("--tasks", type=int, default=4, help="number of parallel tasks")
     benchp.add_argument("--delay-ms", type=int, default=80, help="per-task sleep delay")
     benchp.add_argument("--workers", type=int, default=4, help="swarm max_workers")
 
     # intel subcommand · active learning · run IntelCollector once
-    intelp = sub.add_parser(
-        "intel", help=_("cli.help.intel")
-    )
+    intelp = sub.add_parser("intel", help=_("cli.help.intel"))
     intelp.add_argument("queries", nargs="+", help="one or more search queries")
     intelp.add_argument(
-        "--fetch-top", type=int, default=0,
+        "--fetch-top",
+        type=int,
+        default=0,
         help="for each query, fetch_url top N results (default 0)",
     )
     intelp.add_argument(
-        "--max-results", type=int, default=5,
+        "--max-results",
+        type=int,
+        default=5,
         help="per-query max search results (default 5)",
     )
     intelp.add_argument(
-        "--journal-file", type=Path, default=None,
+        "--journal-file",
+        type=Path,
+        default=None,
         help="persist intel events to JSONL (for --learn-from later)",
     )
 
@@ -635,25 +720,33 @@ def main(argv: list[str] | None = None) -> int:
         help="Bootstrap config, run doctor, and print the local start command.",
     )
     quickstartp.add_argument(
-        "--output", "-o", type=Path, default=Path("config.yaml"),
+        "--output",
+        "-o",
+        type=Path,
+        default=Path("config.yaml"),
         help="config path to create or reuse (default: ./config.yaml)",
     )
     quickstartp.add_argument(
-        "--non-interactive", action="store_true",
+        "--non-interactive",
+        action="store_true",
         help="generate a minimal static config without prompts when config is missing",
     )
     quickstartp.add_argument(
-        "--force", action="store_true",
+        "--force",
+        action="store_true",
         help="overwrite the config file instead of reusing it",
     )
     quickstartp.add_argument("--host", default="127.0.0.1")
     quickstartp.add_argument("--port", type=int, default=8000)
     quickstartp.add_argument(
-        "--serve", action="store_true",
+        "--serve",
+        action="store_true",
         help="start the FastAPI service after setup and doctor checks",
     )
     quickstartp.add_argument(
-        "--learn-interval", type=int, default=0,
+        "--learn-interval",
+        type=int,
+        default=0,
         help="periodic learn_from_journal interval in seconds when --serve is set",
     )
 
@@ -661,14 +754,26 @@ def main(argv: list[str] | None = None) -> int:
         "reflect",
         help=_("cli.help.reflect"),
     )
-    reflectp.add_argument("--from-journal", type=Path, required=True,
-                          help="JSONL journal to analyze")
-    reflectp.add_argument("--verbose", "-v", action="store_true",
-                          help="print full details per producer")
-    reflectp.add_argument("--skip", nargs="*", default=[],
-                          choices=["skill_forge", "rule_extractor", "kg_updater",
-                                   "memory", "workflow_rewriter", "recipe"],
-                          help="skip specific producers")
+    reflectp.add_argument(
+        "--from-journal", type=Path, required=True, help="JSONL journal to analyze"
+    )
+    reflectp.add_argument(
+        "--verbose", "-v", action="store_true", help="print full details per producer"
+    )
+    reflectp.add_argument(
+        "--skip",
+        nargs="*",
+        default=[],
+        choices=[
+            "skill_forge",
+            "rule_extractor",
+            "kg_updater",
+            "memory",
+            "workflow_rewriter",
+            "recipe",
+        ],
+        help="skip specific producers",
+    )
 
     uip = sub.add_parser("ui", help=_("cli.help.ui"))
     uip.add_argument("--host", default="127.0.0.1")
@@ -680,27 +785,35 @@ def main(argv: list[str] | None = None) -> int:
         metavar="PATH",
         help="Listen on a Unix domain socket instead of TCP.",
     )
-    uip.add_argument("--journal", type=Path, default=None,
-                     help="JSONL journal file to visualize (default: in-memory)")
+    uip.add_argument(
+        "--journal",
+        type=Path,
+        default=None,
+        help="JSONL journal file to visualize (default: in-memory)",
+    )
 
     migratep = sub.add_parser(
         "migrate",
         help="Migrate plugins/memory/MCP from Codex/Claude into octopus.",
     )
     migratep.add_argument(
-        "--source", default=None,
+        "--source",
+        default=None,
         help="Comma list of sources: codex,claude (default: all installed).",
     )
     migratep.add_argument(
-        "--apply", action="store_true",
+        "--apply",
+        action="store_true",
         help="Stage into .octopus/imported/ (default: preview only).",
     )
     migratep.add_argument(
-        "--activate", action="store_true",
+        "--activate",
+        action="store_true",
         help="Also activate memory + emit MCP config snippets (implies --apply).",
     )
     migratep.add_argument(
-        "--kinds", default=None,
+        "--kinds",
+        default=None,
         help="Comma list to limit kinds: skill,memory,rule,mcp_server,agent,command.",
     )
 
@@ -709,49 +822,72 @@ def main(argv: list[str] | None = None) -> int:
         help=_("cli.help.optimize"),
     )
     optp.add_argument("goal", type=str, help="natural-language goal")
-    optp.add_argument("--config", type=Path, required=True,
-                      help="YAML config (LLM planner required)")
-    optp.add_argument("--variants", type=Path, default=None,
-                      help="initial variants YAML · omit to start with baseline")
-    optp.add_argument("--journal", type=Path, required=True,
-                      help="JSONL journal file · accumulates trajectories")
-    optp.add_argument("--rounds", type=int, default=10,
-                      help="evolution rounds (default 10)")
-    optp.add_argument("--tasks-per-round", type=int, default=5,
-                      help="tasks between each evolution step (default 5)")
-    optp.add_argument("--mutator-model", type=str, default="mock/mutator",
-                      help="LLM for PromptMutator (real: claude-haiku-4-5-20251001)")
-    optp.add_argument("--mutator-response", type=str, default=None,
-                      help="canned mutator response (for mock/* models)")
-    optp.add_argument("--max-variants", type=int, default=8,
-                      help="max pool size (default 8)")
-    optp.add_argument("--retire-min-uses", type=int, default=5,
-                      help="don't retire until ≥N uses (default 5)")
-    optp.add_argument("--export", type=Path, default=None,
-                      help="export winning variants to YAML")
+    optp.add_argument(
+        "--config", type=Path, required=True, help="YAML config (LLM planner required)"
+    )
+    optp.add_argument(
+        "--variants",
+        type=Path,
+        default=None,
+        help="initial variants YAML · omit to start with baseline",
+    )
+    optp.add_argument(
+        "--journal", type=Path, required=True, help="JSONL journal file · accumulates trajectories"
+    )
+    optp.add_argument("--rounds", type=int, default=10, help="evolution rounds (default 10)")
+    optp.add_argument(
+        "--tasks-per-round",
+        type=int,
+        default=5,
+        help="tasks between each evolution step (default 5)",
+    )
+    optp.add_argument(
+        "--mutator-model",
+        type=str,
+        default="mock/mutator",
+        help="LLM for PromptMutator (real: claude-haiku-4-5-20251001)",
+    )
+    optp.add_argument(
+        "--mutator-response",
+        type=str,
+        default=None,
+        help="canned mutator response (for mock/* models)",
+    )
+    optp.add_argument("--max-variants", type=int, default=8, help="max pool size (default 8)")
+    optp.add_argument(
+        "--retire-min-uses", type=int, default=5, help="don't retire until ≥N uses (default 5)"
+    )
+    optp.add_argument("--export", type=Path, default=None, help="export winning variants to YAML")
 
     resumep = sub.add_parser(
         "resume",
         help=_("cli.help.resume"),
     )
-    resumep.add_argument("--task-id", required=True,
-                         help="original task UUID as seen in journal")
-    resumep.add_argument("--journal", type=Path, required=True,
-                         help="JSONL journal file with prior events")
-    resumep.add_argument("--goal", type=str, required=True,
-                         help="original natural-language goal (to re-plan graph)")
-    resumep.add_argument("--config", type=Path, required=True,
-                         help="YAML config · must match original planner setup")
+    resumep.add_argument("--task-id", required=True, help="original task UUID as seen in journal")
+    resumep.add_argument(
+        "--journal", type=Path, required=True, help="JSONL journal file with prior events"
+    )
+    resumep.add_argument(
+        "--goal", type=str, required=True, help="original natural-language goal (to re-plan graph)"
+    )
+    resumep.add_argument(
+        "--config", type=Path, required=True, help="YAML config · must match original planner setup"
+    )
     resumep.add_argument("--intent", default="task")
-    resumep.add_argument("--dry-run", action="store_true",
-                         help="print resume diagnostic · do not execute")
+    resumep.add_argument(
+        "--dry-run", action="store_true", help="print resume diagnostic · do not execute"
+    )
 
     servep = sub.add_parser(
         "serve",
         help=_("cli.help.serve"),
     )
-    servep.add_argument("--config", type=Path, required=True,
-                        help="YAML config (defines planner/journal/intel_sources)")
+    servep.add_argument(
+        "--config",
+        type=Path,
+        required=True,
+        help="YAML config (defines planner/journal/intel_sources)",
+    )
     servep.add_argument("--host", default="127.0.0.1")
     servep.add_argument("--port", type=int, default=8000)
     servep.add_argument(
@@ -766,37 +902,54 @@ def main(argv: list[str] | None = None) -> int:
             "Electron / desktop clients connect via ws+unix:///PATH."
         ),
     )
-    servep.add_argument("--learn-interval", type=int, default=0,
-                        help="periodic learn_from_journal interval in seconds (0=off)")
-    servep.add_argument("--prompt-variants", type=Path, default=None,
-                        help="variants YAML · enables live A/B on /v1/chat/completions")
-    servep.add_argument("--evolve-interval", type=int, default=0,
-                        help="run evolver.step() every N seconds (0=off; needs --prompt-variants)")
-    servep.add_argument("--mutator-model", type=str, default="mock/mutator",
-                        help="LLM for PromptMutator (default mock · real: claude-haiku-4-5-20251001)")
+    servep.add_argument(
+        "--learn-interval",
+        type=int,
+        default=0,
+        help="periodic learn_from_journal interval in seconds (0=off)",
+    )
+    servep.add_argument(
+        "--prompt-variants",
+        type=Path,
+        default=None,
+        help="variants YAML · enables live A/B on /v1/chat/completions",
+    )
+    servep.add_argument(
+        "--evolve-interval",
+        type=int,
+        default=0,
+        help="run evolver.step() every N seconds (0=off; needs --prompt-variants)",
+    )
+    servep.add_argument(
+        "--mutator-model",
+        type=str,
+        default="mock/mutator",
+        help="LLM for PromptMutator (default mock · real: claude-haiku-4-5-20251001)",
+    )
 
     loopp = sub.add_parser(
         "loop",
         help=_("cli.help.loop"),
     )
     loopp.add_argument("goal", type=str, help="natural-language goal")
-    loopp.add_argument("--config", type=Path, required=True,
-                       help="YAML config (defines planner/budget/etc)")
-    loopp.add_argument("--journal", type=Path, required=True,
-                       help="JSONL journal file · reads for reflection, appends each iter")
-    loopp.add_argument("--iterations", type=int, default=3,
-                       help="number of run cycles (default 3)")
+    loopp.add_argument(
+        "--config", type=Path, required=True, help="YAML config (defines planner/budget/etc)"
+    )
+    loopp.add_argument(
+        "--journal",
+        type=Path,
+        required=True,
+        help="JSONL journal file · reads for reflection, appends each iter",
+    )
+    loopp.add_argument("--iterations", type=int, default=3, help="number of run cycles (default 3)")
     loopp.add_argument("--intent", default="task")
 
-    kgp = sub.add_parser(
-        "kg", help="Build a KnowledgeGraph from a JSONL journal, then query."
+    kgp = sub.add_parser("kg", help="Build a KnowledgeGraph from a JSONL journal, then query.")
+    kgp.add_argument(
+        "--from-journal", type=Path, required=True, help="JSONL journal to load events from"
     )
-    kgp.add_argument("--from-journal", type=Path, required=True,
-                     help="JSONL journal to load events from")
 
-    projectp = sub.add_parser(
-        "project", help="Run milestone-driven projects (Project OS)."
-    )
+    projectp = sub.add_parser("project", help="Run milestone-driven projects (Project OS).")
     project_sub = projectp.add_subparsers(dest="project_op", required=True)
     _pp_plan = project_sub.add_parser("plan", help="Plan a project from a goal.")
     _pp_plan.add_argument("--goal", required=True, help="one-line project goal")
@@ -810,57 +963,71 @@ def main(argv: list[str] | None = None) -> int:
     _pp_report.add_argument("--id", required=True, help="project id")
     project_sub.add_parser("list", help="List all projects.")
 
-    backupp = sub.add_parser(
-        "backup", help="Create a tar.gz backup of all Octopus data."
-    )
+    backupp = sub.add_parser("backup", help="Create a tar.gz backup of all Octopus data.")
     backupp.add_argument(
-        "--output", "-o", type=Path, default=None,
+        "--output",
+        "-o",
+        type=Path,
+        default=None,
         help="output tar.gz path (default: ~/.octopus/backup-<timestamp>.tar.gz)",
     )
     backupp.add_argument(
-        "--base-dir", type=str, default="~/.octopus",
+        "--base-dir",
+        type=str,
+        default="~/.octopus",
         help="Octopus data root (default: ~/.octopus)",
     )
     backupp.add_argument(
-        "--components", nargs="*", default=None,
+        "--components",
+        nargs="*",
+        default=None,
         choices=["journal", "kg", "config", "hot_cache", "skills", "agents"],
         help="components to include (default: all)",
     )
 
-    restorep = sub.add_parser(
-        "restore", help="Restore Octopus data from a tar.gz backup."
-    )
+    restorep = sub.add_parser("restore", help="Restore Octopus data from a tar.gz backup.")
     restorep.add_argument(
-        "input", type=Path,
+        "input",
+        type=Path,
         help="backup tar.gz file to restore from",
     )
     restorep.add_argument(
-        "--base-dir", type=str, default="~/.octopus",
+        "--base-dir",
+        type=str,
+        default="~/.octopus",
         help="Octopus data root (default: ~/.octopus)",
     )
     restorep.add_argument(
-        "--components", nargs="*", default=None,
+        "--components",
+        nargs="*",
+        default=None,
         choices=["journal", "kg", "config", "hot_cache", "skills", "agents"],
         help="components to restore (default: all)",
     )
     restorep.add_argument(
-        "--overwrite", action="store_true",
+        "--overwrite",
+        action="store_true",
         help="overwrite existing files",
     )
 
-    exportp = sub.add_parser(
-        "export", help="Export Octopus data as human-readable JSON."
-    )
+    exportp = sub.add_parser("export", help="Export Octopus data as human-readable JSON.")
     exportp.add_argument(
-        "--output", "-o", type=Path, required=True,
+        "--output",
+        "-o",
+        type=Path,
+        required=True,
         help="output JSON path",
     )
     exportp.add_argument(
-        "--base-dir", type=str, default="~/.octopus",
+        "--base-dir",
+        type=str,
+        default="~/.octopus",
         help="Octopus data root (default: ~/.octopus)",
     )
     exportp.add_argument(
-        "--components", nargs="*", default=None,
+        "--components",
+        nargs="*",
+        default=None,
         choices=["journal", "kg", "config", "hot_cache", "skills", "agents"],
         help="components to export (default: all)",
     )
@@ -869,17 +1036,23 @@ def main(argv: list[str] | None = None) -> int:
         "wiki", help="Compile reflection outputs into a human-readable Markdown Wiki."
     )
     wikip.add_argument(
-        "--from-journal", type=Path, required=True,
+        "--from-journal",
+        type=Path,
+        required=True,
         help="JSONL journal to compile from",
     )
     wikip.add_argument(
-        "--output-dir", type=str, default="~/.octopus/wiki",
+        "--output-dir",
+        type=str,
+        default="~/.octopus/wiki",
         help="Wiki output directory (default: ~/.octopus/wiki)",
     )
 
     kgp.add_argument("--subject", default=None, help="filter by subject (exact match)")
     kgp.add_argument("--predicate", default=None, help="filter by predicate (exact match)")
-    kgp.add_argument("--object", dest="object_", default=None, help="filter by object (exact match)")
+    kgp.add_argument(
+        "--object", dest="object_", default=None, help="filter by object (exact match)"
+    )
     kgp.add_argument("--neighbors", default=None, help="print neighbors of this entity (1 hop)")
     kgp.add_argument("--limit", type=int, default=20, help="max triples to print")
 
@@ -887,11 +1060,15 @@ def main(argv: list[str] | None = None) -> int:
         "setup", help="Interactive setup wizard · generate config.yaml in 3 minutes."
     )
     setupp.add_argument(
-        "--output", "-o", type=Path, default=None,
+        "--output",
+        "-o",
+        type=Path,
+        default=None,
         help="output config path (default: ./config.yaml)",
     )
     setupp.add_argument(
-        "--non-interactive", action="store_true",
+        "--non-interactive",
+        action="store_true",
         help="generate minimal static config without prompts",
     )
 
@@ -899,31 +1076,34 @@ def main(argv: list[str] | None = None) -> int:
         "doctor", help="Check environment health · dependencies, API keys, config."
     )
     doctorp.add_argument(
-        "--config", type=Path, default=None,
+        "--config",
+        type=Path,
+        default=None,
         help="config file to validate (optional)",
     )
 
-    skillsp = sub.add_parser(
-        "skills", help="Manage skills · list, search, install, publish."
-    )
+    skillsp = sub.add_parser("skills", help="Manage skills · list, search, install, publish.")
     skills_sub = skillsp.add_subparsers(dest="skills_op")
     skills_sub.add_parser("list", help="List installed skills.")
     skills_search = skills_sub.add_parser("search", help="Search skill marketplace.")
     skills_search.add_argument("query", help="search query")
     skills_search.add_argument("--limit", type=int, default=20)
     skills_install = skills_sub.add_parser(
-        "install", help="Install a skill from the marketplace, a local dir, or a GitHub URL.",
+        "install",
+        help="Install a skill from the marketplace, a local dir, or a GitHub URL.",
     )
     skills_install.add_argument(
         "name",
         help="marketplace skill name, OR a local skill dir / GitHub URL (agentskills.io standard)",
     )
     skills_install.add_argument(
-        "--allow-dangerous", action="store_true",
+        "--allow-dangerous",
+        action="store_true",
         help="Install an agentskills.io skill even if the safety scan flags it.",
     )
     skills_install.add_argument(
-        "--overwrite", action="store_true",
+        "--overwrite",
+        action="store_true",
         help="Replace an existing skill of the same name.",
     )
     skills_uninstall = skills_sub.add_parser("uninstall", help="Uninstall a skill.")
@@ -933,7 +1113,8 @@ def main(argv: list[str] | None = None) -> int:
     skills_publish = skills_sub.add_parser("publish", help="Prepare a skill for publishing.")
     skills_publish.add_argument("path", type=Path, help="path to skill directory")
     skills_lint = skills_sub.add_parser(
-        "lint", help="Check a skill folder against the agentskills.io standard + safety scan.",
+        "lint",
+        help="Check a skill folder against the agentskills.io standard + safety scan.",
     )
     skills_lint.add_argument("path", type=Path, help="path to skill directory")
 
@@ -955,9 +1136,7 @@ def main(argv: list[str] | None = None) -> int:
     bb_snap = bb_sub.add_parser("snapshot", help="Dump the whole shared board as JSON.")
     bb_snap.add_argument("--turn", default=None)
 
-    pluginsp = sub.add_parser(
-        "plugins", help="Manage plugins · list, discover, load."
-    )
+    pluginsp = sub.add_parser("plugins", help="Manage plugins · list, discover, load.")
     plugins_sub = pluginsp.add_subparsers(dest="plugins_op")
     plugins_sub.add_parser("list", help="List loaded plugins.")
     plugins_sub.add_parser("discover", help="Discover available plugins.")
@@ -973,16 +1152,19 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "code":
         from runtime.cli_code import list_code_sessions, run_code_command
+
         if args.list_sessions:
             return list_code_sessions(args)
         return run_code_command(args, color=color)
 
     if args.command == "mcp":
         from runtime.cli_mcp import run_mcp_command
+
         return run_mcp_command(args)
 
     if args.command == "bugfix-demo":
         from demos.bugfix_demo import run_demo as _bugfix
+
         result = _bugfix(
             workdir=args.workdir,
             color=color and not args.no_color,
@@ -992,6 +1174,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "bugfix-demo-v2":
         from demos.bugfix_demo_v2 import run_demo_v2 as _bugfix_v2
+
         result = _bugfix_v2(
             workdir=args.workdir,
             color=color and not args.no_color,
@@ -1000,6 +1183,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "reflection-demo":
         from demos.reflection_demo import run_demo as _reflect
+
         result = _reflect(
             workdir=args.workdir,
             runs=args.runs,
@@ -1010,6 +1194,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "evolution-demo":
         from demos.evolution_demo import run_demo as _evolve
+
         result = _evolve(
             workdir=args.workdir,
             runs=args.runs,
@@ -1076,6 +1261,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "project":
         from runtime.cli_project import run_project_command
+
         return run_project_command(args, color=color)
 
     if args.command == "kg":
@@ -1168,6 +1354,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "tour":
         from .tour import run_tour
+
         return run_tour(
             chapters=args.chapters or None,
             pause=not args.no_pause,
@@ -1296,6 +1483,7 @@ def run_ui(
 
     if uds:
         import os
+
         with contextlib.suppress(FileNotFoundError):
             os.unlink(uds)
         print(f"  unix socket: {uds}  (ws+unix:///{uds})")
@@ -1483,7 +1671,8 @@ def run_skills(args: argparse.Namespace, *, color: bool = True) -> int:
             if r.ok:
                 note = (
                     f" (⚠ {len(r.findings)} safety finding(s), via --allow-dangerous)"
-                    if r.dangerous else ""
+                    if r.dangerous
+                    else ""
                 )
                 print(f"  ✓ installed '{r.name}'{note}")
                 return 0
@@ -1546,10 +1735,7 @@ def run_skills(args: argparse.Namespace, *, color: bool = True) -> int:
         print(f"  ✓ '{name}' is agentskills.io-conformant and clean")
         return 0
 
-    print(
-        "  Usage: python -m runtime skills "
-        "{list|search|install|uninstall|info|publish|lint}"
-    )
+    print("  Usage: python -m runtime skills {list|search|install|uninstall|info|publish|lint}")
     return 2
 
 
@@ -1575,7 +1761,9 @@ def run_plugins(args: argparse.Namespace, *, color: bool = True) -> int:
         discovered = loader.discover()
         if not discovered:
             print("  No plugins found in ~/.octopus/plugins/")
-            print("  Create a plugin: https://github.com/octopus-agent/octopus-agent/blob/main/docs/plugins.md")
+            print(
+                "  Create a plugin: https://github.com/octopus-agent/octopus-agent/blob/main/docs/plugins.md"
+            )
             return 0
         print(f"  Found {len(discovered)} plugin(s):")
         for name in discovered:

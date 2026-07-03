@@ -77,9 +77,7 @@ class CodexPluginSkillLoadReport:
                     f"Injected Codex plugin `{load.plugin_id}` actions: {actions}{suffix}.",
                 )
             elif load.already_registered:
-                actions = ", ".join(
-                    f"`{name}`" for name in load.already_registered[:12]
-                )
+                actions = ", ".join(f"`{name}`" for name in load.already_registered[:12])
                 suffix = "" if len(load.already_registered) <= 12 else " ..."
                 parts.append(
                     f"Codex plugin `{load.plugin_id}` actions already registered: "
@@ -195,12 +193,14 @@ def _make_codex_plugin_handler(
     def _handler(**kw: Any) -> dict[str, Any]:
         result = base_handler(**kw)
         if isinstance(result, dict):
-            result.update({
-                "plugin": plugin_id,
-                "plugin_root": str(plugin_dir.resolve()),
-                "plugin_skill": plugin_skill_name,
-                "action": action_name,
-            })
+            result.update(
+                {
+                    "plugin": plugin_id,
+                    "plugin_root": str(plugin_dir.resolve()),
+                    "plugin_skill": plugin_skill_name,
+                    "action": action_name,
+                }
+            )
         return result
 
     _handler.__name__ = f"_codex_plugin_skill_{action_name}"
@@ -230,10 +230,9 @@ def load_codex_plugin_skills(
         plugins = discover_codex_plugins(roots)
     except Exception as exc:  # noqa: BLE001 - discovery is best-effort
         _LOG.debug("Codex plugin discovery failed: %s", exc, exc_info=True)
-        return CodexPluginSkillLoadReport(tuple(
-            CodexPluginSkillLoad(plugin_id=pid, found=False, error=str(exc))
-            for pid in ids
-        ))
+        return CodexPluginSkillLoadReport(
+            tuple(CodexPluginSkillLoad(plugin_id=pid, found=False, error=str(exc)) for pid in ids)
+        )
 
     loads: list[CodexPluginSkillLoad] = []
     for requested_id in ids:
@@ -246,20 +245,24 @@ def load_codex_plugin_skills(
         smoke = plugin.get("smoke") if isinstance(plugin.get("smoke"), dict) else {}
         if smoke and smoke.get("ok") is False:
             issues = smoke.get("issues") if isinstance(smoke.get("issues"), list) else []
-            loads.append(CodexPluginSkillLoad(
-                plugin_id=plugin_id,
-                found=True,
-                error=", ".join(str(item) for item in issues) or "smoke check failed",
-            ))
+            loads.append(
+                CodexPluginSkillLoad(
+                    plugin_id=plugin_id,
+                    found=True,
+                    error=", ".join(str(item) for item in issues) or "smoke check failed",
+                )
+            )
             continue
 
         plugin_dir = Path(str(plugin.get("path") or "")).expanduser()
         if not plugin_dir.is_dir():
-            loads.append(CodexPluginSkillLoad(
-                plugin_id=plugin_id,
-                found=True,
-                error="plugin directory is missing",
-            ))
+            loads.append(
+                CodexPluginSkillLoad(
+                    plugin_id=plugin_id,
+                    found=True,
+                    error="plugin directory is missing",
+                )
+            )
             continue
 
         manifest = _read_manifest(plugin_dir)
@@ -283,10 +286,13 @@ def load_codex_plugin_skills(
                 already.append(action_name)
                 continue
             if len(body.encode("utf-8")) > _MAX_INSTRUCTIONS_BYTES:
-                body = body.encode("utf-8")[:_MAX_INSTRUCTIONS_BYTES].decode(
-                    "utf-8",
-                    errors="ignore",
-                ) + "\n\n[... truncated ...]"
+                body = (
+                    body.encode("utf-8")[:_MAX_INSTRUCTIONS_BYTES].decode(
+                        "utf-8",
+                        errors="ignore",
+                    )
+                    + "\n\n[... truncated ...]"
+                )
             description = (
                 str(meta.get("description") or "").strip()
                 or f"Prompt action from Codex plugin {plugin_id}/{plugin_skill_name}."
@@ -317,13 +323,15 @@ def load_codex_plugin_skills(
                 continue
             loaded.append(action_name)
 
-        loads.append(CodexPluginSkillLoad(
-            plugin_id=plugin_id,
-            found=True,
-            loaded_actions=tuple(loaded),
-            already_registered=tuple(already),
-            skipped=tuple(skipped),
-        ))
+        loads.append(
+            CodexPluginSkillLoad(
+                plugin_id=plugin_id,
+                found=True,
+                loaded_actions=tuple(loaded),
+                already_registered=tuple(already),
+                skipped=tuple(skipped),
+            )
+        )
 
     return CodexPluginSkillLoadReport(tuple(loads))
 

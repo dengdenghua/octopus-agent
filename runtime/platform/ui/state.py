@@ -1,4 +1,5 @@
 """Shared UI app state."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -39,8 +40,7 @@ class AppState:
 
         trace_store = None
         if trace_store_path is not None and (
-            (journal is None and journal_path)
-            or isinstance(journal, JSONLJournal)
+            (journal is None and journal_path) or isinstance(journal, JSONLJournal)
         ):
             from runtime.memory.diagnostics.trace_store import AgentTraceStore
 
@@ -57,10 +57,14 @@ class AppState:
         except Exception:  # noqa: BLE001
             self.task_supervisor = None
 
-        base_journal = journal if journal is not None else (
-            JSONLJournal(journal_path, trace_store=trace_store, redactor=Redactor())
-            if journal_path
-            else InMemoryJournal()
+        base_journal = (
+            journal
+            if journal is not None
+            else (
+                JSONLJournal(journal_path, trace_store=trace_store, redactor=Redactor())
+                if journal_path
+                else InMemoryJournal()
+            )
         )
         if isinstance(base_journal, StreamingJournal):
             self.journal = base_journal

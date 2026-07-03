@@ -6,6 +6,7 @@ missing from `_LEGACY_CONTROL_PLANE_PREFIXES`, so the legacy control-plane auth
 middleware did not gate them even when `require_auth=True`. They're now in the
 tuple, so the middleware requires a valid actor.
 """
+
 from __future__ import annotations
 
 import pytest

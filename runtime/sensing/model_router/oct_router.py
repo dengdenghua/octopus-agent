@@ -104,10 +104,12 @@ class OctModelRouter(Provider, ModelRouter):
                     text = messages[i]["content"]
                     content: list[dict[str, Any]] = [{"type": "text", "text": text}]
                     for b64 in imgs:
-                        content.append({
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{b64}"},
-                        })
+                        content.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{b64}"},
+                            }
+                        )
                     messages[i] = {"role": "user", "content": content}
                     break
 
@@ -166,12 +168,9 @@ class OctModelRouter(Provider, ModelRouter):
         choices = data.get("choices") or []
         if not choices:
             raise RuntimeError(f"oct response missing choices: {str(data)[:200]}")
-        content = (
-            choices[0].get("message", {}).get("content")
-            or choices[0].get("text")
-            or ""
-        )
+        content = choices[0].get("message", {}).get("content") or choices[0].get("text") or ""
         from .models import ToolCall
+
         raw_calls = choices[0].get("message", {}).get("tool_calls") or []
         tool_calls: list[ToolCall] = []
         for tc in raw_calls:
@@ -183,11 +182,13 @@ class OctModelRouter(Provider, ModelRouter):
                 args = json.loads(args_raw) if args_raw else {}
             except json.JSONDecodeError:
                 args = {}
-            tool_calls.append(ToolCall(
-                id=str(tc.get("id") or ""),
-                name=str(fn.get("name") or ""),
-                input=args if isinstance(args, dict) else {},
-            ))
+            tool_calls.append(
+                ToolCall(
+                    id=str(tc.get("id") or ""),
+                    name=str(fn.get("name") or ""),
+                    input=args if isinstance(args, dict) else {},
+                )
+            )
         usage = data.get("usage") or {}
         prompt_tokens = int(usage.get("prompt_tokens") or 0)
         completion_tokens = int(usage.get("completion_tokens") or 0)
@@ -216,8 +217,9 @@ class OctModelRouter(Provider, ModelRouter):
 
         url = f"{self.base_url}/v1/chat/completions"
         try:
-            with client.stream("POST", url, json=payload, headers=headers,
-                               timeout=self.timeout_seconds) as r:
+            with client.stream(
+                "POST", url, json=payload, headers=headers, timeout=self.timeout_seconds
+            ) as r:
                 status = getattr(r, "status_code", 0)
                 if status == 401:
                     self._mark_dead(actor)
@@ -243,14 +245,18 @@ class OctFallbackRouter(ModelRouter):
 
     provider_name = "oct"
 
-    def __init__(self, *, oct_router: OctModelRouter, self_router: ModelRouter, link_store: Any) -> None:
+    def __init__(
+        self, *, oct_router: OctModelRouter, self_router: ModelRouter, link_store: Any
+    ) -> None:
         self._oct = oct_router
         self._self = self_router
         self._link_store = link_store
 
     @property
     def default_model(self) -> str | None:
-        return getattr(self._self, "default_model", None) or getattr(self._oct, "default_model", None)
+        return getattr(self._self, "default_model", None) or getattr(
+            self._oct, "default_model", None
+        )
 
     def _pick(self) -> ModelRouter:
         actor = current_actor.get()

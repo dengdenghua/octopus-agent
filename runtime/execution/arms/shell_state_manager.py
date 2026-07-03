@@ -8,6 +8,7 @@ Key design:
 - After execution: parse new state from special output markers
 - Graceful degradation: snapshot failure doesn't break command execution
 """
+
 from __future__ import annotations
 
 import logging
@@ -141,8 +142,7 @@ exit $__EXIT_CODE__
                 for k, v in state.env_vars.items()
             )
             cd_line = (
-                f'Set-Location "{self._escape_ps_var(state.cwd)}" '
-                f"-ErrorAction SilentlyContinue"
+                f'Set-Location "{self._escape_ps_var(state.cwd)}" -ErrorAction SilentlyContinue'
             )
             restore_block = f"{cd_line}\n{env_sets}" if env_sets else cd_line
 
@@ -180,14 +180,8 @@ exit $global:__EXIT_CODE__
         if not state:
             return user_command
 
-        env_sets = " & ".join(
-            f"set {k}={v}" for k, v in state.env_vars.items()
-        )
-        return (
-            f"cd /d {state.cwd} 2>nul & "
-            f"{env_sets} & "
-            f"{user_command}"
-        )
+        env_sets = " & ".join(f"set {k}={v}" for k, v in state.env_vars.items())
+        return f"cd /d {state.cwd} 2>nul & {env_sets} & {user_command}"
 
     def parse_new_state(self, output: str) -> ShellEnvState | None:
         """Extract new shell state from command output.
@@ -207,9 +201,7 @@ exit $global:__EXIT_CODE__
         if start == -1 or end == -1 or start >= end:
             return None
 
-        state_b64 = output[
-            start + len(STATE_MARKER_START) : end
-        ].strip()
+        state_b64 = output[start + len(STATE_MARKER_START) : end].strip()
 
         try:
             state = ShellEnvState.from_base64(state_b64)
@@ -245,11 +237,7 @@ exit $global:__EXIT_CODE__
     @staticmethod
     def _escape_ps_var(s: str) -> str:
         """Escape a string for safe use in PowerShell double quotes."""
-        return (
-            s.replace("`", "``")
-            .replace('"', '`"')
-            .replace("$", "`$")
-        )
+        return s.replace("`", "``").replace('"', '`"').replace("$", "`$")
 
     @staticmethod
     def _escape_ps_key(s: str) -> str:

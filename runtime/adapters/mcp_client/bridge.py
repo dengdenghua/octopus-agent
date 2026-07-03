@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import re
@@ -36,6 +35,7 @@ def register_mcp_tools_as_skills(
     if require_trust:
         if not inferred_name:
             import logging
+
             logging.getLogger("runtime.adapters.mcp_client.bridge").warning(
                 "MCP server name missing; refusing to register %d tool(s)",
                 len(tools),
@@ -43,17 +43,21 @@ def register_mcp_tools_as_skills(
             return []
         if inferred_name:
             from .trust import get_trust_store
+
             store = get_trust_store()
             tool_names = [t.name for t in tools]
             if not store.is_approved(inferred_name, tool_names):
                 import logging
+
                 logging.getLogger(
                     "runtime.adapters.mcp_client.bridge",
                 ).warning(
                     "MCP server %r not approved in trust store · "
                     "refusing to register its %d tool(s). Approve via "
                     "get_trust_store().approve(%r, tool_names).",
-                    inferred_name, len(tool_names), inferred_name,
+                    inferred_name,
+                    len(tool_names),
+                    inferred_name,
                 )
                 return []
     for tool in tools:

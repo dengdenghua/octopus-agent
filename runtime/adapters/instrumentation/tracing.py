@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import functools
@@ -21,11 +20,13 @@ except ImportError:  # pragma: no cover - tested via test_tracing_noop path
         def end(self) -> None: ...
         def __enter__(self) -> _NoopSpan:
             return self
+
         def __exit__(self, *a: Any) -> None: ...
 
     class _NoopTracer:
         def start_as_current_span(self, name: str, **kw: Any) -> _NoopSpan:
             return _NoopSpan()
+
         def start_span(self, name: str, **kw: Any) -> _NoopSpan:
             return _NoopSpan()
 
@@ -41,8 +42,7 @@ except ImportError:  # pragma: no cover - tested via test_tracing_noop path
     StatusCode = _NoopStatusCode  # type: ignore[assignment,misc]
 
 
-
-OCTOPUS_ATTR_STAGE = "octopus.stage"          # Implementation note.
+OCTOPUS_ATTR_STAGE = "octopus.stage"  # Implementation note.
 OCTOPUS_ATTR_TASK_ID = "octopus.task_id"
 OCTOPUS_ATTR_ARM = "octopus.arm_id"
 OCTOPUS_ATTR_SUCKER = "octopus.sucker_id"
@@ -56,7 +56,6 @@ GEN_AI_ATTR_MODEL = "gen_ai.request.model"
 GEN_AI_ATTR_INPUT_TOKENS = "gen_ai.usage.input_tokens"
 GEN_AI_ATTR_OUTPUT_TOKENS = "gen_ai.usage.output_tokens"
 GEN_AI_ATTR_FINISH_REASONS = "gen_ai.response.finish_reasons"
-
 
 
 def get_tracer(name: str = "runtime") -> Any:
@@ -94,7 +93,10 @@ def maybe_setup_tracing(*, service_name: str = "octopus-agent") -> bool:
 
     otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
     want_console = os.environ.get("OCTOPUS_OTEL_CONSOLE", "").strip().lower() in (
-        "1", "true", "yes", "on",
+        "1",
+        "true",
+        "yes",
+        "on",
     )
     if not otlp_endpoint and not want_console:
         return False
@@ -107,9 +109,7 @@ def maybe_setup_tracing(*, service_name: str = "octopus-agent") -> bool:
             ConsoleSpanExporter,
         )
 
-        provider = TracerProvider(
-            resource=Resource.create({"service.name": service_name})
-        )
+        provider = TracerProvider(resource=Resource.create({"service.name": service_name}))
         if otlp_endpoint:
             from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # type: ignore[import-untyped]
                 OTLPSpanExporter,
@@ -140,7 +140,6 @@ def _span_scope(name: str) -> Iterator[Any]:
         yield span
     finally:
         span.end()
-
 
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -177,8 +176,6 @@ def traced(
     return decorator
 
 
-
-
 @contextmanager
 def trace_stage(
     name: str,
@@ -203,8 +200,6 @@ def trace_stage(
             span.record_exception(e)
             span.set_status(Status(StatusCode.ERROR, str(e)))
             raise
-
-
 
 
 def record_gen_ai_cost(

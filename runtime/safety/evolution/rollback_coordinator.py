@@ -72,9 +72,9 @@ class RollbackCoordinator:
         strategy: str = "full",
     ) -> RollbackResult:
         ts = datetime.now().isoformat(timespec="seconds")
-        rollback_id = hashlib.sha256(
-            f"{target}:{reason}:{time.time_ns()}".encode()
-        ).hexdigest()[:12]
+        rollback_id = hashlib.sha256(f"{target}:{reason}:{time.time_ns()}".encode()).hexdigest()[
+            :12
+        ]
 
         fitness_before: float | None = None
         fitness_after: float | None = None
@@ -83,7 +83,7 @@ class RollbackCoordinator:
 
         if target.startswith("canary:"):
             self._canary = CanaryManager(config=self._canary_config)
-            skill_name = target[len("canary:"):]
+            skill_name = target[len("canary:") :]
             state = self._canary.get_state(skill_name)
             if state is not None:
                 fitness_before = state.current_rate
@@ -99,7 +99,9 @@ class RollbackCoordinator:
                 details["skill_name"] = skill_name
                 source_proposal_id = None
                 if isinstance(rolled.metadata, dict):
-                    source_proposal_id = str(rolled.metadata.get("proposal_id") or "").strip() or None
+                    source_proposal_id = (
+                        str(rolled.metadata.get("proposal_id") or "").strip() or None
+                    )
                 ledger_record = self._ledger.propose(
                     kind="canary_rollback",
                     description=f"Rollback canary for {skill_name}: {reason}",
@@ -131,12 +133,14 @@ class RollbackCoordinator:
                         details["source_proposal_id"] = source_proposal_id
                         details["source_proposal_status"] = source_record.status.value
                     else:
-                        details["source_proposal_error"] = f"Proposal not found: {source_proposal_id}"
+                        details["source_proposal_error"] = (
+                            f"Proposal not found: {source_proposal_id}"
+                        )
             else:
                 details["error"] = f"No canary state for skill: {skill_name}"
 
         elif target.startswith("proposal:"):
-            proposal_id = target[len("proposal:"):]
+            proposal_id = target[len("proposal:") :]
             all_records = self._ledger.query()
             target_record = None
             for r in all_records:
@@ -199,16 +203,20 @@ class RollbackCoordinator:
         details = match.get("details") if isinstance(match.get("details"), dict) else {}
 
         if target.startswith("canary:"):
-            skill_name = target[len("canary:"):]
+            skill_name = target[len("canary:") :]
             state = self._canary.get_state(skill_name)
             complete = complete and state is not None and state.phase.value == "rolled_back"
         elif target.startswith("proposal:"):
-            proposal_id = target[len("proposal:"):]
+            proposal_id = target[len("proposal:") :]
             record = self._find_proposal(proposal_id)
-            complete = complete and record is not None and record.status == ProposalStatus.ROLLED_BACK
+            complete = (
+                complete and record is not None and record.status == ProposalStatus.ROLLED_BACK
+            )
         elif details.get("ledger_proposal_id"):
             record = self._find_proposal(str(details["ledger_proposal_id"]))
-            complete = complete and record is not None and record.status == ProposalStatus.ROLLED_BACK
+            complete = (
+                complete and record is not None and record.status == ProposalStatus.ROLLED_BACK
+            )
 
         fb = match.get("fitness_before")
         fa = match.get("fitness_after")
@@ -255,10 +263,7 @@ class RollbackCoordinator:
 
         entries = self._read_log()
         if agent_id is not None:
-            entries = [
-                e for e in entries
-                if e.get("details", {}).get("agent_id") == agent_id
-            ]
+            entries = [e for e in entries if e.get("details", {}).get("agent_id") == agent_id]
         entries = entries[-limit:]
         return [
             RollbackRecord(

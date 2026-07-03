@@ -45,14 +45,10 @@ def test_list_unwraps_enterprise_envelope(monkeypatch):
     def fake_get(url, **kwargs):
         captured["url"] = url
         captured["params"] = kwargs.get("params")
-        return _FakeResp(
-            {"success": True, "data": [{"id": "a", "name": "A"}], "total": 1}
-        )
+        return _FakeResp({"success": True, "data": [{"id": "a", "name": "A"}], "total": 1})
 
     monkeypatch.setattr(httpx, "get", fake_get)
-    body = _client().get(
-        "/api/agent-market/enterprise?category=coder&search=test"
-    ).json()
+    body = _client().get("/api/agent-market/enterprise?category=coder&search=test").json()
     assert body["available"] is True
     assert body["items"] == [{"id": "a", "name": "A"}]
     assert captured["url"] == "http://ent:8000/api/v1/agent-assets"
@@ -63,9 +59,7 @@ def test_get_asset_unwraps_body(monkeypatch):
     monkeypatch.setenv("OCTOPUS_ENTERPRISE_URL", "http://ent:8000")
 
     def fake_get(url, **kwargs):
-        return _FakeResp(
-            {"success": True, "data": {"id": "a", "name": "A", "body": "soul"}}
-        )
+        return _FakeResp({"success": True, "data": {"id": "a", "name": "A", "body": "soul"}})
 
     monkeypatch.setattr(httpx, "get", fake_get)
     body = _client().get("/api/agent-market/enterprise/a").json()
@@ -186,9 +180,7 @@ def test_scaffold_rejects_symlink_agent_core(monkeypatch, tmp_path):
     assert not (outside / "SOUL.md").exists()
 
 
-def test_scaffold_cleans_temp_file_when_atomic_write_fails(
-    monkeypatch, tmp_path
-):
+def test_scaffold_cleans_temp_file_when_atomic_write_fails(monkeypatch, tmp_path):
     import runtime.execution.agents.loader as loader
 
     monkeypatch.setattr(loader, "default_agents_root", lambda: tmp_path / "agents")

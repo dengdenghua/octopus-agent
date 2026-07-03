@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -15,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 class SensorManager:
-
     def __init__(
         self,
         *,
@@ -28,7 +26,6 @@ class SensorManager:
         self._custom_publisher = publisher
         self._sensors: dict[str, EnvSensor] = {}
         self._lock = threading.RLock()
-
 
     def register(self, sensor: EnvSensor) -> None:
         if not sensor.sensor_id:
@@ -80,7 +77,6 @@ class SensorManager:
             except Exception as exc:
                 logger.exception("sensor %r stop failed: %s", s.sensor_id, exc)
 
-
     def status_all(self) -> list[SensorStatus]:
         with self._lock:
             sensors = list(self._sensors.values())
@@ -96,7 +92,6 @@ class SensorManager:
         )
         self._dispatch(evt)
         return evt
-
 
     def _dispatch(self, event: SensorEvent) -> None:
         if self._custom_publisher is not None:

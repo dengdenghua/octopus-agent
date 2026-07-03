@@ -101,9 +101,7 @@ def queue_verifier_drift_backlog(
     limit: int = 1000,
 ) -> dict[str, Any]:
     report = summarize_auto_verifier_metrics(path=metrics_path, limit=limit)
-    alerts = [
-        alert for alert in report.get("alerts") or [] if isinstance(alert, dict)
-    ]
+    alerts = [alert for alert in report.get("alerts") or [] if isinstance(alert, dict)]
     if not alerts:
         return {
             "schema": DRIFT_REPAIR_QUEUE_SCHEMA,
@@ -121,9 +119,7 @@ def queue_verifier_drift_backlog(
     from runtime.memory.learning.review_queue import ReviewQueue
 
     queue = ReviewQueue(
-        Path(review_queue_path)
-        if review_queue_path is not None
-        else app_paths().review_queue_path,
+        Path(review_queue_path) if review_queue_path is not None else app_paths().review_queue_path,
     )
     created = 0
     updated = 0
@@ -189,19 +185,20 @@ def _drift_alerts(families: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if isinstance(first, dict):
                 top_command = str(first.get("command") or "")
         name = str(family.get("family") or "other")
-        alerts.append({
-            "family": name,
-            "severity": severity,
-            "total": total,
-            "fail_count": fail_count,
-            "pass_rate": round(pass_rate, 3),
-            "latest_ts": str(family.get("latest_ts") or ""),
-            "top_command": top_command,
-            "message": (
-                f"{name} verifier family is drifting: "
-                f"{fail_count}/{total} recent runs failed"
-            ),
-        })
+        alerts.append(
+            {
+                "family": name,
+                "severity": severity,
+                "total": total,
+                "fail_count": fail_count,
+                "pass_rate": round(pass_rate, 3),
+                "latest_ts": str(family.get("latest_ts") or ""),
+                "top_command": top_command,
+                "message": (
+                    f"{name} verifier family is drifting: {fail_count}/{total} recent runs failed"
+                ),
+            }
+        )
     return alerts
 
 
@@ -315,18 +312,20 @@ def explain_verification_ranking(
         start=1,
     ):
         stats = _command_stats(command, quality)
-        ranked.append({
-            "rank": rank,
-            "command": str(command.get("command") or ""),
-            "kind": str(command.get("kind") or "manual"),
-            "priority": int(command.get("priority") or 99),
-            "family": stats["family"],
-            "history_count": stats["count"],
-            "pass_rate": round(float(stats["pass_rate"]), 3),
-            "avg_duration_ms": float(stats["avg_duration_ms"]),
-            "reason": _ranking_reason(command, stats),
-            "original_index": index,
-        })
+        ranked.append(
+            {
+                "rank": rank,
+                "command": str(command.get("command") or ""),
+                "kind": str(command.get("kind") or "manual"),
+                "priority": int(command.get("priority") or 99),
+                "family": stats["family"],
+                "history_count": stats["count"],
+                "pass_rate": round(float(stats["pass_rate"]), 3),
+                "avg_duration_ms": float(stats["avg_duration_ms"]),
+                "reason": _ranking_reason(command, stats),
+                "original_index": index,
+            }
+        )
     return ranked
 
 
@@ -369,7 +368,7 @@ def recent_auto_verifier_decisions(
                 continue
             if isinstance(raw, dict) and raw.get("schema") == DECISION_SCHEMA:
                 rows.append(raw)
-    return rows[-max(1, int(limit)):]
+    return rows[-max(1, int(limit)) :]
 
 
 def command_family(command: str) -> str:
@@ -405,24 +404,26 @@ def _read_metrics(
                 raw = json.loads(line)
                 if not isinstance(raw, dict):
                     continue
-                rows.append(AutoVerifierMetric(
-                    ts=str(raw.get("ts") or ""),
-                    command=str(raw.get("command") or ""),
-                    family=str(raw.get("family") or command_family(str(raw.get("command") or ""))),
-                    kind=str(raw.get("kind") or "manual"),
-                    ok=bool(raw.get("ok")),
-                    exit_code=(
-                        int(raw["exit_code"])
-                        if raw.get("exit_code") is not None
-                        else None
-                    ),
-                    duration_ms=int(raw.get("duration_ms") or 0),
-                    target=str(raw.get("target") or ""),
-                    reason=str(raw.get("reason") or ""),
-                ))
+                rows.append(
+                    AutoVerifierMetric(
+                        ts=str(raw.get("ts") or ""),
+                        command=str(raw.get("command") or ""),
+                        family=str(
+                            raw.get("family") or command_family(str(raw.get("command") or ""))
+                        ),
+                        kind=str(raw.get("kind") or "manual"),
+                        ok=bool(raw.get("ok")),
+                        exit_code=(
+                            int(raw["exit_code"]) if raw.get("exit_code") is not None else None
+                        ),
+                        duration_ms=int(raw.get("duration_ms") or 0),
+                        target=str(raw.get("target") or ""),
+                        reason=str(raw.get("reason") or ""),
+                    )
+                )
             except (TypeError, ValueError, json.JSONDecodeError):
                 continue
-    return rows[-max(1, int(limit)):]
+    return rows[-max(1, int(limit)) :]
 
 
 def _family_summary(family: str, rows: list[AutoVerifierMetric]) -> dict[str, Any]:

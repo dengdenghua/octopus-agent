@@ -43,6 +43,7 @@ correct — they're per-turn signals.
 A debug helper (``compute_stable_hash``) returns a hash of the
 stable section so tests can pin the byte-stability invariant.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -66,6 +67,7 @@ class StablePromptBuilder:
     insertion order so two callers with the same inputs produce the
     same output.
     """
+
     _stable: list[tuple[str, str]] = field(default_factory=list)
     _volatile: list[tuple[str, str]] = field(default_factory=list)
 

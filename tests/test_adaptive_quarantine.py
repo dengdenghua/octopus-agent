@@ -10,6 +10,7 @@ Covers:
   7. Non-anomalous calls are NOT quarantined
   8. Thread safety: concurrent quarantine/check calls don't corrupt state
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -19,6 +20,7 @@ from runtime.safety.auth.adaptive_immunity import _MIN_SAMPLES, AdaptiveImmunity
 from runtime.safety.auth.trust_engine import TrustEngine
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def _make_ai(threshold: float = 0.7, ttl_s: float = 300.0) -> AdaptiveImmunity:
     return AdaptiveImmunity(quarantine_threshold=threshold, quarantine_ttl_s=ttl_s)
@@ -31,6 +33,7 @@ def _warm_baseline(ai: AdaptiveImmunity, sucker: str, n: int = _MIN_SAMPLES + 2)
 
 
 # ── 1. Basic quarantine lifecycle ─────────────────────────────────────────────
+
 
 def test_quarantine_marks_sucker():
     ai = _make_ai()
@@ -46,6 +49,7 @@ def test_quarantine_does_not_affect_other_suckers():
 
 
 # ── 2. TTL expiry ─────────────────────────────────────────────────────────────
+
 
 def test_quarantine_expires_after_ttl():
     ai = _make_ai(ttl_s=60.0)
@@ -78,6 +82,7 @@ def test_expired_entry_pruned_lazily():
 
 # ── 3. Re-quarantine resets TTL ───────────────────────────────────────────────
 
+
 def test_requarantine_resets_clock():
     ai = _make_ai(ttl_s=60.0)
     _now = [1000.0]
@@ -87,13 +92,14 @@ def test_requarantine_resets_clock():
 
     with patch("runtime.safety.auth.adaptive_immunity.time.monotonic", _mono):
         ai.quarantine("skill_a")
-        _now[0] += 40.0            # half-way through TTL
-        ai.quarantine("skill_a")   # reset — new expiry is now+60
-        _now[0] += 40.0            # 80s since first quarantine; without reset, would have expired
+        _now[0] += 40.0  # half-way through TTL
+        ai.quarantine("skill_a")  # reset — new expiry is now+60
+        _now[0] += 40.0  # 80s since first quarantine; without reset, would have expired
         assert ai.is_quarantined("skill_a") is True
 
 
 # ── 4. Custom per-call TTL ────────────────────────────────────────────────────
+
 
 def test_quarantine_custom_ttl_overrides_default():
     ai = _make_ai(ttl_s=300.0)
@@ -104,7 +110,7 @@ def test_quarantine_custom_ttl_overrides_default():
 
     with patch("runtime.safety.auth.adaptive_immunity.time.monotonic", _mono):
         ai.quarantine("skill_a", ttl_s=10.0)
-        _now[0] += 11.0   # past the custom TTL but well under default 300s
+        _now[0] += 11.0  # past the custom TTL but well under default 300s
         assert ai.is_quarantined("skill_a") is False
 
 
@@ -114,6 +120,7 @@ def test_quarantine_ttl_s_exposes_clamped_default():
 
 
 # ── 5. TrustEngine.learn() quarantines anomalous sucker ──────────────────────
+
 
 def test_learn_quarantines_on_anomaly():
     ai = _make_ai(threshold=0.7)
@@ -138,12 +145,13 @@ def test_learn_does_not_quarantine_normal_call():
     call.sucker_id = "skill_normal"
 
     _warm_baseline(ai, "skill_normal")
-    engine.learn(call, latency_ms=105.0, tokens=510.0)   # 5 % drift — well inside
+    engine.learn(call, latency_ms=105.0, tokens=510.0)  # 5 % drift — well inside
 
     assert ai.is_quarantined("skill_normal") is False
 
 
 # ── 6. TrustEngine.check() blocks quarantined sucker ─────────────────────────
+
 
 def _make_call(sucker_id: str) -> ToolCall:
     call = MagicMock(spec=ToolCall)
@@ -190,6 +198,7 @@ def test_check_allows_non_quarantined_trusted_sucker():
 
 
 # ── 7. No adaptive → no quarantine path ──────────────────────────────────────
+
 
 def test_check_without_adaptive_never_quarantines():
     engine = TrustEngine(

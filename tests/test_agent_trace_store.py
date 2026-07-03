@@ -133,12 +133,15 @@ def test_checkpoint_returns_newest_by_iteration_then_id(store: AgentTraceStore) 
 
 def test_resume_proposal_is_sanitized(store: AgentTraceStore) -> None:
     fake_api_key = "sk-kimi-" + ("A" * 32)
-    secret_action = "exec_shell(" + json.dumps({
-        "command": (
-            "pytest tests/test_agent_trace_store.py -q --token "
-            f"{fake_api_key}"
-        ),
-    }) + ")"
+    secret_action = (
+        "exec_shell("
+        + json.dumps(
+            {
+                "command": (f"pytest tests/test_agent_trace_store.py -q --token {fake_api_key}"),
+            }
+        )
+        + ")"
+    )
     checkpoint_id = store.record_checkpoint(
         task_id="task-1",
         checkpoint_type="react",
@@ -252,11 +255,14 @@ def test_resume_requests_track_pending_confirmed_and_consumed_state(
     assert pending["intent"]["requires_confirmation"] is True
     assert "message body" not in str(pending)
 
-    assert store.confirm_resume_request(
-        thread_id="thread-1",
-        checkpoint_id=7,
-        confirmation_text="确认恢复 checkpoint #7",
-    ) is not None
+    assert (
+        store.confirm_resume_request(
+            thread_id="thread-1",
+            checkpoint_id=7,
+            confirmation_text="确认恢复 checkpoint #7",
+        )
+        is not None
+    )
     confirmed = store.resume_requests(thread_id="thread-1")[0]
     assert confirmed["status"] == "confirmed"
     assert confirmed["confirmed_at"] is not None
@@ -692,10 +698,7 @@ def test_task_run_review_extracts_findings_replay_and_learning_candidates(
     assert len(review["replay"]["fingerprint"]) == 16
     assert review["replay"]["steps"][1]["approval"]["risk_level"] == "high"
     assert review["resume"]["available"] is False
-    assert any(
-        item["kind"] == "failure_pattern"
-        for item in review["learning_candidates"]
-    )
+    assert any(item["kind"] == "failure_pattern" for item in review["learning_candidates"])
     assert review["backlog_candidates"][0]["priority"] == "P0"
 
 
@@ -828,13 +831,13 @@ def test_task_run_review_uses_loop_native_review_when_latest_checkpoint_is_loop_
     assert review["status"] == "failed"
     assert review["resume"]["source"] == "trace_store"
     assert review["resume"]["latest_checkpoint"]["trace_checkpoint_id"] > 0
-    assert any(
-        step["kind"] == "loop_attempt"
-        for step in review["replay"]["steps"]
-    )
+    assert any(step["kind"] == "loop_attempt" for step in review["replay"]["steps"])
     assert any(finding["type"] == "tool_error" for finding in review["findings"])
     assert any(item["kind"] == "failure_pattern" for item in review["learning_candidates"])
-    assert review["summary"]["trace_checkpoint_id"] == review["resume"]["latest_checkpoint"]["trace_checkpoint_id"]
+    assert (
+        review["summary"]["trace_checkpoint_id"]
+        == review["resume"]["latest_checkpoint"]["trace_checkpoint_id"]
+    )
 
     assert replay_case is not None
     assert replay_case["expectations"]["status"] == "failed"
@@ -938,10 +941,7 @@ def test_task_run_review_prefers_loop_checkpoint_even_if_newer_generic_checkpoin
 
     assert review is not None
     assert review["status"] == "failed"
-    assert any(
-        step["kind"] == "loop_attempt"
-        for step in review["replay"]["steps"]
-    )
+    assert any(step["kind"] == "loop_attempt" for step in review["replay"]["steps"])
     assert review["summary"]["trace_checkpoint_id"] == loop_checkpoint["id"]
     assert review["resume"]["latest_checkpoint"]["trace_checkpoint_id"] == loop_checkpoint["id"]
 
@@ -1333,7 +1333,9 @@ def test_app_state_attaches_trace_store_to_injected_jsonl_journal(tmp_path: Path
         trace.close()
 
 
-def test_create_app_uses_default_agent_trace_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_create_app_uses_default_agent_trace_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     fastapi = pytest.importorskip("fastapi")
     assert fastapi is not None
     from runtime.platform.ui import create_app

@@ -120,4 +120,3 @@ def validate_trace_checkpoint(checkpoint: dict[str, Any]) -> CheckpointIntegrity
     state = checkpoint.get("state") if isinstance(checkpoint, dict) else {}
     iteration = checkpoint.get("iteration") if isinstance(checkpoint, dict) else 0
     return validate_checkpoint_state(state, iteration=int(iteration or 0))
-

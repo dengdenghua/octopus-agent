@@ -35,6 +35,7 @@ _INDEX_DB_PATH: Path | None = None
 
 def _resolve_default_db_path() -> Path:
     from runtime.platform.process.paths import app_paths
+
     return app_paths().data_dir / "journal_index.sqlite"
 
 
@@ -125,12 +126,12 @@ def create_journal_router(
         else:
             raise HTTPException(
                 400,
-                "jsonl_path is required (no default journal path "
-                "configured during boot)",
+                "jsonl_path is required (no default journal path configured during boot)",
             )
         if not jsonl_path.exists():
             raise HTTPException(
-                404, f"jsonl source {jsonl_path!s} not found",
+                404,
+                f"jsonl source {jsonl_path!s} not found",
             )
         index = _get_index(db_path)
         added = index.index_jsonl(jsonl_path)

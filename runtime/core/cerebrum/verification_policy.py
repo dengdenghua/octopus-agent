@@ -34,43 +34,51 @@ _FRONTEND_EXTENSIONS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
 _STATIC_WEB_EXTENSIONS = (".html", ".htm", ".css")
 _CONFIG_EXTENSIONS = (".json", ".toml", ".yaml", ".yml")
 
-_FRONTEND_CONFIG_NAMES = frozenset({
-    "package.json",
-    "pnpm-lock.yaml",
-    "package-lock.json",
-    "yarn.lock",
-    "tsconfig.json",
-    "tsconfig.app.json",
-    "vite.config.ts",
-    "vite.config.js",
-    "vitest.config.ts",
-    "eslint.config.js",
-    "eslint.config.mjs",
-})
+_FRONTEND_CONFIG_NAMES = frozenset(
+    {
+        "package.json",
+        "pnpm-lock.yaml",
+        "package-lock.json",
+        "yarn.lock",
+        "tsconfig.json",
+        "tsconfig.app.json",
+        "vite.config.ts",
+        "vite.config.js",
+        "vitest.config.ts",
+        "eslint.config.js",
+        "eslint.config.mjs",
+    }
+)
 
-_PYTHON_CONFIG_NAMES = frozenset({
-    "pyproject.toml",
-    "pytest.ini",
-    "mypy.ini",
-    "ruff.toml",
-})
+_PYTHON_CONFIG_NAMES = frozenset(
+    {
+        "pyproject.toml",
+        "pytest.ini",
+        "mypy.ini",
+        "ruff.toml",
+    }
+)
 
-_SCHEMA_HINT_SEGMENTS = frozenset({
-    "schema",
-    "schemas",
-    "migration",
-    "migrations",
-    "alembic",
-})
+_SCHEMA_HINT_SEGMENTS = frozenset(
+    {
+        "schema",
+        "schemas",
+        "migration",
+        "migrations",
+        "alembic",
+    }
+)
 
-_API_HINT_SEGMENTS = frozenset({
-    "api",
-    "router",
-    "routers",
-    "routes",
-    "contract",
-    "contracts",
-})
+_API_HINT_SEGMENTS = frozenset(
+    {
+        "api",
+        "router",
+        "routers",
+        "routes",
+        "contract",
+        "contracts",
+    }
+)
 
 
 def normalize_policy_path(path: str) -> str:
@@ -224,12 +232,14 @@ def _project_verification_profile_cached(root_text: str) -> ProjectVerificationP
     for target in ("openapi-snapshot", "frontend-types", "test-fast", "test"):
         if target in make_targets:
             api_hints.append(f"make {target}")
-    api_hints.extend((
-        "python -m pytest tests/test_openapi_snapshot.py -q",
-        "python -m pytest",
-        "pnpm test",
-        "npm test",
-    ))
+    api_hints.extend(
+        (
+            "python -m pytest tests/test_openapi_snapshot.py -q",
+            "python -m pytest",
+            "pnpm test",
+            "npm test",
+        )
+    )
 
     return ProjectVerificationProfile(
         python_hints=_unique(python_hints),
@@ -239,7 +249,9 @@ def _project_verification_profile_cached(root_text: str) -> ProjectVerificationP
     )
 
 
-def project_verification_profile(project_root: str | Path | None = None) -> ProjectVerificationProfile:
+def project_verification_profile(
+    project_root: str | Path | None = None,
+) -> ProjectVerificationProfile:
     root = Path(project_root) if project_root is not None else Path.cwd()
     try:
         root = root.resolve()
@@ -277,13 +289,15 @@ def verification_requirements_for_paths(
             VerificationRequirement(
                 key="python-checks",
                 label="Python tests or compile check",
-                command_hints=_unique((
-                    *profile.python_hints,
-                    "python -m pytest",
-                    "python -m compileall",
-                    "ruff check",
-                    "mypy",
-                )),
+                command_hints=_unique(
+                    (
+                        *profile.python_hints,
+                        "python -m pytest",
+                        "python -m compileall",
+                        "ruff check",
+                        "mypy",
+                    )
+                ),
                 paths=py_paths,
             ),
         )
@@ -293,16 +307,18 @@ def verification_requirements_for_paths(
             VerificationRequirement(
                 key="frontend-typecheck",
                 label="Frontend typecheck or build",
-                command_hints=_unique((
-                    *profile.frontend_hints,
-                    "pnpm typecheck",
-                    "npm run typecheck",
-                    "npx tsc --noEmit",
-                    "pnpm build",
-                    "npm run build",
-                    "pnpm test",
-                    "npm test",
-                )),
+                command_hints=_unique(
+                    (
+                        *profile.frontend_hints,
+                        "pnpm typecheck",
+                        "npm run typecheck",
+                        "npx tsc --noEmit",
+                        "pnpm build",
+                        "npm run build",
+                        "pnpm test",
+                        "npm test",
+                    )
+                ),
                 paths=tuple(buckets["frontend"]),
             ),
         )
@@ -312,61 +328,63 @@ def verification_requirements_for_paths(
             VerificationRequirement(
                 key="static-web-artifact",
                 label="Static web artifact smoke check",
-                command_hints=_unique((
-                    "read_file",
-                    "browser_navigate",
-                    "browser_screenshot",
-                    "browser regression",
-                    "node -c",
-                    "html validate",
-                    "htmlhint",
-                    "npm run build",
-                    "pnpm build",
-                )),
+                command_hints=_unique(
+                    (
+                        "read_file",
+                        "browser_navigate",
+                        "browser_screenshot",
+                        "browser regression",
+                        "node -c",
+                        "html validate",
+                        "htmlhint",
+                        "npm run build",
+                        "pnpm build",
+                    )
+                ),
                 paths=tuple(buckets["static-web"]),
             ),
         )
 
     if any(key in buckets for key in ("schema", "python-schema")):
         schema_paths = tuple(
-            path
-            for key in ("schema", "python-schema")
-            for path in buckets.get(key, [])
+            path for key in ("schema", "python-schema") for path in buckets.get(key, [])
         )
         requirements.append(
             VerificationRequirement(
                 key="schema-contract",
                 label="Schema or migration compatibility check",
-                command_hints=_unique((
-                    *profile.schema_hints,
-                    "python -m pytest",
-                    "alembic check",
-                    "alembic upgrade head",
-                    "prisma validate",
-                    "drizzle-kit check",
-                )),
+                command_hints=_unique(
+                    (
+                        *profile.schema_hints,
+                        "python -m pytest",
+                        "alembic check",
+                        "alembic upgrade head",
+                        "prisma validate",
+                        "drizzle-kit check",
+                    )
+                ),
                 paths=schema_paths,
             ),
         )
 
     if any(key in buckets for key in ("api-contract", "python-api")):
         api_paths = tuple(
-            path
-            for key in ("api-contract", "python-api")
-            for path in buckets.get(key, [])
+            path for key in ("api-contract", "python-api") for path in buckets.get(key, [])
         )
         requirements.append(
             VerificationRequirement(
                 key="api-contract",
                 label="API contract or route test",
-                command_hints=_unique((
-                    *profile.api_hints,
-                    "python -m pytest",
-                    "pytest tests",
-                    "pnpm test",
-                    "npm test",
-                    "openapi",
-                )),
+                command_hints=_unique(
+                    (
+                        *profile.api_hints,
+                        "python -m pytest",
+                        "pytest tests",
+                        "pnpm test",
+                        "npm test",
+                        "openapi",
+                    )
+                ),
                 paths=api_paths,
             ),
         )
@@ -405,6 +423,7 @@ def command_satisfies_requirement(
         return True
 
     haystack = f" {text.lower()} "
+
     def contains_any(markers: tuple[str, ...]) -> bool:
         return any(marker.strip() in haystack for marker in markers)
 

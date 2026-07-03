@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import io
@@ -45,7 +44,6 @@ class RestoreReport(BaseModel):
 
 
 class BackupManager:
-
     COMPONENTS = {
         "journal": "events.jsonl",
         "kg": "knowledge_graph.json",
@@ -195,16 +193,16 @@ class BackupManager:
                         data[comp_name] = json.loads(text)
                     elif abs_path.suffix == ".jsonl":
                         data[comp_name] = [
-                            json.loads(line)
-                            for line in text.strip().splitlines()
-                            if line.strip()
+                            json.loads(line) for line in text.strip().splitlines() if line.strip()
                         ]
                     else:
                         data[comp_name] = text
                 except (OSError, json.JSONDecodeError):
                     data[comp_name] = f"<unreadable: {abs_path}>"
             elif abs_path.is_dir():
-                file_list = sorted(str(f.relative_to(self._base)) for f in abs_path.rglob("*") if f.is_file())
+                file_list = sorted(
+                    str(f.relative_to(self._base)) for f in abs_path.rglob("*") if f.is_file()
+                )
                 data[comp_name] = {"files": file_list, "count": len(file_list)}
 
         atomic_write_json(output, data)

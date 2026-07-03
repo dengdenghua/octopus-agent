@@ -47,7 +47,7 @@ class _FakeRedis:
 
     def __init__(self) -> None:
         self._store: dict[str, bytes] = {}
-        self._ttl: dict[str, float] = {}   # key → expires_at (monotonic-like)
+        self._ttl: dict[str, float] = {}  # key → expires_at (monotonic-like)
         self._counter = 0
 
     def _expired(self, key: str) -> bool:
@@ -65,7 +65,12 @@ class _FakeRedis:
         return self._store.get(key)
 
     def set(
-        self, key: str, value: str | bytes, *, nx: bool = False, px: int | None = None,
+        self,
+        key: str,
+        value: str | bytes,
+        *,
+        nx: bool = False,
+        px: int | None = None,
     ) -> bool:
         if self._expired(key):
             pass  # Implementation note.
@@ -176,15 +181,20 @@ class TestRenew:
         la = a.acquire_lease("scope", ttl=10)
         # Implementation note.
         fake = Lease(
-            scope="scope", holder_id="A", acquired_at=la.acquired_at,
-            expires_at=la.expires_at, fencing_token=la.fencing_token,
+            scope="scope",
+            holder_id="A",
+            acquired_at=la.acquired_at,
+            expires_at=la.expires_at,
+            fencing_token=la.fencing_token,
         )
         # Implementation note.
         r = b.renew_lease(fake, ttl=10)
         assert r is None
 
     def test_renew_after_expiry_returns_none(
-        self, coord: RedisCoordinator, client: _FakeRedis,
+        self,
+        coord: RedisCoordinator,
+        client: _FakeRedis,
     ):
         lease = coord.acquire_lease("s", ttl=0.01)
         assert lease is not None
@@ -277,6 +287,7 @@ class TestClientDuckTyping:
             # Implementation note.
             # Implementation note.
             from runtime.core.hearts import redis_coordinator as rc
+
             if rc.REDIS_AVAILABLE:
                 pytest.skip("redis is installed · duck check bypassed")
             RedisCoordinator(Broken())

@@ -6,6 +6,7 @@ therefore bounds both the depth and the width of the live subagent tree — the
 runaway-tree resource/cost vector (a buggy or malicious agent recursively
 spawning subagents, each with its own per-task budget).
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -32,7 +33,7 @@ def test_slot_acquire_release_and_cap(monkeypatch: pytest.MonkeyPatch) -> None:
     assert bridge.active_subagent_count() == 2
     assert bridge._acquire_subagent_slot() is False  # cap reached
     bridge._release_subagent_slot()
-    assert bridge._acquire_subagent_slot() is True   # slot freed
+    assert bridge._acquire_subagent_slot() is True  # slot freed
     bridge._release_subagent_slot()
     bridge._release_subagent_slot()
     assert bridge.active_subagent_count() == 0
@@ -49,7 +50,9 @@ def test_nested_spawn_refused_when_cap_reached(monkeypatch: pytest.MonkeyPatch) 
     def _runner(prompt: str, *, subagent_name: str, context: Any) -> str:  # noqa: ARG001
         # While this (the only) slot is held, a nested spawn must be refused.
         captured["nested"] = bridge.call_subagent(
-            agent_id="custom_child", role="researcher", prompt="nested",
+            agent_id="custom_child",
+            role="researcher",
+            prompt="nested",
         )
         captured["count_inside"] = bridge.active_subagent_count()
         return "outer-done"
@@ -58,7 +61,9 @@ def test_nested_spawn_refused_when_cap_reached(monkeypatch: pytest.MonkeyPatch) 
     bridge._RUNNER = _runner
     try:
         outer = bridge.call_subagent(
-            agent_id="custom_parent", role="researcher", prompt="outer",
+            agent_id="custom_parent",
+            role="researcher",
+            prompt="outer",
         )
     finally:
         bridge._RUNNER = orig

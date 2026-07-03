@@ -59,9 +59,7 @@ class AtomicWriteError(OSError):
 # WeakValueDictionary: locks for paths no-one references anymore are
 # reclaimed by GC, so the dict doesn't grow unbounded in long-running
 # servers that touch many files.
-_PATH_LOCKS: weakref.WeakValueDictionary[
-    str, threading.Lock
-] = weakref.WeakValueDictionary()
+_PATH_LOCKS: weakref.WeakValueDictionary[str, threading.Lock] = weakref.WeakValueDictionary()
 _LOCKS_GUARD = threading.Lock()
 
 
@@ -268,9 +266,7 @@ def atomic_write_bytes(
                     tmp_path.unlink()
             except OSError:  # noqa: BLE001 — atomic write cleanup best-effort
                 pass
-            raise AtomicWriteError(
-                f"atomic write to {target} failed"
-            ) from exc
+            raise AtomicWriteError(f"atomic write to {target} failed") from exc
 
 
 def atomic_write_text(
@@ -425,18 +421,13 @@ class _DebouncedWriter:
     def _run(self) -> None:
         while True:
             with self._cond:
-                while (
-                    not self._stop
-                    and self._pending is _SENTINEL
-                ):
+                while not self._stop and self._pending is _SENTINEL:
                     self._cond.wait()
                 if self._stop and self._pending is _SENTINEL:
                     return
                 # Wait until it has been quiet for interval_s.
                 while not self._stop:
-                    elapsed = (
-                        time.monotonic() - self._last_queued_at
-                    )
+                    elapsed = time.monotonic() - self._last_queued_at
                     remaining = self._interval - elapsed
                     if remaining <= 0:
                         break
@@ -453,6 +444,7 @@ class _DebouncedWriter:
                     payload,
                     indent=self._indent,
                 )
+
 
 _SENTINEL = object()
 

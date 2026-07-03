@@ -5,6 +5,7 @@ installed source tool offers; ``render_plan_summary()`` turns that into a short
 human preview. Applying a plan (writing into octopus, behind a trust gate) is a
 separate step layered on top.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -45,9 +46,7 @@ def render_plan_summary(plans: Iterable[MigrationPlan]) -> str:
         lines.append(f"[{plan.source}] {len(plan.items)} importable — {breakdown}")
         attn = plan.needing_attention()
         if attn:
-            shown = ", ".join(
-                f"{i.name}[{'/'.join(i.needs) or 'not-portable'}]" for i in attn[:10]
-            )
+            shown = ", ".join(f"{i.name}[{'/'.join(i.needs) or 'not-portable'}]" for i in attn[:10])
             more = f" (+{len(attn) - 10} more)" if len(attn) > 10 else ""
             lines.append(f"    needs follow-up ({len(attn)}): {shown}{more}")
     return "\n".join(lines)

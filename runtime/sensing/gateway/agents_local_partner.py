@@ -94,9 +94,7 @@ def validate_alias(value: str | None) -> str:
     if len(candidate) > 64:
         raise ValueError("alias must be 64 chars or fewer")
     if not _LOCAL_PARTNER_ALIAS_RE.fullmatch(candidate):
-        raise ValueError(
-            "alias may only contain letters, digits, CJK, spaces, '.', '-', '_'"
-        )
+        raise ValueError("alias may only contain letters, digits, CJK, spaces, '.', '-', '_'")
     return candidate
 
 
@@ -220,7 +218,11 @@ def partner_model(partner_id: str) -> dict[str, Any]:
                     data = json.loads(cfg.read_text(encoding="utf-8"))
                     model = str(data.get("model") or "")
                     source = "~/.claude/settings.json" if model else ""
-    except (OSError, ValueError, KeyError):  # best-effort · falls through with model/source left at their defaults
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+    ):  # best-effort · falls through with model/source left at their defaults
         pass
     return {"partner_id": partner_id, "model": model, "source": source}
 
@@ -281,6 +283,7 @@ def to_wire(
 
 
 # ── SOUL.md template + agent writer ────────────────────────────────
+
 
 def soul_template(*, alias: str, partner_name: str, command: str) -> str:
     """Render the SOUL.md persona block for a registered partner."""

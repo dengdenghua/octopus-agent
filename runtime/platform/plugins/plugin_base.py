@@ -63,10 +63,10 @@ class ModuleContext:
     logger: logging.Logger = field(default_factory=lambda: logging.getLogger(__name__))
 
     # Injected external services (set by PluginHub before on_load)
-    skill_registry: Any = None       # runtime.execution.suckers.registry.SkillRegistry
-    channel_manager: Any = None      # runtime.adapters.channels.manager.ChannelManager
-    fastapi_app: Any = None          # FastAPI application
-    event_bus: Any = None            # runtime.platform.process.eventbus.EventBus
+    skill_registry: Any = None  # runtime.execution.suckers.registry.SkillRegistry
+    channel_manager: Any = None  # runtime.adapters.channels.manager.ChannelManager
+    fastapi_app: Any = None  # FastAPI application
+    event_bus: Any = None  # runtime.platform.process.eventbus.EventBus
 
     # Plugin's own persisted config (from plugin.yaml ``config`` field)
     config: dict[str, Any] = field(default_factory=dict)
@@ -91,7 +91,9 @@ class ModuleContext:
         """Unregister all skills and channels registered via this context."""
         if self.skill_registry is not None:
             for skill_name in self._registered_skill_names:
-                with contextlib.suppress(Exception):  # best-effort plugin teardown; one bad skill shouldn't block the rest
+                with contextlib.suppress(
+                    Exception
+                ):  # best-effort plugin teardown; one bad skill shouldn't block the rest
                     self.skill_registry.unregister(skill_name)
             self._registered_skill_names.clear()
 
@@ -203,29 +205,37 @@ class ModulePlugin(ABC):  # noqa: B024
         """Auto-detect which capabilities this plugin provides."""
         caps: list[ProvidedCapability] = []
         if self.__class__.register_skills is not ModulePlugin.register_skills:
-            caps.append(ProvidedCapability(
-                type="skill",
-                name=f"{self.name}.skills",
-                description="Registered skills",
-            ))
+            caps.append(
+                ProvidedCapability(
+                    type="skill",
+                    name=f"{self.name}.skills",
+                    description="Registered skills",
+                )
+            )
         if self.__class__.register_channels is not ModulePlugin.register_channels:
-            caps.append(ProvidedCapability(
-                type="channel",
-                name=f"{self.name}.channel",
-                description="Registered channels",
-            ))
+            caps.append(
+                ProvidedCapability(
+                    type="channel",
+                    name=f"{self.name}.channel",
+                    description="Registered channels",
+                )
+            )
         if self.__class__.register_routes is not ModulePlugin.register_routes:
-            caps.append(ProvidedCapability(
-                type="api",
-                name=f"{self.name}.api",
-                description="Custom API routes",
-            ))
+            caps.append(
+                ProvidedCapability(
+                    type="api",
+                    name=f"{self.name}.api",
+                    description="Custom API routes",
+                )
+            )
         if self.config_ui_component is not None:
-            caps.append(ProvidedCapability(
-                type="config_ui",
-                name=f"{self.name}.config_ui",
-                description="Custom configuration UI",
-            ))
+            caps.append(
+                ProvidedCapability(
+                    type="config_ui",
+                    name=f"{self.name}.config_ui",
+                    description="Custom configuration UI",
+                )
+            )
         return caps
 
 

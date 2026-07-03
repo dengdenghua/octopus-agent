@@ -5,6 +5,7 @@ produce a :class:`MigrationPlan` of importable skills / memory / rules / MCP
 servers / agents / commands — without touching either side. Applying a plan is a
 separate, trust-gated step built on top of these plans.
 """
+
 from __future__ import annotations
 
 from .activate import (

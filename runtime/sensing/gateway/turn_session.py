@@ -18,9 +18,7 @@ def build_turn_metadata(
     if not isinstance(ctx, dict):
         ctx = {}
     config = body.get("config") if isinstance(body.get("config"), dict) else {}
-    config_meta = (
-        config.get("metadata") if isinstance(config.get("metadata"), dict) else {}
-    )
+    config_meta = config.get("metadata") if isinstance(config.get("metadata"), dict) else {}
     metadata: dict[str, Any] = {}
 
     if ctx.get("raw_identity") is True:
@@ -33,12 +31,7 @@ def build_turn_metadata(
     except (KeyError, AttributeError):
         stored_meta = {}
 
-    mode_val = (
-        config_meta.get("mode")
-        or ctx.get("mode")
-        or stored_meta.get("mode")
-        or "chat"
-    )
+    mode_val = config_meta.get("mode") or ctx.get("mode") or stored_meta.get("mode") or "chat"
     if isinstance(mode_val, str) and mode_val:
         metadata["mode"] = mode_val
     explicit_conversation_mode = isinstance(ctx.get("mode"), str) and ctx.get("mode") in {

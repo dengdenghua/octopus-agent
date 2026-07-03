@@ -77,10 +77,7 @@ class ExperienceLedger:
         limit: int = 100,
         offset: int = 0,
     ) -> dict[str, Any]:
-        rows = [
-            _with_memory_quality(row, now=now)
-            for row in self._read().get("records") or []
-        ]
+        rows = [_with_memory_quality(row, now=now) for row in self._read().get("records") or []]
         if status:
             rows = [row for row in rows if str(row.get("status") or "") == status]
         if bucket:
@@ -91,22 +88,23 @@ class ExperienceLedger:
             rows = [row for row in rows if str(row.get("priority") or "") == priority]
         if not include_contradicted:
             rows = [
-                row for row in rows
+                row
+                for row in rows
                 if str(row.get("memory_quality", {}).get("contradiction_status") or "")
                 != "contradicted"
             ]
         threshold = max(0.0, min(1.0, float(min_reliability or 0.0)))
         if threshold > 0:
             rows = [
-                row for row in rows
-                if float(row.get("memory_quality", {}).get("reliability") or 0.0)
-                >= threshold
+                row
+                for row in rows
+                if float(row.get("memory_quality", {}).get("reliability") or 0.0) >= threshold
             ]
         rows = sorted(rows, key=_record_recall_sort_key)
         total = len(rows)
         return {
             "schema": _SCHEMA,
-            "records": rows[offset: offset + limit],
+            "records": rows[offset : offset + limit],
             "total": total,
             "limit": limit,
             "offset": offset,
@@ -186,7 +184,8 @@ class ExperienceLedger:
             ),
         )[: max(1, int(limit))]
         cited = [
-            row for row in rows
+            row
+            for row in rows
             if float(row.get("recall", {}).get("citation_coverage") or 0.0) >= 1.0
         ]
         return {
@@ -239,34 +238,22 @@ class ExperienceLedger:
         now: datetime | None = None,
         limit: int = 10000,
     ) -> dict[str, Any]:
-        rows = [
-            _with_memory_quality(row, now=now)
-            for row in self._read().get("records") or []
-        ][: max(1, int(limit))]
+        rows = [_with_memory_quality(row, now=now) for row in self._read().get("records") or []][
+            : max(1, int(limit))
+        ]
         total = len(rows)
         contradicted = [
-            row for row in rows
-            if row["memory_quality"]["contradiction_status"] == "contradicted"
+            row for row in rows if row["memory_quality"]["contradiction_status"] == "contradicted"
         ]
         active_rows = [
-            row for row in rows
-            if row["memory_quality"]["contradiction_status"] != "contradicted"
+            row for row in rows if row["memory_quality"]["contradiction_status"] != "contradicted"
         ]
-        stale_rows = [
-            row for row in active_rows
-            if float(row["memory_quality"]["freshness"]) < 0.5
-        ]
+        stale_rows = [row for row in active_rows if float(row["memory_quality"]["freshness"]) < 0.5]
         low_reliability_rows = [
-            row for row in active_rows
-            if float(row["memory_quality"]["reliability"]) < 0.7
+            row for row in active_rows if float(row["memory_quality"]["reliability"]) < 0.7
         ]
-        avg_reliability = _avg(
-            row["memory_quality"]["reliability"] for row in active_rows
-        )
-        by_bucket = Counter(
-            str(row.get("memory_bucket") or "experience")
-            for row in active_rows
-        )
+        avg_reliability = _avg(row["memory_quality"]["reliability"] for row in active_rows)
+        by_bucket = Counter(str(row.get("memory_bucket") or "experience") for row in active_rows)
         top_risks = sorted(
             [*low_reliability_rows, *contradicted],
             key=lambda row: (
@@ -341,7 +328,8 @@ def _normalize_payload(raw: dict[str, Any]) -> dict[str, Any]:
         if status not in _VALID_STATUSES:
             status = "active"
         record = {
-            "id": _clean_text(item.get("id"), limit=80) or _record_id(
+            "id": _clean_text(item.get("id"), limit=80)
+            or _record_id(
                 kind=item.get("kind"),
                 bucket=item.get("memory_bucket"),
                 title=title,
@@ -365,12 +353,14 @@ def _normalize_payload(raw: dict[str, Any]) -> dict[str, Any]:
             "metadata": metadata,
         }
         records.append(record)
-    payload.update({
-        "schema": _SCHEMA,
-        "version": 1,
-        "lastUpdated": _clean_text(raw.get("lastUpdated"), limit=80),
-        "records": sorted(records, key=_record_sort_key),
-    })
+    payload.update(
+        {
+            "schema": _SCHEMA,
+            "version": 1,
+            "lastUpdated": _clean_text(raw.get("lastUpdated"), limit=80),
+            "records": sorted(records, key=_record_sort_key),
+        }
+    )
     return payload
 
 
@@ -390,19 +380,21 @@ def _records_from_review(review: dict[str, Any], now_text: str) -> list[dict[str
             continue
         kind = _clean_text(item.get("kind"), limit=80) or "learning_candidate"
         bucket = _clean_text(item.get("memory_bucket"), limit=80) or "experience"
-        records.append(_new_record(
-            now_text=now_text,
-            source_task_id=source_task_id,
-            thread_id=thread_id,
-            turn_id=turn_id,
-            agent_id=agent_id,
-            kind=kind,
-            priority=_priority(item.get("priority")),
-            memory_bucket=bucket,
-            title=title,
-            text=text,
-            metadata={**evidence, "candidate": item},
-        ))
+        records.append(
+            _new_record(
+                now_text=now_text,
+                source_task_id=source_task_id,
+                thread_id=thread_id,
+                turn_id=turn_id,
+                agent_id=agent_id,
+                kind=kind,
+                priority=_priority(item.get("priority")),
+                memory_bucket=bucket,
+                title=title,
+                text=text,
+                metadata={**evidence, "candidate": item},
+            )
+        )
     for item in review.get("backlog_candidates") or []:
         if not isinstance(item, dict):
             continue
@@ -410,27 +402,29 @@ def _records_from_review(review: dict[str, Any], now_text: str) -> list[dict[str
         text = _clean_text(item.get("hypothesis"), limit=1200)
         if not title or not text:
             continue
-        records.append(_new_record(
-            now_text=now_text,
-            source_task_id=source_task_id,
-            thread_id=thread_id,
-            turn_id=turn_id,
-            agent_id=agent_id,
-            kind="backlog_candidate",
-            priority=_priority(item.get("priority")),
-            memory_bucket="experiment_backlog",
-            title=title,
-            text=text,
-            metadata={
-                **evidence,
-                "candidate": item,
-                "minimal_implementation": _clean_text(
-                    item.get("minimal_implementation"),
-                    limit=1200,
-                ),
-                "validation_metric": _clean_text(item.get("validation_metric"), limit=600),
-            },
-        ))
+        records.append(
+            _new_record(
+                now_text=now_text,
+                source_task_id=source_task_id,
+                thread_id=thread_id,
+                turn_id=turn_id,
+                agent_id=agent_id,
+                kind="backlog_candidate",
+                priority=_priority(item.get("priority")),
+                memory_bucket="experiment_backlog",
+                title=title,
+                text=text,
+                metadata={
+                    **evidence,
+                    "candidate": item,
+                    "minimal_implementation": _clean_text(
+                        item.get("minimal_implementation"),
+                        limit=1200,
+                    ),
+                    "validation_metric": _clean_text(item.get("validation_metric"), limit=600),
+                },
+            )
+        )
     return records
 
 
@@ -442,15 +436,9 @@ def _apply_contradictions(
     by_id = {str(row.get("id") or ""): row for row in records}
     for record in touched:
         metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
-        candidate = (
-            metadata.get("candidate")
-            if isinstance(metadata.get("candidate"), dict)
-            else {}
-        )
+        candidate = metadata.get("candidate") if isinstance(metadata.get("candidate"), dict) else {}
         target_ids = _clean_unique_list(
-            candidate.get("contradicts_record_ids")
-            or candidate.get("contradicts")
-            or [],
+            candidate.get("contradicts_record_ids") or candidate.get("contradicts") or [],
             limit=80,
         )
         if not target_ids:
@@ -475,11 +463,7 @@ def _apply_contradictions(
             target = by_id.get(target_id)
             if target is None or target is record:
                 continue
-            target_meta = (
-                target.get("metadata")
-                if isinstance(target.get("metadata"), dict)
-                else {}
-            )
+            target_meta = target.get("metadata") if isinstance(target.get("metadata"), dict) else {}
             target_meta["contradiction"] = {
                 "schema": _CONTRADICTION_SCHEMA,
                 "status": "contradicted",
@@ -527,7 +511,9 @@ def _memory_quality(
         0.0,
         min(
             1.0,
-            round((freshness * 0.5) + (occurrence_score * 0.3) + (priority_score * 0.2) - penalty, 3),
+            round(
+                (freshness * 0.5) + (occurrence_score * 0.3) + (priority_score * 0.2) - penalty, 3
+            ),
         ),
     )
     return {
@@ -555,9 +541,7 @@ def _freshness_score(age_days: int) -> float:
 def _contradiction(row: dict[str, Any]) -> dict[str, Any]:
     metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
     contradiction = (
-        metadata.get("contradiction")
-        if isinstance(metadata.get("contradiction"), dict)
-        else {}
+        metadata.get("contradiction") if isinstance(metadata.get("contradiction"), dict) else {}
     )
     if contradiction.get("schema") == _CONTRADICTION_SCHEMA:
         return contradiction
@@ -581,9 +565,7 @@ def _review_evidence_metadata(review: dict[str, Any]) -> dict[str, Any]:
     replay = review.get("replay") if isinstance(review.get("replay"), dict) else {}
     resume = review.get("resume") if isinstance(review.get("resume"), dict) else {}
     latest = (
-        resume.get("latest_checkpoint")
-        if isinstance(resume.get("latest_checkpoint"), dict)
-        else {}
+        resume.get("latest_checkpoint") if isinstance(resume.get("latest_checkpoint"), dict) else {}
     )
     integrity = latest.get("integrity") if isinstance(latest.get("integrity"), dict) else {}
     return {
@@ -674,12 +656,14 @@ def _find_record(records: list[dict[str, Any]], record_id: str) -> dict[str, Any
 
 
 def _record_id(*, kind: Any, bucket: Any, title: str, text: str) -> str:
-    key = "|".join([
-        _clean_text(kind, limit=80).casefold(),
-        _clean_text(bucket, limit=80).casefold(),
-        title.casefold(),
-        text.casefold(),
-    ])
+    key = "|".join(
+        [
+            _clean_text(kind, limit=80).casefold(),
+            _clean_text(bucket, limit=80).casefold(),
+            title.casefold(),
+            text.casefold(),
+        ]
+    )
     digest = hashlib.blake2b(key.encode("utf-8"), digest_size=10).hexdigest()
     return f"exp_{digest}"
 
@@ -687,20 +671,18 @@ def _record_id(*, kind: Any, bucket: Any, title: str, text: str) -> str:
 def _record_search_text(row: dict[str, Any]) -> str:
     tags = " ".join(str(tag) for tag in row.get("tags") or [])
     metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
-    candidate = (
-        metadata.get("candidate")
-        if isinstance(metadata.get("candidate"), dict)
-        else {}
+    candidate = metadata.get("candidate") if isinstance(metadata.get("candidate"), dict) else {}
+    return " ".join(
+        [
+            str(row.get("title") or ""),
+            str(row.get("text") or ""),
+            str(row.get("kind") or ""),
+            str(row.get("memory_bucket") or ""),
+            tags,
+            str(candidate.get("minimal_implementation") or ""),
+            str(candidate.get("validation_metric") or ""),
+        ]
     )
-    return " ".join([
-        str(row.get("title") or ""),
-        str(row.get("text") or ""),
-        str(row.get("kind") or ""),
-        str(row.get("memory_bucket") or ""),
-        tags,
-        str(candidate.get("minimal_implementation") or ""),
-        str(candidate.get("validation_metric") or ""),
-    ])
 
 
 def _token_set(text: str) -> set[str]:
@@ -808,11 +790,13 @@ def _next_actions(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
             action = f"Promote to failure-prevention rule: {title}"
         else:
             action = f"Review and classify learning: {title}"
-        actions.append({
-            "priority": priority,
-            "record_id": str(row.get("id") or ""),
-            "action": action,
-        })
+        actions.append(
+            {
+                "priority": priority,
+                "record_id": str(row.get("id") or ""),
+                "action": action,
+            }
+        )
     return actions
 
 
@@ -828,7 +812,9 @@ def _quality_next_actions(
     if stale_count:
         actions.append("Refresh stale memories with replay-backed evidence.")
     if low_reliability_count:
-        actions.append("Require stronger citations before low-reliability memories influence code mode.")
+        actions.append(
+            "Require stronger citations before low-reliability memories influence code mode."
+        )
     return actions
 
 

@@ -172,9 +172,7 @@ class EvolutionRouter:
 
         # Soft signals: check prompt for tool-dependent keywords.
         prompt_lower = prompt.lower()
-        tool_keyword_hits = [
-            kw for kw in _TOOL_DEPENDENT_KEYWORDS if kw in prompt_lower
-        ]
+        tool_keyword_hits = [kw for kw in _TOOL_DEPENDENT_KEYWORDS if kw in prompt_lower]
         if tool_keyword_hits:
             signals["tool_keyword_hits"] = tool_keyword_hits
             return EvolutionVerdict(
@@ -185,9 +183,7 @@ class EvolutionRouter:
             )
 
         # Check reply for dynamic content markers.
-        dynamic_hits = [
-            m for m in _DYNAMIC_REPLY_MARKERS if m in reply
-        ]
+        dynamic_hits = [m for m in _DYNAMIC_REPLY_MARKERS if m in reply]
         if dynamic_hits:
             signals["dynamic_reply_markers"] = dynamic_hits
             return EvolutionVerdict(
@@ -208,8 +204,7 @@ class EvolutionRouter:
         return EvolutionVerdict(
             path="reflex",
             reason=(
-                "pure-text prompt+reply with no tool calls, "
-                "no code changes, no dynamic markers"
+                "pure-text prompt+reply with no tool calls, no code changes, no dynamic markers"
             ),
             confidence=confidence,
             signals=signals,

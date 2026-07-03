@@ -18,8 +18,29 @@ import threading
 from pathlib import Path
 
 _STOPWORDS = frozenset(
-    {"the", "and", "for", "you", "are", "can", "with", "this", "that", "how",
-     "what", "please", "help", "need", "want", "我", "的", "了", "吗", "你", "帮"}
+    {
+        "the",
+        "and",
+        "for",
+        "you",
+        "are",
+        "can",
+        "with",
+        "this",
+        "that",
+        "how",
+        "what",
+        "please",
+        "help",
+        "need",
+        "want",
+        "我",
+        "的",
+        "了",
+        "吗",
+        "你",
+        "帮",
+    }
 )
 
 
@@ -121,12 +142,14 @@ def suggest(
         if rel <= 0:
             continue
         comp = store.best_tag_score(agent_id, tags) if store else 0.5
-        out.append({
-            "agent_id": agent_id,
-            "relevance": round(rel, 2),
-            "competence": round(comp, 2),
-            "score": round(rel * 0.7 + comp * 0.3, 3),
-        })
+        out.append(
+            {
+                "agent_id": agent_id,
+                "relevance": round(rel, 2),
+                "competence": round(comp, 2),
+                "score": round(rel * 0.7 + comp * 0.3, 3),
+            }
+        )
     out.sort(key=lambda r: r["score"], reverse=True)
     return out
 

@@ -55,9 +55,7 @@ def test_browser_session_health_surfaces_recovery_proof() -> None:
     center.record_action(session, "navigate", "https://example.test")
     after = center.health_report("recovering")
 
-    assert before["recovery_proof"]["schema"] == (
-        "octopus.browser_session_recovery_proof.v1"
-    )
+    assert before["recovery_proof"]["schema"] == ("octopus.browser_session_recovery_proof.v1")
     assert before["recovery_proof"]["recovered_from_crash"] is True
     assert before["recovery_proof"]["requires_operator_review"] is True
     assert "recovered_from_crash" in before["issues"]

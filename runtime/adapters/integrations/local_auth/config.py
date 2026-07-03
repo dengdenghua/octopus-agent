@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from typing import Any
@@ -34,7 +33,6 @@ def verify_password(plaintext: str, hashed: str) -> bool:
 
 
 class LocalAuthConfig(BaseModel):
-
     enabled: bool = Field(
         default=False,
         description="总开关 · 生产环境慎开",
@@ -42,8 +40,7 @@ class LocalAuthConfig(BaseModel):
     allow_any_username: bool = Field(
         default=False,
         description=(
-            "True · 任何用户名都能登录 · dev 友好。"
-            "False · 只认 allowed_usernames 或 users 里的键"
+            "True · 任何用户名都能登录 · dev 友好。False · 只认 allowed_usernames 或 users 里的键"
         ),
     )
     allowed_usernames: list[str] = Field(
@@ -53,15 +50,13 @@ class LocalAuthConfig(BaseModel):
     users: dict[str, str] = Field(
         default_factory=dict,
         description=(
-            "用户名 → SHA-256 密码哈希。"
-            "非空时 · 强制密码登录 · allow_any_username 被忽略"
+            "用户名 → SHA-256 密码哈希。非空时 · 强制密码登录 · allow_any_username 被忽略"
         ),
     )
     jwt_secret: str | None = Field(
         default=None,
         description=(
-            "登录成功时签发 JWT 用的 HS256 密钥。"
-            "不设则返 actor_id 但不发 JWT · 客户端走 X-Actor"
+            "登录成功时签发 JWT 用的 HS256 密钥。不设则返 actor_id 但不发 JWT · 客户端走 X-Actor"
         ),
     )
 
@@ -70,9 +65,7 @@ class LocalAuthConfig(BaseModel):
         if secret is None:
             return
         if len(secret) < 32:
-            raise ValueError(
-                f"jwt_secret must be at least 32 characters long, got {len(secret)}"
-            )
+            raise ValueError(f"jwt_secret must be at least 32 characters long, got {len(secret)}")
         # Check entropy: reject secrets that are too predictable
         # (e.g. all lowercase, all digits, or common patterns)
         has_lower = any(c.islower() for c in secret)
@@ -84,6 +77,7 @@ class LocalAuthConfig(BaseModel):
             raise ValueError(
                 "jwt_secret must contain at least 3 of: lowercase, uppercase, digits, special characters"
             )
+
     jwt_expire_seconds: int = Field(
         default=7 * 24 * 3600,
         description="JWT exp 距 iat 多少秒 · 默认 7 天",

@@ -19,13 +19,13 @@ def get_day_of_week(date_str: str) -> str:
         Day name (e.g., 'Monday') or empty string if parsing fails
     """
     try:
-        dt = datetime.strptime(date_str, '%Y-%m-%d')
-        return dt.strftime('%A')
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        return dt.strftime("%A")
     except (ValueError, TypeError):
         return ""
 
 
-def format_timestamp(iso_str: str, fmt: str = '%Y-%m-%d %H:%M') -> str:
+def format_timestamp(iso_str: str, fmt: str = "%Y-%m-%d %H:%M") -> str:
     """
     Format an ISO timestamp string to a human-readable format.
 

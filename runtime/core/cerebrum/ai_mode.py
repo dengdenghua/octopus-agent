@@ -32,6 +32,7 @@ Device detection (``detect_recommended_mode``) inspects:
   * GPU presence (``nvidia-smi`` etc.)
   * Network reachability of cloud providers
 """
+
 from __future__ import annotations
 
 import json
@@ -63,6 +64,7 @@ def _state_path() -> Path:
         return Path(explicit).expanduser()
     try:
         from runtime.platform.process.paths import app_paths
+
         return app_paths().data_dir / "ai_mode.json"
     except Exception:  # noqa: BLE001 — fall through to a sensible default
         return Path("data") / "ai_mode.json"
@@ -163,7 +165,10 @@ def _detect_local_model() -> tuple[bool, str | None]:
         try:
             r = subprocess.run(
                 ["ollama", "list"],
-                capture_output=True, text=True, timeout=2.0, check=False,
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+                check=False,
             )
             if r.returncode == 0 and r.stdout.strip().count("\n") >= 1:
                 return True, "ollama detected with at least one model"
@@ -173,6 +178,7 @@ def _detect_local_model() -> tuple[bool, str | None]:
     # Best-effort port probe — LM Studio / vLLM default
     try:
         import socket
+
         for port in (11434, 1234, 8000):
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(0.3)
@@ -193,7 +199,10 @@ def _detect_gpu() -> tuple[bool, str | None]:
         try:
             r = subprocess.run(
                 ["nvidia-smi", "-L"],
-                capture_output=True, text=True, timeout=2.0, check=False,
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+                check=False,
             )
             if r.returncode == 0 and "GPU" in r.stdout:
                 return True, "NVIDIA GPU detected"
@@ -205,11 +214,12 @@ def _detect_gpu() -> tuple[bool, str | None]:
         try:
             r = subprocess.run(
                 ["system_profiler", "SPDisplaysDataType"],
-                capture_output=True, text=True, timeout=2.0, check=False,
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+                check=False,
             )
-            if r.returncode == 0 and (
-                "Apple M" in r.stdout or "Metal" in r.stdout
-            ):
+            if r.returncode == 0 and ("Apple M" in r.stdout or "Metal" in r.stdout):
                 return True, "Apple Silicon GPU detected"
         except (OSError, subprocess.SubprocessError):  # noqa: BLE001 — GPU check is best-effort
             pass
@@ -222,7 +232,8 @@ def _detect_ram_gb() -> float:
     try:
         # psutil is in pyproject deps; fall back to platform-specific if missing
         import psutil  # type: ignore[import-untyped]
-        return psutil.virtual_memory().total / (1024 ** 3)
+
+        return psutil.virtual_memory().total / (1024**3)
     except ImportError:  # noqa: BLE001 — RAM check is best-effort, fall back to /proc
         pass
     try:
@@ -231,7 +242,7 @@ def _detect_ram_gb() -> float:
             for line in f:
                 if line.startswith("MemTotal:"):
                     kb = int(line.split()[1])
-                    return kb / (1024 ** 2)
+                    return kb / (1024**2)
     except OSError:  # noqa: BLE001 — RAM check is best-effort
         pass
     return 0.0
@@ -249,6 +260,7 @@ def _detect_cloud_reachable() -> bool:
     """
     try:
         import socket
+
         for host in ("api.anthropic.com", "api.openai.com", "open.bigmodel.cn"):
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

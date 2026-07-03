@@ -7,19 +7,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class PlannerConfig(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     type: Literal["static", "llm"] = "static"
-    model: str = "mock/planner"           # Implementation note.
-    mock_response: str | None = None       # Implementation note.
+    model: str = "mock/planner"  # Implementation note.
+    mock_response: str | None = None  # Implementation note.
     anthropic_api_key: str | None = None  # Implementation note.
     base_url: str | None = None
     max_nodes: int = Field(default=10, gt=0, le=50)
 
 
 class BudgetConfig(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     max_tokens: int = Field(default=50_000, gt=0)
@@ -28,7 +26,6 @@ class BudgetConfig(BaseModel):
 
 
 class ImmunityConfig(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     # SECURITY: keep this in EXACT sync with the TrustEngine in-process
@@ -39,13 +36,14 @@ class ImmunityConfig(BaseModel):
     # default DID include ``mcp://*`` while TrustEngine's did not, so
     # the yaml-driven path silently trusted every MCP server — the
     # opposite of the documented posture.
-    trusted_sources: list[str] = Field(
-        default_factory=lambda: ["skill://public/*"]
-    )
+    trusted_sources: list[str] = Field(default_factory=lambda: ["skill://public/*"])
     self_whitelist: list[str] = Field(
         default_factory=lambda: [
-            "cerebrum", "ganglia", "arms/*",
-            "react_loop", "react_arm",
+            "cerebrum",
+            "ganglia",
+            "arms/*",
+            "react_loop",
+            "react_arm",
             "intel_collector/*",
         ]
     )
@@ -63,7 +61,6 @@ class ImmunityConfig(BaseModel):
 
 
 class IntelSourceConfig(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     source_id: str = Field(..., min_length=1)
@@ -75,7 +72,6 @@ class IntelSourceConfig(BaseModel):
 
 
 class MCPServerConfigEntry(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     name: str = Field(..., min_length=1)
@@ -87,7 +83,7 @@ class MCPServerConfigEntry(BaseModel):
     transport: Literal["stdio", "http", "sse"] = "stdio"
     url: str = ""
     headers: dict[str, str] = Field(default_factory=dict)
-    name_prefix: str | None = None       # Implementation note.
+    name_prefix: str | None = None  # Implementation note.
 
 
 class SafetyConfig(BaseModel):
@@ -121,22 +117,21 @@ class SafetyConfig(BaseModel):
 
 
 class LearnConfig(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
-    learn_from_journal: str | None = None     # Implementation note.
+    learn_from_journal: str | None = None  # Implementation note.
     min_hits: int = 3
     max_rules: int = 30
     learn_memories_from_journal: str | None = None  # Implementation note.
-    learn_kg_from_journal: str | None = None         # Implementation note.
+    learn_kg_from_journal: str | None = None  # Implementation note.
     kg_max_triples: int = 15
-    rewrite_from_journal: str | None = None          # Implementation note.
+    rewrite_from_journal: str | None = None  # Implementation note.
     rewrite_min_confidence: float = 0.7
     rewrite_min_severity: Literal["low", "mid", "high"] = "mid"
-    assess_recipe_from_journal: str | None = None    # Implementation note.
+    assess_recipe_from_journal: str | None = None  # Implementation note.
 
-    rules_persist_path: str | None = None        # Implementation note.
-    memories_persist_path: str | None = None     # Implementation note.
+    rules_persist_path: str | None = None  # Implementation note.
+    memories_persist_path: str | None = None  # Implementation note.
     static_rules_persist_path: str | None = None  # Implementation note.
 
     @field_validator(
@@ -168,7 +163,6 @@ class LearnConfig(BaseModel):
 
 
 class CredentialPoolConfig(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     keys: list[str] = Field(default_factory=list)
@@ -178,7 +172,6 @@ class CredentialPoolConfig(BaseModel):
 
 
 class HotCacheConfig(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     enabled: bool = True
@@ -201,7 +194,6 @@ def _pick_cheaper(model: str) -> str:
 
 
 class EvolveConfig(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     strategy: Literal["inherit", "cheaper_same_provider", "explicit"] = "inherit"
@@ -242,7 +234,6 @@ class OctConfig(BaseModel):
 
 
 class LocalAuthConfig(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     enabled: bool = False
@@ -261,12 +252,17 @@ class LocalAuthConfig(BaseModel):
         return bool(self.users)
 
 
-
 class CanaryConfig(BaseModel):
     stages: list[str] = Field(default_factory=lambda: ["shadow", "5pct", "25pct", "50pct", "full"])
-    sample_sizes: dict[str, int] = Field(default_factory=lambda: {
-        "shadow": 0, "5pct": 5, "25pct": 25, "50pct": 50, "full": 100,
-    })
+    sample_sizes: dict[str, int] = Field(
+        default_factory=lambda: {
+            "shadow": 0,
+            "5pct": 5,
+            "25pct": 25,
+            "50pct": 50,
+            "full": 100,
+        }
+    )
     auto_promote: bool = True
     rollback_on_failure: bool = True
     max_duration_hours: float = 72.0
@@ -301,7 +297,6 @@ class TentacleConfig(BaseModel):
 
 
 class AgentConfig(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     name: str = "octopus-agent"
@@ -326,6 +321,6 @@ class AgentConfig(BaseModel):
     intel_sources: list[IntelSourceConfig] = Field(default_factory=list)
     mcp_servers: list[MCPServerConfigEntry] = Field(default_factory=list)
 
-    journal_file: str | None = None        # Implementation note.
-    enable_web_skills: bool = True         # Implementation note.
+    journal_file: str | None = None  # Implementation note.
+    enable_web_skills: bool = True  # Implementation note.
     default_arm_id: str = "code_arm"

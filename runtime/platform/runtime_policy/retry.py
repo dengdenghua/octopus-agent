@@ -124,7 +124,7 @@ class RetryPolicy:
         failed attempt), 1 for the second retry, etc. The initial
         attempt never calls this.
         """
-        raw = self.base_delay * (2 ** attempt_index)
+        raw = self.base_delay * (2**attempt_index)
         raw = min(raw, self.max_delay)
         if self.jitter > 0:
             factor = 1.0 - random.random() * self.jitter
@@ -192,7 +192,10 @@ def retry_call(
                     on_retry(i, exc, delay)
             _LOG.debug(
                 "retry attempt=%d/%d exc=%s sleep=%.3fs",
-                i + 1, policy.attempts, type(exc).__name__, delay,
+                i + 1,
+                policy.attempts,
+                type(exc).__name__,
+                delay,
             )
             if delay > 0:
                 sleep(delay)
@@ -237,12 +240,14 @@ def retry(
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> T:
             return retry_call(
-                fn, *args,
+                fn,
+                *args,
                 policy=policy,
                 sleep=sleep,
                 on_retry=on_retry,
                 **kwargs,
             )
+
         return wrapper
 
     return decorator

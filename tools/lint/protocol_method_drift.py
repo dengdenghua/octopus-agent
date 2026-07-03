@@ -31,6 +31,7 @@ Run::
     python tools/lint/protocol_method_drift.py            # report
     python tools/lint/protocol_method_drift.py --strict   # exit 1 on drift
 """
+
 from __future__ import annotations
 
 import argparse
@@ -46,25 +47,27 @@ REDUCER_TS = REPO_ROOT / "frontend" / "src" / "core" / "realtime" / "reducer.ts"
 # Methods present in ServerMethod that the reducer is NOT expected to
 # handle — these go through other client paths (RPC requests, error
 # channel, model events outside the conversation event stream).
-SERVER_METHODS_NOT_IN_REDUCER: frozenset[str] = frozenset({
-    # Server-initiated requests handled by approval / RPC bridge,
-    # not the conversation reducer.
-    "item/commandExecution/requestApproval",
-    "item/fileChange/requestApproval",
-    "item/permissions/requestApproval",
-    "item/tool/requestUserInput",
-    "item/planMode/exitRequest",
-    "mcpServer/elicitation/request",
-    # Cross-cutting concerns
-    "error",
-    "model/rerouted",
-    # Reserved but currently not emitted on the wire (see comments in
-    # events.py). Reducer handler may exist for forward compat — we
-    # don't fail on these being "missing on wire" but do detect their
-    # case-by-case status.
-    "item/fileChange/outputDelta",
-    "item/fileChange/hunkDelta",
-})
+SERVER_METHODS_NOT_IN_REDUCER: frozenset[str] = frozenset(
+    {
+        # Server-initiated requests handled by approval / RPC bridge,
+        # not the conversation reducer.
+        "item/commandExecution/requestApproval",
+        "item/fileChange/requestApproval",
+        "item/permissions/requestApproval",
+        "item/tool/requestUserInput",
+        "item/planMode/exitRequest",
+        "mcpServer/elicitation/request",
+        # Cross-cutting concerns
+        "error",
+        "model/rerouted",
+        # Reserved but currently not emitted on the wire (see comments in
+        # events.py). Reducer handler may exist for forward compat — we
+        # don't fail on these being "missing on wire" but do detect their
+        # case-by-case status.
+        "item/fileChange/outputDelta",
+        "item/fileChange/hunkDelta",
+    }
+)
 
 
 def _python_enum_values(module_path: Path, class_name: str) -> set[str]:
@@ -121,10 +124,7 @@ def main() -> int:
         # Frontend may live in a separate repo (post-split). Skip
         # gracefully instead of failing — the Python-side enum is
         # still validated by other linters.
-        print(
-            f"SKIP · reducer.ts not found at {REDUCER_TS} "
-            "(frontend may be in a separate repo)"
-        )
+        print(f"SKIP · reducer.ts not found at {REDUCER_TS} (frontend may be in a separate repo)")
         return 0
 
     server_methods = _python_enum_values(EVENTS_PY, "ServerMethod")
@@ -144,16 +144,21 @@ def main() -> int:
     missing_in_reducer = expected_in_reducer - reducer_methods
     # Drift: reducer method literals that don't exist as server enum
     # values (typos, stale handlers).
-    unknown_in_reducer = reducer_methods - server_methods - frozenset({
-        # Typed-only narrowing strings — not real wire methods.
-        # Add documented exceptions here.
-    })
+    unknown_in_reducer = (
+        reducer_methods
+        - server_methods
+        - frozenset(
+            {
+                # Typed-only narrowing strings — not real wire methods.
+                # Add documented exceptions here.
+            }
+        )
+    )
 
     issues: list[str] = []
     if missing_in_reducer:
         issues.append(
-            f"\n{len(missing_in_reducer)} ServerMethod value(s) NOT handled by "
-            "reducer.ts:"
+            f"\n{len(missing_in_reducer)} ServerMethod value(s) NOT handled by reducer.ts:"
         )
         for v in sorted(missing_in_reducer):
             issues.append(f"  - {v}")
@@ -163,14 +168,12 @@ def main() -> int:
         )
     if unknown_in_reducer:
         issues.append(
-            f"\n{len(unknown_in_reducer)} reducer method literal(s) NOT in "
-            "ServerMethod enum:"
+            f"\n{len(unknown_in_reducer)} reducer method literal(s) NOT in ServerMethod enum:"
         )
         for v in sorted(unknown_in_reducer):
             issues.append(f"  - {v}")
         issues.append(
-            "  (add to runtime/protocol/events.py:ServerMethod, fix typo, or "
-            "remove from reducer)"
+            "  (add to runtime/protocol/events.py:ServerMethod, fix typo, or remove from reducer)"
         )
 
     if not issues:

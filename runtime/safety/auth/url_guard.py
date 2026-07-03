@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import ipaddress
@@ -8,14 +7,16 @@ from urllib.parse import urlparse
 
 _SAFE_SCHEMES = frozenset({"http", "https"})
 
-_BLOCKED_HOSTS = frozenset({
-    "localhost",
-    "metadata.google.internal",
-    "metadata.azure.internal",
-    "instance-data",           # AWS SSM
-    "instance-data.ec2.internal",
-    "fd00:ec2::254",           # AWS IPv6 metadata
-})
+_BLOCKED_HOSTS = frozenset(
+    {
+        "localhost",
+        "metadata.google.internal",
+        "metadata.azure.internal",
+        "instance-data",  # AWS SSM
+        "instance-data.ec2.internal",
+        "fd00:ec2::254",  # AWS IPv6 metadata
+    }
+)
 
 _BLOCKED_SUFFIXES = (
     ".localhost",
@@ -28,7 +29,6 @@ _BLOCKED_SUFFIXES = (
 
 @dataclass(frozen=True)
 class URLVerdict:
-
     allow: bool
     url: str
     reason: str = ""
@@ -94,7 +94,8 @@ def check_url(
         for ip_obj in resolved:
             if _is_private_ip(ip_obj):
                 return URLVerdict(
-                    False, url,
+                    False,
+                    url,
                     f"dns_resolves_to_private: {host} → {ip_obj}",
                     resolved_ip=str(ip_obj),
                 )
@@ -274,12 +275,12 @@ def _is_private_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
             if client is not None and _is_private_ip(client):
                 return True
     return bool(
-        ip.is_private          # 10.* / 172.16-31.* / 192.168.*
-        or ip.is_loopback      # 127.* / ::1
-        or ip.is_link_local    # 169.254.* / fe80::
-        or ip.is_multicast     # 224+ / ff00::
+        ip.is_private  # 10.* / 172.16-31.* / 192.168.*
+        or ip.is_loopback  # 127.* / ::1
+        or ip.is_link_local  # 169.254.* / fe80::
+        or ip.is_multicast  # 224+ / ff00::
         or ip.is_reserved
-        or ip.is_unspecified   # 0.0.0.0 / ::
+        or ip.is_unspecified  # 0.0.0.0 / ::
     )
 
 

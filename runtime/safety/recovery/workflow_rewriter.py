@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from collections import Counter, defaultdict
@@ -23,13 +22,12 @@ Severity = Literal["low", "mid", "high"]
 
 
 class RewriteProposal(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     proposal_id: UUID = Field(default_factory=new_id)
     kind: ProposalKind
-    target_rule_name: str | None = None    # Implementation note.
-    target_step_index: int | None = None   # Implementation note.
+    target_rule_name: str | None = None  # Implementation note.
+    target_step_index: int | None = None  # Implementation note.
     suggested_skill_sequence: list[SkillId] = Field(default_factory=list)
     rationale: str
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
@@ -39,7 +37,6 @@ class RewriteProposal(BaseModel):
 
 
 class RewriteReport(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     trajectories_scanned: int
@@ -59,10 +56,10 @@ class RewriteReport(BaseModel):
 
 @dataclass
 class RewriterConfig:
-    min_rule_invocations: int = 3             # Implementation note.
-    degraded_step_threshold: float = 0.5      # Implementation note.
-    low_rule_success_threshold: float = 0.4   # Implementation note.
-    new_sequence_min_hits: int = 3            # Implementation note.
+    min_rule_invocations: int = 3  # Implementation note.
+    degraded_step_threshold: float = 0.5  # Implementation note.
+    low_rule_success_threshold: float = 0.4  # Implementation note.
+    new_sequence_min_hits: int = 3  # Implementation note.
     max_proposals: int = 20
 
 
@@ -72,7 +69,6 @@ class RewriterConfig:
 
 
 class WorkflowRewriter:
-
     def __init__(
         self,
         journal: Journal,
@@ -80,7 +76,6 @@ class WorkflowRewriter:
     ) -> None:
         self.journal = journal
         self.config = config or RewriterConfig()
-
 
     def analyze(self, rules: list[Any] | None = None) -> RewriteReport:
         with trace_stage("regeneration.workflow_rewriter.analyze"):
@@ -104,10 +99,7 @@ class WorkflowRewriter:
                 proposals=proposals,
             )
 
-
-    def _analyze_rules(
-        self, rules: list[Any], trajs: list[Trajectory]
-    ) -> list[RewriteProposal]:
+    def _analyze_rules(self, rules: list[Any], trajs: list[Trajectory]) -> list[RewriteProposal]:
         proposals: list[RewriteProposal] = []
 
         by_strategy: dict[str, list[Trajectory]] = defaultdict(list)
@@ -160,9 +152,7 @@ class WorkflowRewriter:
                 success_count = step_success_count.get(idx, 0)
                 rate = success_count / total
                 if rate < self.config.degraded_step_threshold:
-                    sucker_name = (
-                        skill_sequence[idx] if idx < len(skill_sequence) else "?"
-                    )
+                    sucker_name = skill_sequence[idx] if idx < len(skill_sequence) else "?"
                     proposals.append(
                         RewriteProposal(
                             kind="remove_degraded_step",
@@ -180,7 +170,6 @@ class WorkflowRewriter:
                         )
                     )
         return proposals
-
 
     def _propose_new_sequences(self, trajs: list[Trajectory]) -> list[RewriteProposal]:
         success_trajs = [t for t in trajs if t.outcome.success and t.step_count >= 2]
@@ -215,10 +204,7 @@ class WorkflowRewriter:
             )
         return proposals
 
-
-    def _detect_redundant_adjacent(
-        self, trajs: list[Trajectory]
-    ) -> list[RewriteProposal]:
+    def _detect_redundant_adjacent(self, trajs: list[Trajectory]) -> list[RewriteProposal]:
         redundant_counter: Counter[tuple[str, str]] = Counter()
         redundant_source: dict[tuple[str, str], list[UUID]] = defaultdict(list)
 
@@ -226,10 +212,7 @@ class WorkflowRewriter:
             for i in range(len(t.steps) - 1):
                 a = t.steps[i]
                 b = t.steps[i + 1]
-                if (
-                    a.action.sucker_id == b.action.sucker_id
-                    and a.action.args == b.action.args
-                ):
+                if a.action.sucker_id == b.action.sucker_id and a.action.args == b.action.args:
                     key = (str(a.action.sucker_id), str(sorted(a.action.args.items())))
                     redundant_counter[key] += 1
                     redundant_source[key].append(t.trajectory_id)
@@ -253,7 +236,6 @@ class WorkflowRewriter:
                 )
             )
         return proposals
-
 
     def _collect_trajectories(self) -> list[Trajectory]:
         events = self.journal.read_by_type("trajectory")

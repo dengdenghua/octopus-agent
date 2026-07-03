@@ -22,6 +22,7 @@ Locale resolution order:
 
 Files: <dir>/locales/<locale>.yaml — dot-namespaced flat keys.
 """
+
 from __future__ import annotations
 
 import os
@@ -87,6 +88,7 @@ def _load_locale(locale: str) -> dict[str, Any]:
     except ImportError:
         try:
             from ruamel.yaml import YAML
+
             yaml_loader = YAML(typ="safe")
             with path.open(encoding="utf-8") as f:
                 data = yaml_loader.load(f)
@@ -113,7 +115,12 @@ def _parse_simple_yaml(text: str) -> dict[str, Any]:
         key, raw = m.group(1), m.group(2).strip()
         if raw.startswith('"') and raw.endswith('"'):
             val = raw[1:-1]
-            val = val.replace("\\\\", "\x00").replace("\\n", "\n").replace('\\"', '"').replace("\x00", "\\")
+            val = (
+                val.replace("\\\\", "\x00")
+                .replace("\\n", "\n")
+                .replace('\\"', '"')
+                .replace("\x00", "\\")
+            )
             out[key] = val
     return out
 
@@ -240,7 +247,9 @@ def _resolve_key(key: str, locale: str, count: int | None) -> Any:
 
 def _(key: str, **kwargs: Any) -> str:
     locale = get_lang()
-    template = _resolve_key(key, locale, kwargs.get("count") if isinstance(kwargs.get("count"), int) else None)
+    template = _resolve_key(
+        key, locale, kwargs.get("count") if isinstance(kwargs.get("count"), int) else None
+    )
     if template is None:
         return key
     if "count" in kwargs and isinstance(kwargs["count"], int):
@@ -299,8 +308,12 @@ def get_safety_relax_markers() -> list[str]:
         catalog = _catalogs.get(locale)
         if not catalog:
             continue
-        for key in ("safety.relax_markers", "safety.relax_markers_zh",
-                    "safety.relax_markers_ja", "safety.relax_markers_ko"):
+        for key in (
+            "safety.relax_markers",
+            "safety.relax_markers_zh",
+            "safety.relax_markers_ja",
+            "safety.relax_markers_ko",
+        ):
             val = catalog.get(key)
             if isinstance(val, list):
                 for marker in val:

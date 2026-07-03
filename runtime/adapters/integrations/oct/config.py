@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 
 
 class OctConfig(BaseModel):
-
     enabled: bool = Field(
         default=False,
         description="总开关 · false 时所有 /api/*/oct 返 503",
@@ -39,8 +38,7 @@ class OctConfig(BaseModel):
     mock_mode: bool = Field(
         default=False,
         description=(
-            "开发/演示模式 · 走网关 ALLOW_MOCK_AUTH 的 devCode(网关返回的验证码)· "
-            "生产必须 false"
+            "开发/演示模式 · 走网关 ALLOW_MOCK_AUTH 的 devCode(网关返回的验证码)· 生产必须 false"
         ),
     )
 

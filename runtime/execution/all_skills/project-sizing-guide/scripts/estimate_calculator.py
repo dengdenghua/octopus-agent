@@ -11,26 +11,26 @@ import sys
 from typing import Any
 
 TSHIRT_MAP: dict[str, dict[str, float]] = {
-    "XS":  {"O": 0.25, "M": 0.5,  "P": 1},
-    "S":   {"O": 0.5,  "M": 1,    "P": 2.5},
-    "M":   {"O": 2,    "M": 3.5,  "P": 7},
-    "L":   {"O": 5,    "M": 10,   "P": 20},
-    "XL":  {"O": 15,   "M": 25,   "P": 50},
-    "XXL": {"O": 40,   "M": 70,   "P": 150},
+    "XS": {"O": 0.25, "M": 0.5, "P": 1},
+    "S": {"O": 0.5, "M": 1, "P": 2.5},
+    "M": {"O": 2, "M": 3.5, "P": 7},
+    "L": {"O": 5, "M": 10, "P": 20},
+    "XL": {"O": 15, "M": 25, "P": 50},
+    "XXL": {"O": 40, "M": 70, "P": 150},
 }
 
 FPA_WEIGHTS: dict[str, dict[str, int]] = {
-    "ILF": {"低": 7,  "中": 10, "高": 15, "low": 7,  "medium": 10, "high": 15},
-    "EIF": {"低": 5,  "中": 7,  "高": 10, "low": 5,  "medium": 7,  "high": 10},
-    "EI":  {"低": 3,  "中": 4,  "高": 6,  "low": 3,  "medium": 4,  "high": 6},
-    "EO":  {"低": 4,  "中": 5,  "高": 7,  "low": 4,  "medium": 5,  "high": 7},
-    "EQ":  {"低": 3,  "中": 4,  "高": 6,  "low": 3,  "medium": 4,  "high": 6},
+    "ILF": {"低": 7, "中": 10, "高": 15, "low": 7, "medium": 10, "high": 15},
+    "EIF": {"低": 5, "中": 7, "高": 10, "low": 5, "medium": 7, "high": 10},
+    "EI": {"低": 3, "中": 4, "高": 6, "low": 3, "medium": 4, "high": 6},
+    "EO": {"低": 4, "中": 5, "高": 7, "low": 4, "medium": 5, "high": 7},
+    "EQ": {"低": 3, "中": 4, "高": 6, "low": 3, "medium": 4, "high": 6},
 }
 
 CONFIDENCE_LEVELS = [
-    ("68%",   1.0),
-    ("90%",   1.645),
-    ("95%",   2.0),
+    ("68%", 1.0),
+    ("90%", 1.645),
+    ("95%", 2.0),
     ("99.7%", 3.0),
 ]
 
@@ -44,9 +44,15 @@ def validate_pert_task(task: dict[str, Any], idx: int) -> None:
             print(f"错误: 任务 #{idx + 1} 的 '{key}' 必须为非负数", file=sys.stderr)
             sys.exit(1)
     if task["O"] > task["M"]:
-        print(f"警告: 任务 #{idx + 1} '{task.get('name', '')}' 的 O({task['O']}) > M({task['M']})，请检查", file=sys.stderr)
+        print(
+            f"警告: 任务 #{idx + 1} '{task.get('name', '')}' 的 O({task['O']}) > M({task['M']})，请检查",
+            file=sys.stderr,
+        )
     if task["M"] > task["P"]:
-        print(f"警告: 任务 #{idx + 1} '{task.get('name', '')}' 的 M({task['M']}) > P({task['P']})，请检查", file=sys.stderr)
+        print(
+            f"警告: 任务 #{idx + 1} '{task.get('name', '')}' 的 M({task['M']}) > P({task['P']})，请检查",
+            file=sys.stderr,
+        )
 
 
 def calc_pert(tasks: list[dict[str, Any]]) -> dict[str, Any]:
@@ -63,7 +69,7 @@ def calc_pert(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         o, m, p = task["O"], task["M"], task["P"]
         e = (o + 4 * m + p) / 6
         sigma = (p - o) / 6
-        variance = sigma ** 2
+        variance = sigma**2
         spread_ratio = p / o if o > 0 else float("inf")
 
         if spread_ratio < 2:
@@ -76,16 +82,18 @@ def calc_pert(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         total_e += e
         total_var += variance
 
-        results.append({
-            "name": task.get("name", f"任务{i + 1}"),
-            "O": o,
-            "M": m,
-            "P": p,
-            "E": round(e, 2),
-            "sigma": round(sigma, 2),
-            "spread_ratio": round(spread_ratio, 2),
-            "risk_level": risk_level,
-        })
+        results.append(
+            {
+                "name": task.get("name", f"任务{i + 1}"),
+                "O": o,
+                "M": m,
+                "P": p,
+                "E": round(e, 2),
+                "sigma": round(sigma, 2),
+                "spread_ratio": round(spread_ratio, 2),
+                "risk_level": risk_level,
+            }
+        )
 
     total_sigma = math.sqrt(total_var)
     confidence_intervals = {}
@@ -123,16 +131,21 @@ def calc_tshirt(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         size = task.get("size", "").upper()
         if size not in TSHIRT_MAP:
             valid = ", ".join(TSHIRT_MAP.keys())
-            print(f"错误: 任务 #{i + 1} 的尺码 '{task.get('size', '')}' 无效，可选: {valid}", file=sys.stderr)
+            print(
+                f"错误: 任务 #{i + 1} 的尺码 '{task.get('size', '')}' 无效，可选: {valid}",
+                file=sys.stderr,
+            )
             sys.exit(1)
         mapping = TSHIRT_MAP[size]
-        converted.append({
-            "name": task.get("name", f"任务{i + 1}"),
-            "size": size,
-            "O": mapping["O"],
-            "M": mapping["M"],
-            "P": mapping["P"],
-        })
+        converted.append(
+            {
+                "name": task.get("name", f"任务{i + 1}"),
+                "size": size,
+                "O": mapping["O"],
+                "M": mapping["M"],
+                "P": mapping["P"],
+            }
+        )
 
     pert_result = calc_pert(converted)
     pert_result["method"] = "T-shirt Sizing → PERT 转换"
@@ -158,14 +171,19 @@ def calc_fpa(components: list[dict[str, Any]], hours_per_fp: float = 10.0) -> di
         comp_type = comp.get("type", "").upper()
         if comp_type not in FPA_WEIGHTS:
             valid = ", ".join(FPA_WEIGHTS.keys())
-            print(f"错误: 组件 #{i + 1} 的类型 '{comp.get('type', '')}' 无效，可选: {valid}", file=sys.stderr)
+            print(
+                f"错误: 组件 #{i + 1} 的类型 '{comp.get('type', '')}' 无效，可选: {valid}",
+                file=sys.stderr,
+            )
             sys.exit(1)
 
         complexity = comp.get("complexity", "中")
         weights = FPA_WEIGHTS[comp_type]
         if complexity not in weights:
             valid = "低/中/高 或 low/medium/high"
-            print(f"错误: 组件 #{i + 1} 的复杂度 '{complexity}' 无效，可选: {valid}", file=sys.stderr)
+            print(
+                f"错误: 组件 #{i + 1} 的复杂度 '{complexity}' 无效，可选: {valid}", file=sys.stderr
+            )
             sys.exit(1)
 
         count = comp.get("count", 1)
@@ -177,13 +195,15 @@ def calc_fpa(components: list[dict[str, Any]], hours_per_fp: float = 10.0) -> di
         fp = weight * count
         total_ufp += fp
 
-        results.append({
-            "type": comp_type,
-            "complexity": complexity,
-            "count": count,
-            "weight": weight,
-            "fp": fp,
-        })
+        results.append(
+            {
+                "type": comp_type,
+                "complexity": complexity,
+                "count": count,
+                "weight": weight,
+                "fp": fp,
+            }
+        )
 
     total_hours = total_ufp * hours_per_fp
     buffer_low = total_hours * 1.15
@@ -311,7 +331,9 @@ def print_table(result: dict[str, Any]) -> None:
             name = t["name"] + size_str
             if len(name) > 15:
                 name = name[:14] + "…"
-            print(f"{i:<3} {name:<16} {t['O']:>6.1f} {t['M']:>6.1f} {t['P']:>6.1f} {t['E']:>7.2f} {t['sigma']:>6.2f}")
+            print(
+                f"{i:<3} {name:<16} {t['O']:>6.1f} {t['M']:>6.1f} {t['P']:>6.1f} {t['E']:>7.2f} {t['sigma']:>6.2f}"
+            )
 
         s = result["summary"]
         print(f"\n{'─' * 60}")
@@ -326,15 +348,21 @@ def print_table(result: dict[str, Any]) -> None:
         print(f"\n{header}")
         print("-" * 40)
         for i, c in enumerate(result["components"], 1):
-            print(f"{i:<3} {c['type']:<6} {c['complexity']:<8} {c['count']:>4} {c['weight']:>4} {c['fp']:>5}")
+            print(
+                f"{i:<3} {c['type']:<6} {c['complexity']:<8} {c['count']:>4} {c['weight']:>4} {c['fp']:>5}"
+            )
 
         s = result["summary"]
         print(f"\n{'─' * 40}")
         print(f"  总 UFP:      {s['total_UFP']}")
         print(f"  人时/FP:     {s['hours_per_fp']}")
         print(f"  总工时:      {s['total_hours']} 人时 ({s['total_days']} 人日)")
-        print(f"  含15%缓冲:   {s['with_buffer_15pct']['hours']} 人时 ({s['with_buffer_15pct']['days']} 人日)")
-        print(f"  含30%缓冲:   {s['with_buffer_30pct']['hours']} 人时 ({s['with_buffer_30pct']['days']} 人日)")
+        print(
+            f"  含15%缓冲:   {s['with_buffer_15pct']['hours']} 人时 ({s['with_buffer_15pct']['days']} 人日)"
+        )
+        print(
+            f"  含30%缓冲:   {s['with_buffer_30pct']['hours']} 人时 ({s['with_buffer_30pct']['days']} 人日)"
+        )
 
     r = result.get("recommendation", {})
     if r:

@@ -55,14 +55,16 @@ class Task:
         return cls(
             id=str(raw["id"]),
             milestone_id=str(raw.get("milestone_id") or ""),
-            type=raw.get("type") if raw.get("type") in
-            ("design", "code", "research", "analysis", "review") else "code",
+            type=raw.get("type")
+            if raw.get("type") in ("design", "code", "research", "analysis", "review")
+            else "code",
             goal=str(raw.get("goal") or ""),
             assigned_role=str(raw.get("assigned_role") or "engineer"),
             assigned_agent=str(raw.get("assigned_agent") or ""),
-            status=raw.get("status") if raw.get("status") in (
-                "pending", "ready", "running", "blocked", "done", "failed", "rejected"
-            ) else "pending",
+            status=raw.get("status")
+            if raw.get("status")
+            in ("pending", "ready", "running", "blocked", "done", "failed", "rejected")
+            else "pending",
             depends_on=[str(d) for d in (raw.get("depends_on") or [])],
             input=dict(raw.get("input") or {}),
             output=raw.get("output"),
@@ -96,9 +98,9 @@ class Milestone:
             goal=str(raw.get("goal") or ""),
             spec=dict(raw.get("spec") or {}),
             success_criteria=[str(s) for s in (raw.get("success_criteria") or [])],
-            status=status if status in (
-                "pending", "active", "in_progress", "blocked", "done", "failed"
-            ) else "pending",
+            status=status
+            if status in ("pending", "active", "in_progress", "blocked", "done", "failed")
+            else "pending",
             dependencies=[str(d) for d in (raw.get("dependencies") or [])],
             task_ids=[str(t) for t in (raw.get("task_ids") or [])],
         )

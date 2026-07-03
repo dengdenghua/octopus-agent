@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from contextlib import AbstractContextManager
@@ -13,7 +12,6 @@ from .coordinator import Coordinator, LeaderGuard, Lease
 
 @dataclass(frozen=True)
 class HeartsSnapshot:
-
     systemic: dict[str, Any]
     branchial: dict[str, dict[str, Any]]
     healthy: bool
@@ -27,7 +25,6 @@ class HeartsSnapshot:
 
 
 class Hearts(AbstractContextManager["Hearts"]):
-
     def __init__(
         self,
         *,
@@ -39,7 +36,6 @@ class Hearts(AbstractContextManager["Hearts"]):
         self.branchial: dict[str, CircuitBreaker] = dict(branchial or {})
         self.coordinator: Coordinator | None = coordinator
         self._held_leases: dict[str, Lease] = {}
-
 
     def register_branchial(self, name: str, breaker: CircuitBreaker) -> None:
         if not name:
@@ -53,13 +49,11 @@ class Hearts(AbstractContextManager["Hearts"]):
             return self.branchial[channel]
         except KeyError as e:
             raise KeyError(
-                f"no branchial channel named {channel!r} "
-                f"(registered: {sorted(self.branchial)})"
+                f"no branchial channel named {channel!r} (registered: {sorted(self.branchial)})"
             ) from e
 
     def channels(self) -> list[str]:
         return sorted(self.branchial)
-
 
     def start(self) -> None:
         self.systemic.start()
@@ -72,14 +66,12 @@ class Hearts(AbstractContextManager["Hearts"]):
     def is_running(self) -> bool:
         return self.systemic.is_running
 
-
     def __enter__(self) -> Hearts:
         self.start()
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
         self.stop()
-
 
     def snapshot(self) -> HeartsSnapshot:
         systemic: dict[str, Any] = {
@@ -96,10 +88,7 @@ class Hearts(AbstractContextManager["Hearts"]):
                 for name, st in self.systemic.stats().items()
             },
         }
-        branchial = {
-            name: breaker.snapshot()
-            for name, breaker in self.branchial.items()
-        }
+        branchial = {name: breaker.snapshot() for name, breaker in self.branchial.items()}
         return HeartsSnapshot(
             systemic=systemic,
             branchial=branchial,
@@ -114,7 +103,10 @@ class Hearts(AbstractContextManager["Hearts"]):
     # ─── HA · leader election ────────────────────
 
     def acquire_leadership(
-        self, scope: str = "systemic", *, ttl: float = 30.0,
+        self,
+        scope: str = "systemic",
+        *,
+        ttl: float = 30.0,
     ) -> LeaderGuard:
         if self.coordinator is None:
             return _AlwaysLeaderGuard()
@@ -128,7 +120,6 @@ class Hearts(AbstractContextManager["Hearts"]):
             return False
         return current.holder_id == self.coordinator.holder_id
 
-
     @staticmethod
     def _compute_healthy(
         systemic: dict[str, Any],
@@ -140,7 +131,6 @@ class Hearts(AbstractContextManager["Hearts"]):
 
 
 class _AlwaysLeaderGuard:
-
     is_leader: bool = True
 
     def __enter__(self):

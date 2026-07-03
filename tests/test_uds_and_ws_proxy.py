@@ -26,21 +26,15 @@ from runtime.sensing.gateway.remote_transport import (
 
 
 def test_to_ws_url_http_becomes_ws() -> None:
-    assert _to_ws_url("http://host:8000", "/api/realtime") == (
-        "ws://host:8000/api/realtime"
-    )
+    assert _to_ws_url("http://host:8000", "/api/realtime") == ("ws://host:8000/api/realtime")
 
 
 def test_to_ws_url_https_becomes_wss() -> None:
-    assert _to_ws_url("https://host:8000", "/api/realtime") == (
-        "wss://host:8000/api/realtime"
-    )
+    assert _to_ws_url("https://host:8000", "/api/realtime") == ("wss://host:8000/api/realtime")
 
 
 def test_to_ws_url_strips_trailing_slash() -> None:
-    assert _to_ws_url("http://host:8000/", "/api/realtime") == (
-        "ws://host:8000/api/realtime"
-    )
+    assert _to_ws_url("http://host:8000/", "/api/realtime") == ("ws://host:8000/api/realtime")
 
 
 def test_to_ws_url_path_leading_slash_ok() -> None:
@@ -183,9 +177,7 @@ def test_realtime_ws_blocked_when_flag_off(
 ) -> None:
     monkeypatch.delenv("OCTOPUS_FF_UI_REMOTE_TRANSPORT", raising=False)
     ff.reload()
-    with client.websocket_connect(
-        "/api/remote-backends/missing/realtime"
-    ) as ws:
+    with client.websocket_connect("/api/remote-backends/missing/realtime") as ws:
         msg = json.loads(ws.receive_text())
         assert msg["method"] == "proxy/error"
         assert "disabled" in msg["params"]["message"]
@@ -198,9 +190,7 @@ def test_realtime_ws_404_for_unknown_backend(
 ) -> None:
     monkeypatch.setenv("OCTOPUS_FF_UI_REMOTE_TRANSPORT", "1")
     ff.reload()
-    with client.websocket_connect(
-        "/api/remote-backends/does-not-exist/realtime"
-    ) as ws:
+    with client.websocket_connect("/api/remote-backends/does-not-exist/realtime") as ws:
         msg = json.loads(ws.receive_text())
         assert msg["method"] == "proxy/error"
         assert "not found" in msg["params"]["message"]
@@ -246,13 +236,16 @@ def test_realtime_ws_requires_auth_when_enabled(
 def test_serve_parser_accepts_uds() -> None:
     """Verify --uds is accepted by the serve subcommand parser."""
     import sys
+
     old_argv = sys.argv[:]
     try:
         sys.argv = [
             "octopus-agent",
             "serve",
-            "--config", "config.local.yaml",
-            "--uds", "/tmp/test.sock",
+            "--config",
+            "config.local.yaml",
+            "--uds",
+            "/tmp/test.sock",
         ]
         # Import the main entry point and parse args without running.
 
@@ -261,9 +254,11 @@ def test_serve_parser_accepts_uds() -> None:
         # text contains --uds.
         import subprocess
         import sys as _sys
+
         result = subprocess.run(
             [_sys.executable, "-m", "runtime", "serve", "--help"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         assert "--uds" in result.stdout
     finally:
@@ -273,8 +268,10 @@ def test_serve_parser_accepts_uds() -> None:
 def test_ui_parser_accepts_uds() -> None:
     import subprocess
     import sys as _sys
+
     result = subprocess.run(
         [_sys.executable, "-m", "runtime", "ui", "--help"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert "--uds" in result.stdout

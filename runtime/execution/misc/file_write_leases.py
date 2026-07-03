@@ -226,13 +226,9 @@ def file_write_lease_snapshot(metadata: dict[str, Any] | None) -> dict[str, Any]
         "lease_count": len(leases),
         "pending_handoff_count": len(handoffs),
         "handoff_count": sum(
-            1 for item in history
-            if str(item.get("event") or "").startswith("handoff_")
+            1 for item in history if str(item.get("event") or "").startswith("handoff_")
         ),
-        "conflict_count": sum(
-            1 for item in history
-            if item.get("event") == "conflict"
-        ),
+        "conflict_count": sum(1 for item in history if item.get("event") == "conflict"),
         "leases": leases,
         "pending_handoffs": handoffs,
         "history": history,
@@ -279,22 +275,14 @@ def _append_history(
         "owner": owner,
         "at": time.time(),
     }
-    item.update({
-        key: value
-        for key, value in extra.items()
-        if value is not None and value != ""
-    })
+    item.update({key: value for key, value in extra.items() if value is not None and value != ""})
     history.append(item)
 
 
 def _dict_values(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, dict):
         return []
-    return [
-        dict(item)
-        for item in value.values()
-        if isinstance(item, dict)
-    ]
+    return [dict(item) for item in value.values() if isinstance(item, dict)]
 
 
 __all__ = [

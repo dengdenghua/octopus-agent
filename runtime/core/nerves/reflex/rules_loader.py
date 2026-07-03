@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -46,8 +45,8 @@ def _resolve_case_sensitive(raw: Any) -> bool:
             return False
         if n != "IGNORECASE":
             _LOG.warning(
-                "reflex rule: regex flag %r isn't supported by the "
-                "current matcher · ignored", name,
+                "reflex rule: regex flag %r isn't supported by the current matcher · ignored",
+                name,
             )
     return True
 
@@ -93,7 +92,8 @@ def _build_matcher(entry: dict[str, Any]) -> Reflex | None:
         itype = entry.get("intent_type")
         if not isinstance(itype, str) or not itype:
             _LOG.warning(
-                "reflex %s: deterministic needs 'intent_type', skipped", rid,
+                "reflex %s: deterministic needs 'intent_type', skipped",
+                rid,
             )
             return None
         return DeterministicMatcher(
@@ -171,10 +171,7 @@ def _attach_variants(matcher: Reflex, entry: dict[str, Any]) -> None:
         if isinstance(per_actor_raw, dict):
             pinned: dict[str, str] = {}
             for actor, vid in per_actor_raw.items():
-                if (
-                    isinstance(actor, str) and isinstance(vid, str)
-                    and vid in valid_ids
-                ):
+                if isinstance(actor, str) and isinstance(vid, str) and vid in valid_ids:
                     pinned[actor.strip()] = vid.strip()
             if pinned:
                 matcher._per_actor_variant = pinned  # type: ignore[attr-defined]
@@ -208,6 +205,7 @@ def load_rules_from_file(path: str | Path) -> list[Reflex]:
     try:
         if path.suffix.lower() in (".yaml", ".yml"):
             import yaml  # type: ignore[import]
+
             data = yaml.safe_load(text) or {}
         else:
             data = json.loads(text)
@@ -245,6 +243,7 @@ def load_rules_from_file(path: str | Path) -> list[Reflex]:
             ReflexBroadcaster,
             set_default_broadcaster,
         )
+
         set_default_broadcaster(ReflexBroadcaster.from_yaml_top_level(data))
     except Exception:  # noqa: BLE001
         pass
@@ -258,6 +257,7 @@ def load_rules_from_file(path: str | Path) -> list[Reflex]:
             configure_slm,
             get_default_fuzzy_cache,
         )
+
         if isinstance(data, dict):
             slm_cfg = data.get("slm") if isinstance(data.get("slm"), dict) else {}
             configure_slm(

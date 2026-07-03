@@ -21,6 +21,7 @@ Usage
             # Only one session can be here at a time
             await do_something()
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -71,13 +72,10 @@ class PromiseGate:
         """
         # Check session isolation before waiting
         if self._lock.locked() and (
-            session_id
-            and self._owner_session_id
-            and session_id != self._owner_session_id
+            session_id and self._owner_session_id and session_id != self._owner_session_id
         ):
             raise GateError(
-                f"Session '{session_id}' cannot acquire gate "
-                f"owned by '{self._owner_session_id}'"
+                f"Session '{session_id}' cannot acquire gate owned by '{self._owner_session_id}'"
             )
 
         await self._lock.acquire()
@@ -191,9 +189,7 @@ class SessionLock:
                 if os.path.exists(self._lock_file_path):
                     os.unlink(self._lock_file_path)
             except OSError:
-                _logger.warning(
-                    "failed to remove lock file: %s", self._lock_file_path
-                )
+                _logger.warning("failed to remove lock file: %s", self._lock_file_path)
 
     @classmethod
     def cleanup_stale_lock(cls, lock_file_path: str) -> bool:

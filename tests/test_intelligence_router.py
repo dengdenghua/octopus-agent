@@ -132,10 +132,13 @@ def test_subscription_due_uses_fixed_shanghai_fallback_without_tzdata(monkeypatc
         "last_run": None,
     }
 
-    assert router._subscription_due(
-        subscription,
-        now=datetime(2026, 6, 3, 2, 30, tzinfo=UTC),
-    ) is True
+    assert (
+        router._subscription_due(
+            subscription,
+            now=datetime(2026, 6, 3, 2, 30, tzinfo=UTC),
+        )
+        is True
+    )
 
 
 def test_intelligence_subscription_run_creates_report(tmp_path: Path) -> None:

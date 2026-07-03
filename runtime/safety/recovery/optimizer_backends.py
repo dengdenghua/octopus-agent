@@ -138,12 +138,14 @@ def optimize_with_backend(
 ) -> Any:
     cfg = config or OptimizerRunConfig()
     backend = get_optimizer_backend(cfg.backend)
-    return backend.optimize(OptimizerRunContext(
-        seed_prompt=seed_prompt,
-        journal=journal,
-        router=router,
-        config=cfg,
-    ))
+    return backend.optimize(
+        OptimizerRunContext(
+            seed_prompt=seed_prompt,
+            journal=journal,
+            router=router,
+            config=cfg,
+        )
+    )
 
 
 __all__ = [

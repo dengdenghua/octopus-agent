@@ -119,9 +119,7 @@ def main() -> int:
         name: compute_missing(used_keys, keys) for name, keys in locale_key_map.items()
     }
 
-    unused_by_locale = {
-        name: sorted(keys - used_keys) for name, keys in locale_key_map.items()
-    }
+    unused_by_locale = {name: sorted(keys - used_keys) for name, keys in locale_key_map.items()}
 
     parity_missing: dict[str, list[str]] = {}
     locale_names = list(locale_key_map.keys())

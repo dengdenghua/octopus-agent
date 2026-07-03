@@ -25,6 +25,7 @@
                    feature_flags / idempotency / identity_filter / retry /
                    workspaces）
 """
+
 from __future__ import annotations
 
 _LAZY_ATTRS = {
@@ -96,6 +97,7 @@ def __getattr__(name: str):
         globals()[name] = value
         return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "DomainEvent",

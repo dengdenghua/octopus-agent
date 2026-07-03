@@ -7,6 +7,7 @@ bus/operator) scales the spawn ceiling up to a higher deep-mode cap. With no
 budget the conservative `n*rounds`/48 default is unchanged. Both policy helpers
 are pure, so this is verified without spawning agents.
 """
+
 from __future__ import annotations
 
 from runtime.execution.suckers.delegation_budget import (

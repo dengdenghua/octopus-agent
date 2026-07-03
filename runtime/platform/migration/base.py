@@ -9,6 +9,7 @@ step built on top of these plans.
 Stdlib-only and side-effect-free on purpose, so the planner is safe to run
 anywhere and easy to unit-test against temp directories.
 """
+
 from __future__ import annotations
 
 from collections import Counter
@@ -20,13 +21,13 @@ from pathlib import Path
 class MigrationItem:
     """One importable artifact discovered in a source tool."""
 
-    kind: str          # skill | memory | rule | mcp_server | agent | command
+    kind: str  # skill | memory | rule | mcp_server | agent | command
     name: str
-    source: str        # codex | claude | ...
+    source: str  # codex | claude | ...
     summary: str = ""
-    origin: str = ""   # absolute path it was found at
-    portable: bool = True            # can octopus use it as-is?
-    needs: tuple[str, ...] = ()      # required to actually work, e.g. ("credentials",)
+    origin: str = ""  # absolute path it was found at
+    portable: bool = True  # can octopus use it as-is?
+    needs: tuple[str, ...] = ()  # required to actually work, e.g. ("credentials",)
 
 
 @dataclass(frozen=True)
@@ -35,7 +36,7 @@ class MigrationPlan:
 
     source: str
     items: tuple[MigrationItem, ...] = ()
-    available: bool = True           # was the source tool even installed?
+    available: bool = True  # was the source tool even installed?
 
     def kinds(self) -> dict[str, int]:
         return dict(Counter(i.kind for i in self.items))

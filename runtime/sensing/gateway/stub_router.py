@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -43,7 +42,6 @@ def _stub_api_enabled(enabled: bool | None) -> bool:
 
 
 class _StubRoute(APIRoute):
-
     def get_route_handler(self) -> Callable:
         original = super().get_route_handler()
         route_path = self.path
@@ -171,22 +169,24 @@ def create_stub_router(
 
     @router.get("/api/account/profile")
     def _profile() -> dict[str, Any]:
-        return _envelope({
-            "user_id": "anonymous",
-            "username": "anonymous",
-            "display_name": "Guest",
-            "email": None,
-            "avatar_url": None,
-            "bio": None,
-            "timezone": "UTC",
-            "language": "en",
-            "linked_accounts": [],
-            "privacy_mode": False,
-            "data_collection_consent": False,
-            "marketing_emails": False,
-            "created_at": "1970-01-01T00:00:00Z",
-            "updated_at": "1970-01-01T00:00:00Z",
-        })
+        return _envelope(
+            {
+                "user_id": "anonymous",
+                "username": "anonymous",
+                "display_name": "Guest",
+                "email": None,
+                "avatar_url": None,
+                "bio": None,
+                "timezone": "UTC",
+                "language": "en",
+                "linked_accounts": [],
+                "privacy_mode": False,
+                "data_collection_consent": False,
+                "marketing_emails": False,
+                "created_at": "1970-01-01T00:00:00Z",
+                "updated_at": "1970-01-01T00:00:00Z",
+            }
+        )
 
     @router.patch("/api/account/profile")
     def _profile_patch(body: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -194,13 +194,15 @@ def create_stub_router(
 
     @router.get("/api/account/privacy")
     def _privacy() -> dict[str, Any]:
-        return _envelope({
-            "privacy_mode": False,
-            "data_collection_consent": False,
-            "share_usage_analytics": False,
-            "allow_community_features": False,
-            "public_profile": False,
-        })
+        return _envelope(
+            {
+                "privacy_mode": False,
+                "data_collection_consent": False,
+                "share_usage_analytics": False,
+                "allow_community_features": False,
+                "public_profile": False,
+            }
+        )
 
     @router.patch("/api/account/privacy")
     def _privacy_patch(body: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -228,40 +230,60 @@ def create_stub_router(
 
     @router.get("/api/account/usage/events")
     def _usage_events() -> dict[str, Any]:
-        return _envelope({"data": [], "pagination": {
-            "total": 0, "page": 1, "page_size": 20, "total_pages": 0,
-        }})
+        return _envelope(
+            {
+                "data": [],
+                "pagination": {
+                    "total": 0,
+                    "page": 1,
+                    "page_size": 20,
+                    "total_pages": 0,
+                },
+            }
+        )
 
     @router.get("/api/account/usage/summary")
     def _usage_summary() -> dict[str, Any]:
-        return _envelope({
-            "user_id": "anonymous",
-            "period": "month",
-            "total_cost": "0",
-            "total_requests": 0,
-            "total_tokens": 0,
-            "by_model": {},
-            "by_event_type": {},
-            "most_used_model": None,
-        })
+        return _envelope(
+            {
+                "user_id": "anonymous",
+                "period": "month",
+                "total_cost": "0",
+                "total_requests": 0,
+                "total_tokens": 0,
+                "by_model": {},
+                "by_event_type": {},
+                "most_used_model": None,
+            }
+        )
 
     @router.get("/api/account/billing")
     def _billing() -> dict[str, Any]:
-        return _envelope({
-            "user_id": "anonymous",
-            "current_balance": "0",
-            "bonus_balance": "0",
-            "current_period_cost": "0",
-            "last_invoice_date": None,
-            "last_invoice_amount": None,
-            "next_billing_date": None,
-        })
+        return _envelope(
+            {
+                "user_id": "anonymous",
+                "current_balance": "0",
+                "bonus_balance": "0",
+                "current_period_cost": "0",
+                "last_invoice_date": None,
+                "last_invoice_amount": None,
+                "next_billing_date": None,
+            }
+        )
 
     @router.get("/api/account/billing/history")
     def _billing_history() -> dict[str, Any]:
-        return _envelope({"data": [], "pagination": {
-            "total": 0, "page": 1, "page_size": 20, "total_pages": 0,
-        }})
+        return _envelope(
+            {
+                "data": [],
+                "pagination": {
+                    "total": 0,
+                    "page": 1,
+                    "page_size": 20,
+                    "total_pages": 0,
+                },
+            }
+        )
 
     @router.get("/api/account/billing/invoices/{invoice_id}")
     def _invoice(invoice_id: str) -> dict[str, Any]:
@@ -310,14 +332,16 @@ def create_stub_router(
             "last_invoice_amount": None,
             "next_billing_date": None,
         }
-        return _envelope({
-            "profile": profile,
-            "subscription": None,
-            "usage": None,
-            "billing_summary": billing,
-            "recent_usage": [],
-            "recent_billing": [],
-        })
+        return _envelope(
+            {
+                "profile": profile,
+                "subscription": None,
+                "usage": None,
+                "billing_summary": billing,
+                "recent_usage": [],
+                "recent_billing": [],
+            }
+        )
 
     # ─── Memory ────────────────────────────────────────
     _empty_memory = {

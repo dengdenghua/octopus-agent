@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import importlib
@@ -103,17 +102,13 @@ def load_skills_from_dir(
 def _parse_frontmatter(text: str, source: str) -> dict[str, Any]:
     m = _FRONTMATTER_PATTERN.match(text)
     if not m:
-        raise SkillLoadError(
-            f"{source}: no YAML frontmatter found (expected '---' delimiters)"
-        )
+        raise SkillLoadError(f"{source}: no YAML frontmatter found (expected '---' delimiters)")
     try:
         data = yaml.safe_load(m.group(1))
     except yaml.YAMLError as e:
         raise SkillLoadError(f"{source}: YAML parse failed: {e}") from e
     if not isinstance(data, dict):
-        raise SkillLoadError(
-            f"{source}: frontmatter must be a mapping, got {type(data).__name__}"
-        )
+        raise SkillLoadError(f"{source}: frontmatter must be a mapping, got {type(data).__name__}")
     return data
 
 
@@ -126,9 +121,7 @@ def _parse_tests(raw_tests: list[Any], source: str) -> list[SkillTestCase]:
             )
         expect_raw = raw.get("expect") or {}
         if not isinstance(expect_raw, dict):
-            raise SkillLoadError(
-                f"{source}: tests[{i}].expect must be mapping"
-            )
+            raise SkillLoadError(f"{source}: tests[{i}].expect must be mapping")
         try:
             expect = SkillExpect(**expect_raw)
             case = SkillTestCase(
@@ -157,14 +150,10 @@ def _resolve_handler(spec: str, *, base_dir: Path) -> Any:
         try:
             module = importlib.import_module(module_part)
         except ImportError as e:
-            raise SkillLoadError(
-                f"cannot import {module_part!r}: {e}"
-            ) from e
+            raise SkillLoadError(f"cannot import {module_part!r}: {e}") from e
 
     if not hasattr(module, func_name):
-        raise SkillLoadError(
-            f"module {module_part!r} has no attribute {func_name!r}"
-        )
+        raise SkillLoadError(f"module {module_part!r} has no attribute {func_name!r}")
     fn = getattr(module, func_name)
     if not callable(fn):
         raise SkillLoadError(f"{spec}: target is not callable")

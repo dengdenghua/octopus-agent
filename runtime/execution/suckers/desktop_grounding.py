@@ -36,10 +36,7 @@ def _macos_window_grounding(max_windows: int) -> str:
     except Exception:  # noqa: BLE001 — pyobjc absent → no grounding
         return ""
     try:
-        opts = (
-            Quartz.kCGWindowListOptionOnScreenOnly
-            | Quartz.kCGWindowListExcludeDesktopElements
-        )
+        opts = Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements
         windows = Quartz.CGWindowListCopyWindowInfo(opts, Quartz.kCGNullWindowID) or []
     except Exception:  # noqa: BLE001 — Quartz call failed → no grounding
         return ""
@@ -71,11 +68,24 @@ def _macos_window_grounding(max_windows: int) -> str:
 
 
 # Roles worth pointing the planner at — things you can click / type into.
-_AX_ACTIONABLE = frozenset({
-    "AXButton", "AXTextField", "AXTextArea", "AXCheckBox", "AXRadioButton",
-    "AXMenuItem", "AXMenuButton", "AXPopUpButton", "AXLink", "AXComboBox",
-    "AXSlider", "AXTab", "AXDisclosureTriangle", "AXSearchField",
-})
+_AX_ACTIONABLE = frozenset(
+    {
+        "AXButton",
+        "AXTextField",
+        "AXTextArea",
+        "AXCheckBox",
+        "AXRadioButton",
+        "AXMenuItem",
+        "AXMenuButton",
+        "AXPopUpButton",
+        "AXLink",
+        "AXComboBox",
+        "AXSlider",
+        "AXTab",
+        "AXDisclosureTriangle",
+        "AXSearchField",
+    }
+)
 
 
 def ax_control_grounding(max_elements: int = 25, max_depth: int = 14) -> str:
@@ -99,7 +109,9 @@ def ax_control_grounding(max_elements: int = 25, max_depth: int = 14) -> str:
         app_name = str(front.localizedName() or "frontmost app")
         app_el = AS.AXUIElementCreateApplication(front.processIdentifier())
         err, windows = AS.AXUIElementCopyAttributeValue(
-            app_el, AS.kAXWindowsAttribute, None,
+            app_el,
+            AS.kAXWindowsAttribute,
+            None,
         )
         if err != 0 or not windows:
             return ""
@@ -150,7 +162,7 @@ def ax_control_grounding(max_elements: int = 25, max_depth: int = 14) -> str:
             if center is not None:
                 text = str(label).strip().replace("\n", " ")[:40]
                 lines.append(f"- {role[2:]} {text!r} @ ({center[0]},{center[1]})")
-        for child in (_attr(el, AS.kAXChildrenAttribute) or []):
+        for child in _attr(el, AS.kAXChildrenAttribute) or []:
             if len(lines) >= max_elements:
                 break
             _walk(child, depth + 1)
@@ -165,18 +177,26 @@ def ax_control_grounding(max_elements: int = 25, max_depth: int = 14) -> str:
 
     if not lines:
         return ""
-    return (
-        f"Actionable UI in '{app_name}' (role label @ center x,y):\n"
-        + "\n".join(lines)
-    )
+    return f"Actionable UI in '{app_name}' (role label @ center x,y):\n" + "\n".join(lines)
 
 
 # Actionable UIA control types (Windows). Mirrors ``_AX_ACTIONABLE`` — the
 # kinds a user actually clicks/types into, so the planner gets click targets.
-_UIA_ACTIONABLE = frozenset({
-    "Button", "Edit", "CheckBox", "ComboBox", "RadioButton", "Hyperlink",
-    "MenuItem", "ListItem", "TabItem", "Slider", "SplitButton",
-})
+_UIA_ACTIONABLE = frozenset(
+    {
+        "Button",
+        "Edit",
+        "CheckBox",
+        "ComboBox",
+        "RadioButton",
+        "Hyperlink",
+        "MenuItem",
+        "ListItem",
+        "TabItem",
+        "Slider",
+        "SplitButton",
+    }
+)
 
 
 def _format_uia_grounding(tree: object, max_elements: int) -> str:
@@ -207,10 +227,7 @@ def _format_uia_grounding(tree: object, max_elements: int) -> str:
         lines.append(f"- {kind} {label!r} @ ({center['x']},{center['y']})")
     if not lines:
         return ""
-    return (
-        f"Actionable UI in '{app_name}' (control label @ center x,y):\n"
-        + "\n".join(lines)
-    )
+    return f"Actionable UI in '{app_name}' (control label @ center x,y):\n" + "\n".join(lines)
 
 
 def uia_control_grounding(max_elements: int = 25, max_depth: int = 6) -> str:
@@ -225,7 +242,9 @@ def uia_control_grounding(max_elements: int = 25, max_depth: int = 6) -> str:
         )
 
         tree = _computer_uia_tree(
-            root="foreground", max_depth=max_depth, max_nodes=200,
+            root="foreground",
+            max_depth=max_depth,
+            max_nodes=200,
         )
     except Exception:  # noqa: BLE001 — uiautomation absent / load failed
         return ""

@@ -128,10 +128,13 @@ def test_router_requires_auth_when_enabled() -> None:
     client = TestClient(_secured_app())
 
     assert client.get("/api/computer/status").status_code == 401
-    assert client.get(
-        "/api/computer/status",
-        headers={"Authorization": "Bearer sk-alice"},
-    ).status_code == 200
+    assert (
+        client.get(
+            "/api/computer/status",
+            headers={"Authorization": "Bearer sk-alice"},
+        ).status_code
+        == 200
+    )
 
 
 def test_status_reports_runtime_readiness_with_degraded_uia(monkeypatch):
@@ -217,10 +220,14 @@ def test_plan_actions_uses_uia_grounding(monkeypatch):
     monkeypatch.setattr(computer_uia_skills, "uiautomation", _FakeUia())
     monkeypatch.setattr(computer_uia_skills, "_UIA_LOAD_ERROR", None)
 
-    data = TestClient(_app()).post(
-        "/api/computer/actions/plan",
-        json={"goal": "click Router", "capture": False},
-    ).json()
+    data = (
+        TestClient(_app())
+        .post(
+            "/api/computer/actions/plan",
+            json={"goal": "click Router", "capture": False},
+        )
+        .json()
+    )
     assert data["ok"] is True
     action = data["suggestions"][0]["action"]
     assert action["action"] == "click"
@@ -249,10 +256,14 @@ def test_plan_actions_prefers_interactive_uia_match(monkeypatch):
     monkeypatch.setattr(computer_uia_skills, "uiautomation", _FakeRankedUia())
     monkeypatch.setattr(computer_uia_skills, "_UIA_LOAD_ERROR", None)
 
-    data = TestClient(_app()).post(
-        "/api/computer/actions/plan",
-        json={"goal": "click Router", "capture": False},
-    ).json()
+    data = (
+        TestClient(_app())
+        .post(
+            "/api/computer/actions/plan",
+            json={"goal": "click Router", "capture": False},
+        )
+        .json()
+    )
     action = data["suggestions"][0]["action"]
     assert action["x"] == 360
     assert action["y"] == 230
@@ -280,9 +291,7 @@ def test_execute_claims_computer_lease(monkeypatch):
             "lease_owner_label": "Project A",
         },
     ).json()
-    assert preview["preview_contract"]["schema"] == (
-        "octopus.computer_preview_contract.v1"
-    )
+    assert preview["preview_contract"]["schema"] == ("octopus.computer_preview_contract.v1")
     assert preview["preview_contract"]["requires_execute_token"] is True
     result = client.post(
         "/api/computer/actions/execute",
@@ -292,7 +301,10 @@ def test_execute_claims_computer_lease(monkeypatch):
     assert result["ok"] is True
     assert result["preview_contract"]["contract_id"] == preview["preview_contract"]["contract_id"]
     assert result["execution_proof"]["schema"] == "octopus.computer_execution_proof.v1"
-    assert result["execution_proof"]["preview_contract_id"] == preview["preview_contract"]["contract_id"]
+    assert (
+        result["execution_proof"]["preview_contract_id"]
+        == preview["preview_contract"]["contract_id"]
+    )
     assert result["lease"]["held"] is True
     assert result["lease"]["owner_id"] == "project-a"
     status = client.get("/api/computer/status").json()
@@ -309,8 +321,9 @@ def test_execute_claims_computer_lease(monkeypatch):
     ]
     assert activity["items"][-1]["action"]["action"] == "move"
     assert activity["items"][-1]["ok"] is True
-    assert activity["items"][-1]["proof"]["execution_proof"]["proof_id"] == (
-        result["execution_proof"]["proof_id"]
+    assert (
+        activity["items"][-1]["proof"]["execution_proof"]["proof_id"]
+        == (result["execution_proof"]["proof_id"])
     )
 
     replay = client.get("/api/computer/activity/replay-case").json()
@@ -409,16 +422,11 @@ def test_computer_ground_schema_helper_finishes_control_action(tmp_path, monkeyp
 
     replay = client.get("/api/control-sessions/ctrl-ground-helper/replay").json()
     ground_actions = [
-        action
-        for action in replay["actions"]
-        if action["action_type"] == "computer_ground"
+        action for action in replay["actions"] if action["action_type"] == "computer_ground"
     ]
     assert ground_actions
     assert ground_actions[0]["status"] == "done"
-    assert any(
-        evidence["summary"] == "schema helper returned"
-        for evidence in replay["evidence"]
-    )
+    assert any(evidence["summary"] == "schema helper returned" for evidence in replay["evidence"])
 
 
 def test_computer_activity_replay_case_can_queue_operator_review(
@@ -510,9 +518,7 @@ def test_failed_uia_replay_assertion_enters_operator_review_queue(
     assert item["target_bucket"] == "browser_desktop_replay"
     assert item["metadata"]["replay_assertion"]["ok"] is False
     assert item["metadata"]["trace_id"] == result["action"]["replay_assertion"]["trace_id"]
-    assert item["metadata"]["source_trace"]["schema"] == (
-        "octopus.computer_uia_grounding_trace.v1"
-    )
+    assert item["metadata"]["source_trace"]["schema"] == ("octopus.computer_uia_grounding_trace.v1")
     assert item["metadata"]["matched_control"]["automation_id"] == "routerButton"
 
     summary = ReviewQueue(tmp_path / "data" / "review_queue.json").summary()
@@ -758,3 +764,61 @@ def test_release_lease_conflict_includes_recovery_hint(monkeypatch):
     assert detail["diagnostic"]["metadata"]["requested_owner_id"] == "project-b"
     assert detail["diagnostic"]["metadata"]["current_owner_id"] == "project-a"
     assert detail["recommended_actions"] == ["release_with_owner_or_force"]
+
+
+def _claim_race_round(state: Any, workers: int) -> tuple[list[str], int]:
+    """One barrier-synchronized burst of concurrent lease claims.
+
+    Returns (winners, conflict_count). With the lease lock, exactly one thread
+    finds the lease free and claims it; the rest observe another owner → 409.
+    """
+    import threading
+
+    from fastapi import HTTPException
+
+    from runtime.sensing.gateway.computer_lease import _claim_lease
+
+    barrier = threading.Barrier(workers)
+    tally_lock = threading.Lock()
+    wins: list[str] = []
+    conflicts = 0
+
+    def _attempt(idx: int) -> None:
+        nonlocal conflicts
+        owner = {"owner_id": f"op-{idx}", "owner_label": f"Op {idx}"}
+        barrier.wait()
+        try:
+            _claim_lease(state, owner)
+        except HTTPException as exc:
+            assert exc.status_code == 409
+            with tally_lock:
+                conflicts += 1
+        else:
+            with tally_lock:
+                wins.append(owner["owner_id"])
+
+    threads = [threading.Thread(target=_attempt, args=(i,)) for i in range(workers)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    return wins, conflicts
+
+
+def test_lease_claim_is_race_free_under_concurrency() -> None:
+    # Regression for the lease check-then-act race: the router's endpoints are
+    # sync ``def`` (FastAPI threadpool), so concurrent claims must be serialized
+    # by state.lease_lock. Without the lock the empty-lease check lets every
+    # thread through and all "win"; with it, exactly one wins per round.
+    from runtime.sensing.gateway.computer_lease import _release_lease
+    from runtime.sensing.gateway.computer_router_state import ComputerRouterState
+
+    state = ComputerRouterState()
+    workers = 16
+
+    for round_idx in range(40):
+        wins, conflicts = _claim_race_round(state, workers)
+        assert len(wins) == 1, f"round {round_idx}: {len(wins)} winners (expected 1): {wins}"
+        assert conflicts == workers - 1
+        # Force-release the single holder so the next round starts clean.
+        _release_lease(state, {"owner_id": wins[0], "owner_label": ""}, force=True)

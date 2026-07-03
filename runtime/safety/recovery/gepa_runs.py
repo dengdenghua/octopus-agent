@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -18,8 +17,9 @@ DEFAULT_MAX_RUNS = 20
 @dataclass
 class GepaRunRecord:
     """One persisted GEPA run · summarised so the store stays small."""
-    ts: float                                  # unix seconds
-    trigger: str                               # "manual" | "auto_propose" | other
+
+    ts: float  # unix seconds
+    trigger: str  # "manual" | "auto_propose" | other
     recipe_id: str | None
     iterations_run: int
     elapsed_s: float
@@ -60,7 +60,8 @@ class GepaRunStore:
 
     def __init__(
         self,
-        *, max_runs: int = DEFAULT_MAX_RUNS,
+        *,
+        max_runs: int = DEFAULT_MAX_RUNS,
         mirror_path: str | None = None,
     ) -> None:
         self._max = max_runs
@@ -84,7 +85,7 @@ class GepaRunStore:
         """Newest first."""
         with self._lock:
             # deque iteration order is oldest→newest; reverse for UI.
-            return list(reversed(self._runs))[:max(1, int(limit))]
+            return list(reversed(self._runs))[: max(1, int(limit))]
 
     def find(self, *, ts: float) -> GepaRunRecord | None:
         """Find a run by timestamp · used by the apply endpoint to
@@ -146,11 +147,23 @@ def record_from_result(
     for h in history[:30]:
         if not isinstance(h, dict):
             continue
-        summary.append({
-            k: v for k, v in h.items()
-            if k in ("iter", "improved", "child_avg", "front_size",
-                     "rationale", "skipped", "reason", "early_stop")
-        })
+        summary.append(
+            {
+                k: v
+                for k, v in h.items()
+                if k
+                in (
+                    "iter",
+                    "improved",
+                    "child_avg",
+                    "front_size",
+                    "rationale",
+                    "skipped",
+                    "reason",
+                    "early_stop",
+                )
+            }
+        )
     native_evaluation = _compact_native_evaluation(
         getattr(result, "native_evaluation", None),
     )
@@ -176,18 +189,10 @@ def record_from_result(
         iterations_run=int(getattr(result, "iterations_run", 0) or 0),
         elapsed_s=float(getattr(result, "elapsed_s", 0.0) or 0.0),
         front_size=len(getattr(result, "final_front", []) or []),
-        best_candidate_id=(
-            getattr(best, "candidate_id", None) if best else None
-        ),
-        best_avg_score=(
-            float(getattr(best, "avg_score", 0.0)) if best else None
-        ),
-        best_rationale=(
-            str(getattr(best, "rationale", ""))[:300] if best else ""
-        ),
-        best_prompt=(
-            str(getattr(best, "prompt", ""))[:2000] if best else ""
-        ),
+        best_candidate_id=(getattr(best, "candidate_id", None) if best else None),
+        best_avg_score=(float(getattr(best, "avg_score", 0.0)) if best else None),
+        best_rationale=(str(getattr(best, "rationale", ""))[:300] if best else ""),
+        best_prompt=(str(getattr(best, "prompt", ""))[:2000] if best else ""),
         history_summary=summary,
         native_evaluation=native_evaluation,
         native_replay=native_replay,
@@ -206,17 +211,19 @@ def _compact_native_evaluation(value: Any) -> list[dict[str, Any]]:
     for item in value[:5]:
         if not isinstance(item, dict):
             continue
-        rows.append({
-            "candidate_id": item.get("candidate_id"),
-            "total": item.get("total"),
-            "verdict": item.get("verdict"),
-            "task_score": item.get("task_score"),
-            "constraint_score": item.get("constraint_score"),
-            "failure_coverage": item.get("failure_coverage"),
-            "positive_preservation": item.get("positive_preservation"),
-            "efficiency": item.get("efficiency"),
-            "reasons": list(item.get("reasons") or [])[:5],
-        })
+        rows.append(
+            {
+                "candidate_id": item.get("candidate_id"),
+                "total": item.get("total"),
+                "verdict": item.get("verdict"),
+                "task_score": item.get("task_score"),
+                "constraint_score": item.get("constraint_score"),
+                "failure_coverage": item.get("failure_coverage"),
+                "positive_preservation": item.get("positive_preservation"),
+                "efficiency": item.get("efficiency"),
+                "reasons": list(item.get("reasons") or [])[:5],
+            }
+        )
     return rows
 
 
@@ -242,21 +249,25 @@ def _compact_native_replay(value: Any) -> dict[str, Any]:
                         score = 0.0
                     if score >= 0.55:
                         continue
-                    weak_cases.append({
-                        "case_id": result.get("case_id"),
-                        "kind": result.get("kind"),
-                        "score": result.get("score"),
-                        "reason": result.get("reason"),
-                        "missing_signals": list(result.get("missing_signals") or [])[:5],
-                    })
+                    weak_cases.append(
+                        {
+                            "case_id": result.get("case_id"),
+                            "kind": result.get("kind"),
+                            "score": result.get("score"),
+                            "reason": result.get("reason"),
+                            "missing_signals": list(result.get("missing_signals") or [])[:5],
+                        }
+                    )
                     if len(weak_cases) >= 5:
                         break
-            compact_candidates.append({
-                "candidate_id": candidate.get("candidate_id"),
-                "total": candidate.get("total"),
-                "reasons": list(candidate.get("reasons") or [])[:5],
-                "weak_cases": weak_cases,
-            })
+            compact_candidates.append(
+                {
+                    "candidate_id": candidate.get("candidate_id"),
+                    "total": candidate.get("total"),
+                    "reasons": list(candidate.get("reasons") or [])[:5],
+                    "weak_cases": weak_cases,
+                }
+            )
     return {
         "case_count": len(cases) if isinstance(cases, list) else 0,
         "candidates": compact_candidates,
@@ -301,22 +312,26 @@ def _compact_native_sandbox_replay(value: Any) -> dict[str, Any]:
                         score = 0.0
                     if score >= 0.55 and result.get("sandbox_passed") is not False:
                         continue
-                    weak_cases.append({
-                        "case_id": result.get("case_id"),
-                        "kind": result.get("kind"),
-                        "score": result.get("score"),
-                        "sandbox_passed": result.get("sandbox_passed"),
-                        "reason": result.get("reason"),
-                    })
+                    weak_cases.append(
+                        {
+                            "case_id": result.get("case_id"),
+                            "kind": result.get("kind"),
+                            "score": result.get("score"),
+                            "sandbox_passed": result.get("sandbox_passed"),
+                            "reason": result.get("reason"),
+                        }
+                    )
                     if len(weak_cases) >= 5:
                         break
-            compact_candidates.append({
-                "candidate_id": candidate.get("candidate_id"),
-                "total": candidate.get("total"),
-                "passed": candidate.get("passed"),
-                "reasons": list(candidate.get("reasons") or [])[:5],
-                "weak_cases": weak_cases,
-            })
+            compact_candidates.append(
+                {
+                    "candidate_id": candidate.get("candidate_id"),
+                    "total": candidate.get("total"),
+                    "passed": candidate.get("passed"),
+                    "reasons": list(candidate.get("reasons") or [])[:5],
+                    "weak_cases": weak_cases,
+                }
+            )
     return {
         "case_count": value.get("case_count") or 0,
         "candidates": compact_candidates,
@@ -341,23 +356,27 @@ def _compact_native_turn_replay(value: Any) -> dict[str, Any]:
                         continue
                     if result.get("passed") is True:
                         continue
-                    weak_cases.append({
-                        "case_id": result.get("case_id"),
-                        "kind": result.get("kind"),
-                        "score": result.get("score"),
-                        "passed": result.get("passed"),
-                        "reason": result.get("reason"),
-                        "missing_signals": list(result.get("missing_signals") or [])[:5],
-                    })
+                    weak_cases.append(
+                        {
+                            "case_id": result.get("case_id"),
+                            "kind": result.get("kind"),
+                            "score": result.get("score"),
+                            "passed": result.get("passed"),
+                            "reason": result.get("reason"),
+                            "missing_signals": list(result.get("missing_signals") or [])[:5],
+                        }
+                    )
                     if len(weak_cases) >= 5:
                         break
-            compact_candidates.append({
-                "candidate_id": candidate.get("candidate_id"),
-                "total": candidate.get("total"),
-                "passed": candidate.get("passed"),
-                "reasons": list(candidate.get("reasons") or [])[:5],
-                "weak_cases": weak_cases,
-            })
+            compact_candidates.append(
+                {
+                    "candidate_id": candidate.get("candidate_id"),
+                    "total": candidate.get("total"),
+                    "passed": candidate.get("passed"),
+                    "reasons": list(candidate.get("reasons") or [])[:5],
+                    "weak_cases": weak_cases,
+                }
+            )
     return {
         "case_count": len(cases) if isinstance(cases, list) else 0,
         "candidates": compact_candidates,
@@ -392,11 +411,18 @@ def enrich_run_records(
         if ledger_path:
             from runtime.safety.evolution.proposal_ledger import ProposalLedger, ProposalStatus
 
-            for record in reversed(ProposalLedger(ledger_path).query(
-                kind="prompt_optimizer_winner",
-                limit=5_000,
-            )):
-                if record.status not in (ProposalStatus.PROPOSED, ProposalStatus.ACCEPTED, ProposalStatus.APPLIED, ProposalStatus.ROLLED_BACK):
+            for record in reversed(
+                ProposalLedger(ledger_path).query(
+                    kind="prompt_optimizer_winner",
+                    limit=5_000,
+                )
+            ):
+                if record.status not in (
+                    ProposalStatus.PROPOSED,
+                    ProposalStatus.ACCEPTED,
+                    ProposalStatus.APPLIED,
+                    ProposalStatus.ROLLED_BACK,
+                ):
                     continue
                 metadata = record.metadata if isinstance(record.metadata, dict) else {}
                 candidate_id = str(metadata.get("candidate_id") or "").strip() or None
@@ -414,24 +440,34 @@ def enrich_run_records(
         key = (run.recipe_id or None, run.best_candidate_id or None)
         canary = canary_by_key.get(key)
         proposal = proposal_by_key.get(key)
-        canary_metadata = canary.metadata if canary is not None and isinstance(canary.metadata, dict) else {}
-        proposal_metadata = proposal.metadata if proposal is not None and isinstance(proposal.metadata, dict) else {}
+        canary_metadata = (
+            canary.metadata if canary is not None and isinstance(canary.metadata, dict) else {}
+        )
+        proposal_metadata = (
+            proposal.metadata
+            if proposal is not None and isinstance(proposal.metadata, dict)
+            else {}
+        )
         winner_canary_phase = canary.phase.value if canary is not None else None
         winner_proposal_status = proposal.status.value if proposal is not None else None
-        lifecycle_state = winner_canary_phase or winner_proposal_status or ("applied" if run.applied else None)
-        row.update({
-            "winner_proposal_id": proposal.proposal_id if proposal is not None else None,
-            "winner_proposal_status": winner_proposal_status,
-            "winner_proposal_kind": proposal.kind if proposal is not None else None,
-            "winner_canary_key": canary.skill_name if canary is not None else None,
-            "winner_canary_phase": winner_canary_phase,
-            "winner_rollback_reason": (
-                canary_metadata.get("last_rollback_reason")
-                or proposal_metadata.get("last_rollback_reason")
-                or None
-            ),
-            "winner_lifecycle_state": lifecycle_state,
-        })
+        lifecycle_state = (
+            winner_canary_phase or winner_proposal_status or ("applied" if run.applied else None)
+        )
+        row.update(
+            {
+                "winner_proposal_id": proposal.proposal_id if proposal is not None else None,
+                "winner_proposal_status": winner_proposal_status,
+                "winner_proposal_kind": proposal.kind if proposal is not None else None,
+                "winner_canary_key": canary.skill_name if canary is not None else None,
+                "winner_canary_phase": winner_canary_phase,
+                "winner_rollback_reason": (
+                    canary_metadata.get("last_rollback_reason")
+                    or proposal_metadata.get("last_rollback_reason")
+                    or None
+                ),
+                "winner_lifecycle_state": lifecycle_state,
+            }
+        )
         enriched.append(row)
     return enriched
 

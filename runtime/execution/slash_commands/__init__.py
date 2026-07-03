@@ -30,6 +30,7 @@ Public API::
     load_slash_commands(project_dir=None) -> list[SlashCommand]
     expand(cmd, args_str | args_list | args_dict) -> str
 """
+
 from __future__ import annotations
 
 from .loader import SlashCommand, expand, load_slash_commands

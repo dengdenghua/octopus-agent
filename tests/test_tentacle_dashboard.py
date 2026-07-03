@@ -45,6 +45,7 @@ def app_and_coord():
 
     # 注册 mock 设备
     import asyncio
+
     device = MobileDevice(
         tentacle_id="android-dash-001",
         device_meta={"brand": "Google", "model": "Pixel 8"},
@@ -102,10 +103,13 @@ def test_device_detail_not_found(client):
 
 def test_submit_task(client):
     """提交任务应返回执行结果."""
-    r = client.post("/api/tentacle/task", json={
-        "task": "打开示例应用",
-        "tentacle_id": "android-dash-001",
-    })
+    r = client.post(
+        "/api/tentacle/task",
+        json={
+            "task": "打开示例应用",
+            "tentacle_id": "android-dash-001",
+        },
+    )
     assert r.status_code == 200
     data = r.json()
     assert data["success"] is True
@@ -139,10 +143,13 @@ def test_stats(client):
 def test_task_history(client):
     """执行任务后应出现在历史记录中."""
     # 先执行一个任务
-    client.post("/api/tentacle/task", json={
-        "task": "打开应用",
-        "tentacle_id": "android-dash-001",
-    })
+    client.post(
+        "/api/tentacle/task",
+        json={
+            "task": "打开应用",
+            "tentacle_id": "android-dash-001",
+        },
+    )
     # 查看历史
     r = client.get("/api/tentacle/tasks")
     assert r.status_code == 200

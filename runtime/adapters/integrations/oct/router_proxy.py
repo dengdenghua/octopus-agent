@@ -52,13 +52,17 @@ def create_proxy_router(
 
     def _require_enabled() -> None:
         if not config.enabled:
-            raise HTTPException(status_code=503, detail="oct 账号网关未启用 · config.oct.enabled=true")
+            raise HTTPException(
+                status_code=503, detail="oct 账号网关未启用 · config.oct.enabled=true"
+            )
 
     def _actor(request: Request) -> str:
         from runtime.adapters.web_auth import _resolve_actor
 
         actor = _resolve_actor(
-            request, identity_store, require_auth,
+            request,
+            identity_store,
+            require_auth,
             jwt_secret=config.jwt_secret or jwt_secret,
             jwt_issuer=config.jwt_issuer or jwt_issuer,
             jwt_audience=jwt_audience,
@@ -72,8 +76,12 @@ def create_proxy_router(
         """公开模型列表(网关 GET /v1/models,无需鉴权)。"""
         _require_enabled()
         try:
-            return get_auth(f"{base}/v1/models", token="", timeout=config.request_timeout_seconds,
-                            http_client=http_client)
+            return get_auth(
+                f"{base}/v1/models",
+                token="",
+                timeout=config.request_timeout_seconds,
+                http_client=http_client,
+            )
         except OctClientError as exc:
             raise HTTPException(502, f"oct gateway: {exc}") from exc
 
@@ -106,8 +114,9 @@ def create_proxy_router(
             return JSONResponse(status_code=status, content=r.json())
 
         def _stream() -> Any:
-            with client.stream("POST", url, json=body, headers=headers,
-                               timeout=config.llm_timeout_seconds) as r:
+            with client.stream(
+                "POST", url, json=body, headers=headers, timeout=config.llm_timeout_seconds
+            ) as r:
                 if is_dead_token(getattr(r, "status_code", 0)):
                     link_store.mark_token_invalid(actor, "TOKEN_EXPIRED")
                     yield b'data: {"error":"oct \\u767b\\u5f55\\u5df2\\u8fc7\\u671f\\uff0c\\u8bf7\\u91cd\\u65b0\\u767b\\u5f55"}\n\n'

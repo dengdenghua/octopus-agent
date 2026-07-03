@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -37,9 +36,8 @@ def _is_transient_error(exc: BaseException) -> bool:
 
 @dataclass
 class RouteAttempt:
-
-    role: str                          # "primary" | "strong" | "fallback[i]"
-    model: str                         # Implementation note.
+    role: str  # "primary" | "strong" | "fallback[i]"
+    model: str  # Implementation note.
     success: bool
     error: str | None = None
     response_provider: str | None = None
@@ -47,7 +45,6 @@ class RouteAttempt:
 
 @dataclass
 class DispatchRecord:
-
     prefer_strength: str
     attempts: list[RouteAttempt] = field(default_factory=list)
 
@@ -60,7 +57,6 @@ class DispatchRecord:
 
 
 class MultiModelRouter(ModelRouter):
-
     def __init__(
         self,
         *,
@@ -93,17 +89,25 @@ class MultiModelRouter(ModelRouter):
                 try:
                     response = self._call_with_retry(router, sub_request, role)
                 except Exception as e:  # noqa: BLE001
-                    record.attempts.append(RouteAttempt(
-                        role=role, model=sub_request.model,
-                        success=False, error=f"{type(e).__name__}: {e}",
-                    ))
+                    record.attempts.append(
+                        RouteAttempt(
+                            role=role,
+                            model=sub_request.model,
+                            success=False,
+                            error=f"{type(e).__name__}: {e}",
+                        )
+                    )
                     last_error = e
                     continue
 
-                record.attempts.append(RouteAttempt(
-                    role=role, model=sub_request.model,
-                    success=True, response_provider=response.provider or None,
-                ))
+                record.attempts.append(
+                    RouteAttempt(
+                        role=role,
+                        model=sub_request.model,
+                        success=True,
+                        response_provider=response.provider or None,
+                    )
+                )
                 self.dispatch_log.append(record)
                 span.set_attribute("octopus.multi.final_role", role)
                 span.set_attribute("octopus.multi.attempts", len(record.attempts))
@@ -143,13 +147,17 @@ class MultiModelRouter(ModelRouter):
 
         def _on_retry(idx: int, exc: BaseException, delay: float) -> None:
             _LOG.info(
-                "multi_router retry · role=%s model=%s attempt=%d "
-                "exc=%s sleep=%.3fs",
-                role, request.model, idx + 1, type(exc).__name__, delay,
+                "multi_router retry · role=%s model=%s attempt=%d exc=%s sleep=%.3fs",
+                role,
+                request.model,
+                idx + 1,
+                type(exc).__name__,
+                delay,
             )
 
         return retry_call(
-            router.call, request,
+            router.call,
+            request,
             policy=policy,
             on_retry=_on_retry,
         )

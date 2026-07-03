@@ -16,6 +16,7 @@ import requests
 @dataclass
 class SeedreamConfig:
     """Configuration for Seedream API."""
+
     api_key: str
     base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
     model: str = "seedream"
@@ -36,18 +37,24 @@ class SeedreamImageGenerator:
 
     # Supported styles
     STYLES = [
-        "default", "anime", "realistic", "oil_painting",
-        "watercolor", "3d", "pixel_art", "chinese_ink",
-        "ukiyo_e", "sketch", "cyberpunk"
+        "default",
+        "anime",
+        "realistic",
+        "oil_painting",
+        "watercolor",
+        "3d",
+        "pixel_art",
+        "chinese_ink",
+        "ukiyo_e",
+        "sketch",
+        "cyberpunk",
     ]
 
     def __init__(self, config: SeedreamConfig | None = None):
         if config is None:
             api_key = os.environ.get("ARK_API_KEY")
             if not api_key:
-                raise ValueError(
-                    "ARK_API_KEY not found. Please set it in environment or config."
-                )
+                raise ValueError("ARK_API_KEY not found. Please set it in environment or config.")
             config = SeedreamConfig(api_key=api_key)
         self.config = config
 
@@ -59,10 +66,7 @@ class SeedreamImageGenerator:
         }
 
     def _resolve_dimensions(
-        self,
-        width: int | None = None,
-        height: int | None = None,
-        ratio: str | None = None
+        self, width: int | None = None, height: int | None = None, ratio: str | None = None
     ) -> tuple:
         """Resolve final dimensions from width/height or ratio."""
         if ratio and ratio in self.RATIO_MAP:
@@ -148,7 +152,7 @@ class SeedreamImageGenerator:
             return {
                 "success": False,
                 "error": f"API request failed: {str(e)}",
-                "error_code": "GENERATION_FAILED"
+                "error_code": "GENERATION_FAILED",
             }
 
         # Process and save images
@@ -173,19 +177,23 @@ class SeedreamImageGenerator:
                 local_path = output_path / filename
                 local_path.write_bytes(img_response.content)
 
-                images.append({
-                    "url": img_url,
-                    "local_path": str(local_path),
-                    "width": final_width,
-                    "height": final_height,
-                    "seed": seed,
-                })
+                images.append(
+                    {
+                        "url": img_url,
+                        "local_path": str(local_path),
+                        "width": final_width,
+                        "height": final_height,
+                        "seed": seed,
+                    }
+                )
             except Exception as e:
-                images.append({
-                    "url": img_url,
-                    "local_path": None,
-                    "error": str(e),
-                })
+                images.append(
+                    {
+                        "url": img_url,
+                        "local_path": None,
+                        "error": str(e),
+                    }
+                )
 
         return {
             "success": len(images) > 0,

@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from collections import defaultdict
@@ -18,7 +17,6 @@ Verdict = Literal["accepted", "superseded_old", "ignored_lower_conf", "disputed"
 
 
 class AddResult(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     verdict: Verdict
@@ -28,10 +26,15 @@ class AddResult(BaseModel):
 
 
 class KnowledgeGraph:
-
-    DEFAULT_MULTI_VALUED: set[str] = frozenset({                  # type: ignore[assignment]
-        "returned", "mentions", "contains", "tagged_with", "cites",
-    })
+    DEFAULT_MULTI_VALUED: set[str] = frozenset(
+        {  # type: ignore[assignment]
+            "returned",
+            "mentions",
+            "contains",
+            "tagged_with",
+            "cites",
+        }
+    )
 
     def __init__(self, multi_valued_predicates: set[str] | None = None) -> None:
         self._triples = AppendOnlyList[Triple](rule_id="CC-5")
@@ -45,7 +48,6 @@ class KnowledgeGraph:
             if multi_valued_predicates is not None
             else set(self.DEFAULT_MULTI_VALUED)
         )
-
 
     def add(self, triple: Triple) -> AddResult:
         with trace_stage("kg.add") as span:
@@ -139,7 +141,6 @@ class KnowledgeGraph:
                     superseded_ids=superseded,
                 )
 
-
     def query(
         self,
         subject: str | None = None,
@@ -201,11 +202,8 @@ class KnowledgeGraph:
             for next_entity in (t.subject, t.object):
                 if next_entity == entity:
                     continue
-                extra.extend(
-                    self._collect_neighbors(next_entity, depth=depth - 1, seen=seen)
-                )
+                extra.extend(self._collect_neighbors(next_entity, depth=depth - 1, seen=seen))
         return results + extra
-
 
     def count(self, *, active_only: bool = True) -> int:
         with self._lock:
@@ -219,7 +217,6 @@ class KnowledgeGraph:
     def __iter__(self) -> Iterator[Triple]:
         with self._lock:
             return iter(list(self._index.values()))
-
 
     def _store(self, t: Triple) -> None:
         self._triples.append(t)
@@ -237,7 +234,6 @@ class KnowledgeGraph:
             self._remove_from_indexes(old_id, old)
         self._index[old_id] = new_triple
         self._add_to_indexes(old_id, new_triple)
-
 
     def export_triples(self, *, active_only: bool = True) -> list[dict]:
         with self._lock:
@@ -266,6 +262,7 @@ class KnowledgeGraph:
         default_confidence: float = 0.75,
     ) -> dict:
         from runtime.platform.models import Source
+
         src = Source(source_id=source_label, source_type="system")
         imported = skipped = errors = 0
         for item in data:
@@ -316,7 +313,8 @@ class KnowledgeGraph:
 
     def import_obsidian_markdown(self, markdown_text: str, *, page_name: str = "") -> dict:
         import re
-        links = re.findall(r'\[\[([^\]|]+)(?:\|[^\]]+)?\]\]', markdown_text)
+
+        links = re.findall(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", markdown_text)
         if not page_name:
             lines = markdown_text.strip().splitlines()
             for line in lines:
@@ -327,6 +325,7 @@ class KnowledgeGraph:
                 page_name = "unknown_page"
         data = [
             {"subject": page_name, "predicate": "links_to", "object": link.strip()}
-            for link in links if link.strip()
+            for link in links
+            if link.strip()
         ]
         return self.import_triples(data, source_label=f"obsidian:{page_name}")

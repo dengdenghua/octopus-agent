@@ -21,18 +21,18 @@ VALID_EVENT_TYPES = ("TRIGGER", "DETECT", "ACTION", "RESOLVE", "INFO")
 VALID_ACTION_TYPES = ("mitigate", "detect", "prevent", "process")
 
 EVENT_ICONS = {
-    "TRIGGER": "\U0001f534",   # red circle
-    "DETECT":  "\U0001f7e1",   # yellow circle
-    "ACTION":  "\U0001f535",   # blue circle
-    "RESOLVE": "\U0001f7e2",   # green circle
-    "INFO":    "\u26aa",       # white circle
+    "TRIGGER": "\U0001f534",  # red circle
+    "DETECT": "\U0001f7e1",  # yellow circle
+    "ACTION": "\U0001f535",  # blue circle
+    "RESOLVE": "\U0001f7e2",  # green circle
+    "INFO": "\u26aa",  # white circle
 }
 
 ACTION_ICONS = {
     "mitigate": "\U0001f525",  # fire
-    "detect":   "\U0001f6e1\ufe0f",  # shield
-    "prevent":  "\U0001f527",  # wrench
-    "process":  "\U0001f4d6",  # book
+    "detect": "\U0001f6e1\ufe0f",  # shield
+    "prevent": "\U0001f527",  # wrench
+    "process": "\U0001f4d6",  # book
 }
 
 SEVERITY_DESC_ZH = {
@@ -105,13 +105,19 @@ def validate_data(data):
     if not data.get("title"):
         warnings.append("missing required field: title")
     if data.get("severity") and data["severity"] not in VALID_SEVERITIES:
-        warnings.append(f"invalid severity '{data['severity']}', expected one of {VALID_SEVERITIES}")
+        warnings.append(
+            f"invalid severity '{data['severity']}', expected one of {VALID_SEVERITIES}"
+        )
     for i, event in enumerate(data.get("timeline", [])):
         if event.get("type") and event["type"] not in VALID_EVENT_TYPES:
-            warnings.append(f"timeline[{i}]: invalid type '{event['type']}', expected one of {VALID_EVENT_TYPES}")
+            warnings.append(
+                f"timeline[{i}]: invalid type '{event['type']}', expected one of {VALID_EVENT_TYPES}"
+            )
     for i, item in enumerate(data.get("action_items", [])):
         if item.get("type") and item["type"] not in VALID_ACTION_TYPES:
-            warnings.append(f"action_items[{i}]: invalid type '{item['type']}', expected one of {VALID_ACTION_TYPES}")
+            warnings.append(
+                f"action_items[{i}]: invalid type '{item['type']}', expected one of {VALID_ACTION_TYPES}"
+            )
     return warnings
 
 
@@ -152,7 +158,9 @@ def interactive_collect():
     print("--- Step 1: Basic Information ---")
     data["title"] = prompt_input("Incident title", required=True)
     data["severity"] = prompt_input("Severity (P0/P1/P2/P3)", default="P1")
-    data["start_time"] = prompt_input("Impact start time (e.g. 2024-03-15T14:32:00+08:00)", required=True)
+    data["start_time"] = prompt_input(
+        "Impact start time (e.g. 2024-03-15T14:32:00+08:00)", required=True
+    )
     data["end_time"] = prompt_input("Impact end time", required=True)
     data["impact"] = prompt_input("Impact description", required=True)
     data["responders"] = prompt_list("Responders / on-call team members")
@@ -289,11 +297,19 @@ def render_markdown_zh(data, template="standard"):
         lines.append("")
         if trigger_time and detect_time:
             ttd = compute_hhmm_diff(trigger_time, detect_time)
-            ttd_str = f"{ttd} ({trigger_time} → {detect_time})" if ttd else f"{trigger_time} → {detect_time}"
+            ttd_str = (
+                f"{ttd} ({trigger_time} → {detect_time})"
+                if ttd
+                else f"{trigger_time} → {detect_time}"
+            )
             lines.append(f"- **TTD (Time to Detect)**: {ttd_str}")
         if detect_time and resolve_time:
             ttr = compute_hhmm_diff(detect_time, resolve_time)
-            ttr_str = f"{ttr} ({detect_time} → {resolve_time})" if ttr else f"{detect_time} → {resolve_time}"
+            ttr_str = (
+                f"{ttr} ({detect_time} → {resolve_time})"
+                if ttr
+                else f"{detect_time} → {resolve_time}"
+            )
             lines.append(f"- **TTR (Time to Resolve)**: {ttr_str}")
         lines.append("")
     else:
@@ -371,7 +387,9 @@ def render_markdown_zh(data, template="standard"):
         lines.append("- [ ] Document uses system/process language, not personal blame")
         lines.append("- [ ] All timeline entries are backed by data (logs, metrics, configs)")
         lines.append("- [ ] Root cause points to systemic improvement, not individual error")
-        lines.append("- [ ] Every action item is SMART (Specific, Measurable, Assignable, Realistic, Time-bound)")
+        lines.append(
+            "- [ ] Every action item is SMART (Specific, Measurable, Assignable, Realistic, Time-bound)"
+        )
         lines.append("- [ ] Document has been reviewed by all incident responders")
         lines.append("")
 
@@ -437,11 +455,19 @@ def render_markdown_en(data, template="standard"):
         lines.append("")
         if trigger_time and detect_time:
             ttd = compute_hhmm_diff(trigger_time, detect_time)
-            ttd_str = f"{ttd} ({trigger_time} → {detect_time})" if ttd else f"{trigger_time} → {detect_time}"
+            ttd_str = (
+                f"{ttd} ({trigger_time} → {detect_time})"
+                if ttd
+                else f"{trigger_time} → {detect_time}"
+            )
             lines.append(f"- **TTD (Time to Detect)**: {ttd_str}")
         if detect_time and resolve_time:
             ttr = compute_hhmm_diff(detect_time, resolve_time)
-            ttr_str = f"{ttr} ({detect_time} → {resolve_time})" if ttr else f"{detect_time} → {resolve_time}"
+            ttr_str = (
+                f"{ttr} ({detect_time} → {resolve_time})"
+                if ttr
+                else f"{detect_time} → {resolve_time}"
+            )
             lines.append(f"- **TTR (Time to Resolve)**: {ttr_str}")
         lines.append("")
     else:
@@ -486,7 +512,11 @@ def render_markdown_en(data, template="standard"):
     lines.append("## 5. Lessons Learned")
     lines.append("")
     lessons = data.get("lessons", {})
-    for section, heading in [("keep_doing", "Keep Doing"), ("improve", "Improve"), ("lucky", "Lucky / Unlucky")]:
+    for section, heading in [
+        ("keep_doing", "Keep Doing"),
+        ("improve", "Improve"),
+        ("lucky", "Lucky / Unlucky"),
+    ]:
         items = lessons.get(section, [])
         if items:
             lines.append(f"### {heading}")
@@ -504,7 +534,9 @@ def render_markdown_en(data, template="standard"):
         lines.append("- [ ] Document uses system/process language, not personal blame")
         lines.append("- [ ] All timeline entries are backed by data (logs, metrics, configs)")
         lines.append("- [ ] Root cause points to systemic improvement, not individual error")
-        lines.append("- [ ] Every action item is SMART (Specific, Measurable, Assignable, Realistic, Time-bound)")
+        lines.append(
+            "- [ ] Every action item is SMART (Specific, Measurable, Assignable, Realistic, Time-bound)"
+        )
         lines.append("- [ ] Document has been reviewed by all incident responders")
         lines.append("")
 
@@ -515,17 +547,37 @@ def main():
     parser = argparse.ArgumentParser(
         description="Generate a structured postmortem document from incident data.",
         epilog="Examples:\n"
-               "  %(prog)s --interactive\n"
-               "  %(prog)s --input incident.json --output postmortem.md\n"
-               "  cat incident.json | %(prog)s --format markdown\n",
+        "  %(prog)s --interactive\n"
+        "  %(prog)s --input incident.json --output postmortem.md\n"
+        "  cat incident.json | %(prog)s --format markdown\n",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--interactive", action="store_true", help="Interactive mode: guided data collection")
-    parser.add_argument("--input", metavar="FILE", help="JSON input file (reads stdin if omitted and not --interactive)")
-    parser.add_argument("--output", metavar="FILE", help="Output file path (prints to stdout if omitted)")
-    parser.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output format (default: markdown)")
-    parser.add_argument("--template", choices=["standard", "brief"], default="standard", help="Template style (default: standard)")
-    parser.add_argument("--lang", choices=["zh", "en"], default="zh", help="Document language (default: zh)")
+    parser.add_argument(
+        "--interactive", action="store_true", help="Interactive mode: guided data collection"
+    )
+    parser.add_argument(
+        "--input",
+        metavar="FILE",
+        help="JSON input file (reads stdin if omitted and not --interactive)",
+    )
+    parser.add_argument(
+        "--output", metavar="FILE", help="Output file path (prints to stdout if omitted)"
+    )
+    parser.add_argument(
+        "--format",
+        choices=["markdown", "json"],
+        default="markdown",
+        help="Output format (default: markdown)",
+    )
+    parser.add_argument(
+        "--template",
+        choices=["standard", "brief"],
+        default="standard",
+        help="Template style (default: standard)",
+    )
+    parser.add_argument(
+        "--lang", choices=["zh", "en"], default="zh", help="Document language (default: zh)"
+    )
     args = parser.parse_args()
 
     if args.interactive:
@@ -547,7 +599,10 @@ def main():
     else:
         if sys.stdin.isatty():
             parser.print_help()
-            print("\nError: provide --interactive, --input FILE, or pipe JSON to stdin.", file=sys.stderr)
+            print(
+                "\nError: provide --interactive, --input FILE, or pipe JSON to stdin.",
+                file=sys.stderr,
+            )
             sys.exit(1)
         try:
             data = json.load(sys.stdin)

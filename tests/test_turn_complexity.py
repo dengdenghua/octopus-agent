@@ -5,6 +5,7 @@ Tiers:
   - value       — cheap cloud (glm-flash / haiku / 4o-mini)
   - performance — frontier cloud (sonnet / opus / gpt-5)
 """
+
 from __future__ import annotations
 
 import os
@@ -23,7 +24,8 @@ from runtime.core.cerebrum.turn_complexity import (
 
 @pytest.fixture(autouse=True)
 def _isolate_custom_models(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Tier resolution falls back to the first ``custom_models.json``
     entry when no env/config is set. Tests must run hermetically —
@@ -34,6 +36,7 @@ def _isolate_custom_models(
     # Don't create the file — auto-derive returns None for non-existent.
     try:
         from runtime.platform.process.paths import app_paths
+
         original = app_paths()
         # Replace just the one attribute. Other paths (logs, plans,
         # etc.) keep their real values so tests that rely on them
@@ -55,6 +58,7 @@ def _isolate_custom_models(
         # auto-derive will fail open (return None) anyway.
         pass
 
+
 # ── classifier — mode flags take precedence ───────────────────
 
 
@@ -71,9 +75,13 @@ def test_short_chitchat_local() -> None:
 
 
 def test_explicit_model_returns_performance() -> None:
-    assert estimate_turn_complexity(
-        "调研 X", has_explicit_model=True,
-    ) == "performance"
+    assert (
+        estimate_turn_complexity(
+            "调研 X",
+            has_explicit_model=True,
+        )
+        == "performance"
+    )
 
 
 def test_topology_returns_performance() -> None:
@@ -99,15 +107,23 @@ def test_code_mode_returns_performance_even_for_short_text() -> None:
 
 
 def test_todo_protocol_required_performance() -> None:
-    assert estimate_turn_complexity(
-        "做几件事", requires_todo_protocol=True,
-    ) == "performance"
+    assert (
+        estimate_turn_complexity(
+            "做几件事",
+            requires_todo_protocol=True,
+        )
+        == "performance"
+    )
 
 
 def test_tool_intent_returns_value() -> None:
-    assert estimate_turn_complexity(
-        "查一下天气", looks_tool_intent=True,
-    ) == "value"
+    assert (
+        estimate_turn_complexity(
+            "查一下天气",
+            looks_tool_intent=True,
+        )
+        == "value"
+    )
 
 
 def test_short_question_returns_value() -> None:
@@ -198,7 +214,9 @@ def test_resolve_tier_entry_reference_value_uses_first_model(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        _paths, "app_paths", lambda: SimpleNamespace(custom_models_path=cfg),
+        _paths,
+        "app_paths",
+        lambda: SimpleNamespace(custom_models_path=cfg),
     )
     monkeypatch.setenv("OCTOPUS_MODEL_VALUE", "openai-prod")
     assert _resolve_tier_model("value") == "gpt-4o-mini"
@@ -228,7 +246,9 @@ def test_resolve_tier_entry_reference_performance_uses_last_model(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        _paths, "app_paths", lambda: SimpleNamespace(custom_models_path=cfg),
+        _paths,
+        "app_paths",
+        lambda: SimpleNamespace(custom_models_path=cfg),
     )
     monkeypatch.setenv("OCTOPUS_MODEL_PERFORMANCE", "openai-prod")
     assert _resolve_tier_model("performance") == "gpt-4o"
@@ -252,7 +272,9 @@ def test_resolve_tier_entry_reference_single_model(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        _paths, "app_paths", lambda: SimpleNamespace(custom_models_path=cfg),
+        _paths,
+        "app_paths",
+        lambda: SimpleNamespace(custom_models_path=cfg),
     )
     monkeypatch.setenv("OCTOPUS_MODEL_VALUE", "solo-entry")
     monkeypatch.setenv("OCTOPUS_MODEL_PERFORMANCE", "solo-entry")
@@ -286,7 +308,9 @@ def test_resolve_tier_entry_reference_legacy_model_field(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        _paths, "app_paths", lambda: SimpleNamespace(custom_models_path=cfg),
+        _paths,
+        "app_paths",
+        lambda: SimpleNamespace(custom_models_path=cfg),
     )
     monkeypatch.setenv("OCTOPUS_MODEL_VALUE", "legacy-entry")
     monkeypatch.setenv("OCTOPUS_MODEL_PERFORMANCE", "legacy-entry")
@@ -311,7 +335,9 @@ def test_resolve_tier_entry_reference_missing_entry_passthrough(
     cfg = tmp_path / "custom_models.json"
     cfg.write_text(json.dumps({}), encoding="utf-8")
     monkeypatch.setattr(
-        _paths, "app_paths", lambda: SimpleNamespace(custom_models_path=cfg),
+        _paths,
+        "app_paths",
+        lambda: SimpleNamespace(custom_models_path=cfg),
     )
     monkeypatch.setenv("OCTOPUS_MODEL_VALUE", "ghost-entry")
     assert _resolve_tier_model("value") == "ghost-entry"
@@ -335,7 +361,9 @@ def test_resolve_tier_entry_reference_empty_models_returns_none(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        _paths, "app_paths", lambda: SimpleNamespace(custom_models_path=cfg),
+        _paths,
+        "app_paths",
+        lambda: SimpleNamespace(custom_models_path=cfg),
     )
     monkeypatch.setenv("OCTOPUS_MODEL_VALUE", "openai-prod")
     assert _resolve_tier_model("value") is None
@@ -357,7 +385,9 @@ def test_resolve_tier_plain_model_name_passthrough(
     cfg = tmp_path / "custom_models.json"
     cfg.write_text(json.dumps({}), encoding="utf-8")
     monkeypatch.setattr(
-        _paths, "app_paths", lambda: SimpleNamespace(custom_models_path=cfg),
+        _paths,
+        "app_paths",
+        lambda: SimpleNamespace(custom_models_path=cfg),
     )
     monkeypatch.setenv("OCTOPUS_MODEL_VALUE", "gpt-4o-mini")
     assert _resolve_tier_model("value") == "gpt-4o-mini"
@@ -381,7 +411,8 @@ def test_get_tier_config_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_explicit_user_model_no_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OCTOPUS_MODEL_VALUE", "test-cheap")
     routed, reason = select_model_for_complexity(
-        "local", user_model="claude-sonnet-4",
+        "local",
+        user_model="claude-sonnet-4",
     )
     assert routed is None
     assert reason == "user_pinned"
@@ -435,6 +466,7 @@ def test_value_escalates_to_performance_when_value_missing(monkeypatch: pytest.M
     # to skip it. Instead test escalation by making value return None
     # via a temporary patch.
     from runtime.core.cerebrum import turn_complexity as tc
+
     orig = tc._resolve_tier_model
 
     def stub(t):
@@ -514,9 +546,11 @@ def _write_custom_models(
     at a real file we just wrote. Returns the path so tests can
     edit it further."""
     import json
+
     real_path = tmp_path / "custom_models_real.json"
     real_path.write_text(json.dumps(payload), encoding="utf-8")
     from runtime.platform.process.paths import app_paths
+
     original = app_paths()
 
     class _PatchedPaths:
@@ -533,37 +567,48 @@ def _write_custom_models(
 
 
 def test_auto_derive_local_picks_first_model(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """When no env/config is set, ``local`` tier auto-derives
     ``models[0]`` from the first custom_models.json entry.
     Operators don't need to set OCTOPUS_MODEL_LOCAL just to
     enable smart routing on a single API key."""
     monkeypatch.delenv("OCTOPUS_MODEL_LOCAL", raising=False)
-    _write_custom_models(monkeypatch, tmp_path, {
-        "myprovider": {
-            "provider": "openai",
-            "models": ["small-model", "big-model"],
+    _write_custom_models(
+        monkeypatch,
+        tmp_path,
+        {
+            "myprovider": {
+                "provider": "openai",
+                "models": ["small-model", "big-model"],
+            },
         },
-    })
+    )
     assert _resolve_tier_model("local") == "small-model"
 
 
 def test_auto_derive_performance_picks_last_model(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     monkeypatch.delenv("OCTOPUS_MODEL_PERFORMANCE", raising=False)
-    _write_custom_models(monkeypatch, tmp_path, {
-        "myprovider": {
-            "provider": "openai",
-            "models": ["small-model", "big-model"],
+    _write_custom_models(
+        monkeypatch,
+        tmp_path,
+        {
+            "myprovider": {
+                "provider": "openai",
+                "models": ["small-model", "big-model"],
+            },
         },
-    })
+    )
     assert _resolve_tier_model("performance") == "big-model"
 
 
 def test_auto_derive_value_uses_first_model(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Value tier auto-derives the cheap slot too, BEFORE falling
     through to glm-4-flash. Custom-model intent beats built-in
@@ -571,67 +616,87 @@ def test_auto_derive_value_uses_first_model(
     monkeypatch.delenv("OCTOPUS_MODEL_VALUE", raising=False)
     monkeypatch.delenv("OCTOPUS_SMART_ROUTING_CHEAP_MODEL", raising=False)
     monkeypatch.delenv("OCTOPUS_SUBAGENT_CHEAP_MODEL", raising=False)
-    _write_custom_models(monkeypatch, tmp_path, {
-        "myprovider": {
-            "provider": "openai",
-            "models": ["mimo-v2.5", "mimo-v2.5-pro"],
+    _write_custom_models(
+        monkeypatch,
+        tmp_path,
+        {
+            "myprovider": {
+                "provider": "openai",
+                "models": ["mimo-v2.5", "mimo-v2.5-pro"],
+            },
         },
-    })
+    )
     assert _resolve_tier_model("value") == "mimo-v2.5"
 
 
 def test_explicit_env_beats_auto_derive(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Auto-derive is the lowest-priority fallback. Setting an
     explicit OCTOPUS_MODEL_LOCAL takes precedence."""
     monkeypatch.setenv("OCTOPUS_MODEL_LOCAL", "explicit-pick")
-    _write_custom_models(monkeypatch, tmp_path, {
-        "myprovider": {
-            "provider": "openai",
-            "models": ["should-be-ignored", "also-ignored"],
+    _write_custom_models(
+        monkeypatch,
+        tmp_path,
+        {
+            "myprovider": {
+                "provider": "openai",
+                "models": ["should-be-ignored", "also-ignored"],
+            },
         },
-    })
+    )
     assert _resolve_tier_model("local") == "explicit-pick"
 
 
 def test_auto_derive_legacy_single_model_field(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Older entries that predate the ``models`` list refactor
     still have a single ``model`` field — auto-derive should
     still pick it up rather than skipping the entry."""
     monkeypatch.delenv("OCTOPUS_MODEL_LOCAL", raising=False)
-    _write_custom_models(monkeypatch, tmp_path, {
-        "legacy-provider": {
-            "provider": "openai",
-            "model": "single-shot-model",
+    _write_custom_models(
+        monkeypatch,
+        tmp_path,
+        {
+            "legacy-provider": {
+                "provider": "openai",
+                "model": "single-shot-model",
+            },
         },
-    })
+    )
     assert _resolve_tier_model("local") == "single-shot-model"
 
 
 def test_auto_derive_skips_malformed_entries(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """First entry has no usable models — the function should
     move on to the next entry rather than returning None."""
     monkeypatch.delenv("OCTOPUS_MODEL_LOCAL", raising=False)
-    _write_custom_models(monkeypatch, tmp_path, {
-        "broken-provider": {
-            "provider": "openai",
-            "models": [],  # empty list
+    _write_custom_models(
+        monkeypatch,
+        tmp_path,
+        {
+            "broken-provider": {
+                "provider": "openai",
+                "models": [],  # empty list
+            },
+            "good-provider": {
+                "provider": "openai",
+                "models": ["working-model"],
+            },
         },
-        "good-provider": {
-            "provider": "openai",
-            "models": ["working-model"],
-        },
-    })
+    )
     assert _resolve_tier_model("local") == "working-model"
 
 
 def test_auto_derive_returns_none_for_value_when_no_custom(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """No custom_models.json AND no env → value tier still falls
     through to its built-in glm-4-flash default. Auto-derive's
@@ -656,9 +721,12 @@ def test_short_single_line_routes_to_value(
     (118 msgs, 1 changed, that 1 a mis-promotion) showed it net-
     negative, so it was removed and the window is a flat → value."""
     monkeypatch.delenv("OCTOPUS_USE_OCTOPUS_ROUTER", raising=False)
-    assert estimate_turn_complexity(
-        "analyze the architecture and recommend refactoring strategies",
-    ) == "value"
+    assert (
+        estimate_turn_complexity(
+            "analyze the architecture and recommend refactoring strategies",
+        )
+        == "value"
+    )
     assert estimate_turn_complexity("什么是Python") == "value"
 
 
@@ -688,7 +756,8 @@ def test_user_pinned_wins_over_smart_routing(
     routing state — classifier becomes informational."""
     monkeypatch.setenv("OCTOPUS_SMART_ROUTING", "on")
     model, reason = select_model_for_complexity(
-        "performance", user_model="my-pinned-model",
+        "performance",
+        user_model="my-pinned-model",
     )
     assert model is None
     assert reason == "user_pinned"

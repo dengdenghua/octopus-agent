@@ -72,7 +72,14 @@ async def broadcast(
         if isinstance(rec, BaseException):
             # run_device_task is supposed to capture its own failures; this is a
             # belt-and-suspenders guard so the batch result is always well-formed.
-            results.append({"tentacle_id": tid, "ok": False, "output": "", "error": f"{type(rec).__name__}: {rec}"})
+            results.append(
+                {
+                    "tentacle_id": tid,
+                    "ok": False,
+                    "output": "",
+                    "error": f"{type(rec).__name__}: {rec}",
+                }
+            )
         else:
             results.append(rec)
 

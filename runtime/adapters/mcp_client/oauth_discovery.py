@@ -16,6 +16,7 @@ metadata → RFC 7591 dynamic client registration):
 All network calls are best-effort and never raise — callers fall back to the
 manual /authorize path when discovery isn't available.
 """
+
 from __future__ import annotations
 
 import json
@@ -66,9 +67,11 @@ def discover(server_url: str, *, timeout: float = 15.0) -> OAuthEndpoints | None
 
     # 2. authorization-server metadata
     meta = _get_json(
-        f"{auth_server}/.well-known/oauth-authorization-server", timeout=timeout,
+        f"{auth_server}/.well-known/oauth-authorization-server",
+        timeout=timeout,
     ) or _get_json(
-        f"{auth_server}/.well-known/openid-configuration", timeout=timeout,
+        f"{auth_server}/.well-known/openid-configuration",
+        timeout=timeout,
     )
     if not meta:
         return None
@@ -97,16 +100,20 @@ def register_client(
     timeout: float = 15.0,
 ) -> str | None:
     """Dynamic client registration (RFC 7591) for a public PKCE client."""
-    body = json.dumps({
-        "client_name": client_name,
-        "redirect_uris": [redirect_uri],
-        "grant_types": ["authorization_code", "refresh_token"],
-        "response_types": ["code"],
-        "token_endpoint_auth_method": "none",
-    }).encode("utf-8")
+    body = json.dumps(
+        {
+            "client_name": client_name,
+            "redirect_uris": [redirect_uri],
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "none",
+        }
+    ).encode("utf-8")
     try:
         req = urllib_request.Request(
-            registration_url, data=body, method="POST",
+            registration_url,
+            data=body,
+            method="POST",
             headers={"Content-Type": "application/json", "Accept": "application/json"},
         )
         with urllib_request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — DCR endpoint

@@ -105,14 +105,10 @@ class SchemaExtractor:
             "ORDER BY name"
         )
         for row in cur:
-            tables.append(
-                self._sqlite_table_info(row["name"], row["type"], sample_rows)
-            )
+            tables.append(self._sqlite_table_info(row["name"], row["type"], sample_rows))
         return {"db_type": "sqlite", "tables": tables}
 
-    def _sqlite_table_info(
-        self, name: str, ttype: str, sample_rows: int
-    ) -> dict[str, Any]:
+    def _sqlite_table_info(self, name: str, ttype: str, sample_rows: int) -> dict[str, Any]:
         qid = _quote_id(name)
 
         cur = self.conn.execute(f"PRAGMA table_info({qid})")
@@ -139,9 +135,7 @@ class SchemaExtractor:
         cur = self.conn.execute(f"PRAGMA index_list({qid})")
         indexes = []
         for r in cur:
-            ic = self.conn.execute(
-                "PRAGMA index_info({})".format(_quote_id(r["name"]))
-            )
+            ic = self.conn.execute("PRAGMA index_info({})".format(_quote_id(r["name"])))
             indexes.append(
                 {
                     "name": r["name"],
@@ -150,16 +144,12 @@ class SchemaExtractor:
                 }
             )
 
-        cur = self.conn.execute(
-            f"SELECT COUNT(*) AS cnt FROM {qid}"
-        )
+        cur = self.conn.execute(f"SELECT COUNT(*) AS cnt FROM {qid}")
         row_count = cur.fetchone()["cnt"]
 
         samples: list[dict] = []
         if sample_rows > 0:
-            cur = self.conn.execute(
-                f"SELECT * FROM {qid} LIMIT ?", (sample_rows,)
-            )
+            cur = self.conn.execute(f"SELECT * FROM {qid} LIMIT ?", (sample_rows,))
             samples = [dict(r) for r in cur]
 
         return {
@@ -176,26 +166,18 @@ class SchemaExtractor:
 
     def _extract_postgres(self, sample_rows: int) -> dict[str, Any]:
         tables = []
-        with self.conn.cursor(
-            cursor_factory=psycopg2.extras.RealDictCursor
-        ) as cur:
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
                 "SELECT table_name AS name, table_type AS type "
                 "FROM information_schema.tables "
                 "WHERE table_schema = 'public' ORDER BY table_name"
             )
             for row in cur:
-                tables.append(
-                    self._pg_table_info(row["name"], row["type"], sample_rows)
-                )
+                tables.append(self._pg_table_info(row["name"], row["type"], sample_rows))
         return {"db_type": "postgresql", "tables": tables}
 
-    def _pg_table_info(
-        self, name: str, ttype: str, sample_rows: int
-    ) -> dict[str, Any]:
-        with self.conn.cursor(
-            cursor_factory=psycopg2.extras.RealDictCursor
-        ) as cur:
+    def _pg_table_info(self, name: str, ttype: str, sample_rows: int) -> dict[str, Any]:
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
                 """
                 SELECT c.column_name      AS name,
@@ -259,9 +241,7 @@ class SchemaExtractor:
             indexes = [dict(r) for r in cur]
 
             qid = pgsql.Identifier(name)
-            cur.execute(
-                pgsql.SQL("SELECT COUNT(*) AS cnt FROM {}").format(qid)
-            )
+            cur.execute(pgsql.SQL("SELECT COUNT(*) AS cnt FROM {}").format(qid))
             row_count = cur.fetchone()["cnt"]
 
             samples: list[dict] = []
@@ -309,9 +289,7 @@ class QueryOptimizer:
                 }
             )
 
-        has_agg = re.search(
-            r"\b(COUNT|SUM|AVG|MIN|MAX)\s*\(", cleaned_upper
-        )
+        has_agg = re.search(r"\b(COUNT|SUM|AVG|MIN|MAX)\s*\(", cleaned_upper)
         if (
             re.search(r"\bSELECT\b", cleaned_upper)
             and not re.search(r"\bWHERE\b", cleaned_upper)
@@ -347,9 +325,7 @@ class QueryOptimizer:
                 }
             )
 
-        if re.search(
-            r"\bNOT\s+IN\s*\(\s*SELECT\b", cleaned_upper, re.DOTALL
-        ):
+        if re.search(r"\bNOT\s+IN\s*\(\s*SELECT\b", cleaned_upper, re.DOTALL):
             issues.append(
                 {
                     "severity": "warning",
@@ -359,9 +335,7 @@ class QueryOptimizer:
                 }
             )
 
-        if re.search(
-            r"\bSELECT\b[^)]*\(\s*SELECT\b", cleaned_upper, re.DOTALL
-        ):
+        if re.search(r"\bSELECT\b[^)]*\(\s*SELECT\b", cleaned_upper, re.DOTALL):
             issues.append(
                 {
                     "severity": "warning",
@@ -489,17 +463,14 @@ class ExplainInterpreter:
         else:
             if not HAS_PSYCOPG2:
                 print(
-                    "错误：PostgreSQL 需要安装 psycopg2\n"
-                    "  pip install psycopg2-binary",
+                    "错误：PostgreSQL 需要安装 psycopg2\n  pip install psycopg2-binary",
                     file=sys.stderr,
                 )
                 sys.exit(1)
             self.conn = psycopg2.connect(dsn)
             self.conn.set_session(readonly=True, autocommit=True)
 
-    def interpret(
-        self, sql: str, analyze: bool = False
-    ) -> dict[str, Any]:
+    def interpret(self, sql: str, analyze: bool = False) -> dict[str, Any]:
         _validate_readonly(sql)
         if self.db_type == "sqlite":
             return self._interpret_sqlite(sql)
@@ -542,15 +513,11 @@ class ExplainInterpreter:
         }
 
     @staticmethod
-    def _analyze_sqlite_detail(
-        detail: str, issues: list[dict]
-    ) -> None:
+    def _analyze_sqlite_detail(detail: str, issues: list[dict]) -> None:
         detail_upper = detail.upper()
 
         if "SCAN" in detail_upper and "INDEX" not in detail_upper:
-            match = re.search(
-                r"SCAN\s+(?:TABLE\s+)?(\S+)", detail, re.IGNORECASE
-            )
+            match = re.search(r"SCAN\s+(?:TABLE\s+)?(\S+)", detail, re.IGNORECASE)
             table_name = match.group(1) if match else "unknown"
             issues.append(
                 {
@@ -561,9 +528,7 @@ class ExplainInterpreter:
                 }
             )
 
-        if "USING TEMPORARY" in detail_upper or (
-            "TEMP B-TREE" in detail_upper
-        ):
+        if "USING TEMPORARY" in detail_upper or ("TEMP B-TREE" in detail_upper):
             issues.append(
                 {
                     "severity": "info",
@@ -611,14 +576,10 @@ class ExplainInterpreter:
 
     # ── PostgreSQL ──
 
-    def _interpret_postgres(
-        self, sql: str, analyze: bool
-    ) -> dict[str, Any]:
+    def _interpret_postgres(self, sql: str, analyze: bool) -> dict[str, Any]:
         prefix = "EXPLAIN (FORMAT JSON, ANALYZE, BUFFERS)" if analyze else "EXPLAIN (FORMAT JSON)"
 
-        with self.conn.cursor(
-            cursor_factory=psycopg2.extras.RealDictCursor
-        ) as cur:
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(f"{prefix} {sql}")
             result = cur.fetchone()
             plan_json = result[list(result.keys())[0]]
@@ -635,16 +596,10 @@ class ExplainInterpreter:
             "startup_cost": top_plan.get("Startup Cost", 0),
         }
         if analyze:
-            summary["actual_total_time_ms"] = top_plan.get(
-                "Actual Total Time", 0
-            )
+            summary["actual_total_time_ms"] = top_plan.get("Actual Total Time", 0)
             summary["actual_rows"] = top_plan.get("Actual Rows", 0)
-            summary["planning_time_ms"] = plan_json[0].get(
-                "Planning Time", 0
-            )
-            summary["execution_time_ms"] = plan_json[0].get(
-                "Execution Time", 0
-            )
+            summary["planning_time_ms"] = plan_json[0].get("Planning Time", 0)
+            summary["execution_time_ms"] = plan_json[0].get("Execution Time", 0)
 
         if not issues:
             issues.append(
@@ -664,9 +619,7 @@ class ExplainInterpreter:
             "interpretation": issues,
         }
 
-    def _analyze_pg_node(
-        self, node: dict, issues: list[dict]
-    ) -> None:
+    def _analyze_pg_node(self, node: dict, issues: list[dict]) -> None:
         node_type = node.get("Node Type", "")
 
         if node_type == "Seq Scan":
@@ -732,9 +685,7 @@ class ExplainInterpreter:
                 {
                     "severity": "ok",
                     "type": "index-scan",
-                    "detail": "{}: {}".format(
-                        "仅索引扫描" if is_only else "索引扫描", idx
-                    ),
+                    "detail": "{}: {}".format("仅索引扫描" if is_only else "索引扫描", idx),
                     "suggestion": "索引使用良好{}".format(
                         "，覆盖索引避免了回表" if is_only else ""
                     ),
@@ -786,19 +737,13 @@ def _compact_schema(schema: dict[str, Any]) -> str:
             )
             for c in t["columns"]
         )
-        lines.append(
-            "-- {} ({} rows): {}".format(t["name"], t["row_count"], cols)
-        )
+        lines.append("-- {} ({} rows): {}".format(t["name"], t["row_count"], cols))
         for fk in t.get("foreign_keys", []):
-            lines.append(
-                "--   FK: {} -> {}".format(fk["column"], fk["references"])
-            )
+            lines.append("--   FK: {} -> {}".format(fk["column"], fk["references"]))
         for idx in t.get("indexes", []):
             uniq = "(unique)" if idx["unique"] else ""
             lines.append(
-                "--   IDX{}: {} on ({})".format(
-                    uniq, idx["name"], ", ".join(idx["columns"])
-                )
+                "--   IDX{}: {} on ({})".format(uniq, idx["name"], ", ".join(idx["columns"]))
             )
     return "\n".join(lines)
 
@@ -863,21 +808,15 @@ def main():
 
     if args.command in ("schema", "explain"):
         if args.db_type == "sqlite" and not args.db_path:
-            print(
-                "错误：SQLite 模式需要 --db-path 参数", file=sys.stderr
-            )
+            print("错误：SQLite 模式需要 --db-path 参数", file=sys.stderr)
             sys.exit(1)
         if args.db_type == "postgres" and not args.dsn:
-            print(
-                "错误：PostgreSQL 模式需要 --dsn 参数", file=sys.stderr
-            )
+            print("错误：PostgreSQL 模式需要 --dsn 参数", file=sys.stderr)
             sys.exit(1)
 
     try:
         if args.command == "schema":
-            extractor = SchemaExtractor(
-                args.db_type, db_path=args.db_path, dsn=args.dsn
-            )
+            extractor = SchemaExtractor(args.db_type, db_path=args.db_path, dsn=args.dsn)
             try:
                 schema = extractor.extract(sample_rows=args.sample_rows)
                 if args.compact:
@@ -905,13 +844,9 @@ def main():
             )
 
         elif args.command == "explain":
-            interpreter = ExplainInterpreter(
-                args.db_type, db_path=args.db_path, dsn=args.dsn
-            )
+            interpreter = ExplainInterpreter(args.db_type, db_path=args.db_path, dsn=args.dsn)
             try:
-                result = interpreter.interpret(
-                    args.sql, analyze=getattr(args, "analyze", False)
-                )
+                result = interpreter.interpret(args.sql, analyze=getattr(args, "analyze", False))
                 print(
                     json.dumps(
                         result,

@@ -165,9 +165,7 @@ CAPABILITIES: tuple[GapCapability, ...] = (
             "tests/test_browser_artifact.py",
             "tests/test_browser_pixel_assertions.py",
         ),
-        next_actions=(
-            "Turn repeated browser replay failures into deterministic repair recipes.",
-        ),
+        next_actions=("Turn repeated browser replay failures into deterministic repair recipes.",),
     ),
     GapCapability(
         id="subagents_parallel_work",
@@ -360,10 +358,7 @@ def compute_codex_gap_report(
     advantage_score = _average(item["score"] for item in advantage)
     combined = round(parity_score * 0.55 + advantage_score * 0.45, 3)
     top_gaps = sorted(
-        [
-            item for item in items
-            if item["score"] < item["target_score"]
-        ],
+        [item for item in items if item["score"] < item["target_score"]],
         key=lambda item: (
             round(item["target_score"] - item["score"], 3),
             item["id"],
@@ -394,9 +389,7 @@ def _score_capability(base: Path, capability: GapCapability) -> dict[str, Any]:
     if behavior["total"]:
         behavior_score = behavior["passed"] / max(1, behavior["total"])
         score = round(
-            implementation_score * 0.52
-            + test_score * 0.30
-            + behavior_score * 0.18,
+            implementation_score * 0.52 + test_score * 0.30 + behavior_score * 0.18,
             3,
         )
     else:
@@ -425,10 +418,7 @@ def _score_capability(base: Path, capability: GapCapability) -> dict[str, Any]:
 
 
 def _path_status(base: Path, paths: tuple[str, ...]) -> dict[str, Any]:
-    rows = [
-        {"path": path, "exists": (base / path).exists()}
-        for path in paths
-    ]
+    rows = [{"path": path, "exists": (base / path).exists()} for path in paths]
     present = sum(1 for row in rows if row["exists"])
     return {
         "present": present,
@@ -452,25 +442,22 @@ def _behavior_status(
                 text = path.read_text(encoding="utf-8")
             except OSError:
                 text = ""
-        missing_terms = [
-            term for term in check.required_terms
-            if term not in text
-        ]
-        rows.append({
-            "id": check.id,
-            "title": check.title,
-            "path": check.path,
-            "exists": exists,
-            "passed": exists and not missing_terms,
-            "missing_terms": missing_terms,
-        })
+        missing_terms = [term for term in check.required_terms if term not in text]
+        rows.append(
+            {
+                "id": check.id,
+                "title": check.title,
+                "path": check.path,
+                "exists": exists,
+                "passed": exists and not missing_terms,
+                "missing_terms": missing_terms,
+            }
+        )
     passed = sum(1 for row in rows if row["passed"])
     return {
         "passed": passed,
         "total": len(rows),
-        "missing": [
-            row["id"] for row in rows if not row["passed"]
-        ],
+        "missing": [row["id"] for row in rows if not row["passed"]],
         "checks": rows,
     }
 

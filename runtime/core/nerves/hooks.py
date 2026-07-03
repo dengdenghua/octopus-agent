@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import threading
@@ -14,7 +13,6 @@ HookPhase = Literal["pre", "post"]
 
 @dataclass
 class HookContext:
-
     phase: HookPhase
     task_id: TaskId
     arm_id: ArmId
@@ -27,13 +25,11 @@ class HookContext:
 
 @dataclass
 class HookResult:
-
     replace_with: ExecutionResult | None = None  # Implementation note.
     metadata: dict[str, Any] = field(default_factory=dict)  # Implementation note.
 
 
 class HookError(RuntimeError):
-
     def __init__(self, reason: str, *, block: bool = True) -> None:
         super().__init__(reason)
         self.reason = reason
@@ -51,11 +47,9 @@ class _RegisteredHook:
 
 
 class HookManager:
-
     def __init__(self) -> None:
         self._hooks: list[_RegisteredHook] = []
         self._lock = threading.RLock()
-
 
     def add_pre(self, name: str, fn: Hook) -> None:
         self._add("pre", name, fn)
@@ -73,7 +67,8 @@ class HookManager:
         with self._lock:
             before = len(self._hooks)
             self._hooks = [
-                h for h in self._hooks
+                h
+                for h in self._hooks
                 if not (h.name == name and (phase is None or h.phase == phase))
             ]
             return len(self._hooks) < before
@@ -81,7 +76,6 @@ class HookManager:
     def names(self, phase: HookPhase | None = None) -> list[str]:
         with self._lock:
             return [h.name for h in self._hooks if phase is None or h.phase == phase]
-
 
     def run_pre(self, ctx: HookContext) -> HookResult | None:
         return self._run(ctx, "pre")
@@ -110,9 +104,7 @@ class HookManager:
                 except HookError:
                     out = None
                 except Exception as e:  # noqa: BLE001
-                    span.set_attribute(
-                        "octopus.hook.error", f"{type(e).__name__}: {e}"
-                    )
+                    span.set_attribute("octopus.hook.error", f"{type(e).__name__}: {e}")
                     out = None
             if out is not None and out.replace_with is not None:
                 current_result = out.replace_with
@@ -131,9 +123,7 @@ class HookManager:
                 except HookError:
                     raise  # Implementation note.
                 except Exception as e:  # noqa: BLE001
-                    span.set_attribute(
-                        "octopus.hook.error", f"{type(e).__name__}: {e}"
-                    )
+                    span.set_attribute("octopus.hook.error", f"{type(e).__name__}: {e}")
                     continue
             if out is not None and out.replace_with is not None:
                 return out

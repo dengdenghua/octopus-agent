@@ -22,13 +22,15 @@ from runtime.safety.recovery import persist_kg_from_journal
 def _journal_with_success() -> InMemoryJournal:
     """A journal with one successful trajectory → one ``completed_strategy`` triple."""
     j = InMemoryJournal()
-    j.write_trajectory(Trajectory(
-        task_id=TaskId(uuid4()),
-        arm_id=ArmId("code_arm"),
-        strategy_id="default",
-        steps=[],
-        outcome=TrajectoryOutcome(success=True),
-    ))
+    j.write_trajectory(
+        Trajectory(
+            task_id=TaskId(uuid4()),
+            arm_id=ArmId("code_arm"),
+            strategy_id="default",
+            steps=[],
+            outcome=TrajectoryOutcome(success=True),
+        )
+    )
     return j
 
 
@@ -60,12 +62,14 @@ def test_rerun_is_idempotent(tmp_path: Path) -> None:
 def test_failed_trajectory_persists_nothing(tmp_path: Path) -> None:
     db = tmp_path / "kg.db"
     j = InMemoryJournal()
-    j.write_trajectory(Trajectory(
-        task_id=TaskId(uuid4()),
-        arm_id=ArmId("x"),
-        steps=[],
-        outcome=TrajectoryOutcome(success=False),
-    ))
+    j.write_trajectory(
+        Trajectory(
+            task_id=TaskId(uuid4()),
+            arm_id=ArmId("x"),
+            steps=[],
+            outcome=TrajectoryOutcome(success=False),
+        )
+    )
     report = persist_kg_from_journal(j, db)
     assert report.triples_accepted == 0
     with SqliteKnowledgeGraph(db) as kg:

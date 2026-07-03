@@ -29,6 +29,7 @@ Design notes
   module light and lets the big openai_gateway module import without
   a circular.
 """
+
 from __future__ import annotations
 
 import json
@@ -152,6 +153,7 @@ def _uninstall_public_skill_dir(skill_name: str) -> Path:
 
 
 if FASTAPI_AVAILABLE:
+
     class FeedbackEntry(BaseModel):
         ts: float
         sentiment: str  # "liked" | "disliked"
@@ -337,25 +339,32 @@ def create_meta_router(
 
     @router.post("/api/feedback", response_model=FeedbackPostResponse)
     def api_feedback(
-        body: dict[str, Any], request: Request,
+        body: dict[str, Any],
+        request: Request,
     ) -> dict[str, Any]:
         sentiment = str(body.get("sentiment") or "").strip().lower()
         if sentiment not in ("liked", "disliked"):
             raise HTTPException(
-                400, "sentiment must be 'liked' or 'disliked'",
+                400,
+                "sentiment must be 'liked' or 'disliked'",
             )
         actor: str | None = None
         try:
             from runtime.sensing.gateway.openai_gateway import _resolve_actor
 
-            actor = _resolve_actor(  # AUTH-OK: actor-agnostic — optional attribution for feedback log
-                request, identity_store, False,
-                jwt_secret=molili_jwt_secret,
-                jwt_issuer=jwt_issuer,
-                jwt_audience=jwt_audience,
+            actor = (
+                _resolve_actor(  # AUTH-OK: actor-agnostic — optional attribution for feedback log
+                    request,
+                    identity_store,
+                    False,
+                    jwt_secret=molili_jwt_secret,
+                    jwt_issuer=jwt_issuer,
+                    jwt_audience=jwt_audience,
+                )
             )
         except Exception as exc:
             import logging as _logging
+
             _logging.getLogger(__name__).debug("auth resolution failed: %s", exc)
 
         entry = {
@@ -364,8 +373,7 @@ def create_meta_router(
             "message_id": str(body.get("message_id") or "") or None,
             "thread_id": str(body.get("thread_id") or "") or None,
             "agent_id": str(body.get("agent_id") or "") or None,
-            "content_preview": str(body.get("content_preview") or "")[:400]
-                or None,
+            "content_preview": str(body.get("content_preview") or "")[:400] or None,
             "reason": str(body.get("reason") or "")[:200] or None,
             "actor": actor,
         }
@@ -375,7 +383,8 @@ def create_meta_router(
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except OSError as exc:
             raise HTTPException(
-                500, f"failed to record feedback: {exc}",
+                500,
+                f"failed to record feedback: {exc}",
             ) from exc
         return {"ok": True, "recorded": entry}
 
@@ -558,6 +567,7 @@ def create_meta_router(
             from runtime.execution.suckers.market_skills import (
                 load_single_market_skill,
             )
+
             loaded = load_single_market_skill(registry, skill_id)
             if not loaded:
                 raise HTTPException(
@@ -745,7 +755,8 @@ def create_meta_router(
     # ─── Slash commands ─────────────────────────────────────
 
     @router.get(
-        "/api/slash-commands", response_model=SlashCommandsResponse,
+        "/api/slash-commands",
+        response_model=SlashCommandsResponse,
     )
     def api_slash_commands() -> dict[str, Any]:
         """Return the merged slash-command catalog (global ∪ project).
@@ -758,6 +769,7 @@ def create_meta_router(
         import os
 
         from runtime.execution.slash_commands import load_slash_commands
+
         project_dir = os.getcwd()
         try:
             cmds = load_slash_commands(project_dir=project_dir)
@@ -767,12 +779,9 @@ def create_meta_router(
 
     # ─── Auth status ────────────────────────────────────────
 
-    _molili_enabled = bool(
-        molili_config is not None and getattr(molili_config, "enabled", False)
-    )
+    _molili_enabled = bool(molili_config is not None and getattr(molili_config, "enabled", False))
     _local_auth_enabled = bool(
-        local_auth_config is not None
-        and getattr(local_auth_config, "enabled", False)
+        local_auth_config is not None and getattr(local_auth_config, "enabled", False)
     )
     _any_auth_enabled = _molili_enabled or _local_auth_enabled
 
@@ -789,7 +798,8 @@ def create_meta_router(
     # ─── Auth providers ─────────────────────────────────────
 
     @router.get(
-        "/api/auth/providers", response_model=AuthProvidersResponse,
+        "/api/auth/providers",
+        response_model=AuthProvidersResponse,
     )
     def auth_providers() -> dict[str, Any]:
         """Return the list of configured login methods.
@@ -800,59 +810,70 @@ def create_meta_router(
         """
         providers: list[dict[str, Any]] = []
         if oct_config is not None and getattr(oct_config, "enabled", False):
-            providers.append({
-                "id": "oct",
-                "label": "邮箱登录",
-                "mock_mode": bool(getattr(oct_config, "mock_mode", False)),
-                "endpoint_send": "/api/auth/oct/email/send",
-                "endpoint_verify": "/api/auth/oct/email/login",
-            })
+            providers.append(
+                {
+                    "id": "oct",
+                    "label": "邮箱登录",
+                    "mock_mode": bool(getattr(oct_config, "mock_mode", False)),
+                    "endpoint_send": "/api/auth/oct/email/send",
+                    "endpoint_verify": "/api/auth/oct/email/login",
+                }
+            )
         if molili_config is not None and getattr(
-            molili_config, "enabled", False,
+            molili_config,
+            "enabled",
+            False,
         ):
-            providers.append({
-                "id": "molili",
-                "label": "手机号登录",
-                "mock_mode": bool(
-                    getattr(
-                        getattr(molili_config, "auth", None),
-                        "mock_mode", False,
+            providers.append(
+                {
+                    "id": "molili",
+                    "label": "手机号登录",
+                    "mock_mode": bool(
+                        getattr(
+                            getattr(molili_config, "auth", None),
+                            "mock_mode",
+                            False,
+                        ),
                     ),
-                ),
-                "endpoint_send": "/api/auth/molili/sms/send",
-                "endpoint_verify": "/api/auth/molili/sms/verify",
-            })
+                    "endpoint_send": "/api/auth/molili/sms/send",
+                    "endpoint_verify": "/api/auth/molili/sms/verify",
+                }
+            )
         if local_auth_config is not None and getattr(
-            local_auth_config, "enabled", False,
+            local_auth_config,
+            "enabled",
+            False,
         ):
             pw_required = bool(getattr(local_auth_config, "users", {}))
-            providers.append({
-                "id": "local",
-                "label": "本地登录",
-                "allow_any_username": bool(
-                    getattr(local_auth_config, "allow_any_username", True),
-                ),
-                "password_required": pw_required,
-                "endpoint": "/api/auth/local/login",
-            })
+            providers.append(
+                {
+                    "id": "local",
+                    "label": "本地登录",
+                    "allow_any_username": bool(
+                        getattr(local_auth_config, "allow_any_username", True),
+                    ),
+                    "password_required": pw_required,
+                    "endpoint": "/api/auth/local/login",
+                }
+            )
         return {"providers": providers}
 
     #
     #
 
     ARCHITECTURE_DOCS: dict[str, str] = {  # noqa: N806
-        "readme":            "docs/architecture/README.md",
-        "core-path":         "docs/architecture/core-path.md",
-        "high-res-map":      "docs/architecture/high-res-map.md",
-        "high-res-mermaid":  "docs/architecture/high-res-map.mermaid.md",
-        "chat-modes":        "docs/architecture/chat-modes.md",
-        "react-self-evo":    "docs/architecture/react-self-evolution.md",
-        "organ-tiering":     "docs/architecture/organ-tiering.md",
-        "module-map":        "docs/architecture/module-map.md",
-        "organ-cerebrum":       "docs/architecture/organs/cerebrum.md",
-        "organ-ganglia":        "docs/architecture/organs/ganglia.md",
-        "organ-beak":           "docs/architecture/organs/beak.md",
-        "organ-hearts":         "docs/architecture/organs/hearts.md",
+        "readme": "docs/architecture/README.md",
+        "core-path": "docs/architecture/core-path.md",
+        "high-res-map": "docs/architecture/high-res-map.md",
+        "high-res-mermaid": "docs/architecture/high-res-map.mermaid.md",
+        "chat-modes": "docs/architecture/chat-modes.md",
+        "react-self-evo": "docs/architecture/react-self-evolution.md",
+        "organ-tiering": "docs/architecture/organ-tiering.md",
+        "module-map": "docs/architecture/module-map.md",
+        "organ-cerebrum": "docs/architecture/organs/cerebrum.md",
+        "organ-ganglia": "docs/architecture/organs/ganglia.md",
+        "organ-beak": "docs/architecture/organs/beak.md",
+        "organ-hearts": "docs/architecture/organs/hearts.md",
         "organ-chromatophores": "docs/architecture/organs/chromatophores.md",
     }
 
@@ -926,10 +947,15 @@ def create_meta_router(
                 from runtime.memory.users.mention_history import (
                     get_mention_history_store,
                 )
+
                 store = get_mention_history_store()
                 for stat in store.top_for_actor(actor, limit=50):
                     history_boost[(stat.type, stat.identifier)] = stat.count
-            except (ImportError, AttributeError, OSError):  # best-effort · autocomplete still works without history
+            except (
+                ImportError,
+                AttributeError,
+                OSError,
+            ):  # best-effort · autocomplete still works without history
                 pass
 
         items: list[dict[str, Any]] = []
@@ -940,21 +966,18 @@ def create_meta_router(
             return query in (haystack or "").lower()
 
         # ── Agents ───────────────────────────────────────────
-        if (
-            (category_filter in {"all", "agent"})
-            and (not type_prefix or type_prefix == "agent")
-        ):
+        if (category_filter in {"all", "agent"}) and (not type_prefix or type_prefix == "agent"):
             try:
-                agents_iter = list(registry.iter_agents()) if hasattr(registry, "iter_agents") else []
+                agents_iter = (
+                    list(registry.iter_agents()) if hasattr(registry, "iter_agents") else []
+                )
             except (AttributeError, TypeError):
                 agents_iter = []
             # Surface thread's active agents first when thread_id given
             active_agent_ids: set[str] = set()
             if thread_id:
                 with suppress(Exception):
-                    active_agent_ids = _resolve_thread_active_agents(
-                        thread_id, registry
-                    )
+                    active_agent_ids = _resolve_thread_active_agents(thread_id, registry)
             ranked: list[tuple[bool, dict[str, Any]]] = []
             for agent in agents_iter:
                 agent_id = str(getattr(agent, "id", "") or getattr(agent, "name", ""))
@@ -964,16 +987,18 @@ def create_meta_router(
                 desc = str(getattr(agent, "description", "") or "")
                 if not (_matches(agent_id) or _matches(display) or _matches(desc)):
                     continue
-                ranked.append((
-                    agent_id in active_agent_ids,
-                    {
-                        "type": "agent",
-                        "label": display,
-                        "value": f"@agent:{agent_id}",
-                        "description": desc[:120],
-                        "icon": "agent",
-                    },
-                ))
+                ranked.append(
+                    (
+                        agent_id in active_agent_ids,
+                        {
+                            "type": "agent",
+                            "label": display,
+                            "value": f"@agent:{agent_id}",
+                            "description": desc[:120],
+                            "icon": "agent",
+                        },
+                    )
+                )
             ranked.sort(key=lambda pair: (not pair[0], pair[1]["label"].lower()))
             for _is_active, payload in ranked:
                 items.append(payload)
@@ -1002,13 +1027,15 @@ def create_meta_router(
                 desc = str(plugin.get("description") or "")
                 if not (_matches(pid) or _matches(name) or _matches(desc)):
                     continue
-                items.append({
-                    "type": "plugin",
-                    "label": name,
-                    "value": f"@plugin:{pid}",
-                    "description": desc[:120],
-                    "icon": "plugin",
-                })
+                items.append(
+                    {
+                        "type": "plugin",
+                        "label": name,
+                        "value": f"@plugin:{pid}",
+                        "description": desc[:120],
+                        "icon": "plugin",
+                    }
+                )
                 if len(items) >= max_items:
                     break
 
@@ -1019,7 +1046,9 @@ def create_meta_router(
             and len(items) < max_items
         ):
             try:
-                skill_iter = list(registry.iter_skills()) if hasattr(registry, "iter_skills") else []
+                skill_iter = (
+                    list(registry.iter_skills()) if hasattr(registry, "iter_skills") else []
+                )
             except (AttributeError, TypeError):
                 skill_iter = []
             for skill in skill_iter:
@@ -1029,13 +1058,15 @@ def create_meta_router(
                 sdesc = str(getattr(skill, "description", "") or "")
                 if not (_matches(sname) or _matches(sdesc)):
                     continue
-                items.append({
-                    "type": "skill",
-                    "label": sname,
-                    "value": f"@skill:{sname}",
-                    "description": sdesc[:120],
-                    "icon": "skill",
-                })
+                items.append(
+                    {
+                        "type": "skill",
+                        "label": sname,
+                        "value": f"@skill:{sname}",
+                        "description": sdesc[:120],
+                        "icon": "skill",
+                    }
+                )
                 if len(items) >= max_items:
                     break
 
@@ -1049,23 +1080,25 @@ def create_meta_router(
                 from runtime.execution.suckers.delegation_skills import (
                     _DYNAMIC_SKILL_PACKS,
                 )
+
                 pack_dict = _DYNAMIC_SKILL_PACKS
             except (ImportError, AttributeError):
                 pack_dict = {}
             for pack_name, pack_skills in pack_dict.items():
-                pdesc = (
-                    f"Bundled skills: {', '.join(pack_skills[:6])}"
-                    + ("..." if len(pack_skills) > 6 else "")
+                pdesc = f"Bundled skills: {', '.join(pack_skills[:6])}" + (
+                    "..." if len(pack_skills) > 6 else ""
                 )
                 if not (_matches(pack_name) or _matches(pdesc)):
                     continue
-                items.append({
-                    "type": "pack",
-                    "label": pack_name,
-                    "value": f"@pack:{pack_name}",
-                    "description": pdesc[:120],
-                    "icon": "pack",
-                })
+                items.append(
+                    {
+                        "type": "pack",
+                        "label": pack_name,
+                        "value": f"@pack:{pack_name}",
+                        "description": pdesc[:120],
+                        "icon": "pack",
+                    }
+                )
                 if len(items) >= max_items:
                     break
 
@@ -1073,6 +1106,7 @@ def create_meta_router(
         # Items the actor has used before float to the top of their
         # bucket; ordering within "never used" is preserved.
         if history_boost:
+
             def _rank(item: dict[str, Any]) -> tuple[int, int]:
                 key = (str(item.get("type", "")), str(item.get("value", "")).split(":", 1)[-1])
                 # Negate so higher-count items sort first.
@@ -1100,17 +1134,21 @@ def create_meta_router(
             except (AttributeError, KeyError):
                 agent = None
             if agent is None:
-                results.append({
-                    "id": agent_id,
-                    "display_name": agent_id,
-                    "description": "",
-                })
+                results.append(
+                    {
+                        "id": agent_id,
+                        "display_name": agent_id,
+                        "description": "",
+                    }
+                )
                 continue
-            results.append({
-                "id": agent_id,
-                "display_name": str(getattr(agent, "display_name", "") or agent_id),
-                "description": str(getattr(agent, "description", "") or "")[:200],
-            })
+            results.append(
+                {
+                    "id": agent_id,
+                    "display_name": str(getattr(agent, "display_name", "") or agent_id),
+                    "description": str(getattr(agent, "description", "") or "")[:200],
+                }
+            )
         return {"agents": results, "count": len(results)}
 
     return router
@@ -1333,6 +1371,7 @@ def _permission_group_for_skill(skill_id: str) -> str | None:
 def _skill_group_for(name: str) -> str | None:
     try:
         from runtime.execution.all_skills import skill_group
+
         return skill_group(name)
     except (ImportError, AttributeError, KeyError):
         return None
@@ -1346,6 +1385,7 @@ def _skill_kind(group: str | None, name: str = "") -> str:
     """
     try:
         from runtime.execution.all_skills import skill_kind as _classify
+
         return _classify(name)
     except (ImportError, AttributeError, KeyError):
         return "domain"
@@ -1358,12 +1398,14 @@ def _dynamic_plugin_skill_names() -> set[str]:
         project = _default_skill_library_dir().parents[2]
     except Exception:
         project = Path.cwd()
-    roots.extend([
-        project / ".octopus" / "plugins" / "codex",
-        Path.home() / ".octopus" / "plugins" / "codex",
-        project / ".codex" / "plugins" / "cache",
-        Path.home() / ".codex" / "plugins" / "cache",
-    ])
+    roots.extend(
+        [
+            project / ".octopus" / "plugins" / "codex",
+            Path.home() / ".octopus" / "plugins" / "codex",
+            project / ".codex" / "plugins" / "cache",
+            Path.home() / ".codex" / "plugins" / "cache",
+        ]
+    )
     names: set[str] = set()
     for root in roots:
         if not root.is_dir():
@@ -1494,7 +1536,7 @@ def _parse_catalog_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     match = _FRONTMATTER_PATTERN.match(clean_text)
     if not match:
         return {}, text
-    body = clean_text[match.end():]
+    body = clean_text[match.end() :]
     raw_frontmatter = match.group(1)
     if YAML_AVAILABLE:
         try:
@@ -1570,24 +1612,62 @@ def _infer_catalog_affinity(name: str, description: str) -> list[str]:
     text = f"{name} {description}".lower()
     inferred: list[str] = []
     keyword_tags = [
-        ("ecommerce", (
-            "1688", "alibaba", "amazon", "amz", "shopify", "etsy",
-            "dropshipping", "cross-border", "e-commerce", "ecommerce",
-        )),
-        ("sourcing", (
-            "supplier", "sourcing", "product selection",
-        )),
-        ("research", (
-            "research", "analysis", "market", "competitor", "insight",
-            "analytics",
-        )),
-        ("content", (
-            "copywriting", "description", "marketing", "social",
-            "generate", "content",
-        )),
-        ("file", (
-            "xlsx", "docx", "pdf", "pptx", "remotion", "website",
-        )),
+        (
+            "ecommerce",
+            (
+                "1688",
+                "alibaba",
+                "amazon",
+                "amz",
+                "shopify",
+                "etsy",
+                "dropshipping",
+                "cross-border",
+                "e-commerce",
+                "ecommerce",
+            ),
+        ),
+        (
+            "sourcing",
+            (
+                "supplier",
+                "sourcing",
+                "product selection",
+            ),
+        ),
+        (
+            "research",
+            (
+                "research",
+                "analysis",
+                "market",
+                "competitor",
+                "insight",
+                "analytics",
+            ),
+        ),
+        (
+            "content",
+            (
+                "copywriting",
+                "description",
+                "marketing",
+                "social",
+                "generate",
+                "content",
+            ),
+        ),
+        (
+            "file",
+            (
+                "xlsx",
+                "docx",
+                "pdf",
+                "pptx",
+                "remotion",
+                "website",
+            ),
+        ),
     ]
     for tag, keywords in keyword_tags:
         if any(keyword in text for keyword in keywords):
@@ -1602,32 +1682,44 @@ def _infer_catalog_affinity(name: str, description: str) -> list[str]:
 #
 
 SKILL_CATEGORIES: dict[str, str] = {
-    "sourcing":       "货源与选品",
-    "research":       "市场调研与分析",
-    "file":           "文件与编码",
-    "comm":           "通讯与协作",
-    "browse":         "浏览与搜索",
-    "content":        "内容生成",
-    "system":         "系统",
-    "memory":         "记忆",
-    "other":          "其他",
+    "sourcing": "货源与选品",
+    "research": "市场调研与分析",
+    "file": "文件与编码",
+    "comm": "通讯与协作",
+    "browse": "浏览与搜索",
+    "content": "内容生成",
+    "system": "系统",
+    "memory": "记忆",
+    "other": "其他",
 }
 
 _CATEGORY_PRIORITY: list[tuple[str, set[str]]] = [
-    ("sourcing",  {"sourcing", "supplier", "ecommerce", "shopify", "1688",
-                   "aliexpress", "cj", "amazon", "amz", "alibaba",
-                   "etsy", "dropshipping", "product-selection",
-                   "selection"}),
-    ("research",  {"research", "analysis", "market", "competitor",
-                   "intelligence", "data"}),
-    ("browse",    {"browse", "browser", "search", "web"}),
-    ("file",      {"file", "write", "edit", "code", "git", "io"}),
-    ("comm",      {"im", "slack", "email", "wechat", "dingtalk",
-                   "telegram", "feishu", "discord"}),
-    ("content",   {"write_content", "generate", "translate", "summarize",
-                   "transform"}),
-    ("memory",    {"memory", "kg", "recall"}),
-    ("system",    {"system", "os", "process", "sandbox", "shell"}),
+    (
+        "sourcing",
+        {
+            "sourcing",
+            "supplier",
+            "ecommerce",
+            "shopify",
+            "1688",
+            "aliexpress",
+            "cj",
+            "amazon",
+            "amz",
+            "alibaba",
+            "etsy",
+            "dropshipping",
+            "product-selection",
+            "selection",
+        },
+    ),
+    ("research", {"research", "analysis", "market", "competitor", "intelligence", "data"}),
+    ("browse", {"browse", "browser", "search", "web"}),
+    ("file", {"file", "write", "edit", "code", "git", "io"}),
+    ("comm", {"im", "slack", "email", "wechat", "dingtalk", "telegram", "feishu", "discord"}),
+    ("content", {"write_content", "generate", "translate", "summarize", "transform"}),
+    ("memory", {"memory", "kg", "recall"}),
+    ("system", {"system", "os", "process", "sandbox", "shell"}),
 ]
 
 
@@ -1676,9 +1768,7 @@ def _resolve_thread_active_agents(thread_id: str, registry: Any) -> set[str]:
             if room is not None:
                 for member in getattr(room, "members", []) or []:
                     member_id = str(
-                        getattr(member, "agent_id", "")
-                        or getattr(member, "name", "")
-                        or member,
+                        getattr(member, "agent_id", "") or getattr(member, "name", "") or member,
                     )
                     if member_id:
                         agent_ids.add(member_id)
@@ -1695,9 +1785,7 @@ def _resolve_thread_active_agents(thread_id: str, registry: Any) -> set[str]:
             messages = list(store.list_messages(thread_id, limit=100))[-100:]
             for msg in messages:
                 sender = str(
-                    getattr(msg, "sender_agent_id", "")
-                    or getattr(msg, "agent_id", "")
-                    or "",
+                    getattr(msg, "sender_agent_id", "") or getattr(msg, "agent_id", "") or "",
                 )
                 if sender:
                     agent_ids.add(sender)

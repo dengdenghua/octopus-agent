@@ -157,10 +157,12 @@ class TestFallback:
 class TestModelRewrite:
     def test_default_model_rewrites_request(self):
         primary = _TaggedMockRouter(
-            default_model="claude-haiku-4-5", response="echo",
+            default_model="claude-haiku-4-5",
+            response="echo",
         )
         strong = _TaggedMockRouter(
-            default_model="claude-opus-4-7", response="echo",
+            default_model="claude-opus-4-7",
+            response="echo",
         )
         mr = MultiModelRouter(primary=primary, strong=strong)
 
@@ -258,14 +260,10 @@ class TestLLMPlannerUpgradeOnLosing:
     def test_losing_verdict_drives_strong_upgrade(self, registry, composer):
         """Implementation note."""
         primary = MockModelRouter(
-            response=json.dumps(
-                {"reasoning": "p", "nodes": [{"skill": "read_file", "args": {}}]}
-            ),
+            response=json.dumps({"reasoning": "p", "nodes": [{"skill": "read_file", "args": {}}]}),
         )
         strong = MockModelRouter(
-            response=json.dumps(
-                {"reasoning": "s", "nodes": [{"skill": "hash_text", "args": {}}]}
-            ),
+            response=json.dumps({"reasoning": "s", "nodes": [{"skill": "hash_text", "args": {}}]}),
         )
         mr = MultiModelRouter(primary=primary, strong=strong)
 
@@ -290,14 +288,10 @@ class TestLLMPlannerUpgradeOnLosing:
     def test_winning_verdict_stays_on_primary(self, registry, composer):
         """Implementation note."""
         primary = MockModelRouter(
-            response=json.dumps(
-                {"reasoning": "p", "nodes": [{"skill": "read_file", "args": {}}]}
-            ),
+            response=json.dumps({"reasoning": "p", "nodes": [{"skill": "read_file", "args": {}}]}),
         )
         strong = MockModelRouter(
-            response=json.dumps(
-                {"reasoning": "s", "nodes": [{"skill": "hash_text", "args": {}}]}
-            ),
+            response=json.dumps({"reasoning": "s", "nodes": [{"skill": "hash_text", "args": {}}]}),
         )
         mr = MultiModelRouter(primary=primary, strong=strong)
         planner = LLMPlanner(router=mr, registry=registry, composer=composer)

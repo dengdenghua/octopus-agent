@@ -4,6 +4,7 @@ Given a building (footprint + height + rotation) and a point (x,y in meters from
 compute total hours per year the point is in direct sun vs in building shadow vs night.
 Samples at configurable interval (default 1 hour) for memory efficiency on 1GB VPS.
 """
+
 import argparse
 import datetime
 import sys
@@ -68,9 +69,7 @@ def run_annual(
     current = start
     while current <= end:
         dt_utc = current.astimezone(pytz.UTC)
-        alt, shadow_poly = get_shadow_polygon(
-            lat, lon, dt_utc, width, depth, height, rotation
-        )
+        alt, shadow_poly = get_shadow_polygon(lat, lon, dt_utc, width, depth, height, rotation)
         frac = interval.total_seconds() / 3600.0
         month = current.month
         if alt <= 0:
@@ -149,9 +148,9 @@ def main():
     )
     total = hours_sun + hours_shadow + hours_night
     print(f"Annual Sun/Shadow Hours (year={year}, point=({args.point_x}, {args.point_y}) m)")
-    print(f"  Direct sun:  {hours_sun:.1f} h  ({100*hours_sun/total:.1f}%)")
-    print(f"  In shadow:   {hours_shadow:.1f} h  ({100*hours_shadow/total:.1f}%)")
-    print(f"  Night:       {hours_night:.1f} h  ({100*hours_night/total:.1f}%)")
+    print(f"  Direct sun:  {hours_sun:.1f} h  ({100 * hours_sun / total:.1f}%)")
+    print(f"  In shadow:   {hours_shadow:.1f} h  ({100 * hours_shadow / total:.1f}%)")
+    print(f"  Night:       {hours_night:.1f} h  ({100 * hours_night / total:.1f}%)")
     print(f"  Total:       {total:.1f} h")
     if args.output:
         fig, ax = plt.subplots(figsize=(10, 5))
@@ -169,7 +168,9 @@ def main():
         ax.set_xlabel("Month")
         ax.set_ylabel("Hours")
         ax.legend()
-        ax.set_title(f"Monthly Sun/Shadow/Night at point ({args.point_x}, {args.point_y}) m — {year}")
+        ax.set_title(
+            f"Monthly Sun/Shadow/Night at point ({args.point_x}, {args.point_y}) m — {year}"
+        )
         plt.tight_layout()
         plt.savefig(args.output)
         print(f"Chart saved to {args.output}")

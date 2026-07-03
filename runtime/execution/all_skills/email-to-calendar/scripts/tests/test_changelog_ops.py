@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from unittest.mock import patch
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from utils import changelog_ops
 
@@ -24,7 +24,7 @@ class TestLogCreate(unittest.TestCase):
         """Create temp directory and patch file path."""
         self.temp_dir = tempfile.mkdtemp()
         self.changelog_file = os.path.join(self.temp_dir, "changelog.json")
-        self.patcher = patch.object(changelog_ops, 'CHANGELOG_FILE', self.changelog_file)
+        self.patcher = patch.object(changelog_ops, "CHANGELOG_FILE", self.changelog_file)
         self.patcher.start()
 
     def tearDown(self):
@@ -40,7 +40,7 @@ class TestLogCreate(unittest.TestCase):
             summary="Team Meeting",
             start_time="2026-02-11T14:00:00",
             end_time="2026-02-11T15:00:00",
-            email_id="email456"
+            email_id="email456",
         )
 
         with open(self.changelog_file) as f:
@@ -60,9 +60,7 @@ class TestLogCreate(unittest.TestCase):
     def test_log_create_returns_change_id(self):
         """Test that log_create returns a valid change ID."""
         change_id = changelog_ops.log_create(
-            event_id="evt123",
-            calendar_id="primary",
-            summary="Test"
+            event_id="evt123", calendar_id="primary", summary="Test"
         )
 
         self.assertIsNotNone(change_id)
@@ -76,7 +74,7 @@ class TestLogUpdate(unittest.TestCase):
         """Create temp directory and patch file path."""
         self.temp_dir = tempfile.mkdtemp()
         self.changelog_file = os.path.join(self.temp_dir, "changelog.json")
-        self.patcher = patch.object(changelog_ops, 'CHANGELOG_FILE', self.changelog_file)
+        self.patcher = patch.object(changelog_ops, "CHANGELOG_FILE", self.changelog_file)
         self.patcher.start()
 
     def tearDown(self):
@@ -90,10 +88,7 @@ class TestLogUpdate(unittest.TestCase):
         after = json.dumps({"summary": "New Title", "start": "2026-02-11T14:00:00"})
 
         changelog_ops.log_update(
-            event_id="evt123",
-            calendar_id="primary",
-            before_json=before,
-            after_json=after
+            event_id="evt123", calendar_id="primary", before_json=before, after_json=after
         )
 
         with open(self.changelog_file) as f:
@@ -111,7 +106,7 @@ class TestLogUpdate(unittest.TestCase):
             event_id="evt123",
             calendar_id="primary",
             before_json="not json",
-            after_json="also not json"
+            after_json="also not json",
         )
 
         with open(self.changelog_file) as f:
@@ -129,7 +124,7 @@ class TestLogDelete(unittest.TestCase):
         """Create temp directory and patch file path."""
         self.temp_dir = tempfile.mkdtemp()
         self.changelog_file = os.path.join(self.temp_dir, "changelog.json")
-        self.patcher = patch.object(changelog_ops, 'CHANGELOG_FILE', self.changelog_file)
+        self.patcher = patch.object(changelog_ops, "CHANGELOG_FILE", self.changelog_file)
         self.patcher.start()
 
     def tearDown(self):
@@ -141,11 +136,7 @@ class TestLogDelete(unittest.TestCase):
         """Test that log_delete stores the before state."""
         before = json.dumps({"summary": "Deleted Event", "start": "2026-02-11T10:00:00"})
 
-        changelog_ops.log_delete(
-            event_id="evt123",
-            calendar_id="primary",
-            before_json=before
-        )
+        changelog_ops.log_delete(event_id="evt123", calendar_id="primary", before_json=before)
 
         with open(self.changelog_file) as f:
             data = json.load(f)
@@ -163,7 +154,7 @@ class TestListChanges(unittest.TestCase):
         """Create temp directory and patch file path."""
         self.temp_dir = tempfile.mkdtemp()
         self.changelog_file = os.path.join(self.temp_dir, "changelog.json")
-        self.patcher = patch.object(changelog_ops, 'CHANGELOG_FILE', self.changelog_file)
+        self.patcher = patch.object(changelog_ops, "CHANGELOG_FILE", self.changelog_file)
         self.patcher.start()
 
     def tearDown(self):
@@ -173,11 +164,11 @@ class TestListChanges(unittest.TestCase):
 
     def test_list_changes_empty(self):
         """Test list_changes when no changes recorded."""
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump({"changes": []}, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             changelog_ops.list_changes()
 
         output = captured.getvalue()
@@ -186,20 +177,22 @@ class TestListChanges(unittest.TestCase):
     def test_list_changes_shows_entries(self):
         """Test list_changes shows recent entries."""
         test_data = {
-            "changes": [{
-                "id": "chg_001",
-                "timestamp": datetime.now().isoformat(),
-                "action": "create",
-                "event_id": "evt123",
-                "after": {"summary": "Test Meeting"},
-                "can_undo": True
-            }]
+            "changes": [
+                {
+                    "id": "chg_001",
+                    "timestamp": datetime.now().isoformat(),
+                    "action": "create",
+                    "event_id": "evt123",
+                    "after": {"summary": "Test Meeting"},
+                    "can_undo": True,
+                }
+            ]
         }
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             changelog_ops.list_changes()
 
         output = captured.getvalue()
@@ -215,7 +208,7 @@ class TestCanUndo(unittest.TestCase):
         """Create temp directory and patch file path."""
         self.temp_dir = tempfile.mkdtemp()
         self.changelog_file = os.path.join(self.temp_dir, "changelog.json")
-        self.patcher = patch.object(changelog_ops, 'CHANGELOG_FILE', self.changelog_file)
+        self.patcher = patch.object(changelog_ops, "CHANGELOG_FILE", self.changelog_file)
         self.patcher.start()
 
     def tearDown(self):
@@ -226,18 +219,20 @@ class TestCanUndo(unittest.TestCase):
     def test_can_undo_recent_change(self):
         """Test can_undo returns true for recent change."""
         test_data = {
-            "changes": [{
-                "id": "chg_001",
-                "timestamp": datetime.now().isoformat(),
-                "action": "create",
-                "can_undo": True
-            }]
+            "changes": [
+                {
+                    "id": "chg_001",
+                    "timestamp": datetime.now().isoformat(),
+                    "action": "create",
+                    "can_undo": True,
+                }
+            ]
         }
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             changelog_ops.can_undo("chg_001")
 
         output = captured.getvalue().strip()
@@ -247,18 +242,15 @@ class TestCanUndo(unittest.TestCase):
         """Test can_undo returns false for old change (outside 24h window)."""
         old_time = (datetime.now() - timedelta(hours=25)).isoformat()
         test_data = {
-            "changes": [{
-                "id": "chg_001",
-                "timestamp": old_time,
-                "action": "create",
-                "can_undo": True
-            }]
+            "changes": [
+                {"id": "chg_001", "timestamp": old_time, "action": "create", "can_undo": True}
+            ]
         }
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             changelog_ops.can_undo("chg_001")
 
         output = captured.getvalue().strip()
@@ -267,18 +259,20 @@ class TestCanUndo(unittest.TestCase):
     def test_can_undo_already_undone(self):
         """Test can_undo returns false for already undone change."""
         test_data = {
-            "changes": [{
-                "id": "chg_001",
-                "timestamp": datetime.now().isoformat(),
-                "action": "create",
-                "can_undo": False  # Already undone
-            }]
+            "changes": [
+                {
+                    "id": "chg_001",
+                    "timestamp": datetime.now().isoformat(),
+                    "action": "create",
+                    "can_undo": False,  # Already undone
+                }
+            ]
         }
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             changelog_ops.can_undo("chg_001")
 
         output = captured.getvalue().strip()
@@ -286,11 +280,11 @@ class TestCanUndo(unittest.TestCase):
 
     def test_can_undo_not_found(self):
         """Test can_undo exits with error for nonexistent change."""
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump({"changes": []}, f)
 
         captured = io.StringIO()
-        with self.assertRaises(SystemExit) as cm, patch('sys.stdout', captured):
+        with self.assertRaises(SystemExit) as cm, patch("sys.stdout", captured):
             changelog_ops.can_undo("nonexistent")
 
         self.assertEqual(cm.exception.code, 1)
@@ -303,7 +297,7 @@ class TestGetChange(unittest.TestCase):
         """Create temp directory and patch file path."""
         self.temp_dir = tempfile.mkdtemp()
         self.changelog_file = os.path.join(self.temp_dir, "changelog.json")
-        self.patcher = patch.object(changelog_ops, 'CHANGELOG_FILE', self.changelog_file)
+        self.patcher = patch.object(changelog_ops, "CHANGELOG_FILE", self.changelog_file)
         self.patcher.start()
 
     def tearDown(self):
@@ -313,18 +307,12 @@ class TestGetChange(unittest.TestCase):
 
     def test_get_change_returns_json(self):
         """Test get_change returns change as JSON."""
-        test_data = {
-            "changes": [{
-                "id": "chg_001",
-                "action": "create",
-                "event_id": "evt123"
-            }]
-        }
-        with open(self.changelog_file, 'w') as f:
+        test_data = {"changes": [{"id": "chg_001", "action": "create", "event_id": "evt123"}]}
+        with open(self.changelog_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             changelog_ops.get_change("chg_001")
 
         output = captured.getvalue()
@@ -334,7 +322,7 @@ class TestGetChange(unittest.TestCase):
 
     def test_get_change_not_found(self):
         """Test get_change exits with error for nonexistent change."""
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump({"changes": []}, f)
 
         with self.assertRaises(SystemExit) as cm:
@@ -350,7 +338,7 @@ class TestMaxChangesLimit(unittest.TestCase):
         """Create temp directory and patch file path."""
         self.temp_dir = tempfile.mkdtemp()
         self.changelog_file = os.path.join(self.temp_dir, "changelog.json")
-        self.patcher = patch.object(changelog_ops, 'CHANGELOG_FILE', self.changelog_file)
+        self.patcher = patch.object(changelog_ops, "CHANGELOG_FILE", self.changelog_file)
         self.patcher.start()
 
     def tearDown(self):
@@ -362,15 +350,11 @@ class TestMaxChangesLimit(unittest.TestCase):
         """Test that changelog is limited to MAX_CHANGES entries."""
         # Create changelog with MAX_CHANGES entries
         changes = [{"id": f"chg_{i:03d}"} for i in range(100)]
-        with open(self.changelog_file, 'w') as f:
+        with open(self.changelog_file, "w") as f:
             json.dump({"changes": changes}, f)
 
         # Add one more
-        changelog_ops.log_create(
-            event_id="evt_new",
-            calendar_id="primary",
-            summary="New Event"
-        )
+        changelog_ops.log_create(event_id="evt_new", calendar_id="primary", summary="New Event")
 
         with open(self.changelog_file) as f:
             data = json.load(f)
@@ -380,5 +364,5 @@ class TestMaxChangesLimit(unittest.TestCase):
         self.assertNotEqual(data["changes"][0]["id"], "chg_000")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

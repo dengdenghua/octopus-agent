@@ -65,8 +65,7 @@ def _exit_plan_mode(
         return {
             "mode_transitioned": False,
             "reason": (
-                f"new_mode {new_mode!r} not valid · must be one of "
-                f"{sorted(_VALID_TARGET_MODES)}"
+                f"new_mode {new_mode!r} not valid · must be one of {sorted(_VALID_TARGET_MODES)}"
             ),
             "plan": plan,
         }
@@ -79,6 +78,7 @@ def _exit_plan_mode(
     if active_session is None:
         try:
             from runtime.platform.process.session import current_session
+
             active_session = current_session()
         except ImportError:  # noqa: BLE001 — platform layer optional in tests
             active_session = None
@@ -201,16 +201,13 @@ def _notify_hooks(plan: str, current: str, new_mode: str, session: Any) -> None:
     """Best-effort audit notification."""
     try:
         from runtime.safety.hooks.runner import dispatch_notification
+
         dispatch_notification(
             kind="plan_mode_exit",
             details={
                 "from": current,
                 "to": new_mode,
-                "thread_id": (
-                    getattr(session, "thread_id", "")
-                    if session is not None
-                    else ""
-                ),
+                "thread_id": (getattr(session, "thread_id", "") if session is not None else ""),
                 "plan_preview": (plan or "")[:200],
             },
             session=session,
@@ -232,61 +229,61 @@ def register_plan_mode_skill(registry: Any) -> None:
         SkillTestCase,
     )
 
-    registry.register(Skill(
-        name="exit_plan_mode",
-        description=(
-            "Transition the current thread from plan mode to a "
-            "write-capable tier (chat/team/code) after a plan has "
-            "been confirmed."
-        ),
-        affinity=["meta", "mode"],
-        cost_profile="low",
-        trusted_source="skill://public/exit_plan_mode",
-        handler=_exit_plan_mode,
-        tests=[
-            SkillTestCase(
-                name="confirm_false_no_op",
-                tier="golden",
-                args={"plan": "demo", "confirm": False},
-                expect=SkillExpect(schema_keys=["mode_transitioned"]),
-                custom_predicate=lambda r: (
-                    isinstance(r, dict)
-                    and r.get("mode_transitioned") is False
-                ),
+    registry.register(
+        Skill(
+            name="exit_plan_mode",
+            description=(
+                "Transition the current thread from plan mode to a "
+                "write-capable tier (chat/team/code) after a plan has "
+                "been confirmed."
             ),
-            SkillTestCase(
-                name="valid_transition",
-                tier="golden",
-                args={
-                    "plan": "write hello.txt",
-                    "confirm": True,
-                    "new_mode": "chat",
-                },
-                expect=SkillExpect(
-                    schema_keys=["mode_transitioned", "from", "to"],
+            affinity=["meta", "mode"],
+            cost_profile="low",
+            trusted_source="skill://public/exit_plan_mode",
+            handler=_exit_plan_mode,
+            tests=[
+                SkillTestCase(
+                    name="confirm_false_no_op",
+                    tier="golden",
+                    args={"plan": "demo", "confirm": False},
+                    expect=SkillExpect(schema_keys=["mode_transitioned"]),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict) and r.get("mode_transitioned") is False
+                    ),
                 ),
-                custom_predicate=lambda r: (
-                    isinstance(r, dict)
-                    and r.get("mode_transitioned") is True
-                    and r.get("to") == "chat"
+                SkillTestCase(
+                    name="valid_transition",
+                    tier="golden",
+                    args={
+                        "plan": "write hello.txt",
+                        "confirm": True,
+                        "new_mode": "chat",
+                    },
+                    expect=SkillExpect(
+                        schema_keys=["mode_transitioned", "from", "to"],
+                    ),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict)
+                        and r.get("mode_transitioned") is True
+                        and r.get("to") == "chat"
+                    ),
                 ),
-            ),
-            SkillTestCase(
-                name="invalid_new_mode_rejected",
-                tier="golden",
-                args={
-                    "plan": "x",
-                    "confirm": True,
-                    "new_mode": "galaxy_brain",
-                },
-                expect=SkillExpect(schema_keys=["mode_transitioned"]),
-                custom_predicate=lambda r: (
-                    isinstance(r, dict)
-                    and r.get("mode_transitioned") is False
+                SkillTestCase(
+                    name="invalid_new_mode_rejected",
+                    tier="golden",
+                    args={
+                        "plan": "x",
+                        "confirm": True,
+                        "new_mode": "galaxy_brain",
+                    },
+                    expect=SkillExpect(schema_keys=["mode_transitioned"]),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict) and r.get("mode_transitioned") is False
+                    ),
                 ),
-            ),
-        ],
-    ))
+            ],
+        )
+    )
 
 
 __all__ = ["register_plan_mode_skill"]

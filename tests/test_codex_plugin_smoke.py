@@ -77,9 +77,7 @@ def test_codex_plugin_smoke_summary_endpoint(tmp_path: Path) -> None:
     assert data["compatibility"]["verdict"] == "fail"
     assert data["compatibility"]["surface_totals"]["skills"] == 1
     assert data["compatibility"]["surface_totals"]["mcp"] == 1
-    assert data["migration_readiness"]["schema"] == (
-        "octopus.plugin_migration_readiness.v1"
-    )
+    assert data["migration_readiness"]["schema"] == ("octopus.plugin_migration_readiness.v1")
     assert data["migration_readiness"]["total"] == 2
     assert data["migration_readiness"]["ready"] is False
     assert data["migration_readiness"]["blocked_count"] == 2
@@ -106,9 +104,7 @@ def test_codex_plugin_smoke_summary_marks_review_compatible_set(tmp_path: Path) 
         "Resolve inferred plugin permission defaults or mark accepted risk.",
         "Resolve plugin warnings or mark accepted risk.",
     ]
-    assert data["permission_rule_drafts"]["schema"] == (
-        "octopus.plugin_permission_rule_drafts.v1"
-    )
+    assert data["permission_rule_drafts"]["schema"] == ("octopus.plugin_permission_rule_drafts.v1")
     assert data["permission_rule_drafts"]["total"] == 2
     assert data["permission_rule_drafts"]["verified"] == 2
     assert data["migration_readiness"]["ready"] is False
@@ -134,9 +130,7 @@ def test_plugin_migration_readiness_endpoint_requires_contract_artifacts(
     assert data["blocked_count"] == 1
     plugin = data["plugins"][0]
     assert plugin["schema"] == "octopus.plugin_migration_contract.v1"
-    assert plugin["migration_contract"]["schema"] == (
-        "octopus.plugin_migration_contract.v1"
-    )
+    assert plugin["migration_contract"]["schema"] == ("octopus.plugin_migration_contract.v1")
     assert "plugin migration notes are missing" in plugin["blockers"]
     assert data["next_actions"] == [
         "Add migration notes for research.",
@@ -218,7 +212,8 @@ def test_plugin_permission_rule_drafts_endpoint_and_install(tmp_path: Path) -> N
     drafts_response = client.get("/api/plugins/permission-rule-drafts")
     drafts = drafts_response.json()
     draft = next(
-        item for item in drafts["drafts"]
+        item
+        for item in drafts["drafts"]
         if item["signed_payload"]["rule"]["tool"] == "mcp__research__*"
     )
     missing_confirm = client.post(
@@ -294,10 +289,13 @@ def test_plugins_router_requires_auth_when_enabled(tmp_path: Path) -> None:
     client = TestClient(app)
 
     assert client.get("/api/plugins").status_code == 401
-    assert client.get(
-        "/api/plugins",
-        headers={"Authorization": "Bearer sk-alice"},
-    ).status_code == 200
+    assert (
+        client.get(
+            "/api/plugins",
+            headers={"Authorization": "Bearer sk-alice"},
+        ).status_code
+        == 200
+    )
 
 
 def test_plugin_assets_are_public_read_only_when_auth_enabled(tmp_path: Path) -> None:

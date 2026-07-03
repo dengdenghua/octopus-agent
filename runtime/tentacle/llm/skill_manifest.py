@@ -261,7 +261,7 @@ def _preprocess_yaml(text: str) -> str:
 
         # 模式 1 & 2: description 后跟多行内容
         # 检测 "description: |" 或 "description: ..."（后者如果下一行有缩进就续行）
-        if (stripped.startswith("description:") or stripped.startswith("summary:")):
+        if stripped.startswith("description:") or stripped.startswith("summary:"):
             key_part, _, value_part = stripped.partition(":")
             value_part = value_part.strip()
             indent_base = len(line) - len(line.lstrip(" "))

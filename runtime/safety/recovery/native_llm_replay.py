@@ -84,9 +84,13 @@ def replay_llm_candidates(
     max_tool_rounds: int = 2,
     min_case_score: float = 0.62,
 ) -> LLMReplayReport:
-    replay_cases = (cases if cases is not None else build_turn_replay_cases(
-        failures=failures,
-    ))[:max(0, int(max_cases))]
+    replay_cases = (
+        cases
+        if cases is not None
+        else build_turn_replay_cases(
+            failures=failures,
+        )
+    )[: max(0, int(max_cases))]
     root_context: Any
     if workspace_root is None:
         root_context = tempfile.TemporaryDirectory(prefix="octopus-llm-replay-")
@@ -154,9 +158,7 @@ def _replay_candidate(
         passed=not weak,
         case_results=case_results,
         reasons=(
-            [f"llm replay weak cases: {', '.join(weak[:3])}"]
-            if weak
-            else ["llm replay passed"]
+            [f"llm replay weak cases: {', '.join(weak[:3])}"] if weak else ["llm replay passed"]
         ),
     )
 
@@ -184,13 +186,15 @@ def _replay_case(
     text = ""
     finish_reason = ""
     for _round in range(max(1, int(max_tool_rounds)) + 1):
-        response = router.call(ModelRequest(
-            model=model,
-            messages=messages,
-            max_tokens=1200,
-            temperature=0.0,
-            tools=_tool_specs(),
-        ))
+        response = router.call(
+            ModelRequest(
+                model=model,
+                messages=messages,
+                max_tokens=1200,
+                temperature=0.0,
+                tools=_tool_specs(),
+            )
+        )
         text = str(getattr(response, "text", "") or "")
         finish_reason = str(getattr(response, "finish_reason", "") or "")
         calls = list(getattr(response, "tool_calls", []) or [])
@@ -201,11 +205,15 @@ def _replay_case(
         for call in calls:
             name = str(getattr(call, "name", "") or "")
             tool_names.append(name)
-            tool_blocks.append({
-                "type": "tool_result",
-                "tool_use_id": str(getattr(call, "id", "") or name or "tool"),
-                "content": _execute_mock_tool(name, getattr(call, "input", {}) or {}, workspace),
-            })
+            tool_blocks.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": str(getattr(call, "id", "") or name or "tool"),
+                    "content": _execute_mock_tool(
+                        name, getattr(call, "input", {}) or {}, workspace
+                    ),
+                }
+            )
         messages.append(Message(role="user", content=tool_blocks))
     score, reason = _score_llm_output(
         case,
@@ -246,14 +254,30 @@ def _case_prompt(case: TurnReplayCase) -> str:
 def _tool_specs() -> list[ToolSpec]:
     schema = {
         "type": "object",
-        "properties": {"query": {"type": "string"}, "path": {"type": "string"}, "content": {"type": "string"}},
+        "properties": {
+            "query": {"type": "string"},
+            "path": {"type": "string"},
+            "content": {"type": "string"},
+        },
         "additionalProperties": True,
     }
     return [
-        ToolSpec(name="web_search", description="Search the web replay fixture.", input_schema=schema),
-        ToolSpec(name="read_file", description="Read a file in the replay workspace.", input_schema=schema),
-        ToolSpec(name="write_text_file", description="Write a file in the replay workspace.", input_schema=schema),
-        ToolSpec(name="todo_write", description="Update replay todo/progress state.", input_schema=schema),
+        ToolSpec(
+            name="web_search", description="Search the web replay fixture.", input_schema=schema
+        ),
+        ToolSpec(
+            name="read_file",
+            description="Read a file in the replay workspace.",
+            input_schema=schema,
+        ),
+        ToolSpec(
+            name="write_text_file",
+            description="Write a file in the replay workspace.",
+            input_schema=schema,
+        ),
+        ToolSpec(
+            name="todo_write", description="Update replay todo/progress state.", input_schema=schema
+        ),
     ]
 
 
@@ -261,11 +285,17 @@ def _execute_mock_tool(name: str, payload: dict[str, Any], workspace: Path) -> s
     normalized = name.strip().lower()
     if normalized in {"web_search", "search"}:
         query = str(payload.get("query") or payload.get("q") or "")
-        return json.dumps({
-            "results": [
-                {"title": f"Replay result for {query}", "snippet": "deterministic replay search result"}
-            ]
-        }, ensure_ascii=False)
+        return json.dumps(
+            {
+                "results": [
+                    {
+                        "title": f"Replay result for {query}",
+                        "snippet": "deterministic replay search result",
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        )
     if normalized == "read_file":
         target = _safe_workspace_path(workspace, str(payload.get("path") or "case.json"))
         if not target.exists():
@@ -277,7 +307,9 @@ def _execute_mock_tool(name: str, payload: dict[str, Any], workspace: Path) -> s
         target.write_text(str(payload.get("content") or ""), encoding="utf-8")
         return json.dumps({"ok": True, "path": str(target)}, ensure_ascii=False)
     if normalized == "todo_write":
-        (workspace / "todo.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        (workspace / "todo.json").write_text(
+            json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+        )
         return json.dumps({"ok": True, "status": "updated"}, ensure_ascii=False)
     return f"ERROR: unknown replay tool {name}"
 
@@ -294,21 +326,41 @@ def _score_llm_output(
     if finish in {"length", "max_tokens", "max_output_tokens", "output_limit", "token_limit"}:
         return 0.2, "model output was truncated"
     if case.kind == "report_truncation":
-        matched = _count_matches(lower, [r"continue|resume|checkpoint|from where", r"complete|final|report|delivered"])
+        matched = _count_matches(
+            lower, [r"continue|resume|checkpoint|from where", r"complete|final|report|delivered"]
+        )
         score = 0.35 + 0.3 * matched
-        return round(min(1.0, score), 3), "report continuation behavior replayed" if matched >= 2 else "missing continuation behavior"
+        return (
+            round(min(1.0, score), 3),
+            "report continuation behavior replayed"
+            if matched >= 2
+            else "missing continuation behavior",
+        )
     if case.kind == "tool_permission_confusion":
-        if re.search(r"cannot use tools|can't use tools|no tools|without tools|无法调用工具|不能调用工具", lower):
+        if re.search(
+            r"cannot use tools|can't use tools|no tools|without tools|无法调用工具|不能调用工具",
+            lower,
+        ):
             return 0.1, "claimed tools are unavailable"
         used_tool = bool(tool_names)
-        matched = used_tool or bool(re.search(r"tool|search|read_file|web_search|available|can use", lower))
-        return (0.9 if used_tool else 0.7, "tool-capable behavior replayed") if matched else (0.35, "did not show tool-capable behavior")
+        matched = used_tool or bool(
+            re.search(r"tool|search|read_file|web_search|available|can use", lower)
+        )
+        return (
+            (0.9 if used_tool else 0.7, "tool-capable behavior replayed")
+            if matched
+            else (0.35, "did not show tool-capable behavior")
+        )
     if case.kind == "final_step_stuck":
         if re.search(r"in_progress|keep running|still running|继续转圈", lower):
             return 0.2, "left progress running"
-        matched = _count_matches(lower, [r"complete|done|completed|finished|final", r"mark|close|stop|progress|todo"])
+        matched = _count_matches(
+            lower, [r"complete|done|completed|finished|final", r"mark|close|stop|progress|todo"]
+        )
         score = 0.35 + 0.3 * matched
-        return round(min(1.0, score), 3), "final step closure replayed" if matched >= 2 else "missing final step closure"
+        return round(
+            min(1.0, score), 3
+        ), "final step closure replayed" if matched >= 2 else "missing final step closure"
     if text.strip():
         return 0.65, "generic replay produced output"
     return 0.0, "empty replay output"
@@ -338,7 +390,7 @@ def _safe_name(text: str) -> str:
 
 
 def _compact(text: str, limit: int) -> str:
-    return re.sub(r"\s+", " ", str(text or "")).strip()[:max(0, int(limit))]
+    return re.sub(r"\s+", " ", str(text or "")).strip()[: max(0, int(limit))]
 
 
 __all__ = [

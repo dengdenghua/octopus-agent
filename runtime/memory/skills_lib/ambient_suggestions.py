@@ -88,9 +88,7 @@ _LOG = logging.getLogger("octopus.ambient_suggestions")
 _STATUS_PENDING = "pending"
 _STATUS_ACCEPTED = "accepted"
 _STATUS_DISMISSED = "dismissed"
-_VALID_STATUSES = frozenset(
-    {_STATUS_PENDING, _STATUS_ACCEPTED, _STATUS_DISMISSED}
-)
+_VALID_STATUSES = frozenset({_STATUS_PENDING, _STATUS_ACCEPTED, _STATUS_DISMISSED})
 
 # Cap per project. Beyond this we drop the oldest dismissed items
 # first, then the oldest accepted, then the oldest pending. Keeps
@@ -139,9 +137,7 @@ class Suggestion:
                 description=str(raw.get("description") or "")[:1000],
                 prompt=str(raw.get("prompt") or "")[:4000],
                 status=(
-                    raw.get("status")
-                    if raw.get("status") in _VALID_STATUSES
-                    else _STATUS_PENDING
+                    raw.get("status") if raw.get("status") in _VALID_STATUSES else _STATUS_PENDING
                 ),
                 source_turn_ids=list(raw.get("source_turn_ids") or []),
                 created_at=str(raw.get("created_at") or ""),
@@ -168,11 +164,7 @@ def _project_hash(project_root: str | Path) -> str:
 
 
 def _bucket_path(base_dir: Path, project_root: str | Path) -> Path:
-    return (
-        base_dir
-        / _project_hash(project_root)
-        / "suggestions.json"
-    )
+    return base_dir / _project_hash(project_root) / "suggestions.json"
 
 
 def _default_base_dir() -> Path:
@@ -182,6 +174,7 @@ def _default_base_dir() -> Path:
     else ``<cwd>/data``. Matches ``runtime.platform.process.paths``.
     """
     from runtime.platform.process.paths import app_paths
+
     return app_paths().data_dir / "ambient_suggestions"
 
 
@@ -350,10 +343,7 @@ def mark_status(
     lock = _BucketLock.for_path(path)
     with lock:
         raw = read_bucket(project_root, base_dir=base)
-        suggestions = [
-            Suggestion.from_dict(entry)
-            for entry in raw["suggestions"]
-        ]
+        suggestions = [Suggestion.from_dict(entry) for entry in raw["suggestions"]]
         suggestions = [s for s in suggestions if s is not None]
         hit: Suggestion | None = None
         for s in suggestions:
@@ -574,9 +564,7 @@ def generate_suggestions(
                 description=description[:1000],
                 prompt=prompt[:4000],
                 source_turn_ids=[
-                    str(t).strip()
-                    for t in (raw.get("source_turn_ids") or [])
-                    if str(t).strip()
+                    str(t).strip() for t in (raw.get("source_turn_ids") or []) if str(t).strip()
                 ][:10],
                 model=meta.get("model"),
                 experimental=True,

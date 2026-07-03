@@ -7,8 +7,13 @@ from runtime.memory.cowork.group import ContextGrant, GroupState, Member
 
 
 def _member(scope, join=10, f=None, t=None):
-    return Member("spec", "agent", "participant", joined_at_message=join,
-                  grant=ContextGrant(scope=scope, from_msg=f, to_msg=t))
+    return Member(
+        "spec",
+        "agent",
+        "participant",
+        joined_at_message=join,
+        grant=ContextGrant(scope=scope, from_msg=f, to_msg=t),
+    )
 
 
 def _state(member):

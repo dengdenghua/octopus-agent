@@ -21,6 +21,7 @@ firing. The UI's existing cron file format only carries
 ``cron_expression``, so we also add an optional ``fire_at`` field that the UI
 ignores but ``list_scheduled_tasks`` uses for display.
 """
+
 from __future__ import annotations
 
 import logging
@@ -207,17 +208,19 @@ def _list_scheduled_tasks(**_: Any) -> dict[str, Any]:
 
     for job in jobs:
         extra = raw_extras.get(job.get("name", ""), {})
-        out.append({
-            "task_id": job.get("name"),
-            "cron_expression": job.get("cron_expression"),
-            "creator_actor": job.get("creator_actor"),
-            "last_run": job.get("last_run"),
-            "last_status": job.get("last_status"),
-            "next_run_at": _next_run_iso(job.get("cron_expression") or ""),
-            "fire_at": extra.get("fire_at"),
-            "recurring": extra.get("recurring", True),
-            "prompt": extra.get("prompt") or job.get("command"),
-        })
+        out.append(
+            {
+                "task_id": job.get("name"),
+                "cron_expression": job.get("cron_expression"),
+                "creator_actor": job.get("creator_actor"),
+                "last_run": job.get("last_run"),
+                "last_status": job.get("last_status"),
+                "next_run_at": _next_run_iso(job.get("cron_expression") or ""),
+                "fire_at": extra.get("fire_at"),
+                "recurring": extra.get("recurring", True),
+                "prompt": extra.get("prompt") or job.get("command"),
+            }
+        )
     return {"ok": True, "tasks": out, "count": len(out)}
 
 
@@ -230,8 +233,7 @@ def _cancel_scheduled_task(task_id: str = "", **_: Any) -> dict[str, Any]:
     jobs = _read_cron_jobs(path)
     next_jobs = [j for j in jobs if j.get("name") != tid]
     if len(next_jobs) == len(jobs):
-        return {"ok": False, "error": f"task {tid!r} not found",
-                "error_type": "not_found"}
+        return {"ok": False, "error": f"task {tid!r} not found", "error_type": "not_found"}
     _write_cron_jobs(path, next_jobs)
     return {"ok": True, "task_id": tid, "deleted": True}
 
@@ -241,87 +243,93 @@ def register_cron_skills(registry: SkillRegistry) -> int:
 
     Returns the count (3).
     """
-    registry.register(Skill(
-        name="schedule_task",
-        description=(
-            "Schedule a future agent turn. Persists into the same cron "
-            "store the settings UI uses so model-scheduled tasks show up "
-            "alongside user-created ones (creator_actor=agent_self). "
-            "Args: {prompt: str (required), cron_expression: 5-field "
-            "cron string for recurring runs, fire_at: ISO 8601 timestamp "
-            "with timezone offset for one-shot, recurring: bool (default "
-            "true), name: optional task id (auto-generated if omitted)}. "
-            "Supply exactly one of cron_expression / fire_at. Returns "
-            "{ok, task_id, next_run_at}."
-        ),
-        affinity=["scheduling", "self_schedule", "cron"],
-        cost_profile="low",
-        trusted_source="builtin://schedule_task",
-        handler=_schedule_task,
-        tests=[
-            SkillTestCase(
-                name="missing_prompt_returns_error",
-                tier="golden",
-                args={"prompt": "", "cron_expression": "0 * * * *"},
-                expect=SkillExpect(schema_keys=["ok", "error", "error_type"]),
-                custom_predicate=lambda r: (
-                    isinstance(r, dict)
-                    and r.get("ok") is False
-                    and r.get("error_type") == "invalid_argument"
+    registry.register(
+        Skill(
+            name="schedule_task",
+            description=(
+                "Schedule a future agent turn. Persists into the same cron "
+                "store the settings UI uses so model-scheduled tasks show up "
+                "alongside user-created ones (creator_actor=agent_self). "
+                "Args: {prompt: str (required), cron_expression: 5-field "
+                "cron string for recurring runs, fire_at: ISO 8601 timestamp "
+                "with timezone offset for one-shot, recurring: bool (default "
+                "true), name: optional task id (auto-generated if omitted)}. "
+                "Supply exactly one of cron_expression / fire_at. Returns "
+                "{ok, task_id, next_run_at}."
+            ),
+            affinity=["scheduling", "self_schedule", "cron"],
+            cost_profile="low",
+            trusted_source="builtin://schedule_task",
+            handler=_schedule_task,
+            tests=[
+                SkillTestCase(
+                    name="missing_prompt_returns_error",
+                    tier="golden",
+                    args={"prompt": "", "cron_expression": "0 * * * *"},
+                    expect=SkillExpect(schema_keys=["ok", "error", "error_type"]),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict)
+                        and r.get("ok") is False
+                        and r.get("error_type") == "invalid_argument"
+                    ),
                 ),
-            ),
-        ],
-    ))
+            ],
+        )
+    )
 
-    registry.register(Skill(
-        name="list_scheduled_tasks",
-        description=(
-            "List every scheduled task currently persisted, including "
-            "user-created and agent-created ones. Returns "
-            "{ok, tasks: [{task_id, cron_expression, creator_actor, "
-            "next_run_at, fire_at, recurring, prompt, last_run, "
-            "last_status}], count}."
-        ),
-        affinity=["scheduling", "introspection", "cron"],
-        cost_profile="low",
-        trusted_source="builtin://list_scheduled_tasks",
-        handler=_list_scheduled_tasks,
-        tests=[
-            SkillTestCase(
-                name="returns_tasks_list",
-                tier="golden",
-                args={},
-                expect=SkillExpect(schema_keys=["ok", "tasks", "count"]),
+    registry.register(
+        Skill(
+            name="list_scheduled_tasks",
+            description=(
+                "List every scheduled task currently persisted, including "
+                "user-created and agent-created ones. Returns "
+                "{ok, tasks: [{task_id, cron_expression, creator_actor, "
+                "next_run_at, fire_at, recurring, prompt, last_run, "
+                "last_status}], count}."
             ),
-        ],
-    ))
-
-    registry.register(Skill(
-        name="cancel_scheduled_task",
-        description=(
-            "Remove a scheduled task by id. Returns "
-            "{ok, task_id, deleted} on success, or "
-            "{ok: false, error, error_type: 'not_found'} if no task "
-            "with that id exists."
-        ),
-        affinity=["scheduling", "cron"],
-        cost_profile="low",
-        trusted_source="builtin://cancel_scheduled_task",
-        handler=_cancel_scheduled_task,
-        tests=[
-            SkillTestCase(
-                name="empty_task_id_returns_error",
-                tier="golden",
-                args={"task_id": ""},
-                expect=SkillExpect(schema_keys=["ok", "error", "error_type"]),
-                custom_predicate=lambda r: (
-                    isinstance(r, dict)
-                    and r.get("ok") is False
-                    and r.get("error_type") == "invalid_argument"
+            affinity=["scheduling", "introspection", "cron"],
+            cost_profile="low",
+            trusted_source="builtin://list_scheduled_tasks",
+            handler=_list_scheduled_tasks,
+            tests=[
+                SkillTestCase(
+                    name="returns_tasks_list",
+                    tier="golden",
+                    args={},
+                    expect=SkillExpect(schema_keys=["ok", "tasks", "count"]),
                 ),
+            ],
+        )
+    )
+
+    registry.register(
+        Skill(
+            name="cancel_scheduled_task",
+            description=(
+                "Remove a scheduled task by id. Returns "
+                "{ok, task_id, deleted} on success, or "
+                "{ok: false, error, error_type: 'not_found'} if no task "
+                "with that id exists."
             ),
-        ],
-    ))
+            affinity=["scheduling", "cron"],
+            cost_profile="low",
+            trusted_source="builtin://cancel_scheduled_task",
+            handler=_cancel_scheduled_task,
+            tests=[
+                SkillTestCase(
+                    name="empty_task_id_returns_error",
+                    tier="golden",
+                    args={"task_id": ""},
+                    expect=SkillExpect(schema_keys=["ok", "error", "error_type"]),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict)
+                        and r.get("ok") is False
+                        and r.get("error_type") == "invalid_argument"
+                    ),
+                ),
+            ],
+        )
+    )
     return 3
 
 

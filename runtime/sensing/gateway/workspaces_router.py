@@ -5,6 +5,7 @@ code/agent turns. The layout itself lives in ``runtime.platform.runtime_policy.w
 the API is deliberately read-light and creates the standard directory
 structure on first access.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -28,6 +29,7 @@ except ImportError:  # pragma: no cover
 from runtime.platform.runtime_policy.workspaces import WorkspaceManager
 
 if FASTAPI_AVAILABLE:
+
     class WorkspaceDirEntry(BaseModel):
         key: str
         path: str
@@ -161,17 +163,17 @@ def create_workspaces_router(
                     continue
                 rel = path.relative_to(root).as_posix()
                 suffix = "" if area_key == "output" else f"?area={area_key}"
-                files.append({
-                    "name": path.name,
-                    "area": area_key,
-                    "relative_path": rel,
-                    "path": str(path),
-                    "size": path.stat().st_size,
-                    "modified": int(path.stat().st_mtime),
-                    "download_url": (
-                        f"/api/workspaces/{thread_id}/outputs/{rel}{suffix}"
-                    ),
-                })
+                files.append(
+                    {
+                        "name": path.name,
+                        "area": area_key,
+                        "relative_path": rel,
+                        "path": str(path),
+                        "size": path.stat().st_size,
+                        "modified": int(path.stat().st_mtime),
+                        "download_url": (f"/api/workspaces/{thread_id}/outputs/{rel}{suffix}"),
+                    }
+                )
         return {
             "thread_id": thread_id,
             "area": area_key,

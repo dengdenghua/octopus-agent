@@ -6,6 +6,7 @@ effects the first attempt already had (a partial write, or a shell command that
 ran before its result failed to parse), so the loop now gates the retry on
 ``_retry_safe_affinity``.
 """
+
 from __future__ import annotations
 
 from runtime.core.cerebrum.react_loop import _retry_safe_affinity

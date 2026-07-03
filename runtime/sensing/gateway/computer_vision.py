@@ -5,6 +5,7 @@ Split out of the former ~1994-line computer_router.py. Fully self-contained
 — no shared-state access, only reads ``data/custom_models.json`` (fixed
 path) and environment variables.
 """
+
 from __future__ import annotations
 
 import json
@@ -112,8 +113,8 @@ def _call_openai_vision(
     prompt = (
         "You are a desktop UI grounding model. "
         "Inspect the screenshot and return only JSON. "
-        "Schema: {\"actions\":[{\"action\":\"click\",\"x\":number,\"y\":number,"
-        "\"button\":\"left\"}]} or type/key/wait actions. "
+        'Schema: {"actions":[{"action":"click","x":number,"y":number,'
+        '"button":"left"}]} or type/key/wait actions. '
         "Coordinates must use the screenshot's native pixel coordinate system. "
         f"Task: {goal}"
     )

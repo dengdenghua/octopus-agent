@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
@@ -13,16 +12,20 @@ PriorityPolicy = Literal["halve", "subtract"]
 
 @dataclass(frozen=True)
 class ApplyOutcome:
-
     proposal_id: str
     kind: str
-    action: Literal["applied", "skipped_threshold", "skipped_unknown_target", "skipped_duplicate", "skipped_invalid"]
+    action: Literal[
+        "applied",
+        "skipped_threshold",
+        "skipped_unknown_target",
+        "skipped_duplicate",
+        "skipped_invalid",
+    ]
     detail: str = ""
 
 
 @dataclass(frozen=True)
 class ApplyResult:
-
     rules: list[Rule]
     outcomes: list[ApplyOutcome] = field(default_factory=list)
 
@@ -56,12 +59,14 @@ def apply_proposals_to_rules(
     for p in proposals:
         pid = str(p.proposal_id)
         if p.confidence < min_confidence or _SEVERITY_ORDER[p.severity] < accepted_sev:
-            outcomes.append(ApplyOutcome(
-                proposal_id=pid,
-                kind=p.kind,
-                action="skipped_threshold",
-                detail=f"conf={p.confidence:.2f} sev={p.severity}",
-            ))
+            outcomes.append(
+                ApplyOutcome(
+                    proposal_id=pid,
+                    kind=p.kind,
+                    action="skipped_threshold",
+                    detail=f"conf={p.confidence:.2f} sev={p.severity}",
+                )
+            )
             continue
 
         if p.kind == "remove_degraded_step":
@@ -74,8 +79,10 @@ def apply_proposals_to_rules(
             result = _apply_merge_adjacent(new_rules, p)
         else:
             result = ApplyOutcome(
-                proposal_id=pid, kind=p.kind,
-                action="skipped_invalid", detail=f"unknown kind {p.kind!r}",
+                proposal_id=pid,
+                kind=p.kind,
+                action="skipped_invalid",
+                detail=f"unknown kind {p.kind!r}",
             )
         outcomes.append(result)
 
@@ -83,43 +90,43 @@ def apply_proposals_to_rules(
     return ApplyResult(rules=new_rules, outcomes=outcomes)
 
 
-
-
-def _apply_remove_step(
-    rules: list[Rule], p: RewriteProposal
-) -> ApplyOutcome:
+def _apply_remove_step(rules: list[Rule], p: RewriteProposal) -> ApplyOutcome:
     pid = str(p.proposal_id)
     if p.target_rule_name is None or p.target_step_index is None:
         return ApplyOutcome(
-            proposal_id=pid, kind=p.kind,
-            action="skipped_invalid", detail="missing target",
+            proposal_id=pid,
+            kind=p.kind,
+            action="skipped_invalid",
+            detail="missing target",
         )
-    idx_target = next(
-        (i for i, r in enumerate(rules) if r.name == p.target_rule_name), None
-    )
+    idx_target = next((i for i, r in enumerate(rules) if r.name == p.target_rule_name), None)
     if idx_target is None:
         return ApplyOutcome(
-            proposal_id=pid, kind=p.kind,
-            action="skipped_unknown_target", detail=p.target_rule_name,
+            proposal_id=pid,
+            kind=p.kind,
+            action="skipped_unknown_target",
+            detail=p.target_rule_name,
         )
     old = rules[idx_target]
     step_i = p.target_step_index
     if step_i < 0 or step_i >= len(old.skill_sequence):
         return ApplyOutcome(
-            proposal_id=pid, kind=p.kind,
-            action="skipped_invalid", detail=f"step_index {step_i} out of range",
+            proposal_id=pid,
+            kind=p.kind,
+            action="skipped_invalid",
+            detail=f"step_index {step_i} out of range",
         )
     new_sequence = [s for i, s in enumerate(old.skill_sequence) if i != step_i]
-    new_templates = [
-        t for i, t in enumerate(old.node_args_templates) if i != step_i
-    ]
+    new_templates = [t for i, t in enumerate(old.node_args_templates) if i != step_i]
     rules[idx_target] = replace(
         old,
         skill_sequence=new_sequence,
         node_args_templates=new_templates,
     )
     return ApplyOutcome(
-        proposal_id=pid, kind=p.kind, action="applied",
+        proposal_id=pid,
+        kind=p.kind,
+        action="applied",
         detail=f"{old.name}: removed step {step_i}",
     )
 
@@ -133,40 +140,46 @@ def _apply_lower_priority(
     pid = str(p.proposal_id)
     if p.target_rule_name is None:
         return ApplyOutcome(
-            proposal_id=pid, kind=p.kind,
-            action="skipped_invalid", detail="missing target_rule_name",
+            proposal_id=pid,
+            kind=p.kind,
+            action="skipped_invalid",
+            detail="missing target_rule_name",
         )
-    idx_target = next(
-        (i for i, r in enumerate(rules) if r.name == p.target_rule_name), None
-    )
+    idx_target = next((i for i, r in enumerate(rules) if r.name == p.target_rule_name), None)
     if idx_target is None:
         return ApplyOutcome(
-            proposal_id=pid, kind=p.kind,
-            action="skipped_unknown_target", detail=p.target_rule_name,
+            proposal_id=pid,
+            kind=p.kind,
+            action="skipped_unknown_target",
+            detail=p.target_rule_name,
         )
     old = rules[idx_target]
     new_prio = max(0, old.priority // 2) if policy == "halve" else max(0, old.priority - step)
     rules[idx_target] = replace(old, priority=new_prio)
     return ApplyOutcome(
-        proposal_id=pid, kind=p.kind, action="applied",
+        proposal_id=pid,
+        kind=p.kind,
+        action="applied",
         detail=f"{old.name}: priority {old.priority} → {new_prio}",
     )
 
 
-def _apply_new_rule(
-    rules: list[Rule], p: RewriteProposal, existing: set[str]
-) -> ApplyOutcome:
+def _apply_new_rule(rules: list[Rule], p: RewriteProposal, existing: set[str]) -> ApplyOutcome:
     pid = str(p.proposal_id)
     if not p.suggested_skill_sequence:
         return ApplyOutcome(
-            proposal_id=pid, kind=p.kind,
-            action="skipped_invalid", detail="empty skill sequence",
+            proposal_id=pid,
+            kind=p.kind,
+            action="skipped_invalid",
+            detail="empty skill sequence",
         )
     name = p.target_rule_name or f"learned_{pid[:8]}"
     if name in existing:
         return ApplyOutcome(
-            proposal_id=pid, kind=p.kind,
-            action="skipped_duplicate", detail=name,
+            proposal_id=pid,
+            kind=p.kind,
+            action="skipped_duplicate",
+            detail=name,
         )
     rules.append(
         Rule(
@@ -179,27 +192,29 @@ def _apply_new_rule(
     )
     existing.add(name)
     return ApplyOutcome(
-        proposal_id=pid, kind=p.kind, action="applied",
+        proposal_id=pid,
+        kind=p.kind,
+        action="applied",
         detail=f"added rule {name!r} ({len(p.suggested_skill_sequence)} steps)",
     )
 
 
-def _apply_merge_adjacent(
-    rules: list[Rule], p: RewriteProposal
-) -> ApplyOutcome:
+def _apply_merge_adjacent(rules: list[Rule], p: RewriteProposal) -> ApplyOutcome:
     pid = str(p.proposal_id)
     if p.target_rule_name is None:
         return ApplyOutcome(
-            proposal_id=pid, kind=p.kind,
-            action="skipped_invalid", detail="missing target_rule_name",
+            proposal_id=pid,
+            kind=p.kind,
+            action="skipped_invalid",
+            detail="missing target_rule_name",
         )
-    idx_target = next(
-        (i for i, r in enumerate(rules) if r.name == p.target_rule_name), None
-    )
+    idx_target = next((i for i, r in enumerate(rules) if r.name == p.target_rule_name), None)
     if idx_target is None:
         return ApplyOutcome(
-            proposal_id=pid, kind=p.kind,
-            action="skipped_unknown_target", detail=p.target_rule_name,
+            proposal_id=pid,
+            kind=p.kind,
+            action="skipped_unknown_target",
+            detail=p.target_rule_name,
         )
     old = rules[idx_target]
     deduped: list = []
@@ -210,19 +225,20 @@ def _apply_merge_adjacent(
             continue
         deduped.append(s)
         deduped_templates.append(
-            old.node_args_templates[i]
-            if i < len(old.node_args_templates) else None
+            old.node_args_templates[i] if i < len(old.node_args_templates) else None
         )
         prev = s
     if len(deduped) == len(old.skill_sequence):
         return ApplyOutcome(
-            proposal_id=pid, kind=p.kind,
-            action="skipped_invalid", detail="no adjacent duplicates",
+            proposal_id=pid,
+            kind=p.kind,
+            action="skipped_invalid",
+            detail="no adjacent duplicates",
         )
-    rules[idx_target] = replace(
-        old, skill_sequence=deduped, node_args_templates=deduped_templates
-    )
+    rules[idx_target] = replace(old, skill_sequence=deduped, node_args_templates=deduped_templates)
     return ApplyOutcome(
-        proposal_id=pid, kind=p.kind, action="applied",
+        proposal_id=pid,
+        kind=p.kind,
+        action="applied",
         detail=f"{old.name}: {len(old.skill_sequence)} → {len(deduped)} steps",
     )

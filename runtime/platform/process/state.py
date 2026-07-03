@@ -36,7 +36,6 @@ class StateEntry:
 
 
 class StateBackend(ABC):
-
     @abstractmethod
     def get(self, key: str, namespace: str = "default") -> StateEntry | None: ...
 
@@ -135,14 +134,18 @@ class FileBackend(StateBackend):
             entry.ts = datetime.now().isoformat(timespec="seconds")
             path = self._key_path(entry.key, entry.namespace)
             path.write_text(
-                json.dumps({
-                    "key": entry.key,
-                    "value": entry.value,
-                    "namespace": entry.namespace,
-                    "version": entry.version,
-                    "ts": entry.ts,
-                    "metadata": entry.metadata,
-                }, ensure_ascii=False, default=str),
+                json.dumps(
+                    {
+                        "key": entry.key,
+                        "value": entry.value,
+                        "namespace": entry.namespace,
+                        "version": entry.version,
+                        "ts": entry.ts,
+                        "metadata": entry.metadata,
+                    },
+                    ensure_ascii=False,
+                    default=str,
+                ),
                 encoding="utf-8",
             )
             return entry
@@ -165,8 +168,7 @@ class FileBackend(StateBackend):
         if not self._base.exists():
             return []
         return sorted(
-            d.name for d in self._base.iterdir()
-            if d.is_dir() and not d.name.startswith(".")
+            d.name for d in self._base.iterdir() if d.is_dir() and not d.name.startswith(".")
         )
 
 
@@ -204,11 +206,15 @@ class SQLiteBackend(StateBackend):
 
     def get(self, key: str, namespace: str = "default") -> StateEntry | None:
         with self._lock:
-            row = self._get_conn().execute(
-                "SELECT key, value, namespace, version, ts, metadata "
-                "FROM state WHERE namespace=? AND key=?",
-                (namespace, key),
-            ).fetchone()
+            row = (
+                self._get_conn()
+                .execute(
+                    "SELECT key, value, namespace, version, ts, metadata "
+                    "FROM state WHERE namespace=? AND key=?",
+                    (namespace, key),
+                )
+                .fetchone()
+            )
         if row is None:
             return None
         try:
@@ -218,8 +224,12 @@ class SQLiteBackend(StateBackend):
             value = row[1]
             metadata = {}
         return StateEntry(
-            key=row[0], value=value, namespace=row[2],
-            version=row[3], ts=row[4], metadata=metadata,
+            key=row[0],
+            value=value,
+            namespace=row[2],
+            version=row[3],
+            ts=row[4],
+            metadata=metadata,
         )
 
     def set(self, entry: StateEntry) -> StateEntry:
@@ -255,22 +265,28 @@ class SQLiteBackend(StateBackend):
     def list_keys(self, namespace: str = "default", prefix: str = "") -> list[str]:
         with self._lock:
             if prefix:
-                rows = self._get_conn().execute(
-                    "SELECT key FROM state WHERE namespace=? AND key LIKE ?",
-                    (namespace, f"{prefix}%"),
-                ).fetchall()
+                rows = (
+                    self._get_conn()
+                    .execute(
+                        "SELECT key FROM state WHERE namespace=? AND key LIKE ?",
+                        (namespace, f"{prefix}%"),
+                    )
+                    .fetchall()
+                )
             else:
-                rows = self._get_conn().execute(
-                    "SELECT key FROM state WHERE namespace=?",
-                    (namespace,),
-                ).fetchall()
+                rows = (
+                    self._get_conn()
+                    .execute(
+                        "SELECT key FROM state WHERE namespace=?",
+                        (namespace,),
+                    )
+                    .fetchall()
+                )
         return sorted(r[0] for r in rows)
 
     def list_namespaces(self) -> list[str]:
         with self._lock:
-            rows = self._get_conn().execute(
-                "SELECT DISTINCT namespace FROM state"
-            ).fetchall()
+            rows = self._get_conn().execute("SELECT DISTINCT namespace FROM state").fetchall()
         return sorted(r[0] for r in rows)
 
     def close(self) -> None:
@@ -345,14 +361,17 @@ class StateStore:
 
         try:
             from runtime.platform.process.eventbus import StateChanged, get_eventbus
+
             bus = get_eventbus()
-            bus.publish(StateChanged(
-                event_type="state.changed",
-                key=key,
-                old_value=old_value,
-                new_value=value,
-                agent_id=namespace,
-            ))
+            bus.publish(
+                StateChanged(
+                    event_type="state.changed",
+                    key=key,
+                    old_value=old_value,
+                    new_value=value,
+                    agent_id=namespace,
+                )
+            )
         except Exception as _exc:
             _LOG.debug("state changed event publish failed: %s", _exc)
 

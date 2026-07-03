@@ -16,7 +16,7 @@ _REPO = Path(__file__).resolve().parent.parent
 
 class TestConsumeRegex:
     def test_matches_is_on_and_value_both_quote_styles(self):
-        text = "is_on(\"a.b\") and value('c.d') or x.is_on(\"e.f\")"
+        text = 'is_on("a.b") and value(\'c.d\') or x.is_on("e.f")'
         assert set(_CONSUME_RE.findall(text)) == {"a.b", "c.d", "e.f"}
 
     def test_ignores_non_flag_and_dynamic_calls(self):
@@ -27,8 +27,8 @@ class TestConsumeRegex:
 class TestRegisteredFlags:
     def test_extracts_real_dotted_flags(self):
         flags = _registered_flags()
-        assert "regeneration.enabled" in flags   # a real registered flag
-        assert all("." in f for f in flags)       # all dotted group.flag
+        assert "regeneration.enabled" in flags  # a real registered flag
+        assert all("." in f for f in flags)  # all dotted group.flag
         assert len(flags) >= 10
 
 
@@ -45,7 +45,9 @@ class TestRatchet:
                 "tools/lint/feature_flag_consumption_check.py",
                 "--strict",
             ],
-            cwd=str(_REPO), capture_output=True, text=True,
+            cwd=str(_REPO),
+            capture_output=True,
+            text=True,
         )
         assert r.returncode == 0, (
             "feature-flag-consumption baseline drifted:\n" + r.stdout + r.stderr

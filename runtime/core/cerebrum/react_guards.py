@@ -281,9 +281,8 @@ def _final_answer_claims_no_tool_access(final_answer: str) -> bool:
         "文件",
         "项目",
     )
-    return (
-        any(marker in lowered for marker in denial_markers)
-        and any(marker in lowered for marker in tool_markers)
+    return any(marker in lowered for marker in denial_markers) and any(
+        marker in lowered for marker in tool_markers
     )
 
 
@@ -381,7 +380,7 @@ def _code_mode_missing_inspection_tool_guard(
         return (
             "Code mode cannot finish this project-inspection task yet: no "
             "successful file tool observation is recorded. Call "
-            "list_cwd({\"path\":\".\"}) first, then read_file on the smallest "
+            'list_cwd({"path":"."}) first, then read_file on the smallest '
             "relevant file set."
         )
     if _goal_requires_file_content(goal) and not _has_successful_tool_observation(
@@ -416,7 +415,7 @@ def _code_mode_false_no_tool_guard(
     return (
         "Tools are available in this ReAct session. Do not claim that "
         "project/file tools are unavailable before trying a listed tool. "
-        "For this code-mode inspection task, call list_cwd({\"path\":\".\"}) "
+        'For this code-mode inspection task, call list_cwd({"path":"."}) '
         "first, then read_file on the smallest relevant file set. If a "
         "specific tool call fails, report that concrete failure."
     )
@@ -621,10 +620,7 @@ def _completion_phrase_without_todo_guard(
     last = steps[-1]
     last_thought = str(getattr(last, "thought", "") or "")
     last_obs = str(getattr(last, "observation", "") or "")
-    if not (
-        _looks_like_completion_phrase(last_thought)
-        or _looks_like_completion_phrase(last_obs)
-    ):
+    if not (_looks_like_completion_phrase(last_thought) or _looks_like_completion_phrase(last_obs)):
         return None
 
     # Did the model just call todo_write? Then it already did the
@@ -636,10 +632,7 @@ def _completion_phrase_without_todo_guard(
     # Are there still incomplete todos? Otherwise the completion
     # phrase is plausibly the wrap-up at the end and the existing
     # final-answer guard takes over.
-    incomplete = [
-        item for item in todos
-        if str(item.get("status") or "").lower() != "completed"
-    ]
+    incomplete = [item for item in todos if str(item.get("status") or "").lower() != "completed"]
     if not incomplete:
         return None
 
@@ -656,14 +649,16 @@ def _completion_phrase_without_todo_guard(
 # verification action for the §18 post-write guard. Not the same as
 # ``_has_code_verification`` (which scans across all steps); here we
 # care about whether a verification is queued in the next slot.
-_SHELL_VERIFICATION_TOOLS: frozenset[str] = frozenset({
-    "exec_shell",
-    "shell_command",
-    "bash",
-    "run_tests",
-    "run_checks",
-    "verify",
-})
+_SHELL_VERIFICATION_TOOLS: frozenset[str] = frozenset(
+    {
+        "exec_shell",
+        "shell_command",
+        "bash",
+        "run_tests",
+        "run_checks",
+        "verify",
+    }
+)
 
 # How many steps after a code-write action we tolerate before
 # expecting a verification step. Tuned empirically: long edit
@@ -765,7 +760,7 @@ def _unverified_write_followup_guard(
         return None  # still within tolerance
 
     # Was there a verification step after the last write?
-    for follow in steps[last_write_idx + 1:]:
+    for follow in steps[last_write_idx + 1 :]:
         if _is_followup_verification_step(follow, written_path=written_path):
             return None  # already verified
 
@@ -854,7 +849,8 @@ def _language_mismatched_verification_guard(
         return None
 
     missing = [
-        lang for lang in sorted(languages)
+        lang
+        for lang in sorted(languages)
         if not _has_language_specific_verification(steps, language=lang)
     ]
     if not missing:
@@ -867,8 +863,7 @@ def _language_mismatched_verification_guard(
         "go": "go build / go test / go vet",
     }
     hints = "; ".join(
-        f"{lang}: {suggestions.get(lang, 'language-appropriate verifier')}"
-        for lang in missing
+        f"{lang}: {suggestions.get(lang, 'language-appropriate verifier')}" for lang in missing
     )
     langs_repr = ", ".join(missing)
     return (
@@ -943,15 +938,13 @@ def _path_verification_policy_guard(
         return None
 
     followup_texts = [
-        f"{step.action or ''}\n{step.observation or ''}"
-        for step in steps[last_write_idx + 1:]
+        f"{step.action or ''}\n{step.observation or ''}" for step in steps[last_write_idx + 1 :]
     ]
     missing = [
-        req for req in requirements
-        if req.required and not any(
-            command_satisfies_requirement(text, req)
-            for text in followup_texts
-        )
+        req
+        for req in requirements
+        if req.required
+        and not any(command_satisfies_requirement(text, req) for text in followup_texts)
     ]
     if not missing:
         return None
@@ -1171,6 +1164,7 @@ def _new_third_party_import_without_dep_guard(
 # command not found, traceback) — and the model ignored the failure
 # and claimed success anyway.
 
+
 def _false_verification_claim_guard(
     steps: list[ReActStep],
     final_answer: str,
@@ -1355,6 +1349,7 @@ def _trajectory_has_oversized_edit(steps: list[ReActStep]) -> tuple[int, str | N
         if not _step_is_oversized_edit(step):
             continue
         from runtime.core.cerebrum.react_parsing import _step_payload_line_count
+
         parsed = _parse_action(step.action)
         if parsed is None:
             continue
@@ -1444,7 +1439,7 @@ def _secret_in_payload_guard(
     return (
         "Cannot finish yet: a write step introduced a credential-shaped "
         f"value in: {preview}. Hard-coding API keys, GitHub PATs, AWS "
-        "access keys, private-key blocks, or `api_key=\"...\"` literals "
+        'access keys, private-key blocks, or `api_key="..."` literals '
         "into source is a security incident. Move the value to an "
         "environment variable or local config (gitignored), or — if the "
         "string is genuinely a non-secret fixture — make that explicit "
@@ -1589,7 +1584,9 @@ _FULL_REWRITE_LOOKBACK = 12
 
 
 def _trajectory_full_rewrite_hits(
-    steps: list[ReActStep], *, repo_root: str | None = None,
+    steps: list[ReActStep],
+    *,
+    repo_root: str | None = None,
 ) -> list[tuple[str, int]]:
     """Return ``[(path, existing_line_count)]`` for full-rewrite attempts
     that lack a prior surgical edit on the same path within the lookback."""
@@ -1597,7 +1594,8 @@ def _trajectory_full_rewrite_hits(
     bad: list[tuple[str, int]] = []
     for idx, step in enumerate(window):
         is_rewrite, path, line_count = _step_is_full_file_rewrite_attempt(
-            step, repo_root=repo_root,
+            step,
+            repo_root=repo_root,
         )
         if not is_rewrite or not path:
             continue
@@ -1893,11 +1891,7 @@ def _mock_only_test_guard(
     hits = _trajectory_mock_only_hits(steps)
     if not hits:
         return None
-    items = [
-        f"{path} :: {name}"
-        for path, names in hits.items()
-        for name in names
-    ]
+    items = [f"{path} :: {name}" for path, names in hits.items() for name in names]
     preview = "; ".join(items[:3])
     if len(items) > 3:
         preview += f"; +{len(items) - 3} more"
@@ -2004,11 +1998,7 @@ def _deleted_test_guard(
     hits = _trajectory_deleted_tests(steps)
     if not hits:
         return None
-    items = [
-        f"{path} :: {name}"
-        for path, names in hits.items()
-        for name in names
-    ]
+    items = [f"{path} :: {name}" for path, names in hits.items() for name in names]
     preview = "; ".join(items[:3])
     if len(items) > 3:
         preview += f"; +{len(items) - 3} more"
@@ -2063,11 +2053,7 @@ def _generic_test_name_guard(
     hits = _trajectory_generic_test_hits(steps)
     if not hits:
         return None
-    items = [
-        f"{path} :: {name}"
-        for path, names in hits.items()
-        for name in names
-    ]
+    items = [f"{path} :: {name}" for path, names in hits.items() for name in names]
     preview = "; ".join(items[:3])
     if len(items) > 3:
         preview += f"; +{len(items) - 3} more"
@@ -2122,11 +2108,7 @@ def _no_assertion_test_guard(
     hits = _trajectory_no_assertion_test_hits(steps)
     if not hits:
         return None
-    items = [
-        f"{path} :: {name}"
-        for path, names in hits.items()
-        for name in names
-    ]
+    items = [f"{path} :: {name}" for path, names in hits.items() for name in names]
     preview = "; ".join(items[:3])
     if len(items) > 3:
         preview += f"; +{len(items) - 3} more"
@@ -2180,11 +2162,7 @@ def _async_without_await_guard(
     hits = _trajectory_async_no_await_hits(steps)
     if not hits:
         return None
-    items = [
-        f"{path} :: {name}"
-        for path, names in hits.items()
-        for name in names
-    ]
+    items = [f"{path} :: {name}" for path, names in hits.items() for name in names]
     preview = "; ".join(items[:3])
     if len(items) > 3:
         preview += f"; +{len(items) - 3} more"
@@ -2313,8 +2291,6 @@ def _long_function_guard(
     )
 
 
-
-
 # ──────────────────────────────────────────────────────────────────
 # §63, §65-§67, §69-§70 — Security + quality guards (EXTRACTED 2026-06-06)
 # ──────────────────────────────────────────────────────────────────
@@ -2382,6 +2358,7 @@ def _spec_code_mode(
     """Build a GuardSpec for the common A-class guard signature
     ``fn(steps, final_answer, *, is_code_mode)`` that only runs in
     code mode."""
+
     def _invoke(ctx: GuardContext) -> str | None:
         if not ctx.is_code_mode:
             return None
@@ -2410,7 +2387,8 @@ def _invoke_missing_inspection(ctx: GuardContext) -> str | None:
     if not ctx.is_code_mode:
         return None
     return _code_mode_missing_inspection_tool_guard(
-        ctx.steps, ctx.final_answer,
+        ctx.steps,
+        ctx.final_answer,
         goal=ctx.goal,
         file_tools_visible=ctx.file_inspection_tools_visible,
     )
@@ -2420,7 +2398,8 @@ def _invoke_false_no_tool(ctx: GuardContext) -> str | None:
     if not ctx.is_code_mode:
         return None
     return _code_mode_false_no_tool_guard(
-        ctx.steps, ctx.final_answer,
+        ctx.steps,
+        ctx.final_answer,
         goal=ctx.goal,
         tools_active=ctx.file_inspection_tools_visible,
     )
@@ -2430,7 +2409,9 @@ def _invoke_false_tool_result(ctx: GuardContext) -> str | None:
     if not ctx.is_code_mode:
         return None
     return _code_mode_false_tool_result_guard(
-        ctx.steps, ctx.final_answer, tools_active=ctx.tools_active,
+        ctx.steps,
+        ctx.final_answer,
+        tools_active=ctx.tools_active,
     )
 
 
@@ -2474,7 +2455,7 @@ def _final_answer_security_guard(
             f"credential-shaped value ({_preview_labels(secret_hits)}). "
             "Do not reveal API keys, access tokens, private keys, or "
             "password-like literals in the user-visible answer. Redact the "
-            "value and explain how to store it safely."
+            "value and explain how to store it safely.",
         )
 
     dynamic_hits = _detect_dynamic_exec_in_payload(text)
@@ -2485,7 +2466,7 @@ def _final_answer_security_guard(
             f"code ({_preview_labels(dynamic_hits)}). Replace it with a safer "
             "pattern such as ast.literal_eval, explicit dispatch, or a "
             "trusted import allowlist, or clearly mark it as unsafe and do "
-            "not present it as recommended code."
+            "not present it as recommended code.",
         )
 
     shell_hits = _detect_shell_injection_in_payload(text)
@@ -2495,7 +2476,7 @@ def _final_answer_security_guard(
             "Cannot finish yet: the final answer includes shell-injection "
             f"surface(s) ({_preview_labels(shell_hits)}). Prefer argv-list "
             "subprocess calls and avoid shell=True/os.system/os.popen in "
-            "recommended code."
+            "recommended code.",
         )
 
     deser_hits = _detect_unsafe_deser_in_payload(text)
@@ -2504,7 +2485,7 @@ def _final_answer_security_guard(
             "unsafe-deser guard",
             "Cannot finish yet: the final answer includes unsafe "
             f"deserialization ({_preview_labels(deser_hits)}). Recommend "
-            "json.loads, yaml.safe_load, or a typed schema validator instead."
+            "json.loads, yaml.safe_load, or a typed schema validator instead.",
         )
 
     destructive_hits = _detect_destructive_calls_in_payload(text)
@@ -2514,7 +2495,7 @@ def _final_answer_security_guard(
             "Cannot finish yet: the final answer includes destructive "
             f"filesystem/process calls ({_preview_labels(destructive_hits)}). "
             "Add explicit path validation, dry-run/confirmation semantics, "
-            "or avoid presenting the snippet as safe production code."
+            "or avoid presenting the snippet as safe production code.",
         )
 
     return None
@@ -2539,7 +2520,9 @@ GUARD_REGISTRY: list[GuardSpec] = [
     GuardSpec("tool-result guard", "protocol", _invoke_false_tool_result),
     GuardSpec("todo-protocol guard", "protocol", _invoke_todo_protocol),
     # ── Verification completeness ──
-    _spec_code_mode("language-verification guard", "verification", _language_mismatched_verification_guard),
+    _spec_code_mode(
+        "language-verification guard", "verification", _language_mismatched_verification_guard
+    ),
     _spec_code_mode("path-verification guard", "verification", _path_verification_policy_guard),
     _spec_code_mode("test-coverage guard", "verification", _new_python_code_without_test_guard),
     # ── Test-quality cluster ──
@@ -2550,15 +2533,23 @@ GUARD_REGISTRY: list[GuardSpec] = [
     _spec_code_mode("generic-test-name guard", "test-quality", _generic_test_name_guard),
     _spec_code_mode("no-assertion-test guard", "test-quality", _no_assertion_test_guard),
     # ── Interface / dependency safety ──
-    _spec_code_mode("signature-typecheck guard", "verification", _signature_changed_without_typecheck_guard),
-    _spec_code_mode("wire-schema guard", "verification", _wire_schema_change_without_compat_test_guard),
-    _spec_code_mode("dependency-declaration guard", "verification", _new_third_party_import_without_dep_guard),
+    _spec_code_mode(
+        "signature-typecheck guard", "verification", _signature_changed_without_typecheck_guard
+    ),
+    _spec_code_mode(
+        "wire-schema guard", "verification", _wire_schema_change_without_compat_test_guard
+    ),
+    _spec_code_mode(
+        "dependency-declaration guard", "verification", _new_third_party_import_without_dep_guard
+    ),
     _spec_code_mode("false-verification guard", "verification", _false_verification_claim_guard),
     # ── Code-smell cluster ──
     _spec_code_mode("comment-out-fix guard", "code-smell", _commented_out_as_fix_guard),
     _spec_code_mode("broad-except guard", "code-smell", _broad_except_suppression_guard),
     _spec_code_mode("exception-swallow guard", "code-smell", _exception_swallow_via_log_guard),
-    _spec_code_mode("tsconfig-include guard", "code-smell", _frontend_outside_tsconfig_include_guard),
+    _spec_code_mode(
+        "tsconfig-include guard", "code-smell", _frontend_outside_tsconfig_include_guard
+    ),
     _spec_code_mode("oversized-edit guard", "code-smell", _oversized_single_edit_guard),
     _spec_code_mode("sleep-in-prod guard", "code-smell", _sleep_in_production_guard),
     _spec_code_mode("async-without-await guard", "code-smell", _async_without_await_guard),

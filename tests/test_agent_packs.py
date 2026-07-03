@@ -13,7 +13,12 @@ def write(path: Path, text: str) -> None:
 
 def write_importable_market_research_pack(pack_root: Path) -> None:
     write(
-        pack_root / "plugins" / "agent-plugins" / "market-researcher" / ".claude-plugin" / "plugin.json",
+        pack_root
+        / "plugins"
+        / "agent-plugins"
+        / "market-researcher"
+        / ".claude-plugin"
+        / "plugin.json",
         json.dumps(
             {
                 "name": "market-researcher",
@@ -24,7 +29,12 @@ def write_importable_market_research_pack(pack_root: Path) -> None:
         ),
     )
     write(
-        pack_root / "plugins" / "agent-plugins" / "market-researcher" / "agents" / "market-researcher.md",
+        pack_root
+        / "plugins"
+        / "agent-plugins"
+        / "market-researcher"
+        / "agents"
+        / "market-researcher.md",
         """---
 name: market-researcher
 description: Produces sector market research
@@ -35,7 +45,13 @@ Use sector-overview and competitive-analysis to produce a short report.
 """,
     )
     write(
-        pack_root / "plugins" / "agent-plugins" / "market-researcher" / "skills" / "sector-overview" / "SKILL.md",
+        pack_root
+        / "plugins"
+        / "agent-plugins"
+        / "market-researcher"
+        / "skills"
+        / "sector-overview"
+        / "SKILL.md",
         """---
 name: sector-overview
 description: Build a sector overview
@@ -45,7 +61,13 @@ description: Build a sector overview
 """,
     )
     write(
-        pack_root / "plugins" / "agent-plugins" / "market-researcher" / "skills" / "competitive-analysis" / "SKILL.md",
+        pack_root
+        / "plugins"
+        / "agent-plugins"
+        / "market-researcher"
+        / "skills"
+        / "competitive-analysis"
+        / "SKILL.md",
         """---
 name: competitive-analysis
 description: Compare competitors
@@ -98,7 +120,13 @@ You are a pitch agent.
 """,
     )
     write(
-        tmp_path / "plugins" / "agent-plugins" / "pitch-agent" / "skills" / "dcf-model" / "SKILL.md",
+        tmp_path
+        / "plugins"
+        / "agent-plugins"
+        / "pitch-agent"
+        / "skills"
+        / "dcf-model"
+        / "SKILL.md",
         """---
 name: dcf-model
 description: Build DCF models
@@ -119,7 +147,9 @@ Load the dcf skill.
     )
     write(
         tmp_path / "plugins" / "agent-plugins" / "pitch-agent" / ".mcp.json",
-        json.dumps({"mcpServers": {"capiq": {"type": "http", "url": "https://example.invalid/mcp"}}}),
+        json.dumps(
+            {"mcpServers": {"capiq": {"type": "http", "url": "https://example.invalid/mcp"}}}
+        ),
     )
     write(
         tmp_path / "managed-agent-cookbooks" / "pitch-agent" / "agent.yaml",
@@ -300,7 +330,9 @@ def test_import_agent_from_pack_creates_local_agent_without_enabling_mcp(tmp_pat
     result = import_agent_from_pack(pack_root, "market-researcher", agents_root, skills_root)
 
     agent_root = agents_root / "market_researcher"
-    registry = json.loads((agent_root / "agent-core" / "tool-registry.jsonc").read_text(encoding="utf-8"))
+    registry = json.loads(
+        (agent_root / "agent-core" / "tool-registry.jsonc").read_text(encoding="utf-8")
+    )
     profile = json.loads((agent_root / "profile.jsonc").read_text(encoding="utf-8"))
     assert result.agent_id == "market_researcher"
     assert result.copied_skills == ["competitive-analysis", "sector-overview"]
@@ -435,12 +467,7 @@ def test_import_agent_from_pack_rejects_symlinked_skill_asset(tmp_path: Path) ->
     skills_root = tmp_path / "skills" / "public"
     write_importable_market_research_pack(pack_root)
     skill_dir = (
-        pack_root
-        / "plugins"
-        / "agent-plugins"
-        / "market-researcher"
-        / "skills"
-        / "sector-overview"
+        pack_root / "plugins" / "agent-plugins" / "market-researcher" / "skills" / "sector-overview"
     )
     (skill_dir / "reference.md").symlink_to(tmp_path / "outside-reference.md")
 

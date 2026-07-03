@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -90,9 +89,7 @@ def load_forged_skills_from_dir(
             if missing:
                 if skip_missing_subskills:
                     continue
-                raise ValueError(
-                    f"{md.name}: sub-skills missing from registry: {missing}"
-                )
+                raise ValueError(f"{md.name}: sub-skills missing from registry: {missing}")
 
             handler = _build_composite_handler(
                 underlying,
@@ -142,10 +139,7 @@ def _build_composite_handler_with_templates(
     step_templates: list[dict[str, Any]] | None = None,
 ) -> Any:
     templates = list(step_templates or [])
-    has_templates = (
-        len(templates) == len(underlying)
-        and any(template for template in templates)
-    )
+    has_templates = len(templates) == len(underlying) and any(template for template in templates)
 
     def _meta(**kwargs: Any) -> dict[str, Any]:
         from runtime.core.graph_runtime.runtime import (
@@ -169,8 +163,8 @@ def _build_composite_handler_with_templates(
                         call_args = resolve_templates(templates[i], outputs)
                 else:
                     call_args = dict(kwargs)
-                    if i > 0 and f"n{i-1}" in outputs:
-                        call_args.setdefault("_prev", outputs[f"n{i-1}"])
+                    if i > 0 and f"n{i - 1}" in outputs:
+                        call_args.setdefault("_prev", outputs[f"n{i - 1}"])
                 # Safety chokepoint. A forged composite calls each sub-skill's
                 # handler DIRECTLY (not via executor.execute_step), so EVERY
                 # pre-execution gate — capability-permission, injection-taint,
@@ -183,8 +177,11 @@ def _build_composite_handler_with_templates(
                 from runtime.execution.tool_engine.skill_gate import (
                     gate_inner_dispatch,
                 )
+
                 _block = gate_inner_dispatch(
-                    skill, call_args, caller="forged_composite",
+                    skill,
+                    call_args,
+                    caller="forged_composite",
                 )
                 if _block is not None:
                     success = False
@@ -257,8 +254,7 @@ def _parse_forged_md(path: Path) -> dict[str, Any] | None:
             parsed_templates = json.loads(raw_templates)
             if isinstance(parsed_templates, list):
                 meta["step_templates"] = [
-                    dict(item) for item in parsed_templates
-                    if isinstance(item, dict)
+                    dict(item) for item in parsed_templates if isinstance(item, dict)
                 ]
         except Exception:  # noqa: BLE001
             meta["step_templates"] = []
@@ -269,9 +265,7 @@ def _parse_value(raw: str) -> Any:
     if not raw:
         return ""
     # quoted string
-    if (raw.startswith("'") and raw.endswith("'")) or (
-        raw.startswith('"') and raw.endswith('"')
-    ):
+    if (raw.startswith("'") and raw.endswith("'")) or (raw.startswith('"') and raw.endswith('"')):
         s = raw[1:-1]
         if raw[0] == "'":
             s = s.replace("''", "'")

@@ -264,9 +264,7 @@ def _dispatch_parallel_actions(
                     "iteration": iteration,
                     "status": "success" if _ok else "error",
                     "output_preview": (
-                        _summarize_observation(obs)
-                        if isinstance(obs, str) and obs
-                        else obs
+                        _summarize_observation(obs) if isinstance(obs, str) and obs else obs
                     ),
                     "duration_ms": _duration_ms,
                     "parallel_batch_size": n,

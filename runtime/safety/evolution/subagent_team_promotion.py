@@ -37,7 +37,8 @@ def build_subagent_team_promotion_proposals(
     fitness = compute_subagent_fitness(review_queue_path=review_queue_path)
     roles = fitness.get("roles") if isinstance(fitness, dict) else []
     strong_roles = [
-        report for report in roles or []
+        report
+        for report in roles or []
         if _is_promotable_role(
             report,
             min_score=min_score,
@@ -58,10 +59,12 @@ def build_subagent_team_promotion_proposals(
     ):
         role = _canonical_role(report.get("role"))
         if role is None:
-            skipped.append({
-                "role": str(report.get("role") or ""),
-                "reason": "role is not a canonical topology role",
-            })
+            skipped.append(
+                {
+                    "role": str(report.get("role") or ""),
+                    "reason": "role is not a canonical topology role",
+                }
+            )
             continue
         agent_id = str(report.get("role") or "").strip()
         policy = evaluate_agent_policy(
@@ -69,11 +72,13 @@ def build_subagent_team_promotion_proposals(
             path=subagent_policy_path,
         )
         if policy.get("blocked"):
-            skipped.append({
-                "role": agent_id,
-                "reason": "operator policy retired this subagent",
-                "subagent_policy": policy,
-            })
+            skipped.append(
+                {
+                    "role": agent_id,
+                    "reason": "operator policy retired this subagent",
+                    "subagent_policy": policy,
+                }
+            )
             continue
         for topology in active_registry.values():
             spec = topology.agents.get(role)
@@ -83,14 +88,16 @@ def build_subagent_team_promotion_proposals(
             if key in seen:
                 continue
             seen.add(key)
-            proposals.append(_proposal_from_role_report(
-                topology=topology,
-                role=role,
-                old_agent=spec.agent_id,
-                new_agent=agent_id,
-                report=report,
-                subagent_policy=policy,
-            ))
+            proposals.append(
+                _proposal_from_role_report(
+                    topology=topology,
+                    role=role,
+                    old_agent=spec.agent_id,
+                    new_agent=agent_id,
+                    report=report,
+                    subagent_policy=policy,
+                )
+            )
             if len(proposals) >= max(1, limit):
                 break
         if len(proposals) >= max(1, limit):
@@ -200,8 +207,7 @@ def _proposal_from_role_report(
     confidence = float(report.get("confidence") or 0.0)
     promoted = int(report.get("promoted_count") or 0)
     evidence_ids = [
-        str(value) for value in (report.get("evidence_item_ids") or [])
-        if str(value or "").strip()
+        str(value) for value in (report.get("evidence_item_ids") or []) if str(value or "").strip()
     ][:8]
     return Proposal(
         kind="swap_agent",
@@ -267,7 +273,9 @@ def _historical_lift_index(
     for row in rows or []:
         if not isinstance(row, dict):
             continue
-        detail = row.get("promotion_detail") if isinstance(row.get("promotion_detail"), dict) else {}
+        detail = (
+            row.get("promotion_detail") if isinstance(row.get("promotion_detail"), dict) else {}
+        )
         role = str(detail.get("role") or "").strip()
         new_agent = str(detail.get("new_agent") or "").strip()
         if not role or not new_agent:
@@ -288,8 +296,12 @@ def _historical_lift_index(
         ]
         improved = sum(1 for item in items if item.get("verdict") == "improved")
         regressed = sum(1 for item in items if item.get("verdict") == "regressed")
-        avg_success = round(sum(success_deltas) / len(success_deltas), 3) if success_deltas else None
-        avg_quality = round(sum(quality_deltas) / len(quality_deltas), 3) if quality_deltas else None
+        avg_success = (
+            round(sum(success_deltas) / len(success_deltas), 3) if success_deltas else None
+        )
+        avg_quality = (
+            round(sum(quality_deltas) / len(quality_deltas), 3) if quality_deltas else None
+        )
         adjustment = 0.0
         if improved:
             adjustment += min(0.12, 0.04 * improved)

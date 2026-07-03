@@ -119,46 +119,113 @@ _RULES: tuple[dict[str, Any], ...] = (
         "label": "research",
         "modes": {"research", "deep", "deep_research"},
         "keywords": (
-            "research", "market", "competitor", "compare", "survey",
-            "latest", "source", "citation", "调研", "研究", "市场",
-            "竞品", "赛道", "资料", "来源", "引用", "最新", "报告",
+            "research",
+            "market",
+            "competitor",
+            "compare",
+            "survey",
+            "latest",
+            "source",
+            "citation",
+            "调研",
+            "研究",
+            "市场",
+            "竞品",
+            "赛道",
+            "资料",
+            "来源",
+            "引用",
+            "最新",
+            "报告",
         ),
         "skills": (
-            "todo_write", "search_capabilities", "use_capability",
-            "web_search", "web_fetch", "fetch_url",
-            "deep-research", "report-writing", "call_agent_parallel",
-            "bb_write", "bb_read", "bb_keys",
+            "todo_write",
+            "search_capabilities",
+            "use_capability",
+            "web_search",
+            "web_fetch",
+            "fetch_url",
+            "deep-research",
+            "report-writing",
+            "call_agent_parallel",
+            "bb_write",
+            "bb_read",
+            "bb_keys",
         ),
     },
     {
         "label": "code",
         "modes": {"code"},
         "keywords": (
-            "code", "bug", "fix", "implement", "test", "repo",
-            "frontend", "backend", "server", "port", "restart",
-            "代码", "修复", "实现", "测试", "前端", "后端",
-            "启动", "重启", "端口", "文件", "报错", "接口",
+            "code",
+            "bug",
+            "fix",
+            "implement",
+            "test",
+            "repo",
+            "frontend",
+            "backend",
+            "server",
+            "port",
+            "restart",
+            "代码",
+            "修复",
+            "实现",
+            "测试",
+            "前端",
+            "后端",
+            "启动",
+            "重启",
+            "端口",
+            "文件",
+            "报错",
+            "接口",
         ),
         "skills": (
-            "todo_write", "search_capabilities", "use_capability",
-            "list_cwd", "glob_files", "grep_text",
-            "read_file", "read_file_range", "code_search",
-            "code_find_symbol", "code_analyze", "edit_file",
-            "multi_edit_file", "write_text_file", "exec_shell",
-            "git_status", "git_diff",
+            "todo_write",
+            "search_capabilities",
+            "use_capability",
+            "list_cwd",
+            "glob_files",
+            "grep_text",
+            "read_file",
+            "read_file_range",
+            "code_search",
+            "code_find_symbol",
+            "code_analyze",
+            "edit_file",
+            "multi_edit_file",
+            "write_text_file",
+            "exec_shell",
+            "git_status",
+            "git_diff",
         ),
     },
     {
         "label": "capability",
         "modes": {"plugin", "capability", "skill_pack"},
         "keywords": (
-            "plugin", "plugins", "skill pack", "skill-pack", "capability",
-            "workflow", "toolbox", "mcp", "connector",
-            "插件", "技能包", "能力包", "能力", "工作流", "工具箱",
+            "plugin",
+            "plugins",
+            "skill pack",
+            "skill-pack",
+            "capability",
+            "workflow",
+            "toolbox",
+            "mcp",
+            "connector",
+            "插件",
+            "技能包",
+            "能力包",
+            "能力",
+            "工作流",
+            "工具箱",
             "连接器",
         ),
         "skills": (
-            "search_capabilities", "query_capability", "use_capability",
+            "search_capabilities",
+            "query_capability",
+            "use_capability",
             "query_skill",
         ),
     },
@@ -166,32 +233,74 @@ _RULES: tuple[dict[str, Any], ...] = (
         "label": "browser-ui",
         "modes": {"browser", "chrome", "ui"},
         "keywords": (
-            "browser", "localhost", "127.0.0.1", "screenshot",
-            "click", "ux", "ui", "playwright", "regression",
-            "浏览器", "页面", "点击", "截图", "回归", "交互",
-            "对齐", "侧边栏", "按钮", "输入框", "流式",
+            "browser",
+            "localhost",
+            "127.0.0.1",
+            "screenshot",
+            "click",
+            "ux",
+            "ui",
+            "playwright",
+            "regression",
+            "浏览器",
+            "页面",
+            "点击",
+            "截图",
+            "回归",
+            "交互",
+            "对齐",
+            "侧边栏",
+            "按钮",
+            "输入框",
+            "流式",
         ),
         "skills": (
-            "live_browser_state", "live_browser_current_url",
-            "live_browser_navigate", "live_browser_extract",
-            "live_browser_find", "live_browser_click", "live_browser_type",
-            "live_browser_wait", "live_browser_scroll",
-            "live_browser_screenshot", "browser_state", "browser_navigate",
-            "browser_get", "browser_extract", "browser_screenshot",
+            "live_browser_state",
+            "live_browser_current_url",
+            "live_browser_navigate",
+            "live_browser_extract",
+            "live_browser_find",
+            "live_browser_click",
+            "live_browser_type",
+            "live_browser_wait",
+            "live_browser_scroll",
+            "live_browser_screenshot",
+            "browser_state",
+            "browser_navigate",
+            "browser_get",
+            "browser_extract",
+            "browser_screenshot",
             "browser_click",
-            "screen_capture", "screen_info",
+            "screen_capture",
+            "screen_info",
         ),
     },
     {
         "label": "delegation",
         "modes": {"swarm"},
         "keywords": (
-            "subagent", "sub-agent", "parallel", "delegate", "worker",
-            "fan-out", "swarm", "子agent", "子 agent", "并行",
-            "派生", "召唤", "分工", "专家", "集群", "多路",
+            "subagent",
+            "sub-agent",
+            "parallel",
+            "delegate",
+            "worker",
+            "fan-out",
+            "swarm",
+            "子agent",
+            "子 agent",
+            "并行",
+            "派生",
+            "召唤",
+            "分工",
+            "专家",
+            "集群",
+            "多路",
         ),
         "skills": (
-            "call_agent_parallel", "bb_write", "bb_read", "bb_keys",
+            "call_agent_parallel",
+            "bb_write",
+            "bb_read",
+            "bb_keys",
             "query_skill",
         ),
     },
@@ -199,25 +308,56 @@ _RULES: tuple[dict[str, Any], ...] = (
         "label": "files",
         "modes": {"code"},
         "keywords": (
-            "file", "folder", "diff", "artifact", "write", "edit",
-            "文件", "目录", "产物", "生成", "编辑", "保存",
-            "撤销", "审核", "diff",
+            "file",
+            "folder",
+            "diff",
+            "artifact",
+            "write",
+            "edit",
+            "文件",
+            "目录",
+            "产物",
+            "生成",
+            "编辑",
+            "保存",
+            "撤销",
+            "审核",
+            "diff",
         ),
         "skills": (
-            "list_cwd", "glob_files", "read_file", "write_text_file",
-            "edit_file", "multi_edit_file", "append_text_file", "git_diff",
+            "list_cwd",
+            "glob_files",
+            "read_file",
+            "write_text_file",
+            "edit_file",
+            "multi_edit_file",
+            "append_text_file",
+            "git_diff",
         ),
     },
     {
         "label": "memory",
         "modes": {"memory"},
         "keywords": (
-            "remember", "memory", "preference", "profile", "template",
-            "记住", "记忆", "偏好", "以后", "模板", "技能库",
+            "remember",
+            "memory",
+            "preference",
+            "profile",
+            "template",
+            "记住",
+            "记忆",
+            "偏好",
+            "以后",
+            "模板",
+            "技能库",
         ),
         "skills": (
-            "recall", "remember", "note_user", "list_learned_skills",
-            "apply_skill", "learn_skill_from_text",
+            "recall",
+            "remember",
+            "note_user",
+            "list_learned_skills",
+            "apply_skill",
+            "learn_skill_from_text",
         ),
     },
 )
@@ -272,6 +412,7 @@ def activate_capabilities(
         from runtime.core.cerebrum.input_mentions import (
             parse_input_mentions,
         )
+
         mentions = parse_input_mentions(goal)
         pinned_skills = mentions.skills
         pinned_plugins = mentions.plugins
@@ -289,12 +430,17 @@ def activate_capabilities(
             from runtime.execution.suckers.delegation_skills import (
                 _DYNAMIC_SKILL_PACKS,
             )
+
             for pack_name in pinned_packs:
                 pack_skills = _DYNAMIC_SKILL_PACKS.get(
-                    pack_name.strip().lower(), (),
+                    pack_name.strip().lower(),
+                    (),
                 )
                 pack_expanded_skills.extend(pack_skills)
-        except (ImportError, AttributeError):  # best-effort · unknown pack names already handled above
+        except (
+            ImportError,
+            AttributeError,
+        ):  # best-effort · unknown pack names already handled above
             pass
 
     for rule in _RULES:
@@ -308,10 +454,15 @@ def activate_capabilities(
 
     if _PATHISH_RE.search(text):
         labels.append("files")
-        skills.extend((
-            "list_cwd", "read_file", "write_text_file",
-            "edit_file", "git_diff",
-        ))
+        skills.extend(
+            (
+                "list_cwd",
+                "read_file",
+                "write_text_file",
+                "edit_file",
+                "git_diff",
+            )
+        )
 
     if "chrome" in pinned_surfaces:
         labels.append("external-chrome")
@@ -361,23 +512,15 @@ def activate_capabilities(
     # isn't installed.
     leading: list[str] = []
     if pinned_skills:
-        leading.extend(
-            name for name in pinned_skills if _skill_available(registry, name)
-        )
+        leading.extend(name for name in pinned_skills if _skill_available(registry, name))
     if pack_expanded_skills:
-        leading.extend(
-            name for name in pack_expanded_skills
-            if _skill_available(registry, name)
-        )
+        leading.extend(name for name in pack_expanded_skills if _skill_available(registry, name))
     if leading:
         skills = [*leading, *skills]
         if "pinned" not in labels:
             labels.append("pinned")
 
-    skills = [
-        name for name in _dedupe(skills)
-        if _skill_available(registry, name)
-    ]
+    skills = [name for name in _dedupe(skills) if _skill_available(registry, name)]
     if skills:
         for name in (
             "search_capabilities",
@@ -423,9 +566,7 @@ def order_skill_names(
     pinned_plugin_actions: list[str] = []
     if activation.pinned_plugins and registry is not None:
         wanted_sources = tuple(
-            f"plugin://{plugin_id}/"
-            for plugin_id in activation.pinned_plugins
-            if plugin_id
+            f"plugin://{plugin_id}/" for plugin_id in activation.pinned_plugins if plugin_id
         )
         for name in original:
             try:
@@ -443,7 +584,8 @@ def order_skill_names(
         "query_skill",
     )
     front = [
-        name for name in (*anchors, *pinned_plugin_actions, *activation.priority_skills)
+        name
+        for name in (*anchors, *pinned_plugin_actions, *activation.priority_skills)
         if name in available
     ]
     ordered_front = _dedupe(front)

@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import base64
@@ -16,19 +15,16 @@ ANONYMOUS_ACTOR = "anonymous"
 
 @dataclass(frozen=True)
 class Identity:
-
     actor_id: str
     roles: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class IdentityStore:
-
     def __init__(self) -> None:
         self._by_hash: dict[str, Identity] = {}
         self._by_actor: dict[str, Identity] = {}
         self._lock = threading.RLock()
-
 
     def add(
         self,
@@ -65,12 +61,8 @@ class IdentityStore:
             identity = self._by_actor.pop(actor_id, None)
             if identity is None:
                 return False
-            self._by_hash = {
-                h: idn for h, idn in self._by_hash.items()
-                if idn.actor_id != actor_id
-            }
+            self._by_hash = {h: idn for h, idn in self._by_hash.items() if idn.actor_id != actor_id}
             return True
-
 
     def verify_api_key(self, plaintext: str) -> Identity | None:
         if not plaintext:
@@ -116,7 +108,8 @@ class IdentityStore:
         else:
             roles = ()
         meta: dict[str, Any] = {
-            k: v for k, v in claims.items()
+            k: v
+            for k, v in claims.items()
             if k not in ("sub", "exp", "iat", "roles", "role", "iss", "aud")
         }
         meta.setdefault("synthesized_from_jwt", True)
@@ -133,7 +126,6 @@ class IdentityStore:
     def actor_ids(self) -> list[str]:
         with self._lock:
             return list(self._by_actor.keys())
-
 
     @classmethod
     def load_from_yaml(cls, path: str | Path) -> IdentityStore:
@@ -223,7 +215,9 @@ def encode_jwt_hs256(
     )
     signing_input = f"{header_b}.{claims_b}".encode("ascii")
     sig = hmac.new(
-        secret.encode("utf-8"), signing_input, hashlib.sha256,
+        secret.encode("utf-8"),
+        signing_input,
+        hashlib.sha256,
     ).digest()
     return f"{header_b}.{claims_b}.{_b64url_encode(sig)}"
 
@@ -267,7 +261,9 @@ def verify_jwt_hs256(
 
     signing_input = f"{header_b}.{claims_b}".encode("ascii")
     expected = hmac.new(
-        secret.encode("utf-8"), signing_input, hashlib.sha256,
+        secret.encode("utf-8"),
+        signing_input,
+        hashlib.sha256,
     ).digest()
     if not hmac.compare_digest(expected, sig):
         raise JWTError("signature mismatch")
@@ -277,28 +273,19 @@ def verify_jwt_hs256(
         raise JWTError("missing or invalid 'exp' claim")
     current = now if now is not None else int(time.time())
     if current > exp + leeway_seconds:
-        raise JWTError(
-            f"token expired (exp={int(exp)}, now={current}, "
-            f"leeway={leeway_seconds})"
-        )
+        raise JWTError(f"token expired (exp={int(exp)}, now={current}, leeway={leeway_seconds})")
 
     nbf = claims.get("nbf")
     if isinstance(nbf, (int, float)) and current + leeway_seconds < nbf:
         raise JWTError(f"token not yet valid (nbf={int(nbf)}, now={current})")
 
     if required_issuer is not None and claims.get("iss") != required_issuer:
-        raise JWTError(
-            f"issuer mismatch (got {claims.get('iss')!r}, "
-            f"expected {required_issuer!r})"
-        )
+        raise JWTError(f"issuer mismatch (got {claims.get('iss')!r}, expected {required_issuer!r})")
 
     if required_audience is not None:
         aud = claims.get("aud")
         aud_list = aud if isinstance(aud, list) else ([aud] if aud else [])
         if required_audience not in aud_list:
-            raise JWTError(
-                f"audience mismatch (got {aud!r}, "
-                f"expected {required_audience!r})"
-            )
+            raise JWTError(f"audience mismatch (got {aud!r}, expected {required_audience!r})")
 
     return claims

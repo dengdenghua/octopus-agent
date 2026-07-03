@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
@@ -14,7 +13,6 @@ from .models import (
 
 
 class PooledModelRouter(ModelRouter):
-
     def __init__(
         self,
         pool: CredentialPool,
@@ -44,15 +42,14 @@ class PooledModelRouter(ModelRouter):
             try:
                 key = self._pool.acquire()
             except AllKeysExhausted as exc:
-                raise AllKeysExhausted(
-                    f"all keys exhausted after {attempt} attempts"
-                ) from exc
+                raise AllKeysExhausted(f"all keys exhausted after {attempt} attempts") from exc
 
             router = self._get_router(key)
             try:
                 resp = router.call(request)
                 self._pool.report_usage(
-                    key, cost_usd=resp.cost.usd,
+                    key,
+                    cost_usd=resp.cost.usd,
                 )
                 return resp
             except Exception as exc:
@@ -95,5 +92,14 @@ def _is_rate_limit_or_auth(exc: Exception) -> bool:
     msg = str(exc).lower()
     return any(
         token in name or token in msg
-        for token in ("ratelimit", "rate_limit", "429", "quota", "exceeded", "unauthorized", "forbidden", "auth")
+        for token in (
+            "ratelimit",
+            "rate_limit",
+            "429",
+            "quota",
+            "exceeded",
+            "unauthorized",
+            "forbidden",
+            "auth",
+        )
     )

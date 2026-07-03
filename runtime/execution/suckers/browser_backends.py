@@ -21,6 +21,7 @@ out of scope here; what's tested is that each adapter maps the seven
 ``BrowserBackend`` verbs to the correct track action and normalises the
 result.
 """
+
 from __future__ import annotations
 
 import json

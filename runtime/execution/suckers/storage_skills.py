@@ -51,9 +51,9 @@ def _storage_token() -> str | None:
     if raw:
         return raw
     try:
-        token = (Path.home() / ".octopus" / "storage" / "api_token").read_text(
-            encoding="utf-8"
-        ).strip()
+        token = (
+            (Path.home() / ".octopus" / "storage" / "api_token").read_text(encoding="utf-8").strip()
+        )
         return token or None
     except OSError:
         return None

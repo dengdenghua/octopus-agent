@@ -69,6 +69,7 @@ def create_deep_research_router(
         ParallelAgentOrchestrator).
         """
         from .openai_gateway_router import _resolve_actor
+
         return _resolve_actor(
             request,
             identity_store,
@@ -97,12 +98,14 @@ def create_deep_research_router(
                 if not path.is_file() or path.name in seen:
                     continue
                 seen.add(path.name)
-                materials.append(ResearchMaterial(
-                    kind="file",
-                    title=path.name,
-                    path=str(path),
-                    notes="thread upload",
-                ))
+                materials.append(
+                    ResearchMaterial(
+                        kind="file",
+                        title=path.name,
+                        path=str(path),
+                        notes="thread upload",
+                    )
+                )
         return materials
 
     def _build_job(body: DeepResearchRequest) -> ResearchJob:
@@ -180,7 +183,9 @@ def create_deep_research_router(
 
     @router.post("/api/research/deep/plan")
     def plan_deep_research(request: Request, body: DeepResearchRequest) -> dict[str, Any]:
-        _auth(request)  # AUTH-OK: actor-agnostic — DeepResearchJob has no owner field (see _auth docstring)
+        _auth(
+            request
+        )  # AUTH-OK: actor-agnostic — DeepResearchJob has no owner field (see _auth docstring)
         job = _build_job(body)
         jobs[job.job_id] = job
         _save_job(job)
@@ -188,7 +193,9 @@ def create_deep_research_router(
 
     @router.post("/api/research/deep/start")
     def start_deep_research(request: Request, body: DeepResearchRequest) -> dict[str, Any]:
-        _auth(request)  # AUTH-OK: actor-agnostic — DeepResearchJob has no owner field (see _auth docstring)
+        _auth(
+            request
+        )  # AUTH-OK: actor-agnostic — DeepResearchJob has no owner field (see _auth docstring)
         job = _build_job(body)
         if body.prefetch_sources:
             job = _prefetch_job_sources(job)
@@ -209,26 +216,12 @@ def create_deep_research_router(
                         "research_job_id": job.job_id,
                         "research_ephemeral_workers": True,
                         "research_sources": [
-                            source.model_dump()
-                            for source in job.sources
-                            if source.enabled
+                            source.model_dump() for source in job.sources if source.enabled
                         ],
-                        "research_materials": [
-                            material.model_dump()
-                            for material in job.materials
-                        ],
-                        "research_roles": [
-                            role.model_dump()
-                            for role in job.roles
-                        ],
-                        "research_evidence": [
-                            evidence.model_dump()
-                            for evidence in job.evidence
-                        ],
-                        "research_prefetch_logs": [
-                            log.model_dump()
-                            for log in job.prefetch_logs
-                        ],
+                        "research_materials": [material.model_dump() for material in job.materials],
+                        "research_roles": [role.model_dump() for role in job.roles],
+                        "research_evidence": [evidence.model_dump() for evidence in job.evidence],
+                        "research_prefetch_logs": [log.model_dump() for log in job.prefetch_logs],
                     },
                 )
                 job.dispatch_batch_id = batch.batch_id
@@ -241,7 +234,9 @@ def create_deep_research_router(
 
     @router.get("/api/research/deep/jobs/{job_id}")
     def get_deep_research_job(request: Request, job_id: str) -> dict[str, Any]:
-        _auth(request)  # AUTH-OK: actor-agnostic — DeepResearchJob has no owner field (see _auth docstring)
+        _auth(
+            request
+        )  # AUTH-OK: actor-agnostic — DeepResearchJob has no owner field (see _auth docstring)
         job = jobs.get(job_id)
         if job is None:
             raise HTTPException(404, f"research job not found: {job_id}")
@@ -251,7 +246,9 @@ def create_deep_research_router(
 
     @router.get("/api/research/deep/jobs")
     def list_deep_research_jobs(request: Request) -> dict[str, Any]:
-        _auth(request)  # AUTH-OK: actor-agnostic — DeepResearchJob has no owner field (see _auth docstring)
+        _auth(
+            request
+        )  # AUTH-OK: actor-agnostic — DeepResearchJob has no owner field (see _auth docstring)
         return {
             "jobs": [_refresh_job_from_batch(job).model_dump() for job in jobs.values()],
             "count": len(jobs),
@@ -300,11 +297,7 @@ def _sync_route_decisions(job: ResearchJob, batch: Any) -> bool:
     if not decisions:
         return False
     job.route_decisions = decisions
-    by_step = {
-        decision.step_id: decision
-        for decision in decisions
-        if decision.step_id
-    }
+    by_step = {decision.step_id: decision for decision in decisions if decision.step_id}
     for step in job.steps:
         if step.id in by_step:
             step.route_decision = by_step[step.id]
@@ -340,8 +333,7 @@ def _route_decisions_from_batch(batch: Any) -> list[ResearchRouteDecision]:
             evidence_item_ids=[
                 item
                 for item in (
-                    _clean_route_text(value)
-                    for value in (raw.get("evidence_item_ids") or [])
+                    _clean_route_text(value) for value in (raw.get("evidence_item_ids") or [])
                 )
                 if item
             ],

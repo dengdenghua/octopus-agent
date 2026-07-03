@@ -27,10 +27,17 @@ def _intent() -> SimpleNamespace:
 def test_from_join_responder_only_sees_post_join_history(tmp_path) -> None:
     store = GroupStore(base_dir=tmp_path)
     # Sole agent, pulled in at message 3 with a from_join grant.
-    store.append("t1", MemberEvent(
-        action="invite", actor="u", target_id="alice", target_kind="agent",
-        grant=ContextGrant(scope="from_join"), at_message=3,
-    ))
+    store.append(
+        "t1",
+        MemberEvent(
+            action="invite",
+            actor="u",
+            target_id="alice",
+            target_kind="agent",
+            grant=ContextGrant(scope="from_join"),
+            at_message=3,
+        ),
+    )
     intent = _intent()
     _inject_cowork_turn_plan(_runtime(store), thread_id="t1", text="hi", intent=intent)
 
@@ -40,10 +47,17 @@ def test_from_join_responder_only_sees_post_join_history(tmp_path) -> None:
 
 def test_all_grant_responder_keeps_full_history(tmp_path) -> None:
     store = GroupStore(base_dir=tmp_path)
-    store.append("t2", MemberEvent(
-        action="invite", actor="u", target_id="bob", target_kind="agent",
-        grant=ContextGrant(scope="all"), at_message=3,
-    ))
+    store.append(
+        "t2",
+        MemberEvent(
+            action="invite",
+            actor="u",
+            target_id="bob",
+            target_kind="agent",
+            grant=ContextGrant(scope="all"),
+            at_message=3,
+        ),
+    )
     intent = _intent()
     _inject_cowork_turn_plan(_runtime(store), thread_id="t2", text="hi", intent=intent)
 

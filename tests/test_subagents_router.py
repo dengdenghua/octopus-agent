@@ -179,16 +179,18 @@ def test_stream_dispatch_preserves_trace_context_in_events(
         event_emitter = kwargs.get("event_emitter")
         ctx = kwargs["context"]
         if event_emitter:
-            event_emitter({
-                "type": "sub_text_delta",
-                "delta": "hi",
-                "trace": {
+            event_emitter(
+                {
+                    "type": "sub_text_delta",
+                    "delta": "hi",
+                    "trace": {
+                        "thread_id": ctx["thread_id"],
+                        "turn_id": ctx["turn_id"],
+                    },
                     "thread_id": ctx["thread_id"],
                     "turn_id": ctx["turn_id"],
-                },
-                "thread_id": ctx["thread_id"],
-                "turn_id": ctx["turn_id"],
-            })
+                }
+            )
         return {
             "agent_id": args[0],
             "output": "ok",

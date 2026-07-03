@@ -103,7 +103,7 @@ CHECKS: tuple[KimiSwarmEvidenceCheck, ...] = (
         ),
         required_terms=(
             "max_concurrency",
-            'max_concurrency=32',
+            "max_concurrency=32",
             '"max_concurrency": 32',
             '"concurrency": 32',
             "swarm_max_concurrency",
@@ -177,7 +177,7 @@ CHECKS: tuple[KimiSwarmEvidenceCheck, ...] = (
             "test_control_session_timeline_pages_kimi_scale_swarm_replay",
             "range(300)",
             "limit=75",
-            'assert len(seen) == 300',
+            "assert len(seen) == 300",
         ),
         proves=(
             "Kimi-scale swarm traces can be reviewed in stable replay pages "
@@ -457,9 +457,7 @@ def _provider_load_test_missing(report: dict[str, Any] | None) -> dict[str, Any]
             "Persist every step to ControlSession replay",
             "Export latency, failure, retry, and cost metrics",
         ],
-        "failure_summary": (
-            report.get("failure_summary") if isinstance(report, dict) else None
-        ),
+        "failure_summary": (report.get("failure_summary") if isinstance(report, dict) else None),
         "latest_load_test": report,
     }
 
@@ -470,9 +468,7 @@ def _check_row(base: Path, check: KimiSwarmEvidenceCheck) -> dict[str, Any]:
         _read_text(base / str(row["path"])) for row in path_rows if row["exists"]
     ).lower()
     missing_paths = [str(row["path"]) for row in path_rows if not row["exists"]]
-    missing_terms = [
-        term for term in check.required_terms if term.lower() not in haystack
-    ]
+    missing_terms = [term for term in check.required_terms if term.lower() not in haystack]
     passed = not missing_paths and not missing_terms
     return {
         "id": check.id,
@@ -485,11 +481,7 @@ def _check_row(base: Path, check: KimiSwarmEvidenceCheck) -> dict[str, Any]:
         "missing_terms": missing_terms,
         "proves": check.proves,
         "remaining_risk": check.remaining_risk,
-        "next_action": (
-            "Restore the missing Kimi Swarm evidence terms."
-            if not passed
-            else ""
-        ),
+        "next_action": ("Restore the missing Kimi Swarm evidence terms." if not passed else ""),
     }
 
 

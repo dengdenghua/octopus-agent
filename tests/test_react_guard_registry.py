@@ -5,6 +5,7 @@ preserved, that disabled specs are skipped, and that the security
 cluster fires before quality guards. The individual guard behaviors
 are covered by the per-guard test files; here we test the harness.
 """
+
 from __future__ import annotations
 
 from runtime.core.cerebrum.react_guards import (
@@ -63,7 +64,11 @@ class TestEvaluateGuards:
     def test_clean_trajectory_returns_none(self) -> None:
         # A simple read-only inspection with a todo checklist completed.
         steps = [
-            _step(1, action='todo_write({"items": [{"content": "Read", "status": "completed"}]})', observation="ok"),
+            _step(
+                1,
+                action='todo_write({"items": [{"content": "Read", "status": "completed"}]})',
+                observation="ok",
+            ),
             _step(2, action='read_file({"path": "runtime/foo.py"})', observation="contents"),
         ]
         ctx = GuardContext(
@@ -156,11 +161,7 @@ class TestEvaluateGuards:
         ctx = GuardContext(
             steps=[_step(1)],
             final_answer=(
-                "Use this:\n"
-                "```python\n"
-                "import subprocess\n"
-                "subprocess.run(user_cmd, shell=True)\n"
-                "```"
+                "Use this:\n```python\nimport subprocess\nsubprocess.run(user_cmd, shell=True)\n```"
             ),
             is_code_mode=False,
         )

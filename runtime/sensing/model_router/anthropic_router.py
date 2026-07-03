@@ -50,7 +50,6 @@ from .provider import Provider, ProviderCapabilities
 
 
 class AnthropicModelRouter(Provider, ModelRouter):
-
     provider_name = "anthropic"
     capabilities = ProviderCapabilities(
         supports_vision=True,
@@ -83,8 +82,7 @@ class AnthropicModelRouter(Provider, ModelRouter):
             )
             if not key:
                 raise RuntimeError(
-                    "no ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in env "
-                    "and api_key not passed"
+                    "no ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in env and api_key not passed"
                 )
             client_kwargs: dict[str, Any] = {}
             if base_url:
@@ -109,13 +107,15 @@ class AnthropicModelRouter(Provider, ModelRouter):
             # path (Anthropic's sync SDK blocks until the full response
             # is back) — use call_stream for fine-grained cancellation.
             from runtime.safety.approval.cancellation import current_cancellation_token
+
             current_cancellation_token().throw_if_cancelled()
 
             system_text, user_assistant_msgs = _split_system(request.messages)
 
             if request.images_b64 and user_assistant_msgs:
                 _attach_images_to_last_user(
-                    user_assistant_msgs, request.images_b64,
+                    user_assistant_msgs,
+                    request.images_b64,
                 )
 
             system_arg: Any = None
@@ -148,6 +148,7 @@ class AnthropicModelRouter(Provider, ModelRouter):
             # the long comment there.
             if request.tools:
                 from .prompt_cache import prepare_cached_tools
+
                 tool_dicts = [t.model_dump() for t in request.tools]
                 create_kwargs["tools"] = prepare_cached_tools(tool_dicts)
             elif request.enable_thinking:
@@ -183,12 +184,14 @@ class AnthropicModelRouter(Provider, ModelRouter):
             # whether the request carried the ``thinking`` param
             # and what block types the response returned.
             import logging as _lg
+
             _tlog = _lg.getLogger("octopus.thinking")
             if _tlog.isEnabledFor(_lg.DEBUG):
                 _tlog.debug(
                     "anthropic.call · model=%s enable_thinking=%s "
                     "has_thinking_kwarg=%s temp=%s max_tokens=%s",
-                    model, request.enable_thinking,
+                    model,
+                    request.enable_thinking,
                     "thinking" in create_kwargs,
                     create_kwargs.get("temperature"),
                     create_kwargs.get("max_tokens"),
@@ -197,12 +200,12 @@ class AnthropicModelRouter(Provider, ModelRouter):
                 resp = self._client.messages.create(**create_kwargs)
                 if _tlog.isEnabledFor(_lg.DEBUG):
                     _ctypes = [
-                        getattr(b, "type", "?")
-                        for b in (getattr(resp, "content", None) or [])
+                        getattr(b, "type", "?") for b in (getattr(resp, "content", None) or [])
                     ]
                     _tlog.debug(
                         "anthropic.resp · model=%s content_types=%r",
-                        model, _ctypes,
+                        model,
+                        _ctypes,
                     )
             except Exception as exc:
                 # Provider outage / rate limit / auth failure ·
@@ -214,6 +217,7 @@ class AnthropicModelRouter(Provider, ModelRouter):
                     from runtime.safety.hooks.runner import (
                         dispatch_notification,
                     )
+
                     # Distinguish rate-limit (transient · client should
                     # backoff) from generic provider outage. The
                     # anthropic SDK raises RateLimitError · we match
@@ -242,12 +246,12 @@ class AnthropicModelRouter(Provider, ModelRouter):
             # cache_control blocks are used. Missing on older SDK
             # versions → default to 0.
             cache_read = (
-                getattr(resp.usage, "cache_read_input_tokens", 0)
-                if hasattr(resp, "usage") else 0
+                getattr(resp.usage, "cache_read_input_tokens", 0) if hasattr(resp, "usage") else 0
             ) or 0
             cache_create = (
                 getattr(resp.usage, "cache_creation_input_tokens", 0)
-                if hasattr(resp, "usage") else 0
+                if hasattr(resp, "usage")
+                else 0
             ) or 0
             usd = _estimate_usd(model, in_tok, out_tok)
 
@@ -263,15 +267,18 @@ class AnthropicModelRouter(Provider, ModelRouter):
 
             # Extract tool_use blocks (native tool_use path).
             from .models import ToolCall
+
             tool_calls: list[ToolCall] = []
             for block in getattr(resp, "content", None) or []:
                 if getattr(block, "type", None) == "tool_use":
                     inp = getattr(block, "input", None)
-                    tool_calls.append(ToolCall(
-                        id=getattr(block, "id", "") or "",
-                        name=getattr(block, "name", "") or "",
-                        input=inp if isinstance(inp, dict) else {},
-                    ))
+                    tool_calls.append(
+                        ToolCall(
+                            id=getattr(block, "id", "") or "",
+                            name=getattr(block, "name", "") or "",
+                            input=inp if isinstance(inp, dict) else {},
+                        )
+                    )
 
             return ModelResponse(
                 text=text,
@@ -342,7 +349,8 @@ class AnthropicModelRouter(Provider, ModelRouter):
             system_text, user_assistant_msgs = _split_system(request.messages)
             if request.images_b64 and user_assistant_msgs:
                 _attach_images_to_last_user(
-                    user_assistant_msgs, request.images_b64,
+                    user_assistant_msgs,
+                    request.images_b64,
                 )
 
             system_arg: Any = None
@@ -374,6 +382,7 @@ class AnthropicModelRouter(Provider, ModelRouter):
             # via our fast-path heuristic).
             if request.tools:
                 from .prompt_cache import prepare_cached_tools
+
                 tool_dicts = [t.model_dump() for t in request.tools]
                 create_kwargs["tools"] = prepare_cached_tools(tool_dicts)
             elif request.enable_thinking:
@@ -414,6 +423,7 @@ class AnthropicModelRouter(Provider, ModelRouter):
                     OperationCancelled,
                     current_cancellation_token,
                 )
+
                 _cancel_token = current_cancellation_token()
                 _cancel_token.throw_if_cancelled()
 
@@ -439,10 +449,7 @@ class AnthropicModelRouter(Provider, ModelRouter):
                         #     parse, emit ``tool_use`` event
                         if etype == "content_block_start":
                             block = getattr(event, "content_block", None)
-                            if (
-                                block is not None
-                                and getattr(block, "type", None) == "tool_use"
-                            ):
+                            if block is not None and getattr(block, "type", None) == "tool_use":
                                 _tool_id = getattr(block, "id", None)
                                 _tool_name = getattr(block, "name", None)
                                 _tool_input_buf = []
@@ -451,13 +458,11 @@ class AnthropicModelRouter(Provider, ModelRouter):
                             if _tool_id and _tool_name:
                                 raw_json = "".join(_tool_input_buf)
                                 try:
-                                    parsed = (
-                                        __import__("json").loads(raw_json)
-                                        if raw_json else {}
-                                    )
+                                    parsed = __import__("json").loads(raw_json) if raw_json else {}
                                 except json.JSONDecodeError:
                                     parsed = {}
                                 from .models import ToolCall
+
                                 yield ModelStreamEvent(
                                     type="tool_use",
                                     tool_call=ToolCall(
@@ -480,13 +485,15 @@ class AnthropicModelRouter(Provider, ModelRouter):
                             text = getattr(delta, "text", "") or ""
                             if text:
                                 yield ModelStreamEvent(
-                                    type="text_delta", delta=text,
+                                    type="text_delta",
+                                    delta=text,
                                 )
                         elif dtype == "thinking_delta":
                             t = getattr(delta, "thinking", "") or ""
                             if t:
                                 yield ModelStreamEvent(
-                                    type="thinking_delta", delta=t,
+                                    type="thinking_delta",
+                                    delta=t,
                                 )
                         elif dtype == "input_json_delta":
                             # Buffer · emitted as a single tool_use
@@ -508,6 +515,7 @@ class AnthropicModelRouter(Provider, ModelRouter):
                     from runtime.safety.hooks.runner import (
                         dispatch_notification,
                     )
+
                     err_name = type(exc).__name__
                     is_rate = "RateLimit" in err_name or "429" in str(exc)
                     dispatch_notification(
@@ -525,20 +533,20 @@ class AnthropicModelRouter(Provider, ModelRouter):
 
             text, thinking = _extract_text_and_thinking(final_msg)
             in_tok = (
-                getattr(final_msg.usage, "input_tokens", 0)
-                if hasattr(final_msg, "usage") else 0
+                getattr(final_msg.usage, "input_tokens", 0) if hasattr(final_msg, "usage") else 0
             )
             out_tok = (
-                getattr(final_msg.usage, "output_tokens", 0)
-                if hasattr(final_msg, "usage") else 0
+                getattr(final_msg.usage, "output_tokens", 0) if hasattr(final_msg, "usage") else 0
             )
             cache_read = (
                 getattr(final_msg.usage, "cache_read_input_tokens", 0)
-                if hasattr(final_msg, "usage") else 0
+                if hasattr(final_msg, "usage")
+                else 0
             ) or 0
             cache_create = (
                 getattr(final_msg.usage, "cache_creation_input_tokens", 0)
-                if hasattr(final_msg, "usage") else 0
+                if hasattr(final_msg, "usage")
+                else 0
             ) or 0
             usd = _estimate_usd(model, in_tok, out_tok)
 
@@ -560,15 +568,18 @@ class AnthropicModelRouter(Provider, ModelRouter):
             # carries the full list for consumers that want a
             # single source of truth.
             from .models import ToolCall
+
             tool_calls: list[ToolCall] = []
             for block in getattr(final_msg, "content", None) or []:
                 if getattr(block, "type", None) == "tool_use":
                     inp = getattr(block, "input", None)
-                    tool_calls.append(ToolCall(
-                        id=getattr(block, "id", "") or "",
-                        name=getattr(block, "name", "") or "",
-                        input=inp if isinstance(inp, dict) else {},
-                    ))
+                    tool_calls.append(
+                        ToolCall(
+                            id=getattr(block, "id", "") or "",
+                            name=getattr(block, "name", "") or "",
+                            input=inp if isinstance(inp, dict) else {},
+                        )
+                    )
 
             yield ModelStreamEvent(
                 type="done",
@@ -585,9 +596,7 @@ class AnthropicModelRouter(Provider, ModelRouter):
                         tokens_out=out_tok,
                         usd=usd,
                     ),
-                    finish_reason=(
-                        getattr(final_msg, "stop_reason", None) or "stop"
-                    ),
+                    finish_reason=(getattr(final_msg, "stop_reason", None) or "stop"),
                     model=model,
                     provider="anthropic",
                 ),
@@ -610,6 +619,7 @@ def _should_cache_system(text: str) -> bool:
     # Keep the local threshold in sync with prompt_cache.MIN_CACHE_CHARS
     # but tolerate the import being absent in stripped-down deployments.
     from .prompt_cache import MIN_CACHE_CHARS as _MCC
+
     return len(text) >= max(_CACHE_MIN_CHARS, _MCC)
 
 
@@ -625,21 +635,24 @@ def _split_system(messages: list[Message]) -> tuple[str, list[dict]]:
 
 
 def _attach_images_to_last_user(
-    msgs: list[dict[str, Any]], images_b64: list[str],
+    msgs: list[dict[str, Any]],
+    images_b64: list[str],
 ) -> None:
     for i in range(len(msgs) - 1, -1, -1):
         if msgs[i].get("role") == "user":
             text = msgs[i].get("content", "")
             blocks: list[dict[str, Any]] = []
             for b64 in images_b64:
-                blocks.append({
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/png",
-                        "data": b64,
-                    },
-                })
+                blocks.append(
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": b64,
+                        },
+                    }
+                )
             if text:
                 blocks.append({"type": "text", "text": text})
             msgs[i]["content"] = blocks
@@ -688,7 +701,9 @@ def _extract_text_and_thinking(resp: Any) -> tuple[str, str]:
     # Shape-2 path · extract inline <thinking>…</thinking> tags.
     if "<thinking>" in raw_text:
         inline = re.findall(
-            r"<thinking>(.*?)</thinking>", raw_text, flags=re.DOTALL,
+            r"<thinking>(.*?)</thinking>",
+            raw_text,
+            flags=re.DOTALL,
         )
         if inline:
             thinking_parts.extend(p.strip() for p in inline if p.strip())

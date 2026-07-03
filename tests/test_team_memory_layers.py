@@ -132,7 +132,13 @@ def test_remember_and_recall_support_team_and_team_agent_scopes(
     assert Path(team["path"]).exists()
     assert Path(member["path"]).exists()
     assert Path(project["path"]).exists()
-    assert any("[team] " in entry and "shared team decision" in entry for entry in recalled["entries"])
-    assert any("[team-agent] " in entry and "member-specific finding" in entry for entry in recalled["entries"])
-    assert any("[project] " in entry and "repo uses pytest" in entry for entry in recalled["entries"])
-
+    assert any(
+        "[team] " in entry and "shared team decision" in entry for entry in recalled["entries"]
+    )
+    assert any(
+        "[team-agent] " in entry and "member-specific finding" in entry
+        for entry in recalled["entries"]
+    )
+    assert any(
+        "[project] " in entry and "repo uses pytest" in entry for entry in recalled["entries"]
+    )

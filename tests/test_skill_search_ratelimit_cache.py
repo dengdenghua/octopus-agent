@@ -167,7 +167,9 @@ class TestSkillRateLimiter:
         # Fake clock so the test doesn't sleep.
         now = [0.0]
         rl = SkillRateLimiter(
-            capacity=2, refill_per_sec=1.0, clock=lambda: now[0],
+            capacity=2,
+            refill_per_sec=1.0,
+            clock=lambda: now[0],
         )
         rl.try_acquire("s")
         rl.try_acquire("s")
@@ -316,17 +318,23 @@ class TestPromptCache:
 
         # With system + tools cached, 2 remain of 4.
         n = budget_breakpoints(
-            has_system_cache=True, has_tools_cache=True, messages_remaining=10,
+            has_system_cache=True,
+            has_tools_cache=True,
+            messages_remaining=10,
         )
         assert n == 2
         # No caching used → all 4 available.
         n = budget_breakpoints(
-            has_system_cache=False, has_tools_cache=False, messages_remaining=10,
+            has_system_cache=False,
+            has_tools_cache=False,
+            messages_remaining=10,
         )
         assert n == MAX_BREAKPOINTS
         # Capped at messages_remaining.
         n = budget_breakpoints(
-            has_system_cache=False, has_tools_cache=False, messages_remaining=1,
+            has_system_cache=False,
+            has_tools_cache=False,
+            messages_remaining=1,
         )
         assert n == 1
 

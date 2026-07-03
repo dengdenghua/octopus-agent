@@ -27,6 +27,7 @@ Call sites:
   on the replayed state; if true, build a summary via ``compact``
   and write it with :meth:`EventLog.turn_compacted`.
 """
+
 from __future__ import annotations
 
 import re
@@ -164,10 +165,10 @@ _STICKY_FACT_PATTERNS: tuple[tuple[str, str], ...] = (
     # (label, regex) — label is what we tag the fact with, regex must
     # match the trigger phrase verbatim within the message
     ("constraint", r"(?:必须|一定要|强制|要求|must|always|please always)"),
-    ("ban",        r"(?:不要|别|禁止|don'?t|never|please never|do not)"),
+    ("ban", r"(?:不要|别|禁止|don'?t|never|please never|do not)"),
     ("preference", r"(?:我喜欢|我习惯|我偏好|i prefer|by convention)"),
-    ("usage",      r"(?:用 [A-Za-z][\w\-]+|使用 [A-Za-z][\w\-]+|we use|we are using)"),
-    ("identity",   r"(?:项目名|项目叫|project (?:is|name)|我们(?:的)?项目)"),
+    ("usage", r"(?:用 [A-Za-z][\w\-]+|使用 [A-Za-z][\w\-]+|we use|we are using)"),
+    ("identity", r"(?:项目名|项目叫|project (?:is|name)|我们(?:的)?项目)"),
 )
 _STICKY_QUESTION_RE = re.compile(r"[?？]\s*$|是否|应该|可以.*吗|能否")
 _STICKY_FACTS_MAX = 12
@@ -259,9 +260,7 @@ def _default_summariser(turns: Sequence[Turn]) -> str:
             header = f"{header} user: {_clip(user_line, 160)}"
         lines.append(header)
         agent_line = _first_agent_text(turn)
-        command_count = sum(
-            1 for it in turn.items if isinstance(it, CommandExecutionItem)
-        )
+        command_count = sum(1 for it in turn.items if isinstance(it, CommandExecutionItem))
         mcp_count = sum(1 for it in turn.items if isinstance(it, McpToolCallItem))
         file_count = sum(1 for it in turn.items if isinstance(it, FileChangeItem))
         plan_count = sum(1 for it in turn.items if isinstance(it, PlanItem))

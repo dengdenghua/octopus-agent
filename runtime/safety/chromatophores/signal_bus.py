@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import fnmatch
@@ -32,20 +31,22 @@ TOPIC_ARM_MAILBOX = "arm.mailbox.*"
 监听全部。payload 建议：{from, body, ts}。"""
 
 
-STANDARD_TOPICS: frozenset[str] = frozenset({
-    TOPIC_ARM_BUSY,
-    TOPIC_ARM_IDLE,
-    TOPIC_SUCKER_GRABBED,
-    TOPIC_ALERT_BUDGET,
-    TOPIC_ALERT_LOOP,
-    TOPIC_ARM_MAILBOX,
-})
+STANDARD_TOPICS: frozenset[str] = frozenset(
+    {
+        TOPIC_ARM_BUSY,
+        TOPIC_ARM_IDLE,
+        TOPIC_SUCKER_GRABBED,
+        TOPIC_ALERT_BUDGET,
+        TOPIC_ALERT_LOOP,
+        TOPIC_ARM_MAILBOX,
+    }
+)
 
 
 # ─── SignalEvent ───────────────────────────────────────────
 
-class SignalEvent(BaseModel):
 
+class SignalEvent(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     topic: str = Field(..., min_length=1)
@@ -54,9 +55,7 @@ class SignalEvent(BaseModel):
     ts: datetime
 
 
-
 class _Subscription:
-
     __slots__ = ("sid", "topic_pattern", "handler")
 
     def __init__(
@@ -72,18 +71,14 @@ class _Subscription:
 
 # ─── SignalBus ─────────────────────────────────────────────
 
-class SignalBus:
 
+class SignalBus:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._subs: dict[int, _Subscription] = {}
         self._next_sid: int = 1
-        self._history: AppendOnlyList[SignalEvent] = AppendOnlyList(
-            rule_id="SIGNAL_BUS_HISTORY"
-        )
-        self._errors: AppendOnlyList[str] = AppendOnlyList(
-            rule_id="SIGNAL_BUS_ERRORS"
-        )
+        self._history: AppendOnlyList[SignalEvent] = AppendOnlyList(rule_id="SIGNAL_BUS_HISTORY")
+        self._errors: AppendOnlyList[str] = AppendOnlyList(rule_id="SIGNAL_BUS_ERRORS")
 
     # ─── publish ──────────────────────────────────────────
 
@@ -102,8 +97,7 @@ class SignalBus:
         with self._lock:
             self._history.append(event)
             matches = [
-                sub for sub in self._subs.values()
-                if fnmatch.fnmatchcase(topic, sub.topic_pattern)
+                sub for sub in self._subs.values() if fnmatch.fnmatchcase(topic, sub.topic_pattern)
             ]
 
         for sub in matches:
@@ -178,7 +172,6 @@ class SignalBus:
     def handler_errors(self) -> list[str]:
         with self._lock:
             return self._errors.snapshot()
-
 
     def subscriber_count(self) -> int:
         with self._lock:

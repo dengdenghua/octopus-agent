@@ -12,6 +12,7 @@ Cost is bounded (file / chunk caps, noise dirs pruned, large files skipped)
 and the index is cached per root with a short TTL, so a hot planning loop pays
 the walk once. Self-gating: no source under the root → ``None``.
 """
+
 from __future__ import annotations
 
 import ast
@@ -29,12 +30,33 @@ from runtime.memory.hemolymph.semantic_code_index import search_persisted
 # v1 indexes Python source; the chunker is language-agnostic, so extending the
 # extension set later needs no other change.
 _CODE_EXTS = frozenset({".py"})
-_SKIP_DIRS = frozenset({
-    ".git", ".venv", "venv", "env", "node_modules", "__pycache__",
-    ".mypy_cache", ".pytest_cache", ".ruff_cache", "dist", "build", ".next",
-    "site-packages", "docs", "tests", "test", "migrations", ".tox", "vendor",
-    ".idea", ".vscode", "coverage", "htmlcov",
-})
+_SKIP_DIRS = frozenset(
+    {
+        ".git",
+        ".venv",
+        "venv",
+        "env",
+        "node_modules",
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+        ".next",
+        "site-packages",
+        "docs",
+        "tests",
+        "test",
+        "migrations",
+        ".tox",
+        "vendor",
+        ".idea",
+        ".vscode",
+        "coverage",
+        "htmlcov",
+    }
+)
 
 _MAX_FILES = 1200
 _MAX_CHUNKS = 2500
@@ -102,9 +124,7 @@ def _def_chunks(rel: str, node: ast.AST, lines: list[str]) -> list[tuple[str, in
     # A large class is split into its header + one chunk per method, so a big
     # file doesn't collapse into a single diluted chunk.
     if isinstance(node, ast.ClassDef) and (end - start + 1) > _MAX_CHUNK_LINES:
-        methods = [
-            n for n in node.body if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
-        ]
+        methods = [n for n in node.body if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)]
         out: list[tuple[str, int, str]] = []
         header_end = (methods[0].lineno - 1) if methods else end
         header = _capped(lines, start, header_end)
@@ -170,10 +190,15 @@ def _build_index(root: Path) -> dict[str, Any]:
             total_len += length
             for term in tf:
                 df[term] += 1
-            pages.append({
-                "path": rel_path, "line": line, "body": body,
-                "tf": tf, "length": length,
-            })
+            pages.append(
+                {
+                    "path": rel_path,
+                    "line": line,
+                    "body": body,
+                    "tf": tf,
+                    "length": length,
+                }
+            )
             if len(pages) >= _MAX_CHUNKS:
                 break
         if len(pages) >= _MAX_CHUNKS:
@@ -231,12 +256,53 @@ def _get_index(root: Path, *, ttl: float = _INDEX_TTL_S) -> dict[str, Any]:
 _IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{3,}")
 _IDENT_STOP = frozenset(
     {
-        "self", "none", "true", "false", "return", "import", "from", "class",
-        "async", "await", "with", "for", "while", "elif", "else", "try",
-        "except", "finally", "raise", "yield", "lambda", "global", "nonlocal",
-        "assert", "pass", "break", "continue", "print", "this", "that", "your",
-        "list", "dict", "bool", "float", "tuple", "object", "super", "init",
-        "args", "kwargs", "value", "result", "data", "item", "items", "name",
+        "self",
+        "none",
+        "true",
+        "false",
+        "return",
+        "import",
+        "from",
+        "class",
+        "async",
+        "await",
+        "with",
+        "for",
+        "while",
+        "elif",
+        "else",
+        "try",
+        "except",
+        "finally",
+        "raise",
+        "yield",
+        "lambda",
+        "global",
+        "nonlocal",
+        "assert",
+        "pass",
+        "break",
+        "continue",
+        "print",
+        "this",
+        "that",
+        "your",
+        "list",
+        "dict",
+        "bool",
+        "float",
+        "tuple",
+        "object",
+        "super",
+        "init",
+        "args",
+        "kwargs",
+        "value",
+        "result",
+        "data",
+        "item",
+        "items",
+        "name",
     }
 )
 
@@ -357,9 +423,7 @@ def retrieve_code_context(
                 if p in seen:
                     continue
                 seen.add(p)
-                hop_chunks.append(
-                    {"path": p, "line": c["line"], "body": c["body"], "hop": True}
-                )
+                hop_chunks.append({"path": p, "line": c["line"], "body": c["body"], "hop": True})
                 if len(seen) >= max_chunks:
                     break
 

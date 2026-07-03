@@ -11,6 +11,7 @@ Provides two buffering strategies:
    Handles incomplete trailing lines across chunks by deferring
    them until the next chunk arrives.
 """
+
 from __future__ import annotations
 
 import logging
@@ -70,9 +71,7 @@ class ByteStreamBuffer:
             if 0xDC <= first_byte <= 0xDF:
                 new_start += 1
                 self._bytes_dropped += 1
-                _logger.debug(
-                    "ByteStreamBuffer: dropped trailing low surrogate"
-                )
+                _logger.debug("ByteStreamBuffer: dropped trailing low surrogate")
 
         del self._buffer[:new_start]
         _logger.debug(

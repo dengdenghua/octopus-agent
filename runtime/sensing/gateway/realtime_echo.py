@@ -108,7 +108,9 @@ class EchoRuntime:
         thread_id = validated.thread_id
         self._require_thread_id(thread_id)
         log = await self._ensure_thread(thread_id, emitter)
-        self._require_owner(log, actor_id_from_turn_params(validated) or getattr(emitter, "actor_id", None))
+        self._require_owner(
+            log, actor_id_from_turn_params(validated) or getattr(emitter, "actor_id", None)
+        )
 
         turn = Turn(threadId=thread_id, params=validated)
         # Register *before* emitting turn/started so a racing
@@ -257,9 +259,7 @@ class EchoRuntime:
                 else None
             ),
             before_turn_id=(
-                params.get("beforeTurnId")
-                if isinstance(params.get("beforeTurnId"), str)
-                else None
+                params.get("beforeTurnId") if isinstance(params.get("beforeTurnId"), str) else None
             ),
         )
         return {
@@ -286,7 +286,9 @@ class EchoRuntime:
             items.append(summary.model_dump(by_alias=True, mode="json"))
         return {"threads": items}
 
-    async def _handle_archive(self, params: dict[str, Any], emitter: EventEmitter) -> dict[str, Any]:
+    async def _handle_archive(
+        self, params: dict[str, Any], emitter: EventEmitter
+    ) -> dict[str, Any]:
         from runtime.memory.threads.event_log import archive_thread
         from runtime.sensing.gateway.realtime_gateway import _RpcError
 

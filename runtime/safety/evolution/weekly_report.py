@@ -24,6 +24,7 @@ Programmatic usage::
     path = write_weekly_report()
     # path: logs/weekly_guard_reports/2026-22.md  (or None if telemetry empty)
 """
+
 from __future__ import annotations
 
 import json
@@ -48,7 +49,7 @@ class WeeklyReport:
     """Header metadata for one weekly report — drives both the
     Markdown writer and machine-readable summary."""
 
-    week_tag: str          # e.g. "2026-22" (ISO year-week)
+    week_tag: str  # e.g. "2026-22" (ISO year-week)
     generated_at: str
     digest: dict[str, Any]
     delta: dict[str, Any]  # vs previous report — see _compute_delta
@@ -135,10 +136,7 @@ def _compute_delta(
 
     # Trust score delta — only when both sides are available.
     prev_trust = previous_summary.get("trust_score")
-    if (
-        isinstance(prev_trust, (int, float))
-        and isinstance(current_trust_score, (int, float))
-    ):
+    if isinstance(prev_trust, (int, float)) and isinstance(current_trust_score, (int, float)):
         delta_val = round(current_trust_score - float(prev_trust), 4)
         if delta_val > 0.005:
             direction = "up"
@@ -184,11 +182,11 @@ def _render_markdown(
             classify_trust_score,
             compute_guard_trust_score,
         )
+
         trust_score = compute_guard_trust_score(d)
         trust_bucket = classify_trust_score(trust_score)
         lines.append(
-            f"- **Guard trust score**: {trust_score:.2f} "
-            f"(`{trust_bucket}`)",
+            f"- **Guard trust score**: {trust_score:.2f} (`{trust_bucket}`)",
         )
     except Exception:  # noqa: BLE001 — trust must not break the report
         lines.append("- **Guard trust score**: n/a")
@@ -343,9 +341,13 @@ def write_weekly_report(
     except Exception as exc:  # noqa: BLE001
         _LOG.warning("digest read failed: %s — using empty digest", exc)
         digest = {
-            "total_hits": 0, "judged_total": 0,
-            "by_label": {}, "by_category": {}, "category_share": {},
-            "dominant_category": None, "tuning_candidates": [],
+            "total_hits": 0,
+            "judged_total": 0,
+            "by_label": {},
+            "by_category": {},
+            "category_share": {},
+            "dominant_category": None,
+            "tuning_candidates": [],
             "label_precision": {},
         }
 
@@ -368,11 +370,14 @@ def write_weekly_report(
         from runtime.safety.validation.trust_signal import (
             compute_guard_trust_score,
         )
+
         current_trust = compute_guard_trust_score(digest)
     except Exception:  # noqa: BLE001
         current_trust = None
     delta = _compute_delta(
-        digest, previous_summary, current_trust_score=current_trust,
+        digest,
+        previous_summary,
+        current_trust_score=current_trust,
     )
 
     moment = (now or datetime.now()).isoformat(timespec="seconds")

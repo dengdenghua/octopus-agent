@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -20,20 +19,25 @@ _LOG = logging.getLogger("octopus.reflex.tiers")
 @dataclass
 class TierResult:
     """One tier's verdict · ``reply is None`` means miss."""
+
     tier_name: str
     reply: str | None = None
     latency_ms: float = 0.0
-    detail: str = ""           # e.g. "match_score=0.82" or "via slm"
+    detail: str = ""  # e.g. "match_score=0.82" or "via slm"
 
 
 class ReplyTier(ABC):
     """Abstract tier · subclass + implement ``try_reply``."""
+
     name: str = "abstract"
     enabled: bool = True
 
     @abstractmethod
     def try_reply(
-        self, *, prompt: str, actor: str | None = None,
+        self,
+        *,
+        prompt: str,
+        actor: str | None = None,
     ) -> TierResult: ...
 
     def describe(self) -> dict[str, Any]:
@@ -42,12 +46,12 @@ class ReplyTier(ABC):
 
 
 class FuzzyCacheTier(ReplyTier):
-
     name = "fuzzy_cache"
 
     def __init__(
         self,
-        *, similarity: float = 0.7,
+        *,
+        similarity: float = 0.7,
         max_entries: int = 500,
         ttl_hours: float = 168.0,  # 1 week
     ) -> None:
@@ -64,7 +68,7 @@ class FuzzyCacheTier(ReplyTier):
         s = text.strip().lower()
         if len(s) < 2:
             return {s} if s else set()
-        return {s[i:i + 2] for i in range(len(s) - 1)}
+        return {s[i : i + 2] for i in range(len(s) - 1)}
 
     @staticmethod
     def _jaccard(a: set[str], b: set[str]) -> float:
@@ -105,10 +109,29 @@ class FuzzyCacheTier(ReplyTier):
         #    question was asked.
         lower = stripped.lower()
         no_cache_keywords = (
-            "调研", "研究", "报告", "搜索", "查询", "最新", "今日",
-            "昨日", "昨天", "今天", "现在", "实时", "市场",
-            "research", "report", "search", "latest", "news",
-            "market", "today", "yesterday", "realtime", "live",
+            "调研",
+            "研究",
+            "报告",
+            "搜索",
+            "查询",
+            "最新",
+            "今日",
+            "昨日",
+            "昨天",
+            "今天",
+            "现在",
+            "实时",
+            "市场",
+            "research",
+            "report",
+            "search",
+            "latest",
+            "news",
+            "market",
+            "today",
+            "yesterday",
+            "realtime",
+            "live",
         )
         if any(kw in lower for kw in no_cache_keywords):
             return
@@ -119,8 +142,14 @@ class FuzzyCacheTier(ReplyTier):
         #    degraded answer that would mislead future users.
         reply_head = reply.strip()[:80].lower()
         error_markers = (
-            "unable to", "cannot", "抱歉", "无法", "目前无法",
-            "sorry", "i don't have", "not configured",
+            "unable to",
+            "cannot",
+            "抱歉",
+            "无法",
+            "目前无法",
+            "sorry",
+            "i don't have",
+            "not configured",
         )
         if any(m in reply_head for m in error_markers):
             return
@@ -137,7 +166,10 @@ class FuzzyCacheTier(ReplyTier):
             self._store.move_to_end(key)
 
     def try_reply(
-        self, *, prompt: str, actor: str | None = None,
+        self,
+        *,
+        prompt: str,
+        actor: str | None = None,
     ) -> TierResult:
         t0 = time.perf_counter()
         if not self.enabled or not prompt:
@@ -161,7 +193,8 @@ class FuzzyCacheTier(ReplyTier):
         self.hits += 1
         score, entry = best
         return TierResult(
-            self.name, reply=entry["reply"],
+            self.name,
+            reply=entry["reply"],
             latency_ms=elapsed,
             detail=f"match_score={score:.2f} src={entry['prompt']!r}",
         )
@@ -177,8 +210,7 @@ class FuzzyCacheTier(ReplyTier):
             "hits": self.hits,
             "misses": self.misses,
             "hit_rate": (
-                self.hits / (self.hits + self.misses)
-                if (self.hits + self.misses) else 0.0
+                self.hits / (self.hits + self.misses) if (self.hits + self.misses) else 0.0
             ),
         }
 
@@ -218,7 +250,10 @@ class SLMTier(ReplyTier):
         self.errors = 0
 
     def try_reply(
-        self, *, prompt: str, actor: str | None = None,
+        self,
+        *,
+        prompt: str,
+        actor: str | None = None,
     ) -> TierResult:
         t0 = time.perf_counter()
         if not self.enabled or not prompt:
@@ -243,29 +278,30 @@ class SLMTier(ReplyTier):
             with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
                 data = json.loads(resp.read())
             text = (
-                ((data.get("choices") or [{}])[0].get("message") or {})
-                .get("content", "")
+                ((data.get("choices") or [{}])[0].get("message") or {}).get("content", "")
             ).strip()
             elapsed = (time.perf_counter() - t0) * 1000
             if not text:
                 self.misses += 1
-                return TierResult(self.name, None, elapsed,
-                                  detail="empty SLM response")
+                return TierResult(self.name, None, elapsed, detail="empty SLM response")
             self.hits += 1
-            return TierResult(self.name, reply=text, latency_ms=elapsed,
-                              detail=f"slm={self.model}")
+            return TierResult(self.name, reply=text, latency_ms=elapsed, detail=f"slm={self.model}")
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as exc:
             self.errors += 1
             elapsed = (time.perf_counter() - t0) * 1000
             return TierResult(
-                self.name, None, elapsed,
+                self.name,
+                None,
+                elapsed,
                 detail=f"slm error: {type(exc).__name__}",
             )
         except (ImportError, AttributeError, TypeError) as exc:
             self.errors += 1
             elapsed = (time.perf_counter() - t0) * 1000
             return TierResult(
-                self.name, None, elapsed,
+                self.name,
+                None,
+                elapsed,
                 detail=f"slm error: {type(exc).__name__}: {exc}",
             )
 
@@ -280,8 +316,7 @@ class SLMTier(ReplyTier):
             "misses": self.misses,
             "errors": self.errors,
             "hit_rate": (
-                self.hits / (self.hits + self.misses)
-                if (self.hits + self.misses) else 0.0
+                self.hits / (self.hits + self.misses) if (self.hits + self.misses) else 0.0
             ),
         }
 
@@ -307,7 +342,10 @@ class TieredResponder:
             return list(self._tiers)
 
     def try_reply(
-        self, *, prompt: str, actor: str | None = None,
+        self,
+        *,
+        prompt: str,
+        actor: str | None = None,
     ) -> tuple[TierResult | None, list[TierResult]]:
         """Try each tier · return ``(winning_result, all_results)``.
         Empty winner → caller falls through to its planner / LLM
@@ -347,7 +385,8 @@ def get_default_slm() -> SLMTier:
 
 
 def configure_slm(
-    *, endpoint: str | None,
+    *,
+    endpoint: str | None,
     model: str | None = None,
     timeout_ms: int | None = None,
 ) -> None:

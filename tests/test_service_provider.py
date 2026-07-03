@@ -94,6 +94,7 @@ class TestServiceProvider:
 
     def test_thread_safety(self):
         import threading
+
         provider = ServiceProvider()
         results = []
 

@@ -9,8 +9,10 @@ explicit `state` parameter instead of relying on closure capture — the
 same behavior, but each helper is now a plain, independently testable
 module-level function.
 """
+
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -32,6 +34,11 @@ class ComputerRouterState:
         default_factory=lambda: Path("data/computer_automation/screenshots").resolve()
     )
     control_sessions: ControlSessionStore = field(default_factory=ControlSessionStore)
+    # Serializes lease claim/release. The router's endpoints are sync ``def``,
+    # so FastAPI runs them in a threadpool and concurrent requests race on the
+    # ``lease`` dict's check-then-act. Reentrant so the lease helpers can nest
+    # (_claim_lease → _cleanup_lease/_public_lease) under one acquisition.
+    lease_lock: threading.RLock = field(default_factory=threading.RLock, compare=False, repr=False)
 
 
 __all__ = ["ComputerRouterState", "_PENDING_TTL_SECONDS"]

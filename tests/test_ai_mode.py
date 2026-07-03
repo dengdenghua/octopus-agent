@@ -1,4 +1,5 @@
 """Tests for AI mode (Marvis-style efficiency / privacy wrapper)."""
+
 from __future__ import annotations
 
 import json
@@ -30,7 +31,8 @@ def test_env_override_wins(monkeypatch: pytest.MonkeyPatch, tmp_state: Path) -> 
 
 
 def test_unknown_env_falls_back(
-    monkeypatch: pytest.MonkeyPatch, tmp_state: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_state: Path,
 ) -> None:
     monkeypatch.setenv("OCTOPUS_AI_MODE", "turbo")
     assert ai_mode.current_ai_mode() == "efficiency"
@@ -73,7 +75,8 @@ def test_set_ai_mode_rejects_unknown(tmp_state: Path) -> None:
 
 
 def test_efficiency_passes_through(
-    monkeypatch: pytest.MonkeyPatch, tmp_state: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_state: Path,
 ) -> None:
     monkeypatch.setenv("OCTOPUS_AI_MODE", "efficiency")
     assert ai_mode.apply_ai_mode_override("performance") == "performance"
@@ -82,7 +85,8 @@ def test_efficiency_passes_through(
 
 
 def test_privacy_pins_to_local(
-    monkeypatch: pytest.MonkeyPatch, tmp_state: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_state: Path,
 ) -> None:
     monkeypatch.setenv("OCTOPUS_AI_MODE", "privacy")
     for verdict in ("trivial", "local", "value", "performance", "research"):

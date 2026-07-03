@@ -116,7 +116,8 @@ def test_list_proposals_empty(client: TestClient) -> None:
 
 
 def test_list_proposals_returns_persisted_payload(
-    client: TestClient, tmp_path: Path,
+    client: TestClient,
+    tmp_path: Path,
 ) -> None:
     payload = {
         "ts": 0,
@@ -132,7 +133,8 @@ def test_list_proposals_returns_persisted_payload(
         ],
     }
     (tmp_path / "data" / "topology_proposals.json").write_text(
-        json.dumps(payload), encoding="utf-8",
+        json.dumps(payload),
+        encoding="utf-8",
     )
     r = client.get("/api/organizations/topology-proposals")
     body = r.json()
@@ -156,27 +158,29 @@ def test_list_proposals_includes_strong_subagent_promotion(
     save_registry({base.fingerprint: base})
     queue = ReviewQueue(tmp_path / "data" / "review_queue.json")
     for idx in range(3):
-        added = queue.add_from_task_run_review({
-            "status": "completed",
-            "task_id": f"task-{idx}",
-            "thread_id": "thread-1",
-            "turn_id": f"turn-{idx}",
-            "agent_id": "generator",
-            "learning_candidates": [
-                {
-                    "kind": "subagent_output",
-                    "priority": "P1",
-                    "memory_bucket": "experience",
-                    "title": f"generator sample {idx}",
-                    "text": f"generator output {idx}",
-                    "subagent": {
-                        "role": "generator",
-                        "agent_id": "generator",
-                        "files_touched": ["runtime/example.py"],
-                    },
-                }
-            ],
-        })
+        added = queue.add_from_task_run_review(
+            {
+                "status": "completed",
+                "task_id": f"task-{idx}",
+                "thread_id": "thread-1",
+                "turn_id": f"turn-{idx}",
+                "agent_id": "generator",
+                "learning_candidates": [
+                    {
+                        "kind": "subagent_output",
+                        "priority": "P1",
+                        "memory_bucket": "experience",
+                        "title": f"generator sample {idx}",
+                        "text": f"generator output {idx}",
+                        "subagent": {
+                            "role": "generator",
+                            "agent_id": "generator",
+                            "files_touched": ["runtime/example.py"],
+                        },
+                    }
+                ],
+            }
+        )
         queue.decide(added["items"][0]["id"], action="promoted", reason="good")
 
     response = client.get("/api/organizations/topology-proposals")
@@ -204,27 +208,29 @@ def test_promote_strong_subagent_live_proposal(
     save_registry({base.fingerprint: base})
     queue = ReviewQueue(tmp_path / "data" / "review_queue.json")
     for idx in range(3):
-        added = queue.add_from_task_run_review({
-            "status": "completed",
-            "task_id": f"task-{idx}",
-            "thread_id": "thread-1",
-            "turn_id": f"turn-{idx}",
-            "agent_id": "generator",
-            "learning_candidates": [
-                {
-                    "kind": "subagent_output",
-                    "priority": "P1",
-                    "memory_bucket": "experience",
-                    "title": f"generator sample {idx}",
-                    "text": f"generator output {idx}",
-                    "subagent": {
-                        "role": "generator",
-                        "agent_id": "generator",
-                        "files_touched": ["runtime/example.py"],
-                    },
-                }
-            ],
-        })
+        added = queue.add_from_task_run_review(
+            {
+                "status": "completed",
+                "task_id": f"task-{idx}",
+                "thread_id": "thread-1",
+                "turn_id": f"turn-{idx}",
+                "agent_id": "generator",
+                "learning_candidates": [
+                    {
+                        "kind": "subagent_output",
+                        "priority": "P1",
+                        "memory_bucket": "experience",
+                        "title": f"generator sample {idx}",
+                        "text": f"generator output {idx}",
+                        "subagent": {
+                            "role": "generator",
+                            "agent_id": "generator",
+                            "files_touched": ["runtime/example.py"],
+                        },
+                    }
+                ],
+            }
+        )
         queue.decide(added["items"][0]["id"], action="promoted", reason="good")
 
     response = client.post("/api/organizations/topology-proposals/0/promote")
@@ -257,10 +263,12 @@ def test_topology_promotion_lift_endpoint(
             "promotion_source": "subagent_fitness",
         },
     )
-    save_registry({
-        base.fingerprint: base,
-        promoted.fingerprint: promoted,
-    })
+    save_registry(
+        {
+            base.fingerprint: base,
+            promoted.fingerprint: promoted,
+        }
+    )
     rows = [
         {"fingerprint": base.fingerprint, "success": False, "quality_score": 0.4},
         {"fingerprint": promoted.fingerprint, "success": True, "quality_score": 0.9},
@@ -285,7 +293,8 @@ def test_promote_proposal_invalid_index(client: TestClient) -> None:
 
 
 def test_promote_proposal_against_real_registry(
-    client: TestClient, tmp_path: Path,
+    client: TestClient,
+    tmp_path: Path,
 ) -> None:
     base = TeamTopology(
         name="orig",
@@ -296,17 +305,20 @@ def test_promote_proposal_against_real_registry(
     save_registry({base.fingerprint: base})
     proposals = {
         "ts": 0,
-        "proposals": [{
-            "kind": "swap_agent",
-            "base_topology": base.fingerprint,
-            "bucket": "b",
-            "detail": {"role": "generator", "old_agent": "alice", "new_agent": "bob"},
-            "confidence": 0.8,
-            "rationale": "smoke",
-        }],
+        "proposals": [
+            {
+                "kind": "swap_agent",
+                "base_topology": base.fingerprint,
+                "bucket": "b",
+                "detail": {"role": "generator", "old_agent": "alice", "new_agent": "bob"},
+                "confidence": 0.8,
+                "rationale": "smoke",
+            }
+        ],
     }
     (tmp_path / "data" / "topology_proposals.json").write_text(
-        json.dumps(proposals), encoding="utf-8",
+        json.dumps(proposals),
+        encoding="utf-8",
     )
     r = client.post("/api/organizations/topology-proposals/0/promote")
     assert r.status_code == 200, r.text
@@ -335,17 +347,20 @@ def test_promote_proposal_rejects_operator_retired_agent(
     )
     proposals = {
         "ts": 0,
-        "proposals": [{
-            "kind": "swap_agent",
-            "base_topology": base.fingerprint,
-            "bucket": "b",
-            "detail": {"role": "generator", "old_agent": "alice", "new_agent": "bob"},
-            "confidence": 0.8,
-            "rationale": "smoke",
-        }],
+        "proposals": [
+            {
+                "kind": "swap_agent",
+                "base_topology": base.fingerprint,
+                "bucket": "b",
+                "detail": {"role": "generator", "old_agent": "alice", "new_agent": "bob"},
+                "confidence": 0.8,
+                "rationale": "smoke",
+            }
+        ],
     }
     (tmp_path / "data" / "topology_proposals.json").write_text(
-        json.dumps(proposals), encoding="utf-8",
+        json.dumps(proposals),
+        encoding="utf-8",
     )
 
     r = client.post("/api/organizations/topology-proposals/0/promote")
@@ -364,7 +379,8 @@ def test_topology_performance_empty(client: TestClient) -> None:
 
 
 def test_retire_topology_removes_entry(
-    client: TestClient, tmp_path: Path,
+    client: TestClient,
+    tmp_path: Path,
 ) -> None:
     t = TeamTopology(
         name="doomed",

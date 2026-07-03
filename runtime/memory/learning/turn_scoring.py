@@ -31,12 +31,12 @@ _FILE_LOCK = threading.Lock()
 class TurnScore:
     """One scored turn · serialized to a single jsonl line."""
 
-    ts: str                 # ISO-8601 wall time
+    ts: str  # ISO-8601 wall time
     agent_id: str
-    score: float            # 0.0 / 0.5 / 1.0
-    reason: str             # short tag (e.g. "success", "tool_errors",
-                            # "interrupted", "no_reply")
-    soul_hash: str          # 8-char MD5 of SOUL.md at score time
+    score: float  # 0.0 / 0.5 / 1.0
+    reason: str  # short tag (e.g. "success", "tool_errors",
+    # "interrupted", "no_reply")
+    soul_hash: str  # 8-char MD5 of SOUL.md at score time
     rounds: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
@@ -153,7 +153,9 @@ def record_turn_score(
             _trim_if_oversized_locked(path)
     except Exception as exc:  # noqa: BLE001
         _LOG.warning(
-            "record_turn_score failed for %s: %s", agent_id, exc,
+            "record_turn_score failed for %s: %s",
+            agent_id,
+            exc,
         )
         return None
     return path
@@ -189,7 +191,8 @@ def _trim_if_oversized_locked(path: Path) -> None:
 
 
 def read_recent_scores(
-    agent_id: str, limit: int = 50,
+    agent_id: str,
+    limit: int = 50,
 ) -> list[TurnScore]:
     """Return up to ``limit`` most recent TurnScore entries
     (newest first). Empty list if no file."""
@@ -208,19 +211,21 @@ def read_recent_scores(
             continue
         try:
             d = json.loads(raw)
-            out.append(TurnScore(
-                ts=str(d.get("ts", "")),
-                agent_id=str(d.get("agent_id", "")),
-                score=float(d.get("score", 0.0)),
-                reason=str(d.get("reason", "")),
-                soul_hash=str(d.get("soul_hash", "")),
-                rounds=int(d.get("rounds", 0) or 0),
-                input_tokens=int(d.get("input_tokens", 0) or 0),
-                output_tokens=int(d.get("output_tokens", 0) or 0),
-                duration_ms=int(d.get("duration_ms", 0) or 0),
-                thread_id=str(d.get("thread_id", "")),
-                turn_id=str(d.get("turn_id", "")),
-            ))
+            out.append(
+                TurnScore(
+                    ts=str(d.get("ts", "")),
+                    agent_id=str(d.get("agent_id", "")),
+                    score=float(d.get("score", 0.0)),
+                    reason=str(d.get("reason", "")),
+                    soul_hash=str(d.get("soul_hash", "")),
+                    rounds=int(d.get("rounds", 0) or 0),
+                    input_tokens=int(d.get("input_tokens", 0) or 0),
+                    output_tokens=int(d.get("output_tokens", 0) or 0),
+                    duration_ms=int(d.get("duration_ms", 0) or 0),
+                    thread_id=str(d.get("thread_id", "")),
+                    turn_id=str(d.get("turn_id", "")),
+                )
+            )
         except Exception:  # noqa: BLE001
             continue
         if len(out) >= limit:
@@ -229,7 +234,10 @@ def read_recent_scores(
 
 
 def analyze_soul_impact(
-    agent_id: str, *, window: int = 20, drop_threshold: float = 0.2,
+    agent_id: str,
+    *,
+    window: int = 20,
+    drop_threshold: float = 0.2,
 ) -> dict[str, Any]:
     """Compare avg score before vs after the most recent SOUL change.
 
@@ -296,7 +304,7 @@ def analyze_soul_impact(
         }
 
     after = scores[:pivot]
-    before = scores[pivot:pivot + window]  # cap at window
+    before = scores[pivot : pivot + window]  # cap at window
     min_samples = min(window, 5)
     if len(after) < min_samples or len(before) < min_samples:
         return {
@@ -305,11 +313,17 @@ def analyze_soul_impact(
             "current_soul_hash": current_hash,
             "previous_soul_hash": previous_hash,
             "after_avg": round(
-                sum(s.score for s in after) / max(1, len(after)), 3,
-            ) if after else None,
+                sum(s.score for s in after) / max(1, len(after)),
+                3,
+            )
+            if after
+            else None,
             "before_avg": round(
-                sum(s.score for s in before) / max(1, len(before)), 3,
-            ) if before else None,
+                sum(s.score for s in before) / max(1, len(before)),
+                3,
+            )
+            if before
+            else None,
             "delta": None,
             "after_n": len(after),
             "before_n": len(before),

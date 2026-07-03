@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import time
@@ -36,7 +35,6 @@ end
 
 
 class RedisCoordinator:
-
     def __init__(
         self,
         client,
@@ -78,7 +76,6 @@ class RedisCoordinator:
 
     def _next_token(self) -> int:
         return int(self.client.incr(self.counter_key))
-
 
     def acquire_lease(self, scope: str, *, ttl: float) -> Lease | None:
         if ttl <= 0:
@@ -162,7 +159,7 @@ class RedisCoordinator:
         return Lease(
             scope=scope,
             holder_id=holder,
-            acquired_at=now - 0.0,   # Implementation note.
+            acquired_at=now - 0.0,  # Implementation note.
             expires_at=now + pttl_ms / 1000.0,
             fencing_token=token,
         )

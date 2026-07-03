@@ -94,7 +94,9 @@ class FederationHub:
         self._trim_agent_dir(agent_dir)
         _LOG.info(
             "federation publish: agent=%s kind=%s id=%s",
-            agent_id, proposal.kind, proposal.proposal_id,
+            agent_id,
+            proposal.kind,
+            proposal.proposal_id,
         )
         return path
 
@@ -112,7 +114,9 @@ class FederationHub:
                 continue
             if agent_dir.name == agent_id:
                 continue
-            for f in sorted(agent_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+            for f in sorted(
+                agent_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
+            ):
                 try:
                     d = json.loads(f.read_text(encoding="utf-8"))
                     p = SharedProposal(
@@ -154,9 +158,15 @@ class FederationHub:
             _LOG.debug("adopt cooldown: %s", key)
             return False
 
-        if proposal.fitness_delta is not None and proposal.fitness_delta < self.config.adoption_threshold:
-            _LOG.debug("adopt rejected: fitness_delta=%.3f < threshold=%.3f",
-                       proposal.fitness_delta, self.config.adoption_threshold)
+        if (
+            proposal.fitness_delta is not None
+            and proposal.fitness_delta < self.config.adoption_threshold
+        ):
+            _LOG.debug(
+                "adopt rejected: fitness_delta=%.3f < threshold=%.3f",
+                proposal.fitness_delta,
+                self.config.adoption_threshold,
+            )
             return False
 
         target_dir = _ensure_child_dir(self._dir, target_agent, label="target agent")
@@ -178,7 +188,9 @@ class FederationHub:
         self._last_adopt_ts[key] = now
         _LOG.info(
             "federation adopt: target=%s source=%s kind=%s",
-            target_agent, proposal.source_agent, proposal.kind,
+            target_agent,
+            proposal.source_agent,
+            proposal.kind,
         )
         return True
 

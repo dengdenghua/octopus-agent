@@ -113,7 +113,8 @@ def test_upsert_dedupes_by_title(base_dir: Path, project: str) -> None:
 
 
 def test_mark_status_updates_timestamp(
-    base_dir: Path, project: str,
+    base_dir: Path,
+    project: str,
 ) -> None:
     amb.upsert_many(
         project,
@@ -144,7 +145,8 @@ def test_mark_status_rejects_invalid(base_dir: Path, project: str) -> None:
 
 
 def test_mark_status_returns_none_for_unknown_id(
-    base_dir: Path, project: str,
+    base_dir: Path,
+    project: str,
 ) -> None:
     result = amb.mark_status(project, "nope", "dismissed", base_dir=base_dir)
     assert result is None
@@ -165,7 +167,8 @@ def test_clear_all_wipes(base_dir: Path, project: str) -> None:
 
 
 def test_clear_filtered_by_status(
-    base_dir: Path, project: str,
+    base_dir: Path,
+    project: str,
 ) -> None:
     amb.upsert_many(
         project,
@@ -246,7 +249,9 @@ def test_generate_with_no_scores_returns_error(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     result = amb.generate_suggestions(
-        project, "new-agent-nothing-logged", base_dir=base_dir,
+        project,
+        "new-agent-nothing-logged",
+        base_dir=base_dir,
     )
     assert result["generated"] == 0
     assert result["added"] == 0
@@ -282,7 +287,9 @@ def test_generate_merges_llm_output(
         return_value=fake_llm,
     ):
         result = amb.generate_suggestions(
-            project, scored_turns, base_dir=base_dir,
+            project,
+            scored_turns,
+            base_dir=base_dir,
         )
     assert result["error"] is None
     assert result["generated"] == 2
@@ -302,7 +309,9 @@ def test_generate_handles_llm_failure(
         return_value=(None, {"error": "router not wired"}),
     ):
         result = amb.generate_suggestions(
-            project, scored_turns, base_dir=base_dir,
+            project,
+            scored_turns,
+            base_dir=base_dir,
         )
     assert result["error"] == "router not wired"
     assert result["generated"] == 0
@@ -316,8 +325,8 @@ def test_generate_skips_candidates_missing_title_or_prompt(
     fake_llm = (
         {
             "suggestions": [
-                {"title": "", "prompt": "x"},           # no title
-                {"title": "Good one", "prompt": ""},    # no prompt
+                {"title": "", "prompt": "x"},  # no title
+                {"title": "Good one", "prompt": ""},  # no prompt
                 {"title": "Keep me", "prompt": "do it"},
             ]
         },
@@ -328,7 +337,9 @@ def test_generate_skips_candidates_missing_title_or_prompt(
         return_value=fake_llm,
     ):
         result = amb.generate_suggestions(
-            project, scored_turns, base_dir=base_dir,
+            project,
+            scored_turns,
+            base_dir=base_dir,
         )
     assert result["generated"] == 1
     assert result["added"] == 1

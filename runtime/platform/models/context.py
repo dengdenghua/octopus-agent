@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from uuid import UUID
@@ -9,7 +8,6 @@ from .primitives import new_id
 
 
 class QuotaAllocation(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     system: float = Field(..., ge=0.0, le=1.0)
@@ -33,17 +31,11 @@ class QuotaAllocation(BaseModel):
         }
 
 
-DEFAULT_QUOTAS = QuotaAllocation(
-    system=0.15, suckers=0.10, memory=0.30, history=0.45
-)
+DEFAULT_QUOTAS = QuotaAllocation(system=0.15, suckers=0.10, memory=0.30, history=0.45)
 
-CODE_QUOTAS = QuotaAllocation(
-    system=0.12, suckers=0.08, memory=0.45, history=0.35
-)
+CODE_QUOTAS = QuotaAllocation(system=0.12, suckers=0.08, memory=0.45, history=0.35)
 
-DEEP_RESEARCH_QUOTAS = QuotaAllocation(
-    system=0.10, suckers=0.08, memory=0.50, history=0.32
-)
+DEEP_RESEARCH_QUOTAS = QuotaAllocation(system=0.10, suckers=0.08, memory=0.50, history=0.32)
 
 
 def select_quotas(task_type: str | None = None) -> QuotaAllocation:
@@ -55,7 +47,6 @@ def select_quotas(task_type: str | None = None) -> QuotaAllocation:
 
 
 class ContextSegment(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     bucket: str  # "system" | "suckers" | "memory" | "history"
@@ -66,7 +57,6 @@ class ContextSegment(BaseModel):
 
 
 class ContextPacket(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     packet_id: UUID = Field(default_factory=new_id)
@@ -93,10 +83,7 @@ class ContextPacket(BaseModel):
     def bucket_overflow(self) -> dict[str, int]:
         allocated = self.quotas.as_tokens(self.total_budget_tokens)
         used = self.tokens_by_bucket
-        return {
-            bucket: used.get(bucket, 0) - allocated.get(bucket, 0)
-            for bucket in allocated
-        }
+        return {bucket: used.get(bucket, 0) - allocated.get(bucket, 0) for bucket in allocated}
 
 
 class WorkingSetFile(BaseModel):
@@ -118,19 +105,23 @@ class WorkingSet(BaseModel):
 
     def add_file(self, path: str, *, tokens: int = 0, relevance: str = "related") -> None:
         import time
+
         existing = [f for f in self.files if f.path == path]
         if existing:
             return
         now = time.time()
-        self.files.append(WorkingSetFile(
-            path=path,
-            last_read_at=now,
-            tokens_estimated=tokens,
-            relevance=relevance,
-        ))
+        self.files.append(
+            WorkingSetFile(
+                path=path,
+                last_read_at=now,
+                tokens_estimated=tokens,
+                relevance=relevance,
+            )
+        )
 
     def mark_modified(self, path: str) -> None:
         import time
+
         for i, f in enumerate(self.files):
             if f.path == path:
                 self.files[i] = WorkingSetFile(
@@ -146,6 +137,7 @@ class WorkingSet(BaseModel):
         def _sort_key(f: WorkingSetFile) -> tuple:
             rank = {"editing": 0, "related": 1, "referenced": 2}.get(f.relevance, 3)
             return (rank, -max(f.last_read_at, f.last_modified_at))
+
         return sorted(self.files, key=_sort_key)
 
     def top_n(self, n: int = 8) -> list[WorkingSetFile]:

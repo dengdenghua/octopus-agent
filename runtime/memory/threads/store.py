@@ -120,11 +120,7 @@ class ThreadStateStore:
         # Backfill the index from in-memory state on first boot. The
         # index is authoritative AFTER first write; before then we
         # need to seed it from whatever the file walk discovered.
-        if (
-            self._index is not None
-            and len(self._index) == 0
-            and self._threads
-        ):
+        if self._index is not None and len(self._index) == 0 and self._threads:
             self._reindex_all_locked()
 
     # ─── index helpers ───────────────────────────────────────
@@ -144,11 +140,9 @@ class ThreadStateStore:
         if self._per_agent_base is None:
             return str(target)
         try:
-            return str(
-                target.resolve().relative_to(
-                    self._per_agent_base.resolve()
-                )
-            ).replace("\\", "/")
+            return str(target.resolve().relative_to(self._per_agent_base.resolve())).replace(
+                "\\", "/"
+            )
         except ValueError:
             return str(target)
 
@@ -156,9 +150,7 @@ class ThreadStateStore:
         assert self._index is not None
         for _thread_id, thread in self._threads.items():
             target = (
-                self._per_thread_path(thread)
-                if self._per_agent_base is not None
-                else self._path
+                self._per_thread_path(thread) if self._per_agent_base is not None else self._path
             )
             if target is None:
                 continue
@@ -254,12 +246,13 @@ class ThreadStateStore:
             threads = list(self._threads.values())
         if metadata:
             threads = [
-                thread for thread in threads
+                thread
+                for thread in threads
                 if all(thread["metadata"].get(key) == value for key, value in metadata.items())
             ]
         reverse = sort_order.lower() != "asc"
         threads.sort(key=lambda item: item.get(sort_by) or "", reverse=reverse)
-        return [_deepcopy(item) for item in threads[offset: offset + limit]]
+        return [_deepcopy(item) for item in threads[offset : offset + limit]]
 
     def get_state(self, thread_id: str) -> dict[str, Any] | None:
         with self._lock:
@@ -354,8 +347,7 @@ class ThreadStateStore:
         if not isinstance(thread_id, str) or not thread_id or team_id is None:
             return None
         sess_root = (
-            self._per_agent_base / "teams" / _safe_path_segment(team_id, "team")
-            / "sessions"
+            self._per_agent_base / "teams" / _safe_path_segment(team_id, "team") / "sessions"
         )
         return self._resolve_thread_file(sess_root, thread_id)
 
@@ -369,8 +361,7 @@ class ThreadStateStore:
         if agent_id is None:
             return None
         sess_root = (
-            self._per_agent_base / "agents" / _safe_path_segment(agent_id, "agent")
-            / "sessions"
+            self._per_agent_base / "agents" / _safe_path_segment(agent_id, "agent") / "sessions"
         )
         return self._resolve_thread_file(sess_root, thread_id)
 
@@ -404,12 +395,7 @@ class ThreadStateStore:
                     # stale month for both reads and appends.
                     return max(hits)
             now = datetime.now(UTC)
-            return (
-                sess_root
-                / f"{now.year:04d}"
-                / f"{now.month:02d}"
-                / f"{thread_id}.jsonl"
-            )
+            return sess_root / f"{now.year:04d}" / f"{now.month:02d}" / f"{thread_id}.jsonl"
         return flat
 
     def _per_thread_path(self, thread: dict[str, Any]) -> Path | None:
@@ -586,14 +572,18 @@ class ThreadStateStore:
 
                             try:  # noqa: SIM105
                                 handle.seek(0, 0)
-                            except OSError:  # best-effort · unlock below still targets the intended byte
+                            except (
+                                OSError
+                            ):  # best-effort · unlock below still targets the intended byte
                                 pass
                             _msvcrt.locking(fd, _msvcrt.LK_UNLCK, 1)
                         else:
                             import fcntl as _fcntl
 
                             _fcntl.flock(fd, _fcntl.LOCK_UN)
-                    except OSError:  # best-effort · closing the handle below releases the OS lock anyway
+                    except (
+                        OSError
+                    ):  # best-effort · closing the handle below releases the OS lock anyway
                         pass
 
     def _session_meta(self, thread: dict[str, Any]) -> dict[str, Any]:

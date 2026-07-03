@@ -17,6 +17,7 @@ Holdout file shape · one JSON object per line under
 ``expected_signal`` is a substring or regex marker the agent's
 reply must contain — a rough quality proxy, not a full rubric.
 """
+
 from __future__ import annotations
 
 import json
@@ -74,6 +75,7 @@ class GatePolicy:
 
 def _project_root() -> Path:
     from runtime.platform.process.paths import project_root
+
     return project_root()
 
 
@@ -88,7 +90,9 @@ def _scores_path(agent_id: str, root: Path | None = None) -> Path:
 
 
 def _session_path(
-    agent_id: str, thread_id: str, root: Path | None = None,
+    agent_id: str,
+    thread_id: str,
+    root: Path | None = None,
 ) -> Path:
     base = root if root is not None else _project_root()
     return base / "agents" / agent_id / "sessions" / f"{thread_id}.jsonl"
@@ -129,9 +133,13 @@ def _parse_entries(rows: list[dict[str, Any]]) -> list[HoldoutEntry]:
             weight = float(row.get("weight", 1.0))
         except (TypeError, ValueError):
             weight = 1.0
-        out.append(HoldoutEntry(
-            prompt=prompt, expected_signal=sig, weight=weight,
-        ))
+        out.append(
+            HoldoutEntry(
+                prompt=prompt,
+                expected_signal=sig,
+                weight=weight,
+            )
+        )
     return out
 
 
@@ -157,9 +165,9 @@ def load_holdout(
     seeded = auto_seed_holdout(agent_id, journal_root=journal_root)
     if seeded > 0:
         _LOG.info(
-            "auto-seeded %d holdout entries from past successes — "
-            "review and edit %s",
-            seeded, path,
+            "auto-seeded %d holdout entries from past successes — review and edit %s",
+            seeded,
+            path,
         )
         return _parse_entries(_read_jsonl(path))
     return []
@@ -242,9 +250,13 @@ def auto_seed_holdout(
         signal = reply[:_AUTO_SEED_SIGNAL_LEN].strip()
         if not signal:
             continue
-        picked.append(HoldoutEntry(
-            prompt=prompt, expected_signal=signal, weight=1.0,
-        ))
+        picked.append(
+            HoldoutEntry(
+                prompt=prompt,
+                expected_signal=signal,
+                weight=1.0,
+            )
+        )
     if not picked:
         return 0
     out_path = _holdout_path(agent_id, root=journal_root)
@@ -252,11 +264,17 @@ def auto_seed_holdout(
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("w", encoding="utf-8") as fh:
             for entry in picked:
-                fh.write(json.dumps({
-                    "prompt": entry.prompt,
-                    "expected_signal": entry.expected_signal,
-                    "weight": entry.weight,
-                }, ensure_ascii=False) + "\n")
+                fh.write(
+                    json.dumps(
+                        {
+                            "prompt": entry.prompt,
+                            "expected_signal": entry.expected_signal,
+                            "weight": entry.weight,
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
     except OSError as exc:
         _LOG.warning("auto_seed_holdout write failed: %s", exc)
         return 0
@@ -312,13 +330,15 @@ def evaluate_against_holdout(
         w = max(0.0, float(entry.weight))
         total_weight += w
         weighted_score += score * w
-        detail.append({
-            "prompt": entry.prompt,
-            "expected_signal": entry.expected_signal,
-            "score": score,
-            "weight": w,
-            "output": reply[:500],
-        })
+        detail.append(
+            {
+                "prompt": entry.prompt,
+                "expected_signal": entry.expected_signal,
+                "score": score,
+                "weight": w,
+                "output": reply[:500],
+            }
+        )
     pass_rate = (weighted_score / total_weight) if total_weight > 0 else 0.0
     return HoldoutResult(pass_rate=pass_rate, detail=detail)
 
@@ -346,8 +366,7 @@ def gate(
     if new_rate < policy.floor:
         return (
             False,
-            f"new pass_rate {new_rate:.2f} below absolute floor "
-            f"{policy.floor:.2f}",
+            f"new pass_rate {new_rate:.2f} below absolute floor {policy.floor:.2f}",
         )
     if new_rate < (old_rate - policy.regression_tolerance):
         return (

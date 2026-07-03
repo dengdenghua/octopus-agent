@@ -5,6 +5,7 @@ endpoint 401'd while the chat WebSocket (which already uses `?token=`) worked.
 The frontend now appends `?token=` (`authedEventSource`) and the backend reads
 it. The Authorization header still takes precedence when both are present.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace

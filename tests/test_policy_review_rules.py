@@ -196,8 +196,7 @@ def test_plugin_permission_review_drafts_are_signed_for_mcp_plugin(tmp_path) -> 
         "use_capability",
     }
     use_capability = next(
-        draft for draft in drafts
-        if draft["signed_payload"]["rule"]["tool"] == "use_capability"
+        draft for draft in drafts if draft["signed_payload"]["rule"]["tool"] == "use_capability"
     )
     assert use_capability["signed_payload"]["rule"]["args_contains"] == "research"
     assert use_capability["signed_payload"]["proposal_kind"] == "plugin_permission_review"
@@ -241,12 +240,11 @@ def test_automation_policy_review_drafts_are_signed_for_browser_and_desktop() ->
         "screen_*",
     } <= tools
     desktop_execute = next(
-        draft for draft in drafts
+        draft
+        for draft in drafts
         if draft["signed_payload"]["rule"]["tool"] == "computer_execute_token"
     )
-    assert desktop_execute["signed_payload"]["proposal_kind"] == (
-        "automation_policy_review"
-    )
+    assert desktop_execute["signed_payload"]["proposal_kind"] == ("automation_policy_review")
     assert desktop_execute["signed_payload"]["evidence"]["controls"] == [
         "signed_policy_review_rule",
         "preview_confirm_execute",
@@ -288,7 +286,8 @@ def test_automation_policy_rule_coverage_detects_missing_high_risk_target() -> N
 
 def test_install_automation_policy_review_draft_appends_deny_rule(tmp_path) -> None:
     draft = next(
-        item for item in build_automation_policy_rule_drafts()["drafts"]
+        item
+        for item in build_automation_policy_rule_drafts()["drafts"]
         if item["signed_payload"]["rule"]["tool"] == "live_browser_*"
     )
 

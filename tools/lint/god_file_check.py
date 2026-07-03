@@ -18,6 +18,7 @@ Run::
     python tools/lint/god_file_check.py --write-baseline
                                                    # snapshot current state
 """
+
 from __future__ import annotations
 
 import argparse
@@ -107,8 +108,9 @@ def _audit(strict: bool) -> int:
     seen_paths = {p.relative_to(REPO_ROOT).as_posix() for p, _ in hits}
     baseline_paths = set(baseline.keys())
 
-    new_gods = [(p, n) for p, n in hits
-                if p.relative_to(REPO_ROOT).as_posix() not in baseline_paths]
+    new_gods = [
+        (p, n) for p, n in hits if p.relative_to(REPO_ROOT).as_posix() not in baseline_paths
+    ]
     shrunk = baseline_paths - seen_paths
 
     # Escrow check: files at or above ESCROW_THRESHOLD MUST NOT grow.
@@ -122,17 +124,21 @@ def _audit(strict: bool) -> int:
             escrow_breaches.append((rel, baseline_count, current))
 
     if not new_gods and not shrunk and not escrow_breaches:
-        print(f"OK · {len(baseline)} baseline god files unchanged "
-              f"(threshold {THRESHOLD_LINES} lines, escrow {ESCROW_THRESHOLD})")
+        print(
+            f"OK · {len(baseline)} baseline god files unchanged "
+            f"(threshold {THRESHOLD_LINES} lines, escrow {ESCROW_THRESHOLD})"
+        )
         return 0
 
     if shrunk:
         print(f"{len(shrunk)} baseline file(s) shrunk below threshold:")
         for entry in sorted(shrunk):
             print(f"  SHRUNK  {entry}")
-        print("\nRemove them from "
-              f"{_BASELINE_PATH.relative_to(REPO_ROOT).as_posix()} so the "
-              "split-up gain is locked in.")
+        print(
+            "\nRemove them from "
+            f"{_BASELINE_PATH.relative_to(REPO_ROOT).as_posix()} so the "
+            "split-up gain is locked in."
+        )
 
     if escrow_breaches:
         print(
@@ -155,12 +161,14 @@ def _audit(strict: bool) -> int:
         for p, n in new_gods:
             rel = p.relative_to(REPO_ROOT).as_posix()
             print(f"  NEW    {n:5d}  {rel}")
-        print("\nFix one of:\n"
-              "  1. Split the file (preferred — see runtime/core/cerebrum/ "
-              "for an example of breaking one big module into 7 focused subs)\n"
-              "  2. If genuinely irreducible, raise THRESHOLD_LINES in "
-              f"{__file__!s}\n"
-              "     and document the reason.")
+        print(
+            "\nFix one of:\n"
+            "  1. Split the file (preferred — see runtime/core/cerebrum/ "
+            "for an example of breaking one big module into 7 focused subs)\n"
+            "  2. If genuinely irreducible, raise THRESHOLD_LINES in "
+            f"{__file__!s}\n"
+            "     and document the reason."
+        )
 
     if strict and (new_gods or shrunk or escrow_breaches):
         return 1
@@ -169,10 +177,12 @@ def _audit(strict: bool) -> int:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--strict", action="store_true",
-                   help="exit 1 on new god files or stale baseline entries")
-    p.add_argument("--write-baseline", action="store_true",
-                   help="snapshot current state to baseline file")
+    p.add_argument(
+        "--strict", action="store_true", help="exit 1 on new god files or stale baseline entries"
+    )
+    p.add_argument(
+        "--write-baseline", action="store_true", help="snapshot current state to baseline file"
+    )
     args = p.parse_args()
 
     if args.write_baseline:

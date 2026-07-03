@@ -143,9 +143,7 @@ def test_automation_radar_reports_browser_desktop_advantage() -> None:
     assert report["verdict"] == "leading"
     assert report["browser_desktop_quality"]["ready"] is True
     assert report["parity_certification"]["ready"] is True
-    assert report["policy_rule_drafts"]["schema"] == (
-        "octopus.automation_policy_rule_drafts.v1"
-    )
+    assert report["policy_rule_drafts"]["schema"] == ("octopus.automation_policy_rule_drafts.v1")
     assert report["policy_rule_drafts"]["ready"] is True
     assert report["policy_rule_drafts"]["verified"] == report["policy_rule_drafts"]["total"]
     assert report["policy_rule_coverage"]["schema"] == (
@@ -153,16 +151,10 @@ def test_automation_radar_reports_browser_desktop_advantage() -> None:
     )
     assert report["policy_rule_coverage"]["ready"] is True
     session_control = next(
-        row
-        for row in report["dimensions"]
-        if row["id"] == "browser_session_control"
+        row for row in report["dimensions"] if row["id"] == "browser_session_control"
     )
     assert session_control["scores"]["octopus"] > session_control["scores"]["codex"]
-    safety = next(
-        row
-        for row in report["dimensions"]
-        if row["id"] == "automation_safety"
-    )
+    safety = next(row for row in report["dimensions"] if row["id"] == "automation_safety")
     assert safety["scores"]["octopus"] > safety["scores"]["codex"]
     assert {row["id"] for row in report["octopus_strengths"]} >= {
         "browser_session_control",
@@ -175,15 +167,9 @@ def test_automation_radar_reports_browser_desktop_advantage() -> None:
         "productized_api_bridge",
     }
     assert all(row["evidence_ready"] for row in report["octopus_strengths"])
-    visual = next(
-        row
-        for row in report["dimensions"]
-        if row["id"] == "visual_replay_validation"
-    )
+    visual = next(row for row in report["dimensions"] if row["id"] == "visual_replay_validation")
     assert visual["scores"]["octopus"] > visual["scores"]["codex"]
-    assert visual["operator_drilldown"]["schema"] == (
-        "octopus.automation_radar_drilldown.v1"
-    )
+    assert visual["operator_drilldown"]["schema"] == ("octopus.automation_radar_drilldown.v1")
     assert any(
         link["href"] == "/api/evolution/browser-desktop-repair-recipes"
         for link in visual["operator_drilldown"]["links"]

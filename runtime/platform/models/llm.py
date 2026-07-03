@@ -15,6 +15,7 @@ Note this lives in the ``platform.models.llm`` *submodule*, not the
 invocation) doesn't collide with ``platform.models.ToolCall`` (an
 execution-pipeline call) — two distinct concepts that share a name.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -143,7 +144,6 @@ class ToolCall(BaseModel):
 
 
 class ModelRequest(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     model: str  # "claude-haiku-4-5-20251001" / "mock/always-fail" / ...
@@ -178,7 +178,6 @@ class ModelRequest(BaseModel):
 
 
 class ModelResponse(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     text: str
@@ -220,7 +219,10 @@ class LLMResponseFormatError(ValueError):
 # and turns each one into an SSE frame to the browser.
 
 EventType = Literal[
-    "text_delta", "thinking_delta", "tool_use", "done",
+    "text_delta",
+    "thinking_delta",
+    "tool_use",
+    "done",
 ]
 
 
@@ -242,12 +244,12 @@ class ModelStreamEvent(BaseModel):
 
 
 class ModelRouter(ABC):
-
     @abstractmethod
     def call(self, request: ModelRequest) -> ModelResponse: ...
 
     def call_stream(
-        self, request: ModelRequest,
+        self,
+        request: ModelRequest,
     ) -> Iterator[ModelStreamEvent]:
         """Default fallback · wrap ``call()`` as a synthetic stream.
 
@@ -266,7 +268,8 @@ class ModelRouter(ABC):
         resp = self.call(request)
         if resp.thinking:
             yield ModelStreamEvent(
-                type="thinking_delta", delta=resp.thinking,
+                type="thinking_delta",
+                delta=resp.thinking,
             )
         if resp.text:
             yield ModelStreamEvent(type="text_delta", delta=resp.text)

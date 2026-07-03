@@ -138,11 +138,7 @@ def compute_permission_sandbox_quality(
         "checks": checks,
         "automation_policy_coverage": automation,
         "plugin_policy_coverage": plugins,
-        "next_actions": [
-            str(row["next_action"])
-            for row in checks
-            if not row["passed"]
-        ]
+        "next_actions": [str(row["next_action"]) for row in checks if not row["passed"]]
         + list(automation.get("next_actions") or [])
         + list(plugins.get("next_actions") or []),
     }
@@ -176,18 +172,15 @@ def _plugin_policy_coverage(base: Path) -> dict[str, Any]:
             verify_policy_review_rule_draft,
         )
 
-        plugins = discover_codex_plugins([
-            base / ".octopus" / "plugins" / "codex",
-        ])
+        plugins = discover_codex_plugins(
+            [
+                base / ".octopus" / "plugins" / "codex",
+            ]
+        )
         report = build_plugin_permission_rule_drafts(plugins=plugins, limit=500)
-        drafts = [
-            draft for draft in report.get("drafts") or []
-            if isinstance(draft, dict)
-        ]
+        drafts = [draft for draft in report.get("drafts") or [] if isinstance(draft, dict)]
         verified = sum(
-            1
-            for draft in drafts
-            if verify_policy_review_rule_draft(draft).get("ok") is True
+            1 for draft in drafts if verify_policy_review_rule_draft(draft).get("ok") is True
         )
         return {
             "schema": "octopus.plugin_permission_rule_coverage.v1",
@@ -213,25 +206,10 @@ def _plugin_policy_coverage(base: Path) -> dict[str, Any]:
 
 
 def _check_row(base: Path, check: PermissionSandboxCheck) -> dict[str, Any]:
-    paths = [
-        {"path": path, "exists": (base / path).exists()}
-        for path in check.paths
-    ]
-    text = "\n".join(
-        _read_text(base / row["path"])
-        for row in paths
-        if row["exists"]
-    ).lower()
-    missing_paths = [
-        str(row["path"])
-        for row in paths
-        if not row["exists"]
-    ]
-    missing_terms = [
-        term
-        for term in check.required_terms
-        if term.lower() not in text
-    ]
+    paths = [{"path": path, "exists": (base / path).exists()} for path in check.paths]
+    text = "\n".join(_read_text(base / row["path"]) for row in paths if row["exists"]).lower()
+    missing_paths = [str(row["path"]) for row in paths if not row["exists"]]
+    missing_terms = [term for term in check.required_terms if term.lower() not in text]
     return {
         "id": check.id,
         "title": check.title,

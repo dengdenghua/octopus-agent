@@ -3,6 +3,7 @@
 Hermetic — each test builds a fake ``~/.codex`` / ``~/.claude`` under tmp_path
 and asserts the dry-run plan, so nothing touches the real machine.
 """
+
 from __future__ import annotations
 
 import json
@@ -31,7 +32,7 @@ def _fake_codex(home: Path) -> None:
         plugin / "skills" / "fill-form" / "SKILL.md",
         "---\nname: fill-form\ndescription: Fill a PDF form\n---\nDo it.\n",
     )
-    _write(c / "AGENTS.md", "Always write tests.\n")           # non-empty → memory
+    _write(c / "AGENTS.md", "Always write tests.\n")  # non-empty → memory
     _write(c / "rules" / "default.rules", "rule: be careful\n")
     _write(
         c / "config.toml",
@@ -42,7 +43,10 @@ def _fake_codex(home: Path) -> None:
 def _fake_claude(home: Path) -> None:
     c = home / ".claude"
     base = c / "plugins" / "marketplaces" / "official" / "plugins" / "gh"
-    _write(base / "skills" / "pr-review" / "SKILL.md", "---\nname: pr-review\ndescription: Review PRs\n---\nx\n")
+    _write(
+        base / "skills" / "pr-review" / "SKILL.md",
+        "---\nname: pr-review\ndescription: Review PRs\n---\nx\n",
+    )
     _write(base / "agents" / "reviewer.md", "# reviewer\n")
     _write(base / "commands" / "ship.md", "# ship\n")
     _write(
@@ -52,10 +56,12 @@ def _fake_claude(home: Path) -> None:
     _write(c / "projects" / "proj" / "memory" / "MEMORY.md", "- index\n")  # must be skipped
     _write(
         home / ".claude.json",
-        json.dumps({
-            "mcpServers": {"globalsrv": {"command": "npx -y x"}},
-            "projects": {"/p": {"mcpServers": {"projsrv": {"url": "http://x"}}}},
-        }),
+        json.dumps(
+            {
+                "mcpServers": {"globalsrv": {"command": "npx -y x"}},
+                "projects": {"/p": {"mcpServers": {"projsrv": {"url": "http://x"}}}},
+            }
+        ),
     )
 
 
@@ -81,14 +87,14 @@ def test_claude_adapter_maps_skills_agents_commands_memory_mcp(tmp_path: Path) -
     assert k.get("skill") == 1
     assert k.get("agent") == 1
     assert k.get("command") == 1
-    assert k.get("memory") == 1                      # MEMORY.md index skipped
-    assert k.get("mcp_server") == 2                  # global + project
+    assert k.get("memory") == 1  # MEMORY.md index skipped
+    assert k.get("mcp_server") == 2  # global + project
     mem = next(i for i in plan.items if i.kind == "memory")
-    assert mem.name == "user-pref"                   # read from frontmatter, not filename
+    assert mem.name == "user-pref"  # read from frontmatter, not filename
 
 
 def test_absent_sources_marked_unavailable(tmp_path: Path) -> None:
-    for plan in build_migration_plans(home=tmp_path):     # empty home
+    for plan in build_migration_plans(home=tmp_path):  # empty home
         assert plan.available is False
         assert plan.items == ()
 
@@ -101,4 +107,4 @@ def test_service_builds_both_and_renders(tmp_path: Path) -> None:
 
     summary = render_plan_summary(plans)
     assert "[codex]" in summary and "[claude]" in summary
-    assert "needs follow-up" in summary              # the MCP servers
+    assert "needs follow-up" in summary  # the MCP servers

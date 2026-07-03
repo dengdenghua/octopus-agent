@@ -40,6 +40,7 @@ Why snapshot and not stronger schema validation
 * OCTOPUS_OPENAPI_WRITE=1 keeps the update loop cheap for
   intentional changes.
 """
+
 from __future__ import annotations
 
 import json
@@ -51,9 +52,7 @@ from fastapi.testclient import TestClient
 
 from runtime.platform.ui.app import create_app
 
-SNAPSHOT_PATH = (
-    Path(__file__).resolve().parent.parent / "docs" / "openapi-snapshot.json"
-)
+SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / "docs" / "openapi-snapshot.json"
 
 
 def _current_schema() -> dict:
@@ -66,9 +65,7 @@ def _current_schema() -> dict:
     app = create_app()
     client = TestClient(app)
     resp = client.get("/openapi.json")
-    assert resp.status_code == 200, (
-        f"openapi.json did not return 200: {resp.status_code}"
-    )
+    assert resp.status_code == 200, f"openapi.json did not return 200: {resp.status_code}"
     return resp.json()
 
 
@@ -180,10 +177,7 @@ def test_openapi_response_models_on_config_endpoints() -> None:
     ]
     for path, method, expected_component in checks:
         spec = schema["paths"][path][method]
-        ref = (
-            spec["responses"]["200"]["content"]["application/json"]
-            ["schema"].get("$ref", "")
-        )
+        ref = spec["responses"]["200"]["content"]["application/json"]["schema"].get("$ref", "")
         assert ref.endswith(f"/{expected_component}"), (
             f"{method.upper()} {path} should return {expected_component} · "
             f"got ref={ref!r}. If the model was renamed intentionally, "

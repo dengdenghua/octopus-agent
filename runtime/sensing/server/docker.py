@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import os
@@ -31,7 +30,10 @@ def _docker_available() -> bool:
     try:
         r = subprocess.run(
             [exe, "version", "--format", "{{.Server.Version}}"],
-            capture_output=True, timeout=5.0, text=True, check=False,
+            capture_output=True,
+            timeout=5.0,
+            text=True,
+            check=False,
         )
     except (subprocess.TimeoutExpired, OSError):
         return False
@@ -39,7 +41,6 @@ def _docker_available() -> bool:
 
 
 class DockerBackend(LocalBackend):
-
     def __init__(
         self,
         *,
@@ -64,10 +65,7 @@ class DockerBackend(LocalBackend):
             raise ValueError("cpus must be > 0")
         for v in volumes or []:
             if len(v) != 3 or v[2] not in ("ro", "rw"):
-                raise ValueError(
-                    "volumes items must be (host, container, 'ro'|'rw'), "
-                    f"got {v!r}"
-                )
+                raise ValueError(f"volumes items must be (host, container, 'ro'|'rw'), got {v!r}")
         self.image = image
         self.timeout_seconds = timeout_seconds
         self.network_mode: NetworkMode = network_mode
@@ -98,23 +96,26 @@ class DockerBackend(LocalBackend):
                 yield box
             finally:
                 span.set_attribute(
-                    "octopus.backend.docker_runs", box.run_command_count,
+                    "octopus.backend.docker_runs",
+                    box.run_command_count,
                 )
                 span.set_attribute(
-                    "octopus.backend.timed_out_count", box.timeouts,
+                    "octopus.backend.timed_out_count",
+                    box.timeouts,
                 )
 
 
 class DockerSandbox(Sandbox):
-
     def __init__(
-        self, backend: DockerBackend, audit: BackendAudit, span: Any,
+        self,
+        backend: DockerBackend,
+        audit: BackendAudit,
+        span: Any,
     ) -> None:
         super().__init__(backend=backend, audit=audit, span=span)
         self.backend: DockerBackend = backend  # type: ignore[assignment]
         self.run_command_count = 0
         self.timeouts = 0
-
 
     def run_command(
         self,
@@ -173,9 +174,11 @@ class DockerSandbox(Sandbox):
                 "container": container_name,
             }
 
-
     def _build_docker_argv(
-        self, name: str, cwd: str | None, inner_argv: list[str],
+        self,
+        name: str,
+        cwd: str | None,
+        inner_argv: list[str],
     ) -> list[str]:
         m = self.backend
         args: list[str] = ["run", "--rm", "-i", "--name", name]
@@ -203,7 +206,6 @@ class DockerSandbox(Sandbox):
         args += [m.image, *inner_argv]
         return args
 
-
     @staticmethod
     def _best_effort_kill(name: str) -> None:
         exe = shutil.which("docker")
@@ -212,5 +214,8 @@ class DockerSandbox(Sandbox):
         with suppress(subprocess.TimeoutExpired, OSError):
             subprocess.run(
                 [exe, "kill", name],
-                capture_output=True, text=True, timeout=5.0, check=False,
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+                check=False,
             )

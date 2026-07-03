@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -17,7 +16,7 @@ _PYAUTOGUI_LOAD_ERROR: str | None = None
 
 
 _MAX_TYPE_CHARS = 10_000
-_MAX_SCREENSHOT_BYTES = 20 * 1024 * 1024   # 20MB
+_MAX_SCREENSHOT_BYTES = 20 * 1024 * 1024  # 20MB
 _VALID_BUTTONS = ("left", "right", "middle")
 
 
@@ -73,6 +72,7 @@ def _screen_capture(
         return {"error": "missing path"}
 
     from runtime.safety.auth.path_guard import check_path
+
     verdict = check_path(path, sandbox_dir=sandbox_dir)
     if not verdict.allow:
         return {"error": f"path_blocked: {verdict.reason}"}
@@ -159,7 +159,11 @@ def _mouse_click(
         return {"error": f"duration must be >= 0, got {duration!r}"}
     try:
         pyautogui.click(
-            x=x, y=y, clicks=clicks, button=button, duration=duration,
+            x=x,
+            y=y,
+            clicks=clicks,
+            button=button,
+            duration=duration,
         )
     except Exception as e:  # noqa: BLE001
         return {"error": f"click_failed: {type(e).__name__}: {e}"}
@@ -373,8 +377,4 @@ def register_computer_skills(
         ),
         verify_tests=verify_tests,
     )
-    return (
-        6
-        + register_computer_api_skills(registry)
-        + register_computer_uia_skills(registry)
-    )
+    return 6 + register_computer_api_skills(registry) + register_computer_uia_skills(registry)

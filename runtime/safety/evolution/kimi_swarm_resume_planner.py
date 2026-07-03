@@ -7,6 +7,7 @@ and kimi_swarm_proof_lookup.py (history/step-coverage); used by
 kimi_swarm_load_run.py (turning a resume config into execution indices) and
 kimi_swarm_load_test.py's preflight/next-stage orchestration.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -78,9 +79,7 @@ def build_kimi_swarm_resume_plan(
     history = kimi_swarm_load_test_history(store=control_store)
     resume_rows = _resume_rows_for_source(history=history, source=candidate)
     resume_session_ids = [
-        str(row.get("session_id") or "")
-        for row in resume_rows
-        if str(row.get("session_id") or "")
+        str(row.get("session_id") or "") for row in resume_rows if str(row.get("session_id") or "")
     ]
     success_by_step, failed_by_step, raw_step_evidence_count = _step_coverage_for_sessions(
         control_store,
@@ -259,9 +258,7 @@ def _resume_preflight_from_plan(
 ) -> dict[str, Any]:
     payload = plan.get("recommended_chunk_payload") or plan.get("recommended_payload")
     payload = payload if isinstance(payload, dict) else {}
-    selected_steps = int(
-        payload.get("resume_step_count") or plan.get("remaining_step_count") or 0
-    )
+    selected_steps = int(payload.get("resume_step_count") or plan.get("remaining_step_count") or 0)
     configured = True if provider_configured is None else bool(provider_configured)
     checks = [
         {

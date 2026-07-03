@@ -67,6 +67,7 @@ _LEGACY_CONTROL_PLANE_PREFIXES = (
     "/api/team/role-models",
 )
 
+
 def _path_matches_prefix(path: str, prefix: str) -> bool:
     return path == prefix or path.startswith(prefix + "/")
 
@@ -116,10 +117,7 @@ def _install_legacy_control_plane_auth(
             return await call_next(request)
         if _is_oauth_callback_request(request.method, path):
             return await call_next(request)
-        if not any(
-            _path_matches_prefix(path, prefix)
-            for prefix in _LEGACY_CONTROL_PLANE_PREFIXES
-        ):
+        if not any(_path_matches_prefix(path, prefix) for prefix in _LEGACY_CONTROL_PLANE_PREFIXES):
             return await call_next(request)
         if identity_store is None:
             return JSONResponse(
@@ -165,7 +163,9 @@ def _attach_molili_fallback_router(
         )
 
         planner_model = getattr(
-            getattr(stack, "planner", None), "planner_model", None,
+            getattr(stack, "planner", None),
+            "planner_model",
+            None,
         )
         # Self-configured model as the fallback (mirrors builder.py); a clear
         # "no model configured" error when none exists, instead of the old
@@ -202,7 +202,9 @@ def _attach_oct_fallback_router(
         )
 
         planner_model = getattr(getattr(stack, "planner", None), "planner_model", None)
-        self_fallback = build_fallback_router_from_custom_models(planner_model) or UnconfiguredModelRouter()
+        self_fallback = (
+            build_fallback_router_from_custom_models(planner_model) or UnconfiguredModelRouter()
+        )
         oct_router = OctModelRouter(
             link_store=link_store,
             base_url=getattr(oct_config, "base_url", None) or "https://api.octoapk.com",
@@ -210,7 +212,9 @@ def _attach_oct_fallback_router(
             timeout_seconds=getattr(oct_config, "llm_timeout_seconds", None) or 120.0,
         )
         dispatcher.set_fallback(
-            OctFallbackRouter(oct_router=oct_router, self_router=self_fallback, link_store=link_store)
+            OctFallbackRouter(
+                oct_router=oct_router, self_router=self_fallback, link_store=link_store
+            )
         )
     except (ImportError, AttributeError, TypeError):
         return
@@ -311,14 +315,18 @@ def create_app(
         if (oct_enabled and oct_jwt_secret)
         else getattr(molili_config, "jwt_issuer", None)
         if molili_jwt_secret and molili_config
-        else getattr(local_auth_config, "jwt_issuer", None) if local_auth_config else None
+        else getattr(local_auth_config, "jwt_issuer", None)
+        if local_auth_config
+        else None
     )
     cocoloop_jwt_audience = (
         getattr(oct_config, "jwt_audience", None)
         if (oct_enabled and oct_jwt_secret)
         else getattr(molili_config, "jwt_audience", None)
         if molili_jwt_secret and molili_config
-        else getattr(local_auth_config, "jwt_audience", None) if local_auth_config else None
+        else getattr(local_auth_config, "jwt_audience", None)
+        if local_auth_config
+        else None
     )
     local_auth_runtime_config = local_auth_config
     if (
@@ -390,7 +398,11 @@ def create_app(
                     "pause_control: %d stale task(s) recovered from journal",
                     _recovered,
                 )
-        except (ImportError, AttributeError, TypeError):  # best-effort · stale-task recovery is optional, startup proceeds either way
+        except (
+            ImportError,
+            AttributeError,
+            TypeError,
+        ):  # best-effort · stale-task recovery is optional, startup proceeds either way
             pass
 
         # Wire the feature-flag registry to the on-disk override
@@ -483,7 +495,11 @@ def create_app(
                             router,
                             default_model=default_model,
                         )
-                    except (ImportError, AttributeError, TypeError):  # best-effort · deep_reflect / deep_evolve will return clean error
+                    except (
+                        ImportError,
+                        AttributeError,
+                        TypeError,
+                    ):  # best-effort · deep_reflect / deep_evolve will return clean error
                         pass
                     # ─── Evolution auto-trigger · fitness-driven self-evolution ──
                     try:
@@ -517,7 +533,11 @@ def create_app(
                             router,
                             default_model=default_model,
                         )
-                    except (ImportError, AttributeError, TypeError):  # best-effort · skills will return clean "router not wired" error
+                    except (
+                        ImportError,
+                        AttributeError,
+                        TypeError,
+                    ):  # best-effort · skills will return clean "router not wired" error
                         pass
                     # ─── Computer-use vision loop · autonomous desktop ───
                     # register_computer_use_loop needs a VisionPlanner built
@@ -745,7 +765,11 @@ def create_app(
         from runtime.sensing.gateway.metrics_router import create_metrics_router
 
         app.include_router(create_metrics_router())
-    except (ImportError, AttributeError, TypeError):  # best-effort · optional, proceed without /metrics
+    except (
+        ImportError,
+        AttributeError,
+        TypeError,
+    ):  # best-effort · optional, proceed without /metrics
         # Metrics module is optional · proceed without /metrics rather
         # than refuse to boot.
         pass
@@ -780,7 +804,12 @@ def create_app(
         # programmatically and so other routers can register their
         # own checks (e.g. redis_check at startup).
         app.state.health_registry = _hreg
-    except (ImportError, AttributeError, TypeError, OSError):  # best-effort · liveness/readiness probes are optional
+    except (
+        ImportError,
+        AttributeError,
+        TypeError,
+        OSError,
+    ):  # best-effort · liveness/readiness probes are optional
         pass
 
     if cocoloop_install_dir is not None:  # noqa: F841 — parameter kept for back-compat
@@ -902,11 +931,7 @@ def create_app(
             search = getattr(collab_store, "search_messages_for_room", None)
             return search(room_id, q, limit=limit) if callable(search) else []
         history = getattr(collab_store, "messages_for_room", None)
-        return (
-            history(room_id, limit=limit, after_seq=after_seq)
-            if callable(history)
-            else []
-        )
+        return history(room_id, limit=limit, after_seq=after_seq) if callable(history) else []
 
     team_rooms_router = create_team_rooms_router(
         identity_store=cocoloop_identity_store,
@@ -963,11 +988,7 @@ def create_app(
         if collab_store is None:
             return
         metadata = task_payload.get("metadata")
-        session_id = (
-            metadata.get("collab_session_id")
-            if isinstance(metadata, dict)
-            else None
-        )
+        session_id = metadata.get("collab_session_id") if isinstance(metadata, dict) else None
         try:
             if isinstance(session_id, str) and session_id:
                 upsert_task = getattr(collab_store, "upsert_task", None)
@@ -1560,14 +1581,10 @@ def create_app(
     app.include_router(
         create_cowork_group_router(
             store=(
-                getattr(cowork_runtime, "group_store", None)
-                if cowork_runtime is not None
-                else None
+                getattr(cowork_runtime, "group_store", None) if cowork_runtime is not None else None
             ),
             async_store=(
-                getattr(cowork_runtime, "async_store", None)
-                if cowork_runtime is not None
-                else None
+                getattr(cowork_runtime, "async_store", None) if cowork_runtime is not None else None
             ),
             collaboration_store=(
                 getattr(cowork_runtime, "collaboration_store", None)
@@ -1594,17 +1611,13 @@ def create_app(
     project_store = ProjectStore()
     app.state.project_store = project_store
     project_model_router = (
-        getattr(getattr(stack, "planner", None), "router", None)
-        if stack is not None
-        else None
+        getattr(getattr(stack, "planner", None), "router", None) if stack is not None else None
     )
     app.include_router(
         create_projects_router(
             store=project_store,
             group_store=(
-                getattr(cowork_runtime, "group_store", None)
-                if cowork_runtime is not None
-                else None
+                getattr(cowork_runtime, "group_store", None) if cowork_runtime is not None else None
             ),
             collaboration_store=(
                 getattr(cowork_runtime, "collaboration_store", None)
@@ -2008,7 +2021,9 @@ def create_app(
             )
         )
     except Exception as _reg_exc:  # noqa: BLE001
-        logging.getLogger(__name__).warning("registry_consumer_router failed to mount: %s", _reg_exc)
+        logging.getLogger(__name__).warning(
+            "registry_consumer_router failed to mount: %s", _reg_exc
+        )
 
     # ─── 企业版角色资产消费(数字分身归并 C·只读)──────────────
     # 配 OCTOPUS_ENTERPRISE_URL 时,市场可列举企业版托管的角色资产;不配则

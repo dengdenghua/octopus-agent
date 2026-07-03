@@ -85,9 +85,7 @@ def rerank(
             # cohere but no key → drop to bm25 so research loop still works.
             chosen = "bm25"
         else:
-            scores = _cohere_rerank(
-                client, key, query, normalized, timeout_ms=timeout_ms
-            )
+            scores = _cohere_rerank(client, key, query, normalized, timeout_ms=timeout_ms)
             if scores is None:  # network failure
                 chosen = "bm25"
             else:
@@ -192,8 +190,7 @@ def _cohere_rerank(
         close_after = True
 
     docs = [
-        " ".join(filter(None, [s.title, s.snippet, s.content])).strip() or s.url
-        for s in sources
+        " ".join(filter(None, [s.title, s.snippet, s.content])).strip() or s.url for s in sources
     ]
     try:
         r = client.post(
@@ -244,10 +241,7 @@ def _assemble(
     paired.sort(key=lambda x: x[1], reverse=True)
     if top_k is not None:
         paired = paired[:top_k]
-    hits = [
-        RerankHit(source=src, score=float(sc), rank=i)
-        for i, (src, sc) in enumerate(paired)
-    ]
+    hits = [RerankHit(source=src, score=float(sc), rank=i) for i, (src, sc) in enumerate(paired)]
     return RerankResult(hits=hits, backend=backend)
 
 

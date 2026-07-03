@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import io
@@ -11,8 +10,8 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 logger = logging.getLogger(__name__)
 
 
-_DEFAULT_MAX_ENTRY_BYTES = 20 * 1024 * 1024      # Implementation note.
-_DEFAULT_MAX_TOTAL_BYTES = 100 * 1024 * 1024     # Implementation note.
+_DEFAULT_MAX_ENTRY_BYTES = 20 * 1024 * 1024  # Implementation note.
+_DEFAULT_MAX_TOTAL_BYTES = 100 * 1024 * 1024  # Implementation note.
 
 
 class ArchiveSafetyError(ValueError):
@@ -84,7 +83,8 @@ def safe_extract_zip(
                 )
             if _is_symlink(info):
                 logger.warning(
-                    "skipping symlink entry: %s", info.filename,
+                    "skipping symlink entry: %s",
+                    info.filename,
                 )
                 continue
             normalized = posixpath.normpath(
@@ -133,8 +133,7 @@ def safe_extract_zip(
                         )
                     if total_written > max_total_bytes:
                         raise ArchiveSafetyError(
-                            f"archive total too large "
-                            f"({total_written} > {max_total_bytes})",
+                            f"archive total too large ({total_written} > {max_total_bytes})",
                         )
                     dst.write(chunk)
     finally:
@@ -166,6 +165,7 @@ def install_from_archive(
                 f"{dest} already exists (pass overwrite=True to replace)",
             )
         import shutil
+
         shutil.rmtree(dest)
     dest.mkdir(parents=True, exist_ok=True)
 

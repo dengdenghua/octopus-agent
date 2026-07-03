@@ -54,10 +54,13 @@ class DeviceLockManager:
             await asyncio.wait_for(sem.acquire(), timeout=timeout_s)
         except TimeoutError:
             current = self._locks.get(device_id)
-            holder_info = f" (held by {current.holder} for {time.time()-current.acquired_at:.1f}s)" if current else ""
+            holder_info = (
+                f" (held by {current.holder} for {time.time() - current.acquired_at:.1f}s)"
+                if current
+                else ""
+            )
             raise TimeoutError(
-                f"Device {device_id} lock contention{holder_info}. "
-                f"Timeout after {timeout_s}s."
+                f"Device {device_id} lock contention{holder_info}. Timeout after {timeout_s}s."
             ) from None
 
         self._locks[device_id] = _LockEntry(holder=holder)

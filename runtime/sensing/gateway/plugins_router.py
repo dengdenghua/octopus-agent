@@ -102,11 +102,13 @@ def create_plugins_router(
         for plugin in plugins:
             smoke = plugin.get("smoke")
             if not isinstance(smoke, dict):
-                failed.append({
-                    "plugin_id": plugin.get("id"),
-                    "plugin_name": plugin.get("name"),
-                    "issues": ["plugin smoke metadata missing"],
-                })
+                failed.append(
+                    {
+                        "plugin_id": plugin.get("id"),
+                        "plugin_name": plugin.get("name"),
+                        "issues": ["plugin smoke metadata missing"],
+                    }
+                )
                 continue
             surfaces = smoke.get("surfaces") if isinstance(smoke.get("surfaces"), dict) else {}
             for surface in surface_totals:
@@ -119,30 +121,40 @@ def create_plugins_router(
                 else {}
             )
             if permission_resolution:
-                permission_resolutions.append({
-                    "plugin_id": plugin.get("id"),
-                    "plugin_name": plugin.get("name"),
-                    **permission_resolution,
-                })
+                permission_resolutions.append(
+                    {
+                        "plugin_id": plugin.get("id"),
+                        "plugin_name": plugin.get("name"),
+                        **permission_resolution,
+                    }
+                )
             if not smoke.get("ok"):
-                failed.append({
-                    "plugin_id": plugin.get("id"),
-                    "plugin_name": plugin.get("name"),
-                    "issues": smoke.get("issues") if isinstance(smoke.get("issues"), list) else [],
-                })
+                failed.append(
+                    {
+                        "plugin_id": plugin.get("id"),
+                        "plugin_name": plugin.get("name"),
+                        "issues": smoke.get("issues")
+                        if isinstance(smoke.get("issues"), list)
+                        else [],
+                    }
+                )
             if trust.get("level") == "local_review_required":
-                review_required.append({
-                    "plugin_id": plugin.get("id"),
-                    "plugin_name": plugin.get("name"),
-                    "reason": trust.get("reason") or "plugin requires local review",
-                })
+                review_required.append(
+                    {
+                        "plugin_id": plugin.get("id"),
+                        "plugin_name": plugin.get("name"),
+                        "reason": trust.get("reason") or "plugin requires local review",
+                    }
+                )
             plugin_warnings = smoke.get("warnings")
             if isinstance(plugin_warnings, list) and plugin_warnings:
-                warnings.append({
-                    "plugin_id": plugin.get("id"),
-                    "plugin_name": plugin.get("name"),
-                    "warnings": plugin_warnings,
-                })
+                warnings.append(
+                    {
+                        "plugin_id": plugin.get("id"),
+                        "plugin_name": plugin.get("name"),
+                        "warnings": plugin_warnings,
+                    }
+                )
         compatibility = _compatibility_summary(
             total=len(plugins),
             failed_count=len(failed),
@@ -216,7 +228,8 @@ def create_plugins_router(
         )
         draft = next(
             (
-                item for item in report.get("drafts") or []
+                item
+                for item in report.get("drafts") or []
                 if isinstance(item, dict) and str(item.get("draft_id") or "") == draft_id
             ),
             None,
@@ -330,8 +343,7 @@ def _compatibility_summary(
             "id": "review_state_visible",
             "passed": review_required_count > 0 or warning_count > 0 or failed_count == 0,
             "detail": (
-                f"{review_required_count} review-required plugin(s), "
-                f"{warning_count} warning(s)"
+                f"{review_required_count} review-required plugin(s), {warning_count} warning(s)"
             ),
         },
     ]
@@ -430,11 +442,13 @@ def _plugin_capability_entries(manifest: dict[str, Any]) -> list[dict[str, Any]]
     entries: list[dict[str, Any]] = []
     for item in raw:
         if isinstance(item, dict):
-            entries.append({
-                "name": _string(item.get("name") or item.get("type"), "capability"),
-                "type": _string(item.get("type"), "codex"),
-                "description": _string(item.get("description")),
-            })
+            entries.append(
+                {
+                    "name": _string(item.get("name") or item.get("type"), "capability"),
+                    "type": _string(item.get("type"), "codex"),
+                    "description": _string(item.get("description")),
+                }
+            )
         elif isinstance(item, str) and item.strip():
             entries.append({"name": item.strip(), "type": "codex", "description": ""})
     return entries
@@ -448,13 +462,15 @@ def _plugin_skill_entries(plugin_dir: Path) -> list[dict[str, Any]]:
     for skill_path in sorted(skills_dir.glob("*/SKILL.md")):
         skill_dir = skill_path.parent
         description = _first_markdown_paragraph(skill_path)
-        entries.append({
-            "id": skill_dir.name,
-            "name": skill_dir.name.replace("-", " ").title(),
-            "path": str(skill_path),
-            "description": description,
-            "scope": "plugin",
-        })
+        entries.append(
+            {
+                "id": skill_dir.name,
+                "name": skill_dir.name.replace("-", " ").title(),
+                "path": str(skill_path),
+                "description": description,
+                "scope": "plugin",
+            }
+        )
     return entries
 
 
@@ -464,29 +480,35 @@ def _plugin_app_entries(plugin_dir: Path, manifest: dict[str, Any]) -> list[dict
     if isinstance(raw_apps, list):
         for item in raw_apps:
             if isinstance(item, dict):
-                entries.append({
-                    "id": _string(item.get("id") or item.get("name"), "app"),
-                    "name": _string(item.get("name") or item.get("title"), "App"),
-                    "description": _string(item.get("description")),
-                    "source": "manifest",
-                })
+                entries.append(
+                    {
+                        "id": _string(item.get("id") or item.get("name"), "app"),
+                        "name": _string(item.get("name") or item.get("title"), "App"),
+                        "description": _string(item.get("description")),
+                        "source": "manifest",
+                    }
+                )
             elif isinstance(item, str) and item.strip():
-                entries.append({
-                    "id": item.strip(),
-                    "name": item.strip(),
-                    "description": "",
-                    "source": "manifest",
-                })
+                entries.append(
+                    {
+                        "id": item.strip(),
+                        "name": item.strip(),
+                        "description": "",
+                        "source": "manifest",
+                    }
+                )
     for name in (".app.json", "octopus-app.jsonc", "app.json"):
         path = plugin_dir / name
         if path.is_file():
             app = _read_json(path) or {}
-            entries.append({
-                "id": _string(app.get("id") or app.get("name"), path.stem),
-                "name": _string(app.get("name") or app.get("title"), path.stem),
-                "description": _string(app.get("description")),
-                "source": name,
-            })
+            entries.append(
+                {
+                    "id": _string(app.get("id") or app.get("name"), path.stem),
+                    "name": _string(app.get("name") or app.get("title"), path.stem),
+                    "description": _string(app.get("description")),
+                    "source": name,
+                }
+            )
     return _dedupe_by_id(entries)
 
 
@@ -505,21 +527,27 @@ def _plugin_mcp_entries(plugin_dir: Path, manifest: dict[str, Any]) -> list[dict
         if not isinstance(raw_entry, dict):
             continue
         cwd = _string(raw_entry.get("cwd"))
-        resolved_cwd = str((plugin_dir / cwd).resolve()) if cwd and not Path(cwd).is_absolute() else cwd
+        resolved_cwd = (
+            str((plugin_dir / cwd).resolve()) if cwd and not Path(cwd).is_absolute() else cwd
+        )
         env = raw_entry.get("env") if isinstance(raw_entry.get("env"), dict) else {}
-        entries.append({
-            "name": _string(name, "mcp"),
-            "type": _string(raw_entry.get("type"), "stdio" if raw_entry.get("command") else "http"),
-            "title": _string(raw_entry.get("title")),
-            "description": _string(raw_entry.get("description") or raw_entry.get("note")),
-            "command": _string(raw_entry.get("command")),
-            "args": raw_entry.get("args") if isinstance(raw_entry.get("args"), list) else [],
-            "cwd": resolved_cwd or str(plugin_dir),
-            "url": _string(raw_entry.get("url")),
-            "env_keys": sorted(str(key) for key in env),
-            "enabled": False,
-            "scope": "plugin",
-        })
+        entries.append(
+            {
+                "name": _string(name, "mcp"),
+                "type": _string(
+                    raw_entry.get("type"), "stdio" if raw_entry.get("command") else "http"
+                ),
+                "title": _string(raw_entry.get("title")),
+                "description": _string(raw_entry.get("description") or raw_entry.get("note")),
+                "command": _string(raw_entry.get("command")),
+                "args": raw_entry.get("args") if isinstance(raw_entry.get("args"), list) else [],
+                "cwd": resolved_cwd or str(plugin_dir),
+                "url": _string(raw_entry.get("url")),
+                "env_keys": sorted(str(key) for key in env),
+                "enabled": False,
+                "scope": "plugin",
+            }
+        )
     return entries
 
 
@@ -529,12 +557,14 @@ def _plugin_command_entries(plugin_dir: Path) -> list[dict[str, Any]]:
         return []
     entries: list[dict[str, Any]] = []
     for path in sorted(item for item in commands_dir.iterdir() if item.is_file()):
-        entries.append({
-            "id": path.stem,
-            "name": path.stem.replace("-", " ").title(),
-            "path": str(path),
-            "executable": path.stat().st_mode & 0o111 != 0,
-        })
+        entries.append(
+            {
+                "id": path.stem,
+                "name": path.stem.replace("-", " ").title(),
+                "path": str(path),
+                "executable": path.stat().st_mode & 0o111 != 0,
+            }
+        )
     return entries
 
 

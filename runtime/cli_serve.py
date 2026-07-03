@@ -49,7 +49,9 @@ def maybe_setup_prompt_evolution(
 
     variants = load_variants_from_yaml(prompt_variants_path)
     optimizer = PromptOptimizer(
-        stack, variants, auto_persist_path=prompt_variants_path,
+        stack,
+        variants,
+        auto_persist_path=prompt_variants_path,
     )
 
     evolve_count = 0
@@ -97,7 +99,9 @@ def register_intel_task(
 
     def _tick() -> None:
         IntelCollector(
-            sources=[source], journal=stack.journal, registry=stack.registry,
+            sources=[source],
+            journal=stack.journal,
+            registry=stack.registry,
         ).run_once()
 
     runner.add_periodic(
@@ -151,6 +155,7 @@ def register_reflection_tasks(
     jitter = min(30.0, interval_s * 0.05)
 
     if isinstance(stack.planner, LLMPlanner):
+
         def _learn_rules() -> None:
             stack.planner.learn_from_journal(stack.journal)
 
@@ -164,25 +169,41 @@ def register_reflection_tasks(
             stack.planner.assess_recipe_from_journal(stack.journal)
 
         runner.add_periodic(
-            "reflect_rules", interval_s, _learn_rules, jitter_s=jitter,
+            "reflect_rules",
+            interval_s,
+            _learn_rules,
+            jitter_s=jitter,
         )
         runner.add_periodic(
-            "reflect_memories", interval_s, _learn_memories, jitter_s=jitter,
+            "reflect_memories",
+            interval_s,
+            _learn_memories,
+            jitter_s=jitter,
         )
         runner.add_periodic(
-            "reflect_kg", interval_s, _learn_kg, jitter_s=jitter,
+            "reflect_kg",
+            interval_s,
+            _learn_kg,
+            jitter_s=jitter,
         )
         runner.add_periodic(
-            "reflect_recipe", interval_s, _assess_recipe, jitter_s=jitter,
+            "reflect_recipe",
+            interval_s,
+            _assess_recipe,
+            jitter_s=jitter,
         )
         count += 4
 
     if isinstance(stack.planner, StaticPlanner):
+
         def _rewrite() -> None:
             stack.planner.rewrite_from_journal(stack.journal)
 
         runner.add_periodic(
-            "reflect_workflow", interval_s, _rewrite, jitter_s=jitter,
+            "reflect_workflow",
+            interval_s,
+            _rewrite,
+            jitter_s=jitter,
         )
         count += 1
 
@@ -192,7 +213,10 @@ def register_reflection_tasks(
         SkillForge(journal=stack.journal, registry=stack.registry).run()
 
     runner.add_periodic(
-        "reflect_skill_forge", interval_s, _forge, jitter_s=jitter,
+        "reflect_skill_forge",
+        interval_s,
+        _forge,
+        jitter_s=jitter,
     )
     count += 1
 
@@ -268,9 +292,7 @@ def run_serve(
         safety_cfg = getattr(cfg, "safety", None)
         judge_cfg_value = getattr(safety_cfg, "enable_llm_judge", None)
         judge_model = getattr(safety_cfg, "llm_judge_model", None)
-        if maybe_register_llm_judge(
-            judge_router, config_value=judge_cfg_value, model=judge_model
-        ):
+        if maybe_register_llm_judge(judge_router, config_value=judge_cfg_value, model=judge_model):
             print(_yellow(color, "constitution LLM judge: enabled"))
     except Exception:  # noqa: BLE001 — never block startup on judge wiring
         logging.getLogger(__name__).debug("llm judge bootstrap failed", exc_info=True)
@@ -283,11 +305,14 @@ def run_serve(
     reflection_count = 0
     if learn_interval_s > 0:
         reflection_count = register_reflection_tasks(
-            runner, stack, learn_interval_s,
+            runner,
+            stack,
+            learn_interval_s,
         )
 
     optimizer, evolve_count = maybe_setup_prompt_evolution(
-        stack, runner,
+        stack,
+        runner,
         prompt_variants_path=prompt_variants_path,
         evolve_interval_s=evolve_interval_s,
         mutator_model=mutator_model,
@@ -328,6 +353,7 @@ def run_serve(
 
     try:
         from runtime.adapters.channels import ChannelManager
+
         channel_manager = ChannelManager(
             stack=stack,
             agent_registry=agent_registry,
@@ -394,19 +420,27 @@ def run_serve(
         )
 
     _p = cfg.planner
-    if _p.type == "llm" and (
-        _p.model.startswith("mock/") or _p.mock_response is not None
-    ):
-        print(c.red(
-            f"  \u26a0\ufe0f  MOCK PLANNER \u00b7 planner.model={_p.model} \u00b7 "
-            f"mock_response={'set' if _p.mock_response else 'null'}"
-        ))
-        print(c.red(
-            "      \u6240\u6709\u56de\u590d\u5747\u4e3a\u5360\u4f4d mock \u6570\u636e \u00b7 \u975e\u6d4b\u8bd5\u73af\u5883\u8bf7\u6362 --config"
-            " \u6307\u5411\u771f\u5b9e LLM \u914d\u7f6e\uff08\u4f8b\u5982 config.local.yaml\uff09"
-        ))
+    if _p.type == "llm" and (_p.model.startswith("mock/") or _p.mock_response is not None):
+        print(
+            c.red(
+                f"  \u26a0\ufe0f  MOCK PLANNER \u00b7 planner.model={_p.model} \u00b7 "
+                f"mock_response={'set' if _p.mock_response else 'null'}"
+            )
+        )
+        print(
+            c.red(
+                "      \u6240\u6709\u56de\u590d\u5747\u4e3a\u5360\u4f4d mock \u6570\u636e \u00b7 \u975e\u6d4b\u8bd5\u73af\u5883\u8bf7\u6362 --config"
+                " \u6307\u5411\u771f\u5b9e LLM \u914d\u7f6e\uff08\u4f8b\u5982 config.local.yaml\uff09"
+            )
+        )
     print(
-        _("cli.serve.scheduler_info", total=len(runner.task_names()), intel=intel_count, reflection=reflection_count, evolve=evolve_count)
+        _(
+            "cli.serve.scheduler_info",
+            total=len(runner.task_names()),
+            intel=intel_count,
+            reflection=reflection_count,
+            evolve=evolve_count,
+        )
     )
     if optimizer is not None:
         print(_("cli.serve.prompt_ab_info", variants=optimizer.variant_names))
@@ -414,6 +448,7 @@ def run_serve(
     runner.start()
     try:
         import logging as _logging
+
         _NOISY_ROUTES = (  # noqa: N806
             "/api/agents",
             "/api/llm-models",
@@ -444,6 +479,7 @@ def run_serve(
         if uds:
             import contextlib
             import os
+
             with contextlib.suppress(FileNotFoundError):
                 os.unlink(uds)
             uvicorn.run(app, uds=uds, log_level="info")
@@ -453,12 +489,15 @@ def run_serve(
         runner.stop()
         try:
             from runtime.adapters.mcp_client import close_all_persistent_clients
+
             close_all_persistent_clients()
         except Exception as exc:
             logging.getLogger(__name__).debug("mcp client shutdown failed: %s", exc)
         print(c.dim(_("cli.serve.stopped")))
         for name, st in runner.stats().items():
-            print(_("cli.serve.task_stat", name=name, success=st.success_count, errors=st.error_count))
+            print(
+                _("cli.serve.task_stat", name=name, success=st.success_count, errors=st.error_count)
+            )
         if optimizer is not None:
             print(c.dim(_("cli.serve.ranking")))
             for name, rep in sorted(
@@ -467,6 +506,12 @@ def run_serve(
                 reverse=True,
             ):
                 print(
-                    _("cli.serve.variant_info", name=name, uses=rep.assignments, rate=rep.success_rate, verdict=rep.verdict)
+                    _(
+                        "cli.serve.variant_info",
+                        name=name,
+                        uses=rep.assignments,
+                        rate=rep.success_rate,
+                        verdict=rep.verdict,
+                    )
                 )
     return 0

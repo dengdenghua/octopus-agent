@@ -6,7 +6,6 @@ import time
 
 
 class InteractiveDemo:
-
     def __init__(self, slow: bool = True) -> None:
         self._slow = slow
 
@@ -77,7 +76,10 @@ class InteractiveDemo:
                 fallback_skill=SkillId("list_cwd"),
             )
             from runtime.platform.models import ParsedIntent
-            intent = ParsedIntent(raw="list files", intent_type="task", normalized_goal="list files")
+
+            intent = ParsedIntent(
+                raw="list files", intent_type="task", normalized_goal="list files"
+            )
             plan = planner.plan(intent)
             self._print(f"  Plan strategy: {plan.strategy}")
             self._print(f"  Plan nodes: {len(plan.nodes)}")
@@ -196,6 +198,7 @@ class InteractiveDemo:
 
             import shutil
             from pathlib import Path
+
             demo_dir = Path(os.path.expanduser("~/.octopus/demo_cache"))
             if demo_dir.exists():
                 shutil.rmtree(demo_dir, ignore_errors=True)

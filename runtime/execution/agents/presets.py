@@ -77,6 +77,5 @@ def make_all_agent_presets(runtime: GraphRuntime) -> list[Agent]:
     Call ``make_admin_agent()`` explicitly when that persona is needed.
     """
     return [
-        agent for agent in load_all_agents(runtime)
-        if getattr(agent, "agent_id", None) != "admin"
+        agent for agent in load_all_agents(runtime) if getattr(agent, "agent_id", None) != "admin"
     ]

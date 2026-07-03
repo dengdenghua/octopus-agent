@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -9,7 +8,8 @@ from runtime.platform.process.service_provider import get_provider
 from runtime.sensing.model_router import Message, ModelRequest
 
 _FENCED_JSON = re.compile(
-    r"```(?:json)?\s*\n(\{.*?\})\s*\n```", re.DOTALL | re.IGNORECASE,
+    r"```(?:json)?\s*\n(\{.*?\})\s*\n```",
+    re.DOTALL | re.IGNORECASE,
 )
 _BARE_JSON = re.compile(r"(\{.*\})", re.DOTALL)
 
@@ -33,7 +33,9 @@ def _parse_json_envelope(text: str) -> dict[str, Any] | None:
 
 
 def _resolve_model(
-    model: str | None, *, default_key: str,
+    model: str | None,
+    *,
+    default_key: str,
 ) -> str | None:
     if model and model not in ("octopus-agent", ""):
         return model
@@ -68,7 +70,8 @@ class LLMCaller:
         if router is None:
             return "", {"error": f"router not wired ({self._router_key})"}
         use_model = _resolve_model(
-            model, default_key=self._model_key,
+            model,
+            default_key=self._model_key,
         )
         if not use_model:
             return "", {"error": "no model resolved"}

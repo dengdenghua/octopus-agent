@@ -88,9 +88,11 @@ def parse_tasks(text: str, milestone_id: str) -> list[Task]:
         if not isinstance(item, dict):
             continue
         tid = f"{milestone_id}-T{i}"
-        ttype = item.get("type") if item.get("type") in (
-            "design", "code", "research", "analysis", "review"
-        ) else "code"
+        ttype = (
+            item.get("type")
+            if item.get("type") in ("design", "code", "research", "analysis", "review")
+            else "code"
+        )
         goal = str(item.get("goal") or item.get("title") or tid)
         label_to_id[goal] = tid
         label_to_id[str(i)] = tid
@@ -206,10 +208,17 @@ def spec_qa(router: Any = None, *, model: str = DEFAULT_MODEL) -> Callable[[Task
         try:
             from runtime.sensing.model_router import Message, ModelRequest
 
-            text = router.call(
-                ModelRequest(model=model, messages=[Message(role="user", content=prompt)],
-                             max_tokens=300, temperature=0.0)
-            ).text or ""
+            text = (
+                router.call(
+                    ModelRequest(
+                        model=model,
+                        messages=[Message(role="user", content=prompt)],
+                        max_tokens=300,
+                        temperature=0.0,
+                    )
+                ).text
+                or ""
+            )
             block = re.search(r"\{.*\}", text, re.DOTALL)
             data = json.loads(block.group(0)) if block else {}
             return {"approved": bool(data.get("approved")), "reason": str(data.get("reason") or "")}

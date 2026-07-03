@@ -37,7 +37,6 @@ class OllamaModelInfo:
 
 
 class OllamaModelRouter(Provider, ModelRouter):
-
     provider_name = "ollama"
     capabilities = ProviderCapabilities(
         supports_vision=True,
@@ -59,12 +58,10 @@ class OllamaModelRouter(Provider, ModelRouter):
         client: Any = None,
     ) -> None:
         if not HTTPX_AVAILABLE:
-            raise OllamaRouterError(
-                "httpx not installed · `pip install httpx`"
-            )
-        self._base_url = (base_url or os.environ.get(
-            "OLLAMA_BASE_URL", "http://localhost:11434"
-        )).rstrip("/")
+            raise OllamaRouterError("httpx not installed · `pip install httpx`")
+        self._base_url = (
+            base_url or os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+        ).rstrip("/")
         self._timeout = timeout_seconds
         self._client = client
         self._owns_client = client is None
@@ -111,10 +108,7 @@ class OllamaModelRouter(Provider, ModelRouter):
             try:
                 payload = {
                     "model": model,
-                    "messages": [
-                        {"role": m.role, "content": m.content}
-                        for m in request.messages
-                    ],
+                    "messages": [{"role": m.role, "content": m.content} for m in request.messages],
                     "stream": False,
                 }
                 if request.max_tokens:
@@ -128,14 +122,10 @@ class OllamaModelRouter(Provider, ModelRouter):
                     timeout=self._timeout,
                 )
             except Exception as e:
-                raise OllamaRouterError(
-                    f"ollama http_error: {type(e).__name__}: {e}"
-                ) from e
+                raise OllamaRouterError(f"ollama http_error: {type(e).__name__}: {e}") from e
 
             if resp.status_code >= 400:
-                raise OllamaRouterError(
-                    f"ollama http_{resp.status_code}: {resp.text[:500]}"
-                )
+                raise OllamaRouterError(f"ollama http_{resp.status_code}: {resp.text[:500]}")
 
             try:
                 data = resp.json()
@@ -188,9 +178,11 @@ class OllamaModelRouter(Provider, ModelRouter):
     def _parse_models(self, data: dict[str, Any]) -> None:
         self._models = []
         for m in data.get("models") or []:
-            self._models.append(OllamaModelInfo(
-                name=m.get("name", ""),
-                size=m.get("size", 0),
-                family=m.get("details", {}).get("family", ""),
-                quant=m.get("details", {}).get("quantization_level", ""),
-            ))
+            self._models.append(
+                OllamaModelInfo(
+                    name=m.get("name", ""),
+                    size=m.get("size", 0),
+                    family=m.get("details", {}).get("family", ""),
+                    quant=m.get("details", {}).get("quantization_level", ""),
+                )
+            )

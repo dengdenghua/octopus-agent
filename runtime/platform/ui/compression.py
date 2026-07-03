@@ -12,6 +12,7 @@ on the wire at roughly a third of their size while leaving the streaming hot
 paths — ``/api/**/stream``, the realtime SSE/chat channels — byte-for-byte
 untouched.
 """
+
 from __future__ import annotations
 
 import gzip
@@ -94,9 +95,7 @@ class _GzipResponder:
             media_type = headers.get("content-type", "").split(";")[0].strip().lower()
             already_encoded = "content-encoding" in headers
             self.compress = (
-                message["status"] == 200
-                and media_type in _COMPRESSIBLE
-                and not already_encoded
+                message["status"] == 200 and media_type in _COMPRESSIBLE and not already_encoded
             )
             # Defer emitting ``start`` only when compressing — we need the final
             # Content-Length first. Otherwise pass it straight through.
@@ -119,9 +118,7 @@ class _GzipResponder:
         if len(raw) < self.minimum_size:
             # Too small to be worth it — replay the original response verbatim.
             await self.send(self.start_message)
-            await self.send(
-                {"type": "http.response.body", "body": raw, "more_body": False}
-            )
+            await self.send({"type": "http.response.body", "body": raw, "more_body": False})
             return
 
         compressed = gzip.compress(raw, compresslevel=6)
@@ -135,6 +132,4 @@ class _GzipResponder:
             headers["vary"] = f"{vary}, Accept-Encoding"
 
         await self.send(self.start_message)
-        await self.send(
-            {"type": "http.response.body", "body": compressed, "more_body": False}
-        )
+        await self.send({"type": "http.response.body", "body": compressed, "more_body": False})

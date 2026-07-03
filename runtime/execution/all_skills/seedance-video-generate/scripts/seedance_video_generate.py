@@ -17,6 +17,7 @@ import requests
 @dataclass
 class SeedanceConfig:
     """Configuration for Seedance API."""
+
     api_key: str
     base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
     model: str = "seedance"
@@ -34,18 +35,13 @@ class SeedanceVideoGenerator:
     }
 
     # Supported styles
-    STYLES = [
-        "default", "realistic", "anime", "3d",
-        "cinematic", "documentary"
-    ]
+    STYLES = ["default", "realistic", "anime", "3d", "cinematic", "documentary"]
 
     def __init__(self, config: SeedanceConfig | None = None):
         if config is None:
             api_key = os.environ.get("ARK_API_KEY")
             if not api_key:
-                raise ValueError(
-                    "ARK_API_KEY not found. Please set it in environment or config."
-                )
+                raise ValueError("ARK_API_KEY not found. Please set it in environment or config.")
             config = SeedanceConfig(api_key=api_key)
         self.config = config
 
@@ -84,7 +80,7 @@ class SeedanceVideoGenerator:
                     return {
                         "success": False,
                         "error": result.get("error", "Task failed"),
-                        "error_code": "GENERATION_FAILED"
+                        "error_code": "GENERATION_FAILED",
                     }
 
                 # Still processing, wait
@@ -93,14 +89,10 @@ class SeedanceVideoGenerator:
                 return {
                     "success": False,
                     "error": f"Polling failed: {str(e)}",
-                    "error_code": "POLLING_FAILED"
+                    "error_code": "POLLING_FAILED",
                 }
 
-        return {
-            "success": False,
-            "error": "Generation timeout",
-            "error_code": "TIMEOUT"
-        }
+        return {"success": False, "error": "Generation timeout", "error_code": "TIMEOUT"}
 
     def generate(
         self,
@@ -185,7 +177,7 @@ class SeedanceVideoGenerator:
             return {
                 "success": False,
                 "error": f"API request failed: {str(e)}",
-                "error_code": "GENERATION_FAILED"
+                "error_code": "GENERATION_FAILED",
             }
 
         # Poll for completion
@@ -194,7 +186,7 @@ class SeedanceVideoGenerator:
             return {
                 "success": False,
                 "error": "No task ID returned",
-                "error_code": "GENERATION_FAILED"
+                "error_code": "GENERATION_FAILED",
             }
 
         task_result = self._poll_task(task_id)
@@ -208,7 +200,7 @@ class SeedanceVideoGenerator:
             return {
                 "success": False,
                 "error": "No video URL in result",
-                "error_code": "GENERATION_FAILED"
+                "error_code": "GENERATION_FAILED",
             }
 
         # Save locally
@@ -227,7 +219,7 @@ class SeedanceVideoGenerator:
             return {
                 "success": False,
                 "error": f"Download failed: {str(e)}",
-                "error_code": "DOWNLOAD_FAILED"
+                "error_code": "DOWNLOAD_FAILED",
             }
 
         return {
@@ -297,7 +289,7 @@ class SeedanceVideoGenerator:
             return {
                 "success": False,
                 "error": f"API request failed: {str(e)}",
-                "error_code": "EXTENSION_FAILED"
+                "error_code": "EXTENSION_FAILED",
             }
 
         # Poll and download (similar to generate)

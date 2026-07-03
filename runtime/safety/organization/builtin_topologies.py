@@ -57,7 +57,7 @@ _IMPLEMENTER = "implementer"
 # references compile during the transition. Both are now mapped to
 # real ephemeral roles upstream so dispatch always succeeds.
 _GENERAL = _RESEARCHER  # default research-tilted catch-all
-_CODER = _IMPLEMENTER   # default code-tilted catch-all
+_CODER = _IMPLEMENTER  # default code-tilted catch-all
 
 
 # ── 1. research_swarm_v1 ────────────────────────────────────────
@@ -104,7 +104,7 @@ _research_swarm = TeamTopology(
                 "事实核查员的批注,按用户原始要求产出完整最终报告。若 critic "
                 "指出缺项、截断、部分完成或给出'需补全内容',必须把这些缺项"
                 "当作硬性交付要求补齐,不得直接转述一份部分完成的底稿。\n\n"
-                "长任务/调研报告的默认结构:正文第一行必须原样输出\"长任务回归开始\";以用户要求的开头起笔;一、市场假设;"
+                '长任务/调研报告的默认结构:正文第一行必须原样输出"长任务回归开始";以用户要求的开头起笔;一、市场假设;'
                 "二、用户画像;三、竞品格局;四、技术风险;五、商业化路径;"
                 "六、90天行动计划;最后用 5 条 bullet 总结。保持段落紧凑,"
                 "但必须交付完整正文;若上游已经有完整报告,可以直接复用或合并,"

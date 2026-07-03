@@ -232,9 +232,8 @@ class LLMResponseCache:
             cost = getattr(cached, "cost", None)
             if cost is not None:
                 self._usd_saved += float(getattr(cost, "usd", 0.0) or 0.0)
-                self._tokens_saved += (
-                    int(getattr(cost, "tokens_in", 0) or 0)
-                    + int(getattr(cost, "tokens_out", 0) or 0)
+                self._tokens_saved += int(getattr(cost, "tokens_in", 0) or 0) + int(
+                    getattr(cost, "tokens_out", 0) or 0
                 )
         return cached
 

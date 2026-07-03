@@ -101,8 +101,11 @@ def create_subagents_router(
 
     def _auth(request: Any) -> str | None:
         from .openai_gateway_router import _resolve_actor
+
         return _resolve_actor(
-            request, identity_store, require_auth,
+            request,
+            identity_store,
+            require_auth,
             jwt_secret=jwt_secret,
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
@@ -112,6 +115,7 @@ def create_subagents_router(
         if registry is not None:
             return registry
         from runtime.execution.subagents import get_subagent_registry
+
         return get_subagent_registry()
 
     @router.get("/api/subagents")
@@ -122,15 +126,18 @@ def create_subagents_router(
         if reg is not None:
             items.extend(d.to_wire() for d in reg.all())
         from runtime.execution.suckers.ephemeral_agents import BUILTIN_ROLES
+
         for role in BUILTIN_ROLES.values():
-            items.append({
-                "name": role.id,
-                "description": role.description,
-                "tools": list(role.tool_allowlist),
-                "model": None,
-                "source_path": "",
-                "scope": "builtin",
-            })
+            items.append(
+                {
+                    "name": role.id,
+                    "description": role.description,
+                    "tools": list(role.tool_allowlist),
+                    "model": None,
+                    "source_path": "",
+                    "scope": "builtin",
+                }
+            )
         items.sort(key=lambda item: (item["scope"] != "project", item["name"]))
         return {"subagents": items}
 
@@ -141,6 +148,7 @@ def create_subagents_router(
         if reg is not None and reg.has(name):
             return reg.get(name).to_wire(include_prompt=True)
         from runtime.execution.suckers.ephemeral_agents import BUILTIN_ROLES
+
         role = BUILTIN_ROLES.get(name)
         if role is None:
             raise HTTPException(404, f"subagent not found: {name}")
@@ -163,6 +171,7 @@ def create_subagents_router(
         if not body.prompt.strip():
             raise HTTPException(400, "prompt is required")
         from runtime.execution.subagents import call_subagent
+
         ctx = _dispatch_context_from_body(body)
         timeout_s = _bounded_dispatch_timeout(body.timeout_s)
         result = call_subagent(
@@ -178,7 +187,8 @@ def create_subagents_router(
 
     @router.post("/api/subagents/dispatch/stream")
     def dispatch_subagent_stream(
-        request: Request, body: SubagentDispatchRequest,
+        request: Request,
+        body: SubagentDispatchRequest,
     ) -> Any:
         """SSE-streaming variant of /api/subagents/dispatch.
 
@@ -235,12 +245,14 @@ def create_subagents_router(
                 )
                 event_queue.put({"type": "result", **result})
             except Exception as exc:  # noqa: BLE001 — surface as terminal event
-                event_queue.put({
-                    "type": "result",
-                    "success": False,
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "agent_id": target,
-                })
+                event_queue.put(
+                    {
+                        "type": "result",
+                        "success": False,
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "agent_id": target,
+                    }
+                )
             finally:
                 event_queue.put(None)  # sentinel: stream done
 
@@ -258,17 +270,19 @@ def create_subagents_router(
                 # None on completion which terminates this iterator.
                 event = event_queue.get()
                 if event is None:
-                    yield "data: {\"type\":\"done\"}\n\n"
+                    yield 'data: {"type":"done"}\n\n'
                     return
                 try:
                     payload = json.dumps(event, ensure_ascii=False)
                 except (TypeError, ValueError):
                     # Non-serializable event → emit a marker rather than crash
-                    payload = json.dumps({
-                        "type": "error",
-                        "error": "event-not-serializable",
-                        "event_type": str(event.get("type", "unknown")),
-                    })
+                    payload = json.dumps(
+                        {
+                            "type": "error",
+                            "error": "event-not-serializable",
+                            "event_type": str(event.get("type", "unknown")),
+                        }
+                    )
                 yield f"data: {payload}\n\n"
 
         return StreamingResponse(

@@ -15,6 +15,7 @@ The history is read by:
 Schema is intentionally minimal — first/last seen timestamps + count.
 We don't store the prompt text (privacy) or full thread context.
 """
+
 from __future__ import annotations
 
 import logging
@@ -239,6 +240,7 @@ def _default_store_path() -> Path:
     """Resolve the default SQLite path under runtime/data."""
     try:
         from runtime.platform.process.paths import data_dir
+
         return Path(data_dir()) / "mention_history.sqlite"
     except (ImportError, AttributeError):
         return Path("data") / "mention_history.sqlite"

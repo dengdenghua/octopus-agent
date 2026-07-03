@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -30,7 +29,6 @@ from runtime.platform.models import (
 
 
 class IntelSource(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     source_id: str = Field(..., min_length=1)
@@ -42,7 +40,6 @@ class IntelSource(BaseModel):
 
 
 class IntelRunReport(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     started_at: Any
@@ -67,7 +64,6 @@ class CollectorConfig:
 
 
 class IntelCollector:
-
     CALLER_PREFIX = "intel_collector"
 
     def __init__(
@@ -85,7 +81,6 @@ class IntelCollector:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._run_count = 0
-
 
     def run_once(self) -> IntelRunReport:
         with trace_stage("regeneration.intel_collector.run_once") as span:
@@ -151,7 +146,6 @@ class IntelCollector:
                 events_written=events_written,
             )
 
-
     def _scan_one_source(
         self,
         idx: int,
@@ -171,9 +165,7 @@ class IntelCollector:
 
         try:
             handler = self.registry.get("web_search").handler
-            search_output = handler(
-                query=source.query, max_results=source.max_results
-            )
+            search_output = handler(query=source.query, max_results=source.max_results)
             if isinstance(search_output, dict) and "error" in search_output:
                 search_status = "failed"
                 search_error = str(search_output["error"])
@@ -192,7 +184,7 @@ class IntelCollector:
             action=search_call,
             result=ExecutionResult(
                 call_id=search_call.call_id,
-                status=search_status,        # type: ignore[arg-type]
+                status=search_status,  # type: ignore[arg-type]
                 output=search_output,
                 error_type=search_error,
                 stderr_tags=source.tags,
@@ -246,12 +238,11 @@ class IntelCollector:
             action=call,
             result=ExecutionResult(
                 call_id=call.call_id,
-                status=status,       # type: ignore[arg-type]
+                status=status,  # type: ignore[arg-type]
                 output=output,
                 error_type=err,
             ),
         )
-
 
     def start_background(self, tick_seconds: int = 60) -> None:
         if self._thread and self._thread.is_alive():
@@ -279,13 +270,13 @@ class IntelCollector:
     def run_count(self) -> int:
         return self._run_count
 
-
     def _background_loop(self, tick_seconds: int) -> None:
         last_runs: dict[str, float] = {}
         while not self._stop_event.is_set():
             now = time.time()
             to_run: list[IntelSource] = [
-                s for s in self.sources
+                s
+                for s in self.sources
                 if now - last_runs.get(s.source_id, 0) >= s.frequency_seconds
             ]
             if to_run:
@@ -294,7 +285,10 @@ class IntelCollector:
                 for s in to_run:
                     last_runs[s.source_id] = time.time()
 
-            if self.config.stop_after_n_runs is not None and self._run_count >= self.config.stop_after_n_runs:
+            if (
+                self.config.stop_after_n_runs is not None
+                and self._run_count >= self.config.stop_after_n_runs
+            ):
                 self._stop_event.set()
                 break
             self._stop_event.wait(timeout=tick_seconds)

@@ -26,6 +26,7 @@ Usage
     pool = LazyPool(max_size=4)
     arm = await pool.acquire()  # Creates arm if pool is empty
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -97,9 +98,7 @@ class LazyPromise(Generic[T]):
             self._initialized = True
             self._promise.set_result(self._value)
 
-            _logger.info(
-                "lazy %s initialized in %.1fms", self._name, elapsed_ms
-            )
+            _logger.info("lazy %s initialized in %.1fms", self._name, elapsed_ms)
             return self._value
 
         except Exception as e:
@@ -157,9 +156,7 @@ class LazyValue(Generic[T]):
             self._value = self._factory()
             elapsed_ms = (time.perf_counter() - start) * 1000
             self._initialized = True
-            _logger.info(
-                "lazy value %s computed in %.1fms", self._name, elapsed_ms
-            )
+            _logger.info("lazy value %s computed in %.1fms", self._name, elapsed_ms)
         return self._value  # type: ignore[return-value]
 
     @property

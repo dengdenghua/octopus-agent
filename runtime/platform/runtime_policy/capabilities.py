@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -39,7 +38,6 @@ def _store_path() -> Path:
 
 @dataclass
 class Capabilities:
-
     browser_automation: bool = True
     desktop_automation: bool = True
 
@@ -56,12 +54,8 @@ class Capabilities:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Capabilities:
         return cls(
-            browser_automation=bool(
-                data.get("browser_automation", True)
-            ),
-            desktop_automation=bool(
-                data.get("desktop_automation", True)
-            ),
+            browser_automation=bool(data.get("browser_automation", True)),
+            desktop_automation=bool(data.get("desktop_automation", True)),
         )
 
     def disabled_skill_groups(self) -> set[str]:
@@ -102,7 +96,8 @@ def load() -> Capabilities:
     except Exception as exc:  # noqa: BLE001
         _log.warning(
             "capabilities.json load failed (%s: %s) — falling back to defaults",
-            type(exc).__name__, exc,
+            type(exc).__name__,
+            exc,
         )
         return Capabilities.defaults()
 

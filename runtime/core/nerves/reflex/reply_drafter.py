@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -40,9 +39,8 @@ def _build_prompt(suggestions: list[dict[str, Any]]) -> str:
     output shape makes the LLM's job near-mechanical."""
     prompts = [s.get("prompt", "") for s in suggestions if s.get("prompt")]
     payload = {"prompts": prompts}
-    return (
-        "Draft a reflex reply for each of these prompts:\n\n"
-        + json.dumps(payload, ensure_ascii=False, indent=2)
+    return "Draft a reflex reply for each of these prompts:\n\n" + json.dumps(
+        payload, ensure_ascii=False, indent=2
     )
 
 
@@ -62,7 +60,7 @@ def _parse_replies(text: str) -> dict[str, str]:
     end = text.rfind("}")
     if start == -1 or end <= start:
         return {}
-    candidate = text[start:end + 1]
+    candidate = text[start : end + 1]
     try:
         data = json.loads(candidate)
     except json.JSONDecodeError as exc:
@@ -126,7 +124,8 @@ def draft_replies(
 
 
 def apply_drafts_to_yaml(
-    suggested_yaml: str, drafted_reply: str | None,
+    suggested_yaml: str,
+    drafted_reply: str | None,
 ) -> str:
     """Replace the ``TODO`` placeholder in a suggested-yaml block
     with the drafted reply. Idempotent · a yaml without a TODO
@@ -136,7 +135,7 @@ def apply_drafts_to_yaml(
     if not drafted_reply:
         return suggested_yaml
     # Escape double-quotes for embedding in the yaml string literal.
-    escaped = drafted_reply.replace('\\', '\\\\').replace('"', '\\"')
+    escaped = drafted_reply.replace("\\", "\\\\").replace('"', '\\"')
     return re.sub(
         r'reply:\s*"TODO[^"]*"',
         f'reply: "{escaped}"',

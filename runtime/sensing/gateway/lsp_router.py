@@ -4,6 +4,7 @@ This exposes definition / references / diagnostics to the frontend without
 bypassing the existing skill registry. The heavy lifting still lives in
 `runtime.execution.suckers.lsp_skills`.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -21,6 +22,7 @@ except ImportError:  # pragma: no cover
 
 
 if FASTAPI_AVAILABLE:
+
     class LspSymbolRequest(BaseModel):
         path: str
         symbol: str

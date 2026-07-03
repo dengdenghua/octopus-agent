@@ -48,8 +48,7 @@ def _resolve_custom_model_router(
                     continue
                 _models = _entry.get("models")
                 if isinstance(_models, list) and any(
-                    isinstance(_m, str) and _m.strip() == model_name
-                    for _m in _models
+                    isinstance(_m, str) and _m.strip() == model_name for _m in _models
                 ):
                     _custom_entry = _entry
                     _variant_match = True
@@ -133,7 +132,9 @@ def _custom_model_entry(model_name: str) -> dict[str, Any] | None:
         return entry if isinstance(entry, dict) else None
     except Exception as _e:  # noqa: BLE001
         logging.getLogger(__name__).debug(
-            "custom model metadata read failed for %s: %s", model_name, _e,
+            "custom model metadata read failed for %s: %s",
+            model_name,
+            _e,
         )
         return None
 
@@ -147,10 +148,7 @@ def _entry_matches_model(entry: dict[str, Any], model_name: str) -> bool:
             return True
     raw_models = entry.get("models")
     if isinstance(raw_models, list):
-        return any(
-            isinstance(item, str) and item.strip() == needle
-            for item in raw_models
-        )
+        return any(isinstance(item, str) and item.strip() == needle for item in raw_models)
     return False
 
 
@@ -171,7 +169,8 @@ def _custom_model_entry_for(model_name: str, resolved_model: str) -> dict[str, A
             if not isinstance(candidate, dict):
                 continue
             if _entry_matches_model(candidate, model_name) or _entry_matches_model(
-                candidate, resolved_model,
+                candidate,
+                resolved_model,
             ):
                 return candidate
     except Exception as exc:  # noqa: BLE001

@@ -1,4 +1,3 @@
-
 from .journal import (
     BrowserArtifactEvent,
     BudgetBreakerResetEvent,

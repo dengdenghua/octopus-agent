@@ -302,12 +302,14 @@ def create_team_rooms_router(
             leader_id = body.leaderId or current.leaderId or members[0].name
             if leader_id not in {m.name for m in members}:
                 leader_id = members[0].name
-            updated = current.model_copy(update={
-                "name": name,
-                "members": members,
-                "leaderId": leader_id,
-                "updated_at": _now(),
-            })
+            updated = current.model_copy(
+                update={
+                    "name": name,
+                    "members": members,
+                    "leaderId": leader_id,
+                    "updated_at": _now(),
+                }
+            )
             teams[team_id] = updated
             _save()
         await _broadcast_team_update(team_id, updated)
@@ -321,9 +323,7 @@ def create_team_rooms_router(
             "type": "presence",
             "team_id": team_id,
             "participants": [
-                p.model_dump()
-                for p in participants
-                if p.status == "active" and p.id in online_ids
+                p.model_dump() for p in participants if p.status == "active" and p.id in online_ids
             ],
             "count": len(online_ids),
             "server_time": _now(),
@@ -409,11 +409,11 @@ def create_team_rooms_router(
             # prevents cross-tenant team enumeration.
             if require_auth and actor:
                 visible = [
-                    team for team in all_teams
+                    team
+                    for team in all_teams
                     if actor == getattr(team, "owner_id", None)
                     or any(
-                        getattr(p, "actor_id", None) == actor
-                        and p.status == "active"
+                        getattr(p, "actor_id", None) == actor and p.status == "active"
                         for p in team.participants
                     )
                 ]
@@ -457,12 +457,14 @@ def create_team_rooms_router(
             leader_id = body.leaderId or current.leaderId or members[0].name
             if leader_id not in {m.name for m in members}:
                 leader_id = members[0].name
-            updated = current.model_copy(update={
-                "name": name,
-                "members": members,
-                "leaderId": leader_id,
-                "updated_at": _now(),
-            })
+            updated = current.model_copy(
+                update={
+                    "name": name,
+                    "members": members,
+                    "leaderId": leader_id,
+                    "updated_at": _now(),
+                }
+            )
             teams[team_id] = updated
             _save()
             return updated.model_dump()
@@ -584,7 +586,8 @@ def create_team_rooms_router(
                     raise HTTPException(403, "you can only update your own participant entry")
             if current.role == "owner" and (next_role != "owner" or next_status == "removed"):
                 other_owners = [
-                    p for p in team.participants
+                    p
+                    for p in team.participants
                     if p.id != participant_id
                     and p.status != "removed"
                     and _normalize_participant_role(p.role) == "owner"
@@ -597,21 +600,24 @@ def create_team_rooms_router(
                 else current.display_name
             )
             now = _now()
-            updated_participant = current.model_copy(update={
-                "display_name": next_name,
-                "role": next_role,
-                "status": next_status,
-                "muted": next_muted,
-                "last_seen_at": now,
-            })
+            updated_participant = current.model_copy(
+                update={
+                    "display_name": next_name,
+                    "role": next_role,
+                    "status": next_status,
+                    "muted": next_muted,
+                    "last_seen_at": now,
+                }
+            )
             participants = [
-                updated_participant if p.id == participant_id else p
-                for p in team.participants
+                updated_participant if p.id == participant_id else p for p in team.participants
             ]
-            team = team.model_copy(update={
-                "participants": participants,
-                "updated_at": now,
-            })
+            team = team.model_copy(
+                update={
+                    "participants": participants,
+                    "updated_at": now,
+                }
+            )
             teams[team_id] = team
             if next_status == "removed":
                 live_sockets.get(team_id, {}).pop(participant_id, None)
@@ -634,11 +640,13 @@ def create_team_rooms_router(
             team = teams.get(team_id)
             if team is None:
                 raise HTTPException(404, f"team not found: {team_id}")
-            team = team.model_copy(update={
-                "speaker_policy": policy,
-                **_initial_floor_state(team, policy),
-                "updated_at": _now(),
-            })
+            team = team.model_copy(
+                update={
+                    "speaker_policy": policy,
+                    **_initial_floor_state(team, policy),
+                    "updated_at": _now(),
+                }
+            )
             teams[team_id] = team
             _save()
         await _broadcast_team_update(team_id, team)
@@ -666,11 +674,7 @@ def create_team_rooms_router(
             current = next((p for p in team.participants if p.id == participant_id), None)
             if current is None:
                 raise HTTPException(404, f"participant not found: {participant_id}")
-            if (
-                require_auth
-                and actor is not None
-                and getattr(current, "actor_id", None) != actor
-            ):
+            if require_auth and actor is not None and getattr(current, "actor_id", None) != actor:
                 raise HTTPException(
                     403, "only the participant themselves can set their speaking delegation"
                 )
@@ -678,15 +682,15 @@ def create_team_rooms_router(
                 raise HTTPException(400, "twin mode requires twin_agent_id")
             if mode == "hosted" and not host:
                 raise HTTPException(400, "hosted mode requires host_id")
-            updated = current.model_copy(update={
-                "speak_mode": mode,
-                "twin_agent_id": twin if mode == "twin" else None,
-                "host_id": host if mode == "hosted" else None,
-                "last_seen_at": _now(),
-            })
-            participants = [
-                updated if p.id == participant_id else p for p in team.participants
-            ]
+            updated = current.model_copy(
+                update={
+                    "speak_mode": mode,
+                    "twin_agent_id": twin if mode == "twin" else None,
+                    "host_id": host if mode == "hosted" else None,
+                    "last_seen_at": _now(),
+                }
+            )
+            participants = [updated if p.id == participant_id else p for p in team.participants]
             team = team.model_copy(update={"participants": participants, "updated_at": _now()})
             teams[team_id] = team
             _save()
@@ -720,7 +724,8 @@ def create_team_rooms_router(
                 raise HTTPException(403, "only the team owner can remove other participants")
             if current.role == "owner":
                 other_owners = [
-                    p for p in team.participants
+                    p
+                    for p in team.participants
                     if p.id != participant_id
                     and p.status != "removed"
                     and _normalize_participant_role(p.role) == "owner"
@@ -730,13 +735,16 @@ def create_team_rooms_router(
             now = _now()
             participants = [
                 p.model_copy(update={"status": "removed", "last_seen_at": now})
-                if p.id == participant_id else p
+                if p.id == participant_id
+                else p
                 for p in team.participants
             ]
-            team = team.model_copy(update={
-                "participants": participants,
-                "updated_at": now,
-            })
+            team = team.model_copy(
+                update={
+                    "participants": participants,
+                    "updated_at": now,
+                }
+            )
             teams[team_id] = team
             socket = live_sockets.get(team_id, {}).pop(participant_id, None)
             _save()
@@ -760,12 +768,14 @@ def create_team_rooms_router(
                 raise HTTPException(404, f"team not found: {team_id}")
             token = team.invite_token or secrets.token_urlsafe(24)
             invite_role = _normalize_participant_role(body.role if body else None)
-            team = team.model_copy(update={
-                "invite_token": token,
-                "invite_role": invite_role,
-                "invite_created_at": team.invite_created_at or _now(),
-                "updated_at": _now(),
-            })
+            team = team.model_copy(
+                update={
+                    "invite_token": token,
+                    "invite_role": invite_role,
+                    "invite_created_at": team.invite_created_at or _now(),
+                    "updated_at": _now(),
+                }
+            )
             teams[team_id] = team
             _save()
             return {
@@ -797,15 +807,11 @@ def create_team_rooms_router(
             if team is None:
                 raise HTTPException(404, "invite not found")
             now = _now()
-            participant_id = (
-                body.participant_id
-                or (f"actor-{actor}" if actor else f"guest-{uuid4().hex[:10]}")
+            participant_id = body.participant_id or (
+                f"actor-{actor}" if actor else f"guest-{uuid4().hex[:10]}"
             )
             display_name = body.display_name or actor or "Guest"
-            participants = [
-                p for p in team.participants
-                if p.id != participant_id
-            ]
+            participants = [p for p in team.participants if p.id != participant_id]
             participant = TeamParticipantWire(
                 id=participant_id,
                 display_name=display_name,
@@ -815,10 +821,12 @@ def create_team_rooms_router(
                 last_seen_at=now,
             )
             participants.append(participant)
-            team = team.model_copy(update={
-                "participants": participants,
-                "updated_at": now,
-            })
+            team = team.model_copy(
+                update={
+                    "participants": participants,
+                    "updated_at": now,
+                }
+            )
             teams[team.id] = team
             _save()
             return {
@@ -850,7 +858,10 @@ def create_team_rooms_router(
 
     @router.get("/api/teams/{team_id}/messages")
     def get_room_messages(
-        team_id: str, limit: int = 200, after_seq: int = 0, q: str = "",
+        team_id: str,
+        limit: int = 200,
+        after_seq: int = 0,
+        q: str = "",
     ) -> dict[str, Any]:
         """Durable room transcript — reconnect catch-up (``after_seq``) and
         search (``q``). Closes the gap where room chat was live-only / a 20-line

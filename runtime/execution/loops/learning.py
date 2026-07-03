@@ -73,7 +73,9 @@ def build_loop_run_review(run: LoopRun) -> dict[str, Any]:
             }
         )
     elif run.status.value == "failed":
-        checks_text = ", ".join(failed_checks[:5]) if failed_checks else "verification or execution failures"
+        checks_text = (
+            ", ".join(failed_checks[:5]) if failed_checks else "verification or execution failures"
+        )
         candidates.append(
             {
                 "kind": "failure_pattern",

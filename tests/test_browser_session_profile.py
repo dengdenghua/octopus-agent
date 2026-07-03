@@ -1,4 +1,5 @@
 """Signed-in browser: agent session worker uses a persistent profile on opt-in."""
+
 from __future__ import annotations
 
 from pathlib import Path

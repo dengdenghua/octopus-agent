@@ -199,10 +199,12 @@ def test_parallel_agent_contract_validation_reaches_batch_plan() -> None:
 
     orch = ParallelAgentOrchestrator(max_concurrency=2, task_runner=runner)
     try:
-        batch = orch.dispatch([
-            DispatchTaskInput(task_id="a", description="first"),
-            DispatchTaskInput(task_id="b", description="second", depends_on=["a"]),
-        ])
+        batch = orch.dispatch(
+            [
+                DispatchTaskInput(task_id="a", description="first"),
+                DispatchTaskInput(task_id="b", description="second", depends_on=["a"]),
+            ]
+        )
         assert batch.plan is not None
         assert batch.plan.validation_issues == []
         assert validate_work_plan(batch.plan).valid is True
@@ -217,10 +219,12 @@ def test_parallel_agent_plan_flags_parallel_file_write_conflict() -> None:
 
     orch = ParallelAgentOrchestrator(max_concurrency=2, task_runner=runner)
     try:
-        batch = orch.dispatch([
-            DispatchTaskInput(task_id="a", description="first", write_paths=["src/app.py"]),
-            DispatchTaskInput(task_id="b", description="second", write_paths=["src/app.py"]),
-        ])
+        batch = orch.dispatch(
+            [
+                DispatchTaskInput(task_id="a", description="first", write_paths=["src/app.py"]),
+                DispatchTaskInput(task_id="b", description="second", write_paths=["src/app.py"]),
+            ]
+        )
 
         assert batch.plan is not None
         assert any(
@@ -238,15 +242,17 @@ def test_parallel_agent_plan_allows_serialized_file_write_overlap() -> None:
 
     orch = ParallelAgentOrchestrator(max_concurrency=2, task_runner=runner)
     try:
-        batch = orch.dispatch([
-            DispatchTaskInput(task_id="a", description="first", write_paths=["src/app.py"]),
-            DispatchTaskInput(
-                task_id="b",
-                description="second",
-                depends_on=["a"],
-                write_paths=["src/app.py"],
-            ),
-        ])
+        batch = orch.dispatch(
+            [
+                DispatchTaskInput(task_id="a", description="first", write_paths=["src/app.py"]),
+                DispatchTaskInput(
+                    task_id="b",
+                    description="second",
+                    depends_on=["a"],
+                    write_paths=["src/app.py"],
+                ),
+            ]
+        )
 
         assert batch.plan is not None
         assert batch.plan.validation_issues == []

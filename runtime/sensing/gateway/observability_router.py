@@ -715,15 +715,9 @@ def create_observability_router(
             "source": source,
             "source_label": source.get("source_id") or source.get("source_type") or "",
             "ts": t.ts.isoformat() if getattr(t, "ts", None) else None,
-            "valid_from": (
-                t.valid_from.isoformat() if getattr(t, "valid_from", None) else None
-            ),
-            "valid_until": (
-                t.valid_until.isoformat() if getattr(t, "valid_until", None) else None
-            ),
-            "superseded_by": (
-                str(t.superseded_by) if getattr(t, "superseded_by", None) else None
-            ),
+            "valid_from": (t.valid_from.isoformat() if getattr(t, "valid_from", None) else None),
+            "valid_until": (t.valid_until.isoformat() if getattr(t, "valid_until", None) else None),
+            "superseded_by": (str(t.superseded_by) if getattr(t, "superseded_by", None) else None),
         }
 
     def _build_kg_view(limit: int = 200) -> tuple[list, list, dict]:
@@ -797,14 +791,10 @@ def create_observability_router(
                         "source_ref": source_label,
                         "ts": ts,
                         "valid_from": (
-                            t.valid_from.isoformat()
-                            if getattr(t, "valid_from", None)
-                            else None
+                            t.valid_from.isoformat() if getattr(t, "valid_from", None) else None
                         ),
                         "valid_until": (
-                            t.valid_until.isoformat()
-                            if getattr(t, "valid_until", None)
-                            else None
+                            t.valid_until.isoformat() if getattr(t, "valid_until", None) else None
                         ),
                     }
                 )
@@ -905,9 +895,7 @@ def create_observability_router(
         kg, persistent, update_report = _open_synced_kg()
         try:
             matches = [
-                t
-                for t in kg.query()
-                if query in f"{t.subject} {t.predicate} {t.object}".casefold()
+                t for t in kg.query() if query in f"{t.subject} {t.predicate} {t.object}".casefold()
             ][:limit]
             nodes: dict[str, dict[str, str]] = {}
             edges: list[dict[str, Any]] = []

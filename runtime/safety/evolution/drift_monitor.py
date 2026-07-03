@@ -12,13 +12,17 @@ _LOG = logging.getLogger
 
 def _publish_drift_events(events: list[DriftEvent]) -> None:
     from runtime.platform.process.eventbus import DriftDetected, publish_event
+
     for ev in events:
-        publish_event(DriftDetected(
-            event_type="drift.detected",
-            drift_kind=ev.kind,
-            severity=ev.severity,
-            detail=ev.detail,
-        ), logger=_LOG)
+        publish_event(
+            DriftDetected(
+                event_type="drift.detected",
+                drift_kind=ev.kind,
+                severity=ev.severity,
+                detail=ev.detail,
+            ),
+            logger=_LOG,
+        )
 
 
 _LOG = logging.getLogger("octopus.evolution.drift_monitor")

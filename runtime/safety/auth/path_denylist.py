@@ -32,6 +32,7 @@ sits inside the configured sandbox root. A sandbox says "this is
 the working area"; a denylist says "but not these spots inside it
 either".
 """
+
 from __future__ import annotations
 
 import json
@@ -81,6 +82,7 @@ def _state_path() -> Path:
         return Path(explicit).expanduser()
     try:
         from runtime.platform.process.paths import app_paths
+
         return app_paths().data_dir / "path_denylist.json"
     except Exception:  # noqa: BLE001
         return Path("data") / "path_denylist.json"
@@ -183,7 +185,8 @@ def remove_user_denylist_entry(path: str) -> list[str]:
 
 
 _TURN_DENYLIST: ContextVar[tuple[str, ...]] = ContextVar(
-    "turn_denylist", default=(),
+    "turn_denylist",
+    default=(),
 )
 
 
@@ -195,10 +198,7 @@ def push_turn_denylist(extra: Iterable[str]) -> object:
     restrictions on top of the user list (e.g. parent agent says
     "don't touch ``.env``" when dispatching a researcher).
     """
-    cleaned = tuple(
-        s.strip() for s in extra
-        if isinstance(s, str) and s.strip()
-    )
+    cleaned = tuple(s.strip() for s in extra if isinstance(s, str) and s.strip())
     return _TURN_DENYLIST.set(_TURN_DENYLIST.get() + cleaned)
 
 

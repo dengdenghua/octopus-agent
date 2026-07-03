@@ -36,13 +36,15 @@ PC_HOST_ID = "pc-host"
 
 class CaptureBackend(IntEnum):
     """截屏后端."""
-    MSS = 0x01     # mss 库（推荐，最快）
+
+    MSS = 0x01  # mss 库（推荐，最快）
     PILGRAB = 0x02  # PIL.ImageGrab（备选）
 
 
 @dataclass
 class PcScreenConfig:
     """PC 屏幕捕获配置."""
+
     # 目标 FPS
     fps: int = 10
     # JPEG 质量 (1-95)
@@ -96,7 +98,9 @@ class PcScreenCapture:
         self._task = asyncio.create_task(self._capture_loop())
         logger.info(
             "PC screen capture started: fps=%d scale=%.1f backend=%s",
-            self._config.fps, self._config.scale, self._config.backend.name,
+            self._config.fps,
+            self._config.scale,
+            self._config.backend.name,
         )
 
     async def stop(self) -> None:
@@ -107,8 +111,9 @@ class PcScreenCapture:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
             self._task = None
-        logger.info("PC screen capture stopped: frames=%d errors=%d",
-                     self._frame_count, self._errors)
+        logger.info(
+            "PC screen capture stopped: frames=%d errors=%d", self._frame_count, self._errors
+        )
 
     @property
     def is_running(self) -> bool:
@@ -155,9 +160,7 @@ class PcScreenCapture:
                         quality = min(90, quality + 2)
 
                     # 编码帧头
-                    header = encode_frame_header(
-                        PC_HOST_ID, FrameType.JPEG, FrameFlags.KEYFRAME
-                    )
+                    header = encode_frame_header(PC_HOST_ID, FrameType.JPEG, FrameFlags.KEYFRAME)
                     frame = header + jpeg_data
 
                     # 推送到 ScreenRelay
@@ -166,9 +169,7 @@ class PcScreenCapture:
                     # 更新统计
                     self._frame_count += 1
                     self._last_frame_ts = time.time()
-                    self._avg_frame_size = (
-                        self._avg_frame_size * 0.9 + len(jpeg_data) * 0.1
-                    )
+                    self._avg_frame_size = self._avg_frame_size * 0.9 + len(jpeg_data) * 0.1
 
             except asyncio.CancelledError:
                 break
@@ -186,12 +187,14 @@ class PcScreenCapture:
         if self._config.backend == CaptureBackend.MSS:
             try:
                 import mss  # noqa: F401
+
                 return self._capture_mss
             except ImportError:
                 logger.warning("mss not installed, falling back to PIL")
 
         try:
             from PIL import ImageGrab  # noqa: F401
+
             return self._capture_pil
         except ImportError:
             logger.error("Neither mss nor PIL available for screen capture")
@@ -209,6 +212,7 @@ class PcScreenCapture:
             screenshot = sct.grab(monitor)
             # mss 返回 BGRA，需要转 RGB
             from PIL import Image
+
             img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
             return self._encode_jpeg(img)
 
@@ -234,6 +238,7 @@ class PcScreenCapture:
         if self._config.backend == CaptureBackend.MSS:
             try:
                 from PIL import ImageGrab
+
                 img = ImageGrab.grab()
                 return self._encode_jpeg(img)
             except Exception:  # noqa: BLE001 — best-effort; fail-open
@@ -254,6 +259,7 @@ class PcScreenCapture:
 
 
 # ── 远程输入控制 ──────────────────────────────────────────
+
 
 class RemoteInputHandler:
     """处理来自手机端的远程输入事件，转发为本机鼠标/键盘操作.
@@ -336,6 +342,7 @@ class RemoteInputHandler:
         self._initialized = True
         try:
             import pyautogui
+
             self._pyautogui = pyautogui
             # 安全设置
             pyautogui.PAUSE = 0.0  # 零延迟，追求流畅
@@ -346,7 +353,8 @@ class RemoteInputHandler:
                 self._screen_height = pyautogui.size().height
             logger.info(
                 "RemoteInputHandler initialized: screen=%dx%d",
-                self._screen_width, self._screen_height,
+                self._screen_width,
+                self._screen_height,
             )
             return True
         except ImportError:
@@ -536,9 +544,7 @@ class RemoteInputHandler:
         await asyncio.get_event_loop().run_in_executor(
             None, lambda: self._pyautogui.scroll(clicks, x, y, _pause=False)
         )
-        await asyncio.get_event_loop().run_in_executor(
-            None, lambda: self._pyautogui.keyUp("ctrl")
-        )
+        await asyncio.get_event_loop().run_in_executor(None, lambda: self._pyautogui.keyUp("ctrl"))
         return {"success": True, "error": None}
 
     # ── 键盘操作 ──────────────────────────────────────────
@@ -594,8 +600,6 @@ class RemoteInputHandler:
             None, lambda: self._pyautogui.moveTo(x1, y1, _pause=False, duration=0)
         )
         await asyncio.get_event_loop().run_in_executor(
-            None, lambda: self._pyautogui.drag(
-                x2 - x1, y2 - y1, duration=duration, _pause=False
-            )
+            None, lambda: self._pyautogui.drag(x2 - x1, y2 - y1, duration=duration, _pause=False)
         )
         return {"success": True, "error": None}

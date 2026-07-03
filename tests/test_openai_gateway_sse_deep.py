@@ -26,6 +26,7 @@ Also covers:
   must carry ``octopus.conversation_id`` so the UI can multiplex
   overlapping streams onto the right thread window.
 """
+
 from __future__ import annotations
 
 import json
@@ -55,16 +56,19 @@ def _mk_stack(plan_json: str = None, raise_planner: bool = False):
     elif plan_json is not None:
         response = plan_json
     else:
-        response = json.dumps({
-            "reasoning": "r",
-            "nodes": [
-                {"skill": "list_cwd", "args": {"path": "."}},
-                {"skill": "count_words", "args": {"path": "a.txt"}},
-            ],
-        })
+        response = json.dumps(
+            {
+                "reasoning": "r",
+                "nodes": [
+                    {"skill": "list_cwd", "args": {"path": "."}},
+                    {"skill": "count_words", "args": {"path": "a.txt"}},
+                ],
+            }
+        )
     cfg = AgentConfig(
         planner=PlannerConfig(
-            type="llm", model="mock/sse-deep",
+            type="llm",
+            model="mock/sse-deep",
             mock_response=response,
         ),
     )
@@ -110,7 +114,7 @@ def _collect_frames(response) -> tuple[list[dict], bool]:
         for line in chunk.splitlines():
             if not line.startswith("data: "):
                 continue
-            payload = line[len("data: "):]
+            payload = line[len("data: ") :]
             if payload.strip() == "[DONE]":
                 done_seen = True
                 continue
@@ -157,14 +161,12 @@ class TestHappyPath:
         with _stream(client) as r:
             frames, _ = _collect_frames(r)
         # skip meta · look for the role opener
-        role_frames = [
-            f for f in frames
-            if f["choices"][0]["delta"].get("role") == "assistant"
-        ]
+        role_frames = [f for f in frames if f["choices"][0]["delta"].get("role") == "assistant"]
         assert len(role_frames) >= 1
 
     def test_done_sentinel_terminates_stream(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ):
         """Required by openai-compat clients to stop listening.
         If dropped, clients hang waiting forever."""
@@ -173,21 +175,21 @@ class TestHappyPath:
         assert done_seen, "stream must end with 'data: [DONE]'"
 
     def test_finish_reason_stop_on_success(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ):
         """Final content chunk must carry ``finish_reason=stop`` on
         success · openai-compat SDKs use this to distinguish graceful
         completion from abort."""
         with _stream(client) as r:
             frames, _ = _collect_frames(r)
-        finish_reasons = [
-            f["choices"][0].get("finish_reason") for f in frames
-        ]
+        finish_reasons = [f["choices"][0].get("finish_reason") for f in frames]
         # At least one frame carries stop · not all are None
         assert "stop" in finish_reasons
 
     def test_every_frame_has_required_shape(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ):
         """Lock the openai-compat chunk schema · any refactor that
         drops one of these fields breaks client SDKs."""
@@ -196,9 +198,7 @@ class TestHappyPath:
         required_top = {"id", "object", "created", "model", "choices"}
         for f in frames:
             missing = required_top - set(f.keys())
-            assert not missing, (
-                f"chunk missing required fields {missing}: {f!r}"
-            )
+            assert not missing, f"chunk missing required fields {missing}: {f!r}"
             assert f["object"] == "chat.completion.chunk"
             # choices is always a non-empty list of dicts with index+delta
             assert isinstance(f["choices"], list) and f["choices"]
@@ -209,7 +209,8 @@ class TestHappyPath:
                 assert "finish_reason" in choice
 
     def test_chunk_ids_share_conversation_continuity(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ):
         """All content chunks in one stream share the same ``id`` ·
         openai-compat SDKs concatenate by this id. The meta frame
@@ -219,18 +220,12 @@ class TestHappyPath:
             frames, _ = _collect_frames(r)
         # content-bearing chunks (skip meta which has empty delta)
         content_frames = [
-            f for f in frames
-            if f["choices"][0]["delta"]
-            and "content" in f["choices"][0]["delta"]
+            f for f in frames if f["choices"][0]["delta"] and "content" in f["choices"][0]["delta"]
         ]
         if len(content_frames) < 2:
-            pytest.skip(
-                "not enough content frames to compare · stream was trivially short"
-            )
+            pytest.skip("not enough content frames to compare · stream was trivially short")
         ids = {f["id"] for f in content_frames}
-        assert len(ids) == 1, (
-            f"content-bearing frames should share one id · got {ids}"
-        )
+        assert len(ids) == 1, f"content-bearing frames should share one id · got {ids}"
 
     def test_stream_emits_step_before_runtime_returns(self):
         """Guard the real-streaming contract.
@@ -312,10 +307,10 @@ class TestHappyPath:
             "code_arm",
         )
         try:
-            role_frame = json.loads(next(gen)[len("data: "):])
+            role_frame = json.loads(next(gen)[len("data: ") :])
             assert role_frame["choices"][0]["delta"]["role"] == "assistant"
 
-            step_frame = json.loads(next(gen)[len("data: "):])
+            step_frame = json.loads(next(gen)[len("data: ") :])
             content = step_frame["choices"][0]["delta"].get("content", "")
             assert "streamed early" in content
             assert not runtime_finished.is_set()
@@ -383,7 +378,8 @@ class TestHappyPath:
 
 class TestPlannerError:
     def test_planner_error_emits_failed_finish(
-        self, broken_client: TestClient,
+        self,
+        broken_client: TestClient,
     ):
         """Mock planner returns non-JSON → parse fails → the stream
         must emit a ``finish_reason=failed`` chunk, then DONE.
@@ -393,26 +389,22 @@ class TestPlannerError:
             assert r.status_code == 200
             frames, done_seen = _collect_frames(r)
         assert done_seen, "even error paths must terminate with [DONE]"
-        finish_reasons = [
-            f["choices"][0].get("finish_reason") for f in frames
-        ]
+        finish_reasons = [f["choices"][0].get("finish_reason") for f in frames]
         assert "failed" in finish_reasons, (
             f"planner-error stream should include finish_reason=failed · "
             f"got reasons={finish_reasons}"
         )
 
     def test_planner_error_content_mentions_failure(
-        self, broken_client: TestClient,
+        self,
+        broken_client: TestClient,
     ):
         """The failed chunk's delta includes a human-readable
         planning failure hint · surfaces to the UI so the
         user sees what broke rather than a cryptic empty bubble."""
         with _stream(broken_client) as r:
             frames, _ = _collect_frames(r)
-        all_content = " ".join(
-            str(f["choices"][0]["delta"].get("content", ""))
-            for f in frames
-        )
+        all_content = " ".join(str(f["choices"][0]["delta"].get("content", "")) for f in frames)
         assert "planning failed before execution" in all_content.lower(), (
             f"expected planning failure content; got: {all_content!r}"
         )
@@ -428,7 +420,8 @@ class TestNonStreamSmoke:
     internals. Same fixtures · just stream=False."""
 
     def test_non_stream_returns_chat_completion(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ):
         r = client.post(
             "/v1/chat/completions",
@@ -444,7 +437,8 @@ class TestNonStreamSmoke:
         assert data["choices"][0]["message"]["role"] == "assistant"
 
     def test_non_stream_planner_error_returns_error(
-        self, broken_client: TestClient,
+        self,
+        broken_client: TestClient,
     ):
         """Planner error in non-stream mode should still surface ·
         not hang or throw an uncaught exception in the handler."""

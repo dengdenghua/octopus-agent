@@ -75,11 +75,11 @@ class VlmTriggerPolicy:
     控制何时调用 VLM 分析截图，避免每步都调浪费 token。
     """
 
-    min_tree_nodes: int = 3          # 无障碍树节点数低于此值时触发 VLM
-    consecutive_failures: int = 2    # 连续工具调用失败次数达到此值时触发 VLM
+    min_tree_nodes: int = 3  # 无障碍树节点数低于此值时触发 VLM
+    consecutive_failures: int = 2  # 连续工具调用失败次数达到此值时触发 VLM
     verify_after_skill: bool = True  # Skill 执行后是否验证结果
-    vlm_call_interval: int = 2       # 每隔多少步才允许调用 VLM（0 = 不限制）
-    enable_auto_trigger: bool = True # 是否自动触发 VLM（关闭则仅手动触发）
+    vlm_call_interval: int = 2  # 每隔多少步才允许调用 VLM（0 = 不限制）
+    enable_auto_trigger: bool = True  # 是否自动触发 VLM（关闭则仅手动触发）
 
 
 # ── 带视觉的 ReAct 循环 ──────────────────────────────────────
@@ -293,7 +293,10 @@ class VisionReAct:
             return None
 
         # 检查调用间隔
-        if self.trigger_policy.vlm_call_interval > 0 and step - self._last_vlm_step < self.trigger_policy.vlm_call_interval:
+        if (
+            self.trigger_policy.vlm_call_interval > 0
+            and step - self._last_vlm_step < self.trigger_policy.vlm_call_interval
+        ):
             return None
 
         should_trigger = False
@@ -311,7 +314,9 @@ class VisionReAct:
                         should_trigger = True
                         logger.info(
                             "VLM 触发：无障碍树节点不足 (%d < %d, step=%d)",
-                            node_count, self.trigger_policy.min_tree_nodes, step,
+                            node_count,
+                            self.trigger_policy.min_tree_nodes,
+                            step,
                         )
             except Exception as e:
                 logger.warning("获取无障碍树失败: %s", e)
@@ -322,7 +327,8 @@ class VisionReAct:
             should_trigger = True
             logger.info(
                 "VLM 触发：连续 %d 次工具调用失败 (step=%d)",
-                self._consecutive_failures, step,
+                self._consecutive_failures,
+                step,
             )
 
         # 条件 3：用户要求"看屏幕"
@@ -446,11 +452,13 @@ class VisionReAct:
                         args={"x": action.coordinates[0], "y": action.coordinates[1]},
                     )
                     # 注意：这里返回的是 llm.chat_types.ToolCall，需要转换
-                    tool_calls.append(ToolCall(
-                        id=tap_call.call_id,
-                        name=tap_call.tool,
-                        arguments=tap_call.args,
-                    ))
+                    tool_calls.append(
+                        ToolCall(
+                            id=tap_call.call_id,
+                            name=tap_call.tool,
+                            arguments=tap_call.args,
+                        )
+                    )
             elif action.action in ("swipe", "scroll"):
                 tool_name = "android.swipe"
                 # 默认向上滑动（最常见）
@@ -461,11 +469,13 @@ class VisionReAct:
                 continue
 
             if tool_name:
-                tool_calls.append(ToolCall(
-                    id=call_id,
-                    name=tool_name,
-                    arguments=args,
-                ))
+                tool_calls.append(
+                    ToolCall(
+                        id=call_id,
+                        name=tool_name,
+                        arguments=args,
+                    )
+                )
 
         return tool_calls
 
@@ -497,7 +507,7 @@ class VisionReAct:
         self._recent_window.append(frozenset(fingerprints))
         if len(self._recent_window) < self.stuck_window:
             return False
-        recent = list(self._recent_window)[-self.stuck_window:]
+        recent = list(self._recent_window)[-self.stuck_window :]
         return all(r == recent[0] for r in recent)
 
     def _maybe_compress(self, messages: list[ChatMessage]) -> None:

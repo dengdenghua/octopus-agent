@@ -225,8 +225,14 @@ class TestBeakBudgetTracker:
             limits=BudgetLimits(usd=1.0, tokens=10_000, wallclock_s=60.0),
         )
         executor.execute_step(
-            step_id=1, node_id="n1", sucker_id="work", args={},
-            caller="arm:test", task_id=tid, arm_id="arm-1", budget=budget,
+            step_id=1,
+            node_id="n1",
+            sucker_id="work",
+            args={},
+            caller="arm:test",
+            task_id=tid,
+            arm_id="arm-1",
+            budget=budget,
         )
         # No session → nothing recorded.
         assert tracker.snapshot_all() == []
@@ -254,11 +260,13 @@ class TestBeakBudgetTracker:
             warnings.append(threshold)
 
         tracker = TokenBudgetTracker(
-            tokens_ceiling=100, on_warning=on_warn,
+            tokens_ceiling=100,
+            on_warning=on_warn,
         )
         executor = self._build_executor(tracker=tracker)
         # One step = 50 tokens. Run twice = 100 = 100% → triggers 80%+95% + BudgetExceeded.
         from runtime.platform.llm_infra.budget_tracker import BudgetExceeded
+
         self._execute_in_session(executor, "sess-w")
         with pytest.raises(BudgetExceeded):
             self._execute_in_session(executor, "sess-w")
@@ -288,9 +296,11 @@ class TestJournalRedactor:
         from runtime.memory.journal import JSONLJournal
 
         j = JSONLJournal(tmp_path / "j.jsonl")
-        j.write(self._make_event_with_secret(
-            "my key is sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789ABC here",
-        ))
+        j.write(
+            self._make_event_with_secret(
+                "my key is sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789ABC here",
+            )
+        )
         content = (tmp_path / "j.jsonl").read_text(encoding="utf-8")
         assert "sk-ant-api03" in content  # not redacted
 
@@ -299,9 +309,11 @@ class TestJournalRedactor:
         from runtime.platform.observability.redactor import Redactor
 
         j = JSONLJournal(tmp_path / "j.jsonl", redactor=Redactor())
-        j.write(self._make_event_with_secret(
-            "my key is sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789ABC here",
-        ))
+        j.write(
+            self._make_event_with_secret(
+                "my key is sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789ABC here",
+            )
+        )
         content = (tmp_path / "j.jsonl").read_text(encoding="utf-8")
         assert "sk-ant-api03" not in content
         assert "[REDACTED:api_key]" in content
@@ -311,9 +323,11 @@ class TestJournalRedactor:
         from runtime.platform.observability.redactor import Redactor
 
         j = JSONLJournal(tmp_path / "j.jsonl", redactor=Redactor())
-        j.write(self._make_event_with_secret(
-            "reach me at alice@example.com for details",
-        ))
+        j.write(
+            self._make_event_with_secret(
+                "reach me at alice@example.com for details",
+            )
+        )
         content = (tmp_path / "j.jsonl").read_text(encoding="utf-8")
         assert "alice@example.com" not in content
         assert "[REDACTED:email]" in content
@@ -346,9 +360,11 @@ class TestJournalRedactor:
             audit_chain=chain,
             redactor=Redactor(),
         )
-        j.write(self._make_event_with_secret(
-            "email me at bob@x.com — i won't say",
-        ))
+        j.write(
+            self._make_event_with_secret(
+                "email me at bob@x.com — i won't say",
+            )
+        )
 
         # Journal is redacted on disk.
         content = (tmp_path / "j.jsonl").read_text(encoding="utf-8")

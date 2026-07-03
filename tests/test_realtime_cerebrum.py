@@ -580,9 +580,7 @@ def test_cowork_swarm_plan_drives_group_fanout(
     assert len(team_items) == 1
     assert team_items[0]["status"] == "completed"
     assert team_items[0]["arguments"]["schema"] == "octopus.group_fanout_run.v1"
-    assert team_items[0]["arguments"]["capacity"]["schema"] == (
-        "octopus.group_fanout_capacity.v1"
-    )
+    assert team_items[0]["arguments"]["capacity"]["schema"] == ("octopus.group_fanout_capacity.v1")
     assert team_items[0]["result"]["schema"] == "octopus.group_fanout_result.v1"
     assert team_items[0]["result"]["capacity"]["requested_members"] == 2
     assert team_items[0]["result"]["capacity"]["dispatched_members"] == 2
@@ -1018,11 +1016,9 @@ def test_cowork_project_mode_accepts_task_control_command(
     kinds = [event["kind"] for event in events]
     # "reassign … run" audits chronologically: the intervention first,
     # then the trailing run requested by the same command.
-    intervention_idx = max(
-        i for i, kind in enumerate(kinds) if kind == "task.intervention"
-    )
+    intervention_idx = max(i for i, kind in enumerate(kinds) if kind == "task.intervention")
     assert events[intervention_idx]["payload"]["action"] == "reassign"
-    assert "project.run" in kinds[intervention_idx + 1:]
+    assert "project.run" in kinds[intervention_idx + 1 :]
 
     turn = out["response"].result["turn"]
     agent_text = "\n".join(item["text"] for item in turn["items"] if item["type"] == "agentMessage")

@@ -86,30 +86,32 @@ _LOG = logging.getLogger("octopus.gene_locks")
 #   3. Restart · the next boot mints a new genome with the new
 #      LOCK_SYSTEM_VERSION · all prior history is audit-only
 
-LOCK_SYSTEM_VERSION = "1.0.0"    # matches docs/gene-locks.md §11
-SCHEMA_VERSION = 1               # bumps require migration code
-INVARIANTS_VERSION_PIN = "v1"    # INVARIANTS.md pin
+LOCK_SYSTEM_VERSION = "1.0.0"  # matches docs/gene-locks.md §11
+SCHEMA_VERSION = 1  # bumps require migration code
+INVARIANTS_VERSION_PIN = "v1"  # INVARIANTS.md pin
 
 # Name set of fields that cannot be mutated through ``set_maturity``,
 # ``set_mode``, or any other admin endpoint. Attempts return
 # ``immutable_field_locked`` instead of silently succeeding.
-IMMUTABLE_FIELD_PATHS: frozenset[str] = frozenset({
-    "genome_id",
-    "origin_signature",
-    "schema_version",
-    "invariants_version_pin",
-    "lock_system_version",
-})
+IMMUTABLE_FIELD_PATHS: frozenset[str] = frozenset(
+    {
+        "genome_id",
+        "origin_signature",
+        "schema_version",
+        "invariants_version_pin",
+        "lock_system_version",
+    }
+)
 
 # Default cooldowns per mutation kind (seconds).
 # Match the spec's TEMPORAL table as best we can for RecipeForge.
 # Human-signed mutations can set ``bypass_cooldown=True`` but the
 # gate records a flag so audit can see who bypassed when.
 COOLDOWNS_S: dict[str, int] = {
-    "apply_addendum": 3600,          # 1h per recipe · manual iteration OK
-    "set_variant_weights": 21600,    # 6h · weights affect live traffic
-    "auto_promote": 86400,           # 24h · autonomous promote is heaviest
-    "delete_addendum": 60,           # 1m · delete is cheap, near-zero cost
+    "apply_addendum": 3600,  # 1h per recipe · manual iteration OK
+    "set_variant_weights": 21600,  # 6h · weights affect live traffic
+    "auto_promote": 86400,  # 24h · autonomous promote is heaviest
+    "delete_addendum": 60,  # 1m · delete is cheap, near-zero cost
 }
 
 # Approval window for QUORUM counting · an approver header counts
@@ -118,15 +120,16 @@ APPROVAL_WINDOW_S = 600
 
 
 class MaturityLevel(IntEnum):
-    HATCHLING = 0    # Implementation note.
-    JUVENILE = 1     # Implementation note.
-    ADOLESCENT = 2   # Implementation note.
-    ADULT = 3        # Implementation note.
-    MATURE = 4       # Implementation note.
+    HATCHLING = 0  # Implementation note.
+    JUVENILE = 1  # Implementation note.
+    ADOLESCENT = 2  # Implementation note.
+    ADULT = 3  # Implementation note.
+    MATURE = 4  # Implementation note.
 
 
 class MutationKind:
     """Enum-ish string tags · one per RecipeForge mutation op."""
+
     APPLY_ADDENDUM = "apply_addendum"
     SET_VARIANT_WEIGHTS = "set_variant_weights"
     AUTO_PROMOTE = "auto_promote"
@@ -178,8 +181,9 @@ class LockViolation(Exception):
     """Raised when a mutation fails the gate. HTTP layer should turn
     this into a 403/409 response with the violation detail intact."""
 
-    def __init__(self, code: str, message: str, *, hint: str = "",
-                 locks_hit: list[str] | None = None) -> None:
+    def __init__(
+        self, code: str, message: str, *, hint: str = "", locks_hit: list[str] | None = None
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
@@ -224,8 +228,8 @@ class LockState:
     # These are minted once and never change for the lifetime of a
     # genome. A mismatch against the compiled constants at load-time
     # triggers panic + refuses mutations.
-    genome_id: str = ""             # UUID4, minted at first boot
-    origin_signature: str = ""      # hostname+mint-ts hash, audit only
+    genome_id: str = ""  # UUID4, minted at first boot
+    origin_signature: str = ""  # hostname+mint-ts hash, audit only
     schema_version: int = SCHEMA_VERSION
     invariants_version_pin: str = INVARIANTS_VERSION_PIN
     lock_system_version: str = LOCK_SYSTEM_VERSION
@@ -233,7 +237,7 @@ class LockState:
     # ── mutable runtime state ──
     maturity_level: int = MaturityLevel.ADOLESCENT  # dev-friendly default
     panic: PanicState = field(default_factory=PanicState)
-    mode: str = "dev"       # "dev" | "production"
+    mode: str = "dev"  # "dev" | "production"
     # {f"{kind}:{recipe}": last_ts}
     last_mutation_at: dict[str, float] = field(default_factory=dict)
 
@@ -296,6 +300,7 @@ def _bootstrap(s: LockState) -> LockState:
     if not s.origin_signature:
         import hashlib
         import socket
+
         host = socket.gethostname() or "unknown"
         s.origin_signature = hashlib.blake2b(
             f"{s.genome_id}|{host}|{time.time()}".encode(),
@@ -321,10 +326,7 @@ def _check_integrity(s: LockState) -> dict[str, Any] | None:
             f"compiled={LOCK_SYSTEM_VERSION!r}"
         )
     if s.schema_version != SCHEMA_VERSION:
-        problems.append(
-            f"schema_version: persisted={s.schema_version}, "
-            f"compiled={SCHEMA_VERSION}"
-        )
+        problems.append(f"schema_version: persisted={s.schema_version}, compiled={SCHEMA_VERSION}")
     if s.invariants_version_pin != INVARIANTS_VERSION_PIN:
         problems.append(
             f"invariants_version_pin: persisted={s.invariants_version_pin!r}, "
@@ -480,8 +482,7 @@ def set_mode(mode: str, *, human_signed: bool = False) -> dict[str, Any]:
         if going_soft and not human_signed:
             raise LockViolation(
                 "mode_relax_needs_human",
-                f"flipping mode {s.mode} → {target} requires a "
-                f"human-approver header",
+                f"flipping mode {s.mode} → {target} requires a human-approver header",
                 hint="POST with X-Human-Approver: <your-id>",
                 locks_hit=["MODE:relax"],
             )
@@ -505,18 +506,22 @@ def get_state() -> dict[str, Any]:
         # Split IMMUTABLE vs mutable for panel clarity · makes
         # "these values never change" explicit in the UI.
         immutable_view = {
-            k: base.pop(k) for k in [
-                "genome_id", "origin_signature", "schema_version",
-                "invariants_version_pin", "lock_system_version",
-            ] if k in base
+            k: base.pop(k)
+            for k in [
+                "genome_id",
+                "origin_signature",
+                "schema_version",
+                "invariants_version_pin",
+                "lock_system_version",
+            ]
+            if k in base
         }
         return {
             **base,
             "immutable": immutable_view,
             "integrity_ok": _INTEGRITY_FAILED is None,
             "integrity_problems": (
-                _INTEGRITY_FAILED.get("problems", [])
-                if _INTEGRITY_FAILED else []
+                _INTEGRITY_FAILED.get("problems", []) if _INTEGRITY_FAILED else []
             ),
             "required_levels": {
                 kind: {
@@ -580,8 +585,7 @@ def set_maturity(level: int, *, human_signed: bool = False) -> dict[str, Any]:
         if going_up and not human_signed and s.mode == "production":
             raise LockViolation(
                 "maturity_up_needs_human",
-                f"raising maturity from {s.maturity_level}→{level} needs a "
-                f"human-approver header",
+                f"raising maturity from {s.maturity_level}→{level} needs a human-approver header",
                 hint="POST again with X-Human-Approver: <your-id>",
                 locks_hit=["MONOTONIC:maturity_level"],
             )
@@ -589,7 +593,9 @@ def set_maturity(level: int, *, human_signed: bool = False) -> dict[str, Any]:
         s.maturity_level = int(level)
         _save(s)
         return {
-            "ok": True, "old_level": old, "new_level": level,
+            "ok": True,
+            "old_level": old,
+            "new_level": level,
             "direction": "up" if going_up else ("down" if level < old else "same"),
         }
 
@@ -601,13 +607,14 @@ def trigger_panic(reason: str) -> dict[str, Any]:
     with _STATE_LOCK:
         s = _load()
         s.panic = PanicState(
-            active=True, since=time.time(), reason=str(reason)[:500],
+            active=True,
+            since=time.time(),
+            reason=str(reason)[:500],
         )
         # Auto-degrade (CC-G5 invariant).
         s.maturity_level = min(s.maturity_level, int(MaturityLevel.JUVENILE))
         _save(s)
-        return {"ok": True, "panic_active": True,
-                "maturity_level": s.maturity_level}
+        return {"ok": True, "panic_active": True, "maturity_level": s.maturity_level}
 
 
 def clear_panic(*, human_signed: bool = False) -> dict[str, Any]:
@@ -686,8 +693,7 @@ def gate_mutation(
     if _INTEGRITY_FAILED is not None:
         raise LockViolation(
             "integrity_failed",
-            f"IMMUTABLE integrity check failed · "
-            f"{_INTEGRITY_FAILED['problems']}",
+            f"IMMUTABLE integrity check failed · {_INTEGRITY_FAILED['problems']}",
             hint=_INTEGRITY_FAILED.get("hint", ""),
             locks_hit=["IMMUTABLE"],
         )
@@ -696,8 +702,7 @@ def gate_mutation(
     if s.panic.active:
         raise LockViolation(
             "panic_active",
-            f"panic state active since {s.panic.since} · "
-            f"reason: {s.panic.reason}",
+            f"panic state active since {s.panic.since} · reason: {s.panic.reason}",
             hint="clear panic first (POST /api/gene-locks/panic/clear)",
             locks_hit=["PANIC"],
         )
@@ -716,12 +721,13 @@ def gate_mutation(
             "raise maturity via /api/gene-locks/maturity · OR include "
             "X-Human-Approver: <name> header to downgrade the requirement"
             if effective_autonomous
-            else "this should not happen for human-signed mutations · "
-                 "file a bug"
+            else "this should not happen for human-signed mutations · file a bug"
         )
         if s.mode == "production":
             raise LockViolation(
-                "level_too_low", msg, hint=hint,
+                "level_too_low",
+                msg,
+                hint=hint,
                 locks_hit=[f"LEVEL<{required}"],
             )
         warnings.append(f"dev-mode override: LEVEL {msg}")
@@ -737,8 +743,7 @@ def gate_mutation(
                 remaining = int(cooldown - elapsed)
                 raise LockViolation(
                     "cooldown_active",
-                    f"{kind} on {target!r} cooling down · "
-                    f"{remaining}s remaining",
+                    f"{kind} on {target!r} cooling down · {remaining}s remaining",
                     hint=(
                         "wait it out, or pass bypass_cooldown=true with "
                         "human signature if truly urgent"
@@ -764,6 +769,7 @@ def gate_mutation(
     qr = quorum_required_for.get(kind, 0)
     if qr > 0 and human_signed:
         from runtime.safety.gene_locks.approver_ledger import get_ledger
+
         ledger = get_ledger()
         # Register THIS approver before counting · ensures the
         # current call counts toward the tally.
@@ -783,15 +789,15 @@ def gate_mutation(
             )
             if s.mode == "production":
                 raise LockViolation(
-                    "quorum_insufficient", msg, hint=hint,
+                    "quorum_insufficient",
+                    msg,
+                    hint=hint,
                     locks_hit=[f"QUORUM:{qr}of*"],
                 )
             warnings.append(f"dev-mode override: {msg}")
         else:
             # Satisfied · note who the pair/group was for audit.
-            warnings.append(
-                f"QUORUM satisfied · approvers: {approvers_seen}"
-            )
+            warnings.append(f"QUORUM satisfied · approvers: {approvers_seen}")
 
     # 5. MONOTONIC · safety/config fields can tighten autonomously
     # but loosening needs human sign. Enforced by caller-supplied
@@ -851,9 +857,8 @@ def check_monotonic(
     if new_value == old_value:
         return {"ok": True, "direction": "same", "warnings": []}
     going_higher = new_value > old_value
-    is_tightening = (
-        (direction_of_stricter == "higher" and going_higher) or
-        (direction_of_stricter == "lower" and not going_higher)
+    is_tightening = (direction_of_stricter == "higher" and going_higher) or (
+        direction_of_stricter == "lower" and not going_higher
     )
     direction = "tighter" if is_tightening else "looser"
     if is_tightening:
@@ -863,7 +868,8 @@ def check_monotonic(
     human_signed = bool(approver and approver.strip())
     if human_signed:
         return {
-            "ok": True, "direction": direction,
+            "ok": True,
+            "direction": direction,
             "warnings": [f"MONOTONIC looser-direction signed by {approver!r}"],
         }
     msg = (
@@ -872,7 +878,8 @@ def check_monotonic(
     )
     if s.mode == "production":
         raise LockViolation(
-            "monotonic_needs_human", msg,
+            "monotonic_needs_human",
+            msg,
             hint="include X-Human-Approver header to signal human intent",
             locks_hit=[f"MONOTONIC:{field_path}"],
         )

@@ -145,8 +145,7 @@ def _scaffold_local_agent(asset: dict[str, Any]) -> tuple[str, Path]:
     _atomic_write_text(core / "SOUL.md", soul)
     _atomic_write_text(
         core / "IDENTITY.md",
-        f"- Name: {name}\n- Role: {category} specialist\n"
-        "- Source: enterprise asset library\n",
+        f"- Name: {name}\n- Role: {category} specialist\n- Source: enterprise asset library\n",
     )
     _atomic_write_text(
         core / "tool-registry.jsonc",
@@ -191,8 +190,7 @@ def create_enterprise_assets_router(
 
     @router.get("/api/agent-market/enterprise")
     def list_enterprise_assets(
-        request: Request,
-        category: str | None = None, search: str | None = None
+        request: Request, category: str | None = None, search: str | None = None
     ) -> dict[str, Any]:
         _auth(request)
         params: dict[str, Any] = {}

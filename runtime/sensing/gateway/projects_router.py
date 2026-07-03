@@ -166,7 +166,9 @@ def create_projects_router(
             upsert_project_task = getattr(collaboration_store, "upsert_project_task", None)
             if not callable(upsert_project_task):
                 return
-            milestones = state.get("milestones") if isinstance(state.get("milestones"), list) else []
+            milestones = (
+                state.get("milestones") if isinstance(state.get("milestones"), list) else []
+            )
             tasks_by_ms = state.get("tasks") if isinstance(state.get("tasks"), dict) else {}
             for milestone in milestones:
                 if not isinstance(milestone, dict):

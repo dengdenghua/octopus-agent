@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import fnmatch
@@ -15,7 +14,6 @@ UnknownPolicy = Literal["quarantine", "reject", "allow"]
 
 
 class TrustEngine:
-
     def __init__(
         self,
         trusted_sources: list[str] | None = None,
@@ -35,14 +33,17 @@ class TrustEngine:
         # trusted. This prevents malicious MCP servers from bypassing
         # trust checks out of the box.
         self.trusted_sources = (
-            trusted_sources if trusted_sources is not None
-            else ["skill://public/*"]
+            trusted_sources if trusted_sources is not None else ["skill://public/*"]
         )
         self.self_whitelist = (
-            self_whitelist if self_whitelist is not None
+            self_whitelist
+            if self_whitelist is not None
             else [
-                "cerebrum", "ganglia", "arms/*",
-                "react_loop", "react_arm",
+                "cerebrum",
+                "ganglia",
+                "arms/*",
+                "react_loop",
+                "react_arm",
                 "intel_collector/*",
             ]
         )
@@ -55,7 +56,6 @@ class TrustEngine:
         # default (None) — opt in via config so deployments without a
         # cost-baseline history don't quarantine on noise.
         self.adaptive = adaptive
-
 
     def check(self, call: ToolCall, signature: AntigenSignature) -> ImmuneReport:
         if self._is_self(call):
@@ -72,10 +72,7 @@ class TrustEngine:
                 verdict="reject",
                 signature=signature,
                 strategy_used="memory",
-                reason=(
-                    f"known attack pattern (hits={pattern.hit_count}): "
-                    f"{pattern.reason}"
-                ),
+                reason=(f"known attack pattern (hits={pattern.hit_count}): {pattern.reason}"),
             )
 
         # Adaptive tier — behavioural anomaly. Risk only TIGHTENS: a
@@ -134,7 +131,8 @@ class TrustEngine:
             # same source become an antibody, so the source stays
             # rejected even if the policy is later relaxed.
             self.attack_memory.record_violation(
-                signature.entity_id, reason="repeated innate rejections",
+                signature.entity_id,
+                reason="repeated innate rejections",
             )
         elif self.unknown_policy == "allow":
             verdict = "allow"
@@ -166,19 +164,18 @@ class TrustEngine:
         if self.adaptive is None:
             return
         sucker = str(call.sucker_id)
-        score = self.adaptive.score_observed(
-            sucker, latency_ms=latency_ms, tokens=tokens
-        )
+        score = self.adaptive.score_observed(sucker, latency_ms=latency_ms, tokens=tokens)
         if self.adaptive.is_anomalous(score):
             _LOG.warning(
                 "adaptive immunity · behavioural anomaly · sucker=%s "
                 "composite=%.2f · %s · quarantining for %.0fs",
-                sucker, score.composite, score.reason,
+                sucker,
+                score.composite,
+                score.reason,
                 self.adaptive.quarantine_ttl_s,
             )
             self.adaptive.quarantine(sucker)
         self.adaptive.learn(sucker, latency_ms=latency_ms, tokens=tokens)
-
 
     def _is_self(self, call: ToolCall) -> bool:
         return any(fnmatch.fnmatch(call.caller, pattern) for pattern in self.self_whitelist)

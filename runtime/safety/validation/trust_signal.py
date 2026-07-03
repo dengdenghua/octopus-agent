@@ -46,6 +46,7 @@ shaped like ``GuardTelemetry.digest()``. Pass ``None`` (or call the
 module-level helper that pulls the singleton sink) to get a
 neutral 0.5 when telemetry is unavailable.
 """
+
 from __future__ import annotations
 
 import logging
@@ -113,7 +114,8 @@ def compute_guard_trust_score(
 
 
 def _labels_in_category(
-    digest: dict[str, Any], category: str,
+    digest: dict[str, Any],
+    category: str,
 ) -> list[str]:
     """Return labels in the digest belonging to ``category``.
 
@@ -124,10 +126,8 @@ def _labels_in_category(
     """
     try:
         from runtime.core.cerebrum.react_guards import GUARD_REGISTRY
-        return [
-            spec.label for spec in GUARD_REGISTRY
-            if spec.category == category
-        ]
+
+        return [spec.label for spec in GUARD_REGISTRY if spec.category == category]
     except Exception:  # noqa: BLE001 — fall back to heuristic
         _LOG.debug("GUARD_REGISTRY unavailable; using heuristic labels")
         if category == "security":
@@ -168,6 +168,7 @@ def fetch_current_trust_score(
     """
     try:
         from runtime.safety.evolution.guard_telemetry import GuardTelemetry
+
         digest = GuardTelemetry().digest()
     except Exception as exc:  # noqa: BLE001 — fail neutral
         _LOG.debug("trust signal fetch failed: %s — returning neutral", exc)

@@ -127,7 +127,9 @@ def dom_state_iife_js(max_items: int) -> str:
         f"const limit = {int(max_items)};\n"
         + DOM_HELPERS_JS
         + "\nconst bodyText = document.body?.innerText || document.body?.textContent || '';\n"
-        + "const snapshot = (() => {" + _SNAPSHOT_BODY_JS + "})();\n"
+        + "const snapshot = (() => {"
+        + _SNAPSHOT_BODY_JS
+        + "})();\n"
         + "return Object.assign({\n"
         + "    url: location.href,\n"
         + "    title: document.title,\n"

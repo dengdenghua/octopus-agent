@@ -41,7 +41,10 @@ _DANGER_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"chmod\s+-R\s+777\s+/", "world-writable on a broad path"),
     (r">\s*/dev/sd[a-z]", "overwrite a disk device"),
     (r"\.ssh/id_(rsa|ed25519)", "read a private SSH key"),
-    (r"(AWS_SECRET|OPENAI_API_KEY|ANTHROPIC_API_KEY)[^\n]*\|\s*(curl|wget|nc)", "exfiltrate a secret"),
+    (
+        r"(AWS_SECRET|OPENAI_API_KEY|ANTHROPIC_API_KEY)[^\n]*\|\s*(curl|wget|nc)",
+        "exfiltrate a secret",
+    ),
 )
 
 _SCANNED_SUFFIXES = {".md", ".sh", ".bash", ".zsh", ".py", ".js", ".ts", ".rb", ".pl", ".ps1"}
@@ -141,7 +144,10 @@ def install_skill(
     findings = scan_skill_safety(src_dir)
     if findings and not allow_dangerous:
         return InstallResult(
-            ok=False, name=name, description=description, findings=findings,
+            ok=False,
+            name=name,
+            description=description,
+            findings=findings,
             error=(
                 f"refused: {len(findings)} safety finding(s) — pass "
                 "allow_dangerous=True to install anyway"
@@ -152,14 +158,21 @@ def install_skill(
     if dest.exists():
         if not overwrite:
             return InstallResult(
-                ok=False, name=name, description=description, dest=str(dest),
+                ok=False,
+                name=name,
+                description=description,
+                dest=str(dest),
                 error=f"skill '{name}' already installed (pass overwrite=True)",
             )
         shutil.rmtree(dest)
     dest_root.mkdir(parents=True, exist_ok=True)
     shutil.copytree(src_dir, dest)
     return InstallResult(
-        ok=True, name=name, description=description, dest=str(dest), findings=findings,
+        ok=True,
+        name=name,
+        description=description,
+        dest=str(dest),
+        findings=findings,
     )
 
 
@@ -178,9 +191,7 @@ def default_catalog_dir() -> Path:
     return Path(__file__).resolve().parents[2] / "execution" / "all_skills"
 
 
-_GH_TREE_RE = re.compile(
-    r"^https?://github\.com/([^/]+)/([^/]+)/tree/([^/]+)/(.+?)/?$"
-)
+_GH_TREE_RE = re.compile(r"^https?://github\.com/([^/]+)/([^/]+)/tree/([^/]+)/(.+?)/?$")
 _GH_REPO_RE = re.compile(r"^https?://github\.com/[^/]+/[^/]+?(?:\.git)?/?$")
 
 
@@ -234,8 +245,7 @@ def resolve_skill_source(source: str, workdir: Path) -> Path:
         return found.parent
 
     raise ValueError(
-        f"unrecognized skill source: {source!r} "
-        "(use a local directory or a GitHub URL)"
+        f"unrecognized skill source: {source!r} (use a local directory or a GitHub URL)"
     )
 
 
@@ -257,8 +267,10 @@ def install_from_source(
         except (ValueError, RuntimeError, OSError) as exc:
             return InstallResult(ok=False, error=f"fetch failed: {exc}")
         return install_skill(
-            skill_dir, root,
-            allow_dangerous=allow_dangerous, overwrite=overwrite,
+            skill_dir,
+            root,
+            allow_dangerous=allow_dangerous,
+            overwrite=overwrite,
         )
 
 

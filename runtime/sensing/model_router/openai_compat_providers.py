@@ -7,6 +7,7 @@ through provider-specific response keys.  This module keeps those rules
 data-driven so ``OpenAIModelRouter`` can stay a normal chat-completions
 transport instead of accumulating provider-specific branches.
 """
+
 from __future__ import annotations
 
 import ast
@@ -87,24 +88,26 @@ _OPTIONAL_REQUEST_FIELD_FALLBACKS = (
 
 _TOOL_REQUEST_FIELDS = ("tools", "tool_choice", "parallel_tool_calls")
 
-_STRICT_SCHEMA_DROPPED_KEYS = frozenset({
-    "$anchor",
-    "$comment",
-    "$id",
-    "$schema",
-    "default",
-    "deprecated",
-    "discriminator",
-    "example",
-    "examples",
-    "externalDocs",
-    "format",
-    "nullable",
-    "readOnly",
-    "title",
-    "writeOnly",
-    "xml",
-})
+_STRICT_SCHEMA_DROPPED_KEYS = frozenset(
+    {
+        "$anchor",
+        "$comment",
+        "$id",
+        "$schema",
+        "default",
+        "deprecated",
+        "discriminator",
+        "example",
+        "examples",
+        "externalDocs",
+        "format",
+        "nullable",
+        "readOnly",
+        "title",
+        "writeOnly",
+        "xml",
+    }
+)
 
 
 _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
@@ -279,14 +282,10 @@ def sample_openai_compat_profile_probe(
 ) -> OpenAICompatProfileProbe:
     smoke = _smoke_provider_by_id().get(profile.id)
     base_url = (
-        smoke.base_url
-        if smoke is not None
-        else _sample_base_url_from_profile_markers(profile)
+        smoke.base_url if smoke is not None else _sample_base_url_from_profile_markers(profile)
     )
     model = (
-        smoke.default_model
-        if smoke is not None
-        else _sample_model_from_profile_markers(profile)
+        smoke.default_model if smoke is not None else _sample_model_from_profile_markers(profile)
     )
     return OpenAICompatProfileProbe(
         profile_id=profile.id,
@@ -345,8 +344,7 @@ def audit_openai_compat_profile_catalog(
             "model_resolves_to": probe.model_resolves_to,
         }
         for probe in probes
-        if probe.smoke_provider_configured
-        and probe.base_url_resolves_to != probe.profile_id
+        if probe.smoke_provider_configured and probe.base_url_resolves_to != probe.profile_id
     ]
     contract_probes = [
         probe_openai_compat_request_contract(
@@ -546,14 +544,10 @@ def resolve_openai_compat_profile(
     model_probe = (model or "").strip().lower()
 
     for profile in _PROFILES:
-        if profile.base_url_markers and any(
-            marker in base for marker in profile.base_url_markers
-        ):
+        if profile.base_url_markers and any(marker in base for marker in profile.base_url_markers):
             return profile
     for profile in _PROFILES:
-        if profile.model_markers and any(
-            marker in model_probe for marker in profile.model_markers
-        ):
+        if profile.model_markers and any(marker in model_probe for marker in profile.model_markers):
             return profile
     return GENERIC_OPENAI_PROFILE
 
@@ -670,13 +664,15 @@ def plan_openai_compat_retries(
             return
         seen.add(fp)
         removed, added, changed = _payload_delta(payload, candidate)
-        variants.append(OpenAICompatRetryPayload(
-            payload=candidate,
-            reason=reason,
-            removed_fields=removed,
-            added_fields=added,
-            changed_fields=changed,
-        ))
+        variants.append(
+            OpenAICompatRetryPayload(
+                payload=candidate,
+                reason=reason,
+                removed_fields=removed,
+                added_fields=added,
+                changed_fields=changed,
+            )
+        )
 
     lower = (body or "").lower()
     strict_validation = _mentions_any(
@@ -710,9 +706,7 @@ def plan_openai_compat_retries(
     )
     if strict_validation and not optional_fields:
         optional_fields = tuple(
-            field_name
-            for field_name in _OPTIONAL_REQUEST_FIELD_FALLBACKS
-            if field_name in payload
+            field_name for field_name in _OPTIONAL_REQUEST_FIELD_FALLBACKS if field_name in payload
         )
     if optional_fields:
         candidate = dict(payload)
@@ -733,7 +727,9 @@ def plan_openai_compat_retries(
         profile.retry_without_sampling
         and _payload_has_sampling(payload)
         and (
-            _mentions_any(lower, ("temperature", "top_p", "sampling", "presence_penalty", "frequency_penalty"))
+            _mentions_any(
+                lower, ("temperature", "top_p", "sampling", "presence_penalty", "frequency_penalty")
+            )
             or strict_validation
             or profile.omit_sampling_parameters
         )
@@ -840,11 +836,7 @@ def _request_contract_summary(
             "pass" if {"model", "messages"}.issubset(normalized) else "warn",
             [
                 "model preserved" if "model" in normalized else "model missing",
-                (
-                    "messages preserved"
-                    if "messages" in normalized
-                    else "messages missing"
-                ),
+                ("messages preserved" if "messages" in normalized else "messages missing"),
             ],
             ["dry_run_request_shape_only"],
         ),
@@ -877,29 +869,13 @@ def _request_contract_summary(
             "warn" if {"tools", "tool_choice"} & (removed | retry_removed) else "pass",
             [
                 "tools preserved" if "tools" in normalized else "tools removed",
-                (
-                    "tool_choice preserved"
-                    if "tool_choice" in normalized
-                    else "tool_choice absent"
-                ),
+                ("tool_choice preserved" if "tool_choice" in normalized else "tool_choice absent"),
             ],
             [
-                *(
-                    ["parallel_tool_calls removed"]
-                    if "parallel_tool_calls" in removed
-                    else []
-                ),
+                *(["parallel_tool_calls removed"] if "parallel_tool_calls" in removed else []),
                 *(["tool schema normalized"] if "tools" in changed else []),
-                *(
-                    ["fallback may drop tool_choice"]
-                    if "tool_choice" in retry_removed
-                    else []
-                ),
-                *(
-                    ["fallback may drop tools"]
-                    if "tools" in retry_removed
-                    else []
-                ),
+                *(["fallback may drop tool_choice"] if "tool_choice" in retry_removed else []),
+                *(["fallback may drop tools"] if "tools" in retry_removed else []),
             ],
         ),
         _compat_capability_row(
@@ -924,9 +900,8 @@ def _request_contract_summary(
         _compat_capability_row(
             "reasoning_request",
             "warn"
-            if {"reasoning_effort", "thinking"} & (
-                removed | changed | retry_removed | retry_changed
-            )
+            if {"reasoning_effort", "thinking"}
+            & (removed | changed | retry_removed | retry_changed)
             else "pass",
             [
                 (
@@ -1129,7 +1104,11 @@ def parse_tool_call_arguments(value: Any) -> dict[str, Any]:
         if isinstance(parsed, str):
             parsed = json.loads(parsed)
         return parsed if isinstance(parsed, dict) else {}
-    except (TypeError, ValueError, json.JSONDecodeError):  # expected · falls through to the ast.literal_eval fallback below
+    except (
+        TypeError,
+        ValueError,
+        json.JSONDecodeError,
+    ):  # expected · falls through to the ast.literal_eval fallback below
         pass
 
     try:
@@ -1195,9 +1174,7 @@ def _payload_delta(
     added = tuple(sorted(candidate_keys - original_keys))
     changed = tuple(
         sorted(
-            key
-            for key in original_keys & candidate_keys
-            if original.get(key) != candidate.get(key)
+            key for key in original_keys & candidate_keys if original.get(key) != candidate.get(key)
         )
     )
     return removed, added, changed
@@ -1322,9 +1299,7 @@ def _normalize_strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
             out[key] = _normalize_strict_json_schema(value)
         elif isinstance(value, list):
             out[key] = [
-                _normalize_strict_json_schema(item)
-                if isinstance(item, dict)
-                else item
+                _normalize_strict_json_schema(item) if isinstance(item, dict) else item
                 for item in value
             ]
         else:

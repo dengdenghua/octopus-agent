@@ -118,10 +118,12 @@ def discover_external_session_roots(
     if explicit:
         roots.extend(Path(path).expanduser() for path in explicit)
     else:
-        roots.extend([
-            Path("data/imported_sessions"),
-            Path("data/evolution_sessions"),
-        ])
+        roots.extend(
+            [
+                Path("data/imported_sessions"),
+                Path("data/evolution_sessions"),
+            ]
+        )
     deduped: list[Path] = []
     seen: set[str] = set()
     for root in roots:
@@ -176,7 +178,7 @@ def collect_external_session_failures(
     *,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
-    return import_external_sessions(paths, limit=limit).failures[:max(0, int(limit))]
+    return import_external_sessions(paths, limit=limit).failures[: max(0, int(limit))]
 
 
 def build_external_session_dataset(
@@ -248,21 +250,25 @@ def _parse_structured_payload(path: Path, payloads: list[Any]) -> ImportedSessio
     assistant = _last_assistant_text(messages)
     errors = _error_texts(messages)
     success = bool(assistant.strip()) and not errors
-    return ImportedSessionSample(
-        goal=goal,
-        success=success,
-        source=_source_name(path),
-        path=str(path),
-        last_error=errors[-1] if errors else "",
-        assistant_summary=_compact_text(assistant, 600),
-        step_count=len(messages),
-        session_id=str(metadata.get("session_id") or metadata.get("id") or path.stem),
-        metadata={
-            **metadata,
-            "format": path.suffix.lower().lstrip("."),
-            "failure_source": "external_session_error" if errors else None,
-        },
-    ) if goal.strip() else None
+    return (
+        ImportedSessionSample(
+            goal=goal,
+            success=success,
+            source=_source_name(path),
+            path=str(path),
+            last_error=errors[-1] if errors else "",
+            assistant_summary=_compact_text(assistant, 600),
+            step_count=len(messages),
+            session_id=str(metadata.get("session_id") or metadata.get("id") or path.stem),
+            metadata={
+                **metadata,
+                "format": path.suffix.lower().lstrip("."),
+                "failure_source": "external_session_error" if errors else None,
+            },
+        )
+        if goal.strip()
+        else None
+    )
 
 
 def _parse_text_transcript(path: Path, text: str) -> ImportedSessionSample | None:
@@ -282,10 +288,12 @@ def _parse_text_transcript(path: Path, text: str) -> ImportedSessionSample | Non
         assistant_summary=_compact_text(assistant, 600),
         step_count=max(
             1,
-            len(re.findall(
-                r"(?im)^(user|assistant|human|ai|error)\s*:",
-                compact,
-            )),
+            len(
+                re.findall(
+                    r"(?im)^(user|assistant|human|ai|error)\s*:",
+                    compact,
+                )
+            ),
         ),
         session_id=path.stem,
         metadata={
@@ -301,7 +309,9 @@ def _looks_like_message(payload: dict[str, Any]) -> bool:
 
 def _first_user_text(messages: list[dict[str, Any]]) -> str:
     for message in messages:
-        role = str(message.get("role") or message.get("type") or message.get("speaker") or "").lower()
+        role = str(
+            message.get("role") or message.get("type") or message.get("speaker") or ""
+        ).lower()
         if role in {"user", "human"} or "user" in role:
             text = _message_text(message)
             if text:
@@ -315,7 +325,9 @@ def _first_user_text(messages: list[dict[str, Any]]) -> str:
 
 def _last_assistant_text(messages: list[dict[str, Any]]) -> str:
     for message in reversed(messages):
-        role = str(message.get("role") or message.get("type") or message.get("speaker") or "").lower()
+        role = str(
+            message.get("role") or message.get("type") or message.get("speaker") or ""
+        ).lower()
         if role in {"assistant", "ai", "model"} or "assistant" in role:
             text = _message_text(message)
             if text:
@@ -382,10 +394,12 @@ def _extract_text_goal(text: str) -> str:
 
 
 def _extract_last_assistant_text(text: str) -> str:
-    matches = list(re.finditer(
-        r"(?ims)^\s*(?:assistant|ai)\s*:\s*(.+?)(?=^\s*(?:user|human|system)\s*:|\Z)",
-        text,
-    ))
+    matches = list(
+        re.finditer(
+            r"(?ims)^\s*(?:assistant|ai)\s*:\s*(.+?)(?=^\s*(?:user|human|system)\s*:|\Z)",
+            text,
+        )
+    )
     if not matches:
         return ""
     return matches[-1].group(1).strip()
@@ -425,7 +439,7 @@ def _source_name(path: Path) -> str:
 
 def _compact_text(text: str, limit: int) -> str:
     compact = re.sub(r"\s+", " ", str(text or "")).strip()
-    return compact[:max(0, int(limit))]
+    return compact[: max(0, int(limit))]
 
 
 __all__ = [

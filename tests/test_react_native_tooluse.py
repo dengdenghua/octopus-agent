@@ -7,6 +7,7 @@ pass ``tools=`` to the model and drive itself off the structured
 flag is off (the default) the loop must behave byte-identically — no tools
 passed.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -104,7 +105,8 @@ def test_step_from_tool_calls_parallel() -> None:
 
 def test_step_from_tool_calls_skips_nameless() -> None:
     step = step_from_tool_calls(
-        [ToolCall(id="a", name="", input={})], iteration=1,
+        [ToolCall(id="a", name="", input={})],
+        iteration=1,
     )
     assert step.actions == []
 
@@ -202,33 +204,42 @@ class _Stack:
 
 def _intent(goal: str = "读取配置文件") -> ParsedIntent:
     return ParsedIntent(
-        raw=goal, intent_type="task", normalized_goal=goal, user_context={},
+        raw=goal,
+        intent_type="task",
+        normalized_goal=goal,
+        user_context={},
     )
 
 
 def test_native_mode_passes_tools_and_consumes_tool_calls() -> None:
     from runtime.core.cerebrum.react_loop import run_react_loop
 
-    router = _Router([
-        ("", [ToolCall(id="t1", name="read_file", input={"path": "config.yaml"})]),
-        ("Final Answer: 已读取配置。", []),
-    ])
+    router = _Router(
+        [
+            ("", [ToolCall(id="t1", name="read_file", input={"path": "config.yaml"})]),
+            ("Final Answer: 已读取配置。", []),
+        ]
+    )
     fake_spec = ToolSpec(name="read_file", description="read a file")
-    with patch(
-        "runtime.core.cerebrum.react_native.native_tool_use_active",
-        return_value=True,
-    ), patch(
-        "runtime.core.cerebrum.react_native.build_loop_tool_specs",
-        return_value=[fake_spec],
+    with (
+        patch(
+            "runtime.core.cerebrum.react_native.native_tool_use_active",
+            return_value=True,
+        ),
+        patch(
+            "runtime.core.cerebrum.react_native.build_loop_tool_specs",
+            return_value=[fake_spec],
+        ),
     ):
         result = run_react_loop(
-            _Stack(router), _intent(), agent=None, max_iterations=5,
+            _Stack(router),
+            _intent(),
+            agent=None,
+            max_iterations=5,
         )
 
     # Native turn passed a non-empty tools list to the model.
-    assert any(getattr(r, "tools", None) for r in router.requests), (
-        "native mode must pass tools="
-    )
+    assert any(getattr(r, "tools", None) for r in router.requests), "native mode must pass tools="
     # The loop consumed the tool_calls (turn 1) and continued to the final
     # answer (turn 2) — i.e. it drove off the structured calls, not text.
     assert router.calls >= 2
@@ -236,8 +247,7 @@ def test_native_mode_passes_tools_and_consumes_tool_calls() -> None:
     # synthesised action, not an (API-invalid) empty assistant message.
     turn2_messages = router.requests[1].messages
     assert any(
-        getattr(m, "role", "") == "assistant"
-        and "read_file" in str(getattr(m, "content", ""))
+        getattr(m, "role", "") == "assistant" and "read_file" in str(getattr(m, "content", ""))
         for m in turn2_messages
     ), "turn-1 tool call should appear in the assistant history"
     assert result is not None

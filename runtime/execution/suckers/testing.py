@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import time
@@ -21,19 +20,17 @@ TIER_THRESHOLDS: dict[SkillTestTier, float] = {
 
 
 class SkillExpect(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     output_equals: Any | None = None
-    output_contains: list[str] | None = None        # Implementation note.
-    schema_keys: list[str] | None = None             # Implementation note.
-    raises: str | None = None                         # Implementation note.
+    output_contains: list[str] | None = None  # Implementation note.
+    schema_keys: list[str] | None = None  # Implementation note.
+    raises: str | None = None  # Implementation note.
     no_exception: bool = False
     max_latency_ms: float | None = None
 
 
 class SkillTestCase(BaseModel):
-
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     name: str = Field(..., min_length=1)
@@ -44,7 +41,6 @@ class SkillTestCase(BaseModel):
 
 
 class SkillTestResult(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     case_name: str
@@ -55,7 +51,6 @@ class SkillTestResult(BaseModel):
 
 
 class SkillTestReport(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     skill_name: str
@@ -78,7 +73,6 @@ class SkillTestReport(BaseModel):
 
 
 class SkillTestsFailed(RuntimeError):
-
     def __init__(self, skill_name: str, report: SkillTestReport) -> None:
         self.report = report
         fails = "; ".join(f"{r.case_name}:{r.reason}" for r in report.failed)
@@ -94,7 +88,6 @@ class SkillTestsFailed(RuntimeError):
 
 
 class SkillTester:
-
     def run(self, skill: Any) -> SkillTestReport:
         results: list[SkillTestResult] = []
         for case in skill.tests:
@@ -107,9 +100,7 @@ class SkillTester:
         tier_rates: dict[SkillTestTier, float] = {
             tier: sum(bs) / len(bs) for tier, bs in per_tier.items()
         }
-        tier_counts: dict[SkillTestTier, int] = {
-            tier: len(bs) for tier, bs in per_tier.items()
-        }
+        tier_counts: dict[SkillTestTier, int] = {tier: len(bs) for tier, bs in per_tier.items()}
 
         overall = True
         for tier, rate in tier_rates.items():
@@ -130,7 +121,6 @@ class SkillTester:
         if not report.overall_passed:
             raise SkillTestsFailed(skill.name, report)
         return report
-
 
     def _run_case(
         self,

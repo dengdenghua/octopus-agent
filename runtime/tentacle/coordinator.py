@@ -136,7 +136,10 @@ class TentacleCoordinator:
                 app = FastAPI(title="Octopus Tentacle Dashboard")
                 app.include_router(create_tentacle_router(self))
                 config = uvicorn.Config(
-                    app, host="0.0.0.0", port=self._dashboard_port, log_level="warning",
+                    app,
+                    host="0.0.0.0",
+                    port=self._dashboard_port,
+                    log_level="warning",
                 )
                 self._dashboard_server = uvicorn.Server(config)
                 asyncio.create_task(self._dashboard_server.serve())
@@ -164,9 +167,7 @@ class TentacleCoordinator:
 
     # ── 回调：设备连接 ──────────────────────────────────────
 
-    async def _on_device_hello(
-        self, hello: DeviceHello, ws: WebSocketConnection
-    ) -> None:
+    async def _on_device_hello(self, hello: DeviceHello, ws: WebSocketConnection) -> None:
         """设备首次连接 —— 创建 MobileDevice 并注册到 Pool."""
         # 检查是否已存在
         existing = self.pool.get(hello.tentacle_id)
@@ -184,8 +185,12 @@ class TentacleCoordinator:
 
         # 注册到 Pool
         await self.pool.register(device)
-        logger.info("device registered via hello id=%s model=%s caps=%d",
-                    hello.tentacle_id, hello.model, len(hello.capabilities))
+        logger.info(
+            "device registered via hello id=%s model=%s caps=%d",
+            hello.tentacle_id,
+            hello.model,
+            len(hello.capabilities),
+        )
 
     async def _on_device_disconnect(self, tentacle_id: str) -> None:
         """设备断开 —— 从 Pool 注销，清理屏幕流订阅."""
@@ -209,8 +214,9 @@ class TentacleCoordinator:
             device.meta["battery"] = hb.battery
         if hb.last_screen_tree_hash:
             device.meta["last_screen_tree_hash"] = hb.last_screen_tree_hash
-        logger.debug("heartbeat from %s app=%s battery=%s",
-                     hb.tentacle_id, hb.current_app, hb.battery)
+        logger.debug(
+            "heartbeat from %s app=%s battery=%s", hb.tentacle_id, hb.current_app, hb.battery
+        )
 
     async def _on_tool_result(self, result: ToolResult) -> None:
         """工具结果 —— 已由 ws_server 唤醒 future，此处只打日志."""
@@ -239,9 +245,7 @@ class TentacleCoordinator:
             return {"success": False, "error": "Remote input not enabled"}
         return await self.remote_input_handler.handle_input(event)
 
-    async def _on_task_execute(
-        self, request: TaskExecuteRequest, ws: WebSocketConnection
-    ) -> None:
+    async def _on_task_execute(self, request: TaskExecuteRequest, ws: WebSocketConnection) -> None:
         """处理 task/execute —— 手机请求母体决策任务.
 
         流程：
@@ -251,23 +255,31 @@ class TentacleCoordinator:
         4. 收集结果
         5. 返回 task/result 给手机
         """
-        logger.info("task execute request id=%s task='%s' device=%s",
-                    request.task_id, request.task, request.tentacle_id)
+        logger.info(
+            "task execute request id=%s task='%s' device=%s",
+            request.task_id,
+            request.task,
+            request.tentacle_id,
+        )
 
         device = self.pool.get(request.tentacle_id)
         if device is None:
             # 设备不存在，直接通过原始 ws 回复（send_task_result 找不到连接）
-            await ws.send(json.dumps({
-                "jsonrpc": "2.0",
-                "method": "task/result",
-                "params": {
-                    "task_id": request.task_id,
-                    "success": False,
-                    "response": f"Device {request.tentacle_id} not found",
-                    "steps": 0,
-                },
-                "id": request.task_id,
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "method": "task/result",
+                        "params": {
+                            "task_id": request.task_id,
+                            "success": False,
+                            "response": f"Device {request.tentacle_id} not found",
+                            "steps": 0,
+                        },
+                        "id": request.task_id,
+                    }
+                )
+            )
             return
 
         if self._decision_engine is None:
@@ -306,8 +318,12 @@ class TentacleCoordinator:
                 response=response,
                 steps=len(tool_calls),
             )
-            logger.info("task result sent id=%s success=%s steps=%d",
-                        request.task_id, success, len(tool_calls))
+            logger.info(
+                "task result sent id=%s success=%s steps=%d",
+                request.task_id,
+                success,
+                len(tool_calls),
+            )
 
         except Exception as e:
             logger.exception("task execute failed id=%s", request.task_id)
@@ -481,11 +497,11 @@ class TentacleCoordinator:
 
             # 4. 转为 ToolCall 列表
             from .mobile.vlm.react_with_vision import VisionReAct
+
             return VisionReAct.suggested_action_to_tool_calls(
                 analysis.suggested_actions,
                 tentacle_id=device.tentacle_id,
             )
-
 
         return cls(
             host=host,

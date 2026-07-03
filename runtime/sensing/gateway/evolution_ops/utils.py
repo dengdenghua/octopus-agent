@@ -68,8 +68,7 @@ def _trajectory_rows(journal: Any) -> list[tuple[Any, Any]]:
         events = list(journal.read_by_type("trajectory"))
     except (AttributeError, TypeError, OSError):
         events = [
-            ev for ev in _journal_events(journal)
-            if getattr(ev, "event_type", "") == "trajectory"
+            ev for ev in _journal_events(journal) if getattr(ev, "event_type", "") == "trajectory"
         ]
     for event in events:
         traj = getattr(event, "trajectory", None)
@@ -96,13 +95,15 @@ def _skill_step_rows(journal: Any) -> list[dict[str, Any]]:
             started = _as_dt(getattr(step, "ts", None)) or fallback_ts
             finished = _as_dt(getattr(result, "ts", None)) or fallback_ts
             duration_ms = max(0.0, (finished - started).total_seconds() * 1000)
-            rows.append({
-                "task_id": task_id,
-                "skill_name": skill_name,
-                "success": bool(getattr(step, "success", False)),
-                "ts": finished,
-                "duration_ms": duration_ms,
-            })
+            rows.append(
+                {
+                    "task_id": task_id,
+                    "skill_name": skill_name,
+                    "success": bool(getattr(step, "success", False)),
+                    "ts": finished,
+                    "duration_ms": duration_ms,
+                }
+            )
     return rows
 
 
@@ -167,7 +168,8 @@ def _token_usage_rows(journal: Any) -> list[dict[str, Any]]:
         events = list(journal.read_by_type("token_usage"))
     except (AttributeError, TypeError, OSError):
         events = [
-            event for event in _journal_events(journal)
+            event
+            for event in _journal_events(journal)
             if getattr(event, "event_type", "") == "token_usage"
         ]
     for event in events:
@@ -175,14 +177,16 @@ def _token_usage_rows(journal: Any) -> list[dict[str, Any]]:
         task_id = str(getattr(event, "task_id", "") or "").strip()
         if not model or not task_id:
             continue
-        rows.append({
-            "task_id": task_id,
-            "model": model,
-            "input_tokens": int(getattr(event, "input_tokens", 0) or 0),
-            "output_tokens": int(getattr(event, "output_tokens", 0) or 0),
-            "cost_usd": float(getattr(event, "cost_usd", 0.0) or 0.0),
-            "ts": _as_dt(getattr(event, "ts", None)) or _utcnow(),
-        })
+        rows.append(
+            {
+                "task_id": task_id,
+                "model": model,
+                "input_tokens": int(getattr(event, "input_tokens", 0) or 0),
+                "output_tokens": int(getattr(event, "output_tokens", 0) or 0),
+                "cost_usd": float(getattr(event, "cost_usd", 0.0) or 0.0),
+                "ts": _as_dt(getattr(event, "ts", None)) or _utcnow(),
+            }
+        )
     return rows
 
 
@@ -318,21 +322,19 @@ def _skill_performance_rows(journal: Any, registry: Any) -> list[dict[str, Any]]
         usage = len(rows)
         successes = sum(1 for r in rows if r["success"])
         success_rate = successes / usage if usage else 0.0
-        avg_duration = (
-            sum(float(r["duration_ms"]) for r in rows) / usage
-            if usage
-            else 0.0
-        )
+        avg_duration = sum(float(r["duration_ms"]) for r in rows) / usage if usage else 0.0
         trend = _skill_trend(rows, success_rate)
         last_used = _iso(rows[-1]["ts"]) if rows else ""
-        out.append({
-            "name": name,
-            "usage_count": usage,
-            "success_rate": success_rate,
-            "avg_duration_ms": round(avg_duration, 2),
-            "trend": trend,
-            "last_used": last_used,
-        })
+        out.append(
+            {
+                "name": name,
+                "usage_count": usage,
+                "success_rate": success_rate,
+                "avg_duration_ms": round(avg_duration, 2),
+                "trend": trend,
+                "last_used": last_used,
+            }
+        )
 
     out.sort(key=lambda r: (-int(r["usage_count"]), str(r["name"])))
     return out
@@ -357,19 +359,14 @@ def _skill_trend(rows: list[dict[str, Any]], success_rate: float) -> str:
 
 
 def _section_line_count(section: str) -> int:
-    return sum(
-        1 for line in (section or "").splitlines()
-        if line.lstrip().startswith("- [")
-    )
+    return sum(1 for line in (section or "").splitlines() if line.lstrip().startswith("- ["))
 
 
 def _learned_section_counts(planner: Any) -> dict[str, int]:
     if planner is None:
         return {"rules": 0, "memories": 0}
     return {
-        "rules": _section_line_count(
-            str(getattr(planner, "learned_rules_section", "") or "")
-        ),
+        "rules": _section_line_count(str(getattr(planner, "learned_rules_section", "") or "")),
         "memories": _section_line_count(
             str(getattr(planner, "learned_memories_section", "") or "")
         ),
@@ -412,18 +409,9 @@ def _intelligence_store_snapshot() -> dict[str, Any]:
     except (json.JSONDecodeError, OSError):
         raw = {}
 
-    subscriptions = [
-        item for item in raw.get("subscriptions", [])
-        if isinstance(item, dict)
-    ]
-    reports = [
-        item for item in raw.get("reports", [])
-        if isinstance(item, dict)
-    ]
-    enabled = [
-        item for item in subscriptions
-        if item.get("enabled") is not False
-    ]
+    subscriptions = [item for item in raw.get("subscriptions", []) if isinstance(item, dict)]
+    reports = [item for item in raw.get("reports", []) if isinstance(item, dict)]
+    enabled = [item for item in subscriptions if item.get("enabled") is not False]
 
     last_report_at = ""
     for report in reports:

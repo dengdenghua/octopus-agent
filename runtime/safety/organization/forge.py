@@ -107,7 +107,8 @@ def save_registry(
 
 
 def _apply_swap_agent(
-    base: TeamTopology, detail: dict[str, Any],
+    base: TeamTopology,
+    detail: dict[str, Any],
 ) -> TeamTopology:
     from .topology import Role
 
@@ -142,7 +143,8 @@ def _apply_swap_agent(
 
 
 def _apply_switch_protocol(
-    base: TeamTopology, detail: dict[str, Any],
+    base: TeamTopology,
+    detail: dict[str, Any],
 ) -> TeamTopology:
     target = CoordinationProtocol(detail["to"])
     return TeamTopology(
@@ -158,7 +160,8 @@ def _apply_switch_protocol(
 
 
 def _apply_adjust_threshold(
-    base: TeamTopology, detail: dict[str, Any],
+    base: TeamTopology,
+    detail: dict[str, Any],
 ) -> TeamTopology:
     new_threshold = float(detail["new_threshold"])
     return TeamTopology(
@@ -169,7 +172,11 @@ def _apply_adjust_threshold(
         task_bucket=base.task_bucket,
         quality_threshold=new_threshold,
         max_iterations=base.max_iterations,
-        metadata={**base.metadata, "derived_from": base.fingerprint, "mutation": "adjust_threshold"},
+        metadata={
+            **base.metadata,
+            "derived_from": base.fingerprint,
+            "mutation": "adjust_threshold",
+        },
     )
 
 
@@ -225,10 +232,7 @@ def _shadow_validate(
             for item in retired
             if isinstance(item, dict)
         ]
-        return False, (
-            "retired agents in operator policy: "
-            + ", ".join(blocked)
-        )
+        return False, ("retired agents in operator policy: " + ", ".join(blocked))
 
     return True, ""
 
@@ -237,7 +241,6 @@ def _shadow_validate(
 
 
 class TopologyForge:
-
     def __init__(
         self,
         *,
@@ -247,9 +250,7 @@ class TopologyForge:
     ) -> None:
         self._registry_path = Path(registry_path) if registry_path else None
         self._agent_registry = agent_registry
-        self._subagent_policy_path = (
-            Path(subagent_policy_path) if subagent_policy_path else None
-        )
+        self._subagent_policy_path = Path(subagent_policy_path) if subagent_policy_path else None
 
     def promote(
         self,

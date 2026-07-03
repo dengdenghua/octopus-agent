@@ -23,6 +23,7 @@ degrade the permission model. A single unit test on the resolver
 wouldn't catch a regression where the executor stops looking at the
 session, or vice-versa.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -100,9 +101,7 @@ class TestChatTier:
 
         assert scope.mode == "chat"
         assert len(scope.roots) == 1
-        assert scope.primary == (
-            data_dir / "workspaces" / "t-test" / "output" / "final"
-        )
+        assert scope.primary == (data_dir / "workspaces" / "t-test" / "output" / "final")
         # File inside own workspace → allowed
         own = scope.primary / "draft.py"
         assert scope.allows(own)
@@ -152,9 +151,7 @@ class TestTeamTier:
         assert scope.mode == "team"
         assert len(scope.roots) == 2
         # Primary is still the agent's own workspace
-        assert scope.roots[0] == (
-            data_dir / "workspaces" / "t-test" / "output" / "final"
-        )
+        assert scope.roots[0] == (data_dir / "workspaces" / "t-test" / "output" / "final")
         # Team workspace joins
         assert scope.roots[1] == data_dir / "teams" / "team-alpha" / "workspace"
 
@@ -182,7 +179,10 @@ class TestTeamTier:
 
 class TestCodeTier:
     def test_code_adds_extra_workspaces(
-        self, mk_session, data_dir: Path, tmp_path: Path,
+        self,
+        mk_session,
+        data_dir: Path,
+        tmp_path: Path,
     ):
         from runtime.platform.process.scope import resolve_write_scope
 
@@ -200,9 +200,7 @@ class TestCodeTier:
         assert scope.mode == "code"
         assert scope.allows(extra / "src" / "main.py")
         # The isolated artifact output folder remains the default root.
-        assert scope.roots[0] == (
-            data_dir / "workspaces" / "t-test" / "output" / "final"
-        )
+        assert scope.roots[0] == (data_dir / "workspaces" / "t-test" / "output" / "final")
 
     def test_code_drops_relative_extras(self, mk_session):
         """Non-absolute entries are dropped silently — not errored —
@@ -254,7 +252,9 @@ class TestCodeModeAvailableToAll:
         assert scope.allows(extra / "file.py")
 
     def test_legacy_agent_without_caps_gets_code_scope(
-        self, mk_session, tmp_path: Path,
+        self,
+        mk_session,
+        tmp_path: Path,
     ):
         """Legacy Agent objects with no ``capabilities`` attribute at all
         also reach code scope · the resolver only requires a session, not
@@ -347,13 +347,17 @@ class TestExecutorEnforcement:
                 "content": "direct",
                 "sandbox_dir": str(tmp_path),
             },
-            tid, budget,
+            tid,
+            budget,
         )
         assert step.success
         assert (tmp_path / "out.txt").read_text(encoding="utf-8") == "direct"
 
     def test_session_bound_rejects_out_of_scope(
-        self, tmp_path: Path, data_dir: Path, mk_session,
+        self,
+        tmp_path: Path,
+        data_dir: Path,
+        mk_session,
     ):
         """With a Session bound, an LLM-supplied sandbox_dir pointing
         outside the scope roots must fail the step — the failure is
@@ -376,7 +380,8 @@ class TestExecutorEnforcement:
                     "content": "should-not-write",
                     "sandbox_dir": str(escape_target),
                 },
-                tid, budget,
+                tid,
+                budget,
             )
 
         # Step must have failed — the executor caught PermissionError
@@ -385,7 +390,9 @@ class TestExecutorEnforcement:
         assert not (escape_target / "pwned.txt").exists()
 
     def test_session_bound_injects_default_sandbox(
-        self, data_dir: Path, mk_session,
+        self,
+        data_dir: Path,
+        mk_session,
     ):
         """When the LLM omits sandbox_dir entirely, the executor fills
         in the scope's primary root. The skill must write into the
@@ -404,18 +411,18 @@ class TestExecutorEnforcement:
                     "content": "auto-sandbox",
                     # sandbox_dir deliberately omitted
                 },
-                tid, budget,
+                tid,
+                budget,
             )
 
         assert step.success
-        expected = (
-            data_dir / "workspaces" / "t-inject" / "output" / "final"
-            / "hello.txt"
-        )
+        expected = data_dir / "workspaces" / "t-inject" / "output" / "final" / "hello.txt"
         assert expected.read_text(encoding="utf-8") == "auto-sandbox"
 
     def test_session_bound_allows_in_scope_path(
-        self, data_dir: Path, mk_session,
+        self,
+        data_dir: Path,
+        mk_session,
     ):
         """The sibling of the rejection test: a sandbox_dir that DOES
         land under an allowed root must succeed. Otherwise we'd be
@@ -426,9 +433,7 @@ class TestExecutorEnforcement:
         tid, budget = self._budget()
 
         sess = mk_session(mode="chat", thread_id="t-allow")
-        allowed = (
-            data_dir / "workspaces" / "t-allow" / "output" / "final"
-        )
+        allowed = data_dir / "workspaces" / "t-allow" / "output" / "final"
         allowed.mkdir(parents=True, exist_ok=True)
 
         with session_scope(sess):
@@ -439,14 +444,17 @@ class TestExecutorEnforcement:
                     "content": "within-scope",
                     "sandbox_dir": str(allowed),
                 },
-                tid, budget,
+                tid,
+                budget,
             )
 
         assert step.success
         assert (allowed / "ok.txt").read_text(encoding="utf-8") == "within-scope"
 
     def test_code_sandbox_defaults_writes_to_octopus_work(
-        self, tmp_path: Path, mk_session,
+        self,
+        tmp_path: Path,
+        mk_session,
     ):
         from runtime.platform.process.session import session_scope
 
@@ -479,7 +487,9 @@ class TestExecutorEnforcement:
         assert not (wp / "generated.py").exists()
 
     def test_code_sandbox_rejects_parent_workspace_write_root(
-        self, tmp_path: Path, mk_session,
+        self,
+        tmp_path: Path,
+        mk_session,
     ):
         from runtime.platform.process.session import session_scope
 
@@ -518,7 +528,9 @@ class TestExecutorEnforcement:
 
 class TestSandboxMode:
     def test_sandbox_mode_creates_octopus_work_primary(
-        self, mk_session, tmp_path: Path,
+        self,
+        mk_session,
+        tmp_path: Path,
     ):
         """sandbox_mode='sandbox' should set primary to
         <workspace_path>/.octopus-work/<thread_id>/ while keeping
@@ -544,7 +556,9 @@ class TestSandboxMode:
         assert scope.allows(wp / "src" / "main.py")
 
     def test_sandbox_mode_full_uses_workspace_directly(
-        self, mk_session, tmp_path: Path,
+        self,
+        mk_session,
+        tmp_path: Path,
     ):
         """sandbox_mode='full' (default) should use workspace_path as primary."""
         from runtime.platform.process.scope import resolve_write_scope
@@ -564,7 +578,9 @@ class TestSandboxMode:
         assert scope.primary == wp
 
     def test_sandbox_mode_absent_defaults_to_full(
-        self, mk_session, tmp_path: Path,
+        self,
+        mk_session,
+        tmp_path: Path,
     ):
         from runtime.platform.process.scope import resolve_write_scope
 
@@ -580,7 +596,9 @@ class TestSandboxMode:
         assert scope.primary == wp
 
     def test_sandbox_mode_invalid_value_treated_as_full(
-        self, mk_session, tmp_path: Path,
+        self,
+        mk_session,
+        tmp_path: Path,
     ):
         from runtime.platform.process.scope import resolve_write_scope
 
@@ -599,7 +617,9 @@ class TestSandboxMode:
 
 class TestExecutionScope:
     def test_sandbox_execution_scope_splits_read_and_write_roots(
-        self, mk_session, tmp_path: Path,
+        self,
+        mk_session,
+        tmp_path: Path,
     ):
         from runtime.platform.process.scope import resolve_execution_scope
 
@@ -626,7 +646,9 @@ class TestExecutionScope:
         assert scope.allows_read(wp / "src" / "main.py")
 
     def test_full_execution_scope_allows_workspace_writes(
-        self, mk_session, tmp_path: Path,
+        self,
+        mk_session,
+        tmp_path: Path,
     ):
         from runtime.platform.process.scope import resolve_execution_scope
 
@@ -659,7 +681,9 @@ class TestExecutionScope:
         assert scope.browser_policy == "deny"
 
     def test_bypass_permission_scope_maps_to_local_allow_policies(
-        self, mk_session, tmp_path: Path,
+        self,
+        mk_session,
+        tmp_path: Path,
     ):
         from runtime.platform.process.scope import resolve_execution_scope
 
@@ -688,7 +712,10 @@ class TestExecutionScope:
 
 class TestSymlinkEscape:
     def test_symlink_pointing_outside_is_rejected(
-        self, mk_session, data_dir: Path, tmp_path: Path,
+        self,
+        mk_session,
+        data_dir: Path,
+        tmp_path: Path,
     ):
         """A symlink inside the workspace that points to an external
         directory must be rejected by scope.allows()."""

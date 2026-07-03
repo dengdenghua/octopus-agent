@@ -1,4 +1,5 @@
 """Tests for the preflight CLI."""
+
 from __future__ import annotations
 
 import json
@@ -11,7 +12,8 @@ from runtime.safety.evolution import preflight
 
 @pytest.fixture(autouse=True)
 def _isolated_cwd(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Path:
     """Run inside a tmp dir so yaml lookup hits only what we put there."""
     monkeypatch.chdir(tmp_path)
@@ -38,7 +40,8 @@ class TestProbes:
         assert env["OCTOPUS_CHECKPOINT_EVERY_N"] is None
 
     def test_probe_env_picks_up_set(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("OCTOPUS_CHECKPOINT_EVERY_N", "5")
         env = preflight._probe_env()
@@ -52,9 +55,7 @@ class TestProbes:
 
     def test_probe_yaml_reads_settings(self, tmp_path: Path) -> None:
         (tmp_path / "config.local.yaml").write_text(
-            "safety:\n"
-            "  disabled_guards:\n    - magic-number guard\n"
-            "  enable_trust_signal: true\n",
+            "safety:\n  disabled_guards:\n    - magic-number guard\n  enable_trust_signal: true\n",
             encoding="utf-8",
         )
         out = preflight._probe_yaml()
@@ -76,7 +77,8 @@ class TestProbes:
         d = tmp_path / "data"
         d.mkdir()
         (d / "guard_hits.jsonl").write_text(
-            '{"x": 1}\n', encoding="utf-8",
+            '{"x": 1}\n',
+            encoding="utf-8",
         )
         out = preflight._probe_journal()
         assert out["exists"] is True
@@ -174,8 +176,7 @@ class TestFeatureClassifier:
 class TestWarnings:
     def test_mirror_without_redis_warns(self) -> None:
         warnings = preflight._build_warnings(
-            env={"OCTOPUS_CHECKPOINT_MIRROR_URL": "redis://x",
-                 "OCTOPUS_CHECKPOINT_EVERY_N": None},
+            env={"OCTOPUS_CHECKPOINT_MIRROR_URL": "redis://x", "OCTOPUS_CHECKPOINT_EVERY_N": None},
             yaml_settings={},
             deps={"yaml": True, "redis": False},
             journal={"exists": True, "path": "data/guard_hits.jsonl"},
@@ -184,8 +185,7 @@ class TestWarnings:
 
     def test_no_pyyaml_warns(self) -> None:
         warnings = preflight._build_warnings(
-            env={"OCTOPUS_CHECKPOINT_EVERY_N": None,
-                 "OCTOPUS_CHECKPOINT_MIRROR_URL": None},
+            env={"OCTOPUS_CHECKPOINT_EVERY_N": None, "OCTOPUS_CHECKPOINT_MIRROR_URL": None},
             yaml_settings={},
             deps={"yaml": False, "redis": False},
             journal={"exists": True, "path": "data/guard_hits.jsonl"},
@@ -194,8 +194,7 @@ class TestWarnings:
 
     def test_journal_missing_warns(self) -> None:
         warnings = preflight._build_warnings(
-            env={"OCTOPUS_CHECKPOINT_EVERY_N": None,
-                 "OCTOPUS_CHECKPOINT_MIRROR_URL": None},
+            env={"OCTOPUS_CHECKPOINT_EVERY_N": None, "OCTOPUS_CHECKPOINT_MIRROR_URL": None},
             yaml_settings={},
             deps={"yaml": True, "redis": False},
             journal={"exists": False, "path": "data/guard_hits.jsonl"},
@@ -204,8 +203,7 @@ class TestWarnings:
 
     def test_garbage_checkpoint_n_warns(self) -> None:
         warnings = preflight._build_warnings(
-            env={"OCTOPUS_CHECKPOINT_EVERY_N": "five",
-                 "OCTOPUS_CHECKPOINT_MIRROR_URL": None},
+            env={"OCTOPUS_CHECKPOINT_EVERY_N": "five", "OCTOPUS_CHECKPOINT_MIRROR_URL": None},
             yaml_settings={},
             deps={"yaml": True, "redis": False},
             journal={"exists": True, "path": "data/guard_hits.jsonl"},
@@ -236,7 +234,8 @@ class TestRender:
 
 class TestMain:
     def test_main_text_runs_clean(
-        self, capsys: pytest.CaptureFixture[str],
+        self,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         rc = preflight.main([])
         assert rc == 0
@@ -244,7 +243,8 @@ class TestMain:
         assert "preflight" in captured.lower()
 
     def test_main_json_emits_json(
-        self, capsys: pytest.CaptureFixture[str],
+        self,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         rc = preflight.main(["--json"])
         assert rc == 0
@@ -254,7 +254,8 @@ class TestMain:
         assert "env" in parsed
 
     def test_main_top_level_exception_returns_1(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         def boom():

@@ -93,7 +93,10 @@ def native_tool_use_active(router: Any, model: str) -> bool:
 
 
 def build_loop_tool_specs(
-    executor: Any, *, agent: Any = None, goal: str = "",
+    executor: Any,
+    *,
+    agent: Any = None,
+    goal: str = "",
 ) -> list[Any]:
     """Build the native ``ToolSpec`` catalog from the loop's skill registry.
 
@@ -114,7 +117,11 @@ def build_loop_tool_specs(
 
 
 def step_from_tool_calls(
-    tool_calls: list[Any], *, text: str = "", thinking: str = "", iteration: int = 0,
+    tool_calls: list[Any],
+    *,
+    text: str = "",
+    thinking: str = "",
+    iteration: int = 0,
 ) -> ReActStep:
     """Synthesise a ``ReActStep`` from native ``tool_calls``.
 

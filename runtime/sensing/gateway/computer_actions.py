@@ -6,6 +6,7 @@ a pure function (build a dict from arguments, no shared-state access)
 except ``_queue_preview``, which stages a preview token in
 ``state.pending`` for the confirm-then-execute flow.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -108,9 +109,7 @@ def _execute(action: dict[str, Any]) -> dict[str, Any]:
 
 def _ensure_uia_replay_trace(action: dict[str, Any]) -> dict[str, Any]:
     assertion = (
-        action.get("replay_assertion")
-        if isinstance(action.get("replay_assertion"), dict)
-        else {}
+        action.get("replay_assertion") if isinstance(action.get("replay_assertion"), dict) else {}
     )
     if not assertion or assertion.get("trace_id") and assertion.get("source_trace"):
         return action
@@ -209,11 +208,7 @@ def _stable_action_payload(action: dict[str, Any]) -> dict[str, Any]:
         "matched_control",
         "replay_assertion",
     }
-    return {
-        key: _stable_value(action.get(key))
-        for key in sorted(allowed)
-        if key in action
-    }
+    return {key: _stable_value(action.get(key)) for key in sorted(allowed) if key in action}
 
 
 def _stable_result_payload(result: dict[str, Any]) -> dict[str, Any]:
@@ -257,12 +252,7 @@ def _goal_uia_queries(goal: str) -> list[str]:
     for pattern in patterns:
         for match in re.finditer(pattern, text, re.IGNORECASE):
             candidates.append(match.group(1))
-    if (
-        not candidates
-        and len(text) <= 40
-        and "http://" not in text
-        and "https://" not in text
-    ):
+    if not candidates and len(text) <= 40 and "http://" not in text and "https://" not in text:
         candidates.append(text)
 
     cleaned: list[str] = []
@@ -381,19 +371,23 @@ def _plan_actions(goal: str) -> list[dict[str, Any]]:
             if idx >= 0:
                 url = url[idx:].split()[0]
                 break
-        actions.extend([
-            {"action": "key", "keys": ["ctrl", "l"]},
-            {"action": "type", "text": url, "interval": 0.01},
-            {"action": "key", "keys": ["enter"]},
-        ])
+        actions.extend(
+            [
+                {"action": "key", "keys": ["ctrl", "l"]},
+                {"action": "type", "text": url, "interval": 0.01},
+                {"action": "key", "keys": ["enter"]},
+            ]
+        )
     elif uia_actions := _uia_actions_for_goal(goal):
         actions.extend(uia_actions)
     elif any(word in text for word in ("browser", "chrome", "edge", "浏览器", "网页")):
-        actions.extend([
-            {"action": "key", "keys": ["win"]},
-            {"action": "type", "text": "edge", "interval": 0.01},
-            {"action": "key", "keys": ["enter"]},
-        ])
+        actions.extend(
+            [
+                {"action": "key", "keys": ["win"]},
+                {"action": "type", "text": "edge", "interval": 0.01},
+                {"action": "key", "keys": ["enter"]},
+            ]
+        )
     elif any(word in text for word in ("刷新", "reload", "refresh")):
         actions.append({"action": "key", "keys": ["ctrl", "r"]})
     elif any(word in text for word in ("关闭", "close")):

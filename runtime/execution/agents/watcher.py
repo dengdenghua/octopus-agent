@@ -17,6 +17,7 @@ soft-dep on ``watchdog``. If it's not installed, ``start_agent_watcher``
 returns None and the caller keeps running without auto-reload — the
 ``POST /api/agents/<id>/reload`` endpoint still works as a manual fallback.
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,8 +51,8 @@ class _AgentReloadHandler(FileSystemEventHandler):
     def __init__(
         self,
         agents_root: Path,
-        reload_one: Any,        # Callable[[str], None]
-        reload_all: Any,        # Callable[[], None]
+        reload_one: Any,  # Callable[[str], None]
+        reload_all: Any,  # Callable[[], None]
         debounce_ms: int = 500,
     ) -> None:
         super().__init__()
@@ -107,7 +108,9 @@ class _AgentReloadHandler(FileSystemEventHandler):
         except Exception as exc:  # noqa: BLE001
             _log.warning(
                 "[agent-watcher] reload %s failed: %s: %s",
-                key, type(exc).__name__, exc,
+                key,
+                type(exc).__name__,
+                exc,
             )
 
 

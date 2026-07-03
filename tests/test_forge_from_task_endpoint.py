@@ -47,9 +47,7 @@ def _client(suckers: list[str]):
                 step_id=i,
                 node_id=f"n{i}",
                 action=call,
-                result=ExecutionResult(
-                    call_id=call.call_id, status="success", output={"ok": True}
-                ),
+                result=ExecutionResult(call_id=call.call_id, status="success", output={"ok": True}),
             )
         )
     task_id = TaskId(uuid4())
@@ -97,7 +95,5 @@ def test_forge_from_task_missing_id():
 
 def test_forge_from_task_unknown_id():
     client, _registry, _task_id = _client(["list_cwd", "count_words"])
-    resp = client.post(
-        "/api/evolution/skills/forge-from-task", json={"task_id": str(uuid4())}
-    )
+    resp = client.post("/api/evolution/skills/forge-from-task", json={"task_id": str(uuid4())})
     assert resp.json()["status"] == "no_successful_trajectory"

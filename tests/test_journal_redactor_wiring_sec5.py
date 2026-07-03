@@ -8,6 +8,7 @@ hit disk. Previously the redactor was implemented and tested but never wired
 into any production construction site, so the audit log persisted secrets in the
 clear.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

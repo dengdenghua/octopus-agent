@@ -29,7 +29,8 @@ def test_get_returns_roles_and_tiers(client: TestClient) -> None:
 
 
 def test_put_persists_and_get_reflects(
-    client: TestClient, tmp_path: Path,
+    client: TestClient,
+    tmp_path: Path,
 ) -> None:
     r = client.put(
         "/api/team/role-models",
@@ -43,10 +44,7 @@ def test_put_persists_and_get_reflects(
     }
     assert (tmp_path / "data" / "team_role_models.json").exists()
 
-    rows = {
-        row["role"]: row["tier"]
-        for row in client.get("/api/team/role-models").json()["roles"]
-    }
+    rows = {row["role"]: row["tier"] for row in client.get("/api/team/role-models").json()["roles"]}
     assert rows["planner"] == "cheap"
     assert rows["researcher"] == "primary"
 
@@ -66,7 +64,10 @@ def test_requires_auth_when_enabled() -> None:
     client = TestClient(app)
 
     assert client.get("/api/team/role-models").status_code == 401
-    assert client.get(
-        "/api/team/role-models",
-        headers={"Authorization": "Bearer sk-alice"},
-    ).status_code == 200
+    assert (
+        client.get(
+            "/api/team/role-models",
+            headers={"Authorization": "Bearer sk-alice"},
+        ).status_code
+        == 200
+    )

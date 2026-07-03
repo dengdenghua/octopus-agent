@@ -1,4 +1,3 @@
-
 from .installer import (
     ArchiveSafetyError,
     install_from_archive,

@@ -83,9 +83,8 @@ def _turn_has_observable_output(turn: Turn) -> bool:
                 return True
             continue
         if item_type == ItemType.REASONING:
-            if (
-                str(getattr(item, "content", "") or "").strip()
-                or bool(getattr(item, "summary", None))
+            if str(getattr(item, "content", "") or "").strip() or bool(
+                getattr(item, "summary", None)
             ):
                 return True
             continue
@@ -134,17 +133,12 @@ def _inject_cowork_turn_plan(
     context.setdefault("cowork_responders", plan.get("responders") or [])
     context.setdefault("cowork_is_multi", bool(plan.get("is_multi")))
     responders = [
-        str(agent_id)
-        for agent_id in (plan.get("responders") or [])
-        if str(agent_id or "").strip()
+        str(agent_id) for agent_id in (plan.get("responders") or []) if str(agent_id or "").strip()
     ]
     if plan.get("is_multi") and len(responders) > 1:
         context.setdefault(
             "agent_roster",
-            [
-                {"agent_id": agent_id, "display_name": agent_id}
-                for agent_id in responders
-            ],
+            [{"agent_id": agent_id, "display_name": agent_id} for agent_id in responders],
         )
 
     # Enforce the responder's context grant on the single-responder react path.
@@ -223,11 +217,7 @@ async def _start_turn(
         validated = validated.model_copy(
             update={
                 "input": patched_input,
-                **(
-                    {"planning_mode": True}
-                    if marker_mode in {"plan", "spec"}
-                    else {}
-                ),
+                **({"planning_mode": True} if marker_mode in {"plan", "spec"} else {}),
             },
         )
     if text:
@@ -536,10 +526,9 @@ async def _start_turn(
                     provider,
                     text=text,
                 )
-            elif (
-                (intent.user_context or {}).get("cowork_mode") == "project"
-                and not (intent.user_context or {}).get("cowork_responders")
-            ):
+            elif (intent.user_context or {}).get("cowork_mode") == "project" and not (
+                intent.user_context or {}
+            ).get("cowork_responders"):
                 turn_driver = "project_os"
                 await runtime._drive_project_os(
                     turn,
@@ -549,13 +538,9 @@ async def _start_turn(
                     thread_id=thread_id,
                     text=text,
                 )
-            elif (
-                str((intent.user_context or {}).get("serve_mesh") or "").strip()
-                == "1"
-                or (
-                    bool((intent.user_context or {}).get("cowork_is_multi"))
-                    and len((intent.user_context or {}).get("cowork_responders") or []) > 1
-                )
+            elif str((intent.user_context or {}).get("serve_mesh") or "").strip() == "1" or (
+                bool((intent.user_context or {}).get("cowork_is_multi"))
+                and len((intent.user_context or {}).get("cowork_responders") or []) > 1
             ):
                 # 蜂群 / 冒泡: the user picked the leaderless group mode. Fan the
                 # message out to every member agent in parallel — each chimes in
@@ -729,8 +714,7 @@ async def _start_turn(
         if not _turn_has_observable_output(turn):
             err = ErrorItem(
                 message=(
-                    "模型执行结束但没有返回任何可见输出。"
-                    "请重试，或切换到其他可用模型后再试。"
+                    "模型执行结束但没有返回任何可见输出。请重试，或切换到其他可用模型后再试。"
                 ),
                 error_info={
                     "code": "empty_model_output",

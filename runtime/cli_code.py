@@ -162,20 +162,22 @@ def run_code_command(args: Any, *, color: bool = True) -> int:  # noqa: ARG001
 
     final_answer = result.final_answer if result is not None else "".join(text_buffer).strip()
     history.append({"role": "assistant", "content": final_answer, "ts": _now()})
-    saved = _save_session({
-        "id": session_id,
-        "thread_id": thread_id,
-        "created_at": session_record.get("created_at") or _now(),
-        "updated_at": _now(),
-        "workspace_path": str(workspace),
-        "model": model,
-        "permission_mode": permission_mode,
-        "messages": history,
-        "last_result": {
-            "success": bool(result.success if result is not None else final_answer),
-            "terminated_reason": getattr(result, "terminated_reason", None),
-        },
-    })
+    saved = _save_session(
+        {
+            "id": session_id,
+            "thread_id": thread_id,
+            "created_at": session_record.get("created_at") or _now(),
+            "updated_at": _now(),
+            "workspace_path": str(workspace),
+            "model": model,
+            "permission_mode": permission_mode,
+            "messages": history,
+            "last_result": {
+                "success": bool(result.success if result is not None else final_answer),
+                "terminated_reason": getattr(result, "terminated_reason", None),
+            },
+        }
+    )
 
     payload = {
         "session_id": session_id,
@@ -304,11 +306,15 @@ def _latest_session_path() -> Path | None:
         session_id = latest.read_text(encoding="utf-8").strip()
         if session_id:
             return _session_path(session_id)
-    candidates = sorted(
-        _sessions_dir().glob("*.json"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    ) if _sessions_dir().exists() else []
+    candidates = (
+        sorted(
+            _sessions_dir().glob("*.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if _sessions_dir().exists()
+        else []
+    )
     return candidates[0] if candidates else None
 
 
@@ -316,16 +322,20 @@ def _list_sessions() -> list[dict[str, Any]]:
     if not _sessions_dir().exists():
         return []
     out: list[dict[str, Any]] = []
-    for path in sorted(_sessions_dir().glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+    for path in sorted(
+        _sessions_dir().glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
+    ):
         data = _read_session(path)
         if data:
-            out.append({
-                "id": data.get("id"),
-                "updated_at": data.get("updated_at"),
-                "workspace_path": data.get("workspace_path"),
-                "model": data.get("model"),
-                "permission_mode": data.get("permission_mode"),
-            })
+            out.append(
+                {
+                    "id": data.get("id"),
+                    "updated_at": data.get("updated_at"),
+                    "workspace_path": data.get("workspace_path"),
+                    "model": data.get("model"),
+                    "permission_mode": data.get("permission_mode"),
+                }
+            )
     return out
 
 

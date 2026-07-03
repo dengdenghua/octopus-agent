@@ -31,51 +31,128 @@ SEVERITY_RANK = {LOW: 0, MEDIUM: 1, HIGH: 2, CRITICAL: 3}
 # ── Directories to always skip ───────────────────────────────────────────────
 
 DEFAULT_EXCLUDE_DIRS = {
-    "node_modules", ".git", "__pycache__", "venv", ".venv", "env",
-    ".tox", ".mypy_cache", ".pytest_cache", "dist", "build",
-    ".next", ".nuxt", "vendor", "bower_components", ".bundle",
-    "coverage", ".coverage", "htmlcov", ".eggs", ".cache",
+    "node_modules",
+    ".git",
+    "__pycache__",
+    "venv",
+    ".venv",
+    "env",
+    ".tox",
+    ".mypy_cache",
+    ".pytest_cache",
+    "dist",
+    "build",
+    ".next",
+    ".nuxt",
+    "vendor",
+    "bower_components",
+    ".bundle",
+    "coverage",
+    ".coverage",
+    "htmlcov",
+    ".eggs",
+    ".cache",
 }
 
 # ── Binary extensions to skip ────────────────────────────────────────────────
 
 BINARY_EXTENSIONS = {
-    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".svg",
-    ".woff", ".woff2", ".ttf", ".eot", ".otf",
-    ".zip", ".tar", ".gz", ".bz2", ".xz", ".7z", ".rar",
-    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
-    ".mp3", ".mp4", ".avi", ".mov", ".wav", ".flac", ".ogg",
-    ".exe", ".dll", ".so", ".dylib", ".o", ".a",
-    ".pyc", ".pyo", ".class", ".jar", ".war",
-    ".sqlite", ".db", ".dat", ".bin", ".wasm",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".bmp",
+    ".ico",
+    ".webp",
+    ".svg",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".eot",
+    ".otf",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".bz2",
+    ".xz",
+    ".7z",
+    ".rar",
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".ppt",
+    ".pptx",
+    ".mp3",
+    ".mp4",
+    ".avi",
+    ".mov",
+    ".wav",
+    ".flac",
+    ".ogg",
+    ".exe",
+    ".dll",
+    ".so",
+    ".dylib",
+    ".o",
+    ".a",
+    ".pyc",
+    ".pyo",
+    ".class",
+    ".jar",
+    ".war",
+    ".sqlite",
+    ".db",
+    ".dat",
+    ".bin",
+    ".wasm",
 }
 
 # ── File extension → language tag ────────────────────────────────────────────
 
 EXT_TO_LANG = {
-    ".py": "py", ".pyw": "py",
-    ".js": "js", ".mjs": "js", ".cjs": "js",
-    ".ts": "ts", ".mts": "ts", ".cts": "ts",
-    ".jsx": "jsx", ".tsx": "tsx",
-    ".java": "java", ".kt": "java",
+    ".py": "py",
+    ".pyw": "py",
+    ".js": "js",
+    ".mjs": "js",
+    ".cjs": "js",
+    ".ts": "ts",
+    ".mts": "ts",
+    ".cts": "ts",
+    ".jsx": "jsx",
+    ".tsx": "tsx",
+    ".java": "java",
+    ".kt": "java",
     ".go": "go",
-    ".rb": "rb", ".erb": "rb",
+    ".rb": "rb",
+    ".erb": "rb",
     ".php": "php",
-    ".c": "c", ".h": "c", ".cpp": "cpp", ".hpp": "cpp",
+    ".c": "c",
+    ".h": "c",
+    ".cpp": "cpp",
+    ".hpp": "cpp",
     ".cs": "cs",
     ".rs": "rs",
     ".swift": "swift",
     ".vue": "vue",
-    ".html": "html", ".htm": "html",
-    ".yml": "yml", ".yaml": "yaml",
+    ".html": "html",
+    ".htm": "html",
+    ".yml": "yml",
+    ".yaml": "yaml",
     ".json": "json",
     ".xml": "xml",
     ".toml": "toml",
-    ".ini": "ini", ".cfg": "cfg", ".conf": "conf",
+    ".ini": "ini",
+    ".cfg": "cfg",
+    ".conf": "conf",
     ".env": "env",
-    ".sh": "sh", ".bash": "sh", ".zsh": "sh",
+    ".sh": "sh",
+    ".bash": "sh",
+    ".zsh": "sh",
     ".sql": "sql",
-    ".tf": "tf", ".hcl": "hcl",
+    ".tf": "tf",
+    ".hcl": "hcl",
 }
 
 # ── Secret regex patterns ────────────────────────────────────────────────────
@@ -383,9 +460,7 @@ def shannon_entropy(data):
         return 0.0
     freq = Counter(data)
     length = len(data)
-    return -sum(
-        (count / length) * math.log2(count / length) for count in freq.values()
-    )
+    return -sum((count / length) * math.log2(count / length) for count in freq.values())
 
 
 # Regex to extract quoted string values from code
@@ -430,11 +505,7 @@ def walk_files(root, exclude_dirs, max_file_kb):
     max_bytes = max_file_kb * 1024
 
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [
-            d
-            for d in dirnames
-            if d not in exclude_dirs and not d.startswith(".")
-        ]
+        dirnames[:] = [d for d in dirnames if d not in exclude_dirs and not d.startswith(".")]
 
         for fname in filenames:
             fpath = Path(dirpath) / fname
@@ -478,8 +549,7 @@ def scan_npm(project_dir):
 
     if not lock_file.exists():
         print(
-            "[INFO] package-lock.json not found, skipping npm audit "
-            "(run 'npm install' first)",
+            "[INFO] package-lock.json not found, skipping npm audit (run 'npm install' first)",
             file=sys.stderr,
         )
         return findings
@@ -713,9 +783,7 @@ def format_text(target, modules, findings):
         lines.append("No security issues found.")
         return "\n".join(lines)
 
-    sorted_findings = sorted(
-        findings, key=lambda f: SEVERITY_RANK.get(f.severity, 0), reverse=True
-    )
+    sorted_findings = sorted(findings, key=lambda f: SEVERITY_RANK.get(f.severity, 0), reverse=True)
 
     for f in sorted_findings:
         sev_label = SEVERITY_SYMBOL.get(f.severity, f.severity.upper())

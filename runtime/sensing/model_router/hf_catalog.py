@@ -47,10 +47,21 @@ _EXCLUDE_RE = re.compile(
 )
 
 _FAMILIES = [
-    ("qwen", "qwen"), ("llama", "llama"), ("gemma", "gemma"), ("mistral", "mistral"),
-    ("mixtral", "mixtral"), ("phi", "phi"), ("deepseek", "deepseek"), ("yi", "yi"),
-    ("command-r", "command-r"), ("granite", "granite"), ("smollm", "smollm"),
-    ("falcon", "falcon"), ("internlm", "internlm"), ("glm", "glm"), ("olmo", "olmo"),
+    ("qwen", "qwen"),
+    ("llama", "llama"),
+    ("gemma", "gemma"),
+    ("mistral", "mistral"),
+    ("mixtral", "mixtral"),
+    ("phi", "phi"),
+    ("deepseek", "deepseek"),
+    ("yi", "yi"),
+    ("command-r", "command-r"),
+    ("granite", "granite"),
+    ("smollm", "smollm"),
+    ("falcon", "falcon"),
+    ("internlm", "internlm"),
+    ("glm", "glm"),
+    ("olmo", "olmo"),
 ]
 
 _lock = threading.Lock()

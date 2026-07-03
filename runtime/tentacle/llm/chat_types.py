@@ -32,7 +32,7 @@ class ChatMessage:
     ``name`` 可选（多角色场景，例如不同 agent 分工）。
     """
 
-    role: str                       # "system" | "user" | "assistant" | "tool"
+    role: str  # "system" | "user" | "assistant" | "tool"
     content: str
     name: str | None = None
 
@@ -124,8 +124,8 @@ class ToolCallResult:
     tool_call_id: str
     name: str
     success: bool
-    content: str                    # 喂回 LLM 的字符串（已摘要）
-    raw: Any = None                 # 原始数据（供后续处理，例如截图 bytes）
+    content: str  # 喂回 LLM 的字符串（已摘要）
+    raw: Any = None  # 原始数据（供后续处理，例如截图 bytes）
 
     def to_tool_message(self) -> ToolMessage:
         # 失败也照实返回，让 LLM 自己决定下一步
@@ -142,11 +142,11 @@ class ToolCallResult:
 class FinishReason(StrEnum):
     """LLM 响应结束原因."""
 
-    STOP = "stop"                   # 正常文本结束
-    TOOL_CALLS = "tool_calls"       # 调用了工具
-    LENGTH = "length"               # 触达 max_tokens
+    STOP = "stop"  # 正常文本结束
+    TOOL_CALLS = "tool_calls"  # 调用了工具
+    LENGTH = "length"  # 触达 max_tokens
     CONTENT_FILTER = "content_filter"
-    CANCELLED = "cancelled"         # 客户端取消
+    CANCELLED = "cancelled"  # 客户端取消
     ERROR = "error"
 
 
@@ -219,9 +219,9 @@ class SkillSpec:
     description: str
     parameters: dict[str, Any] = field(default_factory=dict)
     timeout_ms: int = 15_000
-    risk: str = "low"               # "low" | "medium" | "high"
+    risk: str = "low"  # "low" | "medium" | "high"
     requires_screen: bool = True
-    body: str = ""                  # SKILL.md 正文（仅供人类阅读，不送 LLM）
+    body: str = ""  # SKILL.md 正文（仅供人类阅读，不送 LLM）
 
     def to_openai_tool(self) -> dict[str, Any]:
         """转成 OpenAI ``tools`` 数组的一项."""
@@ -241,11 +241,11 @@ class SkillSpec:
 class TaskOutcome(StrEnum):
     """任务终止原因（与 Kotlin 端 ``TaskResult`` sealed class 对应）."""
 
-    DONE = "done"                   # LLM 主动 finish
-    MAX_STEPS = "max_steps"         # 触达步数上限
-    CANCELLED = "cancelled"         # 用户取消
-    STUCK = "stuck"                 # 死循环检测触发
-    ERROR = "error"                 # 不可恢复错误
+    DONE = "done"  # LLM 主动 finish
+    MAX_STEPS = "max_steps"  # 触达步数上限
+    CANCELLED = "cancelled"  # 用户取消
+    STUCK = "stuck"  # 死循环检测触发
+    ERROR = "error"  # 不可恢复错误
 
 
 @dataclass(slots=True)

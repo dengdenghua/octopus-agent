@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import hashlib
@@ -31,14 +30,12 @@ _SUFFIX_EXTRACT_RE = re.compile(r"<suffix>(.*?)</suffix>", re.DOTALL | re.IGNORE
 
 @dataclass(frozen=True)
 class MutationProposal:
-
     variant: PromptVariant
-    source_hash: str       # Implementation note.
-    reason: str = ""       # Implementation note.
+    source_hash: str  # Implementation note.
+    reason: str = ""  # Implementation note.
 
 
 class PromptMutator:
-
     def __init__(
         self,
         *,
@@ -69,26 +66,32 @@ class PromptMutator:
             span.set_attribute("octopus.mutator.base_variant", base.name)
 
             losing_summaries = _extract_losing_samples(
-                journal, max_samples, recipe_id=recipe_id,
+                journal,
+                max_samples,
+                recipe_id=recipe_id,
             )
             if not losing_summaries:
                 span.set_attribute("octopus.mutator.skip", "no_failures_to_learn_from")
                 return None
 
             user_prompt = _build_user_prompt(
-                base, losing_summaries, guard_digest=guard_digest,
+                base,
+                losing_summaries,
+                guard_digest=guard_digest,
             )
 
             try:
-                response = self.router.call(ModelRequest(
-                    model=self.model,
-                    messages=[
-                        Message(role="system", content=_MUTATOR_SYSTEM_PROMPT),
-                        Message(role="user", content=user_prompt),
-                    ],
-                    max_tokens=600,
-                    temperature=self.temperature,
-                ))
+                response = self.router.call(
+                    ModelRequest(
+                        model=self.model,
+                        messages=[
+                            Message(role="system", content=_MUTATOR_SYSTEM_PROMPT),
+                            Message(role="user", content=user_prompt),
+                        ],
+                        max_tokens=600,
+                        temperature=self.temperature,
+                    )
+                )
             except Exception as e:  # noqa: BLE001
                 span.set_attribute("octopus.mutator.error", f"{type(e).__name__}: {e}")
                 return None
@@ -151,15 +154,17 @@ class PromptMutator:
 
             user_prompt = _build_merge_prompt(parent_a, parent_b)
             try:
-                response = self.router.call(ModelRequest(
-                    model=self.model,
-                    messages=[
-                        Message(role="system", content=_MERGE_SYSTEM_PROMPT),
-                        Message(role="user", content=user_prompt),
-                    ],
-                    max_tokens=800,
-                    temperature=self.temperature,
-                ))
+                response = self.router.call(
+                    ModelRequest(
+                        model=self.model,
+                        messages=[
+                            Message(role="system", content=_MERGE_SYSTEM_PROMPT),
+                            Message(role="user", content=user_prompt),
+                        ],
+                        max_tokens=800,
+                        temperature=self.temperature,
+                    )
+                )
             except Exception as e:  # noqa: BLE001
                 span.set_attribute("octopus.mutator.error", f"{type(e).__name__}: {e}")
                 return None
@@ -241,9 +246,7 @@ def _extract_losing_samples(
 
     failed: list[Any] = []
     for bucket in failed_buckets.values():
-        swarm_entries = [
-            item for item in bucket if item[1].trajectory.strategy_id == "swarm"
-        ]
+        swarm_entries = [item for item in bucket if item[1].trajectory.strategy_id == "swarm"]
         if swarm_entries:
             failed.append(max(swarm_entries, key=lambda item: item[0])[1])
         else:
@@ -311,13 +314,10 @@ def _render_guard_digest_for_prompt(digest: dict[str, Any]) -> str:
     ]
     if dominant:
         lines.append(
-            f"  Dominant failure category: {dominant} "
-            f"(most-blocked area of agent behaviour)."
+            f"  Dominant failure category: {dominant} (most-blocked area of agent behaviour)."
         )
     if by_category:
-        cat_summary = ", ".join(
-            f"{cat}={count}" for cat, count in list(by_category.items())[:5]
-        )
+        cat_summary = ", ".join(f"{cat}={count}" for cat, count in list(by_category.items())[:5])
         lines.append(f"  By category: {cat_summary}")
     if candidates:
         threshold = int(digest.get("tuning_threshold") or 0)

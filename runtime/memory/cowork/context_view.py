@@ -36,9 +36,7 @@ class MemberView:
         }
 
 
-def resolve_view(
-    state: GroupState, member_id: str, max_message: int
-) -> MemberView | None:
+def resolve_view(state: GroupState, member_id: str, max_message: int) -> MemberView | None:
     """The history slice ``member_id`` may see at the current message count, or
     ``None`` if they aren't a member."""
     member = state.member(member_id)

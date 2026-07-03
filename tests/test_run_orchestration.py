@@ -6,6 +6,7 @@ is code, so it's deterministic and unit-testable: the loop/dedup logic is
 tested by mocking the two sub-skills; the budget gate is tested end-to-end
 through the real ``_call_agent_parallel`` with a mocked ``call_subagent``.
 """
+
 from __future__ import annotations
 
 import json
@@ -42,14 +43,19 @@ def _reset_budget_state():
 def test_split_findings_strips_markers_keeps_content_digits():
     # bullets + space-delimited enumerators ("2.", "(3)") stripped; NONE dropped
     assert ds._split_findings("- a\n2. b\n\nNONE\n* c\n(3) d") == [
-        "a", "b", "c", "d",
+        "a",
+        "b",
+        "c",
+        "d",
     ]
     assert ds._split_findings("nothing\nN/A") == []
     # a finding whose CONTENT starts with a number must survive intact — the
     # marker regex requires a space after the enumerator, so a decimal or a
     # leading count is never mangled.
     assert ds._split_findings("3 retries observed\n10ms latency\n3.14s p99") == [
-        "3 retries observed", "10ms latency", "3.14s p99",
+        "3 retries observed",
+        "10ms latency",
+        "3.14s p99",
     ]
 
 
@@ -128,7 +134,9 @@ def test_dry_stop(monkeypatch):
 
 def test_dedupe_across_rounds(monkeypatch):
     monkeypatch.setattr(
-        ds, "_call_agent_parallel", _fake_parallel_seq([["a\nb"], ["a\nb"], ["c"]]),
+        ds,
+        "_call_agent_parallel",
+        _fake_parallel_seq([["a\nb"], ["a\nb"], ["c"]]),
     )
     r = ds._run_orchestration(goal="g", n=1, rounds=3, patience=1)
     assert r["collected"] == ["a", "b", "c"]
@@ -149,10 +157,15 @@ def test_heterogeneous_roles_rotate_across_workers(monkeypatch):
 
     monkeypatch.setattr(ds, "_call_agent_parallel", fake)
     ds._run_orchestration(
-        goal="g", agent_id=["researcher", "explorer", "critic"], n=3, rounds=1,
+        goal="g",
+        agent_id=["researcher", "explorer", "critic"],
+        n=3,
+        rounds=1,
     )
     assert [s["agent_id"] for s in captured["specs"]] == [
-        "researcher", "explorer", "critic",
+        "researcher",
+        "explorer",
+        "critic",
     ]
 
 
@@ -171,7 +184,9 @@ def test_roles_rotate_when_workers_exceed_roles(monkeypatch):
 
 def test_verify_drops_minority(monkeypatch):
     monkeypatch.setattr(
-        ds, "_call_agent_parallel", _fake_parallel_seq([["keep-me\ndrop-me"]]),
+        ds,
+        "_call_agent_parallel",
+        _fake_parallel_seq([["keep-me\ndrop-me"]]),
     )
 
     def fake_vote(question: str = "", **_kw: Any) -> dict[str, Any]:
@@ -187,7 +202,9 @@ def test_verify_drops_minority(monkeypatch):
 
 def test_verify_budget_limits_how_many_checked(monkeypatch):
     monkeypatch.setattr(
-        ds, "_call_agent_parallel", _fake_parallel_seq([["a\nb\nc\nd"]]),
+        ds,
+        "_call_agent_parallel",
+        _fake_parallel_seq([["a\nb\nc\nd"]]),
     )
     calls = {"n": 0}
     lock = threading.Lock()
@@ -208,7 +225,9 @@ def test_verify_budget_limits_how_many_checked(monkeypatch):
 
 def test_parallel_verify_preserves_order(monkeypatch):
     monkeypatch.setattr(
-        ds, "_call_agent_parallel", _fake_parallel_seq([["keep1\ndrop1\nkeep2"]]),
+        ds,
+        "_call_agent_parallel",
+        _fake_parallel_seq([["keep1\ndrop1\nkeep2"]]),
     )
 
     def fake_vote(question: str = "", **_kw: Any) -> dict[str, Any]:
@@ -289,15 +308,22 @@ def test_full_stack_find_and_verify(monkeypatch):
         else:  # a finder prompt
             out = "strong finding\nweak finding"
         return {
-            "agent_id": agent_id, "output": out,
-            "success": True, "error": None, "codename": "X",
+            "agent_id": agent_id,
+            "output": out,
+            "success": True,
+            "error": None,
+            "codename": "X",
         }
 
     monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake_cs)
     monkeypatch.setattr("runtime.execution.subagents.bridge.call_subagent", fake_cs)
 
     r = ds._run_orchestration(
-        goal="enumerate findings", n=2, rounds=1, verify=True, max_spawns=20,
+        goal="enumerate findings",
+        n=2,
+        rounds=1,
+        verify=True,
+        max_spawns=20,
     )
 
     assert r["ok"] is True
@@ -322,14 +348,20 @@ def test_orchestration_consumes_structured_findings(monkeypatch):
             "output": json.dumps(parsed),
             "parsed": parsed,
             "schema_ok": True,
-            "success": True, "error": None, "codename": "X",
+            "success": True,
+            "error": None,
+            "codename": "X",
         }
 
     monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake_cs)
     monkeypatch.setattr("runtime.execution.subagents.bridge.call_subagent", fake_cs)
 
     r = ds._run_orchestration(
-        goal="enumerate findings", n=1, rounds=1, verify=False, max_spawns=10,
+        goal="enumerate findings",
+        n=1,
+        rounds=1,
+        verify=False,
+        max_spawns=10,
     )
     assert r["ok"] is True
     # structured array preserved verbatim (the embedded newline is NOT split)
@@ -344,14 +376,20 @@ def test_orchestration_falls_back_to_line_split(monkeypatch):
         return {
             "agent_id": agent_id,
             "output": "alpha\nbeta",  # plain text, no parsed key
-            "success": True, "error": None, "codename": "X",
+            "success": True,
+            "error": None,
+            "codename": "X",
         }
 
     monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake_cs)
     monkeypatch.setattr("runtime.execution.subagents.bridge.call_subagent", fake_cs)
 
     r = ds._run_orchestration(
-        goal="enumerate findings", n=1, rounds=1, verify=False, max_spawns=10,
+        goal="enumerate findings",
+        n=1,
+        rounds=1,
+        verify=False,
+        max_spawns=10,
     )
     assert r["ok"] is True
     assert r["collected"] == ["alpha", "beta"]
@@ -454,7 +492,7 @@ def test_orchestration_seeds_and_publishes_on_blackboard(monkeypatch):
     assert r["shared"] is True
     assert r["inherited"] == 1
     assert "prior-finding" in r["collected"]  # seeded from the shared board
-    assert "new-finding" in r["collected"]    # newly discovered
+    assert "new-finding" in r["collected"]  # newly discovered
     # the union is republished for the rest of the turn
     assert set(get_blackboard(turn).read(key)) >= {"prior-finding", "new-finding"}
 
@@ -469,7 +507,7 @@ def test_second_orchestration_builds_on_the_first(monkeypatch):
 
     monkeypatch.setattr(ds, "_call_agent_parallel", _fake_parallel_seq([["B"]]))
     r2 = ds._run_orchestration(goal="shared-goal", n=1, rounds=1, patience=2)
-    assert r2["inherited"] == 1               # inherited A from the first run
+    assert r2["inherited"] == 1  # inherited A from the first run
     assert "A" in r2["collected"] and "B" in r2["collected"]
 
 

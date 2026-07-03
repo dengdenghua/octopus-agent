@@ -12,12 +12,14 @@ class _FakeSSE:
 
 
 def test_iter_openai_sse_preserves_reasoning_content():
-    response = _FakeSSE([
-        'data: {"choices":[{"delta":{"reasoning_content":"plan"}}]}',
-        'data: {"choices":[{"delta":{"content":"answer"}}]}',
-        'data: {"usage":{"prompt_tokens":2,"completion_tokens":3},"choices":[]}',
-        "data: [DONE]",
-    ])
+    response = _FakeSSE(
+        [
+            'data: {"choices":[{"delta":{"reasoning_content":"plan"}}]}',
+            'data: {"choices":[{"delta":{"content":"answer"}}]}',
+            'data: {"usage":{"prompt_tokens":2,"completion_tokens":3},"choices":[]}',
+            "data: [DONE]",
+        ]
+    )
 
     events = list(iter_openai_sse(response, model="deepseek-v4-pro"))
 
@@ -36,12 +38,14 @@ def test_iter_openai_sse_preserves_reasoning_content():
 
 
 def test_iter_openai_sse_preserves_reasoning_aliases_and_byte_lines():
-    response = _FakeSSE([
-        b'data: {"choices":[{"delta":{"reasoning":"step "}}]}',
-        b'data: {"choices":[{"delta":{"thinking":"two"}}]}',
-        b'data: {"choices":[{"delta":{"content":[{"type":"text","text":"answer"}]}}]}',
-        b"data: [DONE]",
-    ])
+    response = _FakeSSE(
+        [
+            b'data: {"choices":[{"delta":{"reasoning":"step "}}]}',
+            b'data: {"choices":[{"delta":{"thinking":"two"}}]}',
+            b'data: {"choices":[{"delta":{"content":[{"type":"text","text":"answer"}]}}]}',
+            b"data: [DONE]",
+        ]
+    )
 
     events = list(iter_openai_sse(response, model="glm-4.6"))
 
@@ -57,19 +61,21 @@ def test_iter_openai_sse_preserves_reasoning_aliases_and_byte_lines():
 
 
 def test_iter_openai_sse_emits_streamed_tool_call():
-    response = _FakeSSE([
-        (
-            'data: {"choices":[{"delta":{"tool_calls":[{"index":0,'
-            '"id":"call_1","type":"function","function":{"name":"read_file",'
-            '"arguments":"{\\"path\\""}}]}}]}'
-        ),
-        (
-            'data: {"choices":[{"delta":{"tool_calls":[{"index":0,'
-            '"function":{"arguments":":\\"README.md\\"}"}}]}}]}'
-        ),
-        'data: {"usage":{"prompt_tokens":5,"completion_tokens":7},"choices":[]}',
-        "data: [DONE]",
-    ])
+    response = _FakeSSE(
+        [
+            (
+                'data: {"choices":[{"delta":{"tool_calls":[{"index":0,'
+                '"id":"call_1","type":"function","function":{"name":"read_file",'
+                '"arguments":"{\\"path\\""}}]}}]}'
+            ),
+            (
+                'data: {"choices":[{"delta":{"tool_calls":[{"index":0,'
+                '"function":{"arguments":":\\"README.md\\"}"}}]}}]}'
+            ),
+            'data: {"usage":{"prompt_tokens":5,"completion_tokens":7},"choices":[]}',
+            "data: [DONE]",
+        ]
+    )
 
     events = list(iter_openai_sse(response, model="gpt-4o-mini"))
 
@@ -84,14 +90,16 @@ def test_iter_openai_sse_emits_streamed_tool_call():
 
 
 def test_iter_openai_sse_accepts_python_repr_tool_arguments():
-    response = _FakeSSE([
-        (
-            'data: {"choices":[{"delta":{"tool_calls":[{"index":0,'
-            '"id":"call_1","type":"function","function":{"name":"read_file",'
-            '"arguments":"{\'path\': \'README.md\'}"}}]}}]}'
-        ),
-        "data: [DONE]",
-    ])
+    response = _FakeSSE(
+        [
+            (
+                'data: {"choices":[{"delta":{"tool_calls":[{"index":0,'
+                '"id":"call_1","type":"function","function":{"name":"read_file",'
+                "\"arguments\":\"{'path': 'README.md'}\"}}]}}]}"
+            ),
+            "data: [DONE]",
+        ]
+    )
 
     events = list(iter_openai_sse(response, model="glm-4.6"))
 
@@ -100,17 +108,16 @@ def test_iter_openai_sse_accepts_python_repr_tool_arguments():
 
 
 def test_iter_openai_sse_accepts_legacy_function_call_delta():
-    response = _FakeSSE([
-        (
-            'data: {"choices":[{"delta":{"function_call":'
-            '{"name":"read_file","arguments":"{\\"path\\""}}}]}'
-        ),
-        (
-            'data: {"choices":[{"delta":{"function_call":'
-            '{"arguments":":\\"README.md\\"}"}}}]}'
-        ),
-        "data: [DONE]",
-    ])
+    response = _FakeSSE(
+        [
+            (
+                'data: {"choices":[{"delta":{"function_call":'
+                '{"name":"read_file","arguments":"{\\"path\\""}}}]}'
+            ),
+            ('data: {"choices":[{"delta":{"function_call":{"arguments":":\\"README.md\\"}"}}}]}'),
+            "data: [DONE]",
+        ]
+    )
 
     events = list(iter_openai_sse(response, model="glm-4.6"))
 
@@ -124,10 +131,12 @@ def test_iter_openai_sse_accepts_legacy_function_call_delta():
 
 
 def test_iter_openai_sse_preserves_finish_reason():
-    response = _FakeSSE([
-        'data: {"choices":[{"delta":{"content":"part one"},"finish_reason":"length"}]}',
-        "data: [DONE]",
-    ])
+    response = _FakeSSE(
+        [
+            'data: {"choices":[{"delta":{"content":"part one"},"finish_reason":"length"}]}',
+            "data: [DONE]",
+        ]
+    )
 
     events = list(iter_openai_sse(response, model="gpt-4o-mini"))
 
@@ -136,17 +145,19 @@ def test_iter_openai_sse_preserves_finish_reason():
 
 
 def test_iter_openai_sse_handles_multiline_data_events():
-    response = _FakeSSE([
-        "data: {",
-        'data: "choices":[{"delta":{"content":"multi"}}]',
-        "data: }",
-        "",
-        "data:{\"choices\":[{\"delta\":{\"content\":\" line\"}}]}",
-        "",
-        ": keepalive",
-        "data: [DONE]",
-        "",
-    ])
+    response = _FakeSSE(
+        [
+            "data: {",
+            'data: "choices":[{"delta":{"content":"multi"}}]',
+            "data: }",
+            "",
+            'data:{"choices":[{"delta":{"content":" line"}}]}',
+            "",
+            ": keepalive",
+            "data: [DONE]",
+            "",
+        ]
+    )
 
     events = list(iter_openai_sse(response, model="qwen-plus"))
 

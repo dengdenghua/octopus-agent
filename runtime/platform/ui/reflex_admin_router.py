@@ -1,4 +1,5 @@
 """Reflex, gene-locks, and forge admin routes for the UI app."""
+
 from __future__ import annotations
 
 import contextlib
@@ -66,6 +67,7 @@ def mount_reflex_admin_routes(
         visually compress gaps.
         """
         from datetime import datetime, timedelta
+
         try:
             window = timedelta(minutes=max(1, int(window_minutes)))
             bucket = max(1, int(bucket_seconds))
@@ -73,20 +75,19 @@ def mount_reflex_admin_routes(
             since = now - window
             events = stack.journal.read_by_type("reflex_hit")
             # Filter to window
-            evs = [
-                e for e in events
-                if getattr(e, "ts", None) and e.ts >= since
-            ]
+            evs = [e for e in events if getattr(e, "ts", None) and e.ts >= since]
             # Bucket by floor(ts) → bucket-aligned epoch second
             num_buckets = max(1, int(window.total_seconds() / bucket))
             start_epoch = int(since.timestamp())
             buckets: list[dict] = []
             for i in range(num_buckets):
-                buckets.append({
-                    "ts": start_epoch + i * bucket,
-                    "count": 0,
-                    "by_rule": {},
-                })
+                buckets.append(
+                    {
+                        "ts": start_epoch + i * bucket,
+                        "count": 0,
+                        "by_rule": {},
+                    }
+                )
             for e in evs:
                 epoch = int(e.ts.timestamp())
                 idx = (epoch - start_epoch) // bucket
@@ -120,10 +121,13 @@ def mount_reflex_admin_routes(
         draft_model: str | None = None,
     ) -> dict:
         from runtime.core.nerves.reflex.suggestions import get_default_tracker
+
         t = get_default_tracker()
         sugs = t.suggestions(
-            min_count=min_count, limit=limit,
-            cluster=cluster, similarity=similarity,
+            min_count=min_count,
+            limit=limit,
+            cluster=cluster,
+            similarity=similarity,
         )
         drafts: dict[str, str] = {}
         if draft_replies and sugs:
@@ -134,6 +138,7 @@ def mount_reflex_admin_routes(
                 from runtime.core.nerves.reflex.reply_drafter import (
                     draft_replies as _draft,
                 )
+
                 router = getattr(stack.planner, "router", None)
                 drafts = _draft(sugs, router=router, model=draft_model)
                 # Stamp drafted replies into each suggestion's
@@ -144,7 +149,8 @@ def mount_reflex_admin_routes(
                     if d:
                         s["drafted_reply"] = d
                         s["suggested_yaml"] = apply_drafts_to_yaml(
-                            s["suggested_yaml"], d,
+                            s["suggested_yaml"],
+                            d,
                         )
             except (OSError, ImportError, TypeError) as exc:
                 drafts = {"_error": f"{type(exc).__name__}: {exc}"}
@@ -154,9 +160,7 @@ def mount_reflex_admin_routes(
             "cluster": cluster,
             "similarity": similarity if cluster else None,
             "drafts_attempted": draft_replies,
-            "drafts_count": len([
-                k for k in drafts if not k.startswith("_")
-            ]),
+            "drafts_count": len([k for k in drafts if not k.startswith("_")]),
             "suggestions": sugs,
         }
 
@@ -165,6 +169,7 @@ def mount_reflex_admin_routes(
         """Drop all tracked unmatched prompts · use after applying
         a batch of suggestions so the next round starts fresh."""
         from runtime.core.nerves.reflex.suggestions import get_default_tracker
+
         return {"dropped": get_default_tracker().reset()}
 
     @_reflex_admin.post("/api/reflex/auto-pr")
@@ -195,8 +200,10 @@ def mount_reflex_admin_routes(
         if path is None:
             return {"ok": False, "error": "no rules file found"}
         sugs = get_default_tracker().suggestions(
-            min_count=min_count, limit=limit,
-            cluster=cluster, similarity=similarity,
+            min_count=min_count,
+            limit=limit,
+            cluster=cluster,
+            similarity=similarity,
         )
         if not sugs:
             return {
@@ -242,9 +249,12 @@ def mount_reflex_admin_routes(
                 "intent_type": getattr(r, "_intent_type", None),
                 "ttl_seconds": getattr(r, "_ttl_seconds", None),
                 "actions": sorted(
-                    k for k in ("webhook", "mqtt", "exec")
+                    k
+                    for k in ("webhook", "mqtt", "exec")
                     if spec is not None and getattr(spec, k, None) is not None
-                ) if spec else [],
+                )
+                if spec
+                else [],
                 "variant_count": len(vars_) if vars_ else 0,
             }
         return snap
@@ -267,6 +277,7 @@ def mount_reflex_admin_routes(
         import time as _t
 
         from runtime.cli import _build_reflex_router
+
         try:
             # Snapshot the current rules BEFORE swapping.
             before = _snapshot_rules(_reflex_router._reflexes)
@@ -282,24 +293,26 @@ def mount_reflex_admin_routes(
             added = sorted(set(after) - set(before))
             removed = sorted(set(before) - set(after))
             modified = sorted(
-                rid for rid in (set(after) & set(before))
-                if before[rid] != after[rid]
+                rid for rid in (set(after) & set(before)) if before[rid] != after[rid]
             )
             unchanged = len((set(after) & set(before)) - set(modified))
-            _last_reload_state.update({
-                "ts": _t.time(),
-                "added": added,
-                "removed": removed,
-                "modified": [
-                    {
-                        "rule_id": rid,
-                        "before": before[rid],
-                        "after": after[rid],
-                    } for rid in modified
-                ],
-                "unchanged_count": unchanged,
-                "rules_loaded": count,
-            })
+            _last_reload_state.update(
+                {
+                    "ts": _t.time(),
+                    "added": added,
+                    "removed": removed,
+                    "modified": [
+                        {
+                            "rule_id": rid,
+                            "before": before[rid],
+                            "after": after[rid],
+                        }
+                        for rid in modified
+                    ],
+                    "unchanged_count": unchanged,
+                    "rules_loaded": count,
+                }
+            )
             # Optional git auto-commit · only when the operator
             # the YAML file enables it via top-level
             # ``git_tracking: true`` · TODO future). The reload
@@ -314,15 +327,18 @@ def mount_reflex_admin_routes(
                     from runtime.core.nerves.reflex.rules_loader import (
                         find_default_rules_file,
                     )
+
                     path = find_default_rules_file()
                     if path is not None:
                         git_result = auto_commit(
                             path,
-                            diff_summary=format_diff_summary({
-                                "added": added,
-                                "removed": removed,
-                                "modified": modified,
-                            }),
+                            diff_summary=format_diff_summary(
+                                {
+                                    "added": added,
+                                    "removed": removed,
+                                    "modified": modified,
+                                }
+                            ),
                         )
                     else:
                         git_result = {"ok": False, "error": "no rules file"}
@@ -360,6 +376,7 @@ def mount_reflex_admin_routes(
         Doesn't mutate state · safe to call repeatedly.
         """
         from runtime.core.nerves.reflex.test_runner import run_tests
+
         return run_tests(_reflex_router)
 
     @_reflex_admin.get("/api/reflex/git/history")
@@ -370,6 +387,7 @@ def mount_reflex_admin_routes(
         shelling in."""
         from runtime.core.nerves.reflex.git_track import file_history
         from runtime.core.nerves.reflex.rules_loader import find_default_rules_file
+
         path = find_default_rules_file()
         if path is None:
             return {"history": [], "error": "no rules file"}
@@ -387,6 +405,7 @@ def mount_reflex_admin_routes(
         (no credentials returned). Lets ops verify the yaml's
         ``broadcast.mqtt`` block was picked up correctly."""
         from runtime.core.nerves.reflex.broadcast import get_default_broadcaster
+
         return get_default_broadcaster().describe()
 
     @_reflex_admin.get("/api/reflex/tiers")
@@ -400,6 +419,7 @@ def mount_reflex_admin_routes(
             get_default_fuzzy_cache,
             get_default_slm,
         )
+
         return {
             "tiers": [
                 get_default_fuzzy_cache().describe(),
@@ -432,6 +452,7 @@ def mount_reflex_admin_routes(
                 OptimizerRunConfig,
                 optimize_with_backend,
             )
+
             planner = stack.planner
             # Seed = the planner's current base prompt. We'd
             # ideally include learned_rules + memories sections
@@ -450,6 +471,7 @@ def mount_reflex_admin_routes(
                     from runtime.core.cerebrum.llm_planner import (
                         _load_planner_prompt,
                     )
+
                     seed = _load_planner_prompt()
                 except (ImportError, OSError, TypeError, AttributeError):  # noqa: BLE001
                     seed = "You are a planner. Build a TaskGraph for the user goal."
@@ -461,7 +483,9 @@ def mount_reflex_admin_routes(
                 journal=stack.journal,
                 router=router,
                 config=OptimizerRunConfig(
-                    backend=optimizer_backend or os.environ.get("OCTOPUS_OPTIMIZER_BACKEND") or "native_gepa",
+                    backend=optimizer_backend
+                    or os.environ.get("OCTOPUS_OPTIMIZER_BACKEND")
+                    or "native_gepa",
                     recipe_id=recipe_id,
                     judge_model=judge_model,
                     mutator_model=mutator_model,
@@ -480,14 +504,17 @@ def mount_reflex_admin_routes(
                     get_default_store,
                     record_from_result,
                 )
+
                 store = get_default_store()
                 rec = record_from_result(
-                    result, trigger="manual", recipe_id=recipe_id,
+                    result,
+                    trigger="manual",
+                    recipe_id=recipe_id,
                 )
                 store.add(rec)
                 _run_ts = rec.ts
             except (OSError, ImportError, TypeError, ValueError) as _exc:  # noqa: BLE001
-                    _run_ts = None
+                _run_ts = None
             return {
                 "ok": True,
                 "optimizer_backend": getattr(result, "optimizer_backend", None) or "native_gepa",
@@ -508,7 +535,9 @@ def mount_reflex_admin_routes(
                         "task_scores": result.best_avg.task_scores,
                         "rationale": result.best_avg.rationale,
                         "prompt_preview": result.best_avg.prompt[:400],
-                    } if result.best_avg else None
+                    }
+                    if result.best_avg
+                    else None
                 ),
                 "winner_proposal": getattr(result, "winner_proposal", None),
                 "native_evaluation": getattr(result, "native_evaluation", []),
@@ -544,6 +573,7 @@ def mount_reflex_admin_routes(
     @_reflex_admin.get("/api/gene-locks/status")
     def _gene_locks_status() -> dict:
         from runtime.safety.gene_locks import get_state
+
         return get_state()
 
     @_reflex_admin.post("/api/gene-locks/maturity")
@@ -553,13 +583,15 @@ def mount_reflex_admin_routes(
     ) -> dict:
         """Change maturity level · body: ``{"level": 0..4}``."""
         from runtime.safety.gene_locks import LockViolation, set_maturity
+
         try:
             lvl = int(body.get("level", 0))
         except (TypeError, ValueError):
             return {"ok": False, "error": "level must be 0..4"}
         try:
             return set_maturity(
-                lvl, human_signed=bool(x_human_approver),
+                lvl,
+                human_signed=bool(x_human_approver),
             )
         except LockViolation as lv:
             return lv.as_dict()
@@ -572,6 +604,7 @@ def mount_reflex_admin_routes(
         ``{"reason": "..."}``. Auto-degrades maturity to
         Level 1 per CC-G5 invariant."""
         from runtime.safety.gene_locks import trigger_panic
+
         reason = str(body.get("reason") or "operator-triggered")
         return trigger_panic(reason)
 
@@ -585,6 +618,7 @@ def mount_reflex_admin_routes(
         for smoke-testing the hard-block paths without a
         server restart."""
         from runtime.safety.gene_locks import LockViolation, set_mode
+
         try:
             return set_mode(
                 str(body.get("mode", "")),
@@ -610,6 +644,7 @@ def mount_reflex_admin_routes(
             LockViolation,
             reset_integrity_alarm,
         )
+
         try:
             return reset_integrity_alarm(
                 human_signed=bool(x_human_approver),
@@ -635,12 +670,14 @@ def mount_reflex_admin_routes(
         so the caller can assert on ``integrity_ok`` without
         a second round-trip."""
         from runtime.safety.gene_locks import simple_gate
+
         with simple_gate._STATE_LOCK:
             simple_gate._CACHED = None
             simple_gate._INTEGRITY_FAILED = None
         # Trigger a re-load so the response already reflects
         # the new on-disk state.
         from runtime.safety.gene_locks import get_state
+
         return {"ok": True, "reloaded": True, "state": get_state()}
 
     @_reflex_admin.get("/api/gene-locks/approvals")
@@ -650,6 +687,7 @@ def mount_reflex_admin_routes(
         operator can see stale signatures ('Alice signed 3
         days ago') · the gate itself only counts in-window."""
         from runtime.safety.gene_locks import get_ledger
+
         return {
             "window_s": get_ledger().window_s,
             "recent": get_ledger().recent(limit=limit),
@@ -663,6 +701,7 @@ def mount_reflex_admin_routes(
         approver header. Maturity stays at whatever the panic
         degraded it to · operator must re-raise explicitly."""
         from runtime.safety.gene_locks import LockViolation, clear_panic
+
         try:
             return clear_panic(human_signed=bool(x_human_approver))
         except LockViolation as lv:
@@ -674,7 +713,10 @@ def mount_reflex_admin_routes(
     # ``_reflex_admin`` / the stack. ``_Header`` was imported
     # higher up, alongside the gene-lock admin endpoints.
     def _gate_forge_mutation(
-        kind: str, target: str, *, approver: str | None,
+        kind: str,
+        target: str,
+        *,
+        approver: str | None,
         bypass_cooldown: bool = False,
     ) -> dict:
         """Thin wrapper around gene_locks.gate_mutation that
@@ -683,9 +725,11 @@ def mount_reflex_admin_routes(
         ``ok=False + gene_lock_violation=True``). Easier for
         the frontend than parsing a 403."""
         from runtime.safety.gene_locks import LockViolation, gate_mutation
+
         try:
             return gate_mutation(
-                kind=kind, target=target,
+                kind=kind,
+                target=target,
                 autonomous=approver is None,
                 approver=approver,
                 bypass_cooldown=bypass_cooldown,
@@ -722,6 +766,7 @@ def mount_reflex_admin_routes(
         target recipe_id, leaving winning recipes untouched.
         """
         from runtime.core.cerebrum.prompt_persistence import dump_section
+
         text = body.get("prompt")
         if not isinstance(text, str) or not text.strip():
             return {"ok": False, "error": "missing prompt"}
@@ -734,6 +779,7 @@ def mount_reflex_admin_routes(
         # for the same recipe (all 3 paths are "changing this
         # recipe's prompt").
         from runtime.safety.gene_locks import MutationKind, record_mutation
+
         _gate = _gate_forge_mutation(
             MutationKind.APPLY_ADDENDUM,
             target=target_recipe_id or "__global__",
@@ -746,8 +792,7 @@ def mount_reflex_admin_routes(
             f"<!-- candidate {body.get('candidate_id', '?')} · "
             f"avg_score {body.get('avg_score', 0)} · "
             f"recipe {target_recipe_id or 'global'} · "
-            f"rationale: {body.get('rationale', '')} -->\n\n"
-            + text
+            f"rationale: {body.get('rationale', '')} -->\n\n" + text
         )
         try:
             # NEW · variant routing. When ``variant_id`` is set
@@ -758,14 +803,18 @@ def mount_reflex_admin_routes(
             variant_id = body.get("variant_id")
             variant_weight = body.get("variant_weight", 1)
             if (
-                isinstance(target_recipe_id, str) and target_recipe_id.strip()
-                and isinstance(variant_id, str) and variant_id.strip()
+                isinstance(target_recipe_id, str)
+                and target_recipe_id.strip()
+                and isinstance(variant_id, str)
+                and variant_id.strip()
             ):
                 from runtime.safety.recovery.gepa_variants import (
                     add_variant,
                 )
+
                 add_variant(
-                    target_recipe_id, variant_id,
+                    target_recipe_id,
+                    variant_id,
                     content=section,
                     weight=int(variant_weight) if isinstance(variant_weight, (int, float)) else 1,
                     candidate_id=str(body.get("candidate_id", "")),
@@ -782,6 +831,7 @@ def mount_reflex_admin_routes(
                 from runtime.safety.recovery.gepa_variants import (
                     variant_path as _variant_path,
                 )
+
                 target = _variant_path(target_recipe_id, variant_id)
                 scope = "variant"
             elif isinstance(target_recipe_id, str) and target_recipe_id.strip():
@@ -790,6 +840,7 @@ def mount_reflex_admin_routes(
                 from runtime.safety.recovery.gepa_addendum_store import (
                     save_for_recipe,
                 )
+
                 target = save_for_recipe(target_recipe_id, section)
                 scope = "per_recipe"
             else:
@@ -800,6 +851,7 @@ def mount_reflex_admin_routes(
                 from runtime.safety.recovery.gepa_addendum_store import (
                     legacy_global_path,
                 )
+
                 target = legacy_global_path()
                 dump_section(target, section, label="forge")
                 scope = "global"
@@ -811,6 +863,7 @@ def mount_reflex_admin_routes(
                     from runtime.safety.recovery.gepa_runs import (
                         get_default_store,
                     )
+
                     applied_flag = get_default_store().mark_applied(
                         ts=float(run_ts_raw),
                     )
@@ -829,11 +882,20 @@ def mount_reflex_admin_routes(
                 )
 
                 winner_applied = mark_winner_proposal_applied(
-                    recipe_id=target_recipe_id if isinstance(target_recipe_id, str) and target_recipe_id.strip() else None,
+                    recipe_id=target_recipe_id
+                    if isinstance(target_recipe_id, str) and target_recipe_id.strip()
+                    else None,
                     variant_id=variant_id if scope == "variant" else None,
-                    candidate_id=str(winner_payload.get("candidate_id") or body.get("candidate_id") or "") or None,
-                    proposal_id=str(winner_payload.get("proposal_id") or body.get("proposal_id") or "") or None,
-                    canary_key=str(winner_payload.get("canary_key") or body.get("canary_key") or "") or None,
+                    candidate_id=str(
+                        winner_payload.get("candidate_id") or body.get("candidate_id") or ""
+                    )
+                    or None,
+                    proposal_id=str(
+                        winner_payload.get("proposal_id") or body.get("proposal_id") or ""
+                    )
+                    or None,
+                    canary_key=str(winner_payload.get("canary_key") or body.get("canary_key") or "")
+                    or None,
                     ledger_path="data/proposal_ledger.jsonl",
                 )
             with contextlib.suppress(ImportError, OSError, TypeError, ValueError):
@@ -875,49 +937,63 @@ def mount_reflex_admin_routes(
         import io
 
         from runtime.safety.recovery.gepa_runs import get_default_store
+
         store = get_default_store()
         runs = store.list_recent(limit=200)
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow([
-            "ts", "iso_ts", "trigger", "recipe_id",
-            "iterations_run", "elapsed_s", "front_size",
-            "best_candidate_id", "best_avg_score",
-            "applied", "applied_at",
-            "winner_lifecycle_state", "winner_proposal_id",
-            "winner_canary_phase", "winner_rollback_reason",
-            "best_rationale",
-        ])
+        w.writerow(
+            [
+                "ts",
+                "iso_ts",
+                "trigger",
+                "recipe_id",
+                "iterations_run",
+                "elapsed_s",
+                "front_size",
+                "best_candidate_id",
+                "best_avg_score",
+                "applied",
+                "applied_at",
+                "winner_lifecycle_state",
+                "winner_proposal_id",
+                "winner_canary_phase",
+                "winner_rollback_reason",
+                "best_rationale",
+            ]
+        )
         from datetime import datetime
 
         from runtime.safety.recovery.gepa_runs import enrich_run_records
+
         for r in enrich_run_records(runs):
-            w.writerow([
-                f"{r['ts']:.3f}",
-                datetime.fromtimestamp(r["ts"], tz=UTC).isoformat(),
-                r["trigger"],
-                r["recipe_id"] or "",
-                r["iterations_run"],
-                f"{r['elapsed_s']:.3f}",
-                r["front_size"],
-                r["best_candidate_id"] or "",
-                f"{r['best_avg_score']:.4f}" if r["best_avg_score"] is not None else "",
-                "1" if r["applied"] else "0",
-                f"{r['applied_at']:.3f}" if r["applied_at"] else "",
-                r["winner_lifecycle_state"] or "",
-                r["winner_proposal_id"] or "",
-                r["winner_canary_phase"] or "",
-                r["winner_rollback_reason"] or "",
-                # Quote-safe via csv writer · rationale can have
-                # commas/quotes/newlines · the writer escapes them.
-                r["best_rationale"] or "",
-            ])
+            w.writerow(
+                [
+                    f"{r['ts']:.3f}",
+                    datetime.fromtimestamp(r["ts"], tz=UTC).isoformat(),
+                    r["trigger"],
+                    r["recipe_id"] or "",
+                    r["iterations_run"],
+                    f"{r['elapsed_s']:.3f}",
+                    r["front_size"],
+                    r["best_candidate_id"] or "",
+                    f"{r['best_avg_score']:.4f}" if r["best_avg_score"] is not None else "",
+                    "1" if r["applied"] else "0",
+                    f"{r['applied_at']:.3f}" if r["applied_at"] else "",
+                    r["winner_lifecycle_state"] or "",
+                    r["winner_proposal_id"] or "",
+                    r["winner_canary_phase"] or "",
+                    r["winner_rollback_reason"] or "",
+                    # Quote-safe via csv writer · rationale can have
+                    # commas/quotes/newlines · the writer escapes them.
+                    r["best_rationale"] or "",
+                ]
+            )
         return PlainTextResponse(
             buf.getvalue(),
             media_type="text/csv",
             headers={
-                "Content-Disposition":
-                    f"attachment; filename=gepa_runs_{int(time.time())}.csv",
+                "Content-Disposition": f"attachment; filename=gepa_runs_{int(time.time())}.csv",
             },
         )
 
@@ -931,30 +1007,40 @@ def mount_reflex_admin_routes(
         from datetime import datetime
 
         from runtime.safety.recovery.gepa_addendum_store import list_all
+
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow([
-            "scope", "recipe_id", "path", "size_bytes",
-            "mtime", "iso_mtime", "preview",
-        ])
+        w.writerow(
+            [
+                "scope",
+                "recipe_id",
+                "path",
+                "size_bytes",
+                "mtime",
+                "iso_mtime",
+                "preview",
+            ]
+        )
         for a in list_all():
-            w.writerow([
-                a["scope"],
-                a["recipe_id"] or "",
-                a["path"],
-                a["size"],
-                f"{a['mtime']:.3f}",
-                datetime.fromtimestamp(
-                    a["mtime"], tz=UTC,
-                ).isoformat(),
-                a["preview"],
-            ])
+            w.writerow(
+                [
+                    a["scope"],
+                    a["recipe_id"] or "",
+                    a["path"],
+                    a["size"],
+                    f"{a['mtime']:.3f}",
+                    datetime.fromtimestamp(
+                        a["mtime"],
+                        tz=UTC,
+                    ).isoformat(),
+                    a["preview"],
+                ]
+            )
         return PlainTextResponse(
             buf.getvalue(),
             media_type="text/csv",
             headers={
-                "Content-Disposition":
-                    f"attachment; filename=gepa_addendums_{int(time.time())}.csv",
+                "Content-Disposition": f"attachment; filename=gepa_addendums_{int(time.time())}.csv",
             },
         )
 
@@ -968,6 +1054,7 @@ def mount_reflex_admin_routes(
         recipe" sub-card.
         """
         from runtime.safety.recovery.gepa_addendum_store import list_all
+
         return {"addendums": list_all(), "source": "gepa"}
 
     @_reflex_admin.get("/api/evolution/gepa/recipes")
@@ -980,6 +1067,7 @@ def mount_reflex_admin_routes(
         from runtime.safety.recovery.gepa_variants import (
             list_all_manifests,
         )
+
         return {"recipes": list_all_manifests(), "source": "gepa"}
 
     @_reflex_admin.get("/api/evolution/gepa/variants/{recipe_id:path}/stats")
@@ -989,12 +1077,13 @@ def mount_reflex_admin_routes(
         from runtime.safety.recovery.variant_evaluator import (
             collect_variant_stats,
         )
+
         comps = collect_variant_stats(
-            stack.journal, base_recipe_id=recipe_id,
+            stack.journal,
+            base_recipe_id=recipe_id,
         )
         if not comps:
-            return {"recipe_id": recipe_id, "variants": [],
-                    "total_uses": 0, "source": "gepa"}
+            return {"recipe_id": recipe_id, "variants": [], "total_uses": 0, "source": "gepa"}
         cmp_ = comps[0]
         return {
             "recipe_id": cmp_.base_recipe_id,
@@ -1031,8 +1120,10 @@ def mount_reflex_admin_routes(
             collect_variant_stats,
             propose_weights,
         )
+
         comps = collect_variant_stats(
-            stack.journal, base_recipe_id=recipe_id,
+            stack.journal,
+            base_recipe_id=recipe_id,
         )
         if not comps:
             # Treat "no data" as skipped (not an error) so the
@@ -1042,14 +1133,15 @@ def mount_reflex_admin_routes(
                 "ok": False,
                 "skipped": True,
                 "reason": (
-                    f"no trajectories tagged with recipe {recipe_id} "
-                    "yet · accumulate traffic first"
+                    f"no trajectories tagged with recipe {recipe_id} yet · accumulate traffic first"
                 ),
                 "current_stats": [],
                 "source": "gepa",
             }
         proposal = propose_weights(
-            comps[0], min_uses=min_uses, min_lead=min_lead,
+            comps[0],
+            min_uses=min_uses,
+            min_lead=min_lead,
         )
         if proposal is None:
             return {
@@ -1057,7 +1149,7 @@ def mount_reflex_admin_routes(
                 "skipped": True,
                 "reason": (
                     f"no winner yet (need ≥{min_uses} uses per variant "
-                    f"and ≥{min_lead*100:.0f}pp Wilson-lower lead)"
+                    f"and ≥{min_lead * 100:.0f}pp Wilson-lower lead)"
                 ),
                 "current_stats": [
                     {
@@ -1089,9 +1181,7 @@ def mount_reflex_admin_routes(
                 result["applied"] = True
                 result["new_manifest"] = list_variants(recipe_id)
             else:
-                result["apply_error"] = (
-                    f"no manifest for {recipe_id} · cannot apply"
-                )
+                result["apply_error"] = f"no manifest for {recipe_id} · cannot apply"
         return result
 
     @_reflex_admin.get("/api/evolution/gepa/variants/{recipe_id:path}")
@@ -1100,11 +1190,13 @@ def mount_reflex_admin_routes(
         content previews. Returns ``manifest_present: false``
         when the recipe is in single-file mode (no manifest)."""
         from runtime.safety.recovery.gepa_variants import list_variants
+
         return {**list_variants(recipe_id), "source": "gepa"}
 
     @_reflex_admin.post("/api/evolution/gepa/variants/{recipe_id:path}/weights")
     def _gepa_variants_weights(
-        recipe_id: str, body: dict,
+        recipe_id: str,
+        body: dict,
         x_human_approver: str | None = _Header(None, alias="X-Human-Approver"),
     ) -> dict:
         """Bulk-update variant weights · operator's "shift more
@@ -1124,11 +1216,13 @@ def mount_reflex_admin_routes(
             list_variants,
             set_weights,
         )
+
         # Gene-lock gate · weight changes are high-risk (live
         # traffic impact) so they go through the QUORUM soft-
         # advisory path + TEMPORAL (6h per recipe).
         _gate = _gate_forge_mutation(
-            MutationKind.SET_VARIANT_WEIGHTS, target=recipe_id,
+            MutationKind.SET_VARIANT_WEIGHTS,
+            target=recipe_id,
             approver=x_human_approver,
         )
         if not _gate.get("ok"):
@@ -1139,27 +1233,28 @@ def mount_reflex_admin_routes(
                 return {"ok": False, "error": "weights must be a dict", "source": "gepa"}
             # Normalise · drop non-int values defensively.
             norm = {
-                str(k): max(0, int(v))
-                for k, v in weights.items()
-                if isinstance(v, (int, float))
+                str(k): max(0, int(v)) for k, v in weights.items() if isinstance(v, (int, float))
             }
             dw_raw = body.get("default_weight")
-            dw = (
-                max(0, int(dw_raw))
-                if isinstance(dw_raw, (int, float)) else None
-            )
+            dw = max(0, int(dw_raw)) if isinstance(dw_raw, (int, float)) else None
             m = set_weights(
-                recipe_id, weights=norm, default_weight=dw,
+                recipe_id,
+                weights=norm,
+                default_weight=dw,
             )
             if m is None:
-                return {"ok": False,
-                        "error": f"no manifest for recipe {recipe_id}",
-                        "source": "gepa"}
+                return {
+                    "ok": False,
+                    "error": f"no manifest for recipe {recipe_id}",
+                    "source": "gepa",
+                }
             record_mutation(
-                MutationKind.SET_VARIANT_WEIGHTS, recipe_id,
+                MutationKind.SET_VARIANT_WEIGHTS,
+                recipe_id,
             )
             return {
-                "ok": True, **list_variants(recipe_id),
+                "ok": True,
+                **list_variants(recipe_id),
                 "gene_lock": {
                     "level": _gate.get("level"),
                     "warnings": _gate.get("warnings", []),
@@ -1173,7 +1268,8 @@ def mount_reflex_admin_routes(
         "/api/evolution/gepa/variants/{recipe_id:path}/{variant_id}",
     )
     def _gepa_variants_delete(
-        recipe_id: str, variant_id: str,
+        recipe_id: str,
+        variant_id: str,
         x_human_approver: str | None = _Header(None, alias="X-Human-Approver"),
     ) -> dict:
         """Drop a variant · removes its file + manifest entry.
@@ -1182,18 +1278,24 @@ def mount_reflex_admin_routes(
         dropped too · planner falls back to single-file mode."""
         from runtime.safety.gene_locks import MutationKind, record_mutation
         from runtime.safety.recovery.gepa_variants import remove_variant
+
         _gate = _gate_forge_mutation(
-            MutationKind.DELETE_ADDENDUM, target=recipe_id,
+            MutationKind.DELETE_ADDENDUM,
+            target=recipe_id,
             approver=x_human_approver,
         )
         if not _gate.get("ok"):
             return _gate
         removed = remove_variant(recipe_id, variant_id)
         record_mutation(MutationKind.DELETE_ADDENDUM, recipe_id)
-        return {"ok": True, "removed": removed,
-                "recipe_id": recipe_id, "variant_id": variant_id,
-                "gene_lock": {"warnings": _gate.get("warnings", [])},
-                "source": "gepa"}
+        return {
+            "ok": True,
+            "removed": removed,
+            "recipe_id": recipe_id,
+            "variant_id": variant_id,
+            "gene_lock": {"warnings": _gate.get("warnings", [])},
+            "source": "gepa",
+        }
 
     @_reflex_admin.delete("/api/evolution/gepa/addendums/{recipe_id}")
     def _gepa_addendum_delete(
@@ -1207,8 +1309,10 @@ def mount_reflex_admin_routes(
         so the panel's delete button is idempotent.
         """
         from runtime.safety.gene_locks import MutationKind, record_mutation
+
         _gate = _gate_forge_mutation(
-            MutationKind.DELETE_ADDENDUM, target=recipe_id,
+            MutationKind.DELETE_ADDENDUM,
+            target=recipe_id,
             approver=x_human_approver,
         )
         if not _gate.get("ok"):
@@ -1218,6 +1322,7 @@ def mount_reflex_admin_routes(
                 delete_for_recipe,
                 legacy_global_path,
             )
+
             if recipe_id == "__global__":
                 p = legacy_global_path()
                 if p.is_file():
@@ -1227,10 +1332,14 @@ def mount_reflex_admin_routes(
                 return {"ok": True, "deleted": False, "scope": "global", "source": "gepa"}
             deleted = delete_for_recipe(recipe_id)
             record_mutation(MutationKind.DELETE_ADDENDUM, recipe_id)
-            return {"ok": True, "deleted": deleted,
-                    "scope": "per_recipe", "recipe_id": recipe_id,
-                    "gene_lock": {"warnings": _gate.get("warnings", [])},
-                    "source": "gepa"}
+            return {
+                "ok": True,
+                "deleted": deleted,
+                "scope": "per_recipe",
+                "recipe_id": recipe_id,
+                "gene_lock": {"warnings": _gate.get("warnings", [])},
+                "source": "gepa",
+            }
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "error": f"{type(exc).__name__}: {exc}", "source": "gepa"}
 
@@ -1243,6 +1352,7 @@ def mount_reflex_admin_routes(
             enrich_run_records,
             get_default_store,
         )
+
         store = get_default_store()
         runs = store.list_recent(limit=limit)
         return {
@@ -1258,12 +1368,14 @@ def mount_reflex_admin_routes(
     # toggle. See forge_auto_tick.py for safety rules.
     try:
         from runtime.safety.recovery import forge_auto_tick
+
         forge_auto_tick.bind_stack(stack)
         # Boot-time opt-in · the OCTOPUS_FORGE_AUTO_PROMOTE_
         # INTERVAL_HOURS env var is the "I want this running
         # from every uvicorn restart" switch. Unset → scheduler
         # stays off, operator can still toggle at runtime.
         import os as _os
+
         _boot_iv = _os.environ.get("OCTOPUS_FORGE_AUTO_PROMOTE_INTERVAL_HOURS")
         if _boot_iv:
             with contextlib.suppress(TypeError, ValueError):
@@ -1274,6 +1386,7 @@ def mount_reflex_admin_routes(
     @_reflex_admin.get("/api/evolution/gepa/auto-tick/status")
     def _gepa_auto_tick_status() -> dict:
         from runtime.safety.recovery import forge_auto_tick
+
         return {**forge_auto_tick.get_status(), "source": "gepa"}
 
     @_reflex_admin.post("/api/evolution/gepa/auto-tick/enable")
@@ -1294,6 +1407,7 @@ def mount_reflex_admin_routes(
         """
         from runtime.safety.gene_locks import LockViolation, check_monotonic
         from runtime.safety.recovery import forge_auto_tick
+
         # Read current thresholds to compute direction.
         status = forge_auto_tick.get_status()
         current_interval = status.get("interval_hours", 24.0)
@@ -1307,7 +1421,9 @@ def mount_reflex_admin_routes(
                 ("auto_tick.min_lead", current_min_lead, min_lead),
             ]:
                 r = check_monotonic(
-                    field_path=path, old_value=old, new_value=new,
+                    field_path=path,
+                    old_value=old,
+                    new_value=new,
                     approver=x_human_approver,
                 )
                 mono_warnings.extend(r.get("warnings", []))
@@ -1328,6 +1444,7 @@ def mount_reflex_admin_routes(
         """Signal the scheduler to stop. Returns immediately ·
         thread exits on its next stop-event check (≤ 5 s)."""
         from runtime.safety.recovery import forge_auto_tick
+
         return {**forge_auto_tick.disable(), "source": "gepa"}
 
     @_reflex_admin.post("/api/evolution/gepa/auto-tick/run-now")
@@ -1344,8 +1461,11 @@ def mount_reflex_admin_routes(
         from dataclasses import asdict
 
         from runtime.safety.recovery import forge_auto_tick
+
         tr = forge_auto_tick.run_tick(
-            apply=apply, min_uses=min_uses, min_lead=min_lead,
+            apply=apply,
+            min_uses=min_uses,
+            min_lead=min_lead,
         )
         return {**asdict(tr), "apply": apply, "source": "gepa"}
 
@@ -1372,6 +1492,7 @@ def mount_reflex_admin_routes(
             from runtime.safety.recovery.gepa_bridge import (
                 propose_for_losing_recipes,
             )
+
             seed = _load_planner_prompt()
             router = getattr(stack.planner, "router", None)
             if router is None:
@@ -1434,6 +1555,7 @@ def mount_reflex_admin_routes(
         changing rules to make sure the cache doesn't keep
         serving the now-superseded LLM reply."""
         from runtime.core.nerves.reflex.tiers import get_default_fuzzy_cache
+
         fc = get_default_fuzzy_cache()
         n = len(fc._store)  # noqa: SLF001 (deliberate access)
         fc._store.clear()  # noqa: SLF001
@@ -1457,6 +1579,7 @@ def mount_reflex_admin_routes(
         the file mtime too so the editor can warn the operator
         if someone else edited the file in between."""
         from runtime.core.nerves.reflex.rules_loader import find_default_rules_file
+
         path = find_default_rules_file()
         if path is None or not path.is_file():
             return {"ok": False, "error": "no rules file"}
@@ -1490,6 +1613,7 @@ def mount_reflex_admin_routes(
             find_default_rules_file,
             load_rules_from_file,
         )
+
         content = body.get("content")
         if not isinstance(content, str):
             return {"ok": False, "error": "missing content"}
@@ -1519,6 +1643,7 @@ def mount_reflex_admin_routes(
         try:
             if path.suffix.lower() in (".yaml", ".yml"):
                 import yaml as _yaml  # type: ignore[import]
+
                 parsed = _yaml.safe_load(content)
             else:
                 parsed = json.loads(content)
@@ -1534,8 +1659,7 @@ def mount_reflex_admin_routes(
         if not isinstance(rules_list, list):
             return {
                 "ok": False,
-                "error": "expected a 'rules:' list at top level "
-                         "(or a top-level list)",
+                "error": "expected a 'rules:' list at top level (or a top-level list)",
             }
         # Now parse via the loader to get the rule count for
         # the response. Failures here surface as 0 rules in
@@ -1566,6 +1690,7 @@ def mount_reflex_admin_routes(
         if body.get("reload", True):
             try:
                 from runtime.cli import _build_reflex_router
+
                 fresh = _build_reflex_router()
                 count = _reflex_router.replace_reflexes(fresh._reflexes)
                 result["reloaded"] = True
@@ -1587,11 +1712,13 @@ def mount_reflex_admin_routes(
     @_reflex_admin.get("/api/reflex/rules-cards")
     def _reflex_rules_cards_get() -> dict:
         from runtime.core.nerves.reflex.rules_loader import find_default_rules_file
+
         path = find_default_rules_file()
         if path is None or not path.is_file():
             return {"ok": False, "error": "no rules file"}
         try:
             from ruamel.yaml import YAML  # type: ignore[import]
+
             yaml = YAML(typ="rt")
             yaml.preserve_quotes = True
             with path.open("r", encoding="utf-8") as fh:
@@ -1617,7 +1744,9 @@ def mount_reflex_admin_routes(
             # Card-incompatible features · these route-block from
             # the simplified UI and force YAML mode.
             non_action_advanced = {
-                "variants", "per_actor", "enabled_when",
+                "variants",
+                "per_actor",
+                "enabled_when",
             }
             has_advanced = bool(non_action_advanced & set(r.keys())) or rtype != "regex"
             # Action handling · expose webhook XOR mqtt in the card.
@@ -1679,19 +1808,21 @@ def mount_reflex_admin_routes(
                 prio_band = "medium"
             else:
                 prio_band = "high"
-            cards.append({
-                "id": rid,
-                "trigger_mode": trigger_mode,
-                "trigger_text": trigger_text,
-                "reply": str(reply),
-                "reply_on_failure": str(reply_on_failure),
-                "reply_source": "workflow" if str(delegate).strip() else "text",
-                "delegate_to_workflow": str(delegate),
-                "priority": prio_band,
-                "priority_raw": prio,
-                "action": action_card,
-                "advanced": has_advanced,
-            })
+            cards.append(
+                {
+                    "id": rid,
+                    "trigger_mode": trigger_mode,
+                    "trigger_text": trigger_text,
+                    "reply": str(reply),
+                    "reply_on_failure": str(reply_on_failure),
+                    "reply_source": "workflow" if str(delegate).strip() else "text",
+                    "delegate_to_workflow": str(delegate),
+                    "priority": prio_band,
+                    "priority_raw": prio,
+                    "action": action_card,
+                    "advanced": has_advanced,
+                }
+            )
         return {
             "ok": True,
             "path": str(path),
@@ -1719,6 +1850,7 @@ def mount_reflex_admin_routes(
             find_default_rules_file,
             load_rules_from_file,
         )
+
         path = find_default_rules_file()
         if path is None:
             return {"ok": False, "error": "no rules file"}
@@ -1738,6 +1870,7 @@ def mount_reflex_admin_routes(
         try:
             from ruamel.yaml import YAML  # type: ignore[import]
             from ruamel.yaml.comments import CommentedMap, CommentedSeq  # type: ignore[import]
+
             yaml = YAML(typ="rt")
             yaml.preserve_quotes = True
             yaml.width = 120
@@ -1758,6 +1891,7 @@ def mount_reflex_admin_routes(
 
         def _to_pattern(mode: str, text: str) -> str:
             import re as _re
+
             t = text or ""
             if mode == "exact":
                 return f"^{_re.escape(t)}$"
@@ -1794,9 +1928,7 @@ def mount_reflex_admin_routes(
         rules_seq[:] = kept
 
         # Apply upserts.
-        existing_by_id = {
-            r.get("id"): i for i, r in enumerate(rules_seq) if isinstance(r, dict)
-        }
+        existing_by_id = {r.get("id"): i for i, r in enumerate(rules_seq) if isinstance(r, dict)}
 
         def _build_action_block(action_in: dict | None) -> CommentedMap | None:
             if not isinstance(action_in, dict):
@@ -1812,9 +1944,7 @@ def mount_reflex_admin_routes(
                 sub["method"] = str(wh.get("method") or "POST").upper()
                 headers = wh.get("headers") or {}
                 if isinstance(headers, dict) and headers:
-                    sub["headers"] = CommentedMap(
-                        (str(k), str(v)) for k, v in headers.items()
-                    )
+                    sub["headers"] = CommentedMap((str(k), str(v)) for k, v in headers.items())
                 body_val = wh.get("body")
                 if body_val not in (None, "", {}):
                     sub["body"] = body_val
@@ -1825,7 +1955,10 @@ def mount_reflex_admin_routes(
                 return block
             if mode == "mqtt":
                 mq = action_in.get("mqtt") or {}
-                if not str(mq.get("broker") or "").strip() or not str(mq.get("topic") or "").strip():
+                if (
+                    not str(mq.get("broker") or "").strip()
+                    or not str(mq.get("topic") or "").strip()
+                ):
                     return None
                 block = CommentedMap()
                 sub = CommentedMap()
@@ -1891,6 +2024,7 @@ def mount_reflex_admin_routes(
 
         # Serialize and re-validate before overwriting on disk.
         import io as _io
+
         buf = _io.StringIO()
         try:
             yaml.dump(doc, buf)
@@ -1919,6 +2053,7 @@ def mount_reflex_admin_routes(
         if body.get("reload", True):
             try:
                 from runtime.cli import _build_reflex_router
+
                 fresh = _build_reflex_router()
                 count = _reflex_router.replace_reflexes(fresh._reflexes)
                 result["reloaded"] = True
@@ -1950,58 +2085,96 @@ def mount_reflex_admin_routes(
     # selection, and Wilson-lower-bound auto-promote which
     # are not part of the upstream research.
     _forge_aliases = [
-        ("GET",  "/api/evolution/gepa/recipes",
-         "/api/evolution/forge/recipes", _gepa_recipes_with_manifests),
-        ("GET",  "/api/evolution/gepa/auto-tick/status",
-         "/api/evolution/forge/auto-tick/status",
-         _gepa_auto_tick_status),
-        ("POST", "/api/evolution/gepa/auto-tick/enable",
-         "/api/evolution/forge/auto-tick/enable",
-         _gepa_auto_tick_enable),
-        ("POST", "/api/evolution/gepa/auto-tick/disable",
-         "/api/evolution/forge/auto-tick/disable",
-         _gepa_auto_tick_disable),
-        ("POST", "/api/evolution/gepa/auto-tick/run-now",
-         "/api/evolution/forge/auto-tick/run-now",
-         _gepa_auto_tick_now),
-        ("POST", "/api/evolution/gepa/run",
-         "/api/evolution/forge/run", _gepa_run),
-        ("POST", "/api/evolution/gepa/apply",
-         "/api/evolution/forge/apply", _gepa_apply),
-        ("GET",  "/api/evolution/gepa/runs",
-         "/api/evolution/forge/runs", _gepa_runs),
-        ("GET",  "/api/evolution/gepa/runs.csv",
-         "/api/evolution/forge/runs.csv", _gepa_runs_csv),
-        ("GET",  "/api/evolution/gepa/addendums",
-         "/api/evolution/forge/addendums", _gepa_addendums),
-        ("GET",  "/api/evolution/gepa/addendums.csv",
-         "/api/evolution/forge/addendums.csv", _gepa_addendums_csv),
-        ("GET",  "/api/evolution/gepa/applied",
-         "/api/evolution/forge/applied", _gepa_applied),
-        ("POST", "/api/evolution/gepa/auto-propose",
-         "/api/evolution/forge/auto-propose", _gepa_auto_propose),
-        ("GET",  "/api/evolution/gepa/variants/{recipe_id:path}/stats",
-         "/api/evolution/forge/variants/{recipe_id:path}/stats",
-         _gepa_variants_stats),
-        ("POST", "/api/evolution/gepa/variants/{recipe_id:path}/auto-promote",
-         "/api/evolution/forge/variants/{recipe_id:path}/auto-promote",
-         _gepa_variants_auto_promote),
-        ("GET",  "/api/evolution/gepa/variants/{recipe_id:path}",
-         "/api/evolution/forge/variants/{recipe_id:path}",
-         _gepa_variants_list),
-        ("POST", "/api/evolution/gepa/variants/{recipe_id:path}/weights",
-         "/api/evolution/forge/variants/{recipe_id:path}/weights",
-         _gepa_variants_weights),
-        ("DELETE", "/api/evolution/gepa/variants/{recipe_id:path}/{variant_id}",
-         "/api/evolution/forge/variants/{recipe_id:path}/{variant_id}",
-         _gepa_variants_delete),
-        ("DELETE", "/api/evolution/gepa/addendums/{recipe_id}",
-         "/api/evolution/forge/addendums/{recipe_id}",
-         _gepa_addendum_delete),
+        (
+            "GET",
+            "/api/evolution/gepa/recipes",
+            "/api/evolution/forge/recipes",
+            _gepa_recipes_with_manifests,
+        ),
+        (
+            "GET",
+            "/api/evolution/gepa/auto-tick/status",
+            "/api/evolution/forge/auto-tick/status",
+            _gepa_auto_tick_status,
+        ),
+        (
+            "POST",
+            "/api/evolution/gepa/auto-tick/enable",
+            "/api/evolution/forge/auto-tick/enable",
+            _gepa_auto_tick_enable,
+        ),
+        (
+            "POST",
+            "/api/evolution/gepa/auto-tick/disable",
+            "/api/evolution/forge/auto-tick/disable",
+            _gepa_auto_tick_disable,
+        ),
+        (
+            "POST",
+            "/api/evolution/gepa/auto-tick/run-now",
+            "/api/evolution/forge/auto-tick/run-now",
+            _gepa_auto_tick_now,
+        ),
+        ("POST", "/api/evolution/gepa/run", "/api/evolution/forge/run", _gepa_run),
+        ("POST", "/api/evolution/gepa/apply", "/api/evolution/forge/apply", _gepa_apply),
+        ("GET", "/api/evolution/gepa/runs", "/api/evolution/forge/runs", _gepa_runs),
+        ("GET", "/api/evolution/gepa/runs.csv", "/api/evolution/forge/runs.csv", _gepa_runs_csv),
+        ("GET", "/api/evolution/gepa/addendums", "/api/evolution/forge/addendums", _gepa_addendums),
+        (
+            "GET",
+            "/api/evolution/gepa/addendums.csv",
+            "/api/evolution/forge/addendums.csv",
+            _gepa_addendums_csv,
+        ),
+        ("GET", "/api/evolution/gepa/applied", "/api/evolution/forge/applied", _gepa_applied),
+        (
+            "POST",
+            "/api/evolution/gepa/auto-propose",
+            "/api/evolution/forge/auto-propose",
+            _gepa_auto_propose,
+        ),
+        (
+            "GET",
+            "/api/evolution/gepa/variants/{recipe_id:path}/stats",
+            "/api/evolution/forge/variants/{recipe_id:path}/stats",
+            _gepa_variants_stats,
+        ),
+        (
+            "POST",
+            "/api/evolution/gepa/variants/{recipe_id:path}/auto-promote",
+            "/api/evolution/forge/variants/{recipe_id:path}/auto-promote",
+            _gepa_variants_auto_promote,
+        ),
+        (
+            "GET",
+            "/api/evolution/gepa/variants/{recipe_id:path}",
+            "/api/evolution/forge/variants/{recipe_id:path}",
+            _gepa_variants_list,
+        ),
+        (
+            "POST",
+            "/api/evolution/gepa/variants/{recipe_id:path}/weights",
+            "/api/evolution/forge/variants/{recipe_id:path}/weights",
+            _gepa_variants_weights,
+        ),
+        (
+            "DELETE",
+            "/api/evolution/gepa/variants/{recipe_id:path}/{variant_id}",
+            "/api/evolution/forge/variants/{recipe_id:path}/{variant_id}",
+            _gepa_variants_delete,
+        ),
+        (
+            "DELETE",
+            "/api/evolution/gepa/addendums/{recipe_id}",
+            "/api/evolution/forge/addendums/{recipe_id}",
+            _gepa_addendum_delete,
+        ),
     ]
     for _method, _old, _new, _fn in _forge_aliases:
         _reflex_admin.add_api_route(
-            _new, _fn, methods=[_method],
+            _new,
+            _fn,
+            methods=[_method],
             include_in_schema=True,
         )
         # Hide the legacy ``gepa`` paths from the OpenAPI spec
@@ -2010,12 +2183,8 @@ def mount_reflex_admin_routes(
         # hardcoded them. Iterate over the router's routes
         # and flip include_in_schema on the matching path.
         for _r in _reflex_admin.routes:
-            if (
-                getattr(_r, "path", None) == _old
-                and _method in getattr(_r, "methods", set())
-            ):
+            if getattr(_r, "path", None) == _old and _method in getattr(_r, "methods", set()):
                 _r.include_in_schema = False
                 break
 
     app.include_router(_reflex_admin)
-

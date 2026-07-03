@@ -71,7 +71,8 @@ class TestMetricsRouter:
         g = fresh_registry.gauge("g1", "gauge help")
         g.set(7.5)
         h = fresh_registry.histogram(
-            "h1", "histogram help",
+            "h1",
+            "histogram help",
             buckets=(0.1, 1.0, float("inf")),
         )
         h.observe(0.5)
@@ -202,9 +203,13 @@ class TestK8sProbes:
         )
 
         reg = HealthRegistry()
-        reg.register(HealthCheck(
-            name="process", check=lambda: True, kind="liveness",
-        ))
+        reg.register(
+            HealthCheck(
+                name="process",
+                check=lambda: True,
+                kind="liveness",
+            )
+        )
         app = FastAPI()
         app.include_router(create_probe_router(reg))
         client = TestClient(app)
@@ -226,9 +231,14 @@ class TestK8sProbes:
         )
 
         reg = HealthRegistry()
-        reg.register(HealthCheck(
-            name="db", check=lambda: False, kind="readiness", critical=True,
-        ))
+        reg.register(
+            HealthCheck(
+                name="db",
+                check=lambda: False,
+                kind="readiness",
+                critical=True,
+            )
+        )
         app = FastAPI()
         app.include_router(create_probe_router(reg))
         client = TestClient(app)
@@ -248,12 +258,21 @@ class TestK8sProbes:
         )
 
         reg = HealthRegistry()
-        reg.register(HealthCheck(
-            name="cache", check=lambda: False, kind="readiness", critical=False,
-        ))
-        reg.register(HealthCheck(
-            name="db", check=lambda: True, kind="readiness",
-        ))
+        reg.register(
+            HealthCheck(
+                name="cache",
+                check=lambda: False,
+                kind="readiness",
+                critical=False,
+            )
+        )
+        reg.register(
+            HealthCheck(
+                name="db",
+                check=lambda: True,
+                kind="readiness",
+            )
+        )
         app = FastAPI()
         app.include_router(create_probe_router(reg))
         client = TestClient(app)
@@ -276,12 +295,21 @@ class TestK8sProbes:
         )
 
         reg = HealthRegistry()
-        reg.register(HealthCheck(
-            name="proc", check=lambda: True, kind="liveness",
-        ))
-        reg.register(HealthCheck(
-            name="db", check=lambda: False, kind="readiness", critical=True,
-        ))
+        reg.register(
+            HealthCheck(
+                name="proc",
+                check=lambda: True,
+                kind="liveness",
+            )
+        )
+        reg.register(
+            HealthCheck(
+                name="db",
+                check=lambda: False,
+                kind="readiness",
+                critical=True,
+            )
+        )
         app = FastAPI()
         app.include_router(create_probe_router(reg))
         client = TestClient(app)
@@ -297,7 +325,7 @@ class TestK8sProbes:
 
 class TestMetricsEndToEnd:
     """Beak emits ``octopus_skill_calls_total``. The
-        /metrics endpoint must surface it without any extra wiring.
+    /metrics endpoint must surface it without any extra wiring.
     """
 
     @pytest.fixture(autouse=True)
@@ -348,8 +376,14 @@ class TestMetricsEndToEnd:
             limits=BudgetLimits(usd=1.0, tokens=10_000, wallclock_s=60.0),
         )
         executor.execute_step(
-            step_id=1, node_id="n1", sucker_id="ping", args={},
-            caller="arm:test", task_id=tid, arm_id="arm-1", budget=budget,
+            step_id=1,
+            node_id="n1",
+            sucker_id="ping",
+            args={},
+            caller="arm:test",
+            task_id=tid,
+            arm_id="arm-1",
+            budget=budget,
         )
 
         # Stand up a small app exposing /metrics.

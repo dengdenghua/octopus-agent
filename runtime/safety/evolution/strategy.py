@@ -81,7 +81,7 @@ class StrategyEngine:
     def _is_regressing(self) -> bool:
         if len(self._history) < self.config.regress_window + 1:
             return False
-        recent = self._history[-(self.config.regress_window + 1):]
+        recent = self._history[-(self.config.regress_window + 1) :]
         older = recent[:-1]
         newer = recent[1:]
         older_avg = sum(r.combined for r in older) / len(older)
@@ -91,7 +91,7 @@ class StrategyEngine:
     def _is_stable(self) -> bool:
         if len(self._history) < self.config.stable_window:
             return False
-        recent = self._history[-self.config.stable_window:]
+        recent = self._history[-self.config.stable_window :]
         scores = [r.combined for r in recent]
         avg = sum(scores) / len(scores)
         variance = sum((s - avg) ** 2 for s in scores) / len(scores)

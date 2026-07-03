@@ -30,8 +30,8 @@ def test_replay_to_a_point(tmp_path) -> None:
     s = GroupStore(base_dir=tmp_path)
     service.invite_member(s, "t", actor="u", target_id="a", kind="agent")  # seq 1
     service.invite_member(s, "t", actor="u", target_id="b", kind="agent")  # seq 2
-    service.remove_member(s, "t", actor="u", target_id="a")                 # seq 3
-    assert {m.id for m in s.state("t").roster} == {"b"}          # now
+    service.remove_member(s, "t", actor="u", target_id="a")  # seq 3
+    assert {m.id for m in s.state("t").roster} == {"b"}  # now
     assert {m.id for m in s.state("t", until_seq=2).roster} == {"a", "b"}  # before removal
     assert {m.id for m in s.state("t", until_seq=1).roster} == {"a"}
 
@@ -39,8 +39,15 @@ def test_replay_to_a_point(tmp_path) -> None:
 # ── catch-up brief ───────────────────────────────────────────────────────────
 def test_catchup_respects_grant_and_lists_board(tmp_path) -> None:
     s = GroupStore(base_dir=tmp_path)
-    service.invite_member(s, "t", actor="u", target_id="newbie", kind="agent",
-                          grant=ContextGrant(scope="from_join"), at_message=5)
+    service.invite_member(
+        s,
+        "t",
+        actor="u",
+        target_id="newbie",
+        kind="agent",
+        grant=ContextGrant(scope="from_join"),
+        at_message=5,
+    )
     msgs = [f"m{i}" for i in range(10)]
     cu = catchup.build_catchup(s.state("t"), "newbie", msgs, {"decision": "x", "plan": "y"})
     assert cu is not None
@@ -67,9 +74,7 @@ def test_competence_memory_and_suggest(tmp_path) -> None:
     for ok in (True, True, False):
         store.record("a", "database", ok)
     assert abs(store.competence("a", "database") - 2 / 3) < 1e-6
-    ranked = nominate.suggest(
-        "tune the database", [("a", "database"), ("b", "frontend")], store
-    )
+    ranked = nominate.suggest("tune the database", [("a", "database"), ("b", "frontend")], store)
     assert ranked and ranked[0]["agent_id"] == "a"
     assert all(r["agent_id"] != "b" for r in ranked)  # b irrelevant → excluded
 
@@ -178,9 +183,13 @@ def test_breakout_fork_and_merge_back(tmp_path) -> None:
     s = GroupStore(base_dir=tmp_path)
     service.invite_member(s, "parent", actor="u", target_id="user", kind="human")
     res = breakout.fork(
-        s, "parent", "child-1", actor="user",
+        s,
+        "parent",
+        "child-1",
+        actor="user",
         members=[{"id": "a", "kind": "agent"}, {"id": "b", "kind": "agent"}],
-        grant=ContextGrant(scope="from_join"), at_message=10,
+        grant=ContextGrant(scope="from_join"),
+        at_message=10,
     )
     assert set(res["members"]) == {"a", "b"}
     # child seeded with the subset

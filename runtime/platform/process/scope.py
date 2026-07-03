@@ -29,6 +29,7 @@ path boundaries (`write_skills._ensure_sandbox`, the executor's
 sandbox-arg injector) call `resolve_write_scope(session)` to get the
 allowed roots · they never re-implement the mode ladder.
 """
+
 from __future__ import annotations
 
 import logging
@@ -132,6 +133,7 @@ class WriteScope:
         What the caller asked for before resolver constraints. Surfaced
         so diagnostics can explain why the effective mode differs.
     """
+
     mode: str
     roots: tuple[Path, ...]
     requested_mode: str = "chat"
@@ -400,8 +402,7 @@ def resolve_write_scope(session: Session | None) -> WriteScope:
             thread_id,
             explicit_root=(
                 explicit_artifact_root
-                if isinstance(explicit_artifact_root, str)
-                and explicit_artifact_root.strip()
+                if isinstance(explicit_artifact_root, str) and explicit_artifact_root.strip()
                 else None
             ),
         )
@@ -517,13 +518,17 @@ def resolve_execution_scope(session: Session | None) -> ExecutionScope:
     if write_scope.mode == "plan" or permission_mode == "plan":
         writable_roots = ()
 
-    if write_scope.mode == "code" and sandbox_mode == "sandbox" and workspace_path is not None and write_scope.primary is not None:
+    if (
+        write_scope.mode == "code"
+        and sandbox_mode == "sandbox"
+        and workspace_path is not None
+        and write_scope.primary is not None
+    ):
         writable_roots = tuple(
-                root
-                for root in write_scope.roots
-                if root == write_scope.primary
-                or not _path_is_same_or_under(root, workspace_path)
-            )
+            root
+            for root in write_scope.roots
+            if root == write_scope.primary or not _path_is_same_or_under(root, workspace_path)
+        )
 
     if permission_mode == "bypassPermissions" or execution_environment == "local":
         shell_policy = "allow"

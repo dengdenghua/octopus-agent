@@ -52,5 +52,5 @@ def save_json(filepath: str, data: Any, indent: int = 2) -> None:
     filepath = os.path.expanduser(filepath)
     ensure_dir(filepath)
 
-    with open(filepath, 'w') as f:
+    with open(filepath, "w") as f:
         json.dump(data, f, indent=indent)

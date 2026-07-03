@@ -50,7 +50,7 @@ class TestLifecycle:
 
         # Implementation note.
         client.close()
-        client.close()   # Implementation note.
+        client.close()  # Implementation note.
 
     def test_context_manager_cleans_up(self):
         """Implementation note."""

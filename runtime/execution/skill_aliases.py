@@ -43,9 +43,7 @@ _CANONICAL_TO_ALIASES: dict[str, tuple[str, ...]] = {}
 _tmp: dict[str, list[str]] = defaultdict(list)
 for alias, canonical in SKILL_ALIAS_TO_CANONICAL.items():
     _tmp[canonical].append(alias)
-_CANONICAL_TO_ALIASES = {
-    canonical: tuple(sorted(aliases)) for canonical, aliases in _tmp.items()
-}
+_CANONICAL_TO_ALIASES = {canonical: tuple(sorted(aliases)) for canonical, aliases in _tmp.items()}
 
 
 def canonical_skill_id(name: str) -> str:

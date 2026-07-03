@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from utils import activity_ops
 
@@ -24,8 +24,8 @@ class TestStartSession(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
         self.session_file = os.path.join(self.temp_dir, ".current_session.json")
         self.activity_file = os.path.join(self.temp_dir, "activity.json")
-        self.session_patcher = patch.object(activity_ops, 'SESSION_FILE', self.session_file)
-        self.activity_patcher = patch.object(activity_ops, 'ACTIVITY_FILE', self.activity_file)
+        self.session_patcher = patch.object(activity_ops, "SESSION_FILE", self.session_file)
+        self.activity_patcher = patch.object(activity_ops, "ACTIVITY_FILE", self.activity_file)
         self.session_patcher.start()
         self.activity_patcher.start()
 
@@ -38,7 +38,7 @@ class TestStartSession(unittest.TestCase):
     def test_creates_session_file(self):
         """Test that start_session creates a session file."""
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             activity_ops.start_session()
 
         self.assertTrue(os.path.exists(self.session_file))
@@ -54,7 +54,7 @@ class TestStartSession(unittest.TestCase):
     def test_start_session_output(self):
         """Test that start_session prints confirmation."""
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             activity_ops.start_session()
 
         output = captured.getvalue()
@@ -68,7 +68,7 @@ class TestLogSkip(unittest.TestCase):
         """Create temp directory and patch file paths."""
         self.temp_dir = tempfile.mkdtemp()
         self.session_file = os.path.join(self.temp_dir, ".current_session.json")
-        self.session_patcher = patch.object(activity_ops, 'SESSION_FILE', self.session_file)
+        self.session_patcher = patch.object(activity_ops, "SESSION_FILE", self.session_file)
         self.session_patcher.start()
 
     def tearDown(self):
@@ -80,14 +80,10 @@ class TestLogSkip(unittest.TestCase):
         """Test that log_skip adds entry to skipped list."""
         # Start session first
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             activity_ops.start_session()
 
-        activity_ops.log_skip(
-            email_id="email123",
-            subject="Test Email",
-            reason="No events found"
-        )
+        activity_ops.log_skip(email_id="email123", subject="Test Email", reason="No events found")
 
         with open(self.session_file) as f:
             session = json.load(f)
@@ -110,11 +106,7 @@ class TestLogSkip(unittest.TestCase):
             os.remove(self.session_file)
 
         with self.assertRaises((SystemExit, KeyError)):
-            activity_ops.log_skip(
-                email_id="email123",
-                subject="Test",
-                reason="Test"
-            )
+            activity_ops.log_skip(email_id="email123", subject="Test", reason="Test")
 
 
 class TestLogEvent(unittest.TestCase):
@@ -124,7 +116,7 @@ class TestLogEvent(unittest.TestCase):
         """Create temp directory and patch file paths."""
         self.temp_dir = tempfile.mkdtemp()
         self.session_file = os.path.join(self.temp_dir, ".current_session.json")
-        self.session_patcher = patch.object(activity_ops, 'SESSION_FILE', self.session_file)
+        self.session_patcher = patch.object(activity_ops, "SESSION_FILE", self.session_file)
         self.session_patcher.start()
 
     def tearDown(self):
@@ -135,14 +127,14 @@ class TestLogEvent(unittest.TestCase):
     def test_log_event_adds_to_list(self):
         """Test that log_event adds entry to events_extracted list."""
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             activity_ops.start_session()
 
         activity_ops.log_event(
             email_id="email123",
             title="Team Meeting",
             action="pending",
-            reason="Extracted from invite"
+            reason="Extracted from invite",
         )
 
         with open(self.session_file) as f:
@@ -157,7 +149,7 @@ class TestLogEvent(unittest.TestCase):
     def test_log_event_increments_emails_with_events(self):
         """Test that log_event increments emails_with_events counter."""
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             activity_ops.start_session()
 
         activity_ops.log_event(email_id="email1", title="Event 1")
@@ -169,7 +161,7 @@ class TestLogEvent(unittest.TestCase):
     def test_log_event_same_email_counted_once(self):
         """Test that multiple events from same email only count once."""
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             activity_ops.start_session()
 
         activity_ops.log_event(email_id="email1", title="Event 1")
@@ -193,10 +185,7 @@ class TestLogEvent(unittest.TestCase):
             os.remove(self.session_file)
 
         with self.assertRaises((SystemExit, KeyError)):
-            activity_ops.log_event(
-                email_id="email123",
-                title="Test Event"
-            )
+            activity_ops.log_event(email_id="email123", title="Test Event")
 
 
 class TestEndSession(unittest.TestCase):
@@ -207,8 +196,8 @@ class TestEndSession(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
         self.session_file = os.path.join(self.temp_dir, ".current_session.json")
         self.activity_file = os.path.join(self.temp_dir, "activity.json")
-        self.session_patcher = patch.object(activity_ops, 'SESSION_FILE', self.session_file)
-        self.activity_patcher = patch.object(activity_ops, 'ACTIVITY_FILE', self.activity_file)
+        self.session_patcher = patch.object(activity_ops, "SESSION_FILE", self.session_file)
+        self.activity_patcher = patch.object(activity_ops, "ACTIVITY_FILE", self.activity_file)
         self.session_patcher.start()
         self.activity_patcher.start()
 
@@ -221,13 +210,13 @@ class TestEndSession(unittest.TestCase):
     def test_end_session_appends_to_activity_log(self):
         """Test that end_session appends session to activity log."""
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             activity_ops.start_session()
 
         activity_ops.log_skip(email_id="e1", subject="S1", reason="R1")
         activity_ops.log_event(email_id="e2", title="Event 1")
 
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             activity_ops.end_session()
 
         with open(self.activity_file) as f:
@@ -242,7 +231,7 @@ class TestEndSession(unittest.TestCase):
     def test_end_session_removes_session_file(self):
         """Test that end_session removes the current session file."""
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             activity_ops.start_session()
             activity_ops.end_session()
 
@@ -260,7 +249,7 @@ class TestEndSession(unittest.TestCase):
             os.remove(self.session_file)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             activity_ops.end_session()
 
         output = captured.getvalue()
@@ -272,11 +261,11 @@ class TestEndSession(unittest.TestCase):
         """Test that end_session keeps only MAX_SESSIONS sessions."""
         # Create activity with many sessions
         sessions = [{"timestamp": f"2026-02-{i:02d}T10:00:00"} for i in range(1, 52)]
-        with open(self.activity_file, 'w') as f:
+        with open(self.activity_file, "w") as f:
             json.dump({"sessions": sessions}, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             activity_ops.start_session()
             activity_ops.end_session()
 
@@ -293,7 +282,7 @@ class TestShowActivity(unittest.TestCase):
         """Create temp directory and patch file paths."""
         self.temp_dir = tempfile.mkdtemp()
         self.activity_file = os.path.join(self.temp_dir, "activity.json")
-        self.activity_patcher = patch.object(activity_ops, 'ACTIVITY_FILE', self.activity_file)
+        self.activity_patcher = patch.object(activity_ops, "ACTIVITY_FILE", self.activity_file)
         self.activity_patcher.start()
 
     def tearDown(self):
@@ -303,11 +292,11 @@ class TestShowActivity(unittest.TestCase):
 
     def test_show_activity_empty(self):
         """Test show_activity when no activity recorded."""
-        with open(self.activity_file, 'w') as f:
+        with open(self.activity_file, "w") as f:
             json.dump({"sessions": []}, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             activity_ops.show_activity()
 
         output = captured.getvalue()
@@ -316,19 +305,21 @@ class TestShowActivity(unittest.TestCase):
     def test_show_activity_displays_session(self):
         """Test show_activity displays session details."""
         test_data = {
-            "sessions": [{
-                "timestamp": "2026-02-11T10:00:00",
-                "emails_scanned": 5,
-                "emails_with_events": 2,
-                "skipped": [{"subject": "Newsletter", "reason": "No events"}],
-                "events_extracted": [{"title": "Meeting", "action": "created"}]
-            }]
+            "sessions": [
+                {
+                    "timestamp": "2026-02-11T10:00:00",
+                    "emails_scanned": 5,
+                    "emails_with_events": 2,
+                    "skipped": [{"subject": "Newsletter", "reason": "No events"}],
+                    "events_extracted": [{"title": "Meeting", "action": "created"}],
+                }
+            ]
         }
-        with open(self.activity_file, 'w') as f:
+        with open(self.activity_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             activity_ops.show_activity()
 
         output = captured.getvalue()
@@ -336,5 +327,5 @@ class TestShowActivity(unittest.TestCase):
         self.assertIn("Emails with events: 2", output)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

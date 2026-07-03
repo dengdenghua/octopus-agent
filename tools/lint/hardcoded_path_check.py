@@ -26,6 +26,7 @@ Run::
     python tools/lint/hardcoded_path_check.py            # report
     python tools/lint/hardcoded_path_check.py --strict   # exit 1 on hits
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,14 +40,16 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 # segment — any non-trivial sequence after the user-root prefix.
 # Excluded usernames are CI / system / shared accounts that legitimately
 # appear in committed code.
-_EXCLUDED_USERNAMES = frozenset({
-    "runner",       # GitHub Actions
-    "Public",       # macOS shared
-    "Shared",       # macOS shared
-    "Default",      # Windows default profile
-    "Administrator",  # Windows admin (system-level)
-    "All Users",    # Windows system
-})
+_EXCLUDED_USERNAMES = frozenset(
+    {
+        "runner",  # GitHub Actions
+        "Public",  # macOS shared
+        "Shared",  # macOS shared
+        "Default",  # Windows default profile
+        "Administrator",  # Windows admin (system-level)
+        "All Users",  # Windows system
+    }
+)
 
 _PATH_PATTERN = re.compile(
     r"""
@@ -80,15 +83,15 @@ SCAN_GLOBS = (
 # (not actual paths) or test fixtures that intentionally contain
 # offending strings.
 SKIP_GLOBS = (
-    "runtime/core/cerebrum/react_guards.py",   # the runtime guard's own docstrings
+    "runtime/core/cerebrum/react_guards.py",  # the runtime guard's own docstrings
     "runtime/core/cerebrum/react_parsing.py",  # parser comments
     "tests/test_react_guards_quality_floor.py",  # fixture data
-    "tests/test_tool_intent_heuristic.py",       # fixture data
-    "tests/test_build_turn_session.py",          # fixture: /home/data placeholder
-    "tests/test_stable_prompt_invariant.py",     # fixture: /home/x placeholder
-    "tests/test_prompt_injection.py",            # fixture: /Users/dev placeholder
-    "tests/test_reflex_forge.py",                # fixture: /Users/test placeholder
-    "tools/lint/hardcoded_path_check.py",        # this file
+    "tests/test_tool_intent_heuristic.py",  # fixture data
+    "tests/test_build_turn_session.py",  # fixture: /home/data placeholder
+    "tests/test_stable_prompt_invariant.py",  # fixture: /home/x placeholder
+    "tests/test_prompt_injection.py",  # fixture: /Users/dev placeholder
+    "tests/test_reflex_forge.py",  # fixture: /Users/test placeholder
+    "tools/lint/hardcoded_path_check.py",  # this file
     # Standard skill documentation that mentions Windows temp paths.
     "runtime/execution/all_skills/edge-tts/SKILL.md",
     "runtime/execution/all_skills/speech-synthesis/SKILL.md",

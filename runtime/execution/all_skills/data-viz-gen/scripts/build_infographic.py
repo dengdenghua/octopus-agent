@@ -27,52 +27,84 @@ from html import escape as _esc
 
 PALETTES = {
     "ocean": {
-        "bg": "#eef4fb", "card": "#ffffff", "primary": "#0077b6",
-        "text": "#023e8a", "text_light": "#4a6fa5",
+        "bg": "#eef4fb",
+        "card": "#ffffff",
+        "primary": "#0077b6",
+        "text": "#023e8a",
+        "text_light": "#4a6fa5",
         "colors": ["#0077b6", "#00b4d8", "#48cae4", "#90e0ef", "#0096c7", "#005f8a"],
-        "up": "#0a9396", "down": "#e63946",
+        "up": "#0a9396",
+        "down": "#e63946",
     },
     "sunset": {
-        "bg": "#fef6f0", "card": "#ffffff", "primary": "#e76f51",
-        "text": "#1d3557", "text_light": "#6b7b8d",
+        "bg": "#fef6f0",
+        "card": "#ffffff",
+        "primary": "#e76f51",
+        "text": "#1d3557",
+        "text_light": "#6b7b8d",
         "colors": ["#e63946", "#f4845f", "#f7b267", "#e76f51", "#c1121f", "#d4a373"],
-        "up": "#2a9d8f", "down": "#e63946",
+        "up": "#2a9d8f",
+        "down": "#e63946",
     },
     "forest": {
-        "bg": "#eef7ee", "card": "#ffffff", "primary": "#2d6a4f",
-        "text": "#1b4332", "text_light": "#6b8f71",
+        "bg": "#eef7ee",
+        "card": "#ffffff",
+        "primary": "#2d6a4f",
+        "text": "#1b4332",
+        "text_light": "#6b8f71",
         "colors": ["#2d6a4f", "#40916c", "#52b788", "#74c69d", "#95d5b2", "#1b4332"],
-        "up": "#2d6a4f", "down": "#c1121f",
+        "up": "#2d6a4f",
+        "down": "#c1121f",
     },
     "berry": {
-        "bg": "#f8f0fa", "card": "#ffffff", "primary": "#7b2cbf",
-        "text": "#3c096c", "text_light": "#8a6baa",
+        "bg": "#f8f0fa",
+        "card": "#ffffff",
+        "primary": "#7b2cbf",
+        "text": "#3c096c",
+        "text_light": "#8a6baa",
         "colors": ["#7b2cbf", "#9d4edd", "#c77dff", "#e0aaff", "#5a189a", "#240046"],
-        "up": "#2a9d8f", "down": "#e63946",
+        "up": "#2a9d8f",
+        "down": "#e63946",
     },
     "vibrant": {
-        "bg": "#f5f6fa", "card": "#ffffff", "primary": "#4361ee",
-        "text": "#1a1a2e", "text_light": "#6c757d",
+        "bg": "#f5f6fa",
+        "card": "#ffffff",
+        "primary": "#4361ee",
+        "text": "#1a1a2e",
+        "text_light": "#6c757d",
         "colors": ["#4361ee", "#f72585", "#4cc9f0", "#7209b7", "#3a0ca3", "#f77f00"],
-        "up": "#06d6a0", "down": "#ef476f",
+        "up": "#06d6a0",
+        "down": "#ef476f",
     },
     "corporate": {
-        "bg": "#f0f2f5", "card": "#ffffff", "primary": "#1a365d",
-        "text": "#1a202c", "text_light": "#718096",
+        "bg": "#f0f2f5",
+        "card": "#ffffff",
+        "primary": "#1a365d",
+        "text": "#1a202c",
+        "text_light": "#718096",
         "colors": ["#1a365d", "#2b6cb0", "#3182ce", "#63b3ed", "#2c5282", "#4a5568"],
-        "up": "#38a169", "down": "#e53e3e",
+        "up": "#38a169",
+        "down": "#e53e3e",
     },
     "pastel": {
-        "bg": "#fafafa", "card": "#ffffff", "primary": "#6c8ebf",
-        "text": "#333333", "text_light": "#888888",
+        "bg": "#fafafa",
+        "card": "#ffffff",
+        "primary": "#6c8ebf",
+        "text": "#333333",
+        "text_light": "#888888",
         "colors": ["#6c8ebf", "#d4a5a5", "#a8d8b9", "#f0d9b5", "#b8b8d1", "#f5c6aa"],
-        "up": "#68b684", "down": "#d4a5a5",
+        "up": "#68b684",
+        "down": "#d4a5a5",
     },
     "earth": {
-        "bg": "#f9f5f0", "card": "#ffffff", "primary": "#8b5e3c",
-        "text": "#3e2723", "text_light": "#795548",
+        "bg": "#f9f5f0",
+        "card": "#ffffff",
+        "primary": "#8b5e3c",
+        "text": "#3e2723",
+        "text_light": "#795548",
         "colors": ["#8b5e3c", "#a0522d", "#c49a6c", "#ddc9a3", "#6d4c41", "#5d4037"],
-        "up": "#558b2f", "down": "#c62828",
+        "up": "#558b2f",
+        "down": "#c62828",
     },
 }
 
@@ -129,12 +161,12 @@ def _get_color(palette, index):
 
 def _svg_icon(name, size=24, color="currentColor"):
     path_data = ICONS.get(name, ICONS.get("star", ""))
-    needs_fill = "fill=\"none\"" not in path_data and "stroke=" not in path_data
+    needs_fill = 'fill="none"' not in path_data and "stroke=" not in path_data
     fill_attr = f' fill="{_esc(color)}"' if needs_fill else ""
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
         f'viewBox="0 0 24 24" style="color:{_esc(color)};fill:{_esc(color)}"'
-        f'{fill_attr}>{path_data}</svg>'
+        f"{fill_attr}>{path_data}</svg>"
     )
 
 
@@ -217,7 +249,7 @@ def _svg_bar_chart(data, palette, chart_w=760, chart_h=360):
             lines.append(
                 f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w:.1f}" '
                 f'height="{bar_h:.1f}" rx="3" fill="{color}" opacity="0.88">'
-                f'<title>{_esc(str(series.get("name", "")))}: {_format_number(val)}</title></rect>'
+                f"<title>{_esc(str(series.get('name', '')))}: {_format_number(val)}</title></rect>"
             )
 
     if n_ser > 1:
@@ -277,8 +309,7 @@ def _svg_donut_chart(items, palette, size=280):
         label_text = _esc(str(it.get("label", "")))
         pct = f"{val / total * 100:.1f}%"
         lines.append(
-            f'<path d="{d}" fill="{color}" opacity="0.9">'
-            f"<title>{label_text}: {pct}</title></path>"
+            f'<path d="{d}" fill="{color}" opacity="0.9"><title>{label_text}: {pct}</title></path>'
         )
         angle += sweep
 
@@ -306,14 +337,14 @@ def _svg_flow_diagram(steps, palette, step_w=180, step_h=90, gap=50):
         f'style="width:100%;max-width:{total_w}px;height:auto;overflow:visible">'
     ]
 
-    lines.append('<defs>')
+    lines.append("<defs>")
     lines.append(
         f'<marker id="arrowhead" markerWidth="10" markerHeight="7" '
         f'refX="10" refY="3.5" orient="auto">'
         f'<polygon points="0 0, 10 3.5, 0 7" fill="{palette["primary"]}"/>'
-        f'</marker>'
+        f"</marker>"
     )
-    lines.append('</defs>')
+    lines.append("</defs>")
 
     y_center = total_h / 2
     for i, step in enumerate(steps):
@@ -337,9 +368,7 @@ def _svg_flow_diagram(steps, palette, step_w=180, step_h=90, gap=50):
 
         badge_cx = x + 22
         badge_cy = ry + 22
-        lines.append(
-            f'<circle cx="{badge_cx}" cy="{badge_cy}" r="14" fill="{color}"/>'
-        )
+        lines.append(f'<circle cx="{badge_cx}" cy="{badge_cy}" r="14" fill="{color}"/>')
         lines.append(
             f'<text x="{badge_cx}" y="{badge_cy + 5}" text-anchor="middle" '
             f'font-size="13" font-weight="700" fill="#fff">{step_num}</text>'
@@ -394,7 +423,7 @@ def _build_stats(data, palette):
             trend_html = (
                 f'<div style="display:flex;align-items:center;gap:4px;'
                 f'color:{trend_color};font-size:13px;font-weight:600;margin-top:4px">'
-                f'{_svg_icon(trend_icon, 16, trend_color)} {_esc(str(trend))}'
+                f"{_svg_icon(trend_icon, 16, trend_color)} {_esc(str(trend))}"
                 f"</div>"
             )
 
@@ -474,11 +503,11 @@ def _build_dashboard(data, palette):
             )
         sections.append(
             f'<div style="background:{palette["card"]};border-radius:14px;padding:28px;'
-            f'box-shadow:0 2px 12px rgba(0,0,0,0.06);display:flex;align-items:center;'
+            f"box-shadow:0 2px 12px rgba(0,0,0,0.06);display:flex;align-items:center;"
             f'gap:32px;flex-wrap:wrap">'
             f'<div style="flex:0 0 auto">{donut_svg}</div>'
             f'<div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:10px">'
-            f'{"".join(legend_items)}</div></div>'
+            f"{''.join(legend_items)}</div></div>"
         )
 
     flow_data = data.get("flow", [])

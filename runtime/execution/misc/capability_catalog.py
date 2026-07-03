@@ -56,10 +56,7 @@ def filter_capability_entries(
     rows = list(entries)
     query = _clean(q).casefold()
     if query:
-        rows = [
-            row for row in rows
-            if query in _search_blob(row).casefold()
-        ]
+        rows = [row for row in rows if query in _search_blob(row).casefold()]
     if source:
         rows = [row for row in rows if row.get("source") == source]
     if kind:
@@ -67,16 +64,13 @@ def filter_capability_entries(
     if risk_level:
         rows = [row for row in rows if row.get("risk", {}).get("level") == risk_level]
     if permission_group:
-        rows = [
-            row for row in rows
-            if row.get("permission", {}).get("group") == permission_group
-        ]
+        rows = [row for row in rows if row.get("permission", {}).get("group") == permission_group]
     if available_only:
         rows = [row for row in rows if row.get("available") is True]
     total = len(rows)
     return {
         "schema": _SCHEMA,
-        "capabilities": rows[offset: offset + limit],
+        "capabilities": rows[offset : offset + limit],
         "total": total,
         "limit": limit,
         "offset": offset,
@@ -107,27 +101,29 @@ def _runtime_skill_entries(registry: Any) -> list[dict[str, Any]]:
         except Exception:
             enabled = True
         risk = _risk_for_tool(skill_name)
-        entries.append({
-            "id": f"runtime:{skill_name}",
-            "name": skill_name,
-            "canonical_name": skill_name,
-            "display_name": skill_name,
-            "description": _clean(getattr(skill, "description", "")),
-            "summary": _clean(getattr(skill, "effective_summary", "")),
-            "source": "runtime_skill",
-            "kind": kind,
-            "group": group,
-            "provider": None,
-            "affinity": _string_list(getattr(skill, "affinity", [])),
-            "cost_profile": _clean(getattr(skill, "cost_profile", "")),
-            "trusted_source": _clean(getattr(skill, "trusted_source", "")),
-            "enabled": enabled,
-            "available": enabled and bool(permission["enabled"]),
-            "permission": permission,
-            "risk": risk,
-            "input_schema": None,
-            "planning_hints": _planning_hints(risk, permission),
-        })
+        entries.append(
+            {
+                "id": f"runtime:{skill_name}",
+                "name": skill_name,
+                "canonical_name": skill_name,
+                "display_name": skill_name,
+                "description": _clean(getattr(skill, "description", "")),
+                "summary": _clean(getattr(skill, "effective_summary", "")),
+                "source": "runtime_skill",
+                "kind": kind,
+                "group": group,
+                "provider": None,
+                "affinity": _string_list(getattr(skill, "affinity", [])),
+                "cost_profile": _clean(getattr(skill, "cost_profile", "")),
+                "trusted_source": _clean(getattr(skill, "trusted_source", "")),
+                "enabled": enabled,
+                "available": enabled and bool(permission["enabled"]),
+                "permission": permission,
+                "risk": risk,
+                "input_schema": None,
+                "planning_hints": _planning_hints(risk, permission),
+            }
+        )
     return entries
 
 
@@ -150,32 +146,36 @@ def _tool_registry_entries(tool_registry: Any) -> list[dict[str, Any]]:
         provider_id = _clean(provider.get("id"))
         permission = _permission_for_skill(name)
         risk = _risk_for_tool(name)
-        entries.append({
-            "id": f"tool:{name}",
-            "name": name,
-            "canonical_name": name,
-            "display_name": name,
-            "description": _clean(schema.get("description")),
-            "summary": _clean(schema.get("description"), limit=180),
-            "source": "tool_registry",
-            "kind": "tool",
-            "group": _skill_group(name),
-            "provider": {
-                "id": provider_id,
-                "display_name": _clean(provider.get("display_name")) or provider_id,
-                "ready": bool(provider.get("is_ready")),
-                "feature_flags": _string_list(provider.get("feature_flags", [])),
-            } if provider_id else None,
-            "affinity": [],
-            "cost_profile": "",
-            "trusted_source": f"tool-registry://{provider_id or 'default'}/{name}",
-            "enabled": True,
-            "available": bool(permission["enabled"]),
-            "permission": permission,
-            "risk": risk,
-            "input_schema": schema.get("inputSchema") or {},
-            "planning_hints": _planning_hints(risk, permission),
-        })
+        entries.append(
+            {
+                "id": f"tool:{name}",
+                "name": name,
+                "canonical_name": name,
+                "display_name": name,
+                "description": _clean(schema.get("description")),
+                "summary": _clean(schema.get("description"), limit=180),
+                "source": "tool_registry",
+                "kind": "tool",
+                "group": _skill_group(name),
+                "provider": {
+                    "id": provider_id,
+                    "display_name": _clean(provider.get("display_name")) or provider_id,
+                    "ready": bool(provider.get("is_ready")),
+                    "feature_flags": _string_list(provider.get("feature_flags", [])),
+                }
+                if provider_id
+                else None,
+                "affinity": [],
+                "cost_profile": "",
+                "trusted_source": f"tool-registry://{provider_id or 'default'}/{name}",
+                "enabled": True,
+                "available": bool(permission["enabled"]),
+                "permission": permission,
+                "risk": risk,
+                "input_schema": schema.get("inputSchema") or {},
+                "planning_hints": _planning_hints(risk, permission),
+            }
+        )
     return entries
 
 
@@ -205,32 +205,34 @@ def _mobile_mcp_entries(mobile_skills_root: str | Path | None) -> list[dict[str,
             "reason": "",
         }
         risk = _risk_for_tool(name)
-        entries.append({
-            "id": f"mobile:{name}",
-            "name": name,
-            "canonical_name": canonical,
-            "display_name": canonical,
-            "description": _clean(tool.get("description")),
-            "summary": _clean(tool.get("description"), limit=180),
-            "source": "mobile_mcp",
-            "kind": "mobile_tool",
-            "group": group,
-            "provider": {
-                "id": "octopus-tentacle",
-                "display_name": "Octopus Tentacle",
-                "ready": True,
-                "feature_flags": ["mobile", "mcp"],
-            },
-            "affinity": ["mobile", "android"],
-            "cost_profile": "mid",
-            "trusted_source": f"tentacle-mobile://skills/{canonical}",
-            "enabled": True,
-            "available": True,
-            "permission": permission,
-            "risk": risk,
-            "input_schema": tool.get("inputSchema") or {},
-            "planning_hints": _planning_hints(risk, permission),
-        })
+        entries.append(
+            {
+                "id": f"mobile:{name}",
+                "name": name,
+                "canonical_name": canonical,
+                "display_name": canonical,
+                "description": _clean(tool.get("description")),
+                "summary": _clean(tool.get("description"), limit=180),
+                "source": "mobile_mcp",
+                "kind": "mobile_tool",
+                "group": group,
+                "provider": {
+                    "id": "octopus-tentacle",
+                    "display_name": "Octopus Tentacle",
+                    "ready": True,
+                    "feature_flags": ["mobile", "mcp"],
+                },
+                "affinity": ["mobile", "android"],
+                "cost_profile": "mid",
+                "trusted_source": f"tentacle-mobile://skills/{canonical}",
+                "enabled": True,
+                "available": True,
+                "permission": permission,
+                "risk": risk,
+                "input_schema": tool.get("inputSchema") or {},
+                "planning_hints": _planning_hints(risk, permission),
+            }
+        )
     return entries
 
 
@@ -294,8 +296,7 @@ def _summary(entries: list[dict[str, Any]]) -> dict[str, Any]:
     by_kind = Counter(str(row.get("kind") or "unknown") for row in entries)
     by_risk = Counter(str(row.get("risk", {}).get("level") or "unknown") for row in entries)
     by_permission = Counter(
-        str(row.get("permission", {}).get("group") or "ungrouped")
-        for row in entries
+        str(row.get("permission", {}).get("group") or "ungrouped") for row in entries
     )
     unavailable = [row["id"] for row in entries if row.get("available") is not True]
     return {

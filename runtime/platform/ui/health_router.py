@@ -1,4 +1,5 @@
 """Health and capability endpoints for the UI app."""
+
 from __future__ import annotations
 
 import contextlib
@@ -96,9 +97,7 @@ def create_health_router(
             "version": __version__,
             "tagline": "biomimetic self-evolving agent OS",
             "skill_count": len(state.registry),
-            "journal_source": (
-                str(state.journal_path) if state.journal_path else "in-memory"
-            ),
+            "journal_source": (str(state.journal_path) if state.journal_path else "in-memory"),
             "capabilities": {
                 "opentelemetry": OTEL_AVAILABLE,
                 "mcp": STDIO_AVAILABLE,
@@ -157,9 +156,7 @@ def build_runtime_self_check(
     canonical_host = _canonical_backend_host(observed_host)
     canonical_base_url = f"{request_scheme}://{canonical_host}:{observed_port}"
     request_origin_base_url = (
-        f"{request_scheme}://{request_host}:{observed_port}"
-        if request_host
-        else canonical_base_url
+        f"{request_scheme}://{request_host}:{observed_port}" if request_host else canonical_base_url
     )
     frontend = _frontend_runtime_info(
         request=request,
@@ -176,9 +173,7 @@ def build_runtime_self_check(
     }
     drift = {
         "runtime_matches_pyproject": __version__ == pyproject_version,
-        "frontend_matches_runtime": (
-            frontend_version in {"", __version__}
-        ),
+        "frontend_matches_runtime": (frontend_version in {"", __version__}),
         "version_sources": version_sources,
     }
     aliases = _loopback_aliases(observed_host, observed_port, request_scheme)
@@ -231,18 +226,14 @@ def build_runtime_self_check(
             "id": "vite_proxy_target",
             "severity": "error",
             "passed": bool(frontend["proxy_targets_backend"]),
-            "detail": (
-                f"proxy_target={frontend['proxy_target']} "
-                f"backend={canonical_base_url}"
-            ),
+            "detail": (f"proxy_target={frontend['proxy_target']} backend={canonical_base_url}"),
         },
         {
             "id": "api_surface",
             "severity": "error",
             "passed": bool(api_surface["required_routes_present"]),
             "detail": (
-                "missing="
-                + ",".join(api_surface["missing_required_routes"])
+                "missing=" + ",".join(api_surface["missing_required_routes"])
                 if api_surface["missing_required_routes"]
                 else f"routes={api_surface['route_count']}"
             ),
@@ -302,13 +293,9 @@ def build_runtime_self_check(
             ),
         },
     ]
-    ready = all(
-        bool(row["passed"]) or row.get("severity") == "warn" for row in checks
-    )
+    ready = all(bool(row["passed"]) or row.get("severity") == "warn" for row in checks)
     warning_count = sum(
-        1
-        for row in checks
-        if row.get("severity") == "warn" and not bool(row["passed"])
+        1 for row in checks if row.get("severity") == "warn" and not bool(row["passed"])
     )
     return {
         "schema": "octopus.runtime_self_check.v1",
@@ -423,18 +410,10 @@ def _webui_static_info(root: Path) -> dict[str, Any]:
     candidates = _webui_dist_candidates(root, env_path)
     env_candidate = candidates[0] if env_path and candidates else None
     env_dist_invalid = bool(
-        env_candidate
-        and not (
-            bool(env_candidate["exists"])
-            and bool(env_candidate["has_index"])
-        )
+        env_candidate and not (bool(env_candidate["exists"]) and bool(env_candidate["has_index"]))
     )
     selected = next(
-        (
-            row
-            for row in candidates
-            if row["exists"] and row["has_index"]
-        ),
+        (row for row in candidates if row["exists"] and row["has_index"]),
         None,
     )
     assets_count = 0
@@ -448,8 +427,7 @@ def _webui_static_info(root: Path) -> dict[str, Any]:
         f"configured OCTOPUS_WEBUI_DIST is invalid: {env_path}; "
         f"fallback={selected['path'] if selected is not None else 'none'}"
         if env_dist_invalid
-        else
-        f"dist={selected['path']} assets={assets_count}"
+        else f"dist={selected['path']} assets={assets_count}"
         if selected is not None
         else "frontend dist not found; dev server fallback expected"
         if dev_fallback_expected
@@ -614,11 +592,7 @@ def _orchestration_surface_info(request: Request | None) -> dict[str, Any]:
         if not row["present"]
     ]
     replay_contract = next(
-        (
-            row
-            for row in method_contracts
-            if row["method"] == "subscribe.after_sequence"
-        ),
+        (row for row in method_contracts if row["method"] == "subscribe.after_sequence"),
         {"present": False},
     )
     ready = (
@@ -642,9 +616,7 @@ def _orchestration_surface_info(request: Request | None) -> dict[str, Any]:
             "parallel_dispatch": route_surface["has_required_route"][
                 "/api/agents/parallel/dispatch"
             ],
-            "split_planning": route_surface["has_required_route"][
-                "/api/agents/parallel/split"
-            ],
+            "split_planning": route_surface["has_required_route"]["/api/agents/parallel/split"],
             "recovery_snapshot": route_surface["has_required_route"][
                 "/api/agents/parallel/batch/{batch_id}/recovery-snapshot"
             ],
@@ -667,7 +639,8 @@ def _orchestration_surface_info(request: Request | None) -> dict[str, Any]:
             "owner_scoping": all(
                 row["present"]
                 for row in method_contracts
-                if row["method"] in {
+                if row["method"]
+                in {
                     "get_batch_owner",
                     "get_task_owner",
                     "cancel_all_for_owner",
@@ -723,10 +696,7 @@ def _run_evidence_surface_info(request: Request | None) -> dict[str, Any]:
         for row in method_contracts
         if not row["present"]
     ]
-    ready = (
-        route_surface["required_routes_present"]
-        and not missing_methods
-    )
+    ready = route_surface["required_routes_present"] and not missing_methods
     return {
         "schema": "octopus.run_evidence_surface_self_check.v1",
         "ready": ready,
@@ -748,35 +718,25 @@ def _run_evidence_surface_info(request: Request | None) -> dict[str, Any]:
             "task_run_replay_evaluation": route_surface["has_required_route"][
                 "/api/agent-trace/task-runs/{task_id}/replay-evaluation"
             ],
-            "replay_gate": route_surface["has_required_route"][
-                "/api/agent-trace/replay-gate"
-            ],
+            "replay_gate": route_surface["has_required_route"]["/api/agent-trace/replay-gate"],
             "process_timeline": route_surface["has_required_route"][
                 "/api/agent-trace/task-runs/{task_id}/process-timeline"
             ],
             "experience_ledger": route_surface["has_required_route"][
                 "/api/agent-trace/experience-ledger"
             ],
-            "review_queue": route_surface["has_required_route"][
-                "/api/agent-trace/review-queue"
-            ],
+            "review_queue": route_surface["has_required_route"]["/api/agent-trace/review-queue"],
             "promotion_gate": route_surface["has_required_route"][
                 "/api/agent-trace/review-queue/promotions/apply"
             ],
             "checkpoint_resume": (
                 route_surface["has_required_route"]["/api/agent-trace/checkpoints"]
-                and route_surface["has_required_route"][
-                    "/api/agent-trace/resume-proposals"
-                ]
+                and route_surface["has_required_route"]["/api/agent-trace/resume-proposals"]
             ),
-            "loop_review": route_surface["has_required_route"][
-                "/api/loops/{run_id}/review"
-            ],
+            "loop_review": route_surface["has_required_route"]["/api/loops/{run_id}/review"],
             "loop_replay": (
                 route_surface["has_required_route"]["/api/loops/{run_id}/replay-case"]
-                and route_surface["has_required_route"][
-                    "/api/loops/{run_id}/replay-evaluation"
-                ]
+                and route_surface["has_required_route"]["/api/loops/{run_id}/replay-evaluation"]
             ),
             "loop_resume": route_surface["has_required_route"][
                 "/api/loops/{run_id}/resume-proposal"
@@ -926,10 +886,7 @@ def _automation_surface_info(request: Request | None) -> dict[str, Any]:
         for row in method_contracts
         if not row["present"]
     ]
-    ready = (
-        route_surface["required_routes_present"]
-        and not missing_methods
-    )
+    ready = route_surface["required_routes_present"] and not missing_methods
     return {
         "schema": "octopus.automation_surface_self_check.v1",
         "ready": ready,
@@ -946,26 +903,18 @@ def _automation_surface_info(request: Request | None) -> dict[str, Any]:
                 and route_surface["has_required_route"]["/api/browser/session/ensure"]
                 and route_surface["has_required_route"]["/api/browser/session/reset"]
             ),
-            "browser_health": route_surface["has_required_route"][
-                "/api/browser/session/health"
-            ],
+            "browser_health": route_surface["has_required_route"]["/api/browser/session/health"],
             "browser_navigation": (
                 route_surface["has_required_route"]["/api/browser/navigate"]
                 and route_surface["has_required_route"]["/api/browser/action"]
             ),
             "browser_screenshot_evidence": (
                 route_surface["has_required_route"]["/api/browser/screenshot/base64"]
-                and route_surface["has_required_route"][
-                    "/api/browser-artifacts/{filename}"
-                ]
+                and route_surface["has_required_route"]["/api/browser-artifacts/{filename}"]
             ),
             "browser_replay_queue": (
-                route_surface["has_required_route"][
-                    "/api/browser/session/replay-case"
-                ]
-                and route_surface["has_required_route"][
-                    "/api/browser/session/replay-case/queue"
-                ]
+                route_surface["has_required_route"]["/api/browser/session/replay-case"]
+                and route_surface["has_required_route"]["/api/browser/session/replay-case/queue"]
             ),
             "browser_relay": (
                 route_surface["has_required_route"]["/api/browser/relay/status"]
@@ -982,21 +931,15 @@ def _automation_surface_info(request: Request | None) -> dict[str, Any]:
                 and route_surface["has_required_route"]["/api/computer/actions/vision"]
             ),
             "computer_activity_replay": (
-                route_surface["has_required_route"][
-                    "/api/computer/activity/replay-case"
-                ]
-                and route_surface["has_required_route"][
-                    "/api/computer/activity/replay-case/queue"
-                ]
+                route_surface["has_required_route"]["/api/computer/activity/replay-case"]
+                and route_surface["has_required_route"]["/api/computer/activity/replay-case/queue"]
             ),
             "computer_uia": (
                 route_surface["has_required_route"]["/api/computer/uia/status"]
                 and route_surface["has_required_route"]["/api/computer/uia/tree"]
                 and route_surface["has_required_route"]["/api/computer/uia/find"]
             ),
-            "computer_lease": route_surface["has_required_route"][
-                "/api/computer/lease/release"
-            ],
+            "computer_lease": route_surface["has_required_route"]["/api/computer/lease/release"],
             "pixel_replay_gate": _contract_present(
                 method_contracts,
                 "browser_pixel.browser_pixel_replay_gate_case",
@@ -1154,16 +1097,12 @@ def _route_surface_info(
             if str(method) not in {"HEAD", "OPTIONS"}
         )
         route_methods[path] = methods
-    missing_routes = [
-        path for path in required_routes if path not in route_methods
-    ]
+    missing_routes = [path for path in required_routes if path not in route_methods]
     missing_route_methods = [
         {
             "path": path,
             "missing_methods": [
-                method
-                for method in methods
-                if method not in route_methods.get(path, [])
+                method for method in methods if method not in route_methods.get(path, [])
             ],
         }
         for path, methods in required_routes.items()
@@ -1173,17 +1112,14 @@ def _route_surface_info(
     return {
         "route_count": len(route_methods),
         "route_methods": {
-            path: route_methods.get(path, [])
-            for path in required_routes
-            if path in route_methods
+            path: route_methods.get(path, []) for path in required_routes if path in route_methods
         },
         "missing_required_routes": missing_routes,
         "missing_route_methods": missing_route_methods,
         "required_routes_present": not missing_routes and not missing_route_methods,
         "has_required_route": {
-            path: path in route_methods and not any(
-                row["path"] == path for row in missing_route_methods
-            )
+            path: path in route_methods
+            and not any(row["path"] == path for row in missing_route_methods)
             for path in required_routes
         },
     }
@@ -1342,9 +1278,7 @@ def _orchestrator_method_contracts() -> list[dict[str, Any]]:
             "method": method,
             "present": callable(getattr(ParallelAgentOrchestrator, method, None)),
             "reason": (
-                ""
-                if callable(getattr(ParallelAgentOrchestrator, method, None))
-                else "missing"
+                "" if callable(getattr(ParallelAgentOrchestrator, method, None)) else "missing"
             ),
         }
         for method in required
@@ -1353,9 +1287,7 @@ def _orchestrator_method_contracts() -> list[dict[str, Any]]:
     has_after_sequence = False
     if callable(subscribe):
         with contextlib.suppress(TypeError, ValueError):
-            has_after_sequence = "after_sequence" in inspect.signature(
-                subscribe
-            ).parameters
+            has_after_sequence = "after_sequence" in inspect.signature(subscribe).parameters
     out.append(
         {
             "method": "subscribe.after_sequence",
@@ -1445,16 +1377,9 @@ def _frontend_runtime_info(
 ) -> dict[str, Any]:
     observed_origin = _request_frontend_origin(request)
     frontend_env_port = _coerce_port(os.environ.get("FRONTEND_PORT"))
-    port = (
-        _coerce_port(frontend_port)
-        or _origin_port(observed_origin)
-        or frontend_env_port
-        or 3000
-    )
+    port = _coerce_port(frontend_port) or _origin_port(observed_origin) or frontend_env_port or 3000
     configured_host = _clean_host(
-        frontend_host
-        or os.environ.get("VITE_CANONICAL_LOOPBACK_HOST")
-        or "localhost"
+        frontend_host or os.environ.get("VITE_CANONICAL_LOOPBACK_HOST") or "localhost"
     )
     canonical_host = _frontend_canonical_host(configured_host)
     canonical_origin = f"{request_scheme}://{canonical_host}:{port}"
@@ -1469,9 +1394,7 @@ def _frontend_runtime_info(
         or f"http://127.0.0.1:{os.environ.get('GATEWAY_PORT') or '8000'}"
     )
     proxy_targets_backend = (
-        _same_local_base_url(proxy_target, backend_canonical_base_url)
-        if proxy_target
-        else False
+        _same_local_base_url(proxy_target, backend_canonical_base_url) if proxy_target else False
     )
     aliases = _loopback_aliases(canonical_host, port, request_scheme)["aliases"]
     return {

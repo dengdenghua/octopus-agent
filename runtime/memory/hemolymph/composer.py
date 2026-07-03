@@ -52,9 +52,7 @@ def _record_compose_snapshot(
         "ts": time.time(),
         "budget_tokens": budget_tokens,
         "tokens_used": total_used,
-        "utilization": (
-            total_used / budget_tokens if budget_tokens > 0 else 0.0
-        ),
+        "utilization": (total_used / budget_tokens if budget_tokens > 0 else 0.0),
         "segment_count": len(segments),
         "by_bucket": {
             bucket: {
@@ -81,14 +79,18 @@ def get_recent_compose_snapshots(limit: int = 50) -> list[dict[str, Any]]:
             return list(_RECENT_COMPOSES)
         # deque doesn't slice · tail N via islice
         from itertools import islice
+
         start = len(_RECENT_COMPOSES) - limit
         return list(islice(_RECENT_COMPOSES, start, None))
 
+
 # Skills that exist for backward-compatible programmatic paths but should not
 # be advertised to the planner as ordinary one-step actions.
-_HIDDEN_BY_DEFAULT_SKILLS: frozenset[str] = frozenset({
-    "call_agent",
-})
+_HIDDEN_BY_DEFAULT_SKILLS: frozenset[str] = frozenset(
+    {
+        "call_agent",
+    }
+)
 
 # ═══════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════
@@ -122,9 +124,7 @@ def _cjk_bigrams(text: str) -> set[str]:
     return out
 
 
-def score_skill_relevance(
-    query: str, name: str, affinity: list[str], description: str
-) -> int:
+def score_skill_relevance(query: str, name: str, affinity: list[str], description: str) -> int:
     """Lexical relevance of a skill to the task. Zero infra: English word
     overlap + name/affinity substring hits + CJK bigram overlap. Higher = more
     relevant. Deterministic; ties are broken by the caller (stable order)."""
@@ -265,7 +265,6 @@ class TruncationContextEngine(ContextEngine):
 
 
 class ContextComposer:
-
     def __init__(
         self,
         registry: SkillRegistry,
@@ -280,7 +279,6 @@ class ContextComposer:
         # TruncationContextEngine when none is supplied so existing
         # callers are unaffected.
         self.engine: ContextEngine = engine or TruncationContextEngine()
-
 
     def compose(
         self,
@@ -357,7 +355,6 @@ class ContextComposer:
                             source_refs=refs,
                         )
                     )
-
 
             final_segments = self.engine.compress(segments, budget_tokens)
 
@@ -487,18 +484,16 @@ class ContextComposer:
             # that followed it. We use append index rather than event.ts
             # because in-memory tests and fast retries can share the same
             # timestamp tick.
-            swarm_events = [
-                item for item in bucket if item[1].trajectory.strategy_id == "swarm"
-            ]
+            swarm_events = [item for item in bucket if item[1].trajectory.strategy_id == "swarm"]
             if swarm_events:
                 deduped.append(max(swarm_events, key=lambda item: item[0])[1])
             else:
                 deduped.extend(event for _, event in bucket)
 
         recent = [
-            e for e in reversed(deduped)
-            if isinstance(e, TrajectoryEvent)
-            and (arm_id is None or e.trajectory.arm_id == arm_id)
+            e
+            for e in reversed(deduped)
+            if isinstance(e, TrajectoryEvent) and (arm_id is None or e.trajectory.arm_id == arm_id)
         ][:n]
 
         blurbs: list[tuple[str, list[str]]] = []

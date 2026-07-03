@@ -34,7 +34,8 @@ def _skill_forge_candidates(
         candidate
         for candidate in candidates
         if candidate.name not in suppressed
-        and decisions.get(candidate.name) not in {
+        and decisions.get(candidate.name)
+        not in {
             "promoted",
             "rejected",
             "shadow_failed",
@@ -56,12 +57,8 @@ def _skill_candidate_to_proposal(candidate: Any) -> dict[str, Any]:
         "candidate_id": getattr(candidate, "candidate_id", ""),
         "description": getattr(candidate, "description", ""),
         "underlying_sequence": sequence,
-        "source_sample_count": int(
-            getattr(candidate, "source_sample_count", 0) or 0
-        ),
-        "source_success_rate": float(
-            getattr(candidate, "source_success_rate", 0.0) or 0.0
-        ),
+        "source_sample_count": int(getattr(candidate, "source_sample_count", 0) or 0),
+        "source_success_rate": float(getattr(candidate, "source_success_rate", 0.0) or 0.0),
     }
 
 
@@ -73,7 +70,8 @@ def _skill_proposal_decision_map(journal: Any) -> dict[str, str]:
         events = list(journal.read_by_type("skill_proposal_decision"))
     except (AttributeError, TypeError, OSError):
         events = [
-            event for event in _journal_events(journal)
+            event
+            for event in _journal_events(journal)
             if getattr(event, "event_type", "") == "skill_proposal_decision"
         ]
     for event in events:

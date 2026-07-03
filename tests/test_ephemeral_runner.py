@@ -5,6 +5,7 @@ Verifies the bridge between ``EphemeralCall`` and ``ModelRouter`` ·
 the last missing piece that makes ``call_agent("reviewer", ...)``
 actually reach an LLM instead of returning a "not configured" stub.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -15,6 +16,7 @@ def _reset_runner():
     from runtime.execution.suckers.ephemeral_agents import (
         set_ephemeral_role_runner,
     )
+
     set_ephemeral_role_runner(None)
     yield
     set_ephemeral_role_runner(None)
@@ -26,13 +28,13 @@ def _make_call(role_id: str = "reviewer", user_prompt: str = "review"):
         BUILTIN_ROLES,
         EphemeralCall,
     )
+
     role = BUILTIN_ROLES[role_id]
     return EphemeralCall(
         role=role,
         user_prompt=user_prompt,
         composed_system_prompt=(
-            f"{role.system_prompt}\n\n---\n\n"
-            "## Caller conversation\n**User**: prior message"
+            f"{role.system_prompt}\n\n---\n\n## Caller conversation\n**User**: prior message"
         ),
         caller_thread_id="t-test",
         caller_agent_id="coder",
@@ -60,7 +62,8 @@ class TestFactory:
 
         router = MockModelRouter(response="fixed reply")
         runner = make_llm_ephemeral_runner(
-            router, default_model="claude-haiku-4-5",
+            router,
+            default_model="claude-haiku-4-5",
         )
         assert callable(runner)
 
@@ -89,7 +92,8 @@ class TestDispatch:
 
         router = MockModelRouter(response="the reviewer's verdict")
         runner = make_llm_ephemeral_runner(
-            router, default_model="claude-haiku-4-5",
+            router,
+            default_model="claude-haiku-4-5",
         )
         out = runner(_make_call())
         assert out == "the reviewer's verdict"
@@ -103,7 +107,8 @@ class TestDispatch:
 
         router = MockModelRouter(response="ok")
         runner = make_llm_ephemeral_runner(
-            router, default_model="claude-haiku-4-5",
+            router,
+            default_model="claude-haiku-4-5",
         )
         call = _make_call(role_id="reviewer", user_prompt="look at auth.py")
         runner(call)
@@ -159,7 +164,8 @@ class TestModelOverride:
 
         router = MockModelRouter(response="ok")
         runner = make_llm_ephemeral_runner(
-            router, default_model="planner-default",
+            router,
+            default_model="planner-default",
         )
         call = _make_call()
         call.context["model_name"] = "gpt-5.5"
@@ -176,7 +182,8 @@ class TestModelOverride:
 
         router = MockModelRouter(response="ok")
         runner = make_llm_ephemeral_runner(
-            router, default_model="planner-default",
+            router,
+            default_model="planner-default",
         )
         # No model_name in context → factory default is used.
         runner(_make_call())
@@ -193,7 +200,8 @@ class TestModelOverride:
 
         router = MockModelRouter(response="ok")
         runner = make_llm_ephemeral_runner(
-            router, default_model="planner-default",
+            router,
+            default_model="planner-default",
         )
         call = _make_call()
         call.context["model_name"] = "   "
@@ -213,7 +221,8 @@ class TestModelOverride:
 
         router = MockModelRouter(response="ok")
         runner = make_llm_ephemeral_runner(
-            router, default_model="primary-model",
+            router,
+            default_model="primary-model",
         )
         call = _make_call()
         call.context["model_name"] = "glm-4-flash"  # what use_cheap_model sets
@@ -232,7 +241,9 @@ class TestModelOverride:
         router = _ScriptedAgenticRouter(script=["done"])
         registry = _StubRegistry({"web_search": lambda **kw: {"ok": True}})
         runner = make_llm_ephemeral_runner(
-            router, registry=registry, default_model="planner-default",
+            router,
+            registry=registry,
+            default_model="planner-default",
         )
         call = _make_call(role_id="reviewer")
         call.context["tool_allowlist"] = ["web_search"]
@@ -406,37 +417,41 @@ class _ScriptedAgenticRouter:
             ModelResponse,
             ToolCall,
         )
+
         self.call_log.append(request)
         if not self._script:
             return ModelResponse(
-                text="(end of script)", input_tokens=self._in,
-                output_tokens=self._out, cost=CostEntry(),
+                text="(end of script)",
+                input_tokens=self._in,
+                output_tokens=self._out,
+                cost=CostEntry(),
             )
         step = self._script.pop(0)
         if isinstance(step, str):
             return ModelResponse(
-                text=step, input_tokens=self._in,
-                output_tokens=self._out, cost=CostEntry(),
-                finish_reason=(
-                    self._finish_reasons.pop(0)
-                    if self._finish_reasons else "stop"
-                ),
+                text=step,
+                input_tokens=self._in,
+                output_tokens=self._out,
+                cost=CostEntry(),
+                finish_reason=(self._finish_reasons.pop(0) if self._finish_reasons else "stop"),
             )
         # Tool-call step
         calls = []
         for i, spec in enumerate(step):
-            calls.append(ToolCall(
-                id=f"toolu_{len(self.call_log)}_{i}",
-                name=spec["name"],
-                input=spec.get("input", {}),
-            ))
+            calls.append(
+                ToolCall(
+                    id=f"toolu_{len(self.call_log)}_{i}",
+                    name=spec["name"],
+                    input=spec.get("input", {}),
+                )
+            )
         return ModelResponse(
-            text="", tool_calls=calls, input_tokens=self._in,
-            output_tokens=self._out, cost=CostEntry(),
-            finish_reason=(
-                self._finish_reasons.pop(0)
-                if self._finish_reasons else "stop"
-            ),
+            text="",
+            tool_calls=calls,
+            input_tokens=self._in,
+            output_tokens=self._out,
+            cost=CostEntry(),
+            finish_reason=(self._finish_reasons.pop(0) if self._finish_reasons else "stop"),
         )
 
 
@@ -458,6 +473,7 @@ class _StubRegistry:
                 self.name = n
                 self.description = f"stub {n}"
                 self.handler = h
+
         h = self._handlers[name]
         return _Skill(name, h)
 
@@ -468,11 +484,13 @@ def test_agentic_runner_uses_effective_context_allowlist():
     )
 
     router = _ScriptedAgenticRouter(script=["done"])
-    registry = _StubRegistry({
-        "read_file": lambda **kw: {"ok": True},
-        "web_search": lambda **kw: {"ok": True},
-        "bb_write": lambda **kw: {"ok": True},
-    })
+    registry = _StubRegistry(
+        {
+            "read_file": lambda **kw: {"ok": True},
+            "web_search": lambda **kw: {"ok": True},
+            "bb_write": lambda **kw: {"ok": True},
+        }
+    )
     runner = make_llm_ephemeral_runner(
         router,
         registry=registry,
@@ -500,20 +518,23 @@ class TestTokenBudget:
             script=["partial section ending at hardware+", " service model done"],
             finish_reasons=["length", "stop"],
         )
-        registry = _StubRegistry({
-            "bb_read": lambda **kw: {"ok": True, "value": "notes"},
-        })
+        registry = _StubRegistry(
+            {
+                "bb_read": lambda **kw: {"ok": True, "value": "notes"},
+            }
+        )
         runner = make_llm_ephemeral_runner(
-            router, registry=registry, default_model="m", token_budget=0,
+            router,
+            registry=registry,
+            default_model="m",
+            token_budget=0,
         )
 
         out = runner(_make_call())
 
         assert out == "partial section ending at hardware+ service model done"
         assert len(router.call_log) == 2
-        assert "Continue exactly where it stopped" in (
-            router.call_log[1].messages[-1].content
-        )
+        assert "Continue exactly where it stopped" in (router.call_log[1].messages[-1].content)
 
     def test_near_output_cap_continues_even_without_finish_reason(self):
         """Some providers report ``stop`` while still cutting output near
@@ -528,20 +549,23 @@ class TestTokenBudget:
             output_tokens=2_000,
             finish_reasons=["stop", "stop"],
         )
-        registry = _StubRegistry({
-            "bb_read": lambda **kw: {"ok": True, "value": "notes"},
-        })
+        registry = _StubRegistry(
+            {
+                "bb_read": lambda **kw: {"ok": True, "value": "notes"},
+            }
+        )
         runner = make_llm_ephemeral_runner(
-            router, registry=registry, default_model="m", token_budget=0,
+            router,
+            registry=registry,
+            default_model="m",
+            token_budget=0,
         )
 
         out = runner(_make_call())
 
         assert out == partial + "sentence and finishes."
         assert len(router.call_log) == 2
-        assert "Continue exactly where it stopped" in (
-            router.call_log[1].messages[-1].content
-        )
+        assert "Continue exactly where it stopped" in (router.call_log[1].messages[-1].content)
 
     def test_mid_sized_unfinished_report_continues(self):
         """A provider may return ``stop`` after a visibly dangling report
@@ -557,11 +581,16 @@ class TestTokenBudget:
             output_tokens=900,
             finish_reasons=["stop", "stop"],
         )
-        registry = _StubRegistry({
-            "bb_read": lambda **kw: {"ok": True, "value": "notes"},
-        })
+        registry = _StubRegistry(
+            {
+                "bb_read": lambda **kw: {"ok": True, "value": "notes"},
+            }
+        )
         runner = make_llm_ephemeral_runner(
-            router, registry=registry, default_model="m", token_budget=0,
+            router,
+            registry=registry,
+            default_model="m",
+            token_budget=0,
         )
 
         out = runner(_make_call())
@@ -584,11 +613,15 @@ class TestTokenBudget:
             input_tokens=8_000,
             output_tokens=3_000,
         )
-        registry = _StubRegistry({
-            "bb_write": lambda **kw: {"ok": True},
-        })
+        registry = _StubRegistry(
+            {
+                "bb_write": lambda **kw: {"ok": True},
+            }
+        )
         runner = make_llm_ephemeral_runner(
-            router, registry=registry, default_model="m",
+            router,
+            registry=registry,
+            default_model="m",
             token_budget=10_000,
         )
         out = runner(_make_call())
@@ -607,13 +640,18 @@ class TestTokenBudget:
                 [{"name": "bb_write", "input": {"key": "k"}}],
                 "done",
             ],
-            input_tokens=9_999, output_tokens=9_999,  # huge
+            input_tokens=9_999,
+            output_tokens=9_999,  # huge
         )
-        registry = _StubRegistry({
-            "bb_write": lambda **kw: {"ok": True},
-        })
+        registry = _StubRegistry(
+            {
+                "bb_write": lambda **kw: {"ok": True},
+            }
+        )
         runner = make_llm_ephemeral_runner(
-            router, registry=registry, default_model="m",
+            router,
+            registry=registry,
+            default_model="m",
             token_budget=0,  # disable
         )
         out = runner(_make_call())
@@ -641,9 +679,12 @@ class _StreamingRouter:
         # Required by the runner's fallback path; tests that drive
         # ``call_stream`` should never end up here.
         from runtime.sensing.model_router.models import CostEntry, ModelResponse
+
         return ModelResponse(
             text="".join(self._chunks),
-            input_tokens=10, output_tokens=20, cost=CostEntry(),
+            input_tokens=10,
+            output_tokens=20,
+            cost=CostEntry(),
         )
 
     def call_stream(self, request):
@@ -652,6 +693,7 @@ class _StreamingRouter:
             ModelResponse,
             ModelStreamEvent,
         )
+
         self.call_log.append(request)
         full = ""
         for chunk in self._chunks:
@@ -660,7 +702,9 @@ class _StreamingRouter:
         yield ModelStreamEvent(
             type="done",
             final=ModelResponse(
-                text=full, input_tokens=10, output_tokens=20,
+                text=full,
+                input_tokens=10,
+                output_tokens=20,
                 cost=CostEntry(),
             ),
         )
@@ -686,7 +730,9 @@ class TestSubTextDeltaStreaming:
             captured.append(event)
 
         runner = make_llm_ephemeral_runner(
-            router, default_model="m", token_budget=0,
+            router,
+            default_model="m",
+            token_budget=0,
         )
         call = _make_call()
         # Inject the emitter through context like the bridge does.
@@ -695,7 +741,9 @@ class TestSubTextDeltaStreaming:
         assert out == "第一段。第二段。第三段最后。"
         deltas = [e for e in captured if e["type"] == "sub_text_delta"]
         assert [e["delta"] for e in deltas] == [
-            "第一段。", "第二段。", "第三段最后。",
+            "第一段。",
+            "第二段。",
+            "第三段最后。",
         ]
         assert all(e["agent_id"] == "reviewer" for e in deltas)
 
@@ -711,7 +759,9 @@ class TestSubTextDeltaStreaming:
 
         router = _ScriptedAgenticRouter(script=["plain text reply"])
         runner = make_llm_ephemeral_runner(
-            router, default_model="m", token_budget=0,
+            router,
+            default_model="m",
+            token_budget=0,
         )
         out = runner(_make_call())
         assert out == "plain text reply"
@@ -735,11 +785,15 @@ class TestSubToolEventDispatch:
                 "final synthesis",
             ],
         )
-        registry = _StubRegistry({
-            "bb_write": lambda **kw: {"ok": True},
-        })
+        registry = _StubRegistry(
+            {
+                "bb_write": lambda **kw: {"ok": True},
+            }
+        )
         runner = make_llm_ephemeral_runner(
-            router, registry=registry, default_model="m",
+            router,
+            registry=registry,
+            default_model="m",
         )
 
         q: _q.Queue = _q.Queue()
@@ -781,11 +835,15 @@ class TestSubToolEventDispatch:
                 "ok",
             ],
         )
-        registry = _StubRegistry({
-            "bb_write": lambda **kw: {"ok": True},
-        })
+        registry = _StubRegistry(
+            {
+                "bb_write": lambda **kw: {"ok": True},
+            }
+        )
         runner = make_llm_ephemeral_runner(
-            router, registry=registry, default_model="m",
+            router,
+            registry=registry,
+            default_model="m",
         )
         # No session bound · the event helper silently no-ops.
         out = runner(_make_call())
@@ -812,7 +870,9 @@ class TestSubToolEventDispatch:
         )
         registry = _StubRegistry({"bb_write": _raising})
         runner = make_llm_ephemeral_runner(
-            router, registry=registry, default_model="m",
+            router,
+            registry=registry,
+            default_model="m",
         )
         q: _q.Queue = _q.Queue()
         sess = Session()
@@ -836,16 +896,12 @@ class TestToolBridgeParentIdTracking:
         # We validate the source directly · the integration path
         # requires a full stack, but the invariant we care about
         # (set before handler, pop after) is structural.
-        src = (
-            tool_bridge.__file__
-            if hasattr(tool_bridge, "__file__")
-            else None
-        )
+        src = tool_bridge.__file__ if hasattr(tool_bridge, "__file__") else None
         assert src is not None
         with open(src, encoding="utf-8") as f:
             text = f.read()
         assert 'metadata["_active_parent_tool_use_id"] = call.id' in text
-        assert 'metadata.pop(' in text
+        assert "metadata.pop(" in text
         assert '"_active_parent_tool_use_id"' in text
 
 
@@ -859,6 +915,7 @@ class TestEphemeralInjectionTaintGate:
     @staticmethod
     def _call(name, args, *, context):
         from types import SimpleNamespace
+
         return SimpleNamespace(name=name, input=args, context=context, id="tu-1")
 
     @pytest.fixture(autouse=True)
@@ -866,6 +923,7 @@ class TestEphemeralInjectionTaintGate:
         from runtime.safety.validation.prompt_injection import (
             reset_injection_taint,
         )
+
         reset_injection_taint()
         yield
         reset_injection_taint()
@@ -874,6 +932,7 @@ class TestEphemeralInjectionTaintGate:
         from runtime.execution.suckers.ephemeral_runner import (
             _execute_tool_in_subagent,
         )
+
         ran = {"exec": False}
 
         def _shell(**_kw):
@@ -882,7 +941,8 @@ class TestEphemeralInjectionTaintGate:
 
         registry = _StubRegistry({"exec_shell": _shell})
         call = self._call(
-            "exec_shell", {"command": "echo hi"},
+            "exec_shell",
+            {"command": "echo hi"},
             context={"_inherited_injection_taint": "high"},
         )
 
@@ -898,9 +958,11 @@ class TestEphemeralInjectionTaintGate:
         from runtime.execution.suckers.ephemeral_runner import (
             _execute_tool_in_subagent,
         )
+
         registry = _StubRegistry({"read_file": lambda **_kw: {"content": "ok"}})
         call = self._call(
-            "read_file", {"path": "x"},
+            "read_file",
+            {"path": "x"},
             context={"_inherited_injection_taint": "high"},
         )
 
@@ -914,6 +976,7 @@ class TestEphemeralInjectionTaintGate:
         from runtime.execution.suckers.ephemeral_runner import (
             _execute_tool_in_subagent,
         )
+
         ran = {"exec": False}
 
         def _shell(**_kw):

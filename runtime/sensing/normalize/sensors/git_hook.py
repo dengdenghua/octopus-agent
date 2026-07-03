@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -13,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 class GitHookSensor(EnvSensor):
-
     def __init__(
         self,
         *,
@@ -32,12 +30,14 @@ class GitHookSensor(EnvSensor):
         self._bg_thread: threading.Thread | None = None
         self._stop_evt = threading.Event()
 
-
     def _git(self, *args: str) -> str:
         try:
             r = subprocess.run(
                 ["git", "-C", str(self.repo_root), *args],
-                capture_output=True, text=True, timeout=10.0, check=False,
+                capture_output=True,
+                text=True,
+                timeout=10.0,
+                check=False,
             )
             if r.returncode != 0:
                 self._last_error = f"git {args[0]}: {r.stderr.strip()[:200]}"
@@ -61,7 +61,6 @@ class GitHookSensor(EnvSensor):
             return ("", "")
         a, s = out.split("|||", 1)
         return (a, s)
-
 
     def check_once(self) -> GitCommitDetected | None:
         sha = self._current_sha()
@@ -97,7 +96,9 @@ class GitHookSensor(EnvSensor):
         self._last_sha = self._current_sha()
 
         self._bg_thread = threading.Thread(
-            target=self._poll_loop, daemon=True, name=f"skin-{self.sensor_id}",
+            target=self._poll_loop,
+            daemon=True,
+            name=f"skin-{self.sensor_id}",
         )
         self._bg_thread.start()
 

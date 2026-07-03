@@ -12,7 +12,8 @@ from runtime.memory.runtime_state.hub import (
 
 
 def test_memory_hub_retrieves_user_store_facts_with_scope(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path,
+    monkeypatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
@@ -49,7 +50,8 @@ def test_memory_hub_retrieves_user_store_facts_with_scope(
 
 
 def test_memory_hub_respects_user_store_injection_toggle(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path,
+    monkeypatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
@@ -60,15 +62,14 @@ def test_memory_hub_respects_user_store_injection_toggle(
     )
     user_store.write_config({"injection_enabled": False})
 
-    records = MemoryHub(repo_root=tmp_path).retrieve(
-        MemoryQuery(text="disabled memory", limit=5)
-    )
+    records = MemoryHub(repo_root=tmp_path).retrieve(MemoryQuery(text="disabled memory", limit=5))
 
     assert all("disabled memory" not in record.content for record in records)
 
 
 def test_memory_hub_reads_global_project_and_agent_memory_files(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path,
+    monkeypatch,
 ) -> None:
     home = tmp_path / "home"
     repo = tmp_path / "repo"
@@ -109,7 +110,8 @@ def test_memory_hub_reads_global_project_and_agent_memory_files(
 
 
 def test_memory_hub_reads_team_memory_layers_when_team_id_present(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path,
+    monkeypatch,
 ) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

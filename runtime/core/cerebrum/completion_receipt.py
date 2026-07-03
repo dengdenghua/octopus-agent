@@ -51,11 +51,7 @@ def build_completion_receipt(
     if state.state == "completed" and not output_present and artifact_count == 0:
         warnings.append("no_output_or_artifact")
 
-    ready = (
-        state.terminal
-        and state.state == "completed"
-        and not issues
-    )
+    ready = state.terminal and state.state == "completed" and not issues
 
     return CompletionReceipt(
         ready=ready,
@@ -65,4 +61,3 @@ def build_completion_receipt(
         artifact_count=max(0, int(artifact_count or 0)),
         output_present=bool(output_present),
     )
-

@@ -227,9 +227,7 @@ class BrowserSessionCenter:
                 "recovered_from_crash": recovered_from_crash,
                 "revalidated": bool(recovery_revalidated_at),
                 "revalidated_at": recovery_revalidated_at,
-                "requires_operator_review": (
-                    recovered_from_crash and not recovery_revalidated_at
-                ),
+                "requires_operator_review": (recovered_from_crash and not recovery_revalidated_at),
                 "replay_ready": bool(actions),
             },
         }
@@ -360,47 +358,57 @@ def _browser_session_diagnostics(
     diagnostics: list[dict[str, Any]] = []
     for issue in issues:
         if issue == "session_unhealthy":
-            diagnostics.append(_diagnostic(
-                issue,
-                severity="error",
-                message="Browser runtime is not healthy.",
-                recommended_action="reset_session",
-            ))
+            diagnostics.append(
+                _diagnostic(
+                    issue,
+                    severity="error",
+                    message="Browser runtime is not healthy.",
+                    recommended_action="reset_session",
+                )
+            )
         elif issue == "recovered_from_crash":
-            diagnostics.append(_diagnostic(
-                issue,
-                severity="warning",
-                message="Browser profile recovered from an unclean shutdown.",
-                recommended_action="revalidate_session",
-                metadata={
-                    "recovered_from_crash": recovered_from_crash,
-                    "recovery_revalidated_at": recovery_revalidated_at,
-                },
-            ))
+            diagnostics.append(
+                _diagnostic(
+                    issue,
+                    severity="warning",
+                    message="Browser profile recovered from an unclean shutdown.",
+                    recommended_action="revalidate_session",
+                    metadata={
+                        "recovered_from_crash": recovered_from_crash,
+                        "recovery_revalidated_at": recovery_revalidated_at,
+                    },
+                )
+            )
         elif issue == "no_actions_recorded":
-            diagnostics.append(_diagnostic(
-                issue,
-                severity="info",
-                message="No browser actions have been recorded yet.",
-                recommended_action="run_navigation_probe",
-            ))
+            diagnostics.append(
+                _diagnostic(
+                    issue,
+                    severity="info",
+                    message="No browser actions have been recorded yet.",
+                    recommended_action="run_navigation_probe",
+                )
+            )
         elif issue == "last_action_failed":
             diagnostics.append(_failed_action_diagnostic(last_action or {}))
         elif issue == "stale_session":
-            diagnostics.append(_diagnostic(
-                issue,
-                severity="warning",
-                message="Browser session has been idle for too long.",
-                recommended_action="refresh_or_reset",
-                metadata={"stale_seconds": stale_seconds},
-            ))
+            diagnostics.append(
+                _diagnostic(
+                    issue,
+                    severity="warning",
+                    message="Browser session has been idle for too long.",
+                    recommended_action="refresh_or_reset",
+                    metadata={"stale_seconds": stale_seconds},
+                )
+            )
         else:
-            diagnostics.append(_diagnostic(
-                issue,
-                severity="warning",
-                message=f"Browser session issue: {issue}",
-                recommended_action="inspect_health",
-            ))
+            diagnostics.append(
+                _diagnostic(
+                    issue,
+                    severity="warning",
+                    message=f"Browser session issue: {issue}",
+                    recommended_action="inspect_health",
+                )
+            )
     return diagnostics
 
 
@@ -436,7 +444,10 @@ def _classify_browser_action_error(error: str) -> str:
         return "selector"
     if any(token in lower for token in ("timeout", "timed out", "deadline")):
         return "timeout"
-    if any(token in lower for token in ("browser closed", "target closed", "context closed", "page closed")):
+    if any(
+        token in lower
+        for token in ("browser closed", "target closed", "context closed", "page closed")
+    ):
         return "browser_closed"
     if any(token in lower for token in ("net::", "dns", "connection refused", "navigation failed")):
         return "navigation"

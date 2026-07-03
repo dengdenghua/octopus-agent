@@ -134,7 +134,10 @@ def test_apps_router_requires_auth_when_enabled(tmp_path: Path) -> None:
     client = TestClient(app)
 
     assert client.get("/api/apps").status_code == 401
-    assert client.get(
-        "/api/apps",
-        headers={"Authorization": "Bearer sk-alice"},
-    ).status_code == 200
+    assert (
+        client.get(
+            "/api/apps",
+            headers={"Authorization": "Bearer sk-alice"},
+        ).status_code
+        == 200
+    )

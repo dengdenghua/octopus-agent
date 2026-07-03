@@ -28,7 +28,7 @@ def validate_tasks(data):
     for i, task in enumerate(tasks):
         for field in ("id", "name", "duration"):
             if field not in task:
-                raise ValueError(f"任务 #{i+1} 缺少必填字段 '{field}'")
+                raise ValueError(f"任务 #{i + 1} 缺少必填字段 '{field}'")
         if not isinstance(task["duration"], (int, float)) or task["duration"] <= 0:
             raise ValueError(f"任务 '{task['id']}' 的 duration 必须为正数")
         if task["id"] in task_ids:
@@ -716,9 +716,7 @@ def main():
         print(f"错误: {e}", file=sys.stderr)
         sys.exit(1)
 
-    html_content = generate_html(
-        project_name, tasks, critical_path, project_duration, start_date
-    )
+    html_content = generate_html(project_name, tasks, critical_path, project_duration, start_date)
 
     if args.output:
         try:

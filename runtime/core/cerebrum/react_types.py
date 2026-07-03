@@ -101,7 +101,6 @@ REACT_NO_TOOLS_NOTE = """
 
 @dataclass
 class ReActStep:
-
     iteration: int
     thought: str = ""
     action: str = ""
@@ -123,7 +122,6 @@ class ReActStep:
 
 @dataclass
 class ReActResult:
-
     final_answer: str
     steps: list[ReActStep] = field(default_factory=list)
     terminated_reason: str = "final_answer"
@@ -141,7 +139,8 @@ class ReActResult:
             return _safe_for_streamdown(self.final_answer)
 
         meaningful = [
-            s for s in self.steps
+            s
+            for s in self.steps
             if (s.thought and s.thought.strip())
             or (s.action and s.action.strip() and s.action.lower() != "none")
             or (s.observation and s.observation not in ("N/A", ""))
@@ -165,8 +164,16 @@ class ReActResult:
 
         short = len(self.final_answer) < 120
         refer_phrases = (
-            "见上方", "如上", "上方", "上面", "以上", "报告如上",
-            "见上", "as above", "see above", "above",
+            "见上方",
+            "如上",
+            "上方",
+            "上面",
+            "以上",
+            "报告如上",
+            "见上",
+            "as above",
+            "see above",
+            "above",
         )
         refers_back = any(p in self.final_answer for p in refer_phrases)
         open_attr = " open" if (short or refers_back) else ""
@@ -181,7 +188,6 @@ class ReActResult:
 
 @dataclass
 class ReActRecipe:
-
     name: str
     max_iterations: int
     temperature: float

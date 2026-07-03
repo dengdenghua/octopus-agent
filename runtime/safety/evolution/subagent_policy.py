@@ -4,6 +4,7 @@ Fitness is evidence; this file is the human decision layer. Operators can put a
 subagent role on watch, retire it, or clear the manual policy. Routing consults
 this policy before fitness so explicit retirements are enforced immediately.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -31,11 +32,13 @@ class SubagentPolicyStore:
             "policies": policies,
             "policy_count": len(policies),
             "retired_count": sum(
-                1 for item in policies.values()
+                1
+                for item in policies.values()
                 if isinstance(item, dict) and item.get("status") == "retired"
             ),
             "watch_count": sum(
-                1 for item in policies.values()
+                1
+                for item in policies.values()
                 if isinstance(item, dict) and item.get("status") == "watch"
             ),
             "lastUpdated": str(payload.get("lastUpdated") or ""),
@@ -70,10 +73,8 @@ class SubagentPolicyStore:
         history = list(payload.get("history") or [])
         now_text = (now or datetime.now(UTC)).isoformat()
         evidence = [
-            item for item in (
-                _clean(value, limit=120)
-                for value in (evidence_item_ids or [])
-            )
+            item
+            for item in (_clean(value, limit=120) for value in (evidence_item_ids or []))
             if item
         ][:20]
         record = {
@@ -152,9 +153,9 @@ def evaluate_agent_policy(
             "actor": _clean(policy.get("actor"), limit=120),
             "updated_at": _clean(policy.get("updated_at"), limit=80),
             "evidence_item_ids": [
-                value for value in (
-                    _clean(raw_id, limit=120)
-                    for raw_id in (policy.get("evidence_item_ids") or [])
+                value
+                for value in (
+                    _clean(raw_id, limit=120) for raw_id in (policy.get("evidence_item_ids") or [])
                 )
                 if value
             ][:20],
@@ -201,24 +202,23 @@ def _normalize(raw: dict[str, Any]) -> dict[str, Any]:
             "status": status,
             "reason": _clean(item.get("reason"), limit=800),
             "evidence_item_ids": [
-                value for value in (
-                    _clean(raw_id, limit=120)
-                    for raw_id in (item.get("evidence_item_ids") or [])
+                value
+                for value in (
+                    _clean(raw_id, limit=120) for raw_id in (item.get("evidence_item_ids") or [])
                 )
                 if value
             ][:20],
             "actor": _clean(item.get("actor"), limit=120) or "operator_panel",
             "updated_at": _clean(item.get("updated_at"), limit=80),
         }
-    history = [
-        row for row in (raw.get("history") or [])
-        if isinstance(row, dict)
-    ][-500:]
-    payload.update({
-        "lastUpdated": _clean(raw.get("lastUpdated"), limit=80),
-        "policies": dict(sorted(policies.items())),
-        "history": history,
-    })
+    history = [row for row in (raw.get("history") or []) if isinstance(row, dict)][-500:]
+    payload.update(
+        {
+            "lastUpdated": _clean(raw.get("lastUpdated"), limit=80),
+            "policies": dict(sorted(policies.items())),
+            "history": history,
+        }
+    )
     return payload
 
 

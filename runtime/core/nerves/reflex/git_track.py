@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -18,7 +17,9 @@ def is_git_repo(path: Path) -> bool:
         out = subprocess.run(
             ["git", "rev-parse", "--is-inside-work-tree"],
             cwd=path.parent if path.is_file() else path,
-            capture_output=True, text=True, timeout=2,
+            capture_output=True,
+            text=True,
+            timeout=2,
         )
         return out.returncode == 0 and out.stdout.strip() == "true"
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
@@ -28,7 +29,11 @@ def is_git_repo(path: Path) -> bool:
 def _git(args: list[str], cwd: Path) -> tuple[int, str, str]:
     """Run a git command · returns (returncode, stdout, stderr)."""
     proc = subprocess.run(
-        ["git", *args], cwd=cwd, capture_output=True, text=True, timeout=10,
+        ["git", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
@@ -74,7 +79,11 @@ def auto_commit(
     env["GIT_COMMITTER_EMAIL"] = email
     proc = subprocess.run(
         ["git", "commit", "-m", msg, "--", rel],
-        cwd=cwd, capture_output=True, text=True, timeout=10, env=env,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        env=env,
     )
     if proc.returncode != 0:
         return {"ok": False, "error": f"git commit: {proc.stderr.strip()}"}
@@ -89,7 +98,9 @@ def auto_commit(
 
 
 def file_history(
-    file_path: Path, *, limit: int = 20,
+    file_path: Path,
+    *,
+    limit: int = 20,
 ) -> list[dict[str, Any]]:
     """Return the most recent commits touching ``file_path``."""
     if not file_path.is_file():
@@ -111,12 +122,16 @@ def file_history(
         parts = line.split("|", 5)
         if len(parts) < 6:
             continue
-        rows.append({
-            "sha_full": parts[0], "sha": parts[1],
-            "author_name": parts[2], "author_email": parts[3],
-            "ts": int(parts[4]) if parts[4].isdigit() else None,
-            "subject": parts[5],
-        })
+        rows.append(
+            {
+                "sha_full": parts[0],
+                "sha": parts[1],
+                "author_name": parts[2],
+                "author_email": parts[3],
+                "ts": int(parts[4]) if parts[4].isdigit() else None,
+                "subject": parts[5],
+            }
+        )
     return rows
 
 

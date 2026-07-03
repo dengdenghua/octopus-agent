@@ -252,34 +252,15 @@ def compute_browser_desktop_quality(
         "browser_relay_bridge": _browser_relay_bridge_diagnostics(),
         "computer_api_bridge": _computer_api_bridge_diagnostics(),
         "replay_trends": _browser_replay_trends(review_queue_path),
-        "next_actions": [
-            str(row["next_action"])
-            for row in checks
-            if not row["passed"]
-        ],
+        "next_actions": [str(row["next_action"]) for row in checks if not row["passed"]],
     }
 
 
 def _check_row(base: Path, check: BrowserDesktopCheck) -> dict[str, Any]:
-    paths = [
-        {"path": path, "exists": (base / path).exists()}
-        for path in check.paths
-    ]
-    text = "\n".join(
-        _read_text(base / row["path"])
-        for row in paths
-        if row["exists"]
-    ).lower()
-    missing_paths = [
-        str(row["path"])
-        for row in paths
-        if not row["exists"]
-    ]
-    missing_terms = [
-        term
-        for term in check.required_terms
-        if term.lower() not in text
-    ]
+    paths = [{"path": path, "exists": (base / path).exists()} for path in check.paths]
+    text = "\n".join(_read_text(base / row["path"]) for row in paths if row["exists"]).lower()
+    missing_paths = [str(row["path"]) for row in paths if not row["exists"]]
+    missing_terms = [term for term in check.required_terms if term.lower() not in text]
     return {
         "id": check.id,
         "title": check.title,

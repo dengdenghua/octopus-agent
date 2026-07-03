@@ -57,7 +57,9 @@ def create_memory_router(
         return user_store.read_memory()
 
     @router.get("/api/memory/search")
-    def api_memory_search(q: str = "", limit: int = Query(20, ge=1, le=100)) -> list[dict[str, Any]]:
+    def api_memory_search(
+        q: str = "", limit: int = Query(20, ge=1, le=100)
+    ) -> list[dict[str, Any]]:
         query = " ".join(q.split()).casefold()
         if not query:
             return []

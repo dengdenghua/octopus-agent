@@ -64,6 +64,7 @@ def lightweight_shadow_validate(
 
 def _build_replay_handler(candidate: ForgedSkillCandidate, registry: Any) -> Any:
     from runtime.safety.recovery.skill_forge import SkillForge
+
     forge = SkillForge.__new__(SkillForge)
     forge.registry = registry
     forge.config = ForgeConfig()

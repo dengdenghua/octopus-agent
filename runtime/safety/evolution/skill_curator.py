@@ -120,19 +120,23 @@ class SkillCurator:
                 anchor = anchor.replace(tzinfo=UTC)
 
             if anchor <= archive_cutoff and s.state != SkillState.ARCHIVED:
-                proposals.append(CuratorProposal(
-                    action=CuratorAction.ARCHIVE,
-                    target=s.name,
-                    reason=f"no activity for {self.config.archive_after_days}+ days",
-                    confidence="high",
-                ))
+                proposals.append(
+                    CuratorProposal(
+                        action=CuratorAction.ARCHIVE,
+                        target=s.name,
+                        reason=f"no activity for {self.config.archive_after_days}+ days",
+                        confidence="high",
+                    )
+                )
             elif anchor <= stale_cutoff and s.state == SkillState.ACTIVE:
-                proposals.append(CuratorProposal(
-                    action=CuratorAction.DEMOTE,
-                    target=s.name,
-                    reason=f"no activity for {self.config.stale_after_days}+ days · mark stale",
-                    confidence="high",
-                ))
+                proposals.append(
+                    CuratorProposal(
+                        action=CuratorAction.DEMOTE,
+                        target=s.name,
+                        reason=f"no activity for {self.config.stale_after_days}+ days · mark stale",
+                        confidence="high",
+                    )
+                )
 
         return proposals
 
@@ -150,7 +154,9 @@ class SkillCurator:
         return {k: v for k, v in clusters.items() if len(v) >= self.config.min_cluster_size}
 
     def _consolidate_cluster(
-        self, cluster_name: str, members: list[SkillInfo],
+        self,
+        cluster_name: str,
+        members: list[SkillInfo],
     ) -> list[CuratorProposal]:
         proposals: list[CuratorProposal] = []
         if len(members) < 2:
@@ -163,25 +169,29 @@ class SkillCurator:
         for sibling in siblings:
             similarity = self._compute_similarity(umbrella, sibling)
             if similarity >= self.config.similarity_threshold:
-                proposals.append(CuratorProposal(
-                    action=CuratorAction.MERGE,
-                    target=sibling.name,
-                    umbrella=umbrella.name,
-                    reason=(
-                        f"cluster '{cluster_name}': similarity={similarity:.2f} "
-                        f"with umbrella '{umbrella.name}' (use_count={umbrella.use_count})"
-                    ),
-                    confidence="medium" if similarity < 0.8 else "high",
-                    metadata={"similarity": round(similarity, 3)},
-                ))
+                proposals.append(
+                    CuratorProposal(
+                        action=CuratorAction.MERGE,
+                        target=sibling.name,
+                        umbrella=umbrella.name,
+                        reason=(
+                            f"cluster '{cluster_name}': similarity={similarity:.2f} "
+                            f"with umbrella '{umbrella.name}' (use_count={umbrella.use_count})"
+                        ),
+                        confidence="medium" if similarity < 0.8 else "high",
+                        metadata={"similarity": round(similarity, 3)},
+                    )
+                )
             else:
-                proposals.append(CuratorProposal(
-                    action=CuratorAction.KEEP,
-                    target=sibling.name,
-                    reason=f"cluster '{cluster_name}' but low similarity ({similarity:.2f}) to umbrella",
-                    confidence="medium",
-                    metadata={"similarity": round(similarity, 3)},
-                ))
+                proposals.append(
+                    CuratorProposal(
+                        action=CuratorAction.KEEP,
+                        target=sibling.name,
+                        reason=f"cluster '{cluster_name}' but low similarity ({similarity:.2f}) to umbrella",
+                        confidence="medium",
+                        metadata={"similarity": round(similarity, 3)},
+                    )
+                )
 
         return proposals
 
@@ -191,22 +201,26 @@ class SkillCurator:
             if s.state != SkillState.ACTIVE:
                 continue
             if s.use_count > 10 and len(s.tags) < 2:
-                proposals.append(CuratorProposal(
-                    action=CuratorAction.UPGRADE,
-                    target=s.name,
-                    reason=f"high-use skill (count={s.use_count}) with few tags · add richer metadata",
-                    confidence="low",
-                ))
+                proposals.append(
+                    CuratorProposal(
+                        action=CuratorAction.UPGRADE,
+                        target=s.name,
+                        reason=f"high-use skill (count={s.use_count}) with few tags · add richer metadata",
+                        confidence="low",
+                    )
+                )
             name_lower = s.name.lower()
             narrow_patterns = ["audit-", "diagnosis-", "salvage-", "fix-", "debug-"]
             for pat in narrow_patterns:
                 if name_lower.startswith(pat):
-                    proposals.append(CuratorProposal(
-                        action=CuratorAction.SPLIT,
-                        target=s.name,
-                        reason=f"narrow session-specific name '{s.name}' · belongs under a class-level umbrella",
-                        confidence="medium",
-                    ))
+                    proposals.append(
+                        CuratorProposal(
+                            action=CuratorAction.SPLIT,
+                            target=s.name,
+                            reason=f"narrow session-specific name '{s.name}' · belongs under a class-level umbrella",
+                            confidence="medium",
+                        )
+                    )
                     break
         return proposals
 

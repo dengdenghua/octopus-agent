@@ -28,6 +28,7 @@ Usage
     # Deactivate a specific skill
     await registry.deactivate("computer_use")
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -110,18 +111,14 @@ class ExtensionRegistry:
     def active_extensions(self) -> list[str]:
         """List of currently active extension IDs."""
         return [
-            ext_id
-            for ext_id, ext in self._extensions.items()
-            if ext.state == ExtensionState.ACTIVE
+            ext_id for ext_id, ext in self._extensions.items() if ext.state == ExtensionState.ACTIVE
         ]
 
     @property
     def failed_extensions(self) -> list[str]:
         """List of extensions that failed during activation."""
         return [
-            ext_id
-            for ext_id, ext in self._extensions.items()
-            if ext.state == ExtensionState.FAILED
+            ext_id for ext_id, ext in self._extensions.items() if ext.state == ExtensionState.FAILED
         ]
 
     def register(
@@ -211,17 +208,13 @@ class ExtensionRegistry:
             if dep_id not in self._extensions:
                 ext.state = ExtensionState.FAILED
                 ext.error = f"dependency '{dep_id}' not registered"
-                _logger.error(
-                    "extension %s failed: %s", skill_id, ext.error
-                )
+                _logger.error("extension %s failed: %s", skill_id, ext.error)
                 return False
             dep_ext = self._extensions[dep_id]
             if dep_ext.state != ExtensionState.ACTIVE:
                 ext.state = ExtensionState.FAILED
                 ext.error = f"dependency '{dep_id}' is not active"
-                _logger.error(
-                    "extension %s failed: %s", skill_id, ext.error
-                )
+                _logger.error("extension %s failed: %s", skill_id, ext.error)
                 return False
 
         ext.state = ExtensionState.ACTIVATING
@@ -301,9 +294,7 @@ class ExtensionRegistry:
         except Exception as exc:
             ext.error = str(exc)
             ext.state = ExtensionState.FAILED
-            _logger.exception(
-                "extension deactivation failed: %s", skill_id
-            )
+            _logger.exception("extension deactivation failed: %s", skill_id)
             return False
 
     async def activate_from_config(

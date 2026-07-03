@@ -28,9 +28,9 @@ from runtime.memory.cowork.group import GroupState, responders
 class TurnPlan:
     mode: str
     responders: list[str]  # agent ids to run this turn (already mode-filtered)
-    addressed: list[str]   # @-addressed agent ids parsed from the message
-    is_multi: bool         # >1 responder → run them in parallel (swarm-style)
-    reason: str            # human-readable rationale (debugging / UI hint)
+    addressed: list[str]  # @-addressed agent ids parsed from the message
+    is_multi: bool  # >1 responder → run them in parallel (swarm-style)
+    reason: str  # human-readable rationale (debugging / UI hint)
 
     def to_dict(self) -> dict:
         return {

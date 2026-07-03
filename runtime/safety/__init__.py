@@ -19,6 +19,7 @@
   audit/         → 审计与外部信任（audit_chain / webhook_verify /
                    trust_gateway）
 """
+
 from __future__ import annotations
 
 # Backward-compat shims: legacy code does ``from runtime.safety import X``

@@ -88,9 +88,7 @@ class PluginContext:
 
     def set_state(self, key: str, value: Any) -> None:
         if self.state_store is not None:
-            self.state_store.set(
-                key, value, namespace=f"plugin.{self.plugin_name}"
-            )
+            self.state_store.set(key, value, namespace=f"plugin.{self.plugin_name}")
 
     def subscribe(self, event_type: str, handler: Callable | None = None) -> None:
         if self.event_bus is None:
@@ -102,9 +100,7 @@ class PluginContext:
     def emit(self, event_type: str, **kwargs: Any) -> int:
         if self.event_bus is None:
             return 0
-        return self.event_bus.emit(
-            event_type, agent_id=f"plugin.{self.plugin_name}", **kwargs
-        )
+        return self.event_bus.emit(event_type, agent_id=f"plugin.{self.plugin_name}", **kwargs)
 
     def _default_event_handler(self, event: Any) -> None:
         if hasattr(self, "on_event") and callable(self.on_event):
@@ -155,6 +151,7 @@ class PluginLoader:
             return self._state_store
         try:
             from runtime.platform.process.state import get_statestore
+
             return get_statestore()
         except Exception as _exc:
             _LOG.debug("statestore lookup failed: %s", _exc)
@@ -165,6 +162,7 @@ class PluginLoader:
             return self._event_bus
         try:
             from runtime.platform.process.eventbus import get_eventbus
+
             return get_eventbus()
         except Exception as _exc:
             _LOG.debug("eventbus lookup failed: %s", _exc)
@@ -176,7 +174,12 @@ class PluginLoader:
             return discovered
 
         for item in sorted(self._dir.iterdir()):
-            if item.is_dir() and (item / "__init__.py").exists() or item.is_dir() and (item / "plugin.yaml").exists():
+            if (
+                item.is_dir()
+                and (item / "__init__.py").exists()
+                or item.is_dir()
+                and (item / "plugin.yaml").exists()
+            ):
                 discovered.append(item.name)
             elif item.is_file() and item.suffix == ".py" and item.stem != "__init__":
                 discovered.append(item.stem)
@@ -399,6 +402,7 @@ class PluginLoader:
         if yaml_path.exists():
             try:
                 import yaml
+
                 data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
                 return PluginManifest(**data)
             except Exception as _exc:
@@ -471,11 +475,14 @@ class PluginLoader:
 
         try:
             from runtime.platform.process.eventbus import PluginLoadedEvent
-            bus.publish(PluginLoadedEvent(
-                event_type="plugin.loaded",
-                plugin_name=name,
-                plugin_version=pi.manifest.version,
-            ))
+
+            bus.publish(
+                PluginLoadedEvent(
+                    event_type="plugin.loaded",
+                    plugin_name=name,
+                    plugin_version=pi.manifest.version,
+                )
+            )
         except Exception as _exc:
             _LOG.debug("plugin loaded event publish failed: %s", _exc)
 

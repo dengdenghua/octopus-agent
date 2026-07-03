@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import os
@@ -25,7 +24,6 @@ except ImportError:
 
 
 class SetupWizard:
-
     def __init__(
         self,
         output_path: str | Path | None = None,
@@ -166,8 +164,7 @@ class SetupWizard:
             planner_kwargs["anthropic_api_key"] = api_key
         if planner_type == "static":
             planner_kwargs["mock_response"] = (
-                '{"reasoning":"demo","nodes":'
-                '[{"skill":"list_cwd","args":{"path":"."}}]}'
+                '{"reasoning":"demo","nodes":[{"skill":"list_cwd","args":{"path":"."}}]}'
             )
 
         pool_kwargs: dict[str, Any] = {}

@@ -147,10 +147,7 @@ def create_openai_router(
         # Fall back to the client IP for anonymous calls. When even
         # that's unknown (rare), share a single anonymous bucket.
         try:
-            host = (
-                getattr(getattr(request, "client", None), "host", None)
-                or "anon"
-            )
+            host = getattr(getattr(request, "client", None), "host", None) or "anon"
         except Exception:  # noqa: BLE001 — best-effort; fail-open
             host = "anon"
         return f"anon:{host}"
@@ -228,14 +225,16 @@ def create_openai_router(
                     "owned_by": "octopus-agent",
                 }
                 for name in stack.registry.all_names()
-            ] + [
+            ]
+            + [
                 {
                     "id": "octopus-agent",
                     "object": "model",
                     "created": now,
                     "owned_by": "octopus-agent",
                 }
-            ] + [
+            ]
+            + [
                 {
                     "id": _mix_id,
                     "object": "model",
@@ -249,7 +248,9 @@ def create_openai_router(
     @router.get("/v1/models")
     def list_models(request: Request) -> dict[str, Any]:
         _resolve_actor(
-            request, identity_store, require_auth,
+            request,
+            identity_store,
+            require_auth,
             jwt_secret=jwt_secret,
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
@@ -260,7 +261,9 @@ def create_openai_router(
     @router.get("/api/models")
     def list_models_alias(request: Request) -> dict[str, Any]:
         _resolve_actor(
-            request, identity_store, require_auth,
+            request,
+            identity_store,
+            require_auth,
             jwt_secret=jwt_secret,
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
@@ -284,11 +287,16 @@ def create_openai_router(
     @router.get("/api/mix-config")
     def get_mix_config(request: Request) -> dict[str, Any]:
         _resolve_actor(
-            request, identity_store, require_auth,
-            jwt_secret=jwt_secret, jwt_issuer=jwt_issuer,
-            jwt_audience=jwt_audience, jwt_leeway_seconds=jwt_leeway_seconds,
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+            jwt_leeway_seconds=jwt_leeway_seconds,
         )
         from .openai_gateway.mix import _DEFAULT_N, load_mix_config
+
         cfg = load_mix_config()
         return {
             "proposers": cfg.get("proposers") or [],
@@ -299,11 +307,16 @@ def create_openai_router(
     @router.put("/api/mix-config")
     def put_mix_config(body: dict[str, Any], request: Request) -> dict[str, Any]:
         _resolve_actor(
-            request, identity_store, require_auth,
-            jwt_secret=jwt_secret, jwt_issuer=jwt_issuer,
-            jwt_audience=jwt_audience, jwt_leeway_seconds=jwt_leeway_seconds,
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+            jwt_leeway_seconds=jwt_leeway_seconds,
         )
         from .openai_gateway.mix import save_mix_config
+
         return save_mix_config(body if isinstance(body, dict) else {})
 
     @router.post("/v1/chat/completions")
@@ -315,7 +328,9 @@ def create_openai_router(
         # Auth + rate-limit at the top so spammers don't get to touch
         # planner / memory / journal at all.
         actor = _resolve_actor(
-            request, identity_store, require_auth,
+            request,
+            identity_store,
+            require_auth,
             jwt_secret=jwt_secret,
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
@@ -341,6 +356,7 @@ def create_openai_router(
             memories_from_messages,
             merge_profile_memories,
         )
+
         explicit_memories = memories_from_messages(conversation_messages)
         stored_memories: list[str] = []
         written_memory_count = 0
@@ -371,11 +387,9 @@ def create_openai_router(
                 read_config,
                 relevant_memory_texts,
             )
+
             memory_config = read_config()
-            if (
-                allow_memory_write
-                and memory_config.get("auto_capture_enabled", True)
-            ):
+            if allow_memory_write and memory_config.get("auto_capture_enabled", True):
                 memory_scope = (
                     "project"
                     if project_for_memory
@@ -387,14 +401,17 @@ def create_openai_router(
                     else ("page-agent" if page_memory_mode == "write_allowed" else "chat")
                 )
                 for memory in explicit_memories:
-                    if add_fact(
-                        memory,
-                        category="profile",
-                        source=source,
-                        scope=memory_scope,
-                        agent_id=agent_name_for_memory or None,
-                        project=project_for_memory or None,
-                    ) is not None:
+                    if (
+                        add_fact(
+                            memory,
+                            category="profile",
+                            source=source,
+                            scope=memory_scope,
+                            agent_id=agent_name_for_memory or None,
+                            project=project_for_memory or None,
+                        )
+                        is not None
+                    ):
                         written_memory_count += 1
             if allow_memory_read:
                 stored_memories = relevant_memory_texts(
@@ -441,6 +458,7 @@ def create_openai_router(
                 selected_agent = agent_registry.get(agent_id)
             else:
                 import logging as _lg
+
                 _lg.info(
                     "unknown agent %r · falling back to no-agent mode",
                     agent_id,
@@ -452,7 +470,8 @@ def create_openai_router(
             not isinstance(conversation_id, str) or not conversation_id
         ):
             raise HTTPException(
-                400, "conversation_id must be a non-empty string",
+                400,
+                "conversation_id must be a non-empty string",
             )
         if conversation_id is None:
             conversation_id = uuid4().hex
@@ -465,11 +484,7 @@ def create_openai_router(
                 "conversation_messages": conversation_messages,
                 "profile_memories": profile_memories,
                 "memory_written_count": written_memory_count,
-                **(
-                    {"reasoning_effort": reasoning_effort}
-                    if reasoning_effort
-                    else {}
-                ),
+                **({"reasoning_effort": reasoning_effort} if reasoning_effort else {}),
             },
         )
 
@@ -480,9 +495,8 @@ def create_openai_router(
             from runtime.sensing.model_router.actor_context import (
                 current_actor as _molili_actor_ctx,
             )
-            _mix_agent_ctx = (
-                selected_agent.agent_id if selected_agent is not None else None
-            )
+
+            _mix_agent_ctx = selected_agent.agent_id if selected_agent is not None else None
             _mix_token = _molili_actor_ctx.set(actor)
             try:
                 with journal_context(
@@ -490,9 +504,14 @@ def create_openai_router(
                     conversation_id=conversation_id,
                 ):
                     mix_result = run_mix_chat(
-                        stack, intent, requested_model, default_arm,
-                        actor=actor, agent=selected_agent,
-                        run_chat=_run_chat, optimizer=prompt_optimizer,
+                        stack,
+                        intent,
+                        requested_model,
+                        default_arm,
+                        actor=actor,
+                        agent=selected_agent,
+                        run_chat=_run_chat,
+                        optimizer=prompt_optimizer,
                     )
             finally:
                 _molili_actor_ctx.reset(_mix_token)
@@ -513,7 +532,11 @@ def create_openai_router(
             None
             if force_deep
             else _maybe_reflex_chat(
-                reflex_router, intent, stack, requested_model, actor=actor,
+                reflex_router,
+                intent,
+                stack,
+                requested_model,
+                actor=actor,
             )
         )
         if reflex_response is not None:
@@ -528,17 +551,19 @@ def create_openai_router(
                 )
             return reflex_response
 
-        agent_id_for_ctx = (
-            selected_agent.agent_id if selected_agent is not None else None
-        )
+        agent_id_for_ctx = selected_agent.agent_id if selected_agent is not None else None
 
         from runtime.sensing.model_router.actor_context import current_actor as _molili_actor_ctx
 
         if stream:
             return StreamingResponse(
                 _stream_chat_wrapped(
-                    stack, intent, requested_model, default_arm,
-                    actor=actor, agent=selected_agent,
+                    stack,
+                    intent,
+                    requested_model,
+                    default_arm,
+                    actor=actor,
+                    agent=selected_agent,
                     agent_id=agent_id_for_ctx,
                     conversation_id=conversation_id,
                     stream_mode=stream_mode,
@@ -552,9 +577,15 @@ def create_openai_router(
                 conversation_id=conversation_id,
             ):
                 response = _run_chat(
-                    stack, intent, requested_model, default_arm,
-                    optimizer=prompt_optimizer, actor=actor, agent=selected_agent,
-                    force_deep=force_deep, conversation_id=conversation_id,
+                    stack,
+                    intent,
+                    requested_model,
+                    default_arm,
+                    optimizer=prompt_optimizer,
+                    actor=actor,
+                    agent=selected_agent,
+                    force_deep=force_deep,
+                    conversation_id=conversation_id,
                 )
         finally:
             _molili_actor_ctx.reset(_molili_token)
@@ -615,7 +646,10 @@ def _run_chat(
                 reply = _direct_llm_fallback(stack, intent, agent, model=model)
                 if reply is not None:
                     return _chat_completion_envelope(
-                        reply, model=model, actor=actor, agent=agent,
+                        reply,
+                        model=model,
+                        actor=actor,
+                        agent=agent,
                         extra={"fallback": f"planner_error: {e}", "deep_requested": force_deep},
                     )
                 raise HTTPException(500, f"planner failed: {e}") from e
@@ -623,7 +657,10 @@ def _run_chat(
             reply = _direct_llm_fallback(stack, intent, agent, model=model)
             if reply is not None:
                 return _chat_completion_envelope(
-                    reply, model=model, actor=actor, agent=agent,
+                    reply,
+                    model=model,
+                    actor=actor,
+                    agent=agent,
                     extra={"fallback": f"planner_error: {e}", "deep_requested": force_deep},
                 )
             raise HTTPException(500, f"planner failed: {e}") from e
@@ -655,8 +692,10 @@ def _run_chat(
         )
     ):
         traj = stack.runtime.run(
-            graph, budget=budget,
-            caller=f"arms/{arm_id_str}", arm_id=ArmId(arm_id_str),
+            graph,
+            budget=budget,
+            caller=f"arms/{arm_id_str}",
+            arm_id=ArmId(arm_id_str),
             actor=actor,
         )
 
@@ -668,8 +707,11 @@ def _run_chat(
             _logger.debug("optimizer.record_outcome failed: %s", _e)
 
     assistant_text = synthesize_reply(
-        stack, goal=intent.normalized_goal, trajectory=traj,
-        model=model, agent=agent,
+        stack,
+        goal=intent.normalized_goal,
+        trajectory=traj,
+        model=model,
+        agent=agent,
         conversation_messages=_conversation_messages_payload(intent),
         profile_memories=_profile_memories_payload(intent),
         user_context=intent.user_context if intent is not None else None,
@@ -771,6 +813,7 @@ def synthesize_reply(
     team_section = ""
     try:
         from runtime.core.cerebrum.llm_planner import _render_team_roster_section
+
         uc = user_context or {}
         if isinstance(uc, dict):
             team_section = _render_team_roster_section(uc)
@@ -782,12 +825,11 @@ def synthesize_reply(
     if interaction_profile:
         system_soul = f"{system_soul}\n\n{interaction_profile}"
     from runtime.memory.users.profile import render_profile_memories
+
     profile_section = render_profile_memories(profile_memories or [])
     profile_block = f"{profile_section}\n\n" if profile_section else ""
     history = _render_conversation_history(conversation_messages or [])
-    history_block = (
-        f"Conversation history:\n{history}\n\n" if history else ""
-    )
+    history_block = f"Conversation history:\n{history}\n\n" if history else ""
     research_instruction = ""
     if wants_research_report:
         research_instruction = (
@@ -808,8 +850,9 @@ def synthesize_reply(
     )
 
     effective_model = (
-        model if model and model not in ("octopus-agent", "") else
-        getattr(stack.planner, "planner_model", None) or "molili"
+        model
+        if model and model not in ("octopus-agent", "")
+        else getattr(stack.planner, "planner_model", None) or "molili"
     )
     req = ModelRequest(
         model=effective_model,
@@ -830,12 +873,16 @@ def synthesize_reply(
             "output_tokens": int(getattr(resp, "output_tokens", 0) or 0),
         }
         _commit_direct_llm_cost(
-            stack, _synth_usage_local, agent, reason="synthesize_reply",
+            stack,
+            _synth_usage_local,
+            agent,
+            reason="synthesize_reply",
         )
         text = (resp.text or "").strip()
         if text:
             from runtime.platform.process.session import current_session
             from runtime.platform.runtime_policy.identity_filter import filter_text
+
             filtered = filter_text(
                 text,
                 session=current_session(),
@@ -851,9 +898,11 @@ def synthesize_reply(
             return filtered
     except (ConnectionError, TimeoutError, OSError, ValueError, TypeError) as exc:  # noqa: BLE001
         import logging
+
         logging.getLogger(__name__).warning(
             "synthesize_reply failed: %s: %s",
-            type(exc).__name__, exc,
+            type(exc).__name__,
+            exc,
         )
 
     if wants_research_report:

@@ -91,6 +91,7 @@ def active_subagent_count() -> int:
     with _ACTIVE_SUBAGENTS_LOCK:
         return _ACTIVE_SUBAGENTS
 
+
 # Permissive default for the cheap subagent model. Operators should
 # override this to point at their org's actual cheap model — either
 # via the ``OCTOPUS_SUBAGENT_CHEAP_MODEL`` env var or via the
@@ -110,41 +111,74 @@ _DEFAULT_CHEAP_SUBAGENT_MODEL: str = "glm-4-flash"
 # through ``sub_tool_*`` events.
 
 _CODENAME_POOL: tuple[str, ...] = (
-    "Spark", "Nova", "Quark", "Atlas", "Echo", "Lyra", "Vega", "Pixel",
-    "Halo", "Comet", "Drift", "Ember", "Flux", "Glow", "Helios", "Iris",
-    "Juno", "Kite", "Lumen", "Maple", "Nimbus", "Orbit", "Prism", "Quest",
-    "Rune", "Sable", "Tide", "Umbra", "Volt", "Whisk", "Xeno", "Yarrow",
-    "Zenith", "Aurora", "Blaze", "Cinder", "Dune", "Frost",
+    "Spark",
+    "Nova",
+    "Quark",
+    "Atlas",
+    "Echo",
+    "Lyra",
+    "Vega",
+    "Pixel",
+    "Halo",
+    "Comet",
+    "Drift",
+    "Ember",
+    "Flux",
+    "Glow",
+    "Helios",
+    "Iris",
+    "Juno",
+    "Kite",
+    "Lumen",
+    "Maple",
+    "Nimbus",
+    "Orbit",
+    "Prism",
+    "Quest",
+    "Rune",
+    "Sable",
+    "Tide",
+    "Umbra",
+    "Volt",
+    "Whisk",
+    "Xeno",
+    "Yarrow",
+    "Zenith",
+    "Aurora",
+    "Blaze",
+    "Cinder",
+    "Dune",
+    "Frost",
 )
 
 # Role → emoji avatar. Falls back to 🐙 (octopus mascot) for unknown
 # roles. Kept short so the UI doesn't have to ship an icon library
 # just for sub-agent tiles.
 _ROLE_AVATAR: dict[str, str] = {
-    "researcher":   "🔍",
-    "research":     "🔍",
-    "explorer":     "🧭",
+    "researcher": "🔍",
+    "research": "🔍",
+    "explorer": "🧭",
     "fact_checker": "✅",
     "fact-checker": "✅",
-    "critic":       "🛡️",
-    "reviewer":     "🛡️",
-    "security":     "🛡️",
+    "critic": "🛡️",
+    "reviewer": "🛡️",
+    "security": "🛡️",
     "security-review": "🛡️",
-    "performance":  "⚡",
-    "style":        "🎨",
-    "synthesizer":  "✍️",
-    "writer":       "✍️",
-    "architect":    "🏗️",
-    "designer":     "📐",
-    "implementer":  "🔧",
-    "coder":        "🔧",
-    "reproducer":   "🐛",
+    "performance": "⚡",
+    "style": "🎨",
+    "synthesizer": "✍️",
+    "writer": "✍️",
+    "architect": "🏗️",
+    "designer": "📐",
+    "implementer": "🔧",
+    "coder": "🔧",
+    "reproducer": "🐛",
     "hypothesizer": "💡",
-    "verifier":     "🧪",
-    "debugger":     "🐛",
-    "planner":      "📋",
-    "evaluator":    "⚖️",
-    "generator":    "✨",
+    "verifier": "🧪",
+    "debugger": "🐛",
+    "planner": "📋",
+    "evaluator": "⚖️",
+    "generator": "✨",
 }
 _DEFAULT_AVATAR = "🐙"
 
@@ -183,6 +217,7 @@ def _resolve_cheap_subagent_model() -> str | None:
         return env_val.strip()
     try:
         from runtime.platform.process.service_provider import get_provider
+
         cfg_val = get_provider().get("subagent_cheap_model")
         if isinstance(cfg_val, str) and cfg_val.strip():
             return cfg_val.strip()
@@ -289,10 +324,9 @@ def _subagent_trace_context(
         or _clean_trace_value(getattr(session, "thread_id", None))
         or _clean_trace_value(getattr(session, "conversation_id", None))
     )
-    turn_id = (
-        _trace_context_value(context, metadata, "turn_id", "caller_turn_id")
-        or _clean_trace_value(getattr(session, "turn_id", None))
-    )
+    turn_id = _trace_context_value(
+        context, metadata, "turn_id", "caller_turn_id"
+    ) or _clean_trace_value(getattr(session, "turn_id", None))
     trace = {
         "thread_id": thread_id,
         "turn_id": turn_id,
@@ -440,14 +474,16 @@ def call_subagent(
     # write-tools set and the call succeeded, we extract its path.
     _files_touched: list[str] = []
     _files_seen: set[str] = set()
-    _subagent_write_tools: frozenset[str] = frozenset({
-        "write_text_file",
-        "append_text_file",
-        "edit_text_file",
-        "edit_file",
-        "multi_edit_file",
-        "propose_patch",
-    })
+    _subagent_write_tools: frozenset[str] = frozenset(
+        {
+            "write_text_file",
+            "append_text_file",
+            "edit_text_file",
+            "edit_file",
+            "multi_edit_file",
+            "propose_patch",
+        }
+    )
 
     # ── Sub-agent identity for visibility (codename + avatar) ──
     # Computed once per call so the spawn / finish events agree on
@@ -491,6 +527,7 @@ def call_subagent(
         from runtime.safety.validation.prompt_injection import (
             current_injection_taint,
         )
+
         _taint = current_injection_taint()
         if _taint and _taint != "none":
             if context is None:
@@ -537,10 +574,7 @@ def call_subagent(
             pass
         # File-touch tracking: best-effort, never breaks the call.
         try:
-            if (
-                event.get("type") == "sub_tool_end"
-                and event.get("status") == "success"
-            ):
+            if event.get("type") == "sub_tool_end" and event.get("status") == "success":
                 name = event.get("skill") or event.get("name") or ""
                 if name in _subagent_write_tools:
                     args = event.get("args") or {}
@@ -592,6 +626,7 @@ def call_subagent(
                     pop_turn_denylist,
                     push_turn_denylist,
                 )
+
                 denylist_token = push_turn_denylist(extra_denied_paths)
             except ImportError:
                 denylist_token = None
@@ -601,6 +636,7 @@ def call_subagent(
             import dataclasses
 
             from runtime.platform.process.session import Session, _current_session
+
             base = session if isinstance(session, Session) else Session()
             run_session = dataclasses.replace(
                 base,
@@ -623,12 +659,14 @@ def call_subagent(
         finally:
             if scope_token is not None:
                 from runtime.platform.process.session import _current_session
+
                 _current_session.reset(scope_token)
             if denylist_token is not None:
                 try:
                     from runtime.safety.auth.path_denylist import (
                         pop_turn_denylist,
                     )
+
                     pop_turn_denylist(denylist_token)
                 except ImportError:  # noqa: BLE001 — denylist is optional, skip if missing
                     pass
@@ -642,9 +680,7 @@ def call_subagent(
     # We do NOT retry generic failures (router error / tool exception)
     # because those are likely deterministic — retrying would just burn
     # more budget without changing the outcome.
-    _retry_disabled = bool(
-        (context or {}).get("disable_auto_retry", False)
-    )
+    _retry_disabled = bool((context or {}).get("disable_auto_retry", False))
 
     def _do_call_with_retry() -> dict[str, Any]:
         first = _do_call()
@@ -660,9 +696,10 @@ def call_subagent(
         partial = str(first.get("output") or "").strip()
         original_rounds = int(first.get("rounds_completed") or 0)
         _log.info(
-            "subagent auto-retry · agent_id=%s rounds_first=%d "
-            "partial_chars=%d",
-            agent_id, original_rounds, len(partial),
+            "subagent auto-retry · agent_id=%s rounds_first=%d partial_chars=%d",
+            agent_id,
+            original_rounds,
+            len(partial),
         )
         # Reset round tracking so the retry's iteration_count reflects
         # the second attempt only (caller's _augment uses _rounds_state).
@@ -744,7 +781,9 @@ def call_subagent(
                     result["schema_error"] = err
                     _log.info(
                         "subagent %s schema mismatch after %d attempt(s): %s",
-                        agent_id, attempts, err,
+                        agent_id,
+                        attempts,
+                        err,
                     )
                     return result
                 attempts += 1
@@ -789,10 +828,13 @@ def call_subagent(
         # so the log surface differentiates "ran out of rounds" from
         # "tool failure" / "router error".
         _log.info(
-            "subagent finish · agent_id=%s role=%s ok=%s rounds=%d "
-            "files=%d duration=%.2fs%s%s",
-            agent_id, _role_label, ok,
-            _rounds_state["max_round"], len(_files_touched), elapsed,
+            "subagent finish · agent_id=%s role=%s ok=%s rounds=%d files=%d duration=%.2fs%s%s",
+            agent_id,
+            _role_label,
+            ok,
+            _rounds_state["max_round"],
+            len(_files_touched),
+            elapsed,
             " · ROUND_CAP_EXCEEDED" if result.get("round_cap_exceeded") else "",
             f" · error={result.get('error')!r}" if result.get("error") else "",
         )
@@ -803,6 +845,7 @@ def call_subagent(
         # is present; stateless callers stay stateless.
         if _memory_thread_id:
             from runtime.execution.subagents.memory import record_turn
+
             record_turn(
                 thread_id=_memory_thread_id,
                 role_id=agent_id,
@@ -816,6 +859,7 @@ def call_subagent(
             from runtime.memory.learning.subagent_review import (
                 queue_subagent_review_candidate,
             )
+
             result["review_candidate"] = queue_subagent_review_candidate(
                 agent_id=agent_id,
                 role=_role_label,
@@ -853,6 +897,7 @@ def call_subagent(
     # Import failure is non-fatal — missing budget module never blocks spawning.
     try:
         from runtime.platform.budget import UsagePricing
+
         _pricing = UsagePricing.get()
         if _pricing.is_over_budget():
             _cost_reject: dict[str, Any] = {
@@ -874,8 +919,7 @@ def call_subagent(
                 "files_touched": [],
             }
             _log.warning(
-                "subagent spawn refused (cost ceiling $%.2f reached, spent $%.4f) "
-                "· agent_id=%s",
+                "subagent spawn refused (cost ceiling $%.2f reached, spent $%.4f) · agent_id=%s",
                 _pricing.config.budget_usd or 0,
                 _pricing.total_cost_usd,
                 agent_id,
@@ -905,7 +949,9 @@ def call_subagent(
         }
         _log.warning(
             "subagent spawn refused (cap %d reached) · agent_id=%s role=%s",
-            MAX_ACTIVE_SUBAGENTS, agent_id, _role_label,
+            MAX_ACTIVE_SUBAGENTS,
+            agent_id,
+            _role_label,
         )
         return _augment(_reject)
     try:
@@ -929,7 +975,9 @@ def call_subagent(
             rounds = _rounds_state["max_round"]
             _log.warning(
                 "subagent %s timed out after %ss (rounds_completed=%d)",
-                agent_id, timeout_seconds, rounds,
+                agent_id,
+                timeout_seconds,
+                rounds,
             )
             # Emit the subagent_finished lifecycle event for the timeout
             # path too — frontend needs to mark the tile as failed.
@@ -950,19 +998,22 @@ def call_subagent(
             _attach_trace_fields(_timeout_event, _trace_context)
             _safe_emit(event_emitter, _timeout_event)
             _safe_journal_emit(_timeout_event)
-            return _attach_trace_fields({
-                "status": "timeout",
-                "error": f"subagent timed out after {timeout_seconds}s",
-                "agent_id": agent_id,
-                "role": _role_label,
-                "codename": _codename,
-                "avatar": _avatar,
-                "output": "",
-                "success": False,
-                "rounds_completed": rounds,
-                "iteration_count": rounds,
-                "files_touched": list(_files_touched),
-            }, _trace_context)
+            return _attach_trace_fields(
+                {
+                    "status": "timeout",
+                    "error": f"subagent timed out after {timeout_seconds}s",
+                    "agent_id": agent_id,
+                    "role": _role_label,
+                    "codename": _codename,
+                    "avatar": _avatar,
+                    "output": "",
+                    "success": False,
+                    "rounds_completed": rounds,
+                    "iteration_count": rounds,
+                    "files_touched": list(_files_touched),
+                },
+                _trace_context,
+            )
         finally:
             executor.shutdown(wait=False)
     finally:
@@ -982,7 +1033,9 @@ def _dispatch(
     """Inner dispatch — runs in the caller's thread or a worker thread."""
     _log.info(
         "subagent dispatch · agent_id=%s prompt_len=%d timeout=%ds",
-        agent_id, len(prompt), timeout_s,
+        agent_id,
+        len(prompt),
+        timeout_s,
     )
     from runtime.execution.suckers.ephemeral_agents import (
         EphemeralRoleDef,
@@ -1046,8 +1099,7 @@ def _dispatch(
             "output": "",
             "success": False,
             "error": (
-                "sub-agent runner not configured; call "
-                "set_sub_agent_runner(fn) during bootstrap"
+                "sub-agent runner not configured; call set_sub_agent_runner(fn) during bootstrap"
             ),
         }
 
@@ -1082,7 +1134,9 @@ def _dispatch(
     except Exception as exc:  # noqa: BLE001
         _log.warning(
             "subagent %s runner raised %s: %s",
-            agent_id, type(exc).__name__, exc,
+            agent_id,
+            type(exc).__name__,
+            exc,
         )
         return {
             "agent_id": agent_id,

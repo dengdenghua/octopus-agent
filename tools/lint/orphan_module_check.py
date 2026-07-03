@@ -39,6 +39,7 @@ Run::
     python tools/lint/orphan_module_check.py --strict   # exit 1 on new
     python tools/lint/orphan_module_check.py --write-baseline
 """
+
 from __future__ import annotations
 
 import argparse
@@ -53,7 +54,12 @@ _RUNTIME = REPO_ROOT / "runtime"
 # Trees scanned for CONSUMERS (imports). A runtime module used by any of
 # these is not an orphan.
 _CONSUMER_ROOTS: tuple[str, ...] = (
-    "runtime", "tests", "demos", "benchmarks", "tools", "scripts",
+    "runtime",
+    "tests",
+    "demos",
+    "benchmarks",
+    "tools",
+    "scripts",
 )
 
 # Two different exclusion purposes, two lists:
@@ -74,9 +80,9 @@ _CONSUMER_EXCLUDE: tuple[str, ...] = (
 # importable module, so "nobody imports them" is expected, not a smell.
 _CANDIDATE_EXCLUDE: tuple[str, ...] = (
     *_CONSUMER_EXCLUDE,
-    "all_skills",            # generated/scaffolded skill packages
+    "all_skills",  # generated/scaffolded skill packages
     "agent_market_sources",  # bundled agent skill scripts (subprocess assets)
-    "/apks/",                # mobile build artifacts
+    "/apks/",  # mobile build artifacts
 )
 
 
@@ -271,10 +277,12 @@ def _audit(strict: bool) -> int:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--strict", action="store_true",
-                   help="exit 1 on new orphans or stale baseline")
-    p.add_argument("--write-baseline", action="store_true",
-                   help="snapshot current orphan modules to the baseline file")
+    p.add_argument("--strict", action="store_true", help="exit 1 on new orphans or stale baseline")
+    p.add_argument(
+        "--write-baseline",
+        action="store_true",
+        help="snapshot current orphan modules to the baseline file",
+    )
     args = p.parse_args()
 
     if args.write_baseline:

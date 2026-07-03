@@ -100,9 +100,7 @@ class PromptRegistry:
     ) -> None:
         self._dir = Path(prompts_dir)
         self._variants_dir = (
-            Path(variants_dir)
-            if variants_dir is not None
-            else self._dir / "variants"
+            Path(variants_dir) if variants_dir is not None else self._dir / "variants"
         )
         self._lock = threading.RLock()
         # Two-level cache:
@@ -120,7 +118,12 @@ class PromptRegistry:
         module loads even before flag registration in test contexts."""
         try:
             from runtime.platform import feature_flags as _ff
-        except (ImportError, TypeError, AttributeError, OSError):  # pragma: no cover - belt and suspenders
+        except (
+            ImportError,
+            TypeError,
+            AttributeError,
+            OSError,
+        ):  # pragma: no cover - belt and suspenders
             return False
         return _ff.is_on("ui.prompts_hot_reload")
 
@@ -287,9 +290,7 @@ class PromptRegistry:
                     # If no base, surface the variant mtime so callers
                     # have something useful.
                     if bucket["modified_at"] == 0.0:
-                        bucket["modified_at"] = (
-                            entry.mtime_ns / 1_000_000_000
-                        )
+                        bucket["modified_at"] = entry.mtime_ns / 1_000_000_000
 
             for bucket in buckets.values():
                 bucket["variants"] = sorted(bucket["variants"])
@@ -312,13 +313,10 @@ class PromptRegistry:
         the freshly-stat'd file so subsequent ``get()`` calls return
         the new content even if the hot-reload flag is OFF.
         """
-        if not name or any(
-            ch in name for ch in ("/", "\\", "..", "\x00")
-        ):
+        if not name or any(ch in name for ch in ("/", "\\", "..", "\x00")):
             raise ValueError(f"invalid prompt name {name!r}")
         if variant is not None and (
-            not variant
-            or any(ch in variant for ch in ("/", "\\", "..", "\x00"))
+            not variant or any(ch in variant for ch in ("/", "\\", "..", "\x00"))
         ):
             raise ValueError(f"invalid variant name {variant!r}")
 

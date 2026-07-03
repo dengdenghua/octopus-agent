@@ -23,6 +23,7 @@ joined to the thread's upload dir · otherwise a client could
 send ``../../etc/passwd`` and land a file outside their sandbox.
 Covered by ``test_filename_path_traversal_stripped``.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -60,6 +61,7 @@ _MAX_UPLOAD_FILENAME_LENGTH = 255
 
 
 if FASTAPI_AVAILABLE:
+
     class UploadFileMetadata(BaseModel):
         filename: str
         size: int
@@ -188,11 +190,7 @@ def create_uploads_router(
         return dirs
 
     def _absolute_artifact_candidate(thread_id: str, raw_path: Path) -> Path | None:
-        if (
-            not raw_path.exists()
-            or raw_path.is_symlink()
-            or not raw_path.is_file()
-        ):
+        if not raw_path.exists() or raw_path.is_symlink() or not raw_path.is_file():
             return None
         try:
             resolved = raw_path.resolve()
@@ -221,7 +219,8 @@ def create_uploads_router(
                 fh.write(data)
         except OSError as exc:
             raise HTTPException(
-                500, f"failed to store upload: {exc}",
+                500,
+                f"failed to store upload: {exc}",
             ) from exc
 
     async def _read_upload_limited(upload: UploadFile) -> bytes:
@@ -245,9 +244,7 @@ def create_uploads_router(
             "size": stat.st_size,
             "path": str(file_path),
             "virtual_path": str(file_path),
-            "artifact_url": (
-                f"/api/threads/{thread_id}/artifacts/{rel_name}"
-            ),
+            "artifact_url": (f"/api/threads/{thread_id}/artifacts/{rel_name}"),
             "extension": file_path.suffix.lstrip(".") or None,
             "modified": int(stat.st_mtime),
         }
@@ -374,7 +371,8 @@ def create_uploads_router(
             target.unlink()
         except OSError as exc:
             raise HTTPException(
-                500, f"failed to delete upload: {exc}",
+                500,
+                f"failed to delete upload: {exc}",
             ) from exc
         return {"success": True, "message": f"Deleted {target.name}"}
 
@@ -408,7 +406,8 @@ def create_uploads_router(
         )
         if target is None:
             raise HTTPException(
-                404, f"artifact not found: {artifact_path}",
+                404,
+                f"artifact not found: {artifact_path}",
             )
         return FileResponse(
             str(target),

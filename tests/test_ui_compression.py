@@ -4,6 +4,7 @@ These drive the ASGI protocol directly (rather than through an HTTP client)
 so we can assert on the raw wire behaviour — in particular that SSE streams
 pass through chunk-by-chunk and are never buffered or re-encoded.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +14,9 @@ from typing import Any
 from runtime.platform.ui.compression import GzipStaticMiddleware
 
 
-def _scope(accept_encoding: str | None = "gzip", *, extra: dict[str, str] | None = None) -> dict[str, Any]:
+def _scope(
+    accept_encoding: str | None = "gzip", *, extra: dict[str, str] | None = None
+) -> dict[str, Any]:
     headers: list[tuple[bytes, bytes]] = []
     if accept_encoding is not None:
         headers.append((b"accept-encoding", accept_encoding.encode()))

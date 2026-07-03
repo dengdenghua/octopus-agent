@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from utils.disposition_ops import disposition_email, get_disposition_settings, is_calendar_reply
 
@@ -19,8 +19,8 @@ class TestGetDispositionSettings(unittest.TestCase):
 
     def test_defaults_when_no_config(self):
         """Test that defaults are returned when config doesn't exist."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            f.write('{}')
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            f.write("{}")
             f.flush()
             settings = get_disposition_settings(f.name)
             os.unlink(f.name)
@@ -35,10 +35,10 @@ class TestGetDispositionSettings(unittest.TestCase):
             "email_handling": {
                 "mark_read": False,
                 "archive": True,
-                "auto_dispose_calendar_replies": False
+                "auto_dispose_calendar_replies": False,
             }
         }
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(config, f)
             f.flush()
             settings = get_disposition_settings(f.name)
@@ -50,12 +50,8 @@ class TestGetDispositionSettings(unittest.TestCase):
 
     def test_partial_config(self):
         """Test that missing keys use defaults."""
-        config = {
-            "email_handling": {
-                "mark_read": False
-            }
-        }
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        config = {"email_handling": {"mark_read": False}}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(config, f)
             f.flush()
             settings = get_disposition_settings(f.name)
@@ -68,7 +64,7 @@ class TestGetDispositionSettings(unittest.TestCase):
     def test_missing_email_handling_section(self):
         """Test that missing email_handling section uses all defaults."""
         config = {"gmail_account": "test@gmail.com"}
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(config, f)
             f.flush()
             settings = get_disposition_settings(f.name)
@@ -82,8 +78,8 @@ class TestGetDispositionSettings(unittest.TestCase):
 class TestDispositionEmail(unittest.TestCase):
     """Tests for disposition_email function."""
 
-    @patch('utils.disposition_ops.modify_email')
-    @patch('utils.disposition_ops.get_disposition_settings')
+    @patch("utils.disposition_ops.modify_email")
+    @patch("utils.disposition_ops.get_disposition_settings")
     def test_mark_read_and_archive(self, mock_settings, mock_modify):
         """Test disposition with both mark_read and archive enabled."""
         mock_settings.return_value = {"mark_read": True, "archive": True}
@@ -100,8 +96,8 @@ class TestDispositionEmail(unittest.TestCase):
         self.assertIn("UNREAD", call_args[1]["remove_labels"])
         self.assertIn("INBOX", call_args[1]["remove_labels"])
 
-    @patch('utils.disposition_ops.modify_email')
-    @patch('utils.disposition_ops.get_disposition_settings')
+    @patch("utils.disposition_ops.modify_email")
+    @patch("utils.disposition_ops.get_disposition_settings")
     def test_mark_read_only(self, mock_settings, mock_modify):
         """Test disposition with only mark_read enabled."""
         mock_settings.return_value = {"mark_read": True, "archive": False}
@@ -116,8 +112,8 @@ class TestDispositionEmail(unittest.TestCase):
         self.assertIn("UNREAD", call_args[1]["remove_labels"])
         self.assertNotIn("INBOX", call_args[1]["remove_labels"])
 
-    @patch('utils.disposition_ops.modify_email')
-    @patch('utils.disposition_ops.get_disposition_settings')
+    @patch("utils.disposition_ops.modify_email")
+    @patch("utils.disposition_ops.get_disposition_settings")
     def test_archive_only(self, mock_settings, mock_modify):
         """Test disposition with only archive enabled."""
         mock_settings.return_value = {"mark_read": False, "archive": True}
@@ -132,7 +128,7 @@ class TestDispositionEmail(unittest.TestCase):
         self.assertIn("INBOX", call_args[1]["remove_labels"])
         self.assertNotIn("UNREAD", call_args[1]["remove_labels"])
 
-    @patch('utils.disposition_ops.get_disposition_settings')
+    @patch("utils.disposition_ops.get_disposition_settings")
     def test_no_actions_configured(self, mock_settings):
         """Test disposition when both options are disabled."""
         mock_settings.return_value = {"mark_read": False, "archive": False}
@@ -150,8 +146,8 @@ class TestDispositionEmail(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertIn("email_id is required", result["error"])
 
-    @patch('utils.disposition_ops.modify_email')
-    @patch('utils.disposition_ops.get_disposition_settings')
+    @patch("utils.disposition_ops.modify_email")
+    @patch("utils.disposition_ops.get_disposition_settings")
     def test_override_mark_read(self, mock_settings, mock_modify):
         """Test explicit override of mark_read setting."""
         mock_settings.return_value = {"mark_read": False, "archive": False}
@@ -164,8 +160,8 @@ class TestDispositionEmail(unittest.TestCase):
         call_args = mock_modify.call_args
         self.assertIn("UNREAD", call_args[1]["remove_labels"])
 
-    @patch('utils.disposition_ops.modify_email')
-    @patch('utils.disposition_ops.get_disposition_settings')
+    @patch("utils.disposition_ops.modify_email")
+    @patch("utils.disposition_ops.get_disposition_settings")
     def test_override_archive(self, mock_settings, mock_modify):
         """Test explicit override of archive setting."""
         mock_settings.return_value = {"mark_read": False, "archive": False}
@@ -178,8 +174,8 @@ class TestDispositionEmail(unittest.TestCase):
         call_args = mock_modify.call_args
         self.assertIn("INBOX", call_args[1]["remove_labels"])
 
-    @patch('utils.disposition_ops.modify_email')
-    @patch('utils.disposition_ops.get_disposition_settings')
+    @patch("utils.disposition_ops.modify_email")
+    @patch("utils.disposition_ops.get_disposition_settings")
     def test_modify_failure(self, mock_settings, mock_modify):
         """Test handling of modify_email failure."""
         mock_settings.return_value = {"mark_read": True, "archive": True}
@@ -229,5 +225,5 @@ class TestIsCalendarReply(unittest.TestCase):
         self.assertFalse(is_calendar_reply(None))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,3 @@
-
 from .executor import StepExecutionError, ToolExecutor
 from .tool_protocol import (
     NormalizedToolCall,

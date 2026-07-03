@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import threading
@@ -13,7 +12,6 @@ from .events import SensorEvent
 
 @dataclass(frozen=True)
 class SensorStatus:
-
     sensor_id: str
     running: bool
     events_emitted: int = 0
@@ -27,7 +25,6 @@ class SensorStatus:
 
 
 class EnvSensor(ABC):
-
     sensor_id: str = ""
 
     def __init__(self) -> None:
@@ -44,8 +41,7 @@ class EnvSensor(ABC):
     def _publish(self, event: SensorEvent) -> None:
         if self._publisher is None:
             raise RuntimeError(
-                f"sensor {self.sensor_id!r} has no publisher · "
-                "register to SensorManager first",
+                f"sensor {self.sensor_id!r} has no publisher · register to SensorManager first",
             )
         if not event.sensor_id:
             event = event.model_copy(update={"sensor_id": self.sensor_id})

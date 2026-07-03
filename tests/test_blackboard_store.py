@@ -1,4 +1,5 @@
 """Durable, cross-process SQLite-backed blackboard."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -90,7 +91,9 @@ def test_cross_process_orchestration_coordination(tmp_path: Path, monkeypatch) -
     monkeypatch.setattr(ds, "_resolve_session_and_turn", lambda: (None, turn))
 
     monkeypatch.setattr(
-        ds, "_call_agent_parallel", _fake_parallel_seq([["finding-from-proc-A"]]),
+        ds,
+        "_call_agent_parallel",
+        _fake_parallel_seq([["finding-from-proc-A"]]),
     )
     r1 = ds._run_orchestration(goal="audit", n=1, rounds=1, patience=2)
     assert r1["shared"] is True
@@ -98,7 +101,9 @@ def test_cross_process_orchestration_coordination(tmp_path: Path, monkeypatch) -
     # second "process": drop the connection cache (restart), same DB file
     reset_sqlite_cache_for_tests()
     monkeypatch.setattr(
-        ds, "_call_agent_parallel", _fake_parallel_seq([["finding-from-proc-B"]]),
+        ds,
+        "_call_agent_parallel",
+        _fake_parallel_seq([["finding-from-proc-B"]]),
     )
     r2 = ds._run_orchestration(goal="audit", n=1, rounds=1, patience=2)
     assert r2["inherited"] == 1  # inherited proc-A's finding via the DB file

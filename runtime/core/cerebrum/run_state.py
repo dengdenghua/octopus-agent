@@ -101,4 +101,3 @@ def _normalize_status(status: str) -> str:
     if value in _CANCELLED:
         return "cancelled"
     return "unknown"
-

@@ -53,9 +53,7 @@ def _make_step(i: int, caller: str) -> Step:
         step_id=i,
         node_id=f"n{i}",
         action=action,
-        result=ExecutionResult(
-            call_id=action.call_id, status="success", output={"i": i}
-        ),
+        result=ExecutionResult(call_id=action.call_id, status="success", output={"i": i}),
     )
 
 

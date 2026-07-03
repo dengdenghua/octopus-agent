@@ -34,6 +34,7 @@ Run::
     python tools/lint/import_direction_check.py --strict   # exit 1 on new/stale
     python tools/lint/import_direction_check.py --write-baseline
 """
+
 from __future__ import annotations
 
 import argparse
@@ -115,7 +116,7 @@ def _normalize(module: str) -> str | None:
     if module == "runtime":
         return None
     if module.startswith("runtime."):
-        return module[len("runtime."):]
+        return module[len("runtime.") :]
     return None
 
 
@@ -232,10 +233,14 @@ def _audit(strict: bool) -> int:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--strict", action="store_true",
-                   help="exit 1 on new wrong-way imports or stale baseline")
-    p.add_argument("--write-baseline", action="store_true",
-                   help="snapshot current violations to the baseline file")
+    p.add_argument(
+        "--strict", action="store_true", help="exit 1 on new wrong-way imports or stale baseline"
+    )
+    p.add_argument(
+        "--write-baseline",
+        action="store_true",
+        help="snapshot current violations to the baseline file",
+    )
     args = p.parse_args()
 
     if args.write_baseline:

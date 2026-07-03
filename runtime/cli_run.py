@@ -129,11 +129,7 @@ def run_goal(
         if has_deps:
             print(c.dim(_("cli.swarm.template_deps")))
         elif strategy == "topo_layers":
-            print(
-                c.dim(
-                    _("cli.swarm.edges_detected", edges=len(graph.edges))
-                )
-            )
+            print(c.dim(_("cli.swarm.edges_detected", edges=len(graph.edges))))
 
         runtime = GraphRuntime(executor=executor, journal=journal)
         signal_bus = SignalBus()
@@ -153,17 +149,23 @@ def run_goal(
 
         for ar in result.arm_results:
             status = ar.status
-            marker = c.green(_("cli.exec.success")) if status == "success" else c.red(_("cli.exec.failed"))
+            marker = (
+                c.green(_("cli.exec.success"))
+                if status == "success"
+                else c.red(_("cli.exec.failed"))
+            )
             lat = ar.cost.latency_ms
             print(
                 f"           {marker} {ar.arm_id:<12} · {_('cli.swarm.result', arm=ar.arm_id, status=status, ms=lat, usd=ar.cost.usd, reason=ar.reason[:40])}"
             )
         print(
             c.dim(
-                _("cli.status.parallelism",
-                  parallelism=result.parallelism_achieved,
-                  arms=len(pool),
-                  speedup=_speedup_estimate(result))
+                _(
+                    "cli.status.parallelism",
+                    parallelism=result.parallelism_achieved,
+                    arms=len(pool),
+                    speedup=_speedup_estimate(result),
+                )
             )
         )
         overall_success = result.all_successful
@@ -185,7 +187,11 @@ def run_goal(
 
         for step in steps:
             status = step.result.status
-            marker = c.green(_("cli.exec.success")) if status == "success" else c.red(_("cli.exec.failed"))
+            marker = (
+                c.green(_("cli.exec.success"))
+                if status == "success"
+                else c.red(_("cli.exec.failed"))
+            )
             verdict = c.dim(str(step.immune_verdict or "—"))
             preview = _short_output(step.result.output)
             lat = step.result.cost.latency_ms
@@ -215,7 +221,13 @@ def run_goal(
     )
     print(
         c.dim(
-            _("cli.budget.display", spent=budget.tokens_spent, limit=budget.limits.tokens, usd_spent=budget.usd_spent, usd_limit=budget.limits.usd)
+            _(
+                "cli.budget.display",
+                spent=budget.tokens_spent,
+                limit=budget.limits.tokens,
+                usd_spent=budget.usd_spent,
+                usd_limit=budget.limits.usd,
+            )
         )
     )
     print(f"  {_('cli.status.wall_time', ms=total_exec_ms)}")
@@ -264,7 +276,13 @@ def run_goal_from_config(
     print(c.bold(_("cli.config.title", path=config_path)))
     print(c.dim("─" * 60))
     print(
-        _("cli.config.info", planner=cfg.planner.type, model=cfg.planner.model, skills=len(stack.registry), budget=cfg.budget.max_usd)
+        _(
+            "cli.config.info",
+            planner=cfg.planner.type,
+            model=cfg.planner.model,
+            skills=len(stack.registry),
+            budget=cfg.budget.max_usd,
+        )
     )
 
     intent = ParsedIntent(raw=goal, intent_type=intent_type, normalized_goal=goal)
@@ -373,9 +391,7 @@ def run_bench(
         task_type="bench",
     )
 
-    serial_budget = Budget(
-        task_id=graph.task_id, limits=BudgetLimits(tokens=100_000, usd=1.00)
-    )
+    serial_budget = Budget(task_id=graph.task_id, limits=BudgetLimits(tokens=100_000, usd=1.00))
     t0 = time.monotonic()
     serial_traj = runtime.run(
         graph,
@@ -404,9 +420,7 @@ def run_bench(
             for i in range(workers)
         ]
     )
-    swarm_budget = Budget(
-        task_id=graph.task_id, limits=BudgetLimits(tokens=100_000, usd=1.00)
-    )
+    swarm_budget = Budget(task_id=graph.task_id, limits=BudgetLimits(tokens=100_000, usd=1.00))
     swarm_runtime = SwarmRuntime(
         arm_pool=pool,
         signal_bus=bench_signal_bus,
@@ -473,9 +487,20 @@ def run_resume(
     print(c.dim("─" * 60))
     print(f"  journal: {journal_path} ({len(journal)} events)")
     print(
-        _("cli.resume.completed_info", completed=len(info.completed_nodes), total=info.total_nodes, strategy=info.strategy)
+        _(
+            "cli.resume.completed_info",
+            completed=len(info.completed_nodes),
+            total=info.total_nodes,
+            strategy=info.strategy,
+        )
     )
-    print(_("cli.resume.terminated_info", terminated=info.task_terminated, resumable=info.is_resumable))
+    print(
+        _(
+            "cli.resume.terminated_info",
+            terminated=info.task_terminated,
+            resumable=info.is_resumable,
+        )
+    )
     for cn in info.completed_nodes:
         print(c.dim(f"    ✓ {cn.node_id} ({cn.sucker_id})"))
 
@@ -508,23 +533,26 @@ def run_resume(
     old_args_prefix = [cn.args_template for cn in info.completed_nodes]
     N = info.resume_from_index  # noqa: N806
     if len(new_skill_refs) < N:
-        print(c.red(
-            f"replanned graph too short ({len(new_skill_refs)} nodes · need ≥ {N})"
-        ), file=sys.stderr)
+        print(
+            c.red(f"replanned graph too short ({len(new_skill_refs)} nodes · need ≥ {N})"),
+            file=sys.stderr,
+        )
         return 1
     if new_skill_refs[:N] != old_skill_refs:
-        print(c.red(
-            "prefix mismatch · replanned skill sequence diverges from journal history"
-        ), file=sys.stderr)
+        print(
+            c.red("prefix mismatch · replanned skill sequence diverges from journal history"),
+            file=sys.stderr,
+        )
         print(c.dim(f"  journal prefix: {old_skill_refs}"))
         print(c.dim(f"  replan prefix:  {new_skill_refs[:N]}"))
         return 1
 
     new_args_prefix = [dict(n.args_template) for n in graph.nodes[:N]]
     if new_args_prefix != old_args_prefix:
-        print(c.red(
-            "prefix mismatch: replanned args_template diverges from journal history"
-        ), file=sys.stderr)
+        print(
+            c.red("prefix mismatch: replanned args_template diverges from journal history"),
+            file=sys.stderr,
+        )
         print(c.dim(f"  journal args prefix: {old_args_prefix}"))
         print(c.dim(f"  replan args prefix:  {new_args_prefix}"))
         return 1
@@ -537,7 +565,9 @@ def run_resume(
             latency_ms=cfg.budget.max_latency_ms,
         ),
     )
-    print(c.cyan(f"[resume] skipping first {N} nodes · running {len(new_skill_refs) - N} remaining"))
+    print(
+        c.cyan(f"[resume] skipping first {N} nodes · running {len(new_skill_refs) - N} remaining")
+    )
     t0 = time.monotonic()
     traj = stack.runtime.run(
         graph_with_task_id,

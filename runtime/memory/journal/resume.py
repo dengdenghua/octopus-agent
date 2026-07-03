@@ -23,6 +23,7 @@ def _maybe_json_load(raw: Any) -> Any:
     except (ValueError, TypeError):
         return raw
 
+
 from .journal import (
     Journal,
     JournalEvent,
@@ -34,7 +35,6 @@ from .journal import (
 
 @dataclass
 class CompletedNode:
-
     node_id: str
     step_id: int
     sucker_id: str
@@ -44,7 +44,6 @@ class CompletedNode:
 
 @dataclass
 class ResumeInfo:
-
     task_id: str
     completed_nodes: list[CompletedNode] = field(default_factory=list)
     outputs_by_node: dict[str, Any] = field(default_factory=dict)
@@ -67,9 +66,7 @@ class ResumeInfo:
 
 def resume_info(journal: Journal, task_id: UUID | str) -> ResumeInfo | None:
     target = str(task_id)
-    events: list[JournalEvent] = [
-        e for e in journal.read_all() if str(e.task_id) == target
-    ]
+    events: list[JournalEvent] = [e for e in journal.read_all() if str(e.task_id) == target]
     if not events:
         return None
 

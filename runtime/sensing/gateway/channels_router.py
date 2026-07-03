@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -86,11 +85,8 @@ def create_channels_router(
         manager = LocalChannelManager()
 
     if state_path is None:
-        state_path = os.environ.get("OCTOPUS_CHANNEL_STATE") \
-            or "data/channel_state.json"
-    _state_file: Path | None = (
-        Path(state_path) if state_path else None
-    )
+        state_path = os.environ.get("OCTOPUS_CHANNEL_STATE") or "data/channel_state.json"
+    _state_file: Path | None = Path(state_path) if state_path else None
     _creds_file: Path | None = (
         _state_file.with_name(
             _state_file.stem + ".credentials" + _state_file.suffix,
@@ -105,8 +101,11 @@ def create_channels_router(
 
     def _auth(request: Any) -> str | None:
         from .openai_gateway_router import _resolve_actor
+
         return _resolve_actor(
-            request, identity_store, require_auth,
+            request,
+            identity_store,
+            require_auth,
             jwt_secret=jwt_secret,
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
@@ -123,7 +122,8 @@ def create_channels_router(
         if jwt_secret and token.count(".") == 2:
             with contextlib.suppress(Exception):
                 identity = identity_store.verify_jwt(
-                    token, secret=jwt_secret,
+                    token,
+                    secret=jwt_secret,
                     required_issuer=jwt_issuer,
                     required_audience=jwt_audience,
                 )
@@ -165,41 +165,45 @@ def create_channels_router(
 
         for cid in manager.channel_ids():
             platform = _guess_platform(
-                cid, type(manager.get(cid)).__name__,
+                cid,
+                type(manager.get(cid)).__name__,
             )
             meta = _PLATFORM_META.get(platform, _FALLBACK_META)
-            out.append({
-                "channel_id": cid,
-                "type": type(manager.get(cid)).__name__,
-                "platform": platform,
-                "connected": True,
-                "display_name": meta["display_name"],
-                "description": meta["description"],
-                "help_url": meta["help_url"],
-                "metrics": pairings.metrics(cid),
-                "assigned_agent_id": assignments.get(cid),
-            })
+            out.append(
+                {
+                    "channel_id": cid,
+                    "type": type(manager.get(cid)).__name__,
+                    "platform": platform,
+                    "connected": True,
+                    "display_name": meta["display_name"],
+                    "description": meta["description"],
+                    "help_url": meta["help_url"],
+                    "metrics": pairings.metrics(cid),
+                    "assigned_agent_id": assignments.get(cid),
+                }
+            )
             seen.add(platform)
 
         for platform, meta in _PLATFORM_META.items():
             if platform in seen:
                 continue
-            out.append({
-                "channel_id": platform,  # Implementation note.
-                "type": meta["cls_name"],
-                "platform": platform,
-                "connected": False,
-                "display_name": meta["display_name"],
-                "description": meta["description"],
-                "help_url": meta["help_url"],
-                "metrics": _zero_metrics(),
-                "assigned_agent_id": assignments.get(platform),
-            })
+            out.append(
+                {
+                    "channel_id": platform,  # Implementation note.
+                    "type": meta["cls_name"],
+                    "platform": platform,
+                    "connected": False,
+                    "display_name": meta["display_name"],
+                    "description": meta["description"],
+                    "help_url": meta["help_url"],
+                    "metrics": _zero_metrics(),
+                    "assigned_agent_id": assignments.get(platform),
+                }
+            )
             seen.add(platform)
 
         _ = registered_ids  # Implementation note.
         return out
-
 
     def _assignments() -> dict[str, str]:
         a = getattr(manager, "_channel_assignments", None)
@@ -214,18 +218,19 @@ def create_channels_router(
 
     @router.get("/api/channels/{channel_id}/assistant")
     def get_channel_assignment(
-        channel_id: str, request: Request,
+        channel_id: str,
+        request: Request,
     ) -> dict[str, Any]:
         _auth(request)  # AUTH-OK: actor-agnostic — assignments are server-global
         safe_channel_id = _normalize_channel_id(channel_id)
         if safe_channel_id is None:
             raise HTTPException(400, "invalid channel_id")
-        return {"channel_id": safe_channel_id,
-                "agent_id": _assignments().get(safe_channel_id)}
+        return {"channel_id": safe_channel_id, "agent_id": _assignments().get(safe_channel_id)}
 
     @router.post("/api/channels/{channel_id}/assistant")
     async def set_channel_assignment(
-        channel_id: str, request: Request,
+        channel_id: str,
+        request: Request,
     ) -> dict[str, Any]:
         _require_admin(request)  # Mutation: assigns which agent handles this channel (global state)
         try:
@@ -249,7 +254,8 @@ def create_channels_router(
 
     @router.delete("/api/channels/{channel_id}/assistant")
     def delete_channel_assignment(
-        channel_id: str, request: Request,
+        channel_id: str,
+        request: Request,
     ) -> dict[str, Any]:
         _require_admin(request)  # Mutation: removes agent assignment
         safe_channel_id = _normalize_channel_id(channel_id)
@@ -268,15 +274,13 @@ def create_channels_router(
         _auth(request)  # AUTH-OK: actor-agnostic — credentials list is server-global (masked)
         creds = _credentials_on(manager)
         return {
-            "credentials": {
-                platform: _mask_credentials(body)
-                for platform, body in creds.items()
-            },
+            "credentials": {platform: _mask_credentials(body) for platform, body in creds.items()},
         }
 
     @router.post("/api/channels/credentials/{platform}")
     async def set_credentials(
-        platform: str, request: Request,
+        platform: str,
+        request: Request,
     ) -> dict[str, Any]:
         _require_admin(request)  # Mutation: sets sensitive IM API credentials
         try:
@@ -289,7 +293,8 @@ def create_channels_router(
         safe_platform = _normalize_platform_id(platform)
         if safe_platform is None:
             raise HTTPException(
-                404, f"unknown platform: {platform!r}",
+                404,
+                f"unknown platform: {platform!r}",
             )
 
         try:
@@ -303,7 +308,8 @@ def create_channels_router(
             ) from e
         except (ValueError, TypeError, KeyError) as e:
             raise HTTPException(
-                400, f"invalid credentials: {e}",
+                400,
+                f"invalid credentials: {e}",
             ) from e
         safe_channel_id = _normalize_channel_id(
             getattr(channel, "channel_id", None),
@@ -327,13 +333,15 @@ def create_channels_router(
 
     @router.delete("/api/channels/credentials/{platform}")
     def delete_credentials(
-        platform: str, request: Request,
+        platform: str,
+        request: Request,
     ) -> dict[str, Any]:
         _require_admin(request)  # Mutation: deletes IM credentials, disconnects channels
         safe_platform = _normalize_platform_id(platform)
         if safe_platform is None:
             raise HTTPException(
-                404, f"unknown platform: {platform!r}",
+                404,
+                f"unknown platform: {platform!r}",
             )
         creds = _credentials_on(manager)
         dropped = creds.pop(safe_platform, None)
@@ -368,7 +376,8 @@ def create_channels_router(
             out = tmp.request_qr_code()
         except (ConnectionError, TimeoutError, OSError) as e:
             raise HTTPException(
-                502, f"iLink get_bot_qrcode failed: {e}",
+                502,
+                f"iLink get_bot_qrcode failed: {e}",
             ) from e
         qrcode = out["qrcode"]
         img_content = out["qrcode_img_content"]
@@ -400,7 +409,8 @@ def create_channels_router(
             resp = tmp.poll_qr_status(qrcode)
         except (ConnectionError, TimeoutError, OSError) as e:
             raise HTTPException(
-                502, f"iLink poll_qr_status failed: {e}",
+                502,
+                f"iLink poll_qr_status failed: {e}",
             ) from e
 
         status = resp.get("status", "pending")
@@ -413,7 +423,8 @@ def create_channels_router(
                 except (ConnectionError, TimeoutError, OSError) as e:
                     _WECHAT_QR_SESSIONS.pop(qrcode, None)
                     raise HTTPException(
-                        500, f"register wechat channel failed: {e}",
+                        500,
+                        f"register wechat channel failed: {e}",
                     ) from e
             tok = resp.get("bot_token")
             if isinstance(tok, str) and tok:
@@ -429,10 +440,10 @@ def create_channels_router(
             "confirmed": confirmed,
         }
 
-
     @router.get("/api/channels/{channel_id}/pairings")
     def list_pairings(
-        channel_id: str, request: Request,
+        channel_id: str,
+        request: Request,
     ) -> dict[str, Any]:
         _auth(request)  # AUTH-OK: actor-agnostic — pairing lists are server-global
         safe_channel_id = _normalize_channel_id(channel_id)
@@ -458,40 +469,45 @@ def create_channels_router(
         for cid in manager.channel_ids():
             platform = _guess_platform(cid, type(manager.get(cid)).__name__)
             m = p.metrics(cid)
-            channels.append({
-                "name": platform,
-                "enabled": True,
-                "running": True,
-                "linked": True,
-                "assigned_agent": assigns.get(cid),
-                "stats": {
-                    "paired_users": m["pairings_count"],
-                    "paired_groups": m["group_count"],
-                    "pending_requests": m["pending_count"],
-                },
-            })
+            channels.append(
+                {
+                    "name": platform,
+                    "enabled": True,
+                    "running": True,
+                    "linked": True,
+                    "assigned_agent": assigns.get(cid),
+                    "stats": {
+                        "paired_users": m["pairings_count"],
+                        "paired_groups": m["group_count"],
+                        "pending_requests": m["pending_count"],
+                    },
+                }
+            )
             seen.add(platform)
 
         for platform in _PLATFORM_META:
             if platform in seen:
                 continue
-            channels.append({
-                "name": platform,
-                "enabled": False,
-                "running": False,
-                "linked": False,
-                "assigned_agent": assigns.get(platform),
-                "stats": {
-                    "paired_users": 0,
-                    "paired_groups": 0,
-                    "pending_requests": 0,
-                },
-            })
+            channels.append(
+                {
+                    "name": platform,
+                    "enabled": False,
+                    "running": False,
+                    "linked": False,
+                    "assigned_agent": assigns.get(platform),
+                    "stats": {
+                        "paired_users": 0,
+                        "paired_groups": 0,
+                        "pending_requests": 0,
+                    },
+                }
+            )
         return {"channels": channels}
 
     @router.post("/api/channels/pairing/{pairing_id}/approve")
     def approve_pairing(
-        pairing_id: str, request: Request,
+        pairing_id: str,
+        request: Request,
     ) -> dict[str, Any]:
         _require_admin(request)  # Mutation: authorizes external user to access the bot
         safe_pairing_id = _normalize_pairing_ref(pairing_id)
@@ -513,7 +529,8 @@ def create_channels_router(
 
     @router.post("/api/channels/pairing/{pairing_id}/reject")
     def reject_pairing(
-        pairing_id: str, request: Request,
+        pairing_id: str,
+        request: Request,
     ) -> dict[str, Any]:
         _require_admin(request)  # Mutation: denies external user access
         safe_pairing_id = _normalize_pairing_ref(pairing_id)
@@ -528,10 +545,10 @@ def create_channels_router(
                     return {"ok": True, "pairing_id": safe_pairing_id}
         raise HTTPException(404, f"pairing {safe_pairing_id!r} not found")
 
-
     @router.post("/api/channels/{channel_id}/inbound")
     async def inbound_webhook(
-        channel_id: str, request: Request,
+        channel_id: str,
+        request: Request,
     ) -> Any:
         # No _auth() gate here: IM platforms (Discord/Slack/WeChat) don't
         # send bearer tokens. Authenticity is verified by the channel's
@@ -558,9 +575,15 @@ def create_channels_router(
             raise HTTPException(400, str(e)) from e
         except ValueError as e:
             msg = str(e).lower()
-            if any(k in msg for k in (
-                "signature", "timestamp", "too old", "not yet valid",
-            )):
+            if any(
+                k in msg
+                for k in (
+                    "signature",
+                    "timestamp",
+                    "too old",
+                    "not yet valid",
+                )
+            ):
                 raise HTTPException(401, str(e)) from e
             raise HTTPException(400, str(e)) from e
         except (ConnectionError, TimeoutError, OSError) as e:
@@ -573,11 +596,11 @@ def create_channels_router(
             return {"ok": True, "dispatched": False}
 
         from runtime.adapters.channels import ChannelRoutingError, InboundMessage
+
         if not isinstance(result, InboundMessage):
             raise HTTPException(
                 500,
-                f"handle_webhook returned unexpected type: "
-                f"{type(result).__name__}",
+                f"handle_webhook returned unexpected type: {type(result).__name__}",
             )
 
         try:
@@ -813,6 +836,7 @@ class _PairingStore:
     def _gc_pending(self, channel_id: str) -> None:
         """Drop expired entries and cap the queue length."""
         import time as _t
+
         bucket = self.pending.get(channel_id)
         if not bucket:
             return
@@ -824,9 +848,12 @@ class _PairingStore:
             self.pending.pop(channel_id, None)
 
     def enqueue_pending(
-        self, channel_id: str, msg: Any,
+        self,
+        channel_id: str,
+        msg: Any,
     ) -> None:
         import time as _t
+
         safe_channel_id = _normalize_channel_id(channel_id)
         if safe_channel_id is None:
             return
@@ -981,12 +1008,7 @@ def _sanitize_credentials_body(body: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     total_bytes = 0
     for key, value in body.items():
-        if (
-            not isinstance(key, str)
-            or not key
-            or len(key) > 96
-            or _CONTROL_RE.search(key)
-        ):
+        if not isinstance(key, str) or not key or len(key) > 96 or _CONTROL_RE.search(key):
             raise ValueError("invalid credential field name")
         if isinstance(value, str):
             value_bytes = len(value.encode("utf-8"))
@@ -1043,7 +1065,8 @@ def _load_state(manager: Any, state_file: Path | None) -> None:
     except (OSError, json.JSONDecodeError) as e:
         logger.warning(
             "channel state load failed (%s): %s · starting empty",
-            type(e).__name__, e,
+            type(e).__name__,
+            e,
         )
         return
 
@@ -1079,14 +1102,8 @@ def _save_state(manager: Any, state_file: Path | None) -> None:
         payload = {
             "version": _STATE_SCHEMA_VERSION,
             "assignments": _clean_assignments(assigns),
-            "users": {
-                k: sorted(v)
-                for k, v in _clean_pairing_map(store.users).items()
-            },
-            "groups": {
-                k: sorted(v)
-                for k, v in _clean_pairing_map(store.groups).items()
-            },
+            "users": {k: sorted(v) for k, v in _clean_pairing_map(store.users).items()},
+            "groups": {k: sorted(v) for k, v in _clean_pairing_map(store.groups).items()},
         }
         state_file.parent.mkdir(parents=True, exist_ok=True)
         tmp = state_file.with_suffix(state_file.suffix + ".tmp")
@@ -1110,7 +1127,9 @@ class _UnsupportedPlatformError(RuntimeError):
 _CHANNEL_CONSTRUCTORS: dict[str, Callable[[dict[str, Any]], Any]] = {}
 
 
-def register_channel_constructor(platform: str, constructor: Callable[[dict[str, Any]], Any]) -> None:
+def register_channel_constructor(
+    platform: str, constructor: Callable[[dict[str, Any]], Any]
+) -> None:
     _CHANNEL_CONSTRUCTORS[platform] = constructor
 
 
@@ -1132,9 +1151,18 @@ def _mask(value: Any) -> Any:
 
 
 _SENSITIVE_KEYS = {
-    "bot_token", "signing_secret", "webhook_secret", "app_secret",
-    "api_key", "api_secret", "token", "secret", "password",
-    "encoding_aes_key", "corp_secret", "access_token",
+    "bot_token",
+    "signing_secret",
+    "webhook_secret",
+    "app_secret",
+    "api_key",
+    "api_secret",
+    "token",
+    "secret",
+    "password",
+    "encoding_aes_key",
+    "corp_secret",
+    "access_token",
 }
 
 
@@ -1171,6 +1199,7 @@ def _construct_channel(platform: str, body: dict[str, Any]) -> Any:
 
 def _make_slack(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels import SlackChannel
+
     return SlackChannel(
         bot_token=_require(body, "bot_token"),
         signing_secret=_require(body, "signing_secret"),
@@ -1180,6 +1209,7 @@ def _make_slack(body: dict[str, Any]) -> Any:
 
 def _make_dingtalk(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.dingtalk import DingTalkChannel
+
     return DingTalkChannel(
         webhook_url=_require(body, "webhook_url"),
         secret=_optional(body, "secret"),
@@ -1189,6 +1219,7 @@ def _make_dingtalk(body: dict[str, Any]) -> Any:
 
 def _make_feishu(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.feishu import FeishuChannel
+
     return FeishuChannel(
         app_id=_require(body, "app_id"),
         app_secret=_require(body, "app_secret"),
@@ -1199,6 +1230,7 @@ def _make_feishu(body: dict[str, Any]) -> Any:
 
 def _make_telegram(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.telegram import TelegramChannel
+
     return TelegramChannel(
         bot_token=_require(body, "bot_token"),
         webhook_secret=_optional(body, "webhook_secret") or "",
@@ -1208,6 +1240,7 @@ def _make_telegram(body: dict[str, Any]) -> Any:
 
 def _make_discord(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.discord import DiscordChannel
+
     return DiscordChannel(
         bot_token=_require(body, "bot_token"),
         public_key=_require(body, "public_key"),
@@ -1217,6 +1250,7 @@ def _make_discord(body: dict[str, Any]) -> Any:
 
 def _make_wechat(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.weixin_bot import WeixinBotChannel
+
     return WeixinBotChannel(
         bot_token=_require(body, "bot_token"),
         channel_id=str(body.get("channel_id", "weixin_bot")),
@@ -1225,6 +1259,7 @@ def _make_wechat(body: dict[str, Any]) -> Any:
 
 def _make_signal(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.signal import SignalChannel
+
     return SignalChannel(
         phone_number=_require(body, "phone_number"),
         api_base_url=_optional(body, "api_base_url") or "http://localhost:8080",
@@ -1234,6 +1269,7 @@ def _make_signal(body: dict[str, Any]) -> Any:
 
 def _make_whatsapp(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.whatsapp import WhatsAppChannel
+
     return WhatsAppChannel(
         phone_number_id=_require(body, "phone_number_id"),
         access_token=_require(body, "access_token"),
@@ -1245,6 +1281,7 @@ def _make_whatsapp(body: dict[str, Any]) -> Any:
 
 def _make_email(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.email import EmailChannel
+
     return EmailChannel(
         smtp_host=_require(body, "smtp_host"),
         smtp_port=int(body.get("smtp_port", 587)),
@@ -1258,6 +1295,7 @@ def _make_email(body: dict[str, Any]) -> Any:
 
 def _make_sms(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.sms import SmsChannel
+
     return SmsChannel(
         account_sid=_require(body, "account_sid"),
         auth_token=_require(body, "auth_token"),
@@ -1268,6 +1306,7 @@ def _make_sms(body: dict[str, Any]) -> Any:
 
 def _make_mattermost(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.mattermost import MattermostChannel
+
     return MattermostChannel(
         bot_token=_require(body, "bot_token"),
         server_url=_require(body, "server_url"),
@@ -1277,6 +1316,7 @@ def _make_mattermost(body: dict[str, Any]) -> Any:
 
 def _make_matrix(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.matrix import MatrixChannel
+
     return MatrixChannel(
         homeserver_url=_require(body, "homeserver_url"),
         access_token=_require(body, "access_token"),
@@ -1286,6 +1326,7 @@ def _make_matrix(body: dict[str, Any]) -> Any:
 
 def _make_wecom(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.wecom import WeComChannel
+
     return WeComChannel(
         corp_id=_require(body, "corp_id"),
         agent_id=_require(body, "agent_id"),
@@ -1298,6 +1339,7 @@ def _make_wecom(body: dict[str, Any]) -> Any:
 
 def _make_qqbot(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.qqbot import QQBotChannel
+
     return QQBotChannel(
         app_id=_require(body, "app_id"),
         app_secret=_require(body, "app_secret"),
@@ -1307,6 +1349,7 @@ def _make_qqbot(body: dict[str, Any]) -> Any:
 
 def _make_teams(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.teams import TeamsChannel
+
     return TeamsChannel(
         app_id=_require(body, "app_id"),
         app_password=_require(body, "app_password"),
@@ -1316,6 +1359,7 @@ def _make_teams(body: dict[str, Any]) -> Any:
 
 def _make_line(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.line import LineChannel
+
     return LineChannel(
         channel_access_token=_require(body, "channel_access_token"),
         channel_secret=_require(body, "channel_secret"),
@@ -1325,6 +1369,7 @@ def _make_line(body: dict[str, Any]) -> Any:
 
 def _make_homeassistant(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.homeassistant import HomeAssistantChannel
+
     return HomeAssistantChannel(
         ha_url=_require(body, "ha_url"),
         long_lived_token=_require(body, "long_lived_token"),
@@ -1334,6 +1379,7 @@ def _make_homeassistant(body: dict[str, Any]) -> Any:
 
 def _make_bluebubbles(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.bluebubbles import BlueBubblesChannel
+
     return BlueBubblesChannel(
         server_url=_require(body, "server_url"),
         api_key=_require(body, "api_key"),
@@ -1344,6 +1390,7 @@ def _make_bluebubbles(body: dict[str, Any]) -> Any:
 
 def _make_ntfy(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.ntfy import NtfyChannel
+
     return NtfyChannel(
         server_url=_optional(body, "server_url") or "https://ntfy.sh",
         topic=_require(body, "topic"),
@@ -1353,6 +1400,7 @@ def _make_ntfy(body: dict[str, Any]) -> Any:
 
 def _make_webhooks(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.webhooks import WebhooksChannel
+
     return WebhooksChannel(
         webhook_secret=_require(body, "webhook_secret"),
         outbound_url=_require(body, "outbound_url"),
@@ -1362,6 +1410,7 @@ def _make_webhooks(body: dict[str, Any]) -> Any:
 
 def _make_google_chat(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.google_chat import GoogleChatChannel
+
     return GoogleChatChannel(
         service_account_key=_require(body, "service_account_key"),
         channel_id=str(body.get("channel_id", "google_chat")),
@@ -1370,6 +1419,7 @@ def _make_google_chat(body: dict[str, Any]) -> Any:
 
 def _make_simplex(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.simplex import SimpleXChannel
+
     return SimpleXChannel(
         api_base_url=_optional(body, "api_base_url") or "http://localhost:5225",
         channel_id=str(body.get("channel_id", "simplex")),
@@ -1378,6 +1428,7 @@ def _make_simplex(body: dict[str, Any]) -> Any:
 
 def _make_open_webui(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.open_webui import OpenWebUIChannel
+
     return OpenWebUIChannel(
         base_url=_require(body, "base_url"),
         api_key=_require(body, "api_key"),
@@ -1387,6 +1438,7 @@ def _make_open_webui(body: dict[str, Any]) -> Any:
 
 def _make_yuanbao(body: dict[str, Any]) -> Any:
     from runtime.adapters.channels.yuanbao import YuanbaoChannel
+
     return YuanbaoChannel(
         bot_id=_require(body, "bot_id"),
         bot_token=_require(body, "bot_token"),
@@ -1421,7 +1473,8 @@ register_channel_constructor("yuanbao", _make_yuanbao)
 
 
 def _load_credentials_and_bootstrap(
-    manager: Any, creds_file: Path | None,
+    manager: Any,
+    creds_file: Path | None,
 ) -> None:
     if creds_file is None or not creds_file.exists():
         return
@@ -1437,7 +1490,8 @@ def _load_credentials_and_bootstrap(
     except (OSError, json.JSONDecodeError) as e:
         logger.warning(
             "channel credentials load failed (%s): %s",
-            type(e).__name__, e,
+            type(e).__name__,
+            e,
         )
         return
     if not isinstance(data, dict):
@@ -1464,7 +1518,8 @@ def _load_credentials_and_bootstrap(
         except (ValueError, TypeError, KeyError) as e:
             logger.warning(
                 "channel credentials for %s invalid · skipping: %s",
-                safe_platform, e,
+                safe_platform,
+                e,
             )
             continue
         safe_channel_id = _normalize_channel_id(
@@ -1483,7 +1538,9 @@ def _load_credentials_and_bootstrap(
             manager.register(channel)
         except (ConnectionError, TimeoutError, OSError) as e:
             logger.warning(
-                "re-register %s failed: %s", safe_platform, e,
+                "re-register %s failed: %s",
+                safe_platform,
+                e,
             )
 
 
@@ -1523,6 +1580,7 @@ def _save_credentials(manager: Any, creds_file: Path | None) -> None:
 
 def _aead_key(creds_dir: Path) -> bytes | None:
     import base64
+
     env_key = os.environ.get("OCTOPUS_CREDENTIAL_KEY")
     if env_key:
         try:
@@ -1548,10 +1606,12 @@ def _aead_key(creds_dir: Path) -> bytes | None:
                 ".credential_key length invalid · regenerating",
             )
         import secrets as _secrets
+
         raw = _secrets.token_bytes(32)
         key_file.parent.mkdir(parents=True, exist_ok=True)
         key_file.write_text(
-            base64.b64encode(raw).decode("ascii"), encoding="utf-8",
+            base64.b64encode(raw).decode("ascii"),
+            encoding="utf-8",
         )
         with contextlib.suppress(OSError):
             os.chmod(key_file, 0o600)
@@ -1562,7 +1622,8 @@ def _aead_key(creds_dir: Path) -> bytes | None:
 
 
 def _try_encrypt_payload(
-    data: dict[str, Any], creds_dir: Path,
+    data: dict[str, Any],
+    creds_dir: Path,
 ) -> dict[str, Any] | None:
     try:
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -1574,6 +1635,7 @@ def _try_encrypt_payload(
     try:
         import base64
         import secrets as _secrets
+
         nonce = _secrets.token_bytes(12)  # Implementation note.
         plaintext = json.dumps(data, ensure_ascii=False).encode("utf-8")
         ct = AESGCM(key).encrypt(nonce, plaintext, None)
@@ -1588,7 +1650,8 @@ def _try_encrypt_payload(
 
 
 def _try_decrypt_payload(
-    envelope: dict[str, Any], creds_dir: Path,
+    envelope: dict[str, Any],
+    creds_dir: Path,
 ) -> dict[str, Any] | None:
     try:
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -1599,6 +1662,7 @@ def _try_decrypt_payload(
         return None
     try:
         import base64
+
         nonce = base64.b64decode(envelope["nonce"])
         ct = base64.b64decode(envelope["ciphertext"])
         pt = AESGCM(key).decrypt(nonce, ct, None)

@@ -206,9 +206,7 @@ class _LSPClient:
                 bufsize=0,
             )
         except (FileNotFoundError, PermissionError, OSError) as exc:
-            raise _LSPTransportError(
-                f"failed to spawn {server_argv[0]!r}: {exc}"
-            ) from exc
+            raise _LSPTransportError(f"failed to spawn {server_argv[0]!r}: {exc}") from exc
 
         self._reader = threading.Thread(
             target=self._read_loop,
@@ -225,9 +223,7 @@ class _LSPClient:
                     "processId": os.getpid(),
                     "rootUri": root_uri,
                     "rootPath": str(Path(workspace_root).resolve()),
-                    "workspaceFolders": [
-                        {"uri": root_uri, "name": Path(workspace_root).name}
-                    ],
+                    "workspaceFolders": [{"uri": root_uri, "name": Path(workspace_root).name}],
                     "capabilities": {
                         "textDocument": {
                             "synchronization": {"dynamicRegistration": False},
@@ -257,7 +253,9 @@ class _LSPClient:
             if proc.poll() is None:
                 # Best-effort graceful shutdown; ignore failures.
                 try:
-                    self._send_raw({"jsonrpc": "2.0", "id": -1, "method": "shutdown", "params": None})
+                    self._send_raw(
+                        {"jsonrpc": "2.0", "id": -1, "method": "shutdown", "params": None}
+                    )
                     self._send_raw({"jsonrpc": "2.0", "method": "exit"})
                 except OSError:  # noqa: BLE001 — shutdown is best-effort
                     pass
@@ -501,33 +499,49 @@ def _validate_path_and_language(
     from runtime.execution.suckers.write_skills import _ensure_sandbox
 
     if not path:
-        return None, None, {
-            "ok": False,
-            "error": "missing path",
-            "error_type": "invalid_argument",
-        }
+        return (
+            None,
+            None,
+            {
+                "ok": False,
+                "error": "missing path",
+                "error_type": "invalid_argument",
+            },
+        )
 
     resolved, err = _ensure_sandbox(path, sandbox_dir)
     if err:
-        return None, None, {
-            "ok": False,
-            "error": err,
-            "error_type": "permission_denied",
-        }
+        return (
+            None,
+            None,
+            {
+                "ok": False,
+                "error": err,
+                "error_type": "permission_denied",
+            },
+        )
     if not resolved.exists():
-        return None, None, {
-            "ok": False,
-            "error": f"not found: {resolved}",
-            "error_type": "invalid_argument",
-        }
+        return (
+            None,
+            None,
+            {
+                "ok": False,
+                "error": f"not found: {resolved}",
+                "error_type": "invalid_argument",
+            },
+        )
 
     language = _detect_language(str(resolved))
     if language is None:
-        return None, None, {
-            "ok": False,
-            "error": f"unsupported file type: {resolved.suffix}",
-            "error_type": "unsupported",
-        }
+        return (
+            None,
+            None,
+            {
+                "ok": False,
+                "error": f"unsupported file type: {resolved.suffix}",
+                "error_type": "unsupported",
+            },
+        )
     return resolved, language, None
 
 
@@ -767,13 +781,15 @@ def _flatten_document_symbols(items: list[Any], container: str = "") -> list[dic
             loc = raw.get("location") or {}
             rng = loc.get("range") or {}
             start = rng.get("start") or {}
-            out.append({
-                "name": raw.get("name") or "",
-                "kind": _symbol_kind_name(raw.get("kind") or 0),
-                "line": int(start.get("line") or 0) + 1,
-                "column": int(start.get("character") or 0) + 1,
-                "container": raw.get("containerName") or container or None,
-            })
+            out.append(
+                {
+                    "name": raw.get("name") or "",
+                    "kind": _symbol_kind_name(raw.get("kind") or 0),
+                    "line": int(start.get("line") or 0) + 1,
+                    "column": int(start.get("character") or 0) + 1,
+                    "container": raw.get("containerName") or container or None,
+                }
+            )
             continue
         rng = raw.get("selectionRange") or raw.get("range") or {}
         start = rng.get("start") or {}
@@ -836,62 +852,70 @@ def _lsp_document_symbols(
 
 def register_lsp_skills(registry: SkillRegistry) -> int:
     """Register the 4 LSP navigation skills. Returns the count registered."""
-    registry.register(Skill(
-        name="lsp_definition",
-        description=(
-            "用途: 通过 LSP 跳转到符号定义 (file/line/column → 真正的定义位置)，比 code_search 的正则更精确，能跨文件跨包解析。\n"
-            "何时不用: 不知道符号在哪一行/哪一列时先用 code_search/grep 定位坐标；只想看文件结构用 lsp_document_symbols；项目里没装对应语言的 language server 时会返回 dependency_missing。\n"
-            "关键参数: path (必填, 文件路径)；line (必填, 1-indexed 行号)；column (必填, 1-indexed 列号, 通常指向标识符的第一个字符)。\n"
-            "示例: lsp_definition({\"path\": \"runtime/foo.py\", \"line\": 42, \"column\": 11})"
-        ),
-        affinity=["code", "intelligence", "lsp"],
-        cost_profile="mid",
-        trusted_source="builtin://lsp_definition",
-        handler=_lsp_definition,
-        tests=[],
-    ))
-    registry.register(Skill(
-        name="lsp_references",
-        description=(
-            "用途: 通过 LSP 列出符号的所有引用/使用点 (谁调用了 foo / 谁读写了这个变量)，跨文件查找比 code_search 更准。\n"
-            "何时不用: 只想看一个文件内的 grep 结果用 code_search；不知道坐标时先 code_search 找到再 lsp_references；没安装 language server 时回 dependency_missing。\n"
-            "关键参数: path (必填)；line (必填, 1-indexed)；column (必填, 1-indexed)；include_declaration (可选, 默认 True, 结果是否包含定义位置本身)。\n"
-            "示例: lsp_references({\"path\": \"runtime/foo.py\", \"line\": 42, \"column\": 11, \"include_declaration\": false})"
-        ),
-        affinity=["code", "intelligence", "lsp"],
-        cost_profile="mid",
-        trusted_source="builtin://lsp_references",
-        handler=_lsp_references,
-        tests=[],
-    ))
-    registry.register(Skill(
-        name="lsp_hover",
-        description=(
-            "用途: 通过 LSP 获取某个位置的悬停信息 (类型签名、docstring、推断的表达式类型)，相当于 IDE 里把鼠标悬停的效果。\n"
-            "何时不用: 想读整个文件用 read_file；想列出文件里所有符号用 lsp_document_symbols；没装 language server 时回 dependency_missing。\n"
-            "关键参数: path (必填)；line (必填, 1-indexed)；column (必填, 1-indexed, 指向标识符)。\n"
-            "示例: lsp_hover({\"path\": \"runtime/foo.py\", \"line\": 42, \"column\": 11})"
-        ),
-        affinity=["code", "intelligence", "lsp"],
-        cost_profile="mid",
-        trusted_source="builtin://lsp_hover",
-        handler=_lsp_hover,
-        tests=[],
-    ))
-    registry.register(Skill(
-        name="lsp_document_symbols",
-        description=(
-            "用途: 通过 LSP 列出一个文件里所有符号 (类、函数、方法、变量) 及其行列坐标和容器关系，相当于 IDE 大纲面板。\n"
-            "何时不用: 只想找一个具体名字用 code_search 或 lsp_definition；想跨文件查询用 code_search；没装 language server 时回 dependency_missing。\n"
-            "关键参数: path (必填, 要分析的文件路径)。\n"
-            "示例: lsp_document_symbols({\"path\": \"runtime/foo.py\"})"
-        ),
-        affinity=["code", "intelligence", "lsp"],
-        cost_profile="mid",
-        trusted_source="builtin://lsp_document_symbols",
-        handler=_lsp_document_symbols,
-        tests=[],
-    ))
+    registry.register(
+        Skill(
+            name="lsp_definition",
+            description=(
+                "用途: 通过 LSP 跳转到符号定义 (file/line/column → 真正的定义位置)，比 code_search 的正则更精确，能跨文件跨包解析。\n"
+                "何时不用: 不知道符号在哪一行/哪一列时先用 code_search/grep 定位坐标；只想看文件结构用 lsp_document_symbols；项目里没装对应语言的 language server 时会返回 dependency_missing。\n"
+                "关键参数: path (必填, 文件路径)；line (必填, 1-indexed 行号)；column (必填, 1-indexed 列号, 通常指向标识符的第一个字符)。\n"
+                '示例: lsp_definition({"path": "runtime/foo.py", "line": 42, "column": 11})'
+            ),
+            affinity=["code", "intelligence", "lsp"],
+            cost_profile="mid",
+            trusted_source="builtin://lsp_definition",
+            handler=_lsp_definition,
+            tests=[],
+        )
+    )
+    registry.register(
+        Skill(
+            name="lsp_references",
+            description=(
+                "用途: 通过 LSP 列出符号的所有引用/使用点 (谁调用了 foo / 谁读写了这个变量)，跨文件查找比 code_search 更准。\n"
+                "何时不用: 只想看一个文件内的 grep 结果用 code_search；不知道坐标时先 code_search 找到再 lsp_references；没安装 language server 时回 dependency_missing。\n"
+                "关键参数: path (必填)；line (必填, 1-indexed)；column (必填, 1-indexed)；include_declaration (可选, 默认 True, 结果是否包含定义位置本身)。\n"
+                '示例: lsp_references({"path": "runtime/foo.py", "line": 42, "column": 11, "include_declaration": false})'
+            ),
+            affinity=["code", "intelligence", "lsp"],
+            cost_profile="mid",
+            trusted_source="builtin://lsp_references",
+            handler=_lsp_references,
+            tests=[],
+        )
+    )
+    registry.register(
+        Skill(
+            name="lsp_hover",
+            description=(
+                "用途: 通过 LSP 获取某个位置的悬停信息 (类型签名、docstring、推断的表达式类型)，相当于 IDE 里把鼠标悬停的效果。\n"
+                "何时不用: 想读整个文件用 read_file；想列出文件里所有符号用 lsp_document_symbols；没装 language server 时回 dependency_missing。\n"
+                "关键参数: path (必填)；line (必填, 1-indexed)；column (必填, 1-indexed, 指向标识符)。\n"
+                '示例: lsp_hover({"path": "runtime/foo.py", "line": 42, "column": 11})'
+            ),
+            affinity=["code", "intelligence", "lsp"],
+            cost_profile="mid",
+            trusted_source="builtin://lsp_hover",
+            handler=_lsp_hover,
+            tests=[],
+        )
+    )
+    registry.register(
+        Skill(
+            name="lsp_document_symbols",
+            description=(
+                "用途: 通过 LSP 列出一个文件里所有符号 (类、函数、方法、变量) 及其行列坐标和容器关系，相当于 IDE 大纲面板。\n"
+                "何时不用: 只想找一个具体名字用 code_search 或 lsp_definition；想跨文件查询用 code_search；没装 language server 时回 dependency_missing。\n"
+                "关键参数: path (必填, 要分析的文件路径)。\n"
+                '示例: lsp_document_symbols({"path": "runtime/foo.py"})'
+            ),
+            affinity=["code", "intelligence", "lsp"],
+            cost_profile="mid",
+            trusted_source="builtin://lsp_document_symbols",
+            handler=_lsp_document_symbols,
+            tests=[],
+        )
+    )
     return 4
 
 

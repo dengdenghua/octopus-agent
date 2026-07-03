@@ -48,7 +48,8 @@ class TestConstruction:
 class TestSign:
     def test_sign_deterministic(self):
         ch = DingTalkChannel(
-            webhook_url="https://x/y", secret="SECxxxxxxxxxxxxxxxxxxxxxxx",
+            webhook_url="https://x/y",
+            secret="SECxxxxxxxxxxxxxxxxxxxxxxx",
         )
         ts = "1700000000000"
         s1 = ch.sign(ts)
@@ -61,7 +62,9 @@ class TestSign:
         secret = "MySecret"
         ts = "12345"
         expected_raw = hmac.new(
-            secret.encode(), f"{ts}\n{secret}".encode(), hashlib.sha256,
+            secret.encode(),
+            f"{ts}\n{secret}".encode(),
+            hashlib.sha256,
         ).digest()
         expected_b64 = base64.b64encode(expected_raw)
         expected = urllib.parse.quote_plus(expected_b64)
@@ -99,7 +102,9 @@ class TestVerifySignature:
 
     def test_rejects_old_timestamp(self):
         ch = DingTalkChannel(
-            webhook_url="https://x/y", secret="S", max_age_seconds=10,
+            webhook_url="https://x/y",
+            secret="S",
+            max_age_seconds=10,
         )
         old_ts = str(int((time.time() - 60) * 1000))
         sig = ch.sign(old_ts)
@@ -130,7 +135,9 @@ class TestVerifySignature:
         ts = str(int(time.time() * 1000))
         raw_sig = base64.b64encode(
             hmac.new(
-                secret.encode(), f"{ts}\n{secret}".encode(), hashlib.sha256,
+                secret.encode(),
+                f"{ts}\n{secret}".encode(),
+                hashlib.sha256,
             ).digest(),
         ).decode("utf-8")
         ch.verify_signature(body=b"{}", timestamp=ts, signature=raw_sig)
@@ -163,7 +170,8 @@ class TestHandleWebhook:
             "createAt": int(time.time() * 1000),
         }
         result = ch.handle_webhook(
-            body=json.dumps(payload).encode(), headers=self._headers(ch, ts),
+            body=json.dumps(payload).encode(),
+            headers=self._headers(ch, ts),
         )
         assert isinstance(result, InboundMessage)
         assert result.content == "hello"
@@ -179,7 +187,8 @@ class TestHandleWebhook:
         ts = str(int(time.time() * 1000))
         payload = {"msgtype": "image", "text": {"content": "shouldnt"}}
         result = ch.handle_webhook(
-            body=json.dumps(payload).encode(), headers=self._headers(ch, ts),
+            body=json.dumps(payload).encode(),
+            headers=self._headers(ch, ts),
         )
         assert result is None
 
@@ -188,7 +197,8 @@ class TestHandleWebhook:
         ts = str(int(time.time() * 1000))
         payload = {"msgtype": "text", "text": {"content": "   "}}
         result = ch.handle_webhook(
-            body=json.dumps(payload).encode(), headers=self._headers(ch, ts),
+            body=json.dumps(payload).encode(),
+            headers=self._headers(ch, ts),
         )
         assert result is None
 
@@ -197,7 +207,8 @@ class TestHandleWebhook:
         ts = str(int(time.time() * 1000))
         with pytest.raises(DingTalkSignatureError, match="JSON"):
             ch.handle_webhook(
-                body=b"not-json", headers=self._headers(ch, ts),
+                body=b"not-json",
+                headers=self._headers(ch, ts),
             )
 
     def test_signature_missing_rejected(self):
@@ -218,7 +229,8 @@ class TestHandleWebhook:
             "conversationId": "c",
         }
         result = ch.handle_webhook(
-            body=json.dumps(payload).encode(), headers={},
+            body=json.dumps(payload).encode(),
+            headers={},
         )
         assert isinstance(result, InboundMessage)
         assert result.content == "hi"
@@ -234,7 +246,9 @@ class TestSend:
         mock_http = MagicMock()
         mock_http.post = MagicMock(
             return_value=MagicMock(
-                status_code=200, text="{}", json=lambda: {"errcode": 0, "errmsg": "ok"},
+                status_code=200,
+                text="{}",
+                json=lambda: {"errcode": 0, "errmsg": "ok"},
             ),
         )
         ch = DingTalkChannel(
@@ -242,9 +256,13 @@ class TestSend:
             secret="S",
             http_client=mock_http,
         )
-        ch.send(OutboundMessage(
-            channel_id="dingtalk", thread_id="c", content="reply",
-        ))
+        ch.send(
+            OutboundMessage(
+                channel_id="dingtalk",
+                thread_id="c",
+                content="reply",
+            )
+        )
         assert mock_http.post.called
         call = mock_http.post.call_args
         url = call.args[0]
@@ -258,38 +276,56 @@ class TestSend:
 
     def test_send_without_secret_no_sign(self):
         mock_http = MagicMock()
-        mock_http.post = MagicMock(return_value=MagicMock(
-            status_code=200, text="{}", json=lambda: {"errcode": 0},
-        ))
+        mock_http.post = MagicMock(
+            return_value=MagicMock(
+                status_code=200,
+                text="{}",
+                json=lambda: {"errcode": 0},
+            )
+        )
         ch = DingTalkChannel(
             webhook_url="https://oapi.example/send?access_token=T",
             http_client=mock_http,
         )
-        ch.send(OutboundMessage(
-            channel_id="dingtalk", thread_id="c", content="hi",
-        ))
+        ch.send(
+            OutboundMessage(
+                channel_id="dingtalk",
+                thread_id="c",
+                content="hi",
+            )
+        )
         url = mock_http.post.call_args.args[0]
         assert "sign=" not in url
 
     def test_send_with_at_metadata(self):
         mock_http = MagicMock()
-        mock_http.post = MagicMock(return_value=MagicMock(
-            status_code=200, text="{}", json=lambda: {"errcode": 0},
-        ))
-        ch = DingTalkChannel(
-            webhook_url="https://oapi.example/send", http_client=mock_http,
+        mock_http.post = MagicMock(
+            return_value=MagicMock(
+                status_code=200,
+                text="{}",
+                json=lambda: {"errcode": 0},
+            )
         )
-        ch.send(OutboundMessage(
-            channel_id="dingtalk", thread_id="c", content="hi",
-            metadata={"at": {"atMobiles": ["13800000000"], "isAtAll": False}},
-        ))
+        ch = DingTalkChannel(
+            webhook_url="https://oapi.example/send",
+            http_client=mock_http,
+        )
+        ch.send(
+            OutboundMessage(
+                channel_id="dingtalk",
+                thread_id="c",
+                content="hi",
+                metadata={"at": {"atMobiles": ["13800000000"], "isAtAll": False}},
+            )
+        )
         body = mock_http.post.call_args.kwargs["json"]
         assert body["at"]["atMobiles"] == ["13800000000"]
 
     def test_empty_content_noop(self):
         mock_http = MagicMock()
         ch = DingTalkChannel(
-            webhook_url="https://x/y", http_client=mock_http,
+            webhook_url="https://x/y",
+            http_client=mock_http,
         )
         ch.send(OutboundMessage(channel_id="dingtalk", thread_id="c", content=""))
         assert not mock_http.post.called
@@ -297,26 +333,41 @@ class TestSend:
 
     def test_http_error_raises(self):
         mock_http = MagicMock()
-        mock_http.post = MagicMock(return_value=MagicMock(
-            status_code=500, text="server down", json=lambda: {},
-        ))
+        mock_http.post = MagicMock(
+            return_value=MagicMock(
+                status_code=500,
+                text="server down",
+                json=lambda: {},
+            )
+        )
         ch = DingTalkChannel(webhook_url="https://x/y", http_client=mock_http)
         with pytest.raises(DingTalkError, match="HTTP 500"):
-            ch.send(OutboundMessage(
-                channel_id="dingtalk", thread_id="c", content="hi",
-            ))
+            ch.send(
+                OutboundMessage(
+                    channel_id="dingtalk",
+                    thread_id="c",
+                    content="hi",
+                )
+            )
 
     def test_dingtalk_errcode_raises(self):
         mock_http = MagicMock()
-        mock_http.post = MagicMock(return_value=MagicMock(
-            status_code=200, text="{}",
-            json=lambda: {"errcode": 310000, "errmsg": "keyword not match"},
-        ))
+        mock_http.post = MagicMock(
+            return_value=MagicMock(
+                status_code=200,
+                text="{}",
+                json=lambda: {"errcode": 310000, "errmsg": "keyword not match"},
+            )
+        )
         ch = DingTalkChannel(webhook_url="https://x/y", http_client=mock_http)
         with pytest.raises(DingTalkError, match="errcode"):
-            ch.send(OutboundMessage(
-                channel_id="dingtalk", thread_id="c", content="hi",
-            ))
+            ch.send(
+                OutboundMessage(
+                    channel_id="dingtalk",
+                    thread_id="c",
+                    content="hi",
+                )
+            )
 
 
 # ═══════════════════════════════════════════════════════════

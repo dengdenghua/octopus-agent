@@ -38,14 +38,14 @@ class ComplexityAnalyzer(ast.NodeVisitor):
         self.current_function = node.name
 
         analysis = {
-            'name': node.name,
-            'line': node.lineno,
-            'time_complexity': 'O(1)',
-            'space_complexity': 'O(1)',
-            'loops': [],
-            'recursion': False,
-            'operations': [],
-            'suggestions': []
+            "name": node.name,
+            "line": node.lineno,
+            "time_complexity": "O(1)",
+            "space_complexity": "O(1)",
+            "loops": [],
+            "recursion": False,
+            "operations": [],
+            "suggestions": [],
         }
 
         # Analyze the function body
@@ -55,38 +55,38 @@ class ComplexityAnalyzer(ast.NodeVisitor):
 
         # Determine time complexity
         if has_recursion:
-            analysis['recursion'] = True
+            analysis["recursion"] = True
             recursion_type = self._classify_recursion(node)
-            analysis['time_complexity'] = recursion_type
-            analysis['suggestions'].append(
+            analysis["time_complexity"] = recursion_type
+            analysis["suggestions"].append(
                 "Recursive function - consider memoization or iterative approach"
             )
         elif loop_depth >= 3:
-            analysis['time_complexity'] = f'O(n^{loop_depth})'
-            analysis['suggestions'].append(
+            analysis["time_complexity"] = f"O(n^{loop_depth})"
+            analysis["suggestions"].append(
                 f"Deep nesting ({loop_depth} levels) - consider optimization"
             )
         elif loop_depth == 2:
-            analysis['time_complexity'] = 'O(n²)'
-            analysis['suggestions'].append(
+            analysis["time_complexity"] = "O(n²)"
+            analysis["suggestions"].append(
                 "Nested loop detected - can this be optimized with hash map?"
             )
         elif loop_depth == 1:
-            analysis['time_complexity'] = 'O(n)'
+            analysis["time_complexity"] = "O(n)"
 
         # Adjust for data structure operations
         for op in data_structure_ops:
-            if op['type'] == 'sort':
-                if 'n²' not in analysis['time_complexity']:
-                    analysis['time_complexity'] = 'O(n log n)'
-            elif op['type'] == 'dict_lookup':
-                analysis['operations'].append(op)
-            elif op['type'] == 'list_search' and loop_depth == 0:
-                analysis['time_complexity'] = 'O(n)'
+            if op["type"] == "sort":
+                if "n²" not in analysis["time_complexity"]:
+                    analysis["time_complexity"] = "O(n log n)"
+            elif op["type"] == "dict_lookup":
+                analysis["operations"].append(op)
+            elif op["type"] == "list_search" and loop_depth == 0:
+                analysis["time_complexity"] = "O(n)"
 
         # Analyze space complexity
         space = self._analyze_space_complexity(node)
-        analysis['space_complexity'] = space
+        analysis["space_complexity"] = space
 
         self.results[node.name] = analysis
         self.generic_visit(node)
@@ -97,8 +97,8 @@ class ComplexityAnalyzer(ast.NodeVisitor):
 
         for child in ast.walk(node):
             if isinstance(child, (ast.For, ast.While)) and self._is_direct_child(node, child):
-                    child_depth = self._analyze_loops(child, depth + 1)
-                    max_depth = max(max_depth, child_depth)
+                child_depth = self._analyze_loops(child, depth + 1)
+                max_depth = max(max_depth, child_depth)
 
         return max_depth
 
@@ -133,16 +133,20 @@ class ComplexityAnalyzer(ast.NodeVisitor):
         function_name = node.name
 
         for child in ast.walk(node):
-            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id == function_name:
+            if (
+                isinstance(child, ast.Call)
+                and isinstance(child.func, ast.Name)
+                and child.func.id == function_name
+            ):
                 recursive_calls += 1
 
         if recursive_calls == 1:
             # Linear recursion (e.g., factorial)
-            return 'O(n)'
+            return "O(n)"
         if recursive_calls == 2:
             # Binary recursion (e.g., fibonacci)
-            return 'O(2^n)'
-        return 'O(recursive)'
+            return "O(2^n)"
+        return "O(recursive)"
 
     def _analyze_data_structures(self, node) -> list[dict]:
         """Analyze data structure operations."""
@@ -152,18 +156,18 @@ class ComplexityAnalyzer(ast.NodeVisitor):
             # Sorting
             if isinstance(child, ast.Call):
                 if isinstance(child.func, ast.Attribute):
-                    if child.func.attr == 'sort':
-                        operations.append({'type': 'sort', 'line': child.lineno})
-                elif isinstance(child.func, ast.Name) and child.func.id == 'sorted':
-                    operations.append({'type': 'sort', 'line': child.lineno})
+                    if child.func.attr == "sort":
+                        operations.append({"type": "sort", "line": child.lineno})
+                elif isinstance(child.func, ast.Name) and child.func.id == "sorted":
+                    operations.append({"type": "sort", "line": child.lineno})
 
             # Dictionary/set operations (O(1) average)
             if isinstance(child, ast.Subscript) and isinstance(child.value, (ast.Dict, ast.Set)):
-                operations.append({'type': 'dict_lookup', 'line': child.lineno})
+                operations.append({"type": "dict_lookup", "line": child.lineno})
 
             # List search operations (O(n))
             if isinstance(child, ast.Compare) and any(isinstance(op, ast.In) for op in child.ops):
-                operations.append({'type': 'list_search', 'line': child.lineno})
+                operations.append({"type": "list_search", "line": child.lineno})
 
         return operations
 
@@ -184,15 +188,15 @@ class ComplexityAnalyzer(ast.NodeVisitor):
 
         if has_recursion:
             # Recursion uses call stack
-            return 'O(n) - call stack'
+            return "O(n) - call stack"
         if has_array_creation:
-            return 'O(n) - auxiliary space'
-        return 'O(1)'
+            return "O(n) - auxiliary space"
+        return "O(1)"
 
 
-def format_output(results, output_format='text'):
+def format_output(results, output_format="text"):
     """Format analysis results."""
-    if output_format == 'json':
+    if output_format == "json":
         print(json.dumps(results, indent=2))
     else:
         print("\n" + "=" * 60)
@@ -204,29 +208,29 @@ def format_output(results, output_format='text'):
             print(f"  Time Complexity:  {analysis['time_complexity']}")
             print(f"  Space Complexity: {analysis['space_complexity']}")
 
-            if analysis['recursion']:
+            if analysis["recursion"]:
                 print("  Recursion: Yes")
 
-            if analysis['operations']:
+            if analysis["operations"]:
                 print("  Operations:")
-                for op in analysis['operations']:
+                for op in analysis["operations"]:
                     print(f"    - {op['type']} at line {op['line']}")
 
-            if analysis['suggestions']:
+            if analysis["suggestions"]:
                 print("  Suggestions:")
-                for suggestion in analysis['suggestions']:
+                for suggestion in analysis["suggestions"]:
                     print(f"    → {suggestion}")
 
             print()
 
 
-def analyze_file(filepath, function_name=None, output_format='text'):
+def analyze_file(filepath, function_name=None, output_format="text"):
     """Analyze a Python file."""
     if not os.path.exists(filepath):
         print(f"Error: File '{filepath}' not found", file=sys.stderr)
         sys.exit(1)
 
-    with open(filepath, encoding='utf-8') as f:
+    with open(filepath, encoding="utf-8") as f:
         code = f.read()
 
     try:
@@ -248,7 +252,7 @@ def analyze_file(filepath, function_name=None, output_format='text'):
     format_output(analyzer.results, output_format)
 
 
-def analyze_code_snippet(code, output_format='text'):
+def analyze_code_snippet(code, output_format="text"):
     """Analyze a code snippet."""
     try:
         tree = ast.parse(code)
@@ -263,18 +267,17 @@ def analyze_code_snippet(code, output_format='text'):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description='Analyze time and space complexity of code'
+    parser = argparse.ArgumentParser(description="Analyze time and space complexity of code")
+    parser.add_argument("file", help="Python file to analyze")
+    parser.add_argument("--function", help="Specific function to analyze")
+    parser.add_argument(
+        "--format", choices=["text", "json"], default="text", help="Output format (default: text)"
     )
-    parser.add_argument('file', help='Python file to analyze')
-    parser.add_argument('--function', help='Specific function to analyze')
-    parser.add_argument('--format', choices=['text', 'json'], default='text',
-                        help='Output format (default: text)')
 
     args = parser.parse_args()
 
     analyze_file(args.file, args.function, args.format)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

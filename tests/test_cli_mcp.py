@@ -10,18 +10,23 @@ def test_mcp_add_list_remove(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.setenv("OCTOPUS_HOME", str(tmp_path / "home"))
     reset_trust_store_for_tests()
 
-    assert main([
-        "--no-color",
-        "mcp",
-        "add",
-        "fs",
-        "--env",
-        "ROOT=.",
-        "--",
-        "npx",
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-    ]) == 0
+    assert (
+        main(
+            [
+                "--no-color",
+                "mcp",
+                "add",
+                "fs",
+                "--env",
+                "ROOT=.",
+                "--",
+                "npx",
+                "-y",
+                "@modelcontextprotocol/server-filesystem",
+            ]
+        )
+        == 0
+    )
     capsys.readouterr()
 
     assert main(["--no-color", "mcp", "list", "--output-format", "json"]) == 0
@@ -54,4 +59,3 @@ def test_mcp_trust_and_revoke(monkeypatch, tmp_path, capsys) -> None:
     assert main(["--no-color", "mcp", "list", "--output-format", "json"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["mcpServers"][0]["trusted"] is False
-

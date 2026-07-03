@@ -1,4 +1,5 @@
 """Tests for AI mode + path denylist HTTP endpoints."""
+
 from __future__ import annotations
 
 import json
@@ -104,7 +105,8 @@ def test_denylist_delete_removes(denylist_state: Path) -> None:
     client.post("/api/path-denylist", json={"path": "C:/x"})
     client.post("/api/path-denylist", json={"path": "C:/y"})
     r = client.request(
-        "DELETE", "/api/path-denylist",
+        "DELETE",
+        "/api/path-denylist",
         json={"path": "C:/x"},
     )
     assert r.status_code == 200

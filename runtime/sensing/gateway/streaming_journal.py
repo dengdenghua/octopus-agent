@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -19,12 +18,10 @@ Subscriber = Callable[[JournalEvent], None]
 
 
 class StreamingJournal(Journal):
-
     def __init__(self, inner: Journal) -> None:
         self._inner = inner
         self._subscribers: list[Subscriber] = []
         self._lock = threading.RLock()
-
 
     def subscribe(self, callback: Subscriber) -> Callable[[], None]:
         with self._lock:
@@ -41,7 +38,6 @@ class StreamingJournal(Journal):
     def subscriber_count(self) -> int:
         with self._lock:
             return len(self._subscribers)
-
 
     def write(self, event: JournalEvent) -> None:
         self._inner.write(event)
@@ -62,7 +58,6 @@ class StreamingJournal(Journal):
     def __len__(self) -> int:
         return len(self._inner)
 
-
     def _broadcast(self, event: JournalEvent) -> None:
         with self._lock:
             subs = list(self._subscribers)  # Implementation note.
@@ -72,7 +67,6 @@ class StreamingJournal(Journal):
             for cb in subs:
                 with contextlib.suppress(Exception):
                     cb(event)
-
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)

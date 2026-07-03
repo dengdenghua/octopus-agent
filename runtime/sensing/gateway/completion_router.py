@@ -6,6 +6,7 @@ suggestion. The frontend renders this as ghost text in CodeMirror.
 
 MVP: uses the configured LLM with a fill-in-the-middle prompt.
 """
+
 from __future__ import annotations
 
 import logging
@@ -13,6 +14,7 @@ from typing import Any
 
 try:
     from fastapi import APIRouter, HTTPException, Request
+
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
@@ -80,12 +82,28 @@ def create_completion_router(
         if not language and file_path:
             ext = file_path.rsplit(".", 1)[-1] if "." in file_path else ""
             lang_map = {
-                "py": "python", "ts": "typescript", "tsx": "typescript",
-                "js": "javascript", "jsx": "javascript", "rs": "rust",
-                "go": "go", "java": "java", "rb": "ruby", "cpp": "c++",
-                "c": "c", "cs": "c#", "swift": "swift", "kt": "kotlin",
-                "sql": "sql", "sh": "bash", "yml": "yaml", "yaml": "yaml",
-                "json": "json", "html": "html", "css": "css", "vue": "vue",
+                "py": "python",
+                "ts": "typescript",
+                "tsx": "typescript",
+                "js": "javascript",
+                "jsx": "javascript",
+                "rs": "rust",
+                "go": "go",
+                "java": "java",
+                "rb": "ruby",
+                "cpp": "c++",
+                "c": "c",
+                "cs": "c#",
+                "swift": "swift",
+                "kt": "kotlin",
+                "sql": "sql",
+                "sh": "bash",
+                "yml": "yaml",
+                "yaml": "yaml",
+                "json": "json",
+                "html": "html",
+                "css": "css",
+                "vue": "vue",
                 "svelte": "svelte",
             }
             language = lang_map.get(ext, ext)
@@ -95,6 +113,7 @@ def create_completion_router(
         try:
             from runtime.platform.ui.app import get_app_state
             from runtime.sensing.model_router.models import Message, ModelRequest
+
             state = get_app_state()
             if not state or not state.model_router:
                 return {"completion": "", "error": "no model router"}

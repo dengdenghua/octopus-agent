@@ -32,8 +32,19 @@ FLASK_DECORATORS = {"route", "get", "post", "put", "delete", "patch", "head", "o
 FASTAPI_DECORATORS = {"get", "post", "put", "delete", "patch", "head", "options", "api_route"}
 
 SKIP_DIRS = {
-    "node_modules", "__pycache__", "venv", ".venv", "env", ".env",
-    ".git", ".hg", "dist", "build", "vendor", ".tox", ".mypy_cache",
+    "node_modules",
+    "__pycache__",
+    "venv",
+    ".venv",
+    "env",
+    ".env",
+    ".git",
+    ".hg",
+    "dist",
+    "build",
+    "vendor",
+    ".tox",
+    ".mypy_cache",
 }
 
 
@@ -45,19 +56,28 @@ def convert_path_params(path, framework):
     params = []
 
     if framework == "flask":
+
         def _replace(m):
             type_str, name = m.group(1), m.group(2)
-            ptype = {"int": "integer", "float": "number", "string": "string",
-                     "path": "string"}.get(type_str, "string") if type_str else "string"
+            ptype = (
+                {"int": "integer", "float": "number", "string": "string", "path": "string"}.get(
+                    type_str, "string"
+                )
+                if type_str
+                else "string"
+            )
             params.append({"name": name, "type": ptype})
             return "{" + name + "}"
+
         path = re.sub(r"<(?:(\w+):)?(\w+)>", _replace, path)
 
     elif framework in ("express", "gin", "echo"):
+
         def _replace(m):
             name = m.group(1)
             params.append({"name": name, "type": "string"})
             return "{" + name + "}"
+
         path = re.sub(r":(\w+)", _replace, path)
 
     elif framework == "fastapi":
@@ -69,10 +89,12 @@ def convert_path_params(path, framework):
 
 def extract_docstring(node):
     """Extract docstring from a Python function AST node."""
-    if (node.body
-            and isinstance(node.body[0], ast.Expr)
-            and isinstance(node.body[0].value, ast.Constant)
-            and isinstance(node.body[0].value.value, str)):
+    if (
+        node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+        and isinstance(node.body[0].value.value, str)
+    ):
         return node.body[0].value.value
     return ""
 
@@ -265,14 +287,18 @@ class PythonExtractor:
                 "responses": {},
             }
             for pp in path_params:
-                route["parameters"].append({
-                    "name": pp["name"], "in": "path",
-                    "required": True,
-                    "schema": {"type": pp["type"]},
-                })
+                route["parameters"].append(
+                    {
+                        "name": pp["name"],
+                        "in": "path",
+                        "required": True,
+                        "schema": {"type": pp["type"]},
+                    }
+                )
             for qp in query_params:
                 entry = {
-                    "name": qp["name"], "in": "query",
+                    "name": qp["name"],
+                    "in": "query",
                     "required": qp.get("required", False),
                     "schema": qp.get("schema", {"type": "string"}),
                 }
@@ -313,16 +339,18 @@ class PythonExtractor:
         summary = docstring.split("\n")[0].strip() if docstring else ""
         routes = []
         for method in methods:
-            routes.append({
-                "method": method,
-                "path": "/" + func.name.replace("_", "-"),
-                "summary": summary,
-                "description": docstring.strip() if docstring else "",
-                "operation_id": func.name,
-                "tags": [tag],
-                "parameters": [],
-                "responses": {"200": {"description": "Successful response"}},
-            })
+            routes.append(
+                {
+                    "method": method,
+                    "path": "/" + func.name.replace("_", "-"),
+                    "summary": summary,
+                    "description": docstring.strip() if docstring else "",
+                    "operation_id": func.name,
+                    "tags": [tag],
+                    "parameters": [],
+                    "responses": {"200": {"description": "Successful response"}},
+                }
+            )
         return routes
 
     @staticmethod
@@ -352,11 +380,13 @@ class PythonExtractor:
 
             has_default = idx >= (num_args - num_defaults)
             schema = python_type_to_schema(type_str) if type_str else {"type": "string"}
-            query_params.append({
-                "name": name,
-                "schema": schema,
-                "required": not has_default,
-            })
+            query_params.append(
+                {
+                    "name": name,
+                    "schema": schema,
+                    "required": not has_default,
+                }
+            )
 
         return query_params, body_schema
 
@@ -386,7 +416,7 @@ class JSExtractor:
             method = m.group(2).lower()
             path = m.group(3)
 
-            jsdoc_match = self._JSDOC_RE.search(content[:m.start()])
+            jsdoc_match = self._JSDOC_RE.search(content[: m.start()])
             summary = self._jsdoc_summary(jsdoc_match.group(1)) if jsdoc_match else ""
 
             openapi_path, path_params = convert_path_params(path, "express")
@@ -400,8 +430,12 @@ class JSExtractor:
                 "operation_id": op_id,
                 "tags": [tag],
                 "parameters": [
-                    {"name": p["name"], "in": "path", "required": True,
-                     "schema": {"type": p["type"]}}
+                    {
+                        "name": p["name"],
+                        "in": "path",
+                        "required": True,
+                        "schema": {"type": p["type"]},
+                    }
                     for p in path_params
                 ],
                 "responses": {"200": {"description": "Successful response"}},
@@ -461,8 +495,9 @@ class GoExtractor:
             prefix = groups.get(var, "")
             full_path = prefix + path
 
-            methods = (["get", "post", "put", "delete", "patch"]
-                       if raw_method == "any" else [raw_method])
+            methods = (
+                ["get", "post", "put", "delete", "patch"] if raw_method == "any" else [raw_method]
+            )
 
             openapi_path, path_params = convert_path_params(full_path, "gin")
             for method in methods:
@@ -475,8 +510,12 @@ class GoExtractor:
                     "operation_id": op_id,
                     "tags": [tag],
                     "parameters": [
-                        {"name": p["name"], "in": "path", "required": True,
-                         "schema": {"type": p["type"]}}
+                        {
+                            "name": p["name"],
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": p["type"]},
+                        }
                         for p in path_params
                     ],
                     "responses": {"200": {"description": "Successful response"}},
@@ -488,8 +527,9 @@ class GoExtractor:
 # ── OpenAPI Spec Builder ──────────────────────────────────────────────────
 
 
-def build_openapi_spec(routes, title="API Documentation", version="1.0.0",
-                       description="", servers=None):
+def build_openapi_spec(
+    routes, title="API Documentation", version="1.0.0", description="", servers=None
+):
     spec = {
         "openapi": "3.0.3",
         "info": {"title": title, "version": version},
@@ -532,8 +572,7 @@ def build_openapi_spec(routes, title="API Documentation", version="1.0.0",
         spec["tags"] = [{"name": t} for t in sorted(all_tags)]
     if ref_schemas:
         spec.setdefault("components", {})["schemas"] = {
-            name: {"type": "object", "description": f"{name} model"}
-            for name in sorted(ref_schemas)
+            name: {"type": "object", "description": f"{name} model"} for name in sorted(ref_schemas)
         }
     return spec
 
@@ -650,7 +689,7 @@ def to_yaml(obj, indent=0):
     if isinstance(obj, str):
         if not obj:
             return '""'
-        if any(c in obj for c in ':#{}[]|>&*!%@`"\'\n') or obj.strip() != obj:
+        if any(c in obj for c in ":#{}[]|>&*!%@`\"'\n") or obj.strip() != obj:
             return json.dumps(obj, ensure_ascii=False)
         return obj
 
@@ -704,31 +743,37 @@ examples:
   %(prog)s ./routes --server http://localhost:3000
         """,
     )
-    parser.add_argument("source_dir",
-                        help="Source directory to scan for route definitions")
-    parser.add_argument("-f", "--format", choices=["json", "yaml"],
-                        default="json", help="Output format (default: json)")
-    parser.add_argument("-o", "--output",
-                        help="Output file path (default: stdout)")
-    parser.add_argument("--framework",
-                        choices=["flask", "fastapi", "django", "express", "gin", "echo"],
-                        help="Force framework detection (auto-detected by default)")
-    parser.add_argument("--title", default="API Documentation",
-                        help="API title (default: API Documentation)")
-    parser.add_argument("--version", default="1.0.0",
-                        help="API version (default: 1.0.0)")
-    parser.add_argument("--description", default="",
-                        help="API description")
-    parser.add_argument("--server", action="append", dest="servers",
-                        help="Server URL (repeatable)")
+    parser.add_argument("source_dir", help="Source directory to scan for route definitions")
+    parser.add_argument(
+        "-f",
+        "--format",
+        choices=["json", "yaml"],
+        default="json",
+        help="Output format (default: json)",
+    )
+    parser.add_argument("-o", "--output", help="Output file path (default: stdout)")
+    parser.add_argument(
+        "--framework",
+        choices=["flask", "fastapi", "django", "express", "gin", "echo"],
+        help="Force framework detection (auto-detected by default)",
+    )
+    parser.add_argument(
+        "--title", default="API Documentation", help="API title (default: API Documentation)"
+    )
+    parser.add_argument("--version", default="1.0.0", help="API version (default: 1.0.0)")
+    parser.add_argument("--description", default="", help="API description")
+    parser.add_argument("--server", action="append", dest="servers", help="Server URL (repeatable)")
 
     args = parser.parse_args()
 
     routes, _ = scan_and_extract(args.source_dir, framework=args.framework)
 
     if not routes:
-        print("Warning: no routes found. Verify the source directory contains "
-              "supported framework code.", file=sys.stderr)
+        print(
+            "Warning: no routes found. Verify the source directory contains "
+            "supported framework code.",
+            file=sys.stderr,
+        )
 
     spec = build_openapi_spec(
         routes,

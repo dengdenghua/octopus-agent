@@ -31,10 +31,12 @@ def test_mark_read_is_monotonic(tmp_path) -> None:
 
 def test_unread_counts_events_past_read_marker(tmp_path) -> None:
     gs, ps = _seed(tmp_path)
-    gs.append("t1", MemberEvent(action="invite", actor="u", target_id="user",
-                                target_kind="human"))  # seq 1
-    gs.append("t1", MemberEvent(action="invite", actor="u", target_id="alice",
-                                target_kind="agent"))  # seq 2
+    gs.append(
+        "t1", MemberEvent(action="invite", actor="u", target_id="user", target_kind="human")
+    )  # seq 1
+    gs.append(
+        "t1", MemberEvent(action="invite", actor="u", target_id="alice", target_kind="agent")
+    )  # seq 2
     gs.append("t1", MemberEvent(action="mode", actor="u", mode="swarm"))  # seq 3
 
     # user joined at seq 1, hasn't read → unread = head(3) - join(1) = 2
@@ -50,12 +52,14 @@ def test_unread_counts_events_past_read_marker(tmp_path) -> None:
 def test_join_seq_is_the_unread_floor(tmp_path) -> None:
     gs, ps = _seed(tmp_path)
     for name in ("user", "alice"):
-        gs.append("t1", MemberEvent(action="invite", actor="u", target_id=name,
-                                    target_kind="agent"))
+        gs.append(
+            "t1", MemberEvent(action="invite", actor="u", target_id=name, target_kind="agent")
+        )
     gs.append("t1", MemberEvent(action="mode", actor="u", mode="cluster"))  # seq 3
     # bob is pulled in late, at seq 4
-    gs.append("t1", MemberEvent(action="invite", actor="u", target_id="bob",
-                                target_kind="agent"))  # seq 4
+    gs.append(
+        "t1", MemberEvent(action="invite", actor="u", target_id="bob", target_kind="agent")
+    )  # seq 4
 
     pres = {p.member_id: p for p in group_presence(gs, ps, "t1")}
     # bob joined at head — nothing happened after him, so zero unread (no
@@ -66,8 +70,7 @@ def test_join_seq_is_the_unread_floor(tmp_path) -> None:
 
 def test_presence_online_within_window(tmp_path) -> None:
     gs, ps = _seed(tmp_path)
-    gs.append("t1", MemberEvent(action="invite", actor="u", target_id="alice",
-                                target_kind="agent"))
+    gs.append("t1", MemberEvent(action="invite", actor="u", target_id="alice", target_kind="agent"))
     now = datetime(2026, 6, 30, 12, 0, 0, tzinfo=UTC)
     ps.heartbeat("t1", "alice", now=(now - timedelta(seconds=10)).isoformat())
 
@@ -81,8 +84,7 @@ def test_presence_online_within_window(tmp_path) -> None:
 
 def test_member_with_no_heartbeat_is_offline(tmp_path) -> None:
     gs, ps = _seed(tmp_path)
-    gs.append("t1", MemberEvent(action="invite", actor="u", target_id="ghost",
-                                target_kind="agent"))
+    gs.append("t1", MemberEvent(action="invite", actor="u", target_id="ghost", target_kind="agent"))
     pres = {p.member_id: p for p in group_presence(gs, ps, "t1")}
     assert pres["ghost"].online is False
     assert pres["ghost"].last_seen_at is None
@@ -90,10 +92,12 @@ def test_member_with_no_heartbeat_is_offline(tmp_path) -> None:
 
 def test_notify_targets_are_offline_with_unread(tmp_path) -> None:
     gs, ps = _seed(tmp_path)
-    gs.append("t1", MemberEvent(action="invite", actor="u", target_id="online-bob",
-                                target_kind="agent"))  # seq 1
-    gs.append("t1", MemberEvent(action="invite", actor="u", target_id="away-amy",
-                                target_kind="agent"))  # seq 2
+    gs.append(
+        "t1", MemberEvent(action="invite", actor="u", target_id="online-bob", target_kind="agent")
+    )  # seq 1
+    gs.append(
+        "t1", MemberEvent(action="invite", actor="u", target_id="away-amy", target_kind="agent")
+    )  # seq 2
     gs.append("t1", MemberEvent(action="mode", actor="u", mode="swarm"))  # seq 3
     now = datetime(2026, 6, 30, 12, 0, 0, tzinfo=UTC)
     # bob is online (recent heartbeat) and caught up; amy is offline with unread

@@ -169,7 +169,9 @@ class TestKanbanDispatcher:
         from runtime.memory.cowork.store import KanbanDispatcher
 
         d = KanbanDispatcher(store, tick_seconds=60)
-        monkeypatch.setattr(store, "list_sessions", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+        monkeypatch.setattr(
+            store, "list_sessions", lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+        )
 
         d._tick_once()
 
@@ -210,7 +212,9 @@ class TestKanbanDispatcher:
         from runtime.memory.cowork.store import KanbanDispatcher
 
         d = KanbanDispatcher(store, tick_seconds=60)
-        monkeypatch.setattr(store, "list_sessions", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+        monkeypatch.setattr(
+            store, "list_sessions", lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+        )
         d._tick_once()
         monkeypatch.setattr(store, "list_sessions", lambda: [])
 

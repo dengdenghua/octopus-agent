@@ -13,5 +13,6 @@ from __future__ import annotations
 import contextvars
 
 current_actor: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "model_router_current_actor", default=None,
+    "model_router_current_actor",
+    default=None,
 )

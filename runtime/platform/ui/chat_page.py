@@ -1,5 +1,3 @@
-
-
 _CHAT_HTML = r"""<!doctype html>
 <html lang="zh-CN" class="dark">
 <head>

@@ -125,7 +125,9 @@ def _infer_schedule_time(text: str) -> str:
 
 def _infer_schedule_day(text: str, cadence: str) -> str:
     if "月" in cadence or "month" in cadence.lower():
-        match = re.search(r"(?:每月|月|monthly)\s*(\d{1,2})\s*(?:号|日|st|nd|rd|th)?", text, flags=re.I)
+        match = re.search(
+            r"(?:每月|月|monthly)\s*(\d{1,2})\s*(?:号|日|st|nd|rd|th)?", text, flags=re.I
+        )
         if match:
             day = max(1, min(int(match.group(1)), 31))
             return str(day)
@@ -391,7 +393,10 @@ def _normalize_result_item(
     title = _clean_text(item.get("title") or item.get("name") or item.get("url"), max_len=220)
     url = _clean_text(item.get("url") or item.get("link") or "", max_len=700)
     snippet = _clean_text(
-        item.get("snippet") or item.get("summary") or item.get("content") or item.get("description"),
+        item.get("snippet")
+        or item.get("summary")
+        or item.get("content")
+        or item.get("description"),
         max_len=700,
     )
     if not title and not snippet:
@@ -406,7 +411,9 @@ def _normalize_result_item(
     }
 
 
-def _items_from_search_output(output: dict[str, Any], *, source: str, query: str) -> list[dict[str, Any]]:
+def _items_from_search_output(
+    output: dict[str, Any], *, source: str, query: str
+) -> list[dict[str, Any]]:
     if not isinstance(output, dict):
         return []
     raw_results = output.get("results")
@@ -493,13 +500,18 @@ def _report_markdown(report: dict[str, Any]) -> str:
         "## 关键发现",
     ]
     findings = report.get("findings") or []
-    lines.extend([f"{idx}. {finding}" for idx, finding in enumerate(findings, 1)] or ["1. 本轮没有发现可用新情报。"])
-    lines.extend([
-        "",
-        "## 证据与来源",
-        "| # | 来源 | 标题 | 摘要 |",
-        "| --- | --- | --- | --- |",
-    ])
+    lines.extend(
+        [f"{idx}. {finding}" for idx, finding in enumerate(findings, 1)]
+        or ["1. 本轮没有发现可用新情报。"]
+    )
+    lines.extend(
+        [
+            "",
+            "## 证据与来源",
+            "| # | 来源 | 标题 | 摘要 |",
+            "| --- | --- | --- | --- |",
+        ]
+    )
     for idx, item in enumerate((report.get("items") or [])[:12], 1):
         title = _clean_text(item.get("title"), max_len=140).replace("|", "\\|")
         source = _clean_text(item.get("source"), max_len=80).replace("|", "\\|")
@@ -509,18 +521,24 @@ def _report_markdown(report: dict[str, Any]) -> str:
         lines.append(f"| {idx} | {source} | {title} | {snippet or '无摘要'} |")
     if not report.get("items"):
         lines.append("| 1 | 暂无 | 未采集到结果 | 需要调整关键词或来源 |")
-    lines.extend([
-        "",
-        "## 进化建议",
-    ])
-    lines.extend([f"- {item}" for item in report.get("recommendations", [])] or ["- 暂无可执行建议。"])
+    lines.extend(
+        [
+            "",
+            "## 进化建议",
+        ]
+    )
+    lines.extend(
+        [f"- {item}" for item in report.get("recommendations", [])] or ["- 暂无可执行建议。"]
+    )
     if report.get("source_errors"):
         lines.extend(["", "## 采集异常"])
         lines.extend([f"- {err}" for err in report["source_errors"][:8]])
     return "\n".join(lines)
 
 
-def _build_report(subscription: dict[str, Any], items: list[dict[str, Any]], source_errors: list[str]) -> dict[str, Any]:
+def _build_report(
+    subscription: dict[str, Any], items: list[dict[str, Any]], source_errors: list[str]
+) -> dict[str, Any]:
     now = _now_iso()
     topic = _clean_text(subscription.get("display_name") or subscription.get("topic"), max_len=160)
     keywords = _clean_list(subscription.get("keywords")) or [topic]
@@ -538,7 +556,9 @@ def _build_report(subscription: dict[str, Any], items: list[dict[str, Any]], sou
         "若某类来源长期无结果，调整关键词或补充 RSS/GitHub/arXiv 专用来源。",
     ]
     if any(str(item.get("source")).lower() == "github" for item in top_items):
-        recommendations.append("对 GitHub 高热项目做二次筛选：看最近提交、issue 活跃度、license 与可集成性。")
+        recommendations.append(
+            "对 GitHub 高热项目做二次筛选：看最近提交、issue 活跃度、license 与可集成性。"
+        )
     if any(str(item.get("source")).lower() == "arxiv" for item in top_items):
         recommendations.append("对 arXiv 论文补充方法、实验设置和可复现代码链接，避免只看摘要。")
     summary = (
@@ -746,14 +766,13 @@ def create_intelligence_router(
             "schedule_day": str(payload.get("schedule_day") or "1").strip() or "1",
             "timezone": str(payload.get("timezone") or "Asia/Shanghai").strip() or "Asia/Shanghai",
             "instructions": str(payload.get("instructions") or "").strip(),
-            "sources": payload.get("sources") if isinstance(payload.get("sources"), list) else ["web", "news"],
+            "sources": payload.get("sources")
+            if isinstance(payload.get("sources"), list)
+            else ["web", "news"],
         }
 
         data = _read_store(path)
-        existing = {
-            str(item.get("topic", "")).strip().lower()
-            for item in data["subscriptions"]
-        }
+        existing = {str(item.get("topic", "")).strip().lower() for item in data["subscriptions"]}
         if topic.lower() in existing:
             raise HTTPException(status_code=409, detail="subscription already exists")
 
@@ -779,22 +798,28 @@ def create_intelligence_router(
                 item["display_name"] = str(payload["display_name"]).strip() or item["display_name"]
             if "keywords" in payload and isinstance(payload["keywords"], list):
                 item["keywords"] = [
-                    str(keyword).strip()
-                    for keyword in payload["keywords"]
-                    if str(keyword).strip()
+                    str(keyword).strip() for keyword in payload["keywords"] if str(keyword).strip()
                 ]
             if "cadence" in payload:
                 item["cadence"] = str(payload["cadence"]).strip() or item.get("cadence", "每天")
             if "schedule_time" in payload:
-                item["schedule_time"] = str(payload["schedule_time"]).strip() or item.get("schedule_time", "09:00")
+                item["schedule_time"] = str(payload["schedule_time"]).strip() or item.get(
+                    "schedule_time", "09:00"
+                )
             if "schedule_day" in payload:
-                item["schedule_day"] = str(payload["schedule_day"]).strip() or item.get("schedule_day", "1")
+                item["schedule_day"] = str(payload["schedule_day"]).strip() or item.get(
+                    "schedule_day", "1"
+                )
             if "timezone" in payload:
-                item["timezone"] = str(payload["timezone"]).strip() or item.get("timezone", "Asia/Shanghai")
+                item["timezone"] = str(payload["timezone"]).strip() or item.get(
+                    "timezone", "Asia/Shanghai"
+                )
             if "instructions" in payload:
                 item["instructions"] = str(payload["instructions"]).strip()
             if "sources" in payload and isinstance(payload["sources"], list):
-                item["sources"] = [str(source).strip() for source in payload["sources"] if str(source).strip()]
+                item["sources"] = [
+                    str(source).strip() for source in payload["sources"] if str(source).strip()
+                ]
             _write_store(path, data)
             return item
         raise HTTPException(status_code=404, detail="subscription not found")
@@ -804,9 +829,7 @@ def create_intelligence_router(
         _auth(request)
         data = _read_store(path)
         before = len(data["subscriptions"])
-        data["subscriptions"] = [
-            item for item in data["subscriptions"] if item.get("id") != sub_id
-        ]
+        data["subscriptions"] = [item for item in data["subscriptions"] if item.get("id") != sub_id]
         if len(data["subscriptions"]) == before:
             raise HTTPException(status_code=404, detail="subscription not found")
         _write_store(path, data)

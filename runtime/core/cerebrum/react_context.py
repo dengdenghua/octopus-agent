@@ -20,11 +20,7 @@ def _content_to_text(content: Any) -> str:
     if isinstance(content, str):
         return content
     if isinstance(content, list):
-        return "\n".join(
-            part
-            for part in (_content_to_text(item) for item in content)
-            if part
-        )
+        return "\n".join(part for part in (_content_to_text(item) for item in content) if part)
     if isinstance(content, dict):
         text = content.get("text")
         if isinstance(text, str):
@@ -193,7 +189,11 @@ def _ensure_context_budget(messages: list, *, max_tokens: int) -> list:
 
     head = list(messages[:keep_head])
     if _estimate_messages_tokens(head) >= max_tokens:
-        out = [_trim_message_to_budget(head[-1], head_tokens=0, max_tokens=max_tokens)] if head else []
+        out = (
+            [_trim_message_to_budget(head[-1], head_tokens=0, max_tokens=max_tokens)]
+            if head
+            else []
+        )
         _logger.info(
             "context hard-capped oversized system head: ~%d tokens → ~%d tokens (%d msgs → %d msgs)",
             _estimate_messages_tokens(messages),
@@ -210,7 +210,11 @@ def _ensure_context_budget(messages: list, *, max_tokens: int) -> list:
             kept_tail.append(m)
             continue
         if not kept_tail:
-            kept_tail.append(_trim_message_to_budget(m, head_tokens=_estimate_messages_tokens(head), max_tokens=max_tokens))
+            kept_tail.append(
+                _trim_message_to_budget(
+                    m, head_tokens=_estimate_messages_tokens(head), max_tokens=max_tokens
+                )
+            )
         break
 
     out = head + list(reversed(kept_tail))
@@ -1026,9 +1030,7 @@ def _build_project_signals_prompt(project_signals: Any) -> str:
     if isinstance(recommended, str) and recommended.strip():
         confidence = project_signals.get("confidence")
         suffix = (
-            f" ({round(float(confidence) * 100)}%)"
-            if isinstance(confidence, (int, float))
-            else ""
+            f" ({round(float(confidence) * 100)}%)" if isinstance(confidence, (int, float)) else ""
         )
         lines.append(f"- 推荐子模式: {recommended.strip()}{suffix}")
     reason = project_signals.get("reason")
@@ -1189,7 +1191,11 @@ def _image_blocks_from_attachments(attachments: Any) -> list[dict[str, Any]]:
             url = candidate
         else:
             raw_url = item.get("url") or item.get("artifact_url")
-            if isinstance(raw_url, str) and raw_url.strip() and (raw_url.startswith("data:image/") or _looks_like_image_attachment(item)):
+            if (
+                isinstance(raw_url, str)
+                and raw_url.strip()
+                and (raw_url.startswith("data:image/") or _looks_like_image_attachment(item))
+            ):
                 url = raw_url
         if not url:
             continue

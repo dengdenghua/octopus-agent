@@ -7,7 +7,7 @@ from typing import Any
 # ═══════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════
 
-_BRAND = "Octopus"   # Implementation note.
+_BRAND = "Octopus"  # Implementation note.
 
 # Per-agent brand override
 # -----------------------
@@ -71,58 +71,77 @@ _IDENTITY_RULES: list[tuple[re.Pattern[str], str]] = [
     # Replacement deliberately has NO leading brand name — the atomic
     # "I'm Claude" rule below will add the brand once, so we avoid the
     # "I'm Octopus, Octopus, a biomimetic..." double-brand bug.
-    (re.compile(
-        r"\b(?:an?\s+)?AI\s+(?:assistant|model)\s+"
-        r"(?:developed|made|built|created|trained)\s+by\s+"
-        rf"(?:{_VENDOR_ALTS_EN})[\w \-]*",
-        re.IGNORECASE,
-    ), "a biomimetic agent OS"),
-
-    (re.compile(
-        rf"一个?\s*由\s*(?:{_VENDOR_ALTS_ZH})[^,，。.!?；;]*?"
-        r"(?:开发|训练|制作|创建|构建)\s*的?\s*(?:AI|人工智能)[^,，。.!?；;]*",
-        re.IGNORECASE,
-    ), "仿生 agent OS"),
-
-    (re.compile(
-        rf"由\s*(?:{_VENDOR_ALTS_ZH})[^,，。.!?；;]*?"
-        r"(?:开发|训练|制作|创建|构建)",
-        re.IGNORECASE,
-    ), "由 Octopus 团队构建"),
-
+    (
+        re.compile(
+            r"\b(?:an?\s+)?AI\s+(?:assistant|model)\s+"
+            r"(?:developed|made|built|created|trained)\s+by\s+"
+            rf"(?:{_VENDOR_ALTS_EN})[\w \-]*",
+            re.IGNORECASE,
+        ),
+        "a biomimetic agent OS",
+    ),
+    (
+        re.compile(
+            rf"一个?\s*由\s*(?:{_VENDOR_ALTS_ZH})[^,，。.!?；;]*?"
+            r"(?:开发|训练|制作|创建|构建)\s*的?\s*(?:AI|人工智能)[^,，。.!?；;]*",
+            re.IGNORECASE,
+        ),
+        "仿生 agent OS",
+    ),
+    (
+        re.compile(
+            rf"由\s*(?:{_VENDOR_ALTS_ZH})[^,，。.!?；;]*?"
+            r"(?:开发|训练|制作|创建|构建)",
+            re.IGNORECASE,
+        ),
+        "由 Octopus 团队构建",
+    ),
     # English: "developed by X" atomic (when not wrapped in the
     # composite rule above — e.g. orphan usage).
-    (re.compile(
-        rf"\b(?:developed|made|built|created|trained)\s+by\s+"
-        rf"(?:{_VENDOR_ALTS_EN})(?:\s+[A-Za-z]+)?",
-        re.IGNORECASE,
-    ), "built by the Octopus team"),
-
+    (
+        re.compile(
+            rf"\b(?:developed|made|built|created|trained)\s+by\s+"
+            rf"(?:{_VENDOR_ALTS_EN})(?:\s+[A-Za-z]+)?",
+            re.IGNORECASE,
+        ),
+        "built by the Octopus team",
+    ),
     # ── identity assertion (Chinese) ───────────────────
     # the vendor name, which let hedged self-identifications through like
     #
     # ``{brand}`` is substituted at filter time with the speaking agent's
     # display_name (falls back to the global product brand).
-    (re.compile(
-        rf"我[^，。,.;:!?\n]{{0,6}}是\s*(?:{_MODEL_ALTS})[\w\-]*",
-        re.IGNORECASE,
-    ), "我是 {brand}"),
-
+    (
+        re.compile(
+            rf"我[^，。,.;:!?\n]{{0,6}}是\s*(?:{_MODEL_ALTS})[\w\-]*",
+            re.IGNORECASE,
+        ),
+        "我是 {brand}",
+    ),
     # ── identity assertion (English) ───────────────────
     # Same hedge-tolerance for English: "I'm just Claude" / "I am really
     # Claude" / "I'm actually GPT-4" all need to get caught.
-    (re.compile(
-        rf"\bI[' ]?m\s+(?:just|only|really|actually|still|essentially|basically)?\s*(?:an?\s+)?(?:{_MODEL_ALTS})[\w\- ]*",
-        re.IGNORECASE,
-    ), "I'm {brand}"),
-    (re.compile(
-        rf"\bI\s+am\s+(?:just|only|really|actually|still|essentially|basically)?\s*(?:an?\s+)?(?:{_MODEL_ALTS})[\w\- ]*",
-        re.IGNORECASE,
-    ), "I am {brand}"),
-    (re.compile(
-        r"\bI[' ]?m\s+(?:an?\s+)?AI\s+assistant\b",
-        re.IGNORECASE,
-    ), "I'm {brand}"),
+    (
+        re.compile(
+            rf"\bI[' ]?m\s+(?:just|only|really|actually|still|essentially|basically)?\s*(?:an?\s+)?(?:{_MODEL_ALTS})[\w\- ]*",
+            re.IGNORECASE,
+        ),
+        "I'm {brand}",
+    ),
+    (
+        re.compile(
+            rf"\bI\s+am\s+(?:just|only|really|actually|still|essentially|basically)?\s*(?:an?\s+)?(?:{_MODEL_ALTS})[\w\- ]*",
+            re.IGNORECASE,
+        ),
+        "I am {brand}",
+    ),
+    (
+        re.compile(
+            r"\bI[' ]?m\s+(?:an?\s+)?AI\s+assistant\b",
+            re.IGNORECASE,
+        ),
+        "I'm {brand}",
+    ),
 ]
 
 

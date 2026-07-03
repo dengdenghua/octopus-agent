@@ -242,8 +242,7 @@ def create_computer_router(
             "ok": True,
             "path": str(shot_path),
             "size_bytes": len(data),
-            "data_url": "data:image/png;base64,"
-            + base64.standard_b64encode(data).decode("ascii"),
+            "data_url": "data:image/png;base64," + base64.standard_b64encode(data).decode("ascii"),
             "created_at": time.time(),
         }
         _update_control_action(
@@ -380,17 +379,21 @@ def create_computer_router(
         )
         screenshot_data: dict[str, Any] | None = None
         if capture:
-            screenshot_data = screenshot({**body, "control_action_id": f"{control_action_id}:screenshot"})
+            screenshot_data = screenshot(
+                {**body, "control_action_id": f"{control_action_id}:screenshot"}
+            )
 
         suggestions = []
         for idx, action in enumerate(_plan_actions(goal), start=1):
             preview = _queue_preview(state, action, owner)
-            suggestions.append({
-                "id": f"step-{idx}",
-                "title": f"Step {idx}: {action['action']}",
-                "rationale": "Heuristic next action based on the task text and current screen observation.",
-                **preview,
-            })
+            suggestions.append(
+                {
+                    "id": f"step-{idx}",
+                    "title": f"Step {idx}: {action['action']}",
+                    "rationale": "Heuristic next action based on the task text and current screen observation.",
+                    **preview,
+                }
+            )
             _record_control_action(
                 state,
                 body,
@@ -477,7 +480,9 @@ def create_computer_router(
         )
         screenshot_data: dict[str, Any] | None = None
         if capture:
-            screenshot_data = screenshot({**body, "control_action_id": f"{control_action_id}:screenshot"})
+            screenshot_data = screenshot(
+                {**body, "control_action_id": f"{control_action_id}:screenshot"}
+            )
 
         if output is None:
             _update_control_action(
@@ -523,12 +528,14 @@ def create_computer_router(
         suggestions = []
         for idx, action in enumerate(actions, start=1):
             preview = _queue_preview(state, action, owner)
-            suggestions.append({
-                "id": f"vision-{idx}",
-                "title": f"Vision {idx}: {action['action']}",
-                "rationale": "Validated action parsed from vision model output.",
-                **preview,
-            })
+            suggestions.append(
+                {
+                    "id": f"vision-{idx}",
+                    "title": f"Vision {idx}: {action['action']}",
+                    "rationale": "Validated action parsed from vision model output.",
+                    **preview,
+                }
+            )
             _record_control_action(
                 state,
                 body,
@@ -597,7 +604,9 @@ def create_computer_router(
             owner=owner,
         )
         config = _vision_model_config(model_id)
-        screenshot_data = screenshot({**body, "control_action_id": f"{control_action_id}:screenshot"})
+        screenshot_data = screenshot(
+            {**body, "control_action_id": f"{control_action_id}:screenshot"}
+        )
         if not screenshot_data.get("ok"):
             _update_control_action(
                 state,
@@ -644,12 +653,14 @@ def create_computer_router(
         suggestions = []
         for idx, action in enumerate(actions, start=1):
             preview = _queue_preview(state, action, owner)
-            suggestions.append({
-                "id": f"vision-model-{idx}",
-                "title": f"Vision model {idx}: {action['action']}",
-                "rationale": "Grounded action returned by the configured vision model.",
-                **preview,
-            })
+            suggestions.append(
+                {
+                    "id": f"vision-model-{idx}",
+                    "title": f"Vision model {idx}: {action['action']}",
+                    "rationale": "Grounded action returned by the configured vision model.",
+                    **preview,
+                }
+            )
             _record_control_action(
                 state,
                 body,

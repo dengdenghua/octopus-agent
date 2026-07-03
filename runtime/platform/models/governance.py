@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -20,7 +19,6 @@ BudgetStatus = Literal["active", "frozen", "exceeded"]
 
 
 class BudgetLimits(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     tokens: int = Field(..., gt=0)
@@ -34,13 +32,12 @@ class InsufficientBudget(Exception):
 
 
 class Budget:
-
     def __init__(self, task_id: TaskId, limits: BudgetLimits) -> None:
         self.task_id = task_id
         self.limits = limits
         self._lock = Lock()
         self._tokens_spent: int = 0
-        self._tokens_in_spent: int = 0   # split for observability
+        self._tokens_in_spent: int = 0  # split for observability
         self._tokens_out_spent: int = 0  # (same invariants · monotonic)
         self._usd_spent: float = 0.0
         self._tokens_reserved: int = 0
@@ -52,7 +49,6 @@ class Budget:
         # once per crossing. Tracked here (vs outside) so it
         # survives budget reuse across multiple tool calls.
         self._warn_levels_fired: set[int] = set()
-
 
     @property
     def status(self) -> BudgetStatus:
@@ -150,8 +146,7 @@ class Budget:
         cutoff = now_utc() - timedelta(seconds=ttl_seconds)
         with self._lock:
             stale_ids = [
-                rid for rid, (_, reserved_at) in self._reservations.items()
-                if reserved_at <= cutoff
+                rid for rid, (_, reserved_at) in self._reservations.items() if reserved_at <= cutoff
             ]
             for rid in stale_ids:
                 estimated, _ = self._reservations.pop(rid)
@@ -193,7 +188,6 @@ Origin = Literal["builtin", "public", "custom", "external"]
 
 
 class AntigenSignature(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     entity_id: str  # "mcp://anthropic/filesystem" / "skill://public/run_sql"
@@ -205,7 +199,6 @@ class AntigenSignature(BaseModel):
 
 
 class RiskScore(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     sucker_id: str
@@ -218,7 +211,6 @@ class RiskScore(BaseModel):
 
 
 class ImmuneReport(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     verdict: ImmuneVerdict

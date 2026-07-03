@@ -221,9 +221,7 @@ def register_echo_skills(registry: SkillRegistry) -> int:
                     args={},
                     expect=SkillExpect(schema_keys=["ok", "available"]),
                     custom_predicate=lambda r: (
-                        isinstance(r, dict)
-                        and r.get("ok") in (True, False)
-                        and "available" in r
+                        isinstance(r, dict) and r.get("ok") in (True, False) and "available" in r
                     ),
                 ),
             ],

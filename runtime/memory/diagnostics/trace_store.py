@@ -42,21 +42,27 @@ _TASK_RUN_TERMINAL_EVENTS: dict[str, TaskRunStatus] = {
     "TASK_RUN_CANCELLED": "cancelled",
     "RUN_CANCELLED": "cancelled",
 }
-_TASK_RUN_START_EVENTS: frozenset[str] = frozenset({
-    "TASK_RUN_STARTED",
-    "RUN_STARTED",
-})
-_TOOL_START_EVENTS: frozenset[str] = frozenset({
-    "TOOL_CALL_START",
-    "TOOL_START",
-    "SUB_TOOL_START",
-})
-_TOOL_END_EVENTS: frozenset[str] = frozenset({
-    "TOOL_CALL_END",
-    "TOOL_CALL_FINISH",
-    "TOOL_END",
-    "SUB_TOOL_END",
-})
+_TASK_RUN_START_EVENTS: frozenset[str] = frozenset(
+    {
+        "TASK_RUN_STARTED",
+        "RUN_STARTED",
+    }
+)
+_TOOL_START_EVENTS: frozenset[str] = frozenset(
+    {
+        "TOOL_CALL_START",
+        "TOOL_START",
+        "SUB_TOOL_START",
+    }
+)
+_TOOL_END_EVENTS: frozenset[str] = frozenset(
+    {
+        "TOOL_CALL_END",
+        "TOOL_CALL_FINISH",
+        "TOOL_END",
+        "SUB_TOOL_END",
+    }
+)
 
 
 _SCHEMA = """
@@ -570,7 +576,9 @@ class AgentTraceStore:
             limit=limit,
             offset=offset,
         )
-        return [_decode_row(row, json_fields=("metadata",), bool_fields=("is_local",)) for row in rows]
+        return [
+            _decode_row(row, json_fields=("metadata",), bool_fields=("is_local",)) for row in rows
+        ]
 
     def resume_requests(
         self,
@@ -594,7 +602,9 @@ class AgentTraceStore:
         )
         items = [_decode_row(row, json_fields=("intent",)) for row in rows]
         if checkpoint_id is not None:
-            items = [row for row in items if int(row.get("checkpoint_id") or 0) == int(checkpoint_id)]
+            items = [
+                row for row in items if int(row.get("checkpoint_id") or 0) == int(checkpoint_id)
+            ]
         return items
 
     def latest_pending_resume_request(
@@ -640,7 +650,10 @@ class AgentTraceStore:
             if cur.rowcount == 0:
                 return None  # lost the race — already confirmed/consumed elsewhere
         confirmed_rows = self.resume_requests(
-            thread_id=thread_id, checkpoint_id=checkpoint_id, status="confirmed", limit=1,
+            thread_id=thread_id,
+            checkpoint_id=checkpoint_id,
+            status="confirmed",
+            limit=1,
         )
         return confirmed_rows[0] if confirmed_rows else None
 
@@ -850,9 +863,7 @@ class AgentTraceStore:
             )
             task_ids = [str(run.get("task_id") or "") for run in runs]
         cases = [
-            case
-            for task_id in task_ids
-            if (case := self.task_run_replay_case(task_id)) is not None
+            case for task_id in task_ids if (case := self.task_run_replay_case(task_id)) is not None
         ]
         return {
             "schema": "octopus.task_run_replay_case_corpus.v1",
@@ -1140,8 +1151,7 @@ def _replay_gate_from_evaluations(
     failing = [
         item
         for item in evaluations
-        if item.get("passed") is not True
-        or float(item.get("score") or 0.0) < threshold_score
+        if item.get("passed") is not True or float(item.get("score") or 0.0) < threshold_score
     ]
     total = len(evaluations)
     enough_cases = total >= threshold_cases
@@ -1166,9 +1176,7 @@ def _replay_gate_from_evaluations(
             "passed": sum(1 for item in evaluations if item.get("passed") is True),
             "failed": sum(1 for item in evaluations if item.get("passed") is False),
             "below_min_score": sum(
-                1
-                for item in evaluations
-                if float(item.get("score") or 0.0) < threshold_score
+                1 for item in evaluations if float(item.get("score") or 0.0) < threshold_score
             ),
         },
         "failing_cases": failing[:20],
@@ -1286,9 +1294,15 @@ def _task_run_from_rows(
     approvals: list[dict[str, Any]],
     include_events: bool,
 ) -> dict[str, Any]:
-    sorted_events = sorted(events, key=lambda row: (str(row.get("ts") or ""), int(row.get("id") or 0)))
+    sorted_events = sorted(
+        events, key=lambda row: (str(row.get("ts") or ""), int(row.get("id") or 0))
+    )
     start_event = next(
-        (event for event in sorted_events if _event_key(event.get("event_type")) in _TASK_RUN_START_EVENTS),
+        (
+            event
+            for event in sorted_events
+            if _event_key(event.get("event_type")) in _TASK_RUN_START_EVENTS
+        ),
         sorted_events[0] if sorted_events else None,
     )
     terminal_events = [
@@ -1314,15 +1328,15 @@ def _task_run_from_rows(
         if _event_key(event.get("event_type")) in _TOOL_START_EVENTS
     ]
     tool_ends = [
-        event
-        for event in sorted_events
-        if _event_key(event.get("event_type")) in _TOOL_END_EVENTS
+        event for event in sorted_events if _event_key(event.get("event_type")) in _TOOL_END_EVENTS
     ]
-    tool_names = sorted({
-        name
-        for event in (*tool_starts, *tool_ends)
-        if (name := _tool_name_from_payload(event.get("payload")))
-    })
+    tool_names = sorted(
+        {
+            name
+            for event in (*tool_starts, *tool_ends)
+            if (name := _tool_name_from_payload(event.get("payload")))
+        }
+    )
 
     token_totals = {
         "input_tokens": sum(int(row.get("input_tokens") or 0) for row in token_rows),
@@ -1331,10 +1345,7 @@ def _task_run_from_rows(
         "cached_tokens": sum(int(row.get("cached_tokens") or 0) for row in token_rows),
         "cost_usd": sum(float(row.get("cost_usd") or 0.0) for row in token_rows),
     }
-    ts_values = [
-        str(row.get("ts") or "")
-        for row in (*sorted_events, *checkpoints, *token_rows)
-    ]
+    ts_values = [str(row.get("ts") or "") for row in (*sorted_events, *checkpoints, *token_rows)]
     completed_at = str(latest_terminal.get("ts") or "") if latest_terminal is not None else None
     run = {
         "task_id": task_id,
@@ -1427,11 +1438,7 @@ def _task_run_review_from_loop_checkpoint(
     )
 
     state = checkpoint.get("state") if isinstance(checkpoint.get("state"), dict) else {}
-    raw_status = (
-        _clean_str(state.get("current_phase"))
-        or _clean_str(run.get("status"))
-        or "failed"
-    )
+    raw_status = _clean_str(state.get("current_phase")) or _clean_str(run.get("status")) or "failed"
     try:
         status = LoopRunStatus(raw_status)
     except ValueError:
@@ -1446,7 +1453,11 @@ def _task_run_review_from_loop_checkpoint(
     attempts: list[LoopAttempt] = []
     attempt_rows = state.get("attempt_snapshots")
     attempt_rows = attempt_rows if isinstance(attempt_rows, list) else []
-    goal = _clean_str(run.get("goal")) or _clean_str(run.get("title")) or _clean_str(checkpoint.get("summary"))
+    goal = (
+        _clean_str(run.get("goal"))
+        or _clean_str(run.get("title"))
+        or _clean_str(checkpoint.get("summary"))
+    )
     for index, item in enumerate(attempt_rows, start=1):
         if not isinstance(item, dict):
             continue
@@ -1507,7 +1518,9 @@ def _task_run_review_from_loop_checkpoint(
                 )
             )
 
-    last_verifier_raw = state.get("last_verifier") if isinstance(state.get("last_verifier"), dict) else {}
+    last_verifier_raw = (
+        state.get("last_verifier") if isinstance(state.get("last_verifier"), dict) else {}
+    )
     last_verifier_result: VerifierResult | None = None
     if attempts and attempts[-1].verifier_result is not None:
         last_verifier_result = attempts[-1].verifier_result
@@ -1527,7 +1540,8 @@ def _task_run_review_from_loop_checkpoint(
             findings=[
                 VerifierFinding(name=name, passed=False, category=failure_category)
                 for name in failed_checks
-            ] or [VerifierFinding(name="verifier", passed=bool(last_verifier_raw.get("passed")))],
+            ]
+            or [VerifierFinding(name="verifier", passed=bool(last_verifier_raw.get("passed")))],
         )
 
     workspace_path = _clean_str(state.get("workspace_path"))
@@ -1539,24 +1553,30 @@ def _task_run_review_from_loop_checkpoint(
         goal=goal or "loop run",
         mode=mode,
         status=status,
-        thread_id=_clean_str(run.get("thread_id")) or _clean_str(checkpoint.get("thread_id")) or None,
+        thread_id=_clean_str(run.get("thread_id"))
+        or _clean_str(checkpoint.get("thread_id"))
+        or None,
         workspace_path=workspace_path or None,
         policy=LoopPolicy(
             verifier_profile=(
-                last_verifier_result.profile
-                if last_verifier_result is not None
-                else "auto"
+                last_verifier_result.profile if last_verifier_result is not None else "auto"
             )
         ),
         attempts=attempts,
         last_verifier_result=last_verifier_result,
-        last_error="" if status == LoopRunStatus.COMPLETED else (
+        last_error=""
+        if status == LoopRunStatus.COMPLETED
+        else (
             _clean_str(run.get("reason"))
             or _clean_str(checkpoint.get("summary"))
             or _clean_str(state.get("progress_summary"))
         ),
-        created_at=_clean_str(run.get("started_at")) or _clean_str(checkpoint.get("ts")) or _now_iso(),
-        updated_at=_clean_str(run.get("updated_at")) or _clean_str(checkpoint.get("ts")) or _now_iso(),
+        created_at=_clean_str(run.get("started_at"))
+        or _clean_str(checkpoint.get("ts"))
+        or _now_iso(),
+        updated_at=_clean_str(run.get("updated_at"))
+        or _clean_str(checkpoint.get("ts"))
+        or _now_iso(),
         started_at=_clean_str(run.get("started_at")) or _clean_str(checkpoint.get("ts")) or None,
         completed_at=_clean_str(run.get("completed_at")) or None,
     )
@@ -1576,9 +1596,7 @@ def _task_run_review_from_loop_checkpoint(
     }
     resume = review.get("resume") if isinstance(review.get("resume"), dict) else {}
     latest_checkpoint = (
-        resume.get("latest_checkpoint")
-        if isinstance(resume.get("latest_checkpoint"), dict)
-        else {}
+        resume.get("latest_checkpoint") if isinstance(resume.get("latest_checkpoint"), dict) else {}
     )
     review["resume"] = {
         **resume,
@@ -1631,9 +1649,7 @@ def _task_run_replay_case_from_review(review: dict[str, Any]) -> dict[str, Any]:
     replay = review.get("replay") if isinstance(review.get("replay"), dict) else {}
     resume = review.get("resume") if isinstance(review.get("resume"), dict) else {}
     latest_checkpoint = (
-        resume.get("latest_checkpoint")
-        if isinstance(resume.get("latest_checkpoint"), dict)
-        else {}
+        resume.get("latest_checkpoint") if isinstance(resume.get("latest_checkpoint"), dict) else {}
     )
     findings = [
         finding
@@ -1656,9 +1672,7 @@ def _task_run_replay_case_from_review(review: dict[str, Any]) -> dict[str, Any]:
             "status": review.get("status"),
             "score": review.get("score"),
             "finding_types": [
-                str(finding.get("type") or "")
-                for finding in findings
-                if finding.get("type")
+                str(finding.get("type") or "") for finding in findings if finding.get("type")
             ],
             "tool_error_count": sum(
                 1 for finding in findings if finding.get("type") == "tool_error"
@@ -1680,9 +1694,7 @@ def _task_run_replay_case_from_review(review: dict[str, Any]) -> dict[str, Any]:
 def _evaluate_task_run_replay_case(replay_case: dict[str, Any]) -> dict[str, Any]:
     replay = replay_case.get("replay") if isinstance(replay_case.get("replay"), dict) else {}
     expectations = (
-        replay_case.get("expectations")
-        if isinstance(replay_case.get("expectations"), dict)
-        else {}
+        replay_case.get("expectations") if isinstance(replay_case.get("expectations"), dict) else {}
     )
     source = replay_case.get("source") if isinstance(replay_case.get("source"), dict) else {}
     safety = replay_case.get("safety") if isinstance(replay_case.get("safety"), dict) else {}
@@ -1776,108 +1788,119 @@ def _task_run_findings(
     findings: list[dict[str, Any]] = []
     status = str(run.get("status") or "unknown")
     if status in {"failed", "interrupted", "cancelled", "unknown"}:
-        findings.append({
-            "type": "terminal_status",
-            "severity": "high" if status in {"failed", "cancelled"} else "medium",
-            "title": f"Task ended as {status}",
-            "evidence": {
-                "status": status,
-                "reason": run.get("reason") or "",
-                "latest_event_type": run.get("latest_event_type"),
-            },
-            "recommendation": "Create a regression replay case from this run before changing prompts or tools.",
-        })
+        findings.append(
+            {
+                "type": "terminal_status",
+                "severity": "high" if status in {"failed", "cancelled"} else "medium",
+                "title": f"Task ended as {status}",
+                "evidence": {
+                    "status": status,
+                    "reason": run.get("reason") or "",
+                    "latest_event_type": run.get("latest_event_type"),
+                },
+                "recommendation": "Create a regression replay case from this run before changing prompts or tools.",
+            }
+        )
 
     failed_tool_events = [
-        event for event in events
+        event
+        for event in events
         if _event_key(event.get("event_type")) in _TOOL_END_EVENTS
         and _tool_event_failed(event.get("payload"))
     ]
     for event in failed_tool_events[:5]:
         payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
-        findings.append({
-            "type": "tool_error",
-            "severity": "high",
-            "title": f"Tool failed: {_tool_name_from_payload(payload) or 'unknown'}",
-            "evidence": {
-                "event_id": event.get("id"),
-                "tool_call_id": _tool_call_id_from_payload(payload, event),
-                "tool": _tool_name_from_payload(payload),
-                "status": payload.get("status"),
-                "is_error": payload.get("is_error"),
-                "output_preview": _preview_from_payload(
-                    payload,
-                    value_key="output",
-                    preview_key="output_preview",
-                    limit=280,
-                ),
-            },
-            "recommendation": "Capture this tool input/output pair as a replay fixture or add a preflight validation rule.",
-        })
+        findings.append(
+            {
+                "type": "tool_error",
+                "severity": "high",
+                "title": f"Tool failed: {_tool_name_from_payload(payload) or 'unknown'}",
+                "evidence": {
+                    "event_id": event.get("id"),
+                    "tool_call_id": _tool_call_id_from_payload(payload, event),
+                    "tool": _tool_name_from_payload(payload),
+                    "status": payload.get("status"),
+                    "is_error": payload.get("is_error"),
+                    "output_preview": _preview_from_payload(
+                        payload,
+                        value_key="output",
+                        preview_key="output_preview",
+                        limit=280,
+                    ),
+                },
+                "recommendation": "Capture this tool input/output pair as a replay fixture or add a preflight validation rule.",
+            }
+        )
 
     started = int(run.get("tool_calls_started") or 0)
     finished = int(run.get("tool_calls_finished") or 0)
     if started > finished:
-        findings.append({
-            "type": "dangling_tool_call",
-            "severity": "medium",
-            "title": "Tool call started without matching completion",
-            "evidence": {"started": started, "finished": finished},
-            "recommendation": "Check cancellation, background task, or event bridge handling for unmatched tool calls.",
-        })
+        findings.append(
+            {
+                "type": "dangling_tool_call",
+                "severity": "medium",
+                "title": "Tool call started without matching completion",
+                "evidence": {"started": started, "finished": finished},
+                "recommendation": "Check cancellation, background task, or event bridge handling for unmatched tool calls.",
+            }
+        )
 
     rejected = [
-        row for row in approvals
+        row
+        for row in approvals
         if str(row.get("decision") or "").lower()
         in {"rejected", "timeout", "connection_lost", "error"}
     ]
     for row in rejected[:5]:
-        findings.append({
-            "type": "permission_friction",
-            "severity": "medium",
-            "title": f"Permission blocked or failed: {row.get('tool_name')}",
-            "evidence": {
-                "tool": row.get("tool_name"),
-                "decision": row.get("decision"),
-                "reason": row.get("reason") or "",
-                "trust_gateway": _trust_gateway_from_approval(row),
-            },
-            "recommendation": "Decide whether this should become a static policy rule, a safer alternative tool, or an agent planning constraint.",
-        })
+        findings.append(
+            {
+                "type": "permission_friction",
+                "severity": "medium",
+                "title": f"Permission blocked or failed: {row.get('tool_name')}",
+                "evidence": {
+                    "tool": row.get("tool_name"),
+                    "decision": row.get("decision"),
+                    "reason": row.get("reason") or "",
+                    "trust_gateway": _trust_gateway_from_approval(row),
+                },
+                "recommendation": "Decide whether this should become a static policy rule, a safer alternative tool, or an agent planning constraint.",
+            }
+        )
 
     risky_approvals = [
-        row for row in approvals
+        row
+        for row in approvals
         if str(row.get("decision") or "").lower() == "approved"
         and _approval_risk_level(row) in {"high", "critical"}
     ]
     for row in risky_approvals[:5]:
-        findings.append({
-            "type": "high_risk_approval",
-            "severity": "medium",
-            "title": f"High-risk tool approved: {row.get('tool_name')}",
-            "evidence": {
-                "tool": row.get("tool_name"),
-                "risk_level": _approval_risk_level(row),
-                "trust_gateway": _trust_gateway_from_approval(row),
-            },
-            "recommendation": "Keep this approval visible in replay and require evidence that the action stayed within scope.",
-        })
+        findings.append(
+            {
+                "type": "high_risk_approval",
+                "severity": "medium",
+                "title": f"High-risk tool approved: {row.get('tool_name')}",
+                "evidence": {
+                    "tool": row.get("tool_name"),
+                    "risk_level": _approval_risk_level(row),
+                    "trust_gateway": _trust_gateway_from_approval(row),
+                },
+                "recommendation": "Keep this approval visible in replay and require evidence that the action stayed within scope.",
+            }
+        )
 
-    if (
-        status == "completed"
-        and not findings
-        and int(run.get("tool_calls_finished") or 0) > 0
-    ):
-        findings.append({
-            "type": "success_pattern",
-            "severity": "info",
-            "title": "Completed with tools and no detected failures",
-            "evidence": {
-                "tool_names": run.get("tool_names") or [],
-                "checkpoint_count": run.get("checkpoint_count") or 0,
-            },
-            "recommendation": "Store as a positive replay example if the user outcome was actually useful.",
-        })
+    if status == "completed" and not findings and int(run.get("tool_calls_finished") or 0) > 0:
+        findings.append(
+            {
+                "type": "success_pattern",
+                "severity": "info",
+                "title": "Completed with tools and no detected failures",
+                "evidence": {
+                    "tool_names": run.get("tool_names") or [],
+                    "checkpoint_count": run.get("checkpoint_count") or 0,
+                },
+                "recommendation": "Store as a positive replay example if the user outcome was actually useful.",
+            }
+        )
     return findings
 
 
@@ -1917,61 +1940,68 @@ def _task_run_replay(
     approvals: list[dict[str, Any]],
 ) -> dict[str, Any]:
     approval_by_call = {
-        str(row.get("tool_call_id") or ""): row
-        for row in approvals
-        if row.get("tool_call_id")
+        str(row.get("tool_call_id") or ""): row for row in approvals if row.get("tool_call_id")
     }
     steps: list[dict[str, Any]] = []
     for event in events:
         event_type = _event_key(event.get("event_type"))
         payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
         if event_type in _TASK_RUN_START_EVENTS:
-            steps.append({
-                "kind": "task_start",
-                "ts": event.get("ts"),
-                "goal": payload.get("goal") or "",
-                "mode": payload.get("mode") or "",
-            })
+            steps.append(
+                {
+                    "kind": "task_start",
+                    "ts": event.get("ts"),
+                    "goal": payload.get("goal") or "",
+                    "mode": payload.get("mode") or "",
+                }
+            )
         elif event_type in _TOOL_START_EVENTS:
             tool_call_id = _tool_call_id_from_payload(payload, event)
             approval = approval_by_call.get(tool_call_id)
-            steps.append({
-                "kind": "tool_start",
-                "ts": event.get("ts"),
-                "tool": _tool_name_from_payload(payload),
-                "tool_call_id": tool_call_id,
-                "input_preview": _preview_from_payload(
-                    payload,
-                    value_key="input",
-                    preview_key="input_preview",
-                    limit=500,
-                ),
-                "approval": _approval_replay_fragment(approval),
-            })
+            steps.append(
+                {
+                    "kind": "tool_start",
+                    "ts": event.get("ts"),
+                    "tool": _tool_name_from_payload(payload),
+                    "tool_call_id": tool_call_id,
+                    "input_preview": _preview_from_payload(
+                        payload,
+                        value_key="input",
+                        preview_key="input_preview",
+                        limit=500,
+                    ),
+                    "approval": _approval_replay_fragment(approval),
+                }
+            )
         elif event_type in _TOOL_END_EVENTS:
             tool_call_id = _tool_call_id_from_payload(payload, event)
-            steps.append({
-                "kind": "tool_end",
-                "ts": event.get("ts"),
-                "tool": _tool_name_from_payload(payload),
-                "tool_call_id": tool_call_id,
-                "status": payload.get("status") or ("error" if payload.get("is_error") else "success"),
-                "is_error": bool(_tool_event_failed(payload)),
-                "output_preview": _preview_from_payload(
-                    payload,
-                    value_key="output",
-                    preview_key="output_preview",
-                    limit=500,
-                ),
-            })
+            steps.append(
+                {
+                    "kind": "tool_end",
+                    "ts": event.get("ts"),
+                    "tool": _tool_name_from_payload(payload),
+                    "tool_call_id": tool_call_id,
+                    "status": payload.get("status")
+                    or ("error" if payload.get("is_error") else "success"),
+                    "is_error": bool(_tool_event_failed(payload)),
+                    "output_preview": _preview_from_payload(
+                        payload,
+                        value_key="output",
+                        preview_key="output_preview",
+                        limit=500,
+                    ),
+                }
+            )
         elif event_type in _TASK_RUN_TERMINAL_EVENTS or event_type.startswith("REACT_"):
-            steps.append({
-                "kind": "task_event",
-                "ts": event.get("ts"),
-                "event_type": event.get("event_type"),
-                "status": payload.get("status"),
-                "reason": payload.get("reason") or payload.get("message") or "",
-            })
+            steps.append(
+                {
+                    "kind": "task_event",
+                    "ts": event.get("ts"),
+                    "event_type": event.get("event_type"),
+                    "status": payload.get("status"),
+                    "reason": payload.get("reason") or payload.get("message") or "",
+                }
+            )
     fingerprint = _task_run_replay_fingerprint(steps)
     return {
         "schema": "octopus.task_run_replay.v1",
@@ -1994,29 +2024,35 @@ def _task_run_replay_fingerprint(steps: list[dict[str, Any]]) -> str:
         kind = str(step.get("kind") or "")
         item: dict[str, Any] = {"kind": kind}
         if kind in {"tool_start", "tool_end"}:
-            item.update({
-                "tool": str(step.get("tool") or ""),
-                "status": str(step.get("status") or ""),
-                "is_error": bool(step.get("is_error")),
-                "input_preview": str(step.get("input_preview") or ""),
-                "output_preview": str(step.get("output_preview") or ""),
-            })
+            item.update(
+                {
+                    "tool": str(step.get("tool") or ""),
+                    "status": str(step.get("status") or ""),
+                    "is_error": bool(step.get("is_error")),
+                    "input_preview": str(step.get("input_preview") or ""),
+                    "output_preview": str(step.get("output_preview") or ""),
+                }
+            )
             approval = step.get("approval") if isinstance(step.get("approval"), dict) else {}
             item["approval"] = {
                 "decision": str(approval.get("decision") or ""),
                 "risk_level": str(approval.get("risk_level") or ""),
             }
         elif kind == "task_start":
-            item.update({
-                "goal": str(step.get("goal") or ""),
-                "mode": str(step.get("mode") or ""),
-            })
+            item.update(
+                {
+                    "goal": str(step.get("goal") or ""),
+                    "mode": str(step.get("mode") or ""),
+                }
+            )
         elif kind == "task_event":
-            item.update({
-                "event_type": str(step.get("event_type") or ""),
-                "status": str(step.get("status") or ""),
-                "reason": str(step.get("reason") or ""),
-            })
+            item.update(
+                {
+                    "event_type": str(step.get("event_type") or ""),
+                    "status": str(step.get("status") or ""),
+                    "reason": str(step.get("reason") or ""),
+                }
+            )
         normalized.append(item)
     payload = json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
@@ -2064,7 +2100,9 @@ def _checkpoint_review_summary(checkpoint: dict[str, Any]) -> dict[str, Any]:
 
 
 def _task_run_resume_summary(run: dict[str, Any]) -> dict[str, Any]:
-    latest = run.get("latest_checkpoint") if isinstance(run.get("latest_checkpoint"), dict) else None
+    latest = (
+        run.get("latest_checkpoint") if isinstance(run.get("latest_checkpoint"), dict) else None
+    )
     integrity = latest.get("integrity") if isinstance(latest, dict) else {}
     return {
         "available": bool(isinstance(integrity, dict) and integrity.get("resume_safe") is True),
@@ -2085,31 +2123,45 @@ def _task_run_learning_candidates(
     for finding in findings:
         ftype = str(finding.get("type") or "")
         if ftype == "tool_error":
-            tool = ((finding.get("evidence") or {}).get("tool") if isinstance(finding.get("evidence"), dict) else "") or "tool"
-            out.append({
-                "kind": "failure_pattern",
-                "priority": "P0",
-                "memory_bucket": "experience",
-                "title": f"Tool failure pattern: {tool}",
-                "text": f"When `{tool}` fails in task `{run.get('task_id')}`, add preflight validation or fallback planning before retrying.",
-            })
+            tool = (
+                (finding.get("evidence") or {}).get("tool")
+                if isinstance(finding.get("evidence"), dict)
+                else ""
+            ) or "tool"
+            out.append(
+                {
+                    "kind": "failure_pattern",
+                    "priority": "P0",
+                    "memory_bucket": "experience",
+                    "title": f"Tool failure pattern: {tool}",
+                    "text": f"When `{tool}` fails in task `{run.get('task_id')}`, add preflight validation or fallback planning before retrying.",
+                }
+            )
         elif ftype == "permission_friction":
-            tool = ((finding.get("evidence") or {}).get("tool") if isinstance(finding.get("evidence"), dict) else "") or "tool"
-            out.append({
-                "kind": "permission_pattern",
-                "priority": "P1",
-                "memory_bucket": "project_knowledge",
-                "title": f"Permission friction: {tool}",
-                "text": f"Review whether `{tool}` should be governed by a static allow/deny rule or replaced by a safer workflow.",
-            })
+            tool = (
+                (finding.get("evidence") or {}).get("tool")
+                if isinstance(finding.get("evidence"), dict)
+                else ""
+            ) or "tool"
+            out.append(
+                {
+                    "kind": "permission_pattern",
+                    "priority": "P1",
+                    "memory_bucket": "project_knowledge",
+                    "title": f"Permission friction: {tool}",
+                    "text": f"Review whether `{tool}` should be governed by a static allow/deny rule or replaced by a safer workflow.",
+                }
+            )
         elif ftype == "success_pattern":
-            out.append({
-                "kind": "success_pattern",
-                "priority": "P2",
-                "memory_bucket": "experience",
-                "title": "Positive tool-use run",
-                "text": f"Task `{run.get('task_id')}` completed using {', '.join(run.get('tool_names') or [])}; consider using it as a positive replay example.",
-            })
+            out.append(
+                {
+                    "kind": "success_pattern",
+                    "priority": "P2",
+                    "memory_bucket": "experience",
+                    "title": "Positive tool-use run",
+                    "text": f"Task `{run.get('task_id')}` completed using {', '.join(run.get('tool_names') or [])}; consider using it as a positive replay example.",
+                }
+            )
     return out
 
 
@@ -2119,29 +2171,35 @@ def _task_run_backlog_candidates(
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     if any(f.get("type") in {"terminal_status", "tool_error"} for f in findings):
-        out.append({
-            "priority": "P0",
-            "experiment": "Create deterministic replay case",
-            "hypothesis": "A replay case from this TaskRun will prevent repeating the same failure mode.",
-            "minimal_implementation": "Convert replay.steps into a fixture and assert expected planning/tool behavior.",
-            "validation_metric": "Replay passes before prompt/tool changes are accepted.",
-        })
+        out.append(
+            {
+                "priority": "P0",
+                "experiment": "Create deterministic replay case",
+                "hypothesis": "A replay case from this TaskRun will prevent repeating the same failure mode.",
+                "minimal_implementation": "Convert replay.steps into a fixture and assert expected planning/tool behavior.",
+                "validation_metric": "Replay passes before prompt/tool changes are accepted.",
+            }
+        )
     if any(f.get("type") == "permission_friction" for f in findings):
-        out.append({
-            "priority": "P1",
-            "experiment": "Permission policy tuning",
-            "hypothesis": "Explicit policy or safer alternative tools reduce repeated approval friction.",
-            "minimal_implementation": "Review trust_gateway evidence and add one narrow rule or planning constraint.",
-            "validation_metric": "Future runs show fewer rejected approvals for the same tool category.",
-        })
+        out.append(
+            {
+                "priority": "P1",
+                "experiment": "Permission policy tuning",
+                "hypothesis": "Explicit policy or safer alternative tools reduce repeated approval friction.",
+                "minimal_implementation": "Review trust_gateway evidence and add one narrow rule or planning constraint.",
+                "validation_metric": "Future runs show fewer rejected approvals for the same tool category.",
+            }
+        )
     if any(f.get("type") == "success_pattern" for f in findings):
-        out.append({
-            "priority": "P2",
-            "experiment": "Positive replay seed",
-            "hypothesis": "Successful TaskRuns can protect useful behavior during self-evolution.",
-            "minimal_implementation": "Add this run to a positive replay dataset with its tool sequence and outcome.",
-            "validation_metric": "Candidate prompt/tool changes preserve the success pattern.",
-        })
+        out.append(
+            {
+                "priority": "P2",
+                "experiment": "Positive replay seed",
+                "hypothesis": "Successful TaskRuns can protect useful behavior during self-evolution.",
+                "minimal_implementation": "Add this run to a positive replay dataset with its tool sequence and outcome.",
+                "validation_metric": "Candidate prompt/tool changes preserve the success pattern.",
+            }
+        )
     return out
 
 
@@ -2207,15 +2265,17 @@ def _recent_tool_calls_from_state(state: dict[str, Any]) -> list[dict[str, Any]]
         if parsed is None:
             continue
         tool, args = parsed
-        out.append({
-            "iteration": int(step.get("iteration") or 0),
-            "tool": str(tool or ""),
-            "input_preview": _sanitize_preview_text(_render_preview(args), 240),
-            "observation_preview": _sanitize_preview_text(
-                _render_preview(step.get("observation")),
-                280,
-            ),
-        })
+        out.append(
+            {
+                "iteration": int(step.get("iteration") or 0),
+                "tool": str(tool or ""),
+                "input_preview": _sanitize_preview_text(_render_preview(args), 240),
+                "observation_preview": _sanitize_preview_text(
+                    _render_preview(step.get("observation")),
+                    280,
+                ),
+            }
+        )
     return out[-5:]
 
 
@@ -2228,15 +2288,17 @@ def _sanitize_recent_tool_calls(value: Any) -> list[dict[str, Any]]:
         tool = _clean_str(item.get("tool"))
         if not tool:
             continue
-        out.append({
-            "iteration": int(item.get("iteration") or 0),
-            "tool": tool,
-            "input_preview": _sanitize_preview_text(item.get("input_preview"), 240),
-            "observation_preview": _sanitize_preview_text(
-                item.get("observation_preview"),
-                280,
-            ),
-        })
+        out.append(
+            {
+                "iteration": int(item.get("iteration") or 0),
+                "tool": tool,
+                "input_preview": _sanitize_preview_text(item.get("input_preview"), 240),
+                "observation_preview": _sanitize_preview_text(
+                    item.get("observation_preview"),
+                    280,
+                ),
+            }
+        )
         if len(out) >= 8:
             break
     return out
@@ -2291,11 +2353,7 @@ def _resume_proposal_from_checkpoint(checkpoint: dict[str, Any]) -> dict[str, An
     hints = _recovery_hints(checkpoint)
     integrity = validate_trace_checkpoint(checkpoint)
     working_set_count = len(hints["working_set"])
-    title = (
-        f"Resume from {hints['phase']}"
-        if hints["phase"]
-        else "Resume from latest checkpoint"
-    )
+    title = f"Resume from {hints['phase']}" if hints["phase"] else "Resume from latest checkpoint"
     steps = [
         (
             f"Restore the agent into phase {hints['phase']}."

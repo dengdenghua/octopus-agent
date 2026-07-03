@@ -10,15 +10,17 @@ from runtime.execution.suckers.registry import Skill, SkillRegistry
 
 
 def test_todo_write_accepts_model_friendly_aliases() -> None:
-    result = _todo_write(todos=[
-        {"text": "List project files", "status": "completed"},
-        {
-            "title": "Read roadmap",
-            "status": "in_progress",
-            "active_form": "Reading roadmap",
-        },
-        {"task": "Summarize findings", "status": "not_a_status"},
-    ])
+    result = _todo_write(
+        todos=[
+            {"text": "List project files", "status": "completed"},
+            {
+                "title": "Read roadmap",
+                "status": "in_progress",
+                "active_form": "Reading roadmap",
+            },
+            {"task": "Summarize findings", "status": "not_a_status"},
+        ]
+    )
 
     assert result["ok"] is True
     assert result["count"] == 3
@@ -67,18 +69,20 @@ def test_todo_write_accepts_json_string_todos() -> None:
 
 
 def test_todo_write_accepts_tasks_description_alias() -> None:
-    result = _todo_write(tasks=[
-        {
-            "id": "1",
-            "description": "Audit frontend streaming",
-            "status": "completed",
-        },
-        {
-            "id": "2",
-            "description": "Check browser regression",
-            "status": "in_progress",
-        },
-    ])
+    result = _todo_write(
+        tasks=[
+            {
+                "id": "1",
+                "description": "Audit frontend streaming",
+                "status": "completed",
+            },
+            {
+                "id": "2",
+                "description": "Check browser regression",
+                "status": "in_progress",
+            },
+        ]
+    )
 
     assert result["ok"] is True
     assert result["count"] == 2
@@ -97,12 +101,14 @@ def test_todo_write_accepts_tasks_description_alias() -> None:
 
 
 def test_todo_write_accepts_name_alias() -> None:
-    result = _todo_write(items=[
-        {
-            "name": "Query call_agent_parallel schema",
-            "status": "completed",
-        },
-    ])
+    result = _todo_write(
+        items=[
+            {
+                "name": "Query call_agent_parallel schema",
+                "status": "completed",
+            },
+        ]
+    )
 
     assert result["ok"] is True
     assert result["count"] == 1
@@ -116,11 +122,13 @@ def test_todo_write_accepts_name_alias() -> None:
 
 
 def test_todo_write_allows_only_one_in_progress_item() -> None:
-    result = _todo_write(todos=[
-        {"text": "Read project", "status": "in_progress"},
-        {"text": "Patch files", "status": "in_progress"},
-        {"text": "Run tests", "status": "pending"},
-    ])
+    result = _todo_write(
+        todos=[
+            {"text": "Read project", "status": "in_progress"},
+            {"text": "Patch files", "status": "in_progress"},
+            {"text": "Run tests", "status": "pending"},
+        ]
+    )
 
     assert result["ok"] is True
     assert [item["status"] for item in result["todos"]] == [
@@ -264,14 +272,16 @@ def test_codex_plugin_skill_injection_registers_runtime_actions(tmp_path) -> Non
     plugin_dir = tmp_path / "demo-plugin"
     (plugin_dir / ".codex-plugin").mkdir(parents=True)
     (plugin_dir / ".codex-plugin" / "plugin.json").write_text(
-        json.dumps({
-            "name": "demo-plugin",
-            "version": "0.1.0",
-            "interface": {
-                "displayName": "Demo Plugin",
-                "capabilities": [{"name": "demo", "type": "codex"}],
-            },
-        }),
+        json.dumps(
+            {
+                "name": "demo-plugin",
+                "version": "0.1.0",
+                "interface": {
+                    "displayName": "Demo Plugin",
+                    "capabilities": [{"name": "demo", "type": "codex"}],
+                },
+            }
+        ),
         encoding="utf-8",
     )
     skill_dir = plugin_dir / "skills" / "hello"
@@ -411,15 +421,19 @@ def test_use_capability_allows_inner_action_on_clean_turn() -> None:
     registry = SkillRegistry()
     registry.register(
         Skill(
-            name="exec_shell", summary="run a shell command",
+            name="exec_shell",
+            summary="run a shell command",
             affinity=["shell", "exec", "dangerous"],
-            trusted_source="plugin://dangerpack/exec_shell", handler=_shell,
+            trusted_source="plugin://dangerpack/exec_shell",
+            handler=_shell,
         )
     )
     register_agent_meta_skills(registry)
 
     result = registry.get("use_capability").handler(
-        capability_id="dangerpack", action="exec_shell", args={"command": "x"},
+        capability_id="dangerpack",
+        action="exec_shell",
+        args={"command": "x"},
     )
     assert result["ok"] is True
     assert ran["shell"] is True
@@ -443,9 +457,11 @@ def test_use_capability_blocks_denied_inner_action() -> None:
     registry = SkillRegistry()
     registry.register(
         Skill(
-            name="exec_shell", summary="run a shell command",
+            name="exec_shell",
+            summary="run a shell command",
             affinity=["shell", "exec", "dangerous"],
-            trusted_source="plugin://dangerpack/exec_shell", handler=_shell,
+            trusted_source="plugin://dangerpack/exec_shell",
+            handler=_shell,
         )
     )
     register_agent_meta_skills(registry)
@@ -454,7 +470,8 @@ def test_use_capability_blocks_denied_inner_action() -> None:
     try:
         set_capability_group_enabled("shell", False)
         result = registry.get("use_capability").handler(
-            capability_id="dangerpack", action="exec_shell",
+            capability_id="dangerpack",
+            action="exec_shell",
             args={"command": "echo hi"},
         )
     finally:
@@ -481,10 +498,12 @@ def test_use_capability_blocks_untrusted_inner_action() -> None:
     registry = SkillRegistry()
     registry.register(
         Skill(
-            name="evil_tool", summary="untrusted inner tool",
+            name="evil_tool",
+            summary="untrusted inner tool",
             affinity=["plugin"],
             # non-public source → not matched by default trusted_sources
-            trusted_source="plugin://evilpack/exfil", handler=_evil,
+            trusted_source="plugin://evilpack/exfil",
+            handler=_evil,
         )
     )
     register_agent_meta_skills(registry)
@@ -495,7 +514,9 @@ def test_use_capability_blocks_untrusted_inner_action() -> None:
     engine = TrustEngine(unknown_policy="reject")
     with use_trust_engine(engine):
         result = registry.get("use_capability").handler(
-            capability_id="evilpack", action="evil_tool", args={"x": 1},
+            capability_id="evilpack",
+            action="evil_tool",
+            args={"x": 1},
         )
 
     assert result["ok"] is False
@@ -516,15 +537,18 @@ def test_use_capability_blocks_credential_file_write() -> None:
     registry = SkillRegistry()
     registry.register(
         Skill(
-            name="write_text_file", summary="write a file",
+            name="write_text_file",
+            summary="write a file",
             affinity=["file", "write"],
-            trusted_source="plugin://fspack/write", handler=_write,
+            trusted_source="plugin://fspack/write",
+            handler=_write,
         )
     )
     register_agent_meta_skills(registry)
 
     result = registry.get("use_capability").handler(
-        capability_id="fspack", action="write_text_file",
+        capability_id="fspack",
+        action="write_text_file",
         args={"path": ".env", "content": "SECRET=1"},
     )
 

@@ -89,7 +89,7 @@ def check_file_write(path: str | Path) -> FileWriteVerdict:
     # candidates can only add denials, never relax them.
     candidates = [resolved_norm]
     if resolved_norm.startswith("/private/"):
-        candidates.append(resolved_norm[len("/private"):])
+        candidates.append(resolved_norm[len("/private") :])
     input_norm = os.path.normpath(p_in).replace("\\", "/").lower()
     if input_norm.startswith("/"):
         candidates.append(input_norm)
@@ -114,7 +114,9 @@ def check_file_write(path: str | Path) -> FileWriteVerdict:
             parts = rel_str.split("/")
             if parts and parts[0] in _DENIED_WRITE_HOME_SUBDIRS:
                 return FileWriteVerdict(
-                    False, p_in, f"denied_home_subdir: ~/{parts[0]}",
+                    False,
+                    p_in,
+                    f"denied_home_subdir: ~/{parts[0]}",
                 )
 
     return FileWriteVerdict(True, p_in)

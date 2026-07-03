@@ -41,11 +41,10 @@ def _default_store_path() -> Path:
 
 @dataclass
 class OctLink:
-
-    octopus_user_id: str          # agent 本地 actor_id(如 "oct:user@example.com")
-    oct_user_id: str              # oct 网关侧 userId(如 "u_xxx")
-    oct_token: str                # oct 网关签发的 JWT(调网关用)
-    email: str | None = None      # 登录邮箱(展示用)
+    octopus_user_id: str  # agent 本地 actor_id(如 "oct:user@example.com")
+    oct_user_id: str  # oct 网关侧 userId(如 "u_xxx")
+    oct_token: str  # oct 网关签发的 JWT(调网关用)
+    email: str | None = None  # 登录邮箱(展示用)
     linked_at: float = 0.0
     last_synced_at: float | None = None
     credits_snapshot: dict[str, Any] = field(default_factory=dict)
@@ -54,7 +53,6 @@ class OctLink:
 
 
 class OctLinkStore:
-
     def __init__(self, path: str | Path | None = None) -> None:
         self._path = Path(path) if path else _default_store_path()
         self._lock = threading.Lock()
@@ -128,7 +126,9 @@ class OctLinkStore:
             return link
 
     def mark_token_invalid(
-        self, octopus_user_id: str, reason: str | None,
+        self,
+        octopus_user_id: str,
+        reason: str | None,
     ) -> OctLink | None:
         with self._lock:
             cache = self._load()

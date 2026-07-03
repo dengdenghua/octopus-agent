@@ -34,6 +34,7 @@ configured allowed roots (``OCTOPUS_FS_ALLOWED_ROOTS`` env var,
 colon- or semicolon-separated; falls back to ``$OCTOPUS_DATA_DIR``
 and CWD).
 """
+
 from __future__ import annotations
 
 import base64
@@ -79,6 +80,7 @@ except ImportError:  # pragma: no cover
 
 
 if FASTAPI_AVAILABLE:
+
     class FsTreeEntry(BaseModel):
         name: str
         path: str
@@ -342,14 +344,15 @@ def _find_line_segment(
         raise _DiffApplyConflict("empty hunk location is outside the current file")
 
     end = len(lines) - len(segment)
-    if 0 <= preferred_index <= end and lines[
-        preferred_index:preferred_index + len(segment)
-    ] == segment:
+    if (
+        0 <= preferred_index <= end
+        and lines[preferred_index : preferred_index + len(segment)] == segment
+    ):
         return preferred_index
 
     matches: list[int] = []
     for index in range(max(end + 1, 0)):
-        if lines[index:index + len(segment)] == segment:
+        if lines[index : index + len(segment)] == segment:
             matches.append(index)
             if len(matches) > 1:
                 break
@@ -366,18 +369,14 @@ def _reverse_unified_diff(current_text: str, diff_text: str) -> str:
     lines = _content_lines(normalized)
 
     for hunk in reversed(hunks):
-        new_segment = [
-            line.content for line in hunk.lines if line.marker != "-"
-        ]
-        old_segment = [
-            line.content for line in hunk.lines if line.marker != "+"
-        ]
+        new_segment = [line.content for line in hunk.lines if line.marker != "-"]
+        old_segment = [line.content for line in hunk.lines if line.marker != "+"]
         index = _find_line_segment(
             lines,
             new_segment,
             _preferred_new_index(hunk),
         )
-        lines[index:index + len(new_segment)] = old_segment
+        lines[index : index + len(new_segment)] = old_segment
 
     trailing_newline = normalized.endswith("\n") or (not normalized and bool(lines))
     return _join_content_lines(lines, trailing_newline=trailing_newline)
@@ -410,8 +409,11 @@ def create_fs_router(
         # so unauthenticated local-dev use is unchanged; raises 401 when
         # auth is required and no valid actor is presented.
         from .openai_gateway_router import _resolve_actor
+
         _resolve_actor(
-            request, identity_store, require_auth,
+            request,
+            identity_store,
+            require_auth,
             jwt_secret=jwt_secret,
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
@@ -501,7 +503,10 @@ def create_fs_router(
         )
 
     def _serialize_tree_entry(
-        root: Path, entry: Path, *, depth: int,
+        root: Path,
+        entry: Path,
+        *,
+        depth: int,
     ) -> dict[str, Any]:
         rel_path = entry.relative_to(root).as_posix()
         is_dir = entry.is_dir()
@@ -520,7 +525,10 @@ def create_fs_router(
         return entry.name.casefold() in TREE_IGNORED_DIRS
 
     def _walk_tree(
-        root: Path, *, max_depth: int, include_ignored: bool = False,
+        root: Path,
+        *,
+        max_depth: int,
+        include_ignored: bool = False,
     ) -> list[dict[str, Any]]:
         if not root.exists() or not root.is_dir():
             raise HTTPException(404, f"directory not found: {root}")
@@ -539,7 +547,8 @@ def create_fs_router(
             except OSError as exc:
                 if depth == 0:
                     raise HTTPException(
-                        500, f"failed to list directory: {exc}",
+                        500,
+                        f"failed to list directory: {exc}",
                     ) from exc
                 return
             for child in children:
@@ -701,9 +710,7 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
         if not files:
             raise HTTPException(400, "files are required")
         first_rel = (
-            relative_paths[0]
-            if relative_paths
-            else files[0].filename or "imported-workspace"
+            relative_paths[0] if relative_paths else files[0].filename or "imported-workspace"
         )
         first_parts = _safe_relative_parts(first_rel)
         folder_name = first_parts[0] if len(first_parts) > 1 else "imported-workspace"
@@ -739,7 +746,8 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
                 target.write_bytes(data)
             except OSError as exc:
                 raise HTTPException(
-                    500, f"failed to import directory: {exc}",
+                    500,
+                    f"failed to import directory: {exc}",
                 ) from exc
             saved += 1
 
@@ -784,7 +792,8 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
             content = file_path.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
             raise HTTPException(
-                500, f"failed to read file: {exc}",
+                500,
+                f"failed to read file: {exc}",
             ) from exc
         lines = content.splitlines()
         return {
@@ -805,14 +814,17 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
         file_path = _assert_in_scope(
             Path(path_value),
             thread_id=body.get("thread_id") if isinstance(body.get("thread_id"), str) else None,
-            workspace_path=body.get("workspace_path") if isinstance(body.get("workspace_path"), str) else None,
+            workspace_path=body.get("workspace_path")
+            if isinstance(body.get("workspace_path"), str)
+            else None,
         )
         try:
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(content, encoding="utf-8")
         except OSError as exc:
             raise HTTPException(
-                500, f"failed to write file: {exc}",
+                500,
+                f"failed to write file: {exc}",
             ) from exc
         return {
             "success": True,
@@ -833,7 +845,9 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
         file_path = _assert_in_scope(
             Path(path_value),
             thread_id=body.get("thread_id") if isinstance(body.get("thread_id"), str) else None,
-            workspace_path=body.get("workspace_path") if isinstance(body.get("workspace_path"), str) else None,
+            workspace_path=body.get("workspace_path")
+            if isinstance(body.get("workspace_path"), str)
+            else None,
         )
         if file_path.exists() and not file_path.is_file():
             raise HTTPException(404, f"file not found: {file_path}")
@@ -887,6 +901,7 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
         the server (CVE-class bug).
         """
         import subprocess
+
         path_value = body.get("path")
         workspace = body.get("workspace")
         if not isinstance(path_value, str) or not path_value.strip():
@@ -930,6 +945,7 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
     ) -> dict[str, Any]:
         """Run git status --porcelain in the given directory."""
         import subprocess
+
         root = Path(path).expanduser()
         if not root.is_dir():
             raise HTTPException(404, f"directory not found: {root}")

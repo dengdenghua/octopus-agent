@@ -51,6 +51,7 @@ Files live at ``agents/<agent_id>/skills/`` so each persona has
 its own library. List via ``list_learned_skills``; load+apply via
 ``apply_skill``.
 """
+
 from __future__ import annotations
 
 import json
@@ -83,8 +84,11 @@ def _llm_call(
     LLM round-trip without touching the caller instance.
     """
     return _SKILL_CALLER.call(
-        system=system, user=user, model=model,
-        max_tokens=max_tokens, temperature=temperature,
+        system=system,
+        user=user,
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
     )
 
 
@@ -155,7 +159,8 @@ Rules:
 """
 
 _LEARN_FENCED_JSON = re.compile(
-    r"```(?:json)?\s*\n(\{.*?\})\s*\n```", re.DOTALL | re.IGNORECASE,
+    r"```(?:json)?\s*\n(\{.*?\})\s*\n```",
+    re.DOTALL | re.IGNORECASE,
 )
 
 
@@ -258,10 +263,8 @@ def learn_skill_from_text(
     golden_report: dict[str, Any] | None = None
     if golden_samples:
         import re as _re
-        template_h2s = {
-            h.strip().lower()
-            for h in _re.findall(r"^##\s+([^\n]+)", template, _re.M)
-        }
+
+        template_h2s = {h.strip().lower() for h in _re.findall(r"^##\s+([^\n]+)", template, _re.M)}
         # Need ≥2 H2 headers in template to run the structural check
         # (otherwise the heuristic has nothing to compare against).
         if len(template_h2s) < 2:
@@ -290,26 +293,29 @@ def learn_skill_from_text(
                     temperature=0.3,
                 )
                 if not out_text:
-                    results.append({
-                        "sample_idx": i,
-                        "passed": False,
-                        "reason": "empty LLM response",
-                        "h2_overlap": 0.0,
-                    })
+                    results.append(
+                        {
+                            "sample_idx": i,
+                            "passed": False,
+                            "reason": "empty LLM response",
+                            "h2_overlap": 0.0,
+                        }
+                    )
                     continue
                 out_h2s = {
-                    h.strip().lower()
-                    for h in _re.findall(r"^##\s+([^\n]+)", out_text, _re.M)
+                    h.strip().lower() for h in _re.findall(r"^##\s+([^\n]+)", out_text, _re.M)
                 }
                 # Compute overlap: what fraction of template H2s
                 overlap = len(template_h2s & out_h2s) / len(template_h2s) if template_h2s else 0.0
                 passed = overlap >= 0.5 and len(out_text) >= 50
-                results.append({
-                    "sample_idx": i,
-                    "passed": passed,
-                    "h2_overlap": round(overlap, 2),
-                    "output_chars": len(out_text),
-                })
+                results.append(
+                    {
+                        "sample_idx": i,
+                        "passed": passed,
+                        "h2_overlap": round(overlap, 2),
+                        "output_chars": len(out_text),
+                    }
+                )
             pass_count = sum(1 for r in results if r["passed"])
             pass_rate = pass_count / max(1, len(results))
             golden_report = {
@@ -383,7 +389,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
             continue
         k, v = raw.split(":", 1)
         meta[k.strip()] = v.strip()
-    body = "\n".join(lines[end + 1:]).lstrip()
+    body = "\n".join(lines[end + 1 :]).lstrip()
     return meta, body
 
 
@@ -399,15 +405,17 @@ def list_learned_skills(agent_id: str) -> list[dict[str, Any]]:
         try:
             text = p.read_text(encoding="utf-8")
             meta, _ = _parse_frontmatter(text)
-            out.append({
-                "name": meta.get("name") or p.stem,
-                "description": meta.get("description", ""),
-                "when_to_use": meta.get("when_to_use", ""),
-                "sample_source": meta.get("sample_source", ""),
-                "learned_at": meta.get("learned_at", ""),
-                "filename": p.name,
-                "size_bytes": p.stat().st_size,
-            })
+            out.append(
+                {
+                    "name": meta.get("name") or p.stem,
+                    "description": meta.get("description", ""),
+                    "when_to_use": meta.get("when_to_use", ""),
+                    "sample_source": meta.get("sample_source", ""),
+                    "learned_at": meta.get("learned_at", ""),
+                    "filename": p.name,
+                    "size_bytes": p.stat().st_size,
+                }
+            )
         except (OSError, TypeError, ValueError):
             continue
     return out
@@ -423,7 +431,10 @@ no JSON envelope. Just the content."""
 
 
 def apply_skill(
-    *, agent_id: str, name: str, user_request: str,
+    *,
+    agent_id: str,
+    name: str,
+    user_request: str,
     model: str | None = None,
 ) -> dict[str, Any]:
     """Look up a learned skill and produce content following its
@@ -470,6 +481,7 @@ def apply_skill(
     # Record usage for the Curator lifecycle tracker.
     try:
         from runtime.memory.skills_lib.skill_curator import record_use
+
         record_use(agent_id, safe_name)
     except ImportError:  # noqa: BLE001 — embedding model optional
         pass

@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -20,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 
 class VariantRetired(NervesEvent):
-
     variant_name: str
     reason: str = ""
     losing_uses: int = 0
@@ -28,15 +26,13 @@ class VariantRetired(NervesEvent):
 
 
 class VariantBoosted(NervesEvent):
-
     variant_name: str
     old_weight: float
     new_weight: float
 
 
 class EvolverStepTriggered(NervesEvent):
-
-    trigger: str                     # "periodic" / "evaluation_pushed" / "manual"
+    trigger: str  # "periodic" / "evaluation_pushed" / "manual"
     retired_count: int = 0
     boosted_count: int = 0
     mutated: bool = False
@@ -48,10 +44,9 @@ class EvolverStepTriggered(NervesEvent):
 
 @dataclass
 class AutoRetireConfig:
-
-    min_interval_seconds: float = 300.0     # Implementation note.
-    min_assignments_since_last: int = 10    # Implementation note.
-    min_variants_to_act: int = 2            # Implementation note.
+    min_interval_seconds: float = 300.0  # Implementation note.
+    min_assignments_since_last: int = 10  # Implementation note.
+    min_variants_to_act: int = 2  # Implementation note.
     losing_threshold_for_immediate: int = 1
     # Rate-limit hardening (audited 2026-05). Without these, a
     # poisoned trajectory burst that pushes every active variant to
@@ -86,7 +81,6 @@ class AutoRetireStats:
 
 
 class AutoRetireScheduler:
-
     def __init__(
         self,
         evolver: PromptEvolver,
@@ -105,7 +99,6 @@ class AutoRetireScheduler:
         # Used by ``_recent_retire_count`` to enforce the rate-limit.
         self._recent_retires: list[float] = []
 
-
     def tick(self) -> EvolutionStep | None:
         with self._lock:
             self.stats.total_ticks += 1
@@ -116,7 +109,8 @@ class AutoRetireScheduler:
             return self._do_step("periodic")
 
     def observe_evaluation(
-        self, report: dict[str, VariantReport] | None = None,
+        self,
+        report: dict[str, VariantReport] | None = None,
     ) -> EvolutionStep | None:
         with self._lock:
             if report is None:
@@ -145,7 +139,6 @@ class AutoRetireScheduler:
     def force_step(self, trigger: str = "manual") -> EvolutionStep:
         with self._lock:
             return self._do_step(trigger)
-
 
     def _should_step_reason(self) -> str | None:
         now = time.time()
@@ -245,14 +238,16 @@ class AutoRetireScheduler:
                 blocked.append(variant_name)
                 logger.warning(
                     "AutoRetire: retirement of %s blocked by gene_locks: %s",
-                    variant_name, lv,
+                    variant_name,
+                    lv,
                 )
             except Exception as exc:  # noqa: BLE001
                 # Defensive: any unexpected error in the gate path
                 # should not break the evolver. Log and pass.
                 logger.warning(
                     "AutoRetire: gene_locks error on %s: %s",
-                    variant_name, exc,
+                    variant_name,
+                    exc,
                 )
                 kept.append(variant_name)
 
@@ -277,23 +272,30 @@ class AutoRetireScheduler:
     ) -> None:
         for name in step.retired:
             rep = report_before.get(name)
-            self.bus.publish(VariantRetired(
-                variant_name=name,
-                reason="losing_verdict",
-                losing_uses=rep.assignments if rep else 0,
-                success_rate=rep.success_rate if rep else 0.0,
-            ))
+            self.bus.publish(
+                VariantRetired(
+                    variant_name=name,
+                    reason="losing_verdict",
+                    losing_uses=rep.assignments if rep else 0,
+                    success_rate=rep.success_rate if rep else 0.0,
+                )
+            )
         for name, old_w, new_w in step.boosted:
-            self.bus.publish(VariantBoosted(
-                variant_name=name, old_weight=old_w, new_weight=new_w,
-            ))
-        self.bus.publish(EvolverStepTriggered(
-            trigger=trigger,
-            retired_count=len(step.retired),
-            boosted_count=len(step.boosted),
-            mutated=step.mutation is not None,
-        ))
-
+            self.bus.publish(
+                VariantBoosted(
+                    variant_name=name,
+                    old_weight=old_w,
+                    new_weight=new_w,
+                )
+            )
+        self.bus.publish(
+            EvolverStepTriggered(
+                trigger=trigger,
+                retired_count=len(step.retired),
+                boosted_count=len(step.boosted),
+                mutated=step.mutation is not None,
+            )
+        )
 
     def as_periodic_task(self) -> Callable[[], None]:
         def _task() -> None:

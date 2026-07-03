@@ -5,6 +5,7 @@ coverage for the Codex-parity behavior we care about: a repeated subagent call
 in the same thread can continue from its own prior output, while isolation
 controls still keep unrelated roles or opt-out calls clean.
 """
+
 from __future__ import annotations
 
 import pytest

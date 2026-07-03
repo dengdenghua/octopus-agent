@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from collections import defaultdict
@@ -16,7 +15,6 @@ RecipeVerdict = Literal["winning", "neutral", "losing", "insufficient_data"]
 
 
 class RecipeScore(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     recipe_id: str
@@ -33,7 +31,6 @@ class RecipeScore(BaseModel):
 
 
 class RecipeEvaluationReport(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     trajectories_scanned: int
@@ -61,12 +58,12 @@ class RecipeEvaluationReport(BaseModel):
 
 @dataclass
 class RecipeEvaluatorConfig:
-    min_uses_to_score: int = 3           # Implementation note.
+    min_uses_to_score: int = 3  # Implementation note.
     winning_success_threshold: float = 0.75
     losing_success_threshold: float = 0.35
     w_success: float = 0.7
-    w_cost: float = 0.2                   # Implementation note.
-    w_speed: float = 0.1                  # Implementation note.
+    w_cost: float = 0.2  # Implementation note.
+    w_speed: float = 0.1  # Implementation note.
 
 
 # ═══════════════════════════════════════════════════════════
@@ -75,7 +72,6 @@ class RecipeEvaluatorConfig:
 
 
 class RecipeEvaluator:
-
     def __init__(
         self,
         journal: Journal,
@@ -94,9 +90,7 @@ class RecipeEvaluator:
                     groups[t.recipe_id].append(t)
 
             scores: list[RecipeScore] = []
-            all_costs = [
-                t.outcome.cost.usd for g in groups.values() for t in g
-            ]
+            all_costs = [t.outcome.cost.usd for g in groups.values() for t in g]
             median_cost = _median(all_costs) if all_costs else 0.01
 
             for recipe_id, cluster in groups.items():
@@ -109,7 +103,6 @@ class RecipeEvaluator:
                 recipes_found=len(groups),
                 scores=scores,
             )
-
 
     def _collect_trajectories(self) -> list[Trajectory]:
         events = self.journal.read_by_type("trajectory")

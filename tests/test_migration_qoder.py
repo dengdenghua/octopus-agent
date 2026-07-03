@@ -44,7 +44,8 @@ def _make_qoder(base: Path) -> None:
     rec = q / "canvas" / "recipes"
     rec.mkdir(parents=True)
     (rec / "code-review.recipe.md").write_text(
-        "---\ndescription: review flow\n---\n", encoding="utf-8",
+        "---\ndescription: review flow\n---\n",
+        encoding="utf-8",
     )
     # MCP (user config OUTSIDE ~/.qoder — macOS app-support path)
     mcp = base / "Library" / "Application Support" / "Qoder" / "SharedClientCache"

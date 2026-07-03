@@ -30,13 +30,20 @@ logger = logging.getLogger(__name__)
 
 # 桌面端能力声明（与 desktop_operator_arm 11 个 skills 对应）
 DESKTOP_CAPABILITIES: list[str] = [
-    "screen_capture", "screen_info",
-    "mouse_click", "mouse_move",
-    "keyboard_type", "keyboard_press",
-    "computer_observe", "computer_plan_next",
-    "computer_preview_action", "computer_execute_token",
+    "screen_capture",
+    "screen_info",
+    "mouse_click",
+    "mouse_move",
+    "keyboard_type",
+    "keyboard_press",
+    "computer_observe",
+    "computer_plan_next",
+    "computer_preview_action",
+    "computer_execute_token",
     "computer_use_loop",
-    "computer_uia_status", "computer_uia_tree", "computer_uia_find",
+    "computer_uia_status",
+    "computer_uia_tree",
+    "computer_uia_find",
 ]
 
 
@@ -89,8 +96,7 @@ class DesktopDevice:
     async def connect(self) -> None:
         """本地"自指"无网络握手，直接 ONLINE."""
         self._status = TentacleStatus.ONLINE
-        logger.info("DesktopDevice connected id=%s platform=%s",
-                    self.tentacle_id, self.platform)
+        logger.info("DesktopDevice connected id=%s platform=%s", self.tentacle_id, self.platform)
 
     async def disconnect(self) -> None:
         self._status = TentacleStatus.OFFLINE

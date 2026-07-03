@@ -10,6 +10,7 @@ glosses over:
 - finalize_workbench skipped when tools still pending (regression guard
   for the suspicious `if self.tools: return` early exit)
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -223,7 +224,10 @@ async def test_finalize_workbench_no_op_when_phases_empty() -> None:
     turn = _make_turn()
     emitter = _StubEmitter()
     await state.finalize_workbench(
-        turn, _StubLog(), emitter, terminal_status=TurnStatus.COMPLETED  # type: ignore[arg-type]
+        turn,
+        _StubLog(),
+        emitter,
+        terminal_status=TurnStatus.COMPLETED,  # type: ignore[arg-type]
     )
     assert emitter.notified == []
     assert turn.workbench_snapshot is None

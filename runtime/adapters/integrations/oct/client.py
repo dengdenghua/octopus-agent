@@ -23,9 +23,12 @@ logger = logging.getLogger(__name__)
 
 
 class OctClientError(RuntimeError):
-
     def __init__(
-        self, message: str, *, status_code: int | None = None, body: str = "",
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        body: str = "",
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
@@ -64,13 +67,17 @@ def _parse(r: Any, url: str) -> dict[str, Any]:
     if status >= 400:
         logger.warning("oct gateway rejected: url=%s status=%s resp=%r", url, status, text[:300])
         raise OctClientError(
-            f"gateway rejected: {text[:512]}", status_code=status, body=text,
+            f"gateway rejected: {text[:512]}",
+            status_code=status,
+            body=text,
         )
     try:
         return r.json() if (text or getattr(r, "content", b"")) else {}
     except ValueError as exc:
         raise OctClientError(
-            "gateway returned non-JSON", status_code=status, body=text,
+            "gateway returned non-JSON",
+            status_code=status,
+            body=text,
         ) from exc
 
 
@@ -83,8 +90,7 @@ def post_public(
 ) -> dict[str, Any]:
     """无鉴权 POST(发码/登录)。日志脱敏 email。"""
     log_body = {
-        k: (mask_email(v) if k == "email" and isinstance(v, str) else v)
-        for k, v in body.items()
+        k: (mask_email(v) if k == "email" and isinstance(v, str) else v) for k, v in body.items()
     }
     t0 = time.perf_counter()
     client = _client(http_client)

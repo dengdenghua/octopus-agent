@@ -7,6 +7,7 @@ project-wide cheap default into the merged context the runner sees.
 based defaults so research-style roles auto-route to the cheap tier
 while architects / synthesizers stay on the parent's primary model.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -109,7 +110,8 @@ def test_call_subagent_without_cheap_flag_does_not_inject(capture_runner) -> Non
 
 
 def test_call_subagent_env_override_is_used_when_cheap(
-    monkeypatch, capture_runner,
+    monkeypatch,
+    capture_runner,
 ) -> None:
     monkeypatch.setenv("OCTOPUS_SUBAGENT_CHEAP_MODEL", "qwen-flash")
     bridge.call_subagent(

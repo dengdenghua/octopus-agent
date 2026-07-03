@@ -237,6 +237,7 @@ class CancellationSource:
 
 # ── Never-cancelled singleton ───────────────────────────────
 
+
 class _NeverCancelledSource(CancellationSource):
     """A source that rejects any attempt to cancel it."""
 

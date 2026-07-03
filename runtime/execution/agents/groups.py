@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import threading
@@ -11,7 +10,6 @@ from runtime.platform.models import now_utc
 
 @dataclass
 class AgentGroup:
-
     group_id: str
     display_name: str = ""
     description: str = ""
@@ -25,7 +23,6 @@ class AgentGroupNotFound(KeyError):
 
 
 class AgentGroupRegistry:
-
     def __init__(self) -> None:
         self._groups: dict[str, AgentGroup] = {}
         self._lock = threading.RLock()
@@ -96,7 +93,6 @@ class AgentGroupRegistry:
         with self._lock:
             return iter(list(self._groups.values()))
 
-
     def add_member(self, group_id: str, agent_id: str) -> bool:
         if not agent_id:
             raise ValueError("agent_id must be non-empty")
@@ -137,10 +133,7 @@ class AgentGroupRegistry:
 
     def groups_for_agent(self, agent_id: str) -> list[str]:
         with self._lock:
-            return sorted([
-                gid for gid, g in self._groups.items()
-                if agent_id in g.members
-            ])
+            return sorted([gid for gid, g in self._groups.items() if agent_id in g.members])
 
 
 # ═══════════════════════════════════════════════════════════

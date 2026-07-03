@@ -35,6 +35,7 @@ add two cushioning layers:
 Both layers fail-soft: the loop never sees an exception escape the
 mirror.
 """
+
 from __future__ import annotations
 
 import json
@@ -161,7 +162,9 @@ class CheckpointMirror:
         self._breaker.record_failure()
         _LOG.warning(
             "mirror %s failed after %d attempts: %s",
-            op_name, self._retry_attempts, last_exc,
+            op_name,
+            self._retry_attempts,
+            last_exc,
         )
         return (False, None)
 
@@ -185,7 +188,9 @@ class CheckpointMirror:
             return False
         try:
             payload = json.dumps(
-                checkpoint, ensure_ascii=False, default=str,
+                checkpoint,
+                ensure_ascii=False,
+                default=str,
             )
         except Exception as exc:  # noqa: BLE001 — never raise from mirror
             _LOG.debug("checkpoint serialize failed: %s", exc)
@@ -208,7 +213,8 @@ class CheckpointMirror:
         if not task_id:
             return None
         ok, raw = self._call_with_retry(
-            f"get({task_id})", lambda: self._client.get(_key_for(task_id)),
+            f"get({task_id})",
+            lambda: self._client.get(_key_for(task_id)),
         )
         if not ok or raw is None:
             return None
@@ -222,7 +228,8 @@ class CheckpointMirror:
     def list_tasks(self) -> list[str]:
         """Return all task ids with mirrored non-final checkpoints."""
         ok, members = self._call_with_retry(
-            "list_tasks", lambda: self._client.smembers(TASKS_INDEX_KEY) or [],
+            "list_tasks",
+            lambda: self._client.smembers(TASKS_INDEX_KEY) or [],
         )
         if not ok:
             return []

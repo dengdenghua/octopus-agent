@@ -82,6 +82,7 @@ def run_reflect(
         # without it the legacy in-memory graph is analyze-only and discarded.
         if kg_db is not None:
             from runtime.memory.knowledge_graph.sqlite_kg import SqliteKnowledgeGraph
+
             kg: KnowledgeGraph = SqliteKnowledgeGraph(kg_db)
         else:
             kg = KnowledgeGraph()
@@ -93,7 +94,16 @@ def run_reflect(
             )
             if verbose:
                 for t in list(kg)[:3]:
-                    print(c.dim(_("cli.reflect.kg_detail", subject=t.subject[:30], predicate=t.predicate, object=t.object[:40])))
+                    print(
+                        c.dim(
+                            _(
+                                "cli.reflect.kg_detail",
+                                subject=t.subject[:30],
+                                predicate=t.predicate,
+                                object=t.object[:40],
+                            )
+                        )
+                    )
         finally:
             if hasattr(kg, "close"):
                 kg.close()
@@ -125,7 +135,8 @@ def run_reflect(
         best = rc_report.best
         best_line = (
             f" · {_('cli.reflect.recipe_best', recipe=c.green(best.recipe_id), score=best.score)}"
-            if best else ""
+            if best
+            else ""
         )
         print(
             f"{c.cyan(_('cli.reflect.recipe_label'))}· "
@@ -162,9 +173,7 @@ def run_intel(
         print(c.red(_("cli.intel.web_search_unavailable")), file=sys.stderr)
         return 2
 
-    journal: Journal = (
-        JSONLJournal(journal_file) if journal_file is not None else InMemoryJournal()
-    )
+    journal: Journal = JSONLJournal(journal_file) if journal_file is not None else InMemoryJournal()
 
     sources = [
         IntelSource(
@@ -183,10 +192,9 @@ def run_intel(
     print(c.dim("─" * 60))
 
     step_events = [
-        e for e in journal.read_all()
-        if e.event_type == "step"
-        and "intel_" in e.step.node_id
-        and "_search" in e.step.node_id
+        e
+        for e in journal.read_all()
+        if e.event_type == "step" and "intel_" in e.step.node_id and "_search" in e.step.node_id
     ]
     for ev in step_events:
         out = ev.step.result.output
@@ -230,7 +238,13 @@ def run_loop(
     print(c.bold(_("cli.loop.title_fmt", iterations=iterations)))
     print(c.dim("─" * 60))
     print(
-        _("cli.loop.config_info", config=config_path, journal=journal_path, planner=cfg.planner.type, goal=goal)
+        _(
+            "cli.loop.config_info",
+            config=config_path,
+            journal=journal_path,
+            planner=cfg.planner.type,
+            goal=goal,
+        )
     )
     print()
 
@@ -305,11 +319,26 @@ def run_loop(
 
         marker = c.green("✓") if ok else c.red("✗")
         print(
-            _("cli.loop.exec_result", marker=marker, nodes=len(graph.nodes), usd=budget.usd_spent, ms=elapsed)
+            _(
+                "cli.loop.exec_result",
+                marker=marker,
+                nodes=len(graph.nodes),
+                usd=budget.usd_spent,
+                ms=elapsed,
+            )
         )
 
     print()
-    print(c.bold(_("cli.loop.done_summary", success=successes, total=iterations, events=len(stack.journal))))
+    print(
+        c.bold(
+            _(
+                "cli.loop.done_summary",
+                success=successes,
+                total=iterations,
+                events=len(stack.journal),
+            )
+        )
+    )
     return 0 if failures == 0 else 1
 
 
@@ -376,16 +405,15 @@ def run_optimize(
     mutator = PromptMutator(router=mutator_router, model=mutator_model)
 
     evolver = PromptEvolver(
-        optimizer, mutator,
+        optimizer,
+        mutator,
         EvolutionPolicy(
             retire_min_uses=retire_min_uses,
             max_total_variants=max_variants,
         ),
     )
 
-    print(c.bold(
-        _("cli.optimize.title_fmt", rounds=rounds, tasks=tasks_per_round)
-    ))
+    print(c.bold(_("cli.optimize.title_fmt", rounds=rounds, tasks=tasks_per_round)))
     print(c.dim("─" * 60))
     print(_("cli.optimize.config_info", config=config_path, journal=journal_path))
     print(_("cli.optimize.variants_info", variants=optimizer.variant_names))
@@ -414,7 +442,8 @@ def run_optimize(
                 ),
             )
             traj = stack.runtime.run(
-                graph, budget=budget,
+                graph,
+                budget=budget,
                 caller=f"arms/{cfg.default_arm_id}",
                 arm_id=ArmId(cfg.default_arm_id),
             )
@@ -425,11 +454,7 @@ def run_optimize(
 
         step = evolver.step()
         variant_count = len(optimizer.variant_names)
-        print(
-            f"  · {round_success}/{tasks_per_round} ok "
-            f"· pool={variant_count} "
-            f"· {step.summary}"
-        )
+        print(f"  · {round_success}/{tasks_per_round} ok · pool={variant_count} · {step.summary}")
 
     print()
     print(c.bold(_("cli.optimize.ranking")))
@@ -441,9 +466,7 @@ def run_optimize(
     )
     for name, rep in ranked:
         verdict_color = (
-            c.green if rep.verdict == "winning"
-            else c.red if rep.verdict == "losing"
-            else c.dim
+            c.green if rep.verdict == "winning" else c.red if rep.verdict == "losing" else c.dim
         )
         print(
             f"  {verdict_color(name):<30} "
@@ -460,11 +483,15 @@ def run_optimize(
 
 
 def _export_winning_variants_cli(
-    path: Path, optimizer: Any, report: dict[str, Any],
+    path: Path,
+    optimizer: Any,
+    report: dict[str, Any],
 ) -> None:
     lines = ["variants:"]
     ranked = sorted(
-        report.items(), key=lambda kv: kv[1].success_rate, reverse=True,
+        report.items(),
+        key=lambda kv: kv[1].success_rate,
+        reverse=True,
     )
     for name, rep in ranked:
         if name not in optimizer.variant_names:
@@ -475,7 +502,5 @@ def _export_winning_variants_cli(
         lines.append(f"    system_prompt_suffix: '{suffix_escaped}'")
         lines.append(f"    weight: {v.weight}")
         if rep.verdict != "insufficient_data":
-            lines.append(
-                f"    description: '{rep.verdict} · {rep.success_rate:.1%}'"
-            )
+            lines.append(f"    description: '{rep.verdict} · {rep.success_rate:.1%}'")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

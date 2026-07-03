@@ -87,9 +87,7 @@ def _iter_project_md_files() -> list[Path]:
 
 
 @pytest.mark.parametrize("banned_phrase, reason", BANNED_PHRASES)
-def test_no_verified_false_claims_in_docs(
-    banned_phrase: str, reason: str
-) -> None:
+def test_no_verified_false_claims_in_docs(banned_phrase: str, reason: str) -> None:
     """Project docs must not assert features the code does not implement."""
     offenders: list[str] = []
     for md_path in _iter_project_md_files():

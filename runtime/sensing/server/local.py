@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
@@ -13,7 +12,6 @@ from runtime.platform.models import now_utc
 
 
 class BackendAudit(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     arm_id: str
@@ -23,7 +21,6 @@ class BackendAudit(BaseModel):
 
 
 class LocalBackend:
-
     def __init__(
         self,
         allowed_read_roots: list[Path] | None = None,
@@ -45,7 +42,6 @@ class LocalBackend:
             finally:
                 span.set_attribute("octopus.backend.allowed_count", len(box._allowed_hits))
                 span.set_attribute("octopus.backend.denied_count", len(box._denied_hits))
-
 
     def allows_read(self, path: Path) -> bool:
         if not self.allowed_read_roots:
@@ -69,7 +65,6 @@ class LocalBackend:
 
 
 class Sandbox:
-
     def __init__(self, backend: LocalBackend, audit: BackendAudit, span: Any) -> None:
         self.backend = backend
         self.audit = audit
@@ -79,7 +74,6 @@ class Sandbox:
 
     def run(self, handler: Callable[..., Any], **kwargs: Any) -> Any:
         return handler(box=self, **kwargs)
-
 
     def check_read(self, path: str | Path) -> Path:
         p = Path(path).resolve()

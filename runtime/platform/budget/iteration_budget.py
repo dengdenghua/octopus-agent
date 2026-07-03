@@ -9,10 +9,14 @@ _LOG = logging.getLogger("octopus.budget.iteration")
 
 def _publish_extended_event() -> None:
     from runtime.platform.process.eventbus import IterationExtended, publish_event
-    publish_event(IterationExtended(
-        event_type="iteration.extended",
-        reason="auto_extend",
-    ), logger=_LOG)
+
+    publish_event(
+        IterationExtended(
+            event_type="iteration.extended",
+            reason="auto_extend",
+        ),
+        logger=_LOG,
+    )
 
 
 class IterationBudgetExceeded(Exception):
@@ -57,9 +61,13 @@ class SmartIterationBudget:
         is_unique: bool = True,
     ) -> tuple[int, str]:
         self._count += 1
-        self._history.append(IterationRecord(
-            tool_name=tool_name, success=success, unique=is_unique,
-        ))
+        self._history.append(
+            IterationRecord(
+                tool_name=tool_name,
+                success=success,
+                unique=is_unique,
+            )
+        )
         if len(self._history) > 100:
             self._history = self._history[-100:]
 
@@ -69,7 +77,8 @@ class SmartIterationBudget:
                 if extended:
                     _LOG.info(
                         "budget auto-extended: %d -> %d (progress detected)",
-                        self._effective_limit - int(self.config.max_iterations * self.config.extend_by_percent),
+                        self._effective_limit
+                        - int(self.config.max_iterations * self.config.extend_by_percent),
                         self._effective_limit,
                     )
                     return self._count, "extended"

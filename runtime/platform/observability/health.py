@@ -190,7 +190,9 @@ class HealthRegistry:
     # ── probe ───────────────────────────────────────────────
 
     def probe(
-        self, *, kind: HealthKind = "readiness",
+        self,
+        *,
+        kind: HealthKind = "readiness",
     ) -> dict[str, Any]:
         """Run every check of ``kind`` and return the aggregate result.
 
@@ -210,9 +212,7 @@ class HealthRegistry:
                 max_workers=max(1, len(selected)),
                 thread_name_prefix="health",
             ) as pool:
-                futures = {
-                    pool.submit(self._run_check, c): c for c in selected
-                }
+                futures = {pool.submit(self._run_check, c): c for c in selected}
                 for fut in concurrent.futures.as_completed(futures):
                     results.append(fut.result())
         else:
@@ -236,7 +236,8 @@ class HealthRegistry:
                 val = {"pass": 1.0, "warn": 0.5, "fail": 0.0}[r.status]
                 with contextlib.suppress(Exception):
                     self._gauge.set(
-                        val, labels={"name": r.name, "kind": kind},
+                        val,
+                        labels={"name": r.name, "kind": kind},
                     )
 
         duration_ms = (time.time() - started) * 1000
@@ -263,7 +264,8 @@ class HealthRegistry:
             if isinstance(raw, HealthStatus):
                 return raw
             return HealthStatus(
-                name=check.name, status="fail",
+                name=check.name,
+                status="fail",
                 detail=f"check returned unexpected type: {type(raw).__name__}",
             )
 
@@ -275,14 +277,16 @@ class HealthRegistry:
                 except concurrent.futures.TimeoutError:
                     duration = (time.time() - started) * 1000
                     return HealthStatus(
-                        name=check.name, status="fail",
+                        name=check.name,
+                        status="fail",
                         detail=f"timed out after {check.timeout_seconds}s",
                         duration_ms=duration,
                     )
         except Exception as exc:  # noqa: BLE001 — health check must coerce every failure mode
             duration = (time.time() - started) * 1000
             return HealthStatus(
-                name=check.name, status="fail",
+                name=check.name,
+                status="fail",
                 detail=f"{type(exc).__name__}: {exc}",
                 duration_ms=duration,
             )
@@ -291,8 +295,11 @@ class HealthRegistry:
         # Ensure duration_ms is on the returned status.
         if result.duration_ms == 0.0:
             result = HealthStatus(
-                name=result.name, status=result.status, detail=result.detail,
-                duration_ms=duration, metadata=result.metadata,
+                name=result.name,
+                status=result.status,
+                detail=result.detail,
+                duration_ms=duration,
+                metadata=result.metadata,
             )
         return result
 
@@ -306,7 +313,10 @@ def _max_status(a: HealthStatusValue, b: HealthStatusValue) -> HealthStatusValue
 
 
 def disk_check(
-    path: str, *, min_free_mb: int = 500, name: str = "disk",
+    path: str,
+    *,
+    min_free_mb: int = 500,
+    name: str = "disk",
 ) -> HealthCheck:
     """Pass if ``path`` has at least ``min_free_mb`` of free space."""
     import shutil
@@ -317,17 +327,20 @@ def disk_check(
             free_mb = usage.free / (1024 * 1024)
             if free_mb < min_free_mb:
                 return HealthStatus(
-                    name=name, status="fail",
+                    name=name,
+                    status="fail",
                     detail=f"only {free_mb:.0f}MB free (min {min_free_mb}MB)",
                     metadata={"free_mb": round(free_mb, 2), "path": path},
                 )
             return HealthStatus(
-                name=name, status="pass",
+                name=name,
+                status="pass",
                 metadata={"free_mb": round(free_mb, 2), "path": path},
             )
         except (OSError, TypeError, ValueError) as exc:
             return HealthStatus(
-                name=name, status="fail",
+                name=name,
+                status="fail",
                 detail=f"{type(exc).__name__}: {exc}",
             )
 
@@ -336,17 +349,21 @@ def disk_check(
 
 def redis_check(client: Any, *, name: str = "redis") -> HealthCheck:
     """Pass if ``client.ping()`` returns a truthy response."""
+
     def _check() -> HealthStatus:
         try:
             ok = client.ping()
             if ok:
                 return HealthStatus(name=name, status="pass")
             return HealthStatus(
-                name=name, status="fail", detail="ping returned falsy",
+                name=name,
+                status="fail",
+                detail="ping returned falsy",
             )
         except (OSError, ImportError, TypeError, ValueError) as exc:
             return HealthStatus(
-                name=name, status="fail",
+                name=name,
+                status="fail",
                 detail=f"{type(exc).__name__}: {exc}",
             )
 
@@ -355,13 +372,15 @@ def redis_check(client: Any, *, name: str = "redis") -> HealthCheck:
 
 def journal_check(journal: Any, *, name: str = "journal") -> HealthCheck:
     """Pass if the journal's ``read_all()`` succeeds without raising."""
+
     def _check() -> HealthStatus:
         try:
             journal.read_all()
             return HealthStatus(name=name, status="pass")
         except (OSError, ImportError, TypeError, ValueError) as exc:
             return HealthStatus(
-                name=name, status="fail",
+                name=name,
+                status="fail",
                 detail=f"{type(exc).__name__}: {exc}",
             )
 
@@ -369,7 +388,9 @@ def journal_check(journal: Any, *, name: str = "journal") -> HealthCheck:
 
 
 def memory_check(
-    *, max_rss_mb: int = 2048, name: str = "memory",
+    *,
+    max_rss_mb: int = 2048,
+    name: str = "memory",
 ) -> HealthCheck:
     """Pass if the process RSS is below ``max_rss_mb``.
 
@@ -377,29 +398,34 @@ def memory_check(
     a note so operators know to install it instead of silently
     skipping.
     """
+
     def _check() -> HealthStatus:
         try:
             import psutil  # type: ignore[import-not-found]
         except ImportError:
             return HealthStatus(
-                name=name, status="warn",
+                name=name,
+                status="warn",
                 detail="psutil not installed; memory check skipped",
             )
         try:
             rss_mb = psutil.Process().memory_info().rss / (1024 * 1024)
             if rss_mb > max_rss_mb:
                 return HealthStatus(
-                    name=name, status="fail",
+                    name=name,
+                    status="fail",
                     detail=f"RSS {rss_mb:.0f}MB > limit {max_rss_mb}MB",
                     metadata={"rss_mb": round(rss_mb, 2)},
                 )
             return HealthStatus(
-                name=name, status="pass",
+                name=name,
+                status="pass",
                 metadata={"rss_mb": round(rss_mb, 2)},
             )
         except (OSError, ImportError, TypeError, ValueError) as exc:
             return HealthStatus(
-                name=name, status="fail",
+                name=name,
+                status="fail",
                 detail=f"{type(exc).__name__}: {exc}",
             )
 

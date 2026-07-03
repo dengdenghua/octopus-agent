@@ -14,6 +14,7 @@ Usage:
     r = generate_video("a red panda walking through a forest")
     print(r["video_url"])  # mp4 URL when status=completed
 """
+
 from __future__ import annotations
 
 import json
@@ -41,19 +42,13 @@ class AgnesConfig:
 
     @classmethod
     def from_env(cls) -> AgnesConfig:
-        key = (
-            os.environ.get("AGNES_API_KEY")
-            or os.environ.get("OPENAI_API_KEY")
-            or ""
-        ).strip()
+        key = (os.environ.get("AGNES_API_KEY") or os.environ.get("OPENAI_API_KEY") or "").strip()
         if not key:
             raise ValueError(
                 "AGNES_API_KEY not found. Set AGNES_API_KEY or "
                 "OPENAI_API_KEY env var, or pass api_key= explicitly.",
             )
-        base = (
-            os.environ.get("AGNES_BASE_URL", "").strip() or DEFAULT_BASE_URL
-        ).rstrip("/")
+        base = (os.environ.get("AGNES_BASE_URL", "").strip() or DEFAULT_BASE_URL).rstrip("/")
         return cls(api_key=key, base_url=base)
 
 
@@ -177,7 +172,12 @@ def generate_video(
     create_url = f"{base_url}/videos"
     _LOG.info(
         "agnes_video_generate model=%s frames=%d fps=%d size=%dx%d wait=%s",
-        model, num_frames, frame_rate, width, height, wait,
+        model,
+        num_frames,
+        frame_rate,
+        width,
+        height,
+        wait,
     )
 
     try:
@@ -283,8 +283,7 @@ def _poll_until_done(
             return last
         if status == "failed":
             raise RuntimeError(
-                f"agnes video task failed: "
-                f"{last.get('error') or last.get('raw')}",
+                f"agnes video task failed: {last.get('error') or last.get('raw')}",
             )
         # else: still queued / processing — keep waiting
     raise TimeoutError(
@@ -295,17 +294,14 @@ def _poll_until_done(
 
 
 def _normalize_poll_response(
-    task_id: str, data: dict[str, Any],
+    task_id: str,
+    data: dict[str, Any],
 ) -> dict[str, Any]:
     """Project the raw poll response into a stable shape."""
     status = str(data.get("status") or "").lower() or "unknown"
     # The completed video URL has been observed under several keys
     # depending on gateway version; check the common ones.
-    video_url = (
-        data.get("video_url")
-        or data.get("url")
-        or _extract_video_url(data.get("output"))
-    )
+    video_url = data.get("video_url") or data.get("url") or _extract_video_url(data.get("output"))
     return {
         "task_id": task_id,
         "status": status,

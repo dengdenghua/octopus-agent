@@ -41,6 +41,7 @@ from runtime.core.cerebrum.react_types import ReActStep
 
 def _user_help_requested(final_answer: str) -> bool:
     from runtime.core.cerebrum.react_guards import _final_answer_requests_user_help
+
     return _final_answer_requests_user_help(final_answer)
 
 

@@ -43,6 +43,7 @@ returns a structured "not configured" response so the
 ephemeral-role feature is a no-op on deployments that haven't
 wired an LLM · consistent with how ``sub_agent._RUNNER`` behaves.
 """
+
 from __future__ import annotations
 
 import logging
@@ -65,6 +66,7 @@ class EphemeralRoleDef:
     Deliberately frozen + hashable so the catalog can live as a
     module-level dict without accidental mutation at runtime.
     """
+
     id: str
     display_name: str
     description: str
@@ -131,7 +133,7 @@ BUILTIN_ROLES: dict[str, EphemeralRoleDef] = {
         ),
         share_context=True,
         share_memory=False,
-tool_allowlist=("fetch_url", "web_search", "read_file", "list_cwd", "grep_text"),
+        tool_allowlist=("fetch_url", "web_search", "read_file", "list_cwd", "grep_text"),
     ),
     "debugger": EphemeralRoleDef(
         id="debugger",
@@ -222,7 +224,14 @@ tool_allowlist=("fetch_url", "web_search", "read_file", "list_cwd", "grep_text")
         ),
         share_context=True,
         share_memory=False,
-        tool_allowlist=("read_file", "list_cwd", "file_stats", "hash_text", "grep_text", "glob_files"),
+        tool_allowlist=(
+            "read_file",
+            "list_cwd",
+            "file_stats",
+            "hash_text",
+            "grep_text",
+            "glob_files",
+        ),
     ),
     # Invoked by the team-vote dispatcher to arbitrate N candidate
     # answers from a roster. Not meant to be called directly by users —
@@ -326,10 +335,19 @@ tool_allowlist=("fetch_url", "web_search", "read_file", "list_cwd", "grep_text")
         share_context=True,
         share_memory=True,
         tool_allowlist=(
-            "read_file", "list_cwd", "glob_files", "grep_text",
-            "edit_file", "multi_edit_file", "write_text_file",
-            "propose_patch", "exec_shell", "bb_read", "bb_keys",
-            "todo_read", "todo_write",
+            "read_file",
+            "list_cwd",
+            "glob_files",
+            "grep_text",
+            "edit_file",
+            "multi_edit_file",
+            "write_text_file",
+            "propose_patch",
+            "exec_shell",
+            "bb_read",
+            "bb_keys",
+            "todo_read",
+            "todo_write",
         ),
     ),
     # Like implementer but with NO shell / network: every write must stay inside
@@ -354,9 +372,17 @@ tool_allowlist=("fetch_url", "web_search", "read_file", "list_cwd", "grep_text")
         share_context=True,
         share_memory=True,
         tool_allowlist=(
-            "read_file", "list_cwd", "glob_files", "grep_text",
-            "edit_file", "multi_edit_file", "write_text_file",
-            "bb_read", "bb_keys", "todo_read", "todo_write",
+            "read_file",
+            "list_cwd",
+            "glob_files",
+            "grep_text",
+            "edit_file",
+            "multi_edit_file",
+            "write_text_file",
+            "bb_read",
+            "bb_keys",
+            "todo_read",
+            "todo_write",
         ),
     ),
     "designer": EphemeralRoleDef(
@@ -381,8 +407,14 @@ tool_allowlist=("fetch_url", "web_search", "read_file", "list_cwd", "grep_text")
         share_context=True,
         share_memory=True,
         tool_allowlist=(
-            "read_file", "list_cwd", "glob_files", "grep_text",
-            "code_search", "bb_write", "bb_read", "todo_write",
+            "read_file",
+            "list_cwd",
+            "glob_files",
+            "grep_text",
+            "code_search",
+            "bb_write",
+            "bb_read",
+            "todo_write",
         ),
     ),
 }
@@ -409,6 +441,7 @@ class EphemeralCall:
 
     The runner just has to feed this to an LLM and return the text.
     """
+
     role: EphemeralRoleDef
     user_prompt: str
     composed_system_prompt: str
@@ -593,6 +626,7 @@ def _collect_caller_memory(session: Any) -> str:
     if not agent_dir_name:
         return ""
     from pathlib import Path
+
     # Walk up from this file to find repo root (same strategy as
     # other skills).
     repo = Path(__file__).resolve()
@@ -665,6 +699,7 @@ def _compose_system_prompt(
     share_history = (context or {}).get("share_history", True)
     if thread_id and share_history:
         from runtime.execution.subagents.memory import recent_turns_prompt
+
         history_prefix = recent_turns_prompt(str(thread_id), role.id)
         if history_prefix:
             parts.append(history_prefix.strip())
@@ -679,7 +714,8 @@ def _compose_system_prompt(
                 if isinstance(content, list):
                     # Multi-block message content · flatten text
                     content = " ".join(
-                        b.get("text", "") for b in content
+                        b.get("text", "")
+                        for b in content
                         if isinstance(b, dict) and b.get("type") == "text"
                     )
                 if not isinstance(content, str):
@@ -689,9 +725,11 @@ def _compose_system_prompt(
                     continue
                 rendered_lines.append(f"**{who}**: {content[:1000]}")
             if len(rendered_lines) > 1:
-                parts.append("\n\n".join(
-                    [rendered_lines[0], "\n".join(rendered_lines[1:])],
-                ))
+                parts.append(
+                    "\n\n".join(
+                        [rendered_lines[0], "\n".join(rendered_lines[1:])],
+                    )
+                )
 
     if role.share_memory:
         mem = _collect_caller_memory(session)
@@ -729,12 +767,10 @@ def run_ephemeral_definition(
     )
     if effective_tool_policy.sources:
         call_context["skill_policy_sources"] = {
-            source: list(names)
-            for source, names in effective_tool_policy.sources.items()
+            source: list(names) for source, names in effective_tool_policy.sources.items()
         }
         call_context["skill_policy_reason_map"] = {
-            name: list(sources)
-            for name, sources in effective_tool_policy.reason_map.items()
+            name: list(sources) for name, sources in effective_tool_policy.reason_map.items()
         }
     grant_note = _format_dynamic_skill_grant_note(
         call_context,
@@ -748,9 +784,7 @@ def run_ephemeral_definition(
         user_prompt=user_prompt,
         composed_system_prompt=composed,
         caller_thread_id=getattr(session, "thread_id", "") or "",
-        caller_agent_id=(
-            getattr(getattr(session, "agent", None), "agent_id", "") or ""
-        ),
+        caller_agent_id=(getattr(getattr(session, "agent", None), "agent_id", "") or ""),
         context={
             **call_context,
             "timeout_s": timeout_s,
@@ -768,11 +802,13 @@ def run_ephemeral_definition(
         from runtime.execution.suckers.ephemeral_runner import (
             EphemeralRoundCapExceeded,
         )
+
         if isinstance(exc, EphemeralRoundCapExceeded):
             _log.warning(
-                "ephemeral round cap hit for role=%s · rounds=%d · "
-                "partial_chars=%d",
-                role.id, exc.rounds, len(exc.partial_text),
+                "ephemeral round cap hit for role=%s · rounds=%d · partial_chars=%d",
+                role.id,
+                exc.rounds,
+                len(exc.partial_text),
             )
             return {
                 "agent_id": role.id,
@@ -789,7 +825,9 @@ def run_ephemeral_definition(
             }
         _log.warning(
             "ephemeral runner failed for role=%s: %s: %s",
-            role.id, type(exc).__name__, exc,
+            role.id,
+            type(exc).__name__,
+            exc,
         )
         return {
             "agent_id": role.id,

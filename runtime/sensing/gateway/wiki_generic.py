@@ -54,8 +54,11 @@ from typing import Any
 # File extensions we know how to summarize.
 _LANG_BY_EXT: dict[str, str] = {
     ".py": "python",
-    ".js": "javascript", ".mjs": "javascript", ".jsx": "javascript",
-    ".ts": "typescript", ".tsx": "typescript",
+    ".js": "javascript",
+    ".mjs": "javascript",
+    ".jsx": "javascript",
+    ".ts": "typescript",
+    ".tsx": "typescript",
     ".go": "go",
     ".rs": "rust",
     ".java": "java",
@@ -63,22 +66,47 @@ _LANG_BY_EXT: dict[str, str] = {
     ".rb": "ruby",
     ".php": "php",
     ".cs": "csharp",
-    ".cpp": "cpp", ".cc": "cpp", ".cxx": "cpp", ".hpp": "cpp", ".h": "cpp",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".cxx": "cpp",
+    ".hpp": "cpp",
+    ".h": "cpp",
     ".c": "c",
     ".swift": "swift",
 }
 
 # Directories we never enter · noise that bloats the wiki without value.
-_SKIP_DIRS = frozenset({
-    "node_modules", ".git", ".hg", ".svn", "__pycache__", ".venv", "venv",
-    ".tox", "target", "dist", "build", ".next", ".nuxt", ".cache",
-    ".octopus-wiki", ".octopus-work", ".idea", ".vscode", "coverage",
-    "out", ".turbo", ".parcel-cache", ".angular",
-})
+_SKIP_DIRS = frozenset(
+    {
+        "node_modules",
+        ".git",
+        ".hg",
+        ".svn",
+        "__pycache__",
+        ".venv",
+        "venv",
+        ".tox",
+        "target",
+        "dist",
+        "build",
+        ".next",
+        ".nuxt",
+        ".cache",
+        ".octopus-wiki",
+        ".octopus-work",
+        ".idea",
+        ".vscode",
+        "coverage",
+        "out",
+        ".turbo",
+        ".parcel-cache",
+        ".angular",
+    }
+)
 
 _MAX_FILES = 5000
 _MAX_TOTAL_BYTES = 50 * 1024 * 1024  # 50 MB
-_MAX_FILE_BYTES = 1 * 1024 * 1024   # 1 MB · skip larger files
+_MAX_FILE_BYTES = 1 * 1024 * 1024  # 1 MB · skip larger files
 _MAX_SUMMARY_LEN = 300
 
 
@@ -193,17 +221,26 @@ def _walk(root: Path) -> list[dict[str, Any]]:
             continue
         rel = child.relative_to(root).as_posix()
         if ext == ".md":
-            out.append({
-                "path": rel, "lang": "markdown", "size": size,
-                "summary": _markdown_first_heading(child),
-                "symbols": [],
-            })
+            out.append(
+                {
+                    "path": rel,
+                    "lang": "markdown",
+                    "size": size,
+                    "summary": _markdown_first_heading(child),
+                    "symbols": [],
+                }
+            )
             continue
         summary, symbols = _summarize_file(child, lang or "generic")
-        out.append({
-            "path": rel, "lang": lang, "size": size,
-            "summary": summary, "symbols": symbols,
-        })
+        out.append(
+            {
+                "path": rel,
+                "lang": lang,
+                "size": size,
+                "summary": summary,
+                "symbols": symbols,
+            }
+        )
     return out
 
 
@@ -260,9 +297,7 @@ def _render_lang_md(lang: str, files: list[dict[str, Any]]) -> str:
                 line += f" — {f['summary']}"
             out.append(line)
             if f.get("symbols"):
-                out.append(
-                    "  - exports: " + ", ".join(f"`{s}`" for s in f["symbols"][:10])
-                )
+                out.append("  - exports: " + ", ".join(f"`{s}`" for s in f["symbols"][:10]))
     return "\n".join(out) + "\n"
 
 
@@ -277,9 +312,20 @@ def _render_readme(root: Path, files: list[dict[str, Any]]) -> str:
         out.append(f"- **{lang}** — {count} files · [view](by-language/{lang}.md)")
     # Highlight likely entrypoints
     entry_patterns = (
-        "main.py", "main.go", "main.rs", "main.js", "main.ts",
-        "index.js", "index.ts", "index.tsx", "app.py", "server.py",
-        "package.json", "Cargo.toml", "pyproject.toml", "go.mod",
+        "main.py",
+        "main.go",
+        "main.rs",
+        "main.js",
+        "main.ts",
+        "index.js",
+        "index.ts",
+        "index.tsx",
+        "app.py",
+        "server.py",
+        "package.json",
+        "Cargo.toml",
+        "pyproject.toml",
+        "go.mod",
     )
     entries = [f for f in files if f["path"].split("/")[-1] in entry_patterns]
     if entries:
@@ -329,11 +375,13 @@ def list_docs(root: Path) -> list[dict[str, Any]]:
         rel = md.relative_to(wd).as_posix()
         if rel == "README.md":
             continue
-        out.append({
-            "path": rel,
-            "name": rel.split("/")[-1].removesuffix(".md"),
-            "size": md.stat().st_size,
-        })
+        out.append(
+            {
+                "path": rel,
+                "name": rel.split("/")[-1].removesuffix(".md"),
+                "size": md.stat().st_size,
+            }
+        )
     return out
 
 
@@ -513,7 +561,8 @@ class _WatcherManager:
                 except Exception as exc:  # noqa: BLE001
                     _LOG.warning(
                         "autosync: regen failed for %s: %s",
-                        self.root, exc,
+                        self.root,
+                        exc,
                     )
 
             def on_any_event(self, event: Any) -> None:  # noqa: ANN401
@@ -524,7 +573,8 @@ class _WatcherManager:
                     if self.timer is not None:
                         self.timer.cancel()
                     self.timer = _threading.Timer(
-                        _DEBOUNCE_SECONDS, self._trigger,
+                        _DEBOUNCE_SECONDS,
+                        self._trigger,
                     )
                     self.timer.daemon = True
                     self.timer.start()
@@ -593,7 +643,14 @@ def boot_existing_watchers(search_dirs: list[Path] | None = None) -> int:
 
 
 __all__ = [
-    "wiki_dir", "status", "list_docs", "read_doc",
-    "generate", "get_settings", "set_settings",
-    "watcher_set", "watcher_status", "boot_existing_watchers",
+    "wiki_dir",
+    "status",
+    "list_docs",
+    "read_doc",
+    "generate",
+    "get_settings",
+    "set_settings",
+    "watcher_set",
+    "watcher_status",
+    "boot_existing_watchers",
 ]

@@ -34,15 +34,17 @@ def mount_thread_state_routes(
 
     from runtime.sensing.gateway.thread_state_router import create_thread_state_router
 
-    app.include_router(create_thread_state_router(
-        store=thread_store,
-        logs_root=logs_root,
-        identity_store=identity_store,
-        require_auth=require_auth,
-        jwt_secret=jwt_secret,
-        jwt_issuer=jwt_issuer,
-        jwt_audience=jwt_audience,
-    ))
+    app.include_router(
+        create_thread_state_router(
+            store=thread_store,
+            logs_root=logs_root,
+            identity_store=identity_store,
+            require_auth=require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+    )
 
 
 __all__ = ["build_reflex_router", "mount_thread_state_routes"]

@@ -24,6 +24,7 @@ Why a dedicated module:
 * A missing file is a valid empty policy, not an error — the rule
   set is optional by design.
 """
+
 from __future__ import annotations
 
 import json

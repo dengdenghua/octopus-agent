@@ -118,24 +118,36 @@ class StateChanged(DomainEvent):
     new_value: Any = None
 
 
-EVOLUTION_EVENTS: frozenset[type[DomainEvent]] = frozenset({
-    FitnessComputed, DriftDetected, SkillUsed,
-    EvolutionTriggered, EvolutionCompleted,
-    GenomeRolledBack, CanaryStageChanged, ProposalCreated,
-})
-
-SAFETY_EVENTS: frozenset[type[DomainEvent]] = frozenset({
-    BudgetPressureEvent, IterationExtended,
-    ToolCallBlocked, FileWriteBlocked,
-})
-
-PLATFORM_EVENTS: frozenset[type[DomainEvent]] = frozenset({
-    PluginLoadedEvent, StateChanged,
-})
-
-ALL_DOMAIN_EVENTS: frozenset[type[DomainEvent]] = (
-    EVOLUTION_EVENTS | SAFETY_EVENTS | PLATFORM_EVENTS
+EVOLUTION_EVENTS: frozenset[type[DomainEvent]] = frozenset(
+    {
+        FitnessComputed,
+        DriftDetected,
+        SkillUsed,
+        EvolutionTriggered,
+        EvolutionCompleted,
+        GenomeRolledBack,
+        CanaryStageChanged,
+        ProposalCreated,
+    }
 )
+
+SAFETY_EVENTS: frozenset[type[DomainEvent]] = frozenset(
+    {
+        BudgetPressureEvent,
+        IterationExtended,
+        ToolCallBlocked,
+        FileWriteBlocked,
+    }
+)
+
+PLATFORM_EVENTS: frozenset[type[DomainEvent]] = frozenset(
+    {
+        PluginLoadedEvent,
+        StateChanged,
+    }
+)
+
+ALL_DOMAIN_EVENTS: frozenset[type[DomainEvent]] = EVOLUTION_EVENTS | SAFETY_EVENTS | PLATFORM_EVENTS
 
 
 @dataclass
@@ -196,7 +208,9 @@ class EventBus:
     ) -> int:
         if isinstance(event_type, type) and issubclass(event_type, DomainEvent):
             et_field = event_type.model_fields.get("event_type")
-            event_type_str = et_field.default if et_field and et_field.default else event_type.__name__
+            event_type_str = (
+                et_field.default if et_field and et_field.default else event_type.__name__
+            )
         else:
             event_type_str = str(event_type)
 
@@ -219,9 +233,7 @@ class EventBus:
                 self._wildcard_subs.append(sub)
             else:
                 self._subs[event_type_str].append(sub)
-                self._subs[event_type_str].sort(
-                    key=lambda s: s.priority, reverse=True
-                )
+                self._subs[event_type_str].sort(key=lambda s: s.priority, reverse=True)
 
         return sub_id
 
@@ -244,9 +256,7 @@ class EventBus:
 
     def publish(self, event: DomainEvent) -> int:
         if not isinstance(event, DomainEvent):
-            raise TypeError(
-                f"event must be DomainEvent, got {type(event).__name__}"
-            )
+            raise TypeError(f"event must be DomainEvent, got {type(event).__name__}")
 
         event_type = event.event_type or type(event).__name__
 
@@ -257,7 +267,7 @@ class EventBus:
         with self._lock:
             self._history.append(event)
             if len(self._history) > self._config.max_history:
-                self._history = self._history[-self._config.max_history:]
+                self._history = self._history[-self._config.max_history :]
 
             typed_subs = list(self._subs.get(event_type, []))
             wildcard_subs = list(self._wildcard_subs)
@@ -283,8 +293,7 @@ class EventBus:
                 called += 1
             except Exception as exc:
                 err_text = (
-                    f"handler sub_id={sub.sub_id} on {event_type}: "
-                    f"{type(exc).__name__}: {exc}"
+                    f"handler sub_id={sub.sub_id} on {event_type}: {type(exc).__name__}: {exc}"
                 )
                 with self._lock:
                     self._errors.append(err_text)
@@ -354,11 +363,13 @@ class EventBus:
                     except Exception:  # noqa: BLE001 — pydantic field access edge case; skip field, keep emitting
                         pass
                 self.emit(f"nerves.{cls_name}", payload=payload)
+
             return _bridge
 
         _base_cls = None
         try:
             from runtime.core.nerves.bus import NervesEvent
+
             _base_cls = NervesEvent
         except ImportError:  # noqa: BLE001 — nerves.bus optional; bridge skipped on this platform
             pass
@@ -395,10 +406,7 @@ class EventBus:
         with self._lock:
             events = list(self._history)
         if event_type:
-            events = [
-                e for e in events
-                if (e.event_type or type(e).__name__) == event_type
-            ]
+            events = [e for e in events if (e.event_type or type(e).__name__) == event_type]
         return events[-limit:]
 
     @property
@@ -426,6 +434,7 @@ class EventBus:
         event_type = event.event_type or type(event).__name__
         try:
             from runtime.platform.process.service_provider import get_provider
+
             provider = get_provider()
 
             signal_bus = provider.get("signal_bus")
@@ -437,8 +446,6 @@ class EventBus:
                 )
         except Exception as _exc:
             _LOG.debug("legacy bridge failed: %s", _exc)
-
-
 
 
 def publish_event(event: DomainEvent, *, logger: logging.Logger | None = None) -> int:
@@ -454,6 +461,7 @@ def publish_event(event: DomainEvent, *, logger: logging.Logger | None = None) -
     except Exception as _exc:
         log.debug("event publish failed [%s]: %s", event.event_type, _exc)
         return 0
+
 
 def get_eventbus() -> EventBus:
     return EventBus.get()

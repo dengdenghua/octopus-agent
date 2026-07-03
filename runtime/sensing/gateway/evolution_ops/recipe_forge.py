@@ -185,7 +185,12 @@ def _forge_auto_tick_enable(
             result["gene_lock_warnings"] = warnings
         return {**result, "source": "gepa"}
     except (OSError, ImportError, AttributeError, TypeError) as exc:
-        return {"ok": False, "enabled": False, "source": "gepa", "error": f"{type(exc).__name__}: {exc}"}
+        return {
+            "ok": False,
+            "enabled": False,
+            "source": "gepa",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
 
 def _forge_auto_tick_disable() -> dict[str, Any]:
@@ -194,7 +199,12 @@ def _forge_auto_tick_disable() -> dict[str, Any]:
 
         return {**forge_auto_tick.disable(), "source": "gepa"}
     except (OSError, ImportError, AttributeError, TypeError) as exc:
-        return {"ok": False, "enabled": False, "source": "gepa", "error": f"{type(exc).__name__}: {exc}"}
+        return {
+            "ok": False,
+            "enabled": False,
+            "source": "gepa",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
 
 def _forge_auto_tick_run_now(
@@ -216,15 +226,25 @@ def _forge_auto_tick_run_now(
             journal=journal,
         )
         payload = asdict(tick)
-        payload.update({
-            "ok": not any(r.get("error") == "no journal bound" for r in payload.get("results", [])),
-            "apply": apply,
-            "applied": bool(payload.get("recipes_promoted", 0)),
-            "source": "gepa",
-        })
+        payload.update(
+            {
+                "ok": not any(
+                    r.get("error") == "no journal bound" for r in payload.get("results", [])
+                ),
+                "apply": apply,
+                "applied": bool(payload.get("recipes_promoted", 0)),
+                "source": "gepa",
+            }
+        )
         return payload
     except (OSError, ImportError, AttributeError, TypeError) as exc:
-        return {"ok": False, "apply": apply, "applied": False, "source": "gepa", "error": f"{type(exc).__name__}: {exc}"}
+        return {
+            "ok": False,
+            "apply": apply,
+            "applied": False,
+            "source": "gepa",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
 
 def _forge_router(planner: Any) -> Any:
@@ -233,9 +253,7 @@ def _forge_router(planner: Any) -> Any:
 
 def _forge_seed_prompt(planner: Any) -> str:
     seed = (
-        getattr(planner, "_PLANNER_SYSTEM_PROMPT", "")
-        or getattr(planner, "base_prompt", "")
-        or ""
+        getattr(planner, "_PLANNER_SYSTEM_PROMPT", "") or getattr(planner, "base_prompt", "") or ""
     )
     if seed:
         return str(seed)
@@ -345,7 +363,9 @@ def _forge_run_optimizer(
             journal=journal,
             router=router,
             config=OptimizerRunConfig(
-                backend=optimizer_backend or os.environ.get("OCTOPUS_OPTIMIZER_BACKEND") or "native_gepa",
+                backend=optimizer_backend
+                or os.environ.get("OCTOPUS_OPTIMIZER_BACKEND")
+                or "native_gepa",
                 recipe_id=recipe_id,
                 judge_model=judge_model,
                 mutator_model=mutator_model,
@@ -386,7 +406,11 @@ def _forge_auto_propose(
 ) -> dict[str, Any]:
     router = _forge_router(planner)
     if journal is None:
-        return {"ok": False, "error": "RecipeForge auto-propose requires a journal.", "source": "gepa"}
+        return {
+            "ok": False,
+            "error": "RecipeForge auto-propose requires a journal.",
+            "source": "gepa",
+        }
     if router is None:
         return {"ok": False, "error": "planner.router missing", "source": "gepa"}
     try:
@@ -442,12 +466,20 @@ def _forge_apply_candidate(body: dict[str, Any], *, approver: str | None) -> dic
         return {"ok": False, "error": "missing prompt", "source": "gepa"}
 
     target_recipe_id = body.get("target_recipe_id")
-    target_key = target_recipe_id if isinstance(target_recipe_id, str) and target_recipe_id.strip() else "__global__"
+    target_key = (
+        target_recipe_id
+        if isinstance(target_recipe_id, str) and target_recipe_id.strip()
+        else "__global__"
+    )
 
     try:
         from runtime.safety.gene_locks import MutationKind, record_mutation
     except (OSError, ImportError, AttributeError, TypeError) as exc:
-        return {"ok": False, "error": f"gene-lock unavailable: {type(exc).__name__}: {exc}", "source": "gepa"}
+        return {
+            "ok": False,
+            "error": f"gene-lock unavailable: {type(exc).__name__}: {exc}",
+            "source": "gepa",
+        }
 
     gate = _forge_gate_mutation(
         MutationKind.APPLY_ADDENDUM,
@@ -462,8 +494,7 @@ def _forge_apply_candidate(body: dict[str, Any], *, approver: str | None) -> dic
         f"<!-- candidate {body.get('candidate_id', '?')} · "
         f"avg_score {body.get('avg_score', 0)} · "
         f"recipe {target_key} · "
-        f"rationale: {body.get('rationale', '')} -->\n\n"
-        + text
+        f"rationale: {body.get('rationale', '')} -->\n\n" + text
     )
 
     try:
@@ -527,11 +558,18 @@ def _forge_apply_candidate(body: dict[str, Any], *, approver: str | None) -> dic
             from runtime.safety.recovery.gepa_bridge import mark_winner_proposal_applied
 
             winner_applied = mark_winner_proposal_applied(
-                recipe_id=target_recipe_id if isinstance(target_recipe_id, str) and target_recipe_id.strip() else None,
+                recipe_id=target_recipe_id
+                if isinstance(target_recipe_id, str) and target_recipe_id.strip()
+                else None,
                 variant_id=variant_id if scope == "variant" else None,
-                candidate_id=str(winner_payload.get("candidate_id") or body.get("candidate_id") or "") or None,
-                proposal_id=str(winner_payload.get("proposal_id") or body.get("proposal_id") or "") or None,
-                canary_key=str(winner_payload.get("canary_key") or body.get("canary_key") or "") or None,
+                candidate_id=str(
+                    winner_payload.get("candidate_id") or body.get("candidate_id") or ""
+                )
+                or None,
+                proposal_id=str(winner_payload.get("proposal_id") or body.get("proposal_id") or "")
+                or None,
+                canary_key=str(winner_payload.get("canary_key") or body.get("canary_key") or "")
+                or None,
                 ledger_path="data/proposal_ledger.jsonl",
             )
         with contextlib.suppress(OSError, ImportError, AttributeError, TypeError):
@@ -559,7 +597,11 @@ def _forge_delete_addendum(recipe_id: str, *, approver: str | None) -> dict[str,
     try:
         from runtime.safety.gene_locks import MutationKind, record_mutation
     except (OSError, ImportError, AttributeError, TypeError) as exc:
-        return {"ok": False, "error": f"gene-lock unavailable: {type(exc).__name__}: {exc}", "source": "gepa"}
+        return {
+            "ok": False,
+            "error": f"gene-lock unavailable: {type(exc).__name__}: {exc}",
+            "source": "gepa",
+        }
 
     gate = _forge_gate_mutation(
         MutationKind.DELETE_ADDENDUM,
@@ -625,7 +667,9 @@ def _forge_variant_stats(*, journal: Any, recipe_id: str) -> dict[str, Any]:
         return {
             "recipe_id": comparison.base_recipe_id,
             "variants": variants,
-            "baseline": next((v for v in variants if v.get("variant_id") in ("", "__default__")), None),
+            "baseline": next(
+                (v for v in variants if v.get("variant_id") in ("", "__default__")), None
+            ),
             "total_calls": comparison.total_uses,
             "total_uses": comparison.total_uses,
             "source": "gepa",
@@ -711,7 +755,12 @@ def _forge_auto_promote(
                 result["new_manifest"] = list_variants(recipe_id)
         return result
     except (OSError, ImportError, AttributeError, TypeError) as exc:
-        return {"ok": False, "recipe_id": recipe_id, "error": f"{type(exc).__name__}: {exc}", "source": "gepa"}
+        return {
+            "ok": False,
+            "recipe_id": recipe_id,
+            "error": f"{type(exc).__name__}: {exc}",
+            "source": "gepa",
+        }
 
 
 def _forge_variants_snapshot(recipe_id: str) -> dict[str, Any]:
@@ -720,7 +769,12 @@ def _forge_variants_snapshot(recipe_id: str) -> dict[str, Any]:
 
         return {**list_variants(recipe_id), "source": "gepa"}
     except (OSError, ImportError, AttributeError, TypeError) as exc:
-        return {"recipe_id": recipe_id, "variants": [], "source": "gepa", "error": f"{type(exc).__name__}: {exc}"}
+        return {
+            "recipe_id": recipe_id,
+            "variants": [],
+            "source": "gepa",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
 
 def _forge_variant_weights(
@@ -732,7 +786,11 @@ def _forge_variant_weights(
     try:
         from runtime.safety.gene_locks import MutationKind, record_mutation
     except (OSError, ImportError, AttributeError, TypeError) as exc:
-        return {"ok": False, "error": f"gene-lock unavailable: {type(exc).__name__}: {exc}", "source": "gepa"}
+        return {
+            "ok": False,
+            "error": f"gene-lock unavailable: {type(exc).__name__}: {exc}",
+            "source": "gepa",
+        }
 
     gate = _forge_gate_mutation(
         MutationKind.SET_VARIANT_WEIGHTS,
@@ -746,25 +804,31 @@ def _forge_variant_weights(
 
         weights = body.get("weights") or {}
         if not isinstance(weights, dict):
-            return {"ok": False, "recipe_id": recipe_id, "error": "weights must be a dict", "source": "gepa"}
+            return {
+                "ok": False,
+                "recipe_id": recipe_id,
+                "error": "weights must be a dict",
+                "source": "gepa",
+            }
         normalized = {
             str(key): max(0, int(value))
             for key, value in weights.items()
             if isinstance(value, (int, float))
         }
         default_raw = body.get("default_weight")
-        default_weight = (
-            max(0, int(default_raw))
-            if isinstance(default_raw, (int, float))
-            else None
-        )
+        default_weight = max(0, int(default_raw)) if isinstance(default_raw, (int, float)) else None
         manifest = set_weights(
             recipe_id,
             weights=normalized,
             default_weight=default_weight,
         )
         if manifest is None:
-            return {"ok": False, "recipe_id": recipe_id, "error": f"no manifest for recipe {recipe_id}", "source": "gepa"}
+            return {
+                "ok": False,
+                "recipe_id": recipe_id,
+                "error": f"no manifest for recipe {recipe_id}",
+                "source": "gepa",
+            }
         with contextlib.suppress(OSError, ImportError, AttributeError, TypeError):
             record_mutation(MutationKind.SET_VARIANT_WEIGHTS, recipe_id)
         return {
@@ -774,14 +838,25 @@ def _forge_variant_weights(
             "source": "gepa",
         }
     except (OSError, ImportError, AttributeError, TypeError) as exc:
-        return {"ok": False, "recipe_id": recipe_id, "error": f"{type(exc).__name__}: {exc}", "source": "gepa"}
+        return {
+            "ok": False,
+            "recipe_id": recipe_id,
+            "error": f"{type(exc).__name__}: {exc}",
+            "source": "gepa",
+        }
 
 
-def _forge_delete_variant(recipe_id: str, variant_id: str, *, approver: str | None) -> dict[str, Any]:
+def _forge_delete_variant(
+    recipe_id: str, variant_id: str, *, approver: str | None
+) -> dict[str, Any]:
     try:
         from runtime.safety.gene_locks import MutationKind, record_mutation
     except (OSError, ImportError, AttributeError, TypeError) as exc:
-        return {"ok": False, "error": f"gene-lock unavailable: {type(exc).__name__}: {exc}", "source": "gepa"}
+        return {
+            "ok": False,
+            "error": f"gene-lock unavailable: {type(exc).__name__}: {exc}",
+            "source": "gepa",
+        }
 
     gate = _forge_gate_mutation(
         MutationKind.DELETE_ADDENDUM,
@@ -806,7 +881,13 @@ def _forge_delete_variant(recipe_id: str, variant_id: str, *, approver: str | No
             "source": "gepa",
         }
     except (OSError, ImportError, AttributeError, TypeError) as exc:
-        return {"ok": False, "recipe_id": recipe_id, "variant_id": variant_id, "error": f"{type(exc).__name__}: {exc}", "source": "gepa"}
+        return {
+            "ok": False,
+            "recipe_id": recipe_id,
+            "variant_id": variant_id,
+            "error": f"{type(exc).__name__}: {exc}",
+            "source": "gepa",
+        }
 
 
 def _forge_runs_csv_rows() -> list[list[Any]]:
@@ -817,24 +898,26 @@ def _forge_runs_csv_rows() -> list[list[Any]]:
 
         rows: list[list[Any]] = []
         for run in enrich_run_records(get_default_store().list_recent(limit=200)):
-            rows.append([
-                f"{run['ts']:.3f}",
-                _datetime.fromtimestamp(run["ts"], tz=UTC).isoformat(),
-                run["trigger"],
-                run["recipe_id"] or "",
-                run["iterations_run"],
-                f"{run['elapsed_s']:.3f}",
-                run["front_size"],
-                run["best_candidate_id"] or "",
-                f"{run['best_avg_score']:.4f}" if run["best_avg_score"] is not None else "",
-                "1" if run["applied"] else "0",
-                f"{run['applied_at']:.3f}" if run["applied_at"] else "",
-                run["winner_lifecycle_state"] or "",
-                run["winner_proposal_id"] or "",
-                run["winner_canary_phase"] or "",
-                run["winner_rollback_reason"] or "",
-                run["best_rationale"] or "",
-            ])
+            rows.append(
+                [
+                    f"{run['ts']:.3f}",
+                    _datetime.fromtimestamp(run["ts"], tz=UTC).isoformat(),
+                    run["trigger"],
+                    run["recipe_id"] or "",
+                    run["iterations_run"],
+                    f"{run['elapsed_s']:.3f}",
+                    run["front_size"],
+                    run["best_candidate_id"] or "",
+                    f"{run['best_avg_score']:.4f}" if run["best_avg_score"] is not None else "",
+                    "1" if run["applied"] else "0",
+                    f"{run['applied_at']:.3f}" if run["applied_at"] else "",
+                    run["winner_lifecycle_state"] or "",
+                    run["winner_proposal_id"] or "",
+                    run["winner_canary_phase"] or "",
+                    run["winner_rollback_reason"] or "",
+                    run["best_rationale"] or "",
+                ]
+            )
         return rows
     except (OSError, ImportError, AttributeError, TypeError):
         return []
@@ -849,15 +932,17 @@ def _forge_addendums_csv_rows() -> list[list[Any]]:
         rows: list[list[Any]] = []
         for addendum in list_all():
             mtime = float(addendum.get("mtime") or 0)
-            rows.append([
-                addendum.get("scope", ""),
-                addendum.get("recipe_id") or "",
-                addendum.get("path", ""),
-                addendum.get("size", 0),
-                f"{mtime:.3f}" if mtime else "",
-                _datetime.fromtimestamp(mtime, tz=UTC).isoformat() if mtime else "",
-                addendum.get("preview", ""),
-            ])
+            rows.append(
+                [
+                    addendum.get("scope", ""),
+                    addendum.get("recipe_id") or "",
+                    addendum.get("path", ""),
+                    addendum.get("size", 0),
+                    f"{mtime:.3f}" if mtime else "",
+                    _datetime.fromtimestamp(mtime, tz=UTC).isoformat() if mtime else "",
+                    addendum.get("preview", ""),
+                ]
+            )
         return rows
     except (OSError, ImportError, AttributeError, TypeError):
         return []

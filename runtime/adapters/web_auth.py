@@ -8,6 +8,7 @@ a request. It only needs the duck-typed request, a caller-supplied
 identity store, and ``HTTPException``, so it sits here in the adapter
 layer; ``openai_gateway`` re-exports it for the gateway's own routers.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -16,7 +17,9 @@ from fastapi import HTTPException
 
 
 def _resolve_actor(
-    request: Any, identity_store: Any, require_auth: bool,
+    request: Any,
+    identity_store: Any,
+    require_auth: bool,
     *,
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,

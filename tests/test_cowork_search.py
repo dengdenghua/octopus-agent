@@ -61,8 +61,12 @@ def test_task_match_on_prompt_and_result(tmp_path) -> None:
 
 def test_event_log_is_searchable(tmp_path) -> None:
     store = GroupStore(base_dir=tmp_path)
-    store.append("t1", MemberEvent(action="invite", actor="user",
-                                   target_id="database-expert", target_kind="agent"))
+    store.append(
+        "t1",
+        MemberEvent(
+            action="invite", actor="user", target_id="database-expert", target_kind="agent"
+        ),
+    )
     hits = search_group(store, "t1", "database-expert")
     hit = next(h for h in hits if h.kind == "event")
     assert hit.actor == "user"
@@ -72,14 +76,18 @@ def test_event_log_is_searchable(tmp_path) -> None:
 
 def test_until_seq_bounds_event_search_for_replay(tmp_path) -> None:
     store = GroupStore(base_dir=tmp_path)
-    store.append("t1", MemberEvent(action="invite", actor="u",
-                                   target_id="alice", target_kind="agent"))  # seq 1
-    store.append("t1", MemberEvent(action="invite", actor="u",
-                                   target_id="zoltan", target_kind="agent"))  # seq 2
+    store.append(
+        "t1", MemberEvent(action="invite", actor="u", target_id="alice", target_kind="agent")
+    )  # seq 1
+    store.append(
+        "t1", MemberEvent(action="invite", actor="u", target_id="zoltan", target_kind="agent")
+    )  # seq 2
 
     # Searching the full log finds zoltan.
-    assert any(h.title.startswith("u") and "zoltan" in h.snippet
-               for h in search_group(store, "t1", "zoltan"))
+    assert any(
+        h.title.startswith("u") and "zoltan" in h.snippet
+        for h in search_group(store, "t1", "zoltan")
+    )
     # Replaying to seq 1 hides the later event.
     assert search_group(store, "t1", "zoltan", until_seq=1) == []
 
@@ -87,8 +95,9 @@ def test_until_seq_bounds_event_search_for_replay(tmp_path) -> None:
 def test_kinds_filter_restricts_surfaces(tmp_path) -> None:
     store = GroupStore(base_dir=tmp_path)
     store.blackboard("t1").write("topic", "alpha signal", writer="u")
-    store.append("t1", MemberEvent(action="invite", actor="alpha",
-                                   target_id="x", target_kind="agent"))
+    store.append(
+        "t1", MemberEvent(action="invite", actor="alpha", target_id="x", target_kind="agent")
+    )
 
     only_board = search_group(store, "t1", "alpha", kinds=("blackboard",))
     assert {h.kind for h in only_board} == {"blackboard"}
@@ -167,8 +176,15 @@ def test_search_includes_linked_room_tasks(tmp_path) -> None:
     def provider(room_id):
         if room_id != "room-9":
             return []
-        return [{"id": "task-1", "title": "nutrition rollout", "status": "running",
-                 "created_by": "alice", "updated_at": "t1"}]
+        return [
+            {
+                "id": "task-1",
+                "title": "nutrition rollout",
+                "status": "running",
+                "created_by": "alice",
+                "updated_at": "t1",
+            }
+        ]
 
     hits = search_group(store, "t1", "nutrition", room_task_provider=provider)
     kinds = {h.kind for h in hits}
@@ -187,9 +203,13 @@ def test_room_task_search_matches_assignee_and_sop(tmp_path) -> None:
 
     def provider(room_id):
         return [
-            {"id": "task-1", "title": "ship", "status": "pending",
-             "assignees": [{"kind": "agent", "ref": "analyst"}],
-             "sop_template": "market-research"},
+            {
+                "id": "task-1",
+                "title": "ship",
+                "status": "pending",
+                "assignees": [{"kind": "agent", "ref": "analyst"}],
+                "sop_template": "market-research",
+            },
         ]
 
     by_assignee = search_group(store, "t1", "analyst", room_task_provider=provider)
@@ -211,7 +231,9 @@ def test_room_message_search_finds_scattered_terms(tmp_path) -> None:
     link_room(store, "t1", "room-9")
     rms = RoomMessageStore(base_dir=tmp_path / "rooms")
     # Terms appear in the same message but NOT as the verbatim phrase.
-    rms.append("room-9", text="nutrition rollout is the plan", participant_id="p", display_name="Bob")
+    rms.append(
+        "room-9", text="nutrition rollout is the plan", participant_id="p", display_name="Bob"
+    )
     # Unrelated message — must NOT appear.
     rms.append("room-9", text="unrelated content here", participant_id="p", display_name="Bob")
 
@@ -226,7 +248,9 @@ def test_search_skips_room_tasks_when_unlinked(tmp_path) -> None:
     store.blackboard("t1").write("k", "nutrition", writer="u")
     # no link → the provider is never consulted
     hits = search_group(
-        store, "t1", "nutrition",
+        store,
+        "t1",
+        "nutrition",
         room_task_provider=lambda rid: [{"id": "x", "title": "nutrition orphan"}],
     )
     assert {h.kind for h in hits} == {"blackboard"}

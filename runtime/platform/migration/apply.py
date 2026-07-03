@@ -15,6 +15,7 @@ Staging-first and safe by default:
 Idempotent: an item whose target already exists is skipped. ``dry_run=True``
 counts what *would* happen without writing anything.
 """
+
 from __future__ import annotations
 
 import json
@@ -92,12 +93,14 @@ def apply_plan(
             applied[item.kind] += 1
 
         elif item.kind == "mcp_server":
-            mcp_records.append({
-                "name": item.name,
-                "needs": list(item.needs),
-                "origin": item.origin,
-                "enabled": False,  # never auto-launch; supply creds + enable explicitly
-            })
+            mcp_records.append(
+                {
+                    "name": item.name,
+                    "needs": list(item.needs),
+                    "origin": item.origin,
+                    "enabled": False,  # never auto-launch; supply creds + enable explicitly
+                }
+            )
             applied["mcp_server"] += 1
 
     if mcp_records and not dry_run:

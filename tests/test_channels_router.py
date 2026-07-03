@@ -72,6 +72,7 @@ def _build_stack(tmp_path: Path):
 
     class _S:
         pass
+
     s = _S()
     s.planner = planner
     s.runtime = runtime
@@ -120,21 +121,26 @@ def _build_app(
 
     http = _FakeHttpClient()
     slack = SlackChannel(
-        bot_token=bot_token, signing_secret=signing_secret,
+        bot_token=bot_token,
+        signing_secret=signing_secret,
         http_client=http,
     )
     m = ChannelManager(
-        stack=stack, agent_registry=reg, default_agent_id="general",
+        stack=stack,
+        agent_registry=reg,
+        default_agent_id="general",
     )
     m.register(slack)
 
     app = FastAPI()
-    app.include_router(create_channels_router(
-        manager=m,
-        identity_store=identity_store,
-        require_auth=require_auth,
-        state_path="" if state_path is None else state_path,
-    ))
+    app.include_router(
+        create_channels_router(
+            manager=m,
+            identity_store=identity_store,
+            require_auth=require_auth,
+            state_path="" if state_path is None else state_path,
+        )
+    )
     return app, m, http
 
 
@@ -166,7 +172,9 @@ class TestListChannels:
         # Implementation note.
         for d in data:
             assert set(d["metrics"].keys()) == {
-                "pairings_count", "group_count", "pending_count",
+                "pairings_count",
+                "group_count",
+                "pending_count",
             }
             assert "assigned_agent_id" in d
 
@@ -227,7 +235,8 @@ class TestChannelAssignment:
         app, _, _ = _build_app(tmp_path)
         c = TestClient(app)
         c.post(
-            "/api/channels/slack/assistant", json={"agent_id": "coder"},
+            "/api/channels/slack/assistant",
+            json={"agent_id": "coder"},
         )
         r = c.delete("/api/channels/slack/assistant")
         assert r.status_code == 200
@@ -237,13 +246,15 @@ class TestChannelAssignment:
         assert r2.json()["agent_id"] is None
 
     def test_assign_unregistered_platform_still_works(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ):
         """Implementation note."""
         app, _, _ = _build_app(tmp_path)
         c = TestClient(app)
         r = c.post(
-            "/api/channels/wechat/assistant", json={"agent_id": "general"},
+            "/api/channels/wechat/assistant",
+            json={"agent_id": "general"},
         )
         assert r.status_code == 200
         r2 = c.get("/api/channels")
@@ -266,16 +277,18 @@ class TestPairings:
         assert slack["metrics"]["pairings_count"] == 0
 
         # Implementation note.
-        body = json.dumps({
-            "type": "event_callback",
-            "event": {
-                "type": "message",
-                "user": "U1234ALICE",
-                "channel": "D_DIRECT_MSG",  # D = direct message
-                "text": "hi",
-                "ts": "1234.5678",
-            },
-        }).encode()
+        body = json.dumps(
+            {
+                "type": "event_callback",
+                "event": {
+                    "type": "message",
+                    "user": "U1234ALICE",
+                    "channel": "D_DIRECT_MSG",  # D = direct message
+                    "text": "hi",
+                    "ts": "1234.5678",
+                },
+            }
+        ).encode()
         ts = str(int(time.time()))
         sig = _slack_sig("sec", ts, body)
         r2 = c.post(
@@ -300,14 +313,18 @@ class TestPairings:
         app, _, _ = _build_app(tmp_path, signing_secret="sec")
         c = TestClient(app)
         for _ in range(3):  # Implementation note.
-            body = json.dumps({
-                "type": "event_callback",
-                "event": {
-                    "type": "message", "user": "U_SAME",
-                    "channel": "D_X", "text": "hi",
-                    "ts": "1234.5678",
-                },
-            }).encode()
+            body = json.dumps(
+                {
+                    "type": "event_callback",
+                    "event": {
+                        "type": "message",
+                        "user": "U_SAME",
+                        "channel": "D_X",
+                        "text": "hi",
+                        "ts": "1234.5678",
+                    },
+                }
+            ).encode()
             ts = str(int(time.time()))
             sig = _slack_sig("sec", ts, body)
             c.post(
@@ -327,14 +344,18 @@ class TestPairings:
         """Implementation note."""
         app, _, _ = _build_app(tmp_path, signing_secret="sec")
         c = TestClient(app)
-        body = json.dumps({
-            "type": "event_callback",
-            "event": {
-                "type": "message", "user": "U_BOB",
-                "channel": "C_PUBLIC_CHAN", "text": "hi",
-                "ts": "1234.5678",
-            },
-        }).encode()
+        body = json.dumps(
+            {
+                "type": "event_callback",
+                "event": {
+                    "type": "message",
+                    "user": "U_BOB",
+                    "channel": "C_PUBLIC_CHAN",
+                    "text": "hi",
+                    "ts": "1234.5678",
+                },
+            }
+        ).encode()
         ts = str(int(time.time()))
         sig = _slack_sig("sec", ts, body)
         c.post(
@@ -352,27 +373,35 @@ class TestPairings:
         assert slack["metrics"]["pairings_count"] == 1  # Implementation note.
 
     def test_state_persists_across_router_rebuild(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ):
         """Implementation note."""
         state_file = tmp_path / "channel_state.json"
 
         # Implementation note.
         app1, mgr1, _ = _build_app(
-            tmp_path, signing_secret="sec", state_path=state_file,
+            tmp_path,
+            signing_secret="sec",
+            state_path=state_file,
         )
         c1 = TestClient(app1)
         c1.post(
-            "/api/channels/slack/assistant", json={"agent_id": "coder"},
+            "/api/channels/slack/assistant",
+            json={"agent_id": "coder"},
         )
-        body = json.dumps({
-            "type": "event_callback",
-            "event": {
-                "type": "message", "user": "U_ALICE",
-                "channel": "C_PUB", "text": "hi",
-                "ts": "1234.5678",
-            },
-        }).encode()
+        body = json.dumps(
+            {
+                "type": "event_callback",
+                "event": {
+                    "type": "message",
+                    "user": "U_ALICE",
+                    "channel": "C_PUB",
+                    "text": "hi",
+                    "ts": "1234.5678",
+                },
+            }
+        ).encode()
         ts = str(int(time.time()))
         c1.post(
             "/api/channels/slack/inbound",
@@ -391,13 +420,13 @@ class TestPairings:
         assert "U_ALICE" in saved["users"]["slack"]
         # Implementation note.
         # Implementation note.
-        assert any(
-            t.startswith("C_PUB") for t in saved["groups"]["slack"]
-        )
+        assert any(t.startswith("C_PUB") for t in saved["groups"]["slack"])
 
         # Implementation note.
         app2, mgr2, _ = _build_app(
-            tmp_path, signing_secret="sec", state_path=state_file,
+            tmp_path,
+            signing_secret="sec",
+            state_path=state_file,
         )
         assert mgr2 is not mgr1
         c2 = TestClient(app2)
@@ -410,7 +439,8 @@ class TestPairings:
         assert slack["metrics"]["group_count"] == 1
 
     def test_corrupt_state_file_falls_back_silently(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ):
         """Implementation note."""
         state_file = tmp_path / "busted.json"
@@ -433,7 +463,8 @@ class TestPairings:
         assert r.json()["agent_id"] is None
 
     def test_state_restore_filters_invalid_and_caps_entries(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ):
         from runtime.sensing.gateway import channels_router as mod
 
@@ -446,19 +477,21 @@ class TestPairings:
         for i in range(mod._MAX_ASSIGNMENTS + 20):
             assignments[f"chan{i}"] = "general"
         state_file.write_text(
-            json.dumps({
-                "version": 1,
-                "assignments": assignments,
-                "users": {
-                    "slack": ["U_ALICE", "\x00bad"]
-                    + [f"U{i}" for i in range(mod._MAX_PAIRINGS_PER_CHANNEL + 20)],
-                    "bad/channel": ["U_BAD"],
-                },
-                "groups": {
-                    "slack": ["C_TEAM"],
-                    "bad/channel": ["C_BAD"],
-                },
-            }),
+            json.dumps(
+                {
+                    "version": 1,
+                    "assignments": assignments,
+                    "users": {
+                        "slack": ["U_ALICE", "\x00bad"]
+                        + [f"U{i}" for i in range(mod._MAX_PAIRINGS_PER_CHANNEL + 20)],
+                        "bad/channel": ["U_BAD"],
+                    },
+                    "groups": {
+                        "slack": ["C_TEAM"],
+                        "bad/channel": ["C_BAD"],
+                    },
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -504,16 +537,22 @@ class TestCredentials:
         reg = AgentRegistry()
         reg.register(make_general_agent(_rt()))
         m = ChannelManager(
-            stack=stack, agent_registry=reg, default_agent_id="general",
+            stack=stack,
+            agent_registry=reg,
+            default_agent_id="general",
         )  # Implementation note.
         app = FastAPI()
-        app.include_router(create_channels_router(
-            manager=m, state_path=state_path,
-        ))
+        app.include_router(
+            create_channels_router(
+                manager=m,
+                state_path=state_path,
+            )
+        )
         return app, m
 
     def test_post_slack_creds_registers_channel(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ):
         state_file = tmp_path / "s.json"
         app, m = self._build_empty(tmp_path, state_file)
@@ -594,20 +633,23 @@ class TestCredentials:
         assert r.status_code == 400
 
     def test_invalid_legacy_credentials_do_not_pollute_cache(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ):
         state_file = tmp_path / "s.json"
         creds_file = tmp_path / "s.credentials.json"
         creds_file.write_text(
-            json.dumps({
-                "mars": {"bot_token": "x", "signing_secret": "y"},
-                "slack": {"bot_token": "missing-signing-secret"},
-                "discord": {
-                    "bot_token": "x",
-                    "public_key": "00" * 32,
-                    "channel_id": "../bad",
-                },
-            }),
+            json.dumps(
+                {
+                    "mars": {"bot_token": "x", "signing_secret": "y"},
+                    "slack": {"bot_token": "missing-signing-secret"},
+                    "discord": {
+                        "bot_token": "x",
+                        "public_key": "00" * 32,
+                        "channel_id": "../bad",
+                    },
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -623,6 +665,7 @@ class TestCredentials:
             _construct_channel,
             _UnsupportedPlatformError,
         )
+
         with pytest.raises(_UnsupportedPlatformError):
             _construct_channel("mars_messenger", {"bot_token": "x"})
 
@@ -641,7 +684,8 @@ class TestCredentials:
         assert not m.has("slack")
 
     def test_credentials_persist_across_restart(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ):
         state_file = tmp_path / "s.json"
         app1, m1 = self._build_empty(tmp_path, state_file)
@@ -713,7 +757,8 @@ class TestCredentials:
         assert r2.status_code == 200
 
     def test_discord_requires_bot_token_and_public_key(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ):
         app, _ = self._build_empty(tmp_path, tmp_path / "s.json")
         # Implementation note.
@@ -766,7 +811,9 @@ class TestWeChatQR:
         reg = AgentRegistry()
         reg.register(make_general_agent(_rt()))
         m = ChannelManager(
-            stack=stack, agent_registry=reg, default_agent_id="general",
+            stack=stack,
+            agent_registry=reg,
+            default_agent_id="general",
         )
 
         # Mock _request on WeixinBotChannel to avoid real HTTP
@@ -781,9 +828,12 @@ class TestWeChatQR:
         _wxmod.WeixinBotChannel._request = _mock_request  # type: ignore[method-assign]
 
         app = FastAPI()
-        app.include_router(create_channels_router(
-            manager=m, state_path=tmp_path / "s.json",
-        ))
+        app.include_router(
+            create_channels_router(
+                manager=m,
+                state_path=tmp_path / "s.json",
+            )
+        )
 
         # Provide teardown via pytest: we can use pytest's finalizer but
         # since we're not in a fixture, restore lazily after test call.
@@ -872,12 +922,17 @@ class TestCredentialEncryption:
         reg = AgentRegistry()
         reg.register(make_general_agent(_rt()))
         m = ChannelManager(
-            stack=stack, agent_registry=reg, default_agent_id="general",
+            stack=stack,
+            agent_registry=reg,
+            default_agent_id="general",
         )
         app = FastAPI()
-        app.include_router(create_channels_router(
-            manager=m, state_path=state_file,
-        ))
+        app.include_router(
+            create_channels_router(
+                manager=m,
+                state_path=state_file,
+            )
+        )
         c = TestClient(app)
         c.post(
             "/api/channels/credentials/slack",
@@ -900,7 +955,8 @@ class TestCredentialEncryption:
         assert r["slack"]["bot_token"].endswith("1234")
 
     def test_round_trip_across_restart_with_encryption(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ):
         """Implementation note."""
         from runtime.adapters.channels import ChannelManager
@@ -916,12 +972,17 @@ class TestCredentialEncryption:
             reg = AgentRegistry()
             reg.register(make_general_agent(_rt()))
             mgr = ChannelManager(
-                stack=stack, agent_registry=reg, default_agent_id="general",
+                stack=stack,
+                agent_registry=reg,
+                default_agent_id="general",
             )
             app = FastAPI()
-            app.include_router(create_channels_router(
-                manager=mgr, state_path=state_file,
-            ))
+            app.include_router(
+                create_channels_router(
+                    manager=mgr,
+                    state_path=state_file,
+                )
+            )
             return app, mgr
 
         app1, m1 = _build()
@@ -943,7 +1004,8 @@ class TestCredentialEncryption:
         assert r["credentials"]["slack"]["bot_token"].endswith("TRIP")
 
     def test_legacy_plaintext_file_still_readable(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ):
         """Implementation note."""
         from runtime.adapters.channels import ChannelManager
@@ -957,12 +1019,14 @@ class TestCredentialEncryption:
         # Implementation note.
         creds_file.parent.mkdir(parents=True, exist_ok=True)
         creds_file.write_text(
-            json.dumps({
-                "slack": {
-                    "bot_token": "xoxb-LEGACY-PLAIN",
-                    "signing_secret": "legacy-sig",
-                },
-            }),
+            json.dumps(
+                {
+                    "slack": {
+                        "bot_token": "xoxb-LEGACY-PLAIN",
+                        "signing_secret": "legacy-sig",
+                    },
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -970,17 +1034,24 @@ class TestCredentialEncryption:
         reg = AgentRegistry()
         reg.register(make_general_agent(_rt()))
         m = ChannelManager(
-            stack=stack, agent_registry=reg, default_agent_id="general",
+            stack=stack,
+            agent_registry=reg,
+            default_agent_id="general",
         )
         app = FastAPI()
-        app.include_router(create_channels_router(
-            manager=m, state_path=state_file,
-        ))
+        app.include_router(
+            create_channels_router(
+                manager=m,
+                state_path=state_file,
+            )
+        )
         # Implementation note.
         assert m.has("slack")
 
     def test_env_key_takes_precedence(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         """Implementation note."""
         import base64
@@ -1001,12 +1072,17 @@ class TestCredentialEncryption:
             reg = AgentRegistry()
             reg.register(make_general_agent(_rt()))
             mgr = ChannelManager(
-                stack=stack, agent_registry=reg, default_agent_id="general",
+                stack=stack,
+                agent_registry=reg,
+                default_agent_id="general",
             )
             app = FastAPI()
-            app.include_router(create_channels_router(
-                manager=mgr, state_path=state_file,
-            ))
+            app.include_router(
+                create_channels_router(
+                    manager=mgr,
+                    state_path=state_file,
+                )
+            )
             return app, mgr
 
         # Implementation note.
@@ -1024,24 +1100,30 @@ class TestCredentialEncryption:
         assert not m2.has("slack")  # Implementation note.
 
     def test_pairings_endpoint_lists_users_and_groups(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ):
         app, _, _ = _build_app(tmp_path, signing_secret="sec")
         c = TestClient(app)
         # Implementation note.
         for user in ("U_ALICE", "U_BOB"):
-            body = json.dumps({
-                "type": "event_callback",
-                "event": {
-                    "type": "message", "user": user,
-                    "channel": "D_DM", "text": "hi",
-                    "ts": "1234.5678",
-                },
-            }).encode()
+            body = json.dumps(
+                {
+                    "type": "event_callback",
+                    "event": {
+                        "type": "message",
+                        "user": user,
+                        "channel": "D_DM",
+                        "text": "hi",
+                        "ts": "1234.5678",
+                    },
+                }
+            ).encode()
             ts = str(int(time.time()))
             sig = _slack_sig("sec", ts, body)
             c.post(
-                "/api/channels/slack/inbound", content=body,
+                "/api/channels/slack/inbound",
+                content=body,
                 headers={
                     "content-type": "application/json",
                     "x-slack-request-timestamp": ts,
@@ -1062,9 +1144,12 @@ class TestCredentialEncryption:
 class TestInboundSlack:
     def test_url_verification_challenge(self, tmp_path: Path):
         app, _, _ = _build_app(tmp_path, signing_secret="sec")
-        body = json.dumps({
-            "type": "url_verification", "challenge": "abc123",
-        }).encode()
+        body = json.dumps(
+            {
+                "type": "url_verification",
+                "challenge": "abc123",
+            }
+        ).encode()
         ts = str(int(time.time()))
         sig = _slack_sig("sec", ts, body)
         r = TestClient(app).post(
@@ -1120,8 +1205,10 @@ class TestInboundSlack:
         payload = {
             "type": "event_callback",
             "event": {
-                "type": "message", "channel": "C",
-                "ts": "1", "text": "from bot",
+                "type": "message",
+                "channel": "C",
+                "ts": "1",
+                "text": "from bot",
                 "bot_id": "B01",
             },
         }
@@ -1160,7 +1247,7 @@ class TestInboundSlack:
     def test_expired_timestamp_401(self, tmp_path: Path):
         app, _, _ = _build_app(tmp_path, signing_secret="sec")
         body = b'{"type":"event_callback"}'
-        old_ts = str(int(time.time()) - 3600)    # Implementation note.
+        old_ts = str(int(time.time()) - 3600)  # Implementation note.
         sig = _slack_sig("sec", old_ts, body)
         r = TestClient(app).post(
             "/api/channels/slack/inbound",
@@ -1203,11 +1290,17 @@ class TestInboundSlack:
 
 class _PollingOnlyChannel(Channel):
     """Implementation note."""
+
     channel_id = "polling_only"
 
-    def start(self): pass
-    def stop(self): pass
-    def send(self, msg: OutboundMessage): pass
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+    def send(self, msg: OutboundMessage):
+        pass
 
 
 class TestWebhookNotSupported:
@@ -1216,14 +1309,17 @@ class TestWebhookNotSupported:
         reg = AgentRegistry()
         reg.register(make_general_agent(_rt()))
         m = ChannelManager(
-            stack=stack, agent_registry=reg, default_agent_id="general",
+            stack=stack,
+            agent_registry=reg,
+            default_agent_id="general",
         )
         m.register(_PollingOnlyChannel())
 
         app = FastAPI()
         app.include_router(create_channels_router(manager=m))
         r = TestClient(app).post(
-            "/api/channels/polling_only/inbound", content=b"{}",
+            "/api/channels/polling_only/inbound",
+            content=b"{}",
         )
         assert r.status_code == 400
         assert "not accept webhook" in r.json()["detail"].lower()

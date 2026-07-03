@@ -24,7 +24,9 @@ def load_data(path: str) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
-def is_categorical(series: pd.Series, max_unique_abs: int = 20, max_unique_ratio: float = 0.05) -> bool:
+def is_categorical(
+    series: pd.Series, max_unique_abs: int = 20, max_unique_ratio: float = 0.05
+) -> bool:
     if series.dtype == object or series.dtype.name == "category":
         return True
     n_unique = series.nunique()
@@ -80,6 +82,7 @@ def significance_label(p: float) -> str:
 
 # ── Test runners ──────────────────────────────────────────────────────────────
 
+
 def run_independent_ttest(groups: list, group_names: list, alpha: float = 0.05) -> dict:
     g1, g2 = groups
     equal_var, _, var_desc = check_equal_variance(groups, alpha)
@@ -101,8 +104,16 @@ def run_independent_ttest(groups: list, group_names: list, alpha: float = 0.05) 
         "effect_size": {"cohens_d": round(float(cohens_d), 4)},
         "variance_test": var_desc,
         "group_stats": {
-            group_names[0]: {"n": len(g1), "mean": round(float(np.mean(g1)), 4), "std": round(float(np.std(g1, ddof=1)), 4)},
-            group_names[1]: {"n": len(g2), "mean": round(float(np.mean(g2)), 4), "std": round(float(np.std(g2, ddof=1)), 4)},
+            group_names[0]: {
+                "n": len(g1),
+                "mean": round(float(np.mean(g1)), 4),
+                "std": round(float(np.std(g1, ddof=1)), 4),
+            },
+            group_names[1]: {
+                "n": len(g2),
+                "mean": round(float(np.mean(g2)), 4),
+                "std": round(float(np.std(g2, ddof=1)), 4),
+            },
         },
     }
 
@@ -190,7 +201,10 @@ def run_chi_square(df: pd.DataFrame, col1: str, col2: str) -> dict:
         "p_value": round_p(p),
         "df": int(dof),
         "effect_size": {"cramers_v": round(float(cramers_v), 4)},
-        "contingency_table": {str(k): {str(kk): int(vv) for kk, vv in v.items()} for k, v in contingency.to_dict().items()},
+        "contingency_table": {
+            str(k): {str(kk): int(vv) for kk, vv in v.items()}
+            for k, v in contingency.to_dict().items()
+        },
         "min_expected": round(float(expected.min()), 2),
     }
 
@@ -208,8 +222,16 @@ def run_paired_ttest(d1: np.ndarray, d2: np.ndarray, name1: str, name2: str) -> 
         "p_value": round_p(p),
         "effect_size": {"cohens_d": round(float(cohens_d), 4)},
         "stats": {
-            name1: {"n": len(d1), "mean": round(float(np.mean(d1)), 4), "std": round(float(np.std(d1, ddof=1)), 4)},
-            name2: {"n": len(d2), "mean": round(float(np.mean(d2)), 4), "std": round(float(np.std(d2, ddof=1)), 4)},
+            name1: {
+                "n": len(d1),
+                "mean": round(float(np.mean(d1)), 4),
+                "std": round(float(np.std(d1, ddof=1)), 4),
+            },
+            name2: {
+                "n": len(d2),
+                "mean": round(float(np.mean(d2)), 4),
+                "std": round(float(np.std(d2, ddof=1)), 4),
+            },
             "difference": {"mean": round(float(np.mean(diff)), 4), "std": round(diff_std, 4)},
         },
     }
@@ -236,12 +258,32 @@ def run_wilcoxon(d1: np.ndarray, d2: np.ndarray, name1: str, name2: str) -> dict
 # ── Effect size descriptions ─────────────────────────────────────────────────
 
 _ES_THRESHOLDS = {
-    "cohens_d":       [(0.2, "极小，几乎没有实际差异"), (0.5, "小效应量，差异较小"), (0.8, "中等效应量，差异明显"), (float("inf"), "大效应量，差异非常明显")],
-    "eta_squared":    [(0.01, "极小"), (0.06, "小效应量"), (0.14, "中等效应量"), (float("inf"), "大效应量")],
-    "cramers_v":      [(0.1, "关联极弱"), (0.3, "弱关联"), (0.5, "中等关联"), (float("inf"), "强关联")],
-    "rank_biserial_r":[(0.1, "极小"), (0.3, "小效应量"), (0.5, "中等效应量"), (float("inf"), "大效应量")],
-    "epsilon_squared":[(0.01, "极小"), (0.06, "小效应量"), (0.14, "中等效应量"), (float("inf"), "大效应量")],
-    "r":              [(0.1, "极小"), (0.3, "小效应量"), (0.5, "中等效应量"), (float("inf"), "大效应量")],
+    "cohens_d": [
+        (0.2, "极小，几乎没有实际差异"),
+        (0.5, "小效应量，差异较小"),
+        (0.8, "中等效应量，差异明显"),
+        (float("inf"), "大效应量，差异非常明显"),
+    ],
+    "eta_squared": [
+        (0.01, "极小"),
+        (0.06, "小效应量"),
+        (0.14, "中等效应量"),
+        (float("inf"), "大效应量"),
+    ],
+    "cramers_v": [(0.1, "关联极弱"), (0.3, "弱关联"), (0.5, "中等关联"), (float("inf"), "强关联")],
+    "rank_biserial_r": [
+        (0.1, "极小"),
+        (0.3, "小效应量"),
+        (0.5, "中等效应量"),
+        (float("inf"), "大效应量"),
+    ],
+    "epsilon_squared": [
+        (0.01, "极小"),
+        (0.06, "小效应量"),
+        (0.14, "中等效应量"),
+        (float("inf"), "大效应量"),
+    ],
+    "r": [(0.1, "极小"), (0.3, "小效应量"), (0.5, "中等效应量"), (float("inf"), "大效应量")],
 }
 
 _ES_LABELS = {
@@ -267,6 +309,7 @@ def _effect_size_desc(effect_size: dict) -> str:
 
 
 # ── Interpretation ────────────────────────────────────────────────────────────
+
 
 def interpret(result: dict, alpha: float = 0.05) -> list:
     p = result["p_value"]
@@ -312,38 +355,52 @@ def interpret(result: dict, alpha: float = 0.05) -> list:
         names = list(gs.keys())
         m1, m2 = gs[names[0]]["median"], gs[names[1]]["median"]
         if sig:
-            lines.append(f"通俗解读：「{names[0]}」（中位数 {m1}）和「{names[1]}」（中位数 {m2}）的分布存在显著差异。")
+            lines.append(
+                f"通俗解读：「{names[0]}」（中位数 {m1}）和「{names[1]}」（中位数 {m2}）的分布存在显著差异。"
+            )
         else:
             lines.append(f"通俗解读：「{names[0]}」和「{names[1]}」的分布没有显著差异。")
 
     elif test_id == "one_way_anova":
         ng = result["n_groups"]
         if sig:
-            lines.append(f"通俗解读：{ng} 个组之间至少有一对存在显著差异。建议进一步做事后检验（如 Tukey HSD）确定具体哪些组不同。")
+            lines.append(
+                f"通俗解读：{ng} 个组之间至少有一对存在显著差异。建议进一步做事后检验（如 Tukey HSD）确定具体哪些组不同。"
+            )
         else:
             lines.append(f"通俗解读：{ng} 个组之间没有显著差异。")
 
     elif test_id == "kruskal_wallis":
         ng = result["n_groups"]
         if sig:
-            lines.append(f"通俗解读：{ng} 个组的分布存在显著差异。建议进一步做 Dunn's test 确定具体差异。")
+            lines.append(
+                f"通俗解读：{ng} 个组的分布存在显著差异。建议进一步做 Dunn's test 确定具体差异。"
+            )
         else:
             lines.append(f"通俗解读：{ng} 个组的分布没有显著差异。")
 
     elif test_id == "chi_square":
         min_exp = result.get("min_expected", 0)
         if min_exp < 5:
-            lines.append(f"注意：最小期望频数 = {min_exp}（< 5），卡方检验结果可能不可靠，建议使用 Fisher 精确检验。")
+            lines.append(
+                f"注意：最小期望频数 = {min_exp}（< 5），卡方检验结果可能不可靠，建议使用 Fisher 精确检验。"
+            )
         if sig:
-            lines.append("通俗解读：两个分类变量之间存在显著关联，某些类别组合的出现频率明显偏离随机预期。")
+            lines.append(
+                "通俗解读：两个分类变量之间存在显著关联，某些类别组合的出现频率明显偏离随机预期。"
+            )
         else:
-            lines.append("通俗解读：两个分类变量之间没有显著关联，类别组合的分布与随机预期无明显偏差。")
+            lines.append(
+                "通俗解读：两个分类变量之间没有显著关联，类别组合的分布与随机预期无明显偏差。"
+            )
 
     elif test_id == "paired_ttest":
         diff_mean = result["stats"]["difference"]["mean"]
         if sig:
             direction = "增加" if diff_mean > 0 else "减少"
-            lines.append(f"通俗解读：两次测量之间存在显著变化，平均{direction}了 {abs(diff_mean):.4f}。")
+            lines.append(
+                f"通俗解读：两次测量之间存在显著变化，平均{direction}了 {abs(diff_mean):.4f}。"
+            )
         else:
             lines.append("通俗解读：两次测量之间没有显著变化。")
 
@@ -357,6 +414,7 @@ def interpret(result: dict, alpha: float = 0.05) -> list:
 
 
 # ── Auto-selection & orchestration ────────────────────────────────────────────
+
 
 def auto_select_and_run(df, group_col, value_col, col1, col2, paired, force_test, alpha):
     if paired or (col1 and col2):
@@ -392,7 +450,10 @@ def auto_select_and_run(df, group_col, value_col, col1, col2, paired, force_test
         return result
 
     if not group_col or not value_col:
-        print("错误：请指定 --group + --value（分组比较），或 --col1 + --col2（配对比较）", file=sys.stderr)
+        print(
+            "错误：请指定 --group + --value（分组比较），或 --col1 + --col2（配对比较）",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     group_is_cat = is_categorical(df[group_col])
@@ -413,7 +474,10 @@ def auto_select_and_run(df, group_col, value_col, col1, col2, paired, force_test
 
     n_groups = len(groups_data)
     if n_groups < 2:
-        print(f"错误：分组变量 '{group_col}' 只有 {n_groups} 个有效组（至少需要 2 个）", file=sys.stderr)
+        print(
+            f"错误：分组变量 '{group_col}' 只有 {n_groups} 个有效组（至少需要 2 个）",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     normality_results = {}
@@ -448,10 +512,14 @@ def auto_select_and_run(df, group_col, value_col, col1, col2, paired, force_test
             result = run_mann_whitney(groups_data, group_names)
     else:
         if all_normal:
-            selection_reason.append(f"{n_groups} 组比较 + 数据近似正态 → 选择单因素方差分析 (ANOVA)")
+            selection_reason.append(
+                f"{n_groups} 组比较 + 数据近似正态 → 选择单因素方差分析 (ANOVA)"
+            )
             result = run_one_way_anova(groups_data, group_names)
         else:
-            selection_reason.append(f"{n_groups} 组比较 + 数据不满足正态性 → 选择 Kruskal-Wallis 检验")
+            selection_reason.append(
+                f"{n_groups} 组比较 + 数据不满足正态性 → 选择 Kruskal-Wallis 检验"
+            )
             result = run_kruskal_wallis(groups_data, group_names)
 
     result["normality_check"] = normality_results
@@ -470,8 +538,18 @@ def main():
     parser.add_argument("--col2", default=None, help="配对检验：第 2 个变量列名")
     parser.add_argument("--paired", action="store_true", help="启用配对检验模式")
     parser.add_argument(
-        "--test", "-T", default=None,
-        choices=["t-test", "mann-whitney", "anova", "kruskal-wallis", "chi-square", "paired-ttest", "wilcoxon"],
+        "--test",
+        "-T",
+        default=None,
+        choices=[
+            "t-test",
+            "mann-whitney",
+            "anova",
+            "kruskal-wallis",
+            "chi-square",
+            "paired-ttest",
+            "wilcoxon",
+        ],
         help="强制指定检验方法（默认自动选择）",
     )
     parser.add_argument("--alpha", "-a", type=float, default=0.05, help="显著性水平（默认 0.05）")
@@ -496,10 +574,15 @@ def main():
             sys.exit(1)
 
     if not (args.group and args.value) and not (args.col1 and args.col2):
-        print("错误：请指定 --group + --value（分组比较），或 --col1 + --col2（配对比较）", file=sys.stderr)
+        print(
+            "错误：请指定 --group + --value（分组比较），或 --col1 + --col2（配对比较）",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
-    result = auto_select_and_run(df, args.group, args.value, args.col1, args.col2, args.paired, args.test, args.alpha)
+    result = auto_select_and_run(
+        df, args.group, args.value, args.col1, args.col2, args.paired, args.test, args.alpha
+    )
     result["alpha"] = args.alpha
     result["interpretation"] = interpret(result, args.alpha)
 

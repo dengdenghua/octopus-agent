@@ -36,6 +36,7 @@ Design notes
   when ``stack.planner.router`` is absent (returns ``{"ok": False}``).
   That's the path we exercise: the persistence side works regardless.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -57,7 +58,8 @@ from runtime.sensing.model_router import ModelDispatchRouter, ModelRouter
 
 @pytest.fixture
 def isolated_cwd(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Path:
     """Redirect CWD so ``Path("data/custom_models.json")`` lands in a
     scratch dir. Restoration is handled by monkeypatch."""
@@ -118,7 +120,8 @@ class TestIdentityLockGet:
         assert len(data["unlock_paths"]) >= 3
 
     def test_runtime_override_reported_as_runtime(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         from runtime.platform import identity_filter as _idf
 
@@ -138,7 +141,8 @@ class TestIdentityLockGet:
 class TestIdentityLockPut:
     def test_set_locked_false(self, client: TestClient) -> None:
         r = client.put(
-            "/api/config/identity-lock", json={"locked": False},
+            "/api/config/identity-lock",
+            json={"locked": False},
         )
         assert r.status_code == 200
         assert r.json()["locked"] is False
@@ -147,7 +151,8 @@ class TestIdentityLockPut:
     def test_set_locked_true(self, client: TestClient) -> None:
         client.put("/api/config/identity-lock", json={"locked": False})
         r = client.put(
-            "/api/config/identity-lock", json={"locked": True},
+            "/api/config/identity-lock",
+            json={"locked": True},
         )
         assert r.status_code == 200
         assert r.json()["locked"] is True
@@ -158,43 +163,58 @@ class TestIdentityLockPut:
         "forget" the override."""
         client.put("/api/config/identity-lock", json={"locked": False})
         r = client.put(
-            "/api/config/identity-lock", json={"locked": None},
+            "/api/config/identity-lock",
+            json={"locked": None},
         )
         assert r.status_code == 200
         assert r.json()["source"] == "default"
 
     def test_rejects_non_bool_value(self, client: TestClient) -> None:
         r = client.put(
-            "/api/config/identity-lock", json={"locked": "yes"},
+            "/api/config/identity-lock",
+            json={"locked": "yes"},
         )
         assert r.status_code == 400
 
 
 class TestConfigAuth:
     def test_identity_lock_requires_auth_when_enabled(
-        self, secured_client: tuple[TestClient, dict[str, str]],
+        self,
+        secured_client: tuple[TestClient, dict[str, str]],
     ) -> None:
         client, headers = secured_client
 
         assert client.get("/api/config/identity-lock").status_code == 401
-        assert client.get(
-            "/api/config/identity-lock", headers=headers,
-        ).status_code == 200
+        assert (
+            client.get(
+                "/api/config/identity-lock",
+                headers=headers,
+            ).status_code
+            == 200
+        )
 
     def test_custom_model_put_requires_auth_when_enabled(
-        self, secured_client: tuple[TestClient, dict[str, str]],
+        self,
+        secured_client: tuple[TestClient, dict[str, str]],
     ) -> None:
         client, headers = secured_client
         payload = {"provider": "anthropic", "model": "claude-sonnet-4-6"}
 
-        assert client.put(
-            "/api/config/custom-models/claude-mirror", json=payload,
-        ).status_code == 401
-        assert client.put(
-            "/api/config/custom-models/claude-mirror",
-            json=payload,
-            headers=headers,
-        ).status_code == 200
+        assert (
+            client.put(
+                "/api/config/custom-models/claude-mirror",
+                json=payload,
+            ).status_code
+            == 401
+        )
+        assert (
+            client.put(
+                "/api/config/custom-models/claude-mirror",
+                json=payload,
+                headers=headers,
+            ).status_code
+            == 200
+        )
 
 
 # ═══════════════════════════════════════════════════════════
@@ -247,7 +267,9 @@ class TestCustomModelsList:
 
 class TestCustomModelsUpsert:
     def test_create_persists_to_disk(
-        self, client: TestClient, isolated_cwd: Path,
+        self,
+        client: TestClient,
+        isolated_cwd: Path,
     ) -> None:
         payload = {
             "name": "claude-mirror",
@@ -269,7 +291,8 @@ class TestCustomModelsUpsert:
             "default_headers": {"X-Test": "yes"},
         }
         r = client.put(
-            "/api/config/custom-models/claude-mirror", json=payload,
+            "/api/config/custom-models/claude-mirror",
+            json=payload,
         )
         assert r.status_code == 200
         body = r.json()
@@ -304,7 +327,8 @@ class TestCustomModelsUpsert:
         assert stored["claude-mirror"]["default_headers"] == {"X-Test": "yes"}
 
     def test_update_preserves_prior_api_key(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         """PUT without api_key should NOT wipe the existing secret.
         This is the UX: user opens the form, toggles something minor,
@@ -312,8 +336,10 @@ class TestCustomModelsUpsert:
         client.put(
             "/api/config/custom-models/mid1",
             json={
-                "name": "m1", "provider": "openai",
-                "base_url": "https://x.test", "api_key": "sk-original",
+                "name": "m1",
+                "provider": "openai",
+                "base_url": "https://x.test",
+                "api_key": "sk-original",
                 "model": "gpt-4",
             },
         )
@@ -332,14 +358,18 @@ class TestCustomModelsUpsert:
         assert entry["name"] == "m1-renamed"
 
     def test_update_can_clear_headers_and_false_capabilities(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         client.put(
             "/api/config/custom-models/mid2",
             json={
-                "name": "m2", "provider": "openai",
-                "base_url": "https://x.test", "api_key": "sk",
-                "model": "gpt-4", "supports_thinking": True,
+                "name": "m2",
+                "provider": "openai",
+                "base_url": "https://x.test",
+                "api_key": "sk",
+                "model": "gpt-4",
+                "supports_thinking": True,
                 "supports_vision": True,
                 "default_headers": {"X-Route": "a"},
             },
@@ -362,7 +392,8 @@ class TestCustomModelsUpsert:
         assert entry["has_default_headers"] is False
 
     def test_custom_model_list_never_echoes_header_secret_values(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         client.put(
             "/api/config/custom-models/secret-headers",
@@ -458,9 +489,7 @@ class TestCustomModelCompatDiagnostics:
         data = r.json()
         assert data["schema"] == "octopus.openai_compat_profile_catalog.v1"
         assert data["total"] >= 10
-        assert data["live_smoke"]["schema"] == (
-            "octopus.openai_compat_live_smoke_readiness.v1"
-        )
+        assert data["live_smoke"]["schema"] == ("octopus.openai_compat_live_smoke_readiness.v1")
         assert data["live_smoke"]["provider_count"] == data["total"]
         assert data["live_smoke"]["chat_smoke_enabled"] is False
         assert data["live_smoke"]["runnable_chat_provider_count"] == 0
@@ -493,27 +522,25 @@ class TestCustomModelCompatDiagnostics:
         }
         assert kimi_coding["upstreams"][0]["model"] == "K2.7-Code"
         assert kimi_coding["upstreams"][0]["profile"] == "kimi_coding"
-        assert "drop_sampling_parameters" in kimi_coding["upstreams"][0][
-            "normalization_hints"
-        ]
-        assert "parallel_tool_calls" in kimi_coding["upstreams"][0][
-            "normalization"
-        ]["removed_fields"]
+        assert "drop_sampling_parameters" in kimi_coding["upstreams"][0]["normalization_hints"]
+        assert (
+            "parallel_tool_calls" in kimi_coding["upstreams"][0]["normalization"]["removed_fields"]
+        )
         assert kimi_coding["upstreams"][0]["dry_run"] is True
         assert kimi_coding["upstreams"][0]["risk_level"] in {"medium", "high"}
-        assert "sampling_parameters_removed" in kimi_coding["upstreams"][0][
-            "risk_reasons"
-        ]
+        assert "sampling_parameters_removed" in kimi_coding["upstreams"][0]["risk_reasons"]
         assert kimi_coding["upstreams"][0]["request_contract"]["schema"] == (
             "octopus.openai_compat_request_contract_probe.v1"
         )
         assert kimi_coding["upstreams"][0]["request_contract"]["contract_ready"] is True
-        assert "parallel_tool_calls" in kimi_coding["upstreams"][0][
-            "request_contract"
-        ]["removed_fields"]
-        assert "strict_provider_may_drop_optional_features" in kimi_coding[
-            "upstreams"
-        ][0]["risk_reasons"]
+        assert (
+            "parallel_tool_calls"
+            in kimi_coding["upstreams"][0]["request_contract"]["removed_fields"]
+        )
+        assert (
+            "strict_provider_may_drop_optional_features"
+            in kimi_coding["upstreams"][0]["risk_reasons"]
+        )
         capability_status = {
             item["capability"]: item["status"]
             for item in kimi_coding["upstreams"][0]["capability_matrix"]
@@ -531,9 +558,7 @@ class TestCustomModelCompatDiagnostics:
             "temperature",
             "thinking",
             "top_p",
-        }.issubset(
-            set(kimi_coding["upstreams"][0]["normalization"]["removed_fields"])
-        )
+        }.issubset(set(kimi_coding["upstreams"][0]["normalization"]["removed_fields"]))
 
         qwen = by_id["qwen"]["upstreams"][0]
         assert "strict_tool_schema" in qwen["normalization_hints"]
@@ -542,13 +567,9 @@ class TestCustomModelCompatDiagnostics:
         assert qwen["risk_level"] == "medium"
         assert "tool_schema_normalized" in qwen["risk_reasons"]
         assert "core_request_field_removed" not in qwen["risk_reasons"]
-        qwen_capabilities = {
-            item["capability"]: item for item in qwen["capability_matrix"]
-        }
+        qwen_capabilities = {item["capability"]: item for item in qwen["capability_matrix"]}
         assert qwen_capabilities["tool_calling"]["status"] == "warn"
-        assert "tool schema normalized" in qwen_capabilities["tool_calling"][
-            "notes"
-        ]
+        assert "tool schema normalized" in qwen_capabilities["tool_calling"]["notes"]
         qwen_reasons = {item["reason"] for item in qwen["fallback_retries"]}
         assert "rename_max_tokens" in qwen_reasons
 
@@ -645,22 +666,17 @@ class TestCustomModelCompatDiagnostics:
         assert "tool_calling_control_removed" in upstream["risk_reasons"]
         assert upstream["request_contract"]["profile_id"] == "kimi_coding"
         assert upstream["request_contract"]["contract_ready"] is True
-        assert upstream["request_contract"]["normalized_payload"] == upstream[
-            "normalization"
-        ]["payload"]
-        assert upstream["request_contract"]["fallback_retries"] == upstream[
-            "fallback_retries"
-        ]
-        capability_matrix = {
-            item["capability"]: item for item in upstream["capability_matrix"]
-        }
+        assert (
+            upstream["request_contract"]["normalized_payload"]
+            == upstream["normalization"]["payload"]
+        )
+        assert upstream["request_contract"]["fallback_retries"] == upstream["fallback_retries"]
+        capability_matrix = {item["capability"]: item for item in upstream["capability_matrix"]}
         assert capability_matrix["chat_completion"]["status"] == "pass"
         assert capability_matrix["tool_calling"]["status"] == "warn"
         assert capability_matrix["structured_output"]["status"] == "warn"
         assert capability_matrix["fallback_retries"]["status"] == "pass"
-        assert "dry_run_representative_400" in capability_matrix[
-            "fallback_retries"
-        ]["notes"]
+        assert "dry_run_representative_400" in capability_matrix["fallback_retries"]["notes"]
         assert upstream["strict_tool_schema"] is True
         removed = set(upstream["normalization"]["removed_fields"])
         assert {
@@ -711,13 +727,17 @@ class TestCustomModelCompatDiagnostics:
 
 class TestCustomModelsDelete:
     def test_delete_removes_from_list_and_disk(
-        self, client: TestClient, isolated_cwd: Path,
+        self,
+        client: TestClient,
+        isolated_cwd: Path,
     ) -> None:
         client.put(
             "/api/config/custom-models/delme",
             json={
-                "name": "x", "provider": "openai",
-                "base_url": "https://x.test", "api_key": "sk",
+                "name": "x",
+                "provider": "openai",
+                "base_url": "https://x.test",
+                "api_key": "sk",
                 "model": "gpt-4",
             },
         )
@@ -736,7 +756,8 @@ class TestCustomModelsDelete:
         assert "delme" not in stored
 
     def test_delete_missing_is_idempotent(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         """Double-delete shouldn't 500. UI could race two Delete clicks
         and we want the second to be a no-op rather than an error."""
@@ -752,14 +773,17 @@ class TestCustomModelsDelete:
 
 class TestLlmModelsMerge:
     def test_custom_model_appears_in_merged_list(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         client.put(
             "/api/config/custom-models/mirror-x",
             json={
-                "name": "Mirror X", "provider": "anthropic",
+                "name": "Mirror X",
+                "provider": "anthropic",
                 "base_url": "https://mirror.test",
-                "api_key": "sk-x", "model": "claude-sonnet-4-6",
+                "api_key": "sk-x",
+                "model": "claude-sonnet-4-6",
                 "display_name": "Mirror X",
                 "supports_thinking": True,
                 "supports_vision": True,
@@ -779,7 +803,8 @@ class TestLlmModelsMerge:
         assert "supports_thinking" in blob
 
     def test_llm_models_do_not_advertise_legacy_molili_presets(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         """The React model picker should not surface retired Molili gateway
         presets such as MiniMax M2.5 unless the user explicitly configures
@@ -805,9 +830,11 @@ class TestLlmModelsMerge:
         client.put(
             "/api/config/custom-models/kimi-code",
             json={
-                "name": "Kimi Code", "provider": "openai",
+                "name": "Kimi Code",
+                "provider": "openai",
                 "base_url": "https://api.kimi.com/coding/v1",
-                "api_key": "sk-x", "models": ["kimi-for-coding"],
+                "api_key": "sk-x",
+                "models": ["kimi-for-coding"],
                 "display_name": "K2.7 Code",
                 "omit_sampling_parameters": True,
                 "compat_profile": "kimi_coding",
@@ -819,10 +846,7 @@ class TestLlmModelsMerge:
         )
 
         data = client.get("/api/llm-models").json()
-        rows = [
-            row for row in data["models"]
-            if row.get("entry_id") == "kimi-code"
-        ]
+        rows = [row for row in data["models"] if row.get("entry_id") == "kimi-code"]
         assert rows
         assert rows[0]["id"] == "kimi-for-coding"
         assert rows[0]["display_name"] == "K2.7 Code"
@@ -842,7 +866,8 @@ class TestLlmModelsMerge:
 
 class TestStartupHydration:
     def test_disk_state_loaded_on_create_app(
-        self, isolated_cwd: Path,
+        self,
+        isolated_cwd: Path,
     ) -> None:
         """Create an app, add a model, throw the app away, create a
         new one — the new app must see the model. This is the
@@ -852,9 +877,11 @@ class TestStartupHydration:
         client1.put(
             "/api/config/custom-models/persist-me",
             json={
-                "name": "persist-me", "provider": "openai",
+                "name": "persist-me",
+                "provider": "openai",
                 "base_url": "https://p.test",
-                "api_key": "sk-p", "model": "gpt-4",
+                "api_key": "sk-p",
+                "model": "gpt-4",
             },
         )
 
@@ -884,7 +911,8 @@ class TestFeatureFlagsEndpoint:
         assert "ui.ambient_suggestions" in names
 
     def test_each_entry_has_full_schema(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         r = client.get("/api/feature-flags")
         for entry in r.json()["flags"]:
@@ -911,8 +939,6 @@ class TestFeatureFlagsEndpoint:
         monkeypatch.setenv("OCTOPUS_FF_CAMOUFLAGE_ENABLED", "1")
         r = client.post("/api/feature-flags/reload")
         assert r.status_code == 200
-        entry = next(
-            e for e in r.json()["flags"] if e["name"] == "camouflage.enabled"
-        )
+        entry = next(e for e in r.json()["flags"] if e["name"] == "camouflage.enabled")
         assert entry["value"] is True
         assert entry["source"] == "env"

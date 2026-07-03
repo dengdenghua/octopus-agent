@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from utils import pending_ops
 
@@ -23,7 +23,7 @@ class TestListPendingJson(unittest.TestCase):
         """Create temp directory and patch file path."""
         self.temp_dir = tempfile.mkdtemp()
         self.pending_file = os.path.join(self.temp_dir, "pending_invites.json")
-        self.patcher = patch.object(pending_ops, 'PENDING_FILE', self.pending_file)
+        self.patcher = patch.object(pending_ops, "PENDING_FILE", self.pending_file)
         self.patcher.start()
 
     def tearDown(self):
@@ -33,11 +33,11 @@ class TestListPendingJson(unittest.TestCase):
 
     def test_empty_when_no_invites(self):
         """Test that empty list returned when no invites exist."""
-        with open(self.pending_file, 'w') as f:
+        with open(self.pending_file, "w") as f:
             json.dump({"invites": []}, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             pending_ops.list_pending_json(today="2026-02-11")
 
         output = captured.getvalue()
@@ -47,21 +47,23 @@ class TestListPendingJson(unittest.TestCase):
     def test_filters_past_dates(self):
         """Test that past events are filtered out."""
         test_data = {
-            "invites": [{
-                "id": "inv1",
-                "email_id": "email1",
-                "email_subject": "Test",
-                "events": [
-                    {"title": "Past Event", "date": "2026-02-01", "status": "pending"},
-                    {"title": "Future Event", "date": "2026-02-15", "status": "pending"}
-                ]
-            }]
+            "invites": [
+                {
+                    "id": "inv1",
+                    "email_id": "email1",
+                    "email_subject": "Test",
+                    "events": [
+                        {"title": "Past Event", "date": "2026-02-01", "status": "pending"},
+                        {"title": "Future Event", "date": "2026-02-15", "status": "pending"},
+                    ],
+                }
+            ]
         }
-        with open(self.pending_file, 'w') as f:
+        with open(self.pending_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             pending_ops.list_pending_json(today="2026-02-11")
 
         output = captured.getvalue()
@@ -72,21 +74,23 @@ class TestListPendingJson(unittest.TestCase):
     def test_filters_non_pending_status(self):
         """Test that non-pending events are filtered out."""
         test_data = {
-            "invites": [{
-                "id": "inv1",
-                "email_id": "email1",
-                "email_subject": "Test",
-                "events": [
-                    {"title": "Created Event", "date": "2026-02-15", "status": "created"},
-                    {"title": "Pending Event", "date": "2026-02-16", "status": "pending"}
-                ]
-            }]
+            "invites": [
+                {
+                    "id": "inv1",
+                    "email_id": "email1",
+                    "email_subject": "Test",
+                    "events": [
+                        {"title": "Created Event", "date": "2026-02-15", "status": "created"},
+                        {"title": "Pending Event", "date": "2026-02-16", "status": "pending"},
+                    ],
+                }
+            ]
         }
-        with open(self.pending_file, 'w') as f:
+        with open(self.pending_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             pending_ops.list_pending_json(today="2026-02-11")
 
         output = captured.getvalue()
@@ -97,20 +101,22 @@ class TestListPendingJson(unittest.TestCase):
     def test_includes_day_of_week(self):
         """Test that day_of_week is included in results."""
         test_data = {
-            "invites": [{
-                "id": "inv1",
-                "email_id": "email1",
-                "email_subject": "Test",
-                "events": [
-                    {"title": "Wednesday Event", "date": "2026-02-11", "status": "pending"}
-                ]
-            }]
+            "invites": [
+                {
+                    "id": "inv1",
+                    "email_id": "email1",
+                    "email_subject": "Test",
+                    "events": [
+                        {"title": "Wednesday Event", "date": "2026-02-11", "status": "pending"}
+                    ],
+                }
+            ]
         }
-        with open(self.pending_file, 'w') as f:
+        with open(self.pending_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             pending_ops.list_pending_json(today="2026-02-11")
 
         output = captured.getvalue()
@@ -125,7 +131,7 @@ class TestListPendingSummary(unittest.TestCase):
         """Create temp directory and patch file path."""
         self.temp_dir = tempfile.mkdtemp()
         self.pending_file = os.path.join(self.temp_dir, "pending_invites.json")
-        self.patcher = patch.object(pending_ops, 'PENDING_FILE', self.pending_file)
+        self.patcher = patch.object(pending_ops, "PENDING_FILE", self.pending_file)
         self.patcher.start()
 
     def tearDown(self):
@@ -135,11 +141,11 @@ class TestListPendingSummary(unittest.TestCase):
 
     def test_shows_no_pending_message(self):
         """Test that 'No pending invites' shown when empty."""
-        with open(self.pending_file, 'w') as f:
+        with open(self.pending_file, "w") as f:
             json.dump({"invites": []}, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             pending_ops.list_pending_summary(today="2026-02-11")
 
         output = captured.getvalue()
@@ -148,21 +154,23 @@ class TestListPendingSummary(unittest.TestCase):
     def test_shows_event_count(self):
         """Test that event count is shown in summary."""
         test_data = {
-            "invites": [{
-                "id": "inv1",
-                "email_id": "email1",
-                "email_subject": "Meeting Invite",
-                "events": [
-                    {"title": "Event 1", "date": "2026-02-15", "status": "pending"},
-                    {"title": "Event 2", "date": "2026-02-16", "status": "pending"}
-                ]
-            }]
+            "invites": [
+                {
+                    "id": "inv1",
+                    "email_id": "email1",
+                    "email_subject": "Meeting Invite",
+                    "events": [
+                        {"title": "Event 1", "date": "2026-02-15", "status": "pending"},
+                        {"title": "Event 2", "date": "2026-02-16", "status": "pending"},
+                    ],
+                }
+            ]
         }
-        with open(self.pending_file, 'w') as f:
+        with open(self.pending_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             pending_ops.list_pending_summary(today="2026-02-11")
 
         output = captured.getvalue()
@@ -176,7 +184,7 @@ class TestAutoDismiss(unittest.TestCase):
         """Create temp directory and patch file path."""
         self.temp_dir = tempfile.mkdtemp()
         self.pending_file = os.path.join(self.temp_dir, "pending_invites.json")
-        self.patcher = patch.object(pending_ops, 'PENDING_FILE', self.pending_file)
+        self.patcher = patch.object(pending_ops, "PENDING_FILE", self.pending_file)
         self.patcher.start()
 
     def tearDown(self):
@@ -187,21 +195,23 @@ class TestAutoDismiss(unittest.TestCase):
     def test_auto_dismiss_after_max_reminders(self):
         """Test that events are auto-dismissed after MAX_REMINDERS."""
         test_data = {
-            "invites": [{
-                "id": "inv1",
-                "email_id": "email1",
-                "email_subject": "Test",
-                "reminder_count": 3,  # MAX_REMINDERS
-                "events": [
-                    {"title": "Ignored Event", "date": "2026-02-15", "status": "pending"}
-                ]
-            }]
+            "invites": [
+                {
+                    "id": "inv1",
+                    "email_id": "email1",
+                    "email_subject": "Test",
+                    "reminder_count": 3,  # MAX_REMINDERS
+                    "events": [
+                        {"title": "Ignored Event", "date": "2026-02-15", "status": "pending"}
+                    ],
+                }
+            ]
         }
-        with open(self.pending_file, 'w') as f:
+        with open(self.pending_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             pending_ops.list_pending_json(today="2026-02-11", auto_dismiss=True)
 
         # Check that the file was updated with auto_dismissed status
@@ -215,21 +225,23 @@ class TestAutoDismiss(unittest.TestCase):
     def test_no_auto_dismiss_below_max_reminders(self):
         """Test that events are not auto-dismissed below MAX_REMINDERS."""
         test_data = {
-            "invites": [{
-                "id": "inv1",
-                "email_id": "email1",
-                "email_subject": "Test",
-                "reminder_count": 2,  # Below MAX_REMINDERS
-                "events": [
-                    {"title": "Still Pending", "date": "2026-02-15", "status": "pending"}
-                ]
-            }]
+            "invites": [
+                {
+                    "id": "inv1",
+                    "email_id": "email1",
+                    "email_subject": "Test",
+                    "reminder_count": 2,  # Below MAX_REMINDERS
+                    "events": [
+                        {"title": "Still Pending", "date": "2026-02-15", "status": "pending"}
+                    ],
+                }
+            ]
         }
-        with open(self.pending_file, 'w') as f:
+        with open(self.pending_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             pending_ops.list_pending_json(today="2026-02-11", auto_dismiss=True)
 
         output = captured.getvalue()
@@ -245,7 +257,7 @@ class TestUpdateReminded(unittest.TestCase):
         """Create temp directory and patch file path."""
         self.temp_dir = tempfile.mkdtemp()
         self.pending_file = os.path.join(self.temp_dir, "pending_invites.json")
-        self.patcher = patch.object(pending_ops, 'PENDING_FILE', self.pending_file)
+        self.patcher = patch.object(pending_ops, "PENDING_FILE", self.pending_file)
         self.patcher.start()
 
     def tearDown(self):
@@ -256,21 +268,21 @@ class TestUpdateReminded(unittest.TestCase):
     def test_increments_reminder_count(self):
         """Test that update_reminded increments reminder_count."""
         test_data = {
-            "invites": [{
-                "id": "inv1",
-                "email_id": "email1",
-                "email_subject": "Test",
-                "reminder_count": 1,
-                "events": [
-                    {"title": "Event", "date": "2026-02-15", "status": "pending"}
-                ]
-            }]
+            "invites": [
+                {
+                    "id": "inv1",
+                    "email_id": "email1",
+                    "email_subject": "Test",
+                    "reminder_count": 1,
+                    "events": [{"title": "Event", "date": "2026-02-15", "status": "pending"}],
+                }
+            ]
         }
-        with open(self.pending_file, 'w') as f:
+        with open(self.pending_file, "w") as f:
             json.dump(test_data, f)
 
         captured = io.StringIO()
-        with patch('sys.stdout', captured):
+        with patch("sys.stdout", captured):
             pending_ops.list_pending_json(today="2026-02-11", update_reminded=True)
 
         with open(self.pending_file) as f:
@@ -287,7 +299,7 @@ class TestAddPendingInvite(unittest.TestCase):
         """Create temp directory and patch file path."""
         self.temp_dir = tempfile.mkdtemp()
         self.pending_file = os.path.join(self.temp_dir, "pending_invites.json")
-        self.patcher = patch.object(pending_ops, 'PENDING_FILE', self.pending_file)
+        self.patcher = patch.object(pending_ops, "PENDING_FILE", self.pending_file)
         self.patcher.start()
 
     def tearDown(self):
@@ -298,16 +310,14 @@ class TestAddPendingInvite(unittest.TestCase):
     def test_add_new_invite(self):
         """Test adding a new pending invite."""
         # Start with empty invites
-        with open(self.pending_file, 'w') as f:
+        with open(self.pending_file, "w") as f:
             json.dump({"invites": []}, f)
 
         events = [
             {"title": "Birthday Party", "date": "2026-02-15", "time": "14:00", "status": "pending"}
         ]
         invite_id = pending_ops.add_pending_invite(
-            email_id="email123",
-            email_subject="Party Invite",
-            events=events
+            email_id="email123", email_subject="Party Invite", events=events
         )
 
         # Verify the invite was created
@@ -330,17 +340,19 @@ class TestAddPendingInvite(unittest.TestCase):
         """Test that adding with same email_id updates existing invite."""
         # Create an existing invite
         initial_data = {
-            "invites": [{
-                "id": "inv_existing",
-                "email_id": "email123",
-                "email_subject": "Old Subject",
-                "events": [{"title": "Old Event", "date": "2026-02-10", "status": "pending"}],
-                "created_at": "2026-02-01T10:00:00",
-                "reminder_count": 2,
-                "last_reminded": "2026-02-03T10:00:00"
-            }]
+            "invites": [
+                {
+                    "id": "inv_existing",
+                    "email_id": "email123",
+                    "email_subject": "Old Subject",
+                    "events": [{"title": "Old Event", "date": "2026-02-10", "status": "pending"}],
+                    "created_at": "2026-02-01T10:00:00",
+                    "reminder_count": 2,
+                    "last_reminded": "2026-02-03T10:00:00",
+                }
+            ]
         }
-        with open(self.pending_file, 'w') as f:
+        with open(self.pending_file, "w") as f:
             json.dump(initial_data, f)
 
         # Add with same email_id but new events
@@ -348,9 +360,7 @@ class TestAddPendingInvite(unittest.TestCase):
             {"title": "New Event", "date": "2026-02-20", "time": "15:00", "status": "pending"}
         ]
         invite_id = pending_ops.add_pending_invite(
-            email_id="email123",
-            email_subject="New Subject",
-            events=new_events
+            email_id="email123", email_subject="New Subject", events=new_events
         )
 
         # Verify the existing invite was updated
@@ -369,18 +379,16 @@ class TestAddPendingInvite(unittest.TestCase):
 
     def test_add_multiple_events(self):
         """Test adding an invite with multiple events."""
-        with open(self.pending_file, 'w') as f:
+        with open(self.pending_file, "w") as f:
             json.dump({"invites": []}, f)
 
         events = [
             {"title": "Workshop Day 1", "date": "2026-03-01", "time": "09:00", "status": "pending"},
             {"title": "Workshop Day 2", "date": "2026-03-02", "time": "09:00", "status": "pending"},
-            {"title": "Workshop Day 3", "date": "2026-03-03", "time": "09:00", "status": "pending"}
+            {"title": "Workshop Day 3", "date": "2026-03-03", "time": "09:00", "status": "pending"},
         ]
         pending_ops.add_pending_invite(
-            email_id="workshop_email",
-            email_subject="3-Day Workshop Registration",
-            events=events
+            email_id="workshop_email", email_subject="3-Day Workshop Registration", events=events
         )
 
         with open(self.pending_file) as f:
@@ -399,11 +407,7 @@ class TestAddPendingInvite(unittest.TestCase):
             os.remove(self.pending_file)
 
         events = [{"title": "Test Event", "date": "2026-02-15", "status": "pending"}]
-        pending_ops.add_pending_invite(
-            email_id="test_email",
-            email_subject="Test",
-            events=events
-        )
+        pending_ops.add_pending_invite(email_id="test_email", email_subject="Test", events=events)
 
         self.assertTrue(os.path.exists(self.pending_file))
         with open(self.pending_file) as f:
@@ -411,5 +415,5 @@ class TestAddPendingInvite(unittest.TestCase):
         self.assertEqual(len(data["invites"]), 1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

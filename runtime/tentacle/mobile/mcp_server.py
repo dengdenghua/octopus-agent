@@ -611,7 +611,9 @@ class TentacleMcpServer:
                 "meta": getattr(device, "meta", {}),
             }
             return {
-                "content": [{"type": "text", "text": json.dumps(result, ensure_ascii=False, default=str)}],
+                "content": [
+                    {"type": "text", "text": json.dumps(result, ensure_ascii=False, default=str)}
+                ],
                 "isError": False,
             }
 
@@ -702,7 +704,12 @@ class TentacleMcpServer:
                 )
                 result_data = analysis.to_dict()
                 return {
-                    "content": [{"type": "text", "text": json.dumps(result_data, ensure_ascii=False, default=str)}],
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(result_data, ensure_ascii=False, default=str),
+                        }
+                    ],
                     "isError": False,
                 }
 
@@ -722,12 +729,14 @@ class TentacleMcpServer:
 
         if self.coordinator is not None:
             for device in self.coordinator.pool.all():
-                resources.append({
-                    "uri": f"tentacle://device/{device.tentacle_id}",
-                    "name": f"Device {device.tentacle_id}",
-                    "description": f"{device.tentacle_type.value} device ({device.status.value})",
-                    "mimeType": "application/json",
-                })
+                resources.append(
+                    {
+                        "uri": f"tentacle://device/{device.tentacle_id}",
+                        "name": f"Device {device.tentacle_id}",
+                        "description": f"{device.tentacle_type.value} device ({device.status.value})",
+                        "mimeType": "application/json",
+                    }
+                )
 
         return resources
 
@@ -741,7 +750,7 @@ class TentacleMcpServer:
         if not uri.startswith("tentacle://device/"):
             return {"error": {"code": -32602, "message": f"Unknown resource URI: {uri}"}}
 
-        parts = uri[len("tentacle://device/"):].split("/")
+        parts = uri[len("tentacle://device/") :].split("/")
         tentacle_id = parts[0]
 
         if self.coordinator is None:
@@ -776,7 +785,9 @@ class TentacleMcpServer:
                         }
                     ]
                 }
-            return {"error": {"code": -32002, "message": f"Screenshot failed: {result.error_message}"}}
+            return {
+                "error": {"code": -32002, "message": f"Screenshot failed: {result.error_message}"}
+            }
 
         # 设备状态
         status = {
@@ -869,7 +880,11 @@ class TentacleMcpServer:
     def _handle_initialize(self, params: dict[str, Any]) -> dict[str, Any]:
         """处理 initialize 请求."""
         client_info = params.get("clientInfo", {})
-        logger.info("MCP client connected: %s v%s", client_info.get("name", "unknown"), client_info.get("version", "?"))
+        logger.info(
+            "MCP client connected: %s v%s",
+            client_info.get("name", "unknown"),
+            client_info.get("version", "?"),
+        )
 
         return {
             "protocolVersion": "2024-11-05",
@@ -993,7 +1008,9 @@ async def serve_stdio(coordinator: TentacleCoordinator | None = None) -> None:
     writer_transport, writer_protocol = await asyncio.get_event_loop().connect_write_pipe(
         asyncio.streams.FlowControlMixin, sys.stdout
     )
-    writer = asyncio.StreamWriter(writer_transport, writer_protocol, reader, asyncio.get_event_loop())
+    writer = asyncio.StreamWriter(
+        writer_transport, writer_protocol, reader, asyncio.get_event_loop()
+    )
 
     try:
         while True:

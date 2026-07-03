@@ -32,7 +32,8 @@ def _curriculum_goal_rows(
         task_id = str(getattr(traj, "task_id", "") or "")
         strategy_id = str(getattr(traj, "strategy_id", "") or "default")
         failed_steps = [
-            step for step in (getattr(traj, "steps", []) or [])
+            step
+            for step in (getattr(traj, "steps", []) or [])
             if not bool(getattr(step, "success", False))
         ]
 
@@ -85,19 +86,21 @@ def _curriculum_goal_rows(
             continue
         failure_count = len(cluster["task_ids"])
         goal_id = _stable_int_id(cluster_key)
-        rows.append({
-            "id": goal_id,
-            "cluster_key": cluster_key,
-            "category": cluster["category"],
-            "title": cluster["title"],
-            "description": cluster["description"],
-            "keywords": sorted(cluster["keywords"]),
-            "failure_count": failure_count,
-            "priority": round(min(100.0, failure_count * 10.0), 1),
-            "status": current_status,
-            "covered_by": decision.get("covered_by"),
-            "last_seen": _iso(cluster["last_seen"]),
-        })
+        rows.append(
+            {
+                "id": goal_id,
+                "cluster_key": cluster_key,
+                "category": cluster["category"],
+                "title": cluster["title"],
+                "description": cluster["description"],
+                "keywords": sorted(cluster["keywords"]),
+                "failure_count": failure_count,
+                "priority": round(min(100.0, failure_count * 10.0), 1),
+                "status": current_status,
+                "covered_by": decision.get("covered_by"),
+                "last_seen": _iso(cluster["last_seen"]),
+            }
+        )
 
     rows.sort(
         key=lambda row: (
@@ -148,7 +151,8 @@ def _curriculum_goal_decision_map(journal: Any) -> dict[str, dict[str, Any]]:
         events = list(journal.read_by_type("curriculum_goal_decision"))
     except (AttributeError, TypeError, OSError):
         events = [
-            event for event in _journal_events(journal)
+            event
+            for event in _journal_events(journal)
             if getattr(event, "event_type", "") == "curriculum_goal_decision"
         ]
     for event in events:
@@ -208,19 +212,14 @@ def _write_curriculum_goal_decision(
 
 
 def _section_line_count(section: str) -> int:
-    return sum(
-        1 for line in (section or "").splitlines()
-        if line.lstrip().startswith("- [")
-    )
+    return sum(1 for line in (section or "").splitlines() if line.lstrip().startswith("- ["))
 
 
 def _learned_section_counts(planner: Any) -> dict[str, int]:
     if planner is None:
         return {"rules": 0, "memories": 0}
     return {
-        "rules": _section_line_count(
-            str(getattr(planner, "learned_rules_section", "") or "")
-        ),
+        "rules": _section_line_count(str(getattr(planner, "learned_rules_section", "") or "")),
         "memories": _section_line_count(
             str(getattr(planner, "learned_memories_section", "") or "")
         ),

@@ -1,4 +1,5 @@
 """Failure injection tests for the evolution system."""
+
 from __future__ import annotations
 
 import threading
@@ -122,19 +123,25 @@ class TestDriftFailureScenarios:
         for level in score_levels:
             scores = [
                 TurnScore(
-                    ts="t", agent_id="fluctuation_agent", score=level,
-                    reason="test", soul_hash="h", rounds=3,
+                    ts="t",
+                    agent_id="fluctuation_agent",
+                    score=level,
+                    reason="test",
+                    soul_hash="h",
+                    rounds=3,
                 )
                 for _ in range(10)
             ]
-            with patch.object(monitor, "_check_soul_drift", return_value=None), \
-                 patch.object(monitor, "_check_genome_drift", return_value=None), \
-                 patch(
+            with (
+                patch.object(monitor, "_check_soul_drift", return_value=None),
+                patch.object(monitor, "_check_genome_drift", return_value=None),
+                patch(
                     "runtime.memory.learning.turn_scoring.read_recent_scores",
                     return_value=scores,
-                ):
-                        report = monitor.check()
-                        reports.append(report)
+                ),
+            ):
+                report = monitor.check()
+                reports.append(report)
 
         for report in reports:
             assert report.agent_id == "fluctuation_agent"
@@ -151,44 +158,58 @@ class TestDriftFailureScenarios:
 
         low_scores = [
             TurnScore(
-                ts="t", agent_id="recovery_agent", score=0.60,
-                reason="fail", soul_hash="h", rounds=3,
+                ts="t",
+                agent_id="recovery_agent",
+                score=0.60,
+                reason="fail",
+                soul_hash="h",
+                rounds=3,
             )
             for _ in range(10)
         ]
-        with patch.object(monitor, "_check_soul_drift", return_value=None), \
-             patch.object(monitor, "_check_genome_drift", return_value=None), \
-             patch(
+        with (
+            patch.object(monitor, "_check_soul_drift", return_value=None),
+            patch.object(monitor, "_check_genome_drift", return_value=None),
+            patch(
                 "runtime.memory.learning.turn_scoring.read_recent_scores",
                 return_value=low_scores,
-            ):
-                drift_report = monitor.check()
+            ),
+        ):
+            drift_report = monitor.check()
         assert drift_report.has_drift is True
         assert monitor._baseline_score == pytest.approx(0.60, abs=0.01)
 
         recovered_scores = [
             TurnScore(
-                ts="t", agent_id="recovery_agent", score=0.85,
-                reason="ok", soul_hash="h", rounds=3,
+                ts="t",
+                agent_id="recovery_agent",
+                score=0.85,
+                reason="ok",
+                soul_hash="h",
+                rounds=3,
             )
             for _ in range(10)
         ]
-        with patch.object(monitor, "_check_soul_drift", return_value=None), \
-             patch.object(monitor, "_check_genome_drift", return_value=None), \
-             patch(
+        with (
+            patch.object(monitor, "_check_soul_drift", return_value=None),
+            patch.object(monitor, "_check_genome_drift", return_value=None),
+            patch(
                 "runtime.memory.learning.turn_scoring.read_recent_scores",
                 return_value=recovered_scores,
-            ):
-                monitor.check()
+            ),
+        ):
+            monitor.check()
         assert monitor._baseline_score == pytest.approx(0.85, abs=0.01)
 
-        with patch.object(monitor, "_check_soul_drift", return_value=None), \
-             patch.object(monitor, "_check_genome_drift", return_value=None), \
-             patch(
+        with (
+            patch.object(monitor, "_check_soul_drift", return_value=None),
+            patch.object(monitor, "_check_genome_drift", return_value=None),
+            patch(
                 "runtime.memory.learning.turn_scoring.read_recent_scores",
                 return_value=recovered_scores,
-            ):
-                stable_report = monitor.check()
+            ),
+        ):
+            stable_report = monitor.check()
         assert stable_report.has_drift is False
 
 

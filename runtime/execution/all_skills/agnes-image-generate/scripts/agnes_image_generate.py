@@ -14,6 +14,7 @@ The skill reads its API key from `AGNES_API_KEY` first, then falls back
 to `OPENAI_API_KEY` (since Agnes is OpenAI-compatible and many users
 already have that var set).
 """
+
 from __future__ import annotations
 
 import json
@@ -41,20 +42,13 @@ class AgnesConfig:
 
     @classmethod
     def from_env(cls) -> AgnesConfig:
-        key = (
-            os.environ.get("AGNES_API_KEY")
-            or os.environ.get("OPENAI_API_KEY")
-            or ""
-        ).strip()
+        key = (os.environ.get("AGNES_API_KEY") or os.environ.get("OPENAI_API_KEY") or "").strip()
         if not key:
             raise ValueError(
                 "AGNES_API_KEY not found. Set AGNES_API_KEY or "
                 "OPENAI_API_KEY env var, or pass api_key= explicitly.",
             )
-        base = (
-            os.environ.get("AGNES_BASE_URL", "").strip()
-            or DEFAULT_BASE_URL
-        ).rstrip("/")
+        base = (os.environ.get("AGNES_BASE_URL", "").strip() or DEFAULT_BASE_URL).rstrip("/")
         return cls(api_key=key, base_url=base)
 
 
@@ -137,7 +131,9 @@ def generate_image(
     }
     _LOG.info(
         "agnes_image_generate model=%s n=%d size=%s",
-        model, payload["n"], size or "auto",
+        model,
+        payload["n"],
+        size or "auto",
     )
 
     try:
@@ -197,6 +193,9 @@ if __name__ == "__main__":  # pragma: no cover — manual smoke test
     args = parser.parse_args()
 
     result = generate_image(
-        args.prompt, model=args.model, size=args.size, n=args.n,
+        args.prompt,
+        model=args.model,
+        size=args.size,
+        n=args.n,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -51,6 +51,7 @@ def _prepare_exec(script_path, script_args):
 # CPU Profiling (cProfile)
 # ---------------------------------------------------------------------------
 
+
 def run_cpu_profile(script_path, script_args, sort_key="cumulative", top_n=20, threshold=0.0):
     _, code, script_globals, cleanup = _prepare_exec(script_path, script_args)
     profiler = cProfile.Profile()
@@ -89,17 +90,19 @@ def _parse_cprofile(profiler, sort_key, top_n, threshold):
         if func_name == "<module>":
             continue
 
-        results.append({
-            "function": func_name,
-            "file": filename,
-            "line": line_no,
-            "calls": nc,
-            "total_time": round(tt, 6),
-            "cumulative_time": round(ct, 6),
-            "per_call_total": round(tt / nc, 6) if nc > 0 else 0,
-            "per_call_cumulative": round(ct / nc, 6) if nc > 0 else 0,
-            "percent": round(pct, 2),
-        })
+        results.append(
+            {
+                "function": func_name,
+                "file": filename,
+                "line": line_no,
+                "calls": nc,
+                "total_time": round(tt, 6),
+                "cumulative_time": round(ct, 6),
+                "per_call_total": round(tt / nc, 6) if nc > 0 else 0,
+                "per_call_cumulative": round(ct / nc, 6) if nc > 0 else 0,
+                "percent": round(pct, 2),
+            }
+        )
 
     sort_map = {
         "cumulative": lambda x: x["cumulative_time"],
@@ -121,6 +124,7 @@ def _parse_cprofile(profiler, sort_key, top_n, threshold):
 # Memory Profiling (tracemalloc)
 # ---------------------------------------------------------------------------
 
+
 def run_memory_profile(script_path, script_args, top_n=20):
     _, code, script_globals, cleanup = _prepare_exec(script_path, script_args)
 
@@ -141,26 +145,30 @@ def run_memory_profile(script_path, script_args, top_n=20):
     allocations = []
     for stat in top_stats[:top_n]:
         frame = stat.traceback[0]
-        allocations.append({
-            "file": frame.filename,
-            "line": frame.lineno,
-            "size_bytes": stat.size,
-            "size_human": _format_bytes(stat.size),
-            "count": stat.count,
-        })
+        allocations.append(
+            {
+                "file": frame.filename,
+                "line": frame.lineno,
+                "size_bytes": stat.size,
+                "size_human": _format_bytes(stat.size),
+                "count": stat.count,
+            }
+        )
 
     diff_stats = snapshot_end.compare_to(snapshot_start, "lineno")
     growth = []
     for stat in diff_stats:
         if stat.size_diff > 0:
             frame = stat.traceback[0]
-            growth.append({
-                "file": frame.filename,
-                "line": frame.lineno,
-                "size_diff_bytes": stat.size_diff,
-                "size_diff_human": _format_bytes(stat.size_diff),
-                "count_diff": stat.count_diff,
-            })
+            growth.append(
+                {
+                    "file": frame.filename,
+                    "line": frame.lineno,
+                    "size_diff_bytes": stat.size_diff,
+                    "size_diff_human": _format_bytes(stat.size_diff),
+                    "count_diff": stat.count_diff,
+                }
+            )
     growth.sort(key=lambda x: x["size_diff_bytes"], reverse=True)
 
     return {
@@ -177,8 +185,8 @@ def run_memory_profile(script_path, script_args, top_n=20):
 # Combined CPU + Memory (single execution)
 # ---------------------------------------------------------------------------
 
-def run_combined_profile(script_path, script_args, sort_key="cumulative",
-                         top_n=20, threshold=0.0):
+
+def run_combined_profile(script_path, script_args, sort_key="cumulative", top_n=20, threshold=0.0):
     _, code, script_globals, cleanup = _prepare_exec(script_path, script_args)
 
     tracemalloc.start(25)
@@ -221,7 +229,8 @@ def run_combined_profile(script_path, script_args, sort_key="cumulative",
                 "size_diff_human": _format_bytes(s.size_diff),
                 "count_diff": s.count_diff,
             }
-            for s in diff_stats if s.size_diff > 0
+            for s in diff_stats
+            if s.size_diff > 0
         ],
         key=lambda x: x["size_diff_bytes"],
         reverse=True,
@@ -242,6 +251,7 @@ def run_combined_profile(script_path, script_args, sort_key="cumulative",
 # ---------------------------------------------------------------------------
 # Line Profiling (line_profiler)
 # ---------------------------------------------------------------------------
+
 
 def _find_top_level_functions(source):
     tree = ast.parse(source)
@@ -272,8 +282,7 @@ def run_line_profile(script_path, script_args, functions=None, top_n=20):
     if not target_names:
         return {"available": True, "error": "未找到可分析的函数", "functions": []}
 
-    targets = [(name, lineno, col) for name, lineno, col in all_funcs
-               if name in target_names]
+    targets = [(name, lineno, col) for name, lineno, col in all_funcs if name in target_names]
     if not targets:
         return {
             "available": True,
@@ -345,11 +354,13 @@ def _parse_line_profiler_output(raw):
 
         if stripped.startswith("Function:"):
             if current_func and current_lines:
-                results.append({
-                    "function": current_func,
-                    "file": current_file or "",
-                    "lines": current_lines,
-                })
+                results.append(
+                    {
+                        "function": current_func,
+                        "file": current_file or "",
+                        "lines": current_lines,
+                    }
+                )
             part = stripped.split("Function:", 1)[1].strip()
             func_name = part.split(" at ")[0].strip() if " at " in part else part
             current_func = func_name
@@ -375,23 +386,27 @@ def _parse_line_profiler_output(raw):
                     per_hit = float(parts[3])
                     pct = float(parts[4])
                     src = parts[5] if len(parts) > 5 else ""
-                    current_lines.append({
-                        "line_no": line_no,
-                        "hits": hits,
-                        "time": time_val,
-                        "per_hit": per_hit,
-                        "percent": pct,
-                        "source": src,
-                    })
+                    current_lines.append(
+                        {
+                            "line_no": line_no,
+                            "hits": hits,
+                            "time": time_val,
+                            "per_hit": per_hit,
+                            "percent": pct,
+                            "source": src,
+                        }
+                    )
                 except (ValueError, IndexError):
                     pass
 
     if current_func and current_lines:
-        results.append({
-            "function": current_func,
-            "file": current_file or "",
-            "lines": current_lines,
-        })
+        results.append(
+            {
+                "function": current_func,
+                "file": current_file or "",
+                "lines": current_lines,
+            }
+        )
 
     return results
 
@@ -399,6 +414,7 @@ def _parse_line_profiler_output(raw):
 # ---------------------------------------------------------------------------
 # Report Printers
 # ---------------------------------------------------------------------------
+
 
 def print_cpu_report(result):
     print("\n" + "=" * 60)
@@ -514,10 +530,7 @@ def print_suggestion(cpu_result):
         if name.startswith("<") or f["file"].startswith("<frozen"):
             continue
         if f["calls"] > 10000 and f["per_call_total"] > 0.0001:
-            suggestions.append(
-                f"  - {name}: 调用 {f['calls']:,} 次，"
-                f"考虑缓存/减少调用次数"
-            )
+            suggestions.append(f"  - {name}: 调用 {f['calls']:,} 次，考虑缓存/减少调用次数")
         elif f["percent"] > 30:
             suggestions.append(
                 f"  - {name}: 占 {f['percent']:.1f}% 时间，"
@@ -534,6 +547,7 @@ def print_suggestion(cpu_result):
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Python 性能分析工具 - cProfile + line_profiler + 内存分析",
@@ -549,21 +563,25 @@ def main():
     )
 
     parser.add_argument("script", help="要分析的 Python 脚本路径")
-    parser.add_argument("script_args", nargs="*",
-                        help="传递给目标脚本的参数（用 -- 分隔）")
-    parser.add_argument("--mode", choices=["cpu", "memory", "line", "all"],
-                        default="cpu", help="分析模式 (默认: cpu)")
-    parser.add_argument("--top", type=int, default=20,
-                        help="显示 Top N 结果 (默认: 20)")
-    parser.add_argument("--sort",
-                        choices=["cumulative", "tottime", "calls", "ncalls"],
-                        default="cumulative",
-                        help="CPU 分析排序方式 (默认: cumulative)")
+    parser.add_argument("script_args", nargs="*", help="传递给目标脚本的参数（用 -- 分隔）")
+    parser.add_argument(
+        "--mode",
+        choices=["cpu", "memory", "line", "all"],
+        default="cpu",
+        help="分析模式 (默认: cpu)",
+    )
+    parser.add_argument("--top", type=int, default=20, help="显示 Top N 结果 (默认: 20)")
+    parser.add_argument(
+        "--sort",
+        choices=["cumulative", "tottime", "calls", "ncalls"],
+        default="cumulative",
+        help="CPU 分析排序方式 (默认: cumulative)",
+    )
     parser.add_argument("--output", help="输出 JSON 报告到文件")
-    parser.add_argument("--function",
-                        help="逐行分析的目标函数名 (逗号分隔)")
-    parser.add_argument("--threshold", type=float, default=0.0,
-                        help="只显示占比超过此阈值(%%) 的函数 (默认: 0)")
+    parser.add_argument("--function", help="逐行分析的目标函数名 (逗号分隔)")
+    parser.add_argument(
+        "--threshold", type=float, default=0.0, help="只显示占比超过此阈值(%%) 的函数 (默认: 0)"
+    )
 
     args = parser.parse_args()
 
@@ -580,8 +598,11 @@ def main():
         if args.mode == "all":
             print(f"正在进行 CPU + 内存组合分析: {script_path.name} ...")
             cpu_result, mem_result = run_combined_profile(
-                script_path, args.script_args,
-                args.sort, args.top, args.threshold,
+                script_path,
+                args.script_args,
+                args.sort,
+                args.top,
+                args.threshold,
             )
             report["cpu"] = cpu_result
             report["memory"] = mem_result
@@ -592,8 +613,11 @@ def main():
         elif args.mode == "cpu":
             print(f"正在进行 CPU 分析: {script_path.name} ...")
             cpu_result = run_cpu_profile(
-                script_path, args.script_args,
-                args.sort, args.top, args.threshold,
+                script_path,
+                args.script_args,
+                args.sort,
+                args.top,
+                args.threshold,
             )
             report["cpu"] = cpu_result
             print_cpu_report(cpu_result)
@@ -602,7 +626,9 @@ def main():
         elif args.mode == "memory":
             print(f"正在进行内存分析: {script_path.name} ...")
             mem_result = run_memory_profile(
-                script_path, args.script_args, args.top,
+                script_path,
+                args.script_args,
+                args.top,
             )
             report["memory"] = mem_result
             print_memory_report(mem_result)
@@ -610,8 +636,10 @@ def main():
         elif args.mode == "line":
             print(f"正在进行逐行分析: {script_path.name} ...")
             line_result = run_line_profile(
-                script_path, args.script_args,
-                args.function, args.top,
+                script_path,
+                args.script_args,
+                args.function,
+                args.top,
             )
             report["line"] = line_result
             print_line_report(line_result)
@@ -619,6 +647,7 @@ def main():
     except Exception as e:
         print(f"\n分析过程中出错: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

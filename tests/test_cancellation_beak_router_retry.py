@@ -202,7 +202,8 @@ class TestBeakMetricsWiring:
         # Error counter incremented; the exact error_type label may
         # be "RuntimeError" or whatever beak normalized it to.
         total = sum(
-            v for k, v in e._values.items()  # type: ignore[attr-defined]
+            v
+            for k, v in e._values.items()  # type: ignore[attr-defined]
             if any(pair[0] == "sucker_id" and pair[1] == "boom" for pair in k)
         )
         assert total >= 1
@@ -248,6 +249,7 @@ class _FlakyRouter:
             raise self._error
         from runtime.platform.models import CostEntry
         from runtime.sensing.model_router.models import ModelResponse
+
         return ModelResponse(
             text="ok",
             input_tokens=1,
@@ -294,10 +296,13 @@ class TestMultiRouterRetry:
 
         flaky = _FlakyRouter(fail_count=2, error=RateLimitError("429 boom"))
         router = MultiModelRouter(
-            primary=flaky, retry_attempts=3, retry_base_delay=0.001,
+            primary=flaky,
+            retry_attempts=3,
+            retry_base_delay=0.001,
         )
         # Patch sleep so the test doesn't actually wait.
         import runtime.platform.runtime_policy.retry as r
+
         original = r.time.sleep
         r.time.sleep = lambda s: None
         try:
@@ -321,8 +326,10 @@ class TestMultiRouterRetry:
         # Provide a fallback so the chain has somewhere to go.
         flaky_ok = _FlakyRouter(fail_count=0, error=RuntimeError("unused"))
         router = MultiModelRouter(
-            primary=broken, fallbacks=[flaky_ok],
-            retry_attempts=3, retry_base_delay=0.001,
+            primary=broken,
+            fallbacks=[flaky_ok],
+            retry_attempts=3,
+            retry_base_delay=0.001,
         )
         resp = router.call(self._make_request())
         assert resp.text == "ok"
@@ -340,10 +347,13 @@ class TestMultiRouterRetry:
         broken = _AlwaysFails(error=TimeoutError_("502 gateway timeout"))
         backup = _FlakyRouter(fail_count=0, error=RuntimeError("unused"))
         router = MultiModelRouter(
-            primary=broken, fallbacks=[backup],
-            retry_attempts=3, retry_base_delay=0.001,
+            primary=broken,
+            fallbacks=[backup],
+            retry_attempts=3,
+            retry_base_delay=0.001,
         )
         import runtime.platform.runtime_policy.retry as r
+
         original = r.time.sleep
         r.time.sleep = lambda s: None
         try:
@@ -364,7 +374,8 @@ class TestMultiRouterRetry:
 
         flaky = _FlakyRouter(fail_count=1, error=RateLimitError("429"))
         router = MultiModelRouter(
-            primary=flaky, retry_attempts=1,
+            primary=flaky,
+            retry_attempts=1,
         )
         # No retry → first failure propagates as a route attempt fail
         # and (with no fallback) the multi-router re-raises.

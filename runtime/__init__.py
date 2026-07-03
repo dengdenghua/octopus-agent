@@ -74,22 +74,48 @@ def __getattr__(name: str):
     globals()[name] = value
     return value
 
+
 __all__ = [
     "__version__",
     # core
-    "cerebrum", "graph_runtime", "hearts", "nerves", "reflex",
+    "cerebrum",
+    "graph_runtime",
+    "hearts",
+    "nerves",
+    "reflex",
     # execution
-    "agents", "arms", "tool_engine", "suckers", "parallel_agents", "swarm",
+    "agents",
+    "arms",
+    "tool_engine",
+    "suckers",
+    "parallel_agents",
+    "swarm",
     # sensing
-    "model_router", "normalize", "gateway", "server",
+    "model_router",
+    "normalize",
+    "gateway",
+    "server",
     # memory
-    "journal", "hemolymph", "knowledge_graph", "threads",
+    "journal",
+    "hemolymph",
+    "knowledge_graph",
+    "threads",
     # safety
-    "auth", "budget_breaker", "invariants", "recovery",
-    "experiments", "chromatophores",
+    "auth",
+    "budget_breaker",
+    "invariants",
+    "recovery",
+    "experiments",
+    "chromatophores",
     # adapters
-    "channels", "integrations", "mcp_client", "scheduler",
+    "channels",
+    "integrations",
+    "mcp_client",
+    "scheduler",
     "instrumentation",
     # platform
-    "config", "models", "ui", "i18n",
+    "config",
+    "models",
+    "ui",
+    "i18n",
 ]

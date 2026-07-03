@@ -1,4 +1,5 @@
 """Tests for ``GET /api/smart-routing`` config endpoint."""
+
 from __future__ import annotations
 
 import pytest

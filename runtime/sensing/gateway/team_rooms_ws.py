@@ -62,7 +62,8 @@ def _persist_pool() -> ThreadPoolExecutor:
     global _PERSIST_POOL
     if _PERSIST_POOL is None:
         _PERSIST_POOL = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="room-persist",
+            max_workers=1,
+            thread_name_prefix="room-persist",
         )
     return _PERSIST_POOL
 
@@ -117,11 +118,13 @@ def _remember_line(
     no await) — the buffer is shared across the room's sockets."""
     with ctx.lock:
         buf = ctx.recent_messages.setdefault(team_id, [])
-        buf.append({
-            "participant_id": participant_id,
-            "display_name": display_name,
-            "text": text,
-        })
+        buf.append(
+            {
+                "participant_id": participant_id,
+                "display_name": display_name,
+                "text": text,
+            }
+        )
         if len(buf) > _RING_SIZE:
             del buf[: len(buf) - _RING_SIZE]
     # Durable persistence (best-effort): so the transcript survives beyond the
@@ -132,8 +135,11 @@ def _remember_line(
     if store is not None:
         with contextlib.suppress(Exception):
             _persist_pool().submit(
-                store.append, team_id,
-                text=text, participant_id=participant_id, display_name=display_name,
+                store.append,
+                team_id,
+                text=text,
+                participant_id=participant_id,
+                display_name=display_name,
             )
     projection = ctx.message_projection
     if projection is not None:
@@ -260,10 +266,7 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
         """
         await _broadcast(team_id, payload, exclude=participant_id)
         with lock:
-            has_peer = any(
-                pid != participant_id
-                for pid in live_sockets.get(team_id, {})
-            )
+            has_peer = any(pid != participant_id for pid in live_sockets.get(team_id, {}))
         if not has_peer:
             await ws.send_json(payload)
 
@@ -280,10 +283,7 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
         await ws.close(code=4401)
         return
 
-    participant_id = (
-        ws.query_params.get("participant_id")
-        or f"guest-{uuid4().hex[:10]}"
-    )
+    participant_id = ws.query_params.get("participant_id") or f"guest-{uuid4().hex[:10]}"
     display_name = ws.query_params.get("display_name") or "Guest"
     thread_id = (ws.query_params.get("thread_id") or "").strip() or None
     now = _now()
@@ -306,10 +306,7 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
             ):
                 reject_reason = "participant actor mismatch"
             else:
-                participants = [
-                    p for p in team.participants
-                    if p.id != participant_id
-                ]
+                participants = [p for p in team.participants if p.id != participant_id]
                 participant = TeamParticipantWire(
                     id=participant_id,
                     display_name=display_name,
@@ -329,10 +326,12 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                     host_id=existing.host_id if existing else None,
                 )
                 participants.append(participant)
-                team = team.model_copy(update={
-                    "participants": participants,
-                    "updated_at": now,
-                })
+                team = team.model_copy(
+                    update={
+                        "participants": participants,
+                        "updated_at": now,
+                    }
+                )
                 teams[team_id] = team
                 live_sockets.setdefault(team_id, {})[participant_id] = ws
                 _save()
@@ -372,17 +371,22 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                     if current is not None:
                         seen = _now()
                         participants = [
-                            p.model_copy(update={
-                                "last_seen_at": seen,
-                                "status": "active",
-                            })
-                            if p.id == participant_id else p
+                            p.model_copy(
+                                update={
+                                    "last_seen_at": seen,
+                                    "status": "active",
+                                }
+                            )
+                            if p.id == participant_id
+                            else p
                             for p in current.participants
                         ]
-                        teams[team_id] = current.model_copy(update={
-                            "participants": participants,
-                            "updated_at": seen,
-                        })
+                        teams[team_id] = current.model_copy(
+                            update={
+                                "participants": participants,
+                                "updated_at": seen,
+                            }
+                        )
                         _save()
                 await ws.send_json({"type": "pong", "server_time": _now()})
                 await _broadcast_presence(team_id)
@@ -422,14 +426,14 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                         if current_team is not None
                         else None
                     )
-                    if target is None or not _authorized_to_speak_for(
-                        active_participant, target
-                    ):
-                        await ws.send_json({
-                            "type": "error",
-                            "code": "delegation_denied",
-                            "message": f"not authorized to speak for {on_behalf_of}",
-                        })
+                    if target is None or not _authorized_to_speak_for(active_participant, target):
+                        await ws.send_json(
+                            {
+                                "type": "error",
+                                "code": "delegation_denied",
+                                "message": f"not authorized to speak for {on_behalf_of}",
+                            }
+                        )
                         continue
                     speaker = target
                     spoken_by = participant_id
@@ -537,11 +541,13 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                     ):
                         not_moderator = True
                 if not_moderator:
-                    await ws.send_json({
-                        "type": "error",
-                        "code": "not_moderator",
-                        "message": "only the moderator can move the floor",
-                    })
+                    await ws.send_json(
+                        {
+                            "type": "error",
+                            "code": "not_moderator",
+                            "message": "only the moderator can move the floor",
+                        }
+                    )
                 elif floor_team is not None:
                     await _broadcast_floor(team_id, floor_team)
                     # A twin granted the floor speaks once and keeps it — in
@@ -573,11 +579,14 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
             if current is not None:
                 left_at = _now()
                 participants = [
-                    p.model_copy(update={
-                        "last_seen_at": left_at,
-                        "status": "offline",
-                    })
-                    if p.id == participant_id else p
+                    p.model_copy(
+                        update={
+                            "last_seen_at": left_at,
+                            "status": "offline",
+                        }
+                    )
+                    if p.id == participant_id
+                    else p
                     for p in current.participants
                 ]
                 updates: dict[str, Any] = {
@@ -588,10 +597,7 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                 # round_robin advances past them, roll_call/moderated
                 # re-open the floor. Also drop them from the hand queue.
                 policy_now = _normalize_speaker_policy(current.speaker_policy)
-                if (
-                    policy_now in _TURN_POLICIES
-                    and current.current_speaker_id == participant_id
-                ):
+                if policy_now in _TURN_POLICIES and current.current_speaker_id == participant_id:
                     rebuilt = current.model_copy(update={"participants": participants})
                     updates["current_speaker_id"] = (
                         _next_speaker(rebuilt, participant_id)

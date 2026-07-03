@@ -40,7 +40,11 @@ def _print_report(store: ProjectStore, project_id: str, c: _Colors) -> int:
             print(c.dim(f"      criteria: {', '.join(m.success_criteria)}"))
         for t in store.tasks_for_milestone(m.id):
             tdot = c.green("✓") if t.status == "done" else c.dim("·")
-            out = (str(t.output)[:80] + "…") if t.output and len(str(t.output)) > 80 else (t.output or "")
+            out = (
+                (str(t.output)[:80] + "…")
+                if t.output and len(str(t.output)) > 80
+                else (t.output or "")
+            )
             print(f"      {tdot} {t.id} [{t.assigned_role}/{t.type}] {t.status}: {out}")
     return 0
 
@@ -53,7 +57,7 @@ def run_project_command(args: Any, *, color: bool = True) -> int:
     if op == "list":
         projects = store.list_projects()
         if not projects:
-            print(c.dim("no projects yet — `octopus project plan --goal \"...\"`"))
+            print(c.dim('no projects yet — `octopus project plan --goal "..."`'))
             return 0
         for p in projects:
             print(f"  {c.bold(p.id)}  {p.name}  — {p.status}  ({len(p.milestone_ids)} milestones)")
@@ -71,7 +75,7 @@ def run_project_command(args: Any, *, color: bool = True) -> int:
         project_id = getattr(args, "id", None)
         if not project_id:
             if not getattr(args, "goal", None):
-                print(c.red("run needs --id <project> or --goal \"...\""))
+                print(c.red('run needs --id <project> or --goal "..."'))
                 return 2
             project = _engine(store).plan(args.name or args.goal[:40], args.goal)
             project_id = project.id
@@ -82,8 +86,11 @@ def run_project_command(args: Any, *, color: bool = True) -> int:
         result = _engine(store).run(project_id, max_ticks=getattr(args, "max_ticks", 50))
         print(
             c.bold(f"ran {result['ticks']} ticks → ")
-            + (c.green(result["final_status"]) if result["final_status"] == "done"
-               else c.red(result["final_status"]))
+            + (
+                c.green(result["final_status"])
+                if result["final_status"] == "done"
+                else c.red(result["final_status"])
+            )
         )
         return _print_report(store, project_id, c)
 

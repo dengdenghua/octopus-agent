@@ -86,8 +86,12 @@ def _commit_direct_llm_cost(
 
 
 def _direct_llm_fallback_with_usage(
-    stack: Any, intent: ParsedIntent, agent: Any,
-    *, model: str | None = None, reasoning_effort: Any = None,
+    stack: Any,
+    intent: ParsedIntent,
+    agent: Any,
+    *,
+    model: str | None = None,
+    reasoning_effort: Any = None,
     max_tokens_cap: int | None = None,
 ) -> tuple[str | None, dict[str, int]]:
     reply, usage = _direct_llm_fallback_impl(
@@ -102,8 +106,12 @@ def _direct_llm_fallback_with_usage(
 
 
 def _direct_llm_fallback(
-    stack: Any, intent: ParsedIntent, agent: Any,
-    *, model: str | None = None, reasoning_effort: Any = None,
+    stack: Any,
+    intent: ParsedIntent,
+    agent: Any,
+    *,
+    model: str | None = None,
+    reasoning_effort: Any = None,
 ) -> str | None:
     reply, _ = _direct_llm_fallback_impl(
         stack,
@@ -116,8 +124,12 @@ def _direct_llm_fallback(
 
 
 def _direct_llm_fallback_impl(
-    stack: Any, intent: ParsedIntent, agent: Any,
-    *, model: str | None = None, reasoning_effort: Any = None,
+    stack: Any,
+    intent: ParsedIntent,
+    agent: Any,
+    *,
+    model: str | None = None,
+    reasoning_effort: Any = None,
     max_tokens_cap: int | None = None,
 ) -> tuple[str | None, dict[str, int]]:
     router = getattr(stack.planner, "router", None)
@@ -133,21 +145,20 @@ def _direct_llm_fallback_impl(
     messages: list[Message] = _build_messages_for_llm(intent, agent)
 
     effective_model = (
-        model if model and model not in ("octopus-agent", "")
+        model
+        if model and model not in ("octopus-agent", "")
         else getattr(stack.planner, "planner_model", None) or "molili"
     )
     router, effective_model = _resolve_custom_model_router(
-        effective_model, router,
+        effective_model,
+        router,
     )
     resolved_model = effective_model
     if hasattr(router, "_resolve"):
         try:
             _sub = router._resolve(effective_model)
             if _sub is not router:
-                resolved_model = (
-                    getattr(_sub, "default_model", None)
-                    or effective_model
-                )
+                resolved_model = getattr(_sub, "default_model", None) or effective_model
         except (AttributeError, TypeError):  # noqa: BLE001 — subrouter doesn't expose default_model; fall back to effective_model
             pass
     wants_thinking, max_tokens = _model_runtime_options(effective_model, resolved_model)
@@ -169,6 +180,7 @@ def _direct_llm_fallback_impl(
         resp = router.call(req)
         from runtime.platform.process.session import current_session
         from runtime.platform.runtime_policy.identity_filter import filter_text
+
         filtered = filter_text(
             _strip_inline_thinking_markup(resp.text),
             session=current_session(),
@@ -177,13 +189,17 @@ def _direct_llm_fallback_impl(
         )
         thinking = (getattr(resp, "thinking", "") or "").strip()
         import logging as _lg
+
         _tlog = _lg.getLogger("octopus.thinking")
         if _tlog.isEnabledFor(_lg.DEBUG):
             _tlog.debug(
                 "direct_llm_fallback · model=%s wants_thinking=%s "
                 "thinking_len=%d text_len=%d thinking_head=%r",
-                effective_model, wants_thinking, len(thinking),
-                len(filtered or ""), thinking[:160],
+                effective_model,
+                wants_thinking,
+                len(thinking),
+                len(filtered or ""),
+                thinking[:160],
             )
         usage = {
             "input_tokens": int(getattr(resp, "input_tokens", 0) or 0),
@@ -193,16 +209,22 @@ def _direct_llm_fallback_impl(
         return filtered, usage
     except Exception as _exc:  # noqa: BLE001
         import logging as _lg
+
         _lg.getLogger("octopus.thinking").warning(
             "direct_llm_fallback · EXCEPTION model=%s err=%s",
-            effective_model, _exc,
+            effective_model,
+            _exc,
         )
         return None, {}
 
 
 def _stream_direct_llm_fallback(
-    stack: Any, intent: ParsedIntent, agent: Any,
-    *, model: str | None = None, reasoning_effort: Any = None,
+    stack: Any,
+    intent: ParsedIntent,
+    agent: Any,
+    *,
+    model: str | None = None,
+    reasoning_effort: Any = None,
 ):
     router = getattr(stack.planner, "router", None)
     if router is None:
@@ -218,14 +240,9 @@ def _stream_direct_llm_fallback(
     # "auto" / "octopus-agent" / "" are non-pin sentinels — defer to
     # the planner default + smart routing. Anything else is a user
     # pick from model_picker and should pass through verbatim.
-    _is_auto_or_default = (
-        not model
-        or model in ("octopus-agent", "auto")
-    )
+    _is_auto_or_default = not model or model in ("octopus-agent", "auto")
     effective_model = (
-        getattr(stack.planner, "planner_model", None) or "molili"
-        if _is_auto_or_default
-        else model
+        getattr(stack.planner, "planner_model", None) or "molili" if _is_auto_or_default else model
     )
     # Smart routing: in the chat fast-path, classify the prompt and
     # let select_model_for_complexity pick the configured tier
@@ -238,6 +255,7 @@ def _stream_direct_llm_fallback(
             estimate_turn_complexity,
             select_model_for_complexity,
         )
+
         _verdict = estimate_turn_complexity(
             getattr(intent, "normalized_goal", "") or "",
             has_explicit_model=not _is_auto_or_default,
@@ -247,7 +265,8 @@ def _stream_direct_llm_fallback(
         # "auto" / "octopus-agent" as "no pin" via its existing
         # check at turn_complexity.py:395.
         _smart_model, _ = select_model_for_complexity(
-            _verdict, user_model=model,
+            _verdict,
+            user_model=model,
         )
         if _smart_model:
             effective_model = _smart_model
@@ -256,17 +275,15 @@ def _stream_direct_llm_fallback(
     # _resolve_custom_model_router needs a concrete name — never
     # the "auto" sentinel (which has no custom_models.json entry).
     router, effective_model = _resolve_custom_model_router(
-        effective_model, router,
+        effective_model,
+        router,
     )
     resolved_model = effective_model
     if hasattr(router, "_resolve"):
         try:
             _sub = router._resolve(effective_model)
             if _sub is not router:
-                resolved_model = (
-                    getattr(_sub, "default_model", None)
-                    or effective_model
-                )
+                resolved_model = getattr(_sub, "default_model", None) or effective_model
         except (AttributeError, TypeError):  # noqa: BLE001 — subrouter doesn't expose default_model; fall back to effective_model
             pass
     wants_thinking, max_tokens = _model_runtime_options(effective_model, resolved_model)
@@ -295,18 +312,22 @@ def _stream_direct_llm_fallback(
             return
         chunk_size = 18
         for i in range(0, len(text), chunk_size):
-            yield text[i:i + chunk_size]
+            yield text[i : i + chunk_size]
 
     def _clean_final_text(text: str) -> str:
-        return filter_text(
-            _strip_inline_thinking_markup(text),
-            session=current_session(),
-            user_message=intent.normalized_goal,
-            agent=agent,
-        ) or ""
+        return (
+            filter_text(
+                _strip_inline_thinking_markup(text),
+                session=current_session(),
+                user_message=intent.normalized_goal,
+                agent=agent,
+            )
+            or ""
+        )
 
     def _normalize_markdown(text: str) -> str:
         import re as _re
+
         out = text.strip()
         out = _re.sub(r"(?<!^)(?<!\n)(#{1,4}\s+)", r"\n\n\1", out)
         out = _re.sub(r"(?<!\n)(\n?---\n?)", "\n\n---\n\n", out)
@@ -351,9 +372,7 @@ def _stream_direct_llm_fallback(
                 yield ("reasoning", event.delta, None)
             elif etype == "done":
                 final = event.final
-                raw_text = (
-                    (final.text if final else "".join(text_buf)) or ""
-                )
+                raw_text = (final.text if final else "".join(text_buf)) or ""
                 final_text = _clean_final_text(raw_text)
                 if not final_text.strip() and not text_buf:
                     yield from _sync_call_as_stream(
@@ -370,23 +389,27 @@ def _stream_direct_llm_fallback(
                 }
                 _usage_json = json.dumps(_usage_dict)
                 _commit_direct_llm_cost(
-                    stack, _usage_dict, agent,
+                    stack,
+                    _usage_dict,
+                    agent,
                     reason="stream_direct_llm_fallback",
                 )
                 yield ("done", _usage_json, final_text)
     except (ConnectionError, TimeoutError) as _exc:
         import logging as _lg
+
         _lg.getLogger("octopus.thinking").warning(
             "stream_direct_llm_fallback · EXCEPTION model=%s err=%s",
-            effective_model, _exc,
+            effective_model,
+            _exc,
         )
         try:
             yield from _sync_call_as_stream("stream_error_direct_llm_fallback")
         except (ConnectionError, TimeoutError) as _fallback_exc:
             _lg.getLogger("octopus.thinking").warning(
-                "stream_direct_llm_fallback sync fallback failed "
-                "model=%s err=%s",
-                effective_model, _fallback_exc,
+                "stream_direct_llm_fallback sync fallback failed model=%s err=%s",
+                effective_model,
+                _fallback_exc,
             )
             raise _fallback_exc
         return
@@ -418,7 +441,6 @@ def _stream_chat_wrapped(
     _convo_token = _CONVERSATION_ID.set(conversation_id)
     _actor_token = _molili_actor_ctx.set(actor) if actor else None
     try:
-
         meta_chunk = {
             "id": f"chatcmpl-{uuid4().hex[:16]}",
             "object": "chat.completion.chunk",
@@ -432,8 +454,12 @@ def _stream_chat_wrapped(
         }
         yield f"data: {json.dumps(meta_chunk)}\n\n"
         yield from _stream_chat(
-            stack, intent, model, default_arm,
-            actor=actor, agent=agent,
+            stack,
+            intent,
+            model,
+            default_arm,
+            actor=actor,
+            agent=agent,
             stream_mode=stream_mode,
             conversation_id=conversation_id,
         )
@@ -583,8 +609,10 @@ def _stream_chat(
                 )
             ):
                 traj = stack.runtime.run(
-                    graph, budget=budget,
-                    caller=f"arms/{arm_id_str}", arm_id=ArmId(arm_id_str),
+                    graph,
+                    budget=budget,
+                    caller=f"arms/{arm_id_str}",
+                    arm_id=ArmId(arm_id_str),
                     actor=actor,
                 )
             result_holder["trajectory"] = traj
@@ -670,8 +698,10 @@ def _reflex_stream_frames(completion: dict[str, Any], model: str):
 
     def _mk_chunk(delta: dict[str, Any], finish_reason: str | None = None) -> str:
         chunk = {
-            "id": cid, "object": "chat.completion.chunk",
-            "created": created, "model": model,
+            "id": cid,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
             "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
         }
         return f"data: {_json.dumps(chunk)}\n\n"

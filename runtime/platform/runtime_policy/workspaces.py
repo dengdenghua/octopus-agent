@@ -22,6 +22,7 @@ Policy knobs:
 Stateless; a ``WorkspaceManager`` instance is cheap and does not hold
 locks across calls.
 """
+
 from __future__ import annotations
 
 import json

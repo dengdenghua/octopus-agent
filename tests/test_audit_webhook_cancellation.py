@@ -68,7 +68,9 @@ class TestAuditChain:
 
         path = tmp_path / "a.jsonl"
         chain = AuditChain(
-            path=path, keys={"v1": b"s"}, active_key_id="v1",
+            path=path,
+            keys={"v1": b"s"},
+            active_key_id="v1",
         )
         chain.append(kind="a", payload={"value": 100})
         chain.append(kind="b", payload={"value": 200})
@@ -83,7 +85,9 @@ class TestAuditChain:
 
         # Need a fresh chain to re-read.
         chain2 = AuditChain(
-            path=path, keys={"v1": b"s"}, active_key_id="v1",
+            path=path,
+            keys={"v1": b"s"},
+            active_key_id="v1",
         )
         report = chain2.verify()
         assert report.ok is False
@@ -94,7 +98,9 @@ class TestAuditChain:
 
         path = tmp_path / "a.jsonl"
         chain = AuditChain(
-            path=path, keys={"v1": b"s"}, active_key_id="v1",
+            path=path,
+            keys={"v1": b"s"},
+            active_key_id="v1",
         )
         chain.append(kind="a", payload={})
         chain.append(kind="b", payload={})
@@ -106,7 +112,9 @@ class TestAuditChain:
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
         chain2 = AuditChain(
-            path=path, keys={"v1": b"s"}, active_key_id="v1",
+            path=path,
+            keys={"v1": b"s"},
+            active_key_id="v1",
         )
         report = chain2.verify()
         assert report.ok is False
@@ -118,7 +126,9 @@ class TestAuditChain:
 
         path = tmp_path / "a.jsonl"
         chain = AuditChain(
-            path=path, keys={"v1": b"s"}, active_key_id="v1",
+            path=path,
+            keys={"v1": b"s"},
+            active_key_id="v1",
         )
         chain.append(kind="a", payload={})
         chain.append(kind="b", payload={})
@@ -129,7 +139,9 @@ class TestAuditChain:
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
         chain2 = AuditChain(
-            path=path, keys={"v1": b"s"}, active_key_id="v1",
+            path=path,
+            keys={"v1": b"s"},
+            active_key_id="v1",
         )
         report = chain2.verify()
         assert report.ok is False
@@ -156,13 +168,17 @@ class TestAuditChain:
 
         path = tmp_path / "a.jsonl"
         chain = AuditChain(
-            path=path, keys={"v1": b"s"}, active_key_id="v1",
+            path=path,
+            keys={"v1": b"s"},
+            active_key_id="v1",
         )
         chain.append(kind="x", payload={})
 
         # Verifier without the needed key.
         chain2 = AuditChain(
-            path=path, keys={"v9": b"other"}, active_key_id="v9",
+            path=path,
+            keys={"v9": b"other"},
+            active_key_id="v9",
         )
         report = chain2.verify()
         assert report.ok is False
@@ -240,7 +256,9 @@ class TestWebhookVerify:
         body = b'{"action":"opened"}'
         sig = "sha256=" + hmac.new(secret, body, hashlib.sha256).hexdigest()
         verify_github_signature(
-            secret=secret, body=body, signature_header=sig,
+            secret=secret,
+            body=body,
+            signature_header=sig,
         )  # no raise
 
     def test_github_invalid_signature(self):
@@ -264,7 +282,9 @@ class TestWebhookVerify:
 
         with pytest.raises(WebhookVerificationError):
             verify_github_signature(
-                secret=b"s", body=b"{}", signature_header=None,
+                secret=b"s",
+                body=b"{}",
+                signature_header=None,
             )
 
     def test_shopify_valid_signature(self):
@@ -276,7 +296,9 @@ class TestWebhookVerify:
             hmac.new(secret, body, hashlib.sha256).digest(),
         ).decode("ascii")
         verify_shopify_signature(
-            secret=secret, body=body, signature_header=sig,
+            secret=secret,
+            body=body,
+            signature_header=sig,
         )
 
     def test_shopify_invalid_signature(self):
@@ -287,7 +309,8 @@ class TestWebhookVerify:
 
         with pytest.raises(WebhookVerificationError):
             verify_shopify_signature(
-                secret=b"s", body=b"{}",
+                secret=b"s",
+                body=b"{}",
                 signature_header=base64.b64encode(b"wrong").decode(),
             )
 
@@ -300,7 +323,8 @@ class TestWebhookVerify:
         signed_payload = f"{ts}.".encode() + body
         v1 = hmac.new(secret, signed_payload, hashlib.sha256).hexdigest()
         verify_stripe_signature(
-            secret=secret, body=body,
+            secret=secret,
+            body=body,
             signature_header=f"t={ts},v1={v1}",
         )
 
@@ -317,7 +341,8 @@ class TestWebhookVerify:
         v1 = hmac.new(secret, signed, hashlib.sha256).hexdigest()
         with pytest.raises(WebhookVerificationError, match="tolerance"):
             verify_stripe_signature(
-                secret=secret, body=body,
+                secret=secret,
+                body=body,
                 signature_header=f"t={ts},v1={v1}",
                 tolerance_seconds=300,
             )
@@ -332,7 +357,8 @@ class TestWebhookVerify:
         v1 = hmac.new(secret, signed, hashlib.sha256).hexdigest()
         # With now=ts, the delta is 0, well within tolerance.
         verify_stripe_signature(
-            secret=secret, body=body,
+            secret=secret,
+            body=body,
             signature_header=f"t={ts},v1={v1}",
             now=float(ts),
         )
@@ -346,7 +372,8 @@ class TestWebhookVerify:
         ts = int(time.time())
         with pytest.raises(WebhookVerificationError):
             verify_stripe_signature(
-                secret=b"s", body=b"{}",
+                secret=b"s",
+                body=b"{}",
                 signature_header=f"t={ts},v1=deadbeef",
             )
 
@@ -357,7 +384,8 @@ class TestWebhookVerify:
         body = b"payload"
         digest = hmac.new(secret, body, hashlib.sha256).hexdigest()
         verify_generic_hmac(
-            secret=secret, body=body,
+            secret=secret,
+            body=body,
             provided_hex=f"sha256={digest}",
             prefix="sha256=",
         )
@@ -370,7 +398,8 @@ class TestWebhookVerify:
         sig = "sha256=" + hmac.new(secret, body, hashlib.sha256).hexdigest()
         verify_webhook(
             "github",
-            secret=secret, body=body,
+            secret=secret,
+            body=body,
             headers={"x-hub-signature-256": sig},
         )
 
@@ -380,7 +409,9 @@ class TestWebhookVerify:
         with pytest.raises(ValueError):
             verify_webhook(
                 "unknown",  # type: ignore[arg-type]
-                secret=b"s", body=b"{}", headers={},
+                secret=b"s",
+                body=b"{}",
+                headers={},
             )
 
     def test_constant_time_compare(self):
@@ -394,7 +425,9 @@ class TestWebhookVerify:
         # verify the function exists and rejects wrong values.
         try:
             verify_github_signature(
-                secret=b"s", body=b"x", signature_header="sha256=00",
+                secret=b"s",
+                body=b"x",
+                signature_header="sha256=00",
             )
             raise AssertionError("should have raised")
         except WebhookVerificationError:
@@ -408,7 +441,8 @@ class TestWebhookVerify:
 
         secret = b"hook-secret"
         dep = create_verify_dependency(
-            "github", secret_getter=lambda: secret,
+            "github",
+            secret_getter=lambda: secret,
         )
         app = FastAPI()
 
@@ -429,7 +463,8 @@ class TestWebhookVerify:
         from runtime.safety.audit.webhook_verify import create_verify_dependency
 
         dep = create_verify_dependency(
-            "github", secret_getter=lambda: b"s",
+            "github",
+            secret_getter=lambda: b"s",
         )
         app = FastAPI()
 
@@ -439,7 +474,8 @@ class TestWebhookVerify:
 
         client = TestClient(app)
         r = client.post(
-            "/w", content=b"{}",
+            "/w",
+            content=b"{}",
             headers={"x-hub-signature-256": "sha256=00"},
         )
         assert r.status_code == 401

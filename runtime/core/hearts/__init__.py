@@ -1,4 +1,3 @@
-
 from .coordinator import (
     Coordinator,
     FileLockCoordinator,

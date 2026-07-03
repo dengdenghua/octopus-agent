@@ -28,10 +28,7 @@ def assert_screenshot_pixels(
     counts = Counter(pixels)
     background_count = counts.most_common(1)[0][1] if counts else 0
     non_background_ratio = round((total - background_count) / total, 4)
-    ok = (
-        len(counts) >= min_unique_colors
-        and non_background_ratio >= min_non_background_ratio
-    )
+    ok = len(counts) >= min_unique_colors and non_background_ratio >= min_non_background_ratio
     return {
         "schema": "octopus.browser_pixel_assertion.v1",
         "ok": ok,
@@ -66,10 +63,7 @@ def compare_screenshot_pixels(
             "thresholds": {"min_changed_ratio": min_changed_ratio},
         }
     total = max(1, len(before_pixels))
-    changed = sum(
-        1 for lhs, rhs in zip(before_pixels, after_pixels, strict=True)
-        if lhs != rhs
-    )
+    changed = sum(1 for lhs, rhs in zip(before_pixels, after_pixels, strict=True) if lhs != rhs)
     changed_ratio = round(changed / total, 4)
     ok = changed_ratio >= min_changed_ratio
     return {
@@ -172,13 +166,14 @@ def _png_pixels(data: bytes) -> tuple[list[tuple[int, ...]], int, int]:
     channels = 0
     idat = bytearray()
     while offset + 8 <= len(data):
-        length = struct.unpack(">I", data[offset: offset + 4])[0]
-        chunk_type = data[offset + 4: offset + 8]
-        chunk_data = data[offset + 8: offset + 8 + length]
+        length = struct.unpack(">I", data[offset : offset + 4])[0]
+        chunk_type = data[offset + 4 : offset + 8]
+        chunk_data = data[offset + 8 : offset + 8 + length]
         offset += 12 + length
         if chunk_type == b"IHDR":
             width, height, bit_depth, color_type = struct.unpack(
-                ">IIBB", chunk_data[:10],
+                ">IIBB",
+                chunk_data[:10],
             )
             if bit_depth != 8 or color_type not in {2, 6}:
                 raise ValueError("only 8-bit RGB/RGBA PNG screenshots are supported")
@@ -197,7 +192,7 @@ def _png_pixels(data: bytes) -> tuple[list[tuple[int, ...]], int, int]:
     for _ in range(height):
         filter_type = raw[pos]
         pos += 1
-        scanline = bytearray(raw[pos: pos + stride])
+        scanline = bytearray(raw[pos : pos + stride])
         pos += stride
         _unfilter(scanline, prev, filter_type, channels)
         rows.append(bytes(scanline))
@@ -205,7 +200,7 @@ def _png_pixels(data: bytes) -> tuple[list[tuple[int, ...]], int, int]:
     pixels: list[tuple[int, ...]] = []
     for row in rows:
         for idx in range(0, len(row), channels):
-            pixels.append(tuple(row[idx: idx + channels]))
+            pixels.append(tuple(row[idx : idx + channels]))
     return pixels, width, height
 
 

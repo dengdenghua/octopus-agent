@@ -34,7 +34,9 @@ def test_nominate_endpoint(tmp_path) -> None:
     # tokens — agents are named for their domain ("database-expert", "css-guru").
     c.post(f"/api/cowork/{t}/members", json={"target_id": "database-expert", "kind": "agent"})
     c.post(f"/api/cowork/{t}/members", json={"target_id": "css-guru", "kind": "agent"})
-    nominated = c.get(f"/api/cowork/{t}/nominate", params={"text": "optimize database index"}).json()
+    nominated = c.get(
+        f"/api/cowork/{t}/nominate", params={"text": "optimize database index"}
+    ).json()
     assert nominated["nominated"] == ["database-expert"]
 
 
@@ -67,8 +69,12 @@ def test_breakout_endpoints(tmp_path) -> None:
     t = "par"
     fork = c.post(
         f"/api/cowork/{t}/breakout",
-        json={"child_thread": "child", "members": [{"id": "a", "kind": "agent"}],
-              "grant": {"scope": "from_join"}, "at_message": 3},
+        json={
+            "child_thread": "child",
+            "members": [{"id": "a", "kind": "agent"}],
+            "grant": {"scope": "from_join"},
+            "at_message": 3,
+        },
     )
     assert fork.status_code == 200 and fork.json()["members"] == ["a"]
     assert {m["id"] for m in c.get("/api/cowork/child").json()["state"]["roster"]} == {"a"}

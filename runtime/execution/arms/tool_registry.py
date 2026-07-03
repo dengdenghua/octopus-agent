@@ -35,6 +35,7 @@ Usage
         "command": "ls -la",
     })
 """
+
 from __future__ import annotations
 
 import logging
@@ -267,9 +268,7 @@ class ToolRegistry:
             try:
                 await handler(result)
             except (TypeError, ValueError, RuntimeError):
-                _logger.warning(
-                    "Post-call hook failed for tool: %s", tool_name
-                )
+                _logger.warning("Post-call hook failed for tool: %s", tool_name)
 
         return result
 

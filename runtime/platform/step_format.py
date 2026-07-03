@@ -9,6 +9,7 @@ from the web/gateway layer made ``adapters`` depend upward on
 operate on the platform ``Step`` shape, so they belong in the base
 layer. ``openai_formatting`` re-exports them for the gateway's callers.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -18,15 +19,41 @@ from typing import Any
 # demos — the ones at the top are what users were clicking to see
 # first. Unordered keys round out the remaining slots.
 _ARGS_PRIORITY = (
-    "text", "path", "url", "query", "command", "keys", "key",
-    "x", "y", "duration", "direction", "amount", "content",
+    "text",
+    "path",
+    "url",
+    "query",
+    "command",
+    "keys",
+    "key",
+    "x",
+    "y",
+    "duration",
+    "direction",
+    "amount",
+    "content",
 )
 
 _OUTPUT_PRIORITY = (
-    "result", "reply", "answer", "text", "ok", "success",
-    "count", "items", "path", "hash", "word_count", "bytes",
-    "error", "triggered", "clicked", "moved", "typed_chars",
-    "image_size", "screen_size",
+    "result",
+    "reply",
+    "answer",
+    "text",
+    "ok",
+    "success",
+    "count",
+    "items",
+    "path",
+    "hash",
+    "word_count",
+    "bytes",
+    "error",
+    "triggered",
+    "clicked",
+    "moved",
+    "typed_chars",
+    "image_size",
+    "screen_size",
 )
 
 
@@ -111,17 +138,13 @@ def summarize_step_for_stream(step: Any) -> str:
     args_preview = ""
     if isinstance(args, dict) and args:
         prioritized = _pick_preview_keys(args)
-        args_preview = ", ".join(
-            f"{k}={_short(v)}" for k, v in prioritized
-        )
+        args_preview = ", ".join(f"{k}={_short(v)}" for k, v in prioritized)
     # Output summary
     out = step.result.output
     out_preview = ""
     if isinstance(out, dict) and out:
         out_prio = _pick_output_keys(out)
-        out_preview = ", ".join(
-            f"{k}={_short(v)}" for k, v in out_prio
-        )
+        out_preview = ", ".join(f"{k}={_short(v)}" for k, v in out_prio)
     elif isinstance(out, str) and out:
         out_preview = _short(out, max_len=80)
 

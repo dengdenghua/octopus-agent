@@ -19,6 +19,7 @@ It deliberately does NOT rewrite or strip the content (that would
 corrupt legitimate data and give false assurance); it annotates and
 fences. Treat its output as a risk signal, not a guarantee.
 """
+
 from __future__ import annotations
 
 import contextvars
@@ -55,15 +56,30 @@ _UNTRUSTED_NAME_PREFIXES: tuple[str, ...] = ("mcp_", "mcp__")
 # ordinary repo/cwd reads (which would taint nearly every turn). macOS system
 # temp lives under /var/folders.
 _UNTRUSTED_READ_ROOTS: tuple[str, ...] = (
-    "/tmp/", "/var/tmp/", "/private/tmp/", "/private/var/tmp/",
-    "/dev/shm/", "/var/folders/",
+    "/tmp/",
+    "/var/tmp/",
+    "/private/tmp/",
+    "/private/var/tmp/",
+    "/dev/shm/",
+    "/var/folders/",
 )
 # Read-type tool NAMES whose path argument we vet against the roots above.
 # Scoped to reads so a write INTO /tmp (not an ingestion) doesn't taint.
-_READ_TOOL_NAMES: frozenset[str] = frozenset({
-    "read_file", "read_text_file", "read", "cat", "head", "tail",
-    "git_diff", "git_show", "git_log", "view_file", "open_file",
-})
+_READ_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "read_file",
+        "read_text_file",
+        "read",
+        "cat",
+        "head",
+        "tail",
+        "git_diff",
+        "git_show",
+        "git_log",
+        "view_file",
+        "open_file",
+    }
+)
 
 
 def _path_in_untrusted_root(value: str) -> bool:
@@ -85,66 +101,85 @@ def _path_in_untrusted_root(value: str) -> bool:
 
 
 def _reads_from_untrusted_location(
-    name: str | None, args: dict | None,
+    name: str | None,
+    args: dict | None,
 ) -> bool:
     """True when a READ tool targets a world-writable / temp / downloads path —
     content an attacker may have planted there."""
     if not isinstance(args, dict) or not args:
         return False
     low = (name or "").lower()
-    is_read = (
-        low in _READ_TOOL_NAMES
-        or low.startswith(("read_", "git_diff", "git_show", "git_log"))
+    is_read = low in _READ_TOOL_NAMES or low.startswith(
+        ("read_", "git_diff", "git_show", "git_log")
     )
     if not is_read:
         return False
-    return any(
-        isinstance(v, str) and _path_in_untrusted_root(v)
-        for v in args.values()
-    )
+    return any(isinstance(v, str) and _path_in_untrusted_root(v) for v in args.values())
+
 
 # (pattern, label). Ordered by rough specificity; each label fires once.
 _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(
-        r"ignore\s+(?:all\s+|any\s+|the\s+)?(?:previous|prior|above|earlier|"
-        r"preceding)\s+(?:instruction|prompt|message|context|rule)", re.I),
-     "override_prior"),
-    (re.compile(
-        r"disregard\s+(?:all\s+|the\s+|your\s+)?(?:previous|prior|above|"
-        r"system|earlier)", re.I),
-     "override_prior"),
-    (re.compile(r"forget\s+(?:everything|all|your|previous)\b", re.I),
-     "override_prior"),
+    (
+        re.compile(
+            r"ignore\s+(?:all\s+|any\s+|the\s+)?(?:previous|prior|above|earlier|"
+            r"preceding)\s+(?:instruction|prompt|message|context|rule)",
+            re.I,
+        ),
+        "override_prior",
+    ),
+    (
+        re.compile(
+            r"disregard\s+(?:all\s+|the\s+|your\s+)?(?:previous|prior|above|"
+            r"system|earlier)",
+            re.I,
+        ),
+        "override_prior",
+    ),
+    (re.compile(r"forget\s+(?:everything|all|your|previous)\b", re.I), "override_prior"),
     # Synonyms for "ignore/forget your instructions" the verbs above miss —
     # "change/modify/alter/replace/update your instructions/rules/task/persona".
-    (re.compile(
-        r"(?:change|modify|alter|replace|override|update)\s+"
-        r"(?:your\s+|the\s+|my\s+)?"
-        r"(?:instruction|directive|system\s*prompt|prompt|rule|task|"
-        r"behaviou?r|persona|role|objective|goal)s?\b", re.I),
-     "override_prior"),
-    (re.compile(r"you\s+are\s+now\s+(?:a|an|the|in|no\s+longer|going)\b", re.I),
-     "role_override"),
-    (re.compile(
-        r"(?:new|updated|revised|real|actual)\s+(?:instruction|system\s*prompt|"
-        r"directive|rule)s?\s*[:：]", re.I),
-     "new_instructions"),
-    (re.compile(
-        r"(?:reveal|print|repeat|show|output|leak|tell\s+me|disclose)\s+"
-        r"(?:your\s+|the\s+)?(?:system\s*prompt|initial\s+instruction|"
-        r"hidden\s+instruction|the\s+prompt)", re.I),
-     "prompt_exfil"),
-    (re.compile(r"^\s{0,4}(?:Action|Final\s*Answer|Observation|Thought)\s*[:：]",
-                re.I | re.M),
-     "control_token"),
-    (re.compile(r"<\s*/?\s*(?:system|assistant|user|tool|im_start|im_end)\b",
-                re.I),
-     "role_tag"),
-    (re.compile(
-        r"(?:send|exfiltrate|post|upload|email|curl|wget|fetch)\b[^\n]{0,80}?"
-        r"(?:secret|credential|api[ _-]?key|password|token|\.env|private\s+key|"
-        r"id_rsa)", re.I),
-     "exfil"),
+    (
+        re.compile(
+            r"(?:change|modify|alter|replace|override|update)\s+"
+            r"(?:your\s+|the\s+|my\s+)?"
+            r"(?:instruction|directive|system\s*prompt|prompt|rule|task|"
+            r"behaviou?r|persona|role|objective|goal)s?\b",
+            re.I,
+        ),
+        "override_prior",
+    ),
+    (re.compile(r"you\s+are\s+now\s+(?:a|an|the|in|no\s+longer|going)\b", re.I), "role_override"),
+    (
+        re.compile(
+            r"(?:new|updated|revised|real|actual)\s+(?:instruction|system\s*prompt|"
+            r"directive|rule)s?\s*[:：]",
+            re.I,
+        ),
+        "new_instructions",
+    ),
+    (
+        re.compile(
+            r"(?:reveal|print|repeat|show|output|leak|tell\s+me|disclose)\s+"
+            r"(?:your\s+|the\s+)?(?:system\s*prompt|initial\s+instruction|"
+            r"hidden\s+instruction|the\s+prompt)",
+            re.I,
+        ),
+        "prompt_exfil",
+    ),
+    (
+        re.compile(r"^\s{0,4}(?:Action|Final\s*Answer|Observation|Thought)\s*[:：]", re.I | re.M),
+        "control_token",
+    ),
+    (re.compile(r"<\s*/?\s*(?:system|assistant|user|tool|im_start|im_end)\b", re.I), "role_tag"),
+    (
+        re.compile(
+            r"(?:send|exfiltrate|post|upload|email|curl|wget|fetch)\b[^\n]{0,80}?"
+            r"(?:secret|credential|api[ _-]?key|password|token|\.env|private\s+key|"
+            r"id_rsa)",
+            re.I,
+        ),
+        "exfil",
+    ),
     # Credential term in close proximity to a URL. The English preposition
     # "to/into/at" used to be REQUIRED here, which let any non-English exfil
     # instruction ("api_key 发送到 https://…") slip through — the connecting
@@ -152,11 +187,15 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     # stay Latin. Match on proximity instead. False positives (a page that
     # merely mentions a token near a link) only ESCALATE to human approval,
     # never silently block, so erring toward catching exfil is acceptable.
-    (re.compile(
-        r"(?:secret|credential|api[ _-]?key|password|token|\.env|"
-        r"private\s+key|id_rsa)"
-        r"[^\n]{0,100}?https?://", re.I),
-     "exfil"),
+    (
+        re.compile(
+            r"(?:secret|credential|api[ _-]?key|password|token|\.env|"
+            r"private\s+key|id_rsa)"
+            r"[^\n]{0,100}?https?://",
+            re.I,
+        ),
+        "exfil",
+    ),
 )
 
 _SEVERITY: dict[str, str] = {
@@ -259,12 +298,7 @@ def wrap_untrusted_observation(
             f"⚠️ POSSIBLE PROMPT INJECTION detected (severity={scan.severity}, "
             f"signals={', '.join(scan.labels)}). " + header
         )
-    return (
-        f"{header}\n"
-        f"{_BOUNDARY_OPEN.format(source=source)}\n"
-        f"{text}\n"
-        f"{_BOUNDARY_CLOSE}"
-    )
+    return f"{header}\n{_BOUNDARY_OPEN.format(source=source)}\n{text}\n{_BOUNDARY_CLOSE}"
 
 
 # ─── Per-turn injection taint ──────────────────────────────
@@ -279,7 +313,8 @@ def wrap_untrusted_observation(
 # execution context without threading a flag through every call site.
 
 _TAINT: contextvars.ContextVar[str] = contextvars.ContextVar(
-    "octopus_injection_taint", default="none",
+    "octopus_injection_taint",
+    default="none",
 )
 
 
@@ -312,7 +347,8 @@ def injection_taint_gates(*, threshold: str = "medium") -> bool:
 # parallel dispatch, the agentic-fallback loop, subagents) leave it unset,
 # so the executor blocks their risky tools after taint.
 _GATE_HANDLED: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    "octopus_injection_gate_handled", default=False,
+    "octopus_injection_gate_handled",
+    default=False,
 )
 
 

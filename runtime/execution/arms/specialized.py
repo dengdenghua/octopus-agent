@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from runtime.core.graph_runtime import GraphRuntime
@@ -55,8 +54,6 @@ _FILE_SKILLS: list[SkillId] = [
     SkillId("list_dir"),
     SkillId("stat_file"),
 ]
-
-
 
 
 def make_code_arm(

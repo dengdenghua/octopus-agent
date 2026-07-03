@@ -20,6 +20,7 @@ record → silently-auto-grant.
 The recorder is best-effort and side-channel: a failure here must never
 break the live computer-use loop.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -122,9 +123,7 @@ def record_successful_loop(journal: Any, loop_result: Any) -> Trajectory | None:
 # A non-success loop end. ``max_iterations`` / ``planner_gave_up`` / ``error``
 # all mean the loop failed to reach the goal — exactly the cases the
 # browser-desktop repair-recipe pipeline turns into deterministic repairs.
-_FAILURE_STATUSES = frozenset(
-    {"planner_gave_up", "error", "max_iterations", "timeout"}
-)
+_FAILURE_STATUSES = frozenset({"planner_gave_up", "error", "max_iterations", "timeout"})
 
 
 def record_failed_loop(loop_result: Any, *, review_queue_path: Any = None) -> Any:
@@ -167,9 +166,7 @@ def record_failed_loop(loop_result: Any, *, review_queue_path: Any = None) -> An
 
         fingerprint = f"culoop:{status}:{last_kind}:{new_id().hex[:12]}"
         queue = ReviewQueue(
-            review_queue_path
-            if review_queue_path is not None
-            else app_paths().review_queue_path
+            review_queue_path if review_queue_path is not None else app_paths().review_queue_path
         )
         return queue.upsert_item(
             source="computer_use_loop_failure",

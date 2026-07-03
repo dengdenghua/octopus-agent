@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import hashlib
@@ -13,7 +12,6 @@ from runtime.adapters.instrumentation import trace_stage
 
 @dataclass
 class Variant:
-
     name: str
     payload: Any
     weight: float = 1.0
@@ -27,7 +25,6 @@ class Variant:
 
 @dataclass
 class VariantStats:
-
     assignments: int = 0
     successes: int = 0
     failures: int = 0
@@ -45,7 +42,6 @@ class VariantStats:
 
 
 class ABSplitter:
-
     def __init__(
         self,
         variants: Iterable[Variant],
@@ -61,16 +57,13 @@ class ABSplitter:
 
         self._total_weight: float = sum(v.weight for v in self._variants)
         self._rng = random.Random(seed) if seed is not None else random.Random()
-        self.stats: dict[str, VariantStats] = {
-            v.name: VariantStats() for v in self._variants
-        }
+        self.stats: dict[str, VariantStats] = {v.name: VariantStats() for v in self._variants}
         self._lock = threading.Lock()
         self._cum_weights: list[float] = []
         acc = 0.0
         for v in self._variants:
             acc += v.weight
             self._cum_weights.append(acc)
-
 
     @property
     def names(self) -> list[str]:
@@ -81,7 +74,6 @@ class ABSplitter:
             if v.name == name:
                 return v
         raise KeyError(f"no variant named {name!r}")
-
 
     def next_variant(self) -> Variant:
         with trace_stage("camouflage.assign") as span:
@@ -105,14 +97,12 @@ class ABSplitter:
             span.set_attribute("octopus.camouflage.key_len", len(key_bytes))
         return v
 
-
     def record_outcome(self, variant_name: str, *, success: bool) -> None:
         with self._lock:
             stats = self.stats.get(variant_name)
             if stats is None:
                 raise KeyError(f"unknown variant {variant_name!r}")
             stats.record(success=success)
-
 
     def _pick_by_cum(self, r: float) -> Variant:
         for v, cum in zip(self._variants, self._cum_weights, strict=False):

@@ -94,14 +94,19 @@ class SessionManager:
         return sorted(results, key=lambda s: s.created_at, reverse=True)
 
     async def set_status(
-        self, session_id: str, status: SessionStatus,
+        self,
+        session_id: str,
+        status: SessionStatus,
     ) -> None:
         state = self._sessions.get(session_id)
         if state:
             state.status = status
 
     async def add_usage(
-        self, session_id: str, input_tokens: int = 0, output_tokens: int = 0,
+        self,
+        session_id: str,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
     ) -> None:
         state = self._sessions.get(session_id)
         if state:
@@ -154,7 +159,8 @@ class SessionManager:
             title=state.title,
             agent_id=state.agent_id,
             created_at=datetime.fromtimestamp(
-                state.created_at, tz=UTC,
+                state.created_at,
+                tz=UTC,
             ).isoformat(),
             usage=UsageInfo(
                 input_tokens=state.input_tokens,

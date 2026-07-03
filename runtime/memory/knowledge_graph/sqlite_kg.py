@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -35,7 +34,6 @@ CREATE INDEX IF NOT EXISTS idx_status    ON triples(status);
 
 
 class SqliteKnowledgeGraph(KnowledgeGraph):
-
     def __init__(
         self,
         db_path: str | Path,
@@ -47,12 +45,11 @@ class SqliteKnowledgeGraph(KnowledgeGraph):
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(
             str(self.db_path),
-            isolation_level=None,        # Implementation note.
-            check_same_thread=False,     # Implementation note.
+            isolation_level=None,  # Implementation note.
+            check_same_thread=False,  # Implementation note.
         )
         self._conn.executescript(_SCHEMA)
         self._load_from_db()
-
 
     def __enter__(self) -> SqliteKnowledgeGraph:
         return self
@@ -65,7 +62,6 @@ class SqliteKnowledgeGraph(KnowledgeGraph):
             self._conn.close()
             self._conn = None  # type: ignore[assignment]
 
-
     def _store(self, t: Triple) -> None:
         super()._store(t)
         self._upsert(t)
@@ -73,7 +69,6 @@ class SqliteKnowledgeGraph(KnowledgeGraph):
     def _replace(self, old_id: UUID, new_triple: Triple) -> None:
         super()._replace(old_id, new_triple)
         self._upsert(new_triple)
-
 
     def _load_from_db(self) -> None:
         cur = self._conn.execute(
@@ -84,7 +79,6 @@ class SqliteKnowledgeGraph(KnowledgeGraph):
         for row in cur.fetchall():
             t = _row_to_triple(row)
             super()._store(t)
-
 
     def _upsert(self, t: Triple) -> None:
         assert self._conn is not None, "connection closed"
@@ -116,9 +110,17 @@ class SqliteKnowledgeGraph(KnowledgeGraph):
 
 def _row_to_triple(row: tuple) -> Triple:
     (
-        triple_id, subject, predicate, object_,
-        confidence, source_json, ts, valid_from, valid_until,
-        status, superseded_by,
+        triple_id,
+        subject,
+        predicate,
+        object_,
+        confidence,
+        source_json,
+        ts,
+        valid_from,
+        valid_until,
+        status,
+        superseded_by,
     ) = row
     source = Source(**json.loads(source_json))
     return Triple(

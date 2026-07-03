@@ -90,7 +90,9 @@ class TestMountedRoutes:
         assert "console.log" in r.text
 
     def test_old_inline_dashboard_still_at_root(
-        self, tmp_path: Path, monkeypatch,
+        self,
+        tmp_path: Path,
+        monkeypatch,
     ):
         """Implementation note."""
         dist = tmp_path / "dist"
@@ -105,7 +107,9 @@ class TestMountedRoutes:
         assert "octopus" in r.text.lower()
 
     def test_api_routes_not_shadowed_by_spa(
-        self, tmp_path: Path, monkeypatch,
+        self,
+        tmp_path: Path,
+        monkeypatch,
     ):
         """Implementation note."""
         dist = tmp_path / "dist"

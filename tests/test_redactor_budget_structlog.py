@@ -48,9 +48,7 @@ class TestRedactor:
         from runtime.platform.observability.redactor import redact_text
 
         # 40-char base64-like secret with explicit context word.
-        out = redact_text(
-            'aws_secret_access_key="abcdefghijklmnopqrstuvwxyz0123456789ABCD"'
-        )
+        out = redact_text('aws_secret_access_key="abcdefghijklmnopqrstuvwxyz0123456789ABCD"')
         assert "abcdefghijklmnopqrstuvwxyz0123456789ABCD" not in out
         assert "[REDACTED:aws_secret]" in out
 
@@ -194,7 +192,8 @@ class TestTokenBudgetTracker:
             warnings.append(threshold)
 
         t = TokenBudgetTracker(
-            tokens_ceiling=100, on_warning=on_warn,
+            tokens_ceiling=100,
+            on_warning=on_warn,
         )
         t.record("s1", CostEntry(tokens_in=50, tokens_out=30))  # 80%
         assert 0.80 in warnings
@@ -209,7 +208,7 @@ class TestTokenBudgetTracker:
 
         t = TokenBudgetTracker(tokens_ceiling=100, on_warning=on_warn)
         t.record("s1", CostEntry(tokens_in=80, tokens_out=0))  # 80%
-        t.record("s1", CostEntry(tokens_in=5, tokens_out=0))   # 85%
+        t.record("s1", CostEntry(tokens_in=5, tokens_out=0))  # 85%
         # 80% threshold should have fired exactly once.
         assert warnings.count(0.80) == 1
 

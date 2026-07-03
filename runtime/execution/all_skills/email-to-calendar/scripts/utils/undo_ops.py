@@ -14,9 +14,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from common import format_timestamp, time_ago
 from json_store import load_json, save_json
 
-CHANGELOG_FILE = os.path.expanduser(
-    "~/.openclaw/workspace/memory/email-to-calendar/changelog.json"
-)
+CHANGELOG_FILE = os.path.expanduser("~/.openclaw/workspace/memory/email-to-calendar/changelog.json")
 UNDO_WINDOW_HOURS = 24
 
 
@@ -79,9 +77,8 @@ def list_undoable() -> None:
             summary = change.get("after", {}).get("summary", "Unknown")
             desc = f'Created "{summary}"'
         elif action == "update":
-            summary = (
-                change.get("after", {}).get("summary") or
-                change.get("before", {}).get("summary", "Unknown")
+            summary = change.get("after", {}).get("summary") or change.get("before", {}).get(
+                "summary", "Unknown"
             )
             desc = f'Updated "{summary}"'
         else:

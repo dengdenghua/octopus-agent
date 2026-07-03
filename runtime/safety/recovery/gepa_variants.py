@@ -73,6 +73,7 @@ def _root() -> Path:
     everything addendum-related lives in one place. Delegates so
     the legacy-path migration only needs to live in one file."""
     from runtime.safety.recovery.gepa_addendum_store import _root as _shared_root
+
     return _shared_root()
 
 
@@ -105,11 +106,12 @@ def manifest_path(recipe_id: str) -> Path:
 @dataclass
 class VariantEntry:
     """One row in a recipe's variant manifest."""
+
     variant_id: str
-    weight: int                # 0..N · 0 = retired (never selected)
-    added_at: float            # unix seconds · ts of first save
-    candidate_id: str = ""     # GEPA run's candidate id (provenance)
-    rationale: str = ""        # the LLM mutator's "why" string
+    weight: int  # 0..N · 0 = retired (never selected)
+    added_at: float  # unix seconds · ts of first save
+    candidate_id: str = ""  # GEPA run's candidate id (provenance)
+    rationale: str = ""  # the LLM mutator's "why" string
     avg_score: float | None = None  # GEPA-time avg score
 
 
@@ -117,15 +119,14 @@ class VariantEntry:
 class VariantManifest:
     """Per-recipe manifest · what variants exist, their weights,
     plus ``default_weight`` (the "no addendum" control group)."""
+
     recipe_id: str
     variants: list[VariantEntry] = field(default_factory=list)
-    default_weight: int = 0    # weight for the "no addendum" branch
+    default_weight: int = 0  # weight for the "no addendum" branch
     updated_at: float = 0.0
 
     def total_weight(self) -> int:
-        return self.default_weight + sum(
-            max(0, v.weight) for v in self.variants
-        )
+        return self.default_weight + sum(max(0, v.weight) for v in self.variants)
 
     def find(self, variant_id: str) -> VariantEntry | None:
         return next(
@@ -152,17 +153,18 @@ class VariantManifest:
             if not vid:
                 continue
             try:
-                variants.append(VariantEntry(
-                    variant_id=vid,
-                    weight=int(v.get("weight") or 0),
-                    added_at=float(v.get("added_at") or 0.0),
-                    candidate_id=str(v.get("candidate_id") or ""),
-                    rationale=str(v.get("rationale") or "")[:300],
-                    avg_score=(
-                        float(v["avg_score"])
-                        if v.get("avg_score") is not None else None
-                    ),
-                ))
+                variants.append(
+                    VariantEntry(
+                        variant_id=vid,
+                        weight=int(v.get("weight") or 0),
+                        added_at=float(v.get("added_at") or 0.0),
+                        candidate_id=str(v.get("candidate_id") or ""),
+                        rationale=str(v.get("rationale") or "")[:300],
+                        avg_score=(
+                            float(v["avg_score"]) if v.get("avg_score") is not None else None
+                        ),
+                    )
+                )
             except (TypeError, ValueError):
                 continue
         return cls(
@@ -181,8 +183,7 @@ def load_manifest(recipe_id: str) -> VariantManifest | None:
         data = json.loads(path.read_text(encoding="utf-8"))
         return VariantManifest.from_dict(data)
     except (OSError, json.JSONDecodeError) as exc:
-        _LOG.warning("variant manifest read failed for %s · %s",
-                     recipe_id, exc)
+        _LOG.warning("variant manifest read failed for %s · %s", recipe_id, exc)
         return None
 
 
@@ -243,14 +244,16 @@ def add_variant(
     m = load_manifest(recipe_id) or VariantManifest(recipe_id=recipe_id)
     existing = m.find(variant_id)
     if existing is None:
-        m.variants.append(VariantEntry(
-            variant_id=variant_id,
-            weight=max(0, int(weight)),
-            added_at=time.time(),
-            candidate_id=candidate_id,
-            rationale=rationale,
-            avg_score=avg_score,
-        ))
+        m.variants.append(
+            VariantEntry(
+                variant_id=variant_id,
+                weight=max(0, int(weight)),
+                added_at=time.time(),
+                candidate_id=candidate_id,
+                rationale=rationale,
+                avg_score=avg_score,
+            )
+        )
     else:
         existing.weight = max(0, int(weight))
         existing.candidate_id = candidate_id or existing.candidate_id
@@ -319,8 +322,12 @@ def list_variants(recipe_id: str) -> dict[str, Any]:
     """Return manifest + per-variant content preview for the UI."""
     m = load_manifest(recipe_id)
     if m is None:
-        return {"recipe_id": recipe_id, "variants": [],
-                "default_weight": 0, "manifest_present": False}
+        return {
+            "recipe_id": recipe_id,
+            "variants": [],
+            "default_weight": 0,
+            "manifest_present": False,
+        }
     out: list[dict[str, Any]] = []
     for v in m.variants:
         path = variant_path(recipe_id, v.variant_id)
@@ -335,13 +342,15 @@ def list_variants(recipe_id: str) -> dict[str, Any]:
                 mtime = path.stat().st_mtime
             except OSError:  # noqa: BLE001 — file stat best-effort
                 pass
-        out.append({
-            **asdict(v),
-            "preview": preview,
-            "size": size,
-            "mtime": mtime,
-            "path": str(path),
-        })
+        out.append(
+            {
+                **asdict(v),
+                "preview": preview,
+                "size": size,
+                "mtime": mtime,
+                "path": str(path),
+            }
+        )
     return {
         "recipe_id": recipe_id,
         "manifest_present": True,
@@ -360,7 +369,8 @@ def list_variants(recipe_id: str) -> dict[str, Any]:
 def _bucket(key: str) -> int:
     """Stable cross-process hash · same as gating._bucket."""
     return int.from_bytes(
-        hashlib.sha1(key.encode("utf-8")).digest()[:4], "big",
+        hashlib.sha1(key.encode("utf-8")).digest()[:4],
+        "big",
     )
 
 
@@ -415,9 +425,9 @@ def select_variant(
     path = variant_path(recipe_id, chosen)
     if not path.is_file():
         _LOG.warning(
-            "variant %s for recipe %s manifest-listed but file "
-            "missing · treating as empty",
-            chosen, recipe_id,
+            "variant %s for recipe %s manifest-listed but file missing · treating as empty",
+            chosen,
+            recipe_id,
         )
         return chosen, ""
     try:
@@ -445,14 +455,16 @@ def list_all_manifests() -> list[dict[str, Any]]:
         try:
             data = json.loads(m_path.read_text(encoding="utf-8"))
             m = VariantManifest.from_dict(data)
-            out.append({
-                "recipe_id": m.recipe_id,
-                "variant_count": len(m.variants),
-                "total_weight": m.total_weight(),
-                "default_weight": m.default_weight,
-                "updated_at": m.updated_at,
-                "manifest_path": str(m_path),
-            })
+            out.append(
+                {
+                    "recipe_id": m.recipe_id,
+                    "variant_count": len(m.variants),
+                    "total_weight": m.total_weight(),
+                    "default_weight": m.default_weight,
+                    "updated_at": m.updated_at,
+                    "manifest_path": str(m_path),
+                }
+            )
         except (OSError, json.JSONDecodeError) as exc:
             _LOG.warning("manifest scan: %s skipped · %s", m_path, exc)
             continue

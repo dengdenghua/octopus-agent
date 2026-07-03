@@ -118,15 +118,35 @@ def default_catalog() -> list[ModelSpec]:
 
 # ── memory-bandwidth tables (GB/s) for the tps roofline ───────────────────────
 _APPLE_BW: list[tuple[str, float]] = [
-    ("m1 ultra", 800), ("m1 max", 400), ("m1 pro", 200), ("m1", 68),
-    ("m2 ultra", 800), ("m2 max", 400), ("m2 pro", 200), ("m2", 100),
-    ("m3 ultra", 800), ("m3 max", 400), ("m3 pro", 150), ("m3", 100),
-    ("m4 max", 546), ("m4 pro", 273), ("m4", 120),
+    ("m1 ultra", 800),
+    ("m1 max", 400),
+    ("m1 pro", 200),
+    ("m1", 68),
+    ("m2 ultra", 800),
+    ("m2 max", 400),
+    ("m2 pro", 200),
+    ("m2", 100),
+    ("m3 ultra", 800),
+    ("m3 max", 400),
+    ("m3 pro", 150),
+    ("m3", 100),
+    ("m4 max", 546),
+    ("m4 pro", 273),
+    ("m4", 120),
 ]
 _NVIDIA_BW: list[tuple[str, float]] = [
-    ("h100", 3350), ("a100", 1935), ("5090", 1792), ("4090", 1008),
-    ("3090", 936), ("4080", 717), ("3080", 760), ("4070", 504),
-    ("3070", 448), ("3060", 360), ("4060", 272), ("a6000", 768),
+    ("h100", 3350),
+    ("a100", 1935),
+    ("5090", 1792),
+    ("4090", 1008),
+    ("3090", 936),
+    ("4080", 717),
+    ("3080", 760),
+    ("4070", 504),
+    ("3070", 448),
+    ("3060", 360),
+    ("4060", 272),
+    ("a6000", 768),
 ]
 
 
@@ -174,9 +194,7 @@ def _detect_nvidia() -> tuple[float, str | None]:
     """Total VRAM (GB) summed across NVIDIA GPUs + a representative name."""
     if not shutil.which("nvidia-smi"):
         return 0.0, None
-    out = _run(
-        ["nvidia-smi", "--query-gpu=memory.total,name", "--format=csv,noheader,nounits"]
-    )
+    out = _run(["nvidia-smi", "--query-gpu=memory.total,name", "--format=csv,noheader,nounits"])
     if not out:
         return 0.0, None
     total_mb = 0.0
@@ -410,7 +428,9 @@ def start_pull(tag: str) -> dict[str, object]:
         if _pull_state.get(tag) == "pulling":
             return {"status": "already_pulling", "tag": tag}
         _pull_state[tag] = "pulling"
-    threading.Thread(target=_pull_worker, args=(tag,), name=f"ollama-pull-{tag}", daemon=True).start()
+    threading.Thread(
+        target=_pull_worker, args=(tag,), name=f"ollama-pull-{tag}", daemon=True
+    ).start()
     return {"status": "started", "tag": tag}
 
 

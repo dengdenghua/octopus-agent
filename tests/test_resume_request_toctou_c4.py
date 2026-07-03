@@ -6,6 +6,7 @@ both confirm or both consume the same request → a resume could execute twice.
 The UPDATEs are now compare-and-set (``WHERE ... AND status ...``) with a
 rowcount check, so the loser of the race gets ``None`` and does not re-act.
 """
+
 from __future__ import annotations
 
 from runtime.memory.diagnostics.trace_store import AgentTraceStore

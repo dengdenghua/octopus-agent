@@ -4,6 +4,7 @@ Captures the full state of a shell environment (env vars, working
 directory, aliases, functions) so it can be serialized, transferred
 across process boundaries, and restored in a new subprocess.
 """
+
 from __future__ import annotations
 
 import base64
@@ -43,9 +44,7 @@ class ShellEnvState:
 
     def to_base64(self) -> str:
         """Serialize to base64-encoded JSON (safe for pipe transport)."""
-        return base64.b64encode(self.to_json().encode("utf-8")).decode(
-            "ascii"
-        )
+        return base64.b64encode(self.to_json().encode("utf-8")).decode("ascii")
 
     @classmethod
     def from_json(cls, json_str: str) -> ShellEnvState:

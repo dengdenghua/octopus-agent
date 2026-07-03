@@ -151,9 +151,7 @@ def _auto_indent(content: str, base_indent: str) -> str:
 
     if min_indent_len == 0:
         # Content has no indentation - just prepend base
-        return "\n".join(
-            base_indent + line if line.strip() else line for line in lines
-        )
+        return "\n".join(base_indent + line if line.strip() else line for line in lines)
 
     # Remove common indentation and add base indent
     result_lines = []
@@ -275,7 +273,11 @@ def _edit_code(
         return {"error": f"write_failed: {e}"}
 
     changed_lines = len(
-        [d for d in diff_text.split("\n") if d.startswith(("+", "-")) and not d.startswith(("+++", "---"))]
+        [
+            d
+            for d in diff_text.split("\n")
+            if d.startswith(("+", "-")) and not d.startswith(("+++", "---"))
+        ]
     )
 
     return {
@@ -407,6 +409,7 @@ def _propose_patch(
     from runtime.execution.suckers.code_intelligence_skills import (
         _apply_unified_diff,
     )
+
     try:
         new_text = _apply_unified_diff(original, unified_diff)
     except Exception as exc:  # noqa: BLE001
@@ -438,15 +441,19 @@ def _propose_patch(
     new_lines = new_text.splitlines()
     hunks_preview: list[dict[str, Any]] = []
     import re as _re_local
+
     for m in _re_local.finditer(
-        r"@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@", unified_diff,
+        r"@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@",
+        unified_diff,
     ):
         start = max(0, int(m.group(1)) - 1)
         end = min(len(new_lines), start + 20)
-        hunks_preview.append({
-            "start_line": start + 1,
-            "preview": "\n".join(new_lines[max(0, start - 10):end]),
-        })
+        hunks_preview.append(
+            {
+                "start_line": start + 1,
+                "preview": "\n".join(new_lines[max(0, start - 10) : end]),
+            }
+        )
 
     if dry_run:
         return {
@@ -520,9 +527,9 @@ def register_code_edit_skills(registry: SkillRegistry) -> int:
                 "新建文件用 write_text_file。\n"
                 "关键参数: path, unified_diff, dry_run (默认 True 仅预览, "
                 "False 真写)。\n"
-                "示例: propose_patch({\"path\":\"a.py\",\"unified_diff\":"
-                "\"--- a/a.py\\n+++ b/a.py\\n@@ -1 +1 @@\\n-old\\n+new\\n\","
-                "\"dry_run\":false})"
+                '示例: propose_patch({"path":"a.py","unified_diff":'
+                '"--- a/a.py\\n+++ b/a.py\\n@@ -1 +1 @@\\n-old\\n+new\\n",'
+                '"dry_run":false})'
             ),
             affinity=["code", "edit", "diff"],
             cost_profile="low",

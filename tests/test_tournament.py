@@ -71,7 +71,7 @@ def test_handler_not_a_git_repo_errors(monkeypatch) -> None:
 
 def test_handler_runs_candidates_and_judge_picks_winner(monkeypatch) -> None:
     monkeypatch.setattr(wl, "is_git_repo", lambda _root: True)
-    monkeypatch.setattr(wl, "subagent_worktree_worker", lambda **kw: (lambda p, t: None))
+    monkeypatch.setattr(wl, "subagent_worktree_worker", lambda **kw: lambda p, t: None)
     monkeypatch.setattr(
         wl,
         "run_worktree_loop",
@@ -106,7 +106,7 @@ def test_handler_runs_candidates_and_judge_picks_winner(monkeypatch) -> None:
 
 def test_handler_all_candidates_failed_returns_no_winner(monkeypatch) -> None:
     monkeypatch.setattr(wl, "is_git_repo", lambda _root: True)
-    monkeypatch.setattr(wl, "subagent_worktree_worker", lambda **kw: (lambda p, t: None))
+    monkeypatch.setattr(wl, "subagent_worktree_worker", lambda **kw: lambda p, t: None)
     monkeypatch.setattr(
         wl,
         "run_worktree_loop",

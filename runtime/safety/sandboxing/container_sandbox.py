@@ -7,6 +7,7 @@ sandbox refuses to execute rather than falling back to the host.
 
 MVP: single shared image, per-thread container, volume-mounted workspace.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -59,7 +60,9 @@ class ContainerSandbox:
             try:
                 result = subprocess.run(
                     ["docker", "inspect", "-f", "{{.State.Running}}", self.container_name],
-                    capture_output=True, text=True, timeout=5,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
                 )
                 if result.returncode == 0 and "true" in result.stdout.lower():
                     return True
@@ -69,18 +72,25 @@ class ContainerSandbox:
         with contextlib.suppress(OSError, subprocess.SubprocessError):
             subprocess.run(
                 ["docker", "rm", "-f", self.container_name],
-                capture_output=True, timeout=10,
+                capture_output=True,
+                timeout=10,
             )
 
         workspace = Path(self.workspace_path).resolve()
         cmd = [
-            "docker", "run", "-d",
-            "--name", self.container_name,
-            "--memory", self.config.memory_limit,
+            "docker",
+            "run",
+            "-d",
+            "--name",
+            self.container_name,
+            "--memory",
+            self.config.memory_limit,
             f"--cpus={self.config.cpu_limit}",
             f"--network={self.config.network}",
-            "-v", f"{workspace}:/workspace",
-            "-w", "/workspace",
+            "-v",
+            f"{workspace}:/workspace",
+            "-w",
+            "/workspace",
         ]
         if self.config.read_only_root:
             cmd.append("--read-only")
@@ -90,7 +100,10 @@ class ContainerSandbox:
 
         try:
             result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=30,
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             if result.returncode == 0:
                 self._container_id = result.stdout.strip()[:12]
@@ -107,15 +120,13 @@ class ContainerSandbox:
 
         if not self._container_id and not self.ensure_running():
             _logger.error(
-                "sandbox unavailable for thread %s — "
-                "refusing to execute on host",
+                "sandbox unavailable for thread %s — refusing to execute on host",
                 self.thread_id,
             )
             return {
                 "stdout": "",
                 "stderr": (
-                    "sandbox unavailable: command rejected "
-                    "(host execution disabled for safety)"
+                    "sandbox unavailable: command rejected (host execution disabled for safety)"
                 ),
                 "exit_code": -1,
                 "sandboxed": False,
@@ -124,7 +135,8 @@ class ContainerSandbox:
         try:
             result = subprocess.run(
                 ["docker", "exec", self.container_name, "sh", "-c", command],
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
                 timeout=effective_timeout,
             )
             return {
@@ -144,10 +156,7 @@ class ContainerSandbox:
             _logger.error("docker exec failed, refusing host fallback: %s", exc)
             return {
                 "stdout": "",
-                "stderr": (
-                    f"sandbox exec failed: {exc} "
-                    "(host execution disabled for safety)"
-                ),
+                "stderr": (f"sandbox exec failed: {exc} (host execution disabled for safety)"),
                 "exit_code": -1,
                 "sandboxed": False,
             }
@@ -190,8 +199,14 @@ class ContainerSandbox:
         try:
             result = subprocess.run(
                 [
-                    "docker", "exec", "-i", self.container_name,
-                    "python", "-c", script, str(rel),
+                    "docker",
+                    "exec",
+                    "-i",
+                    self.container_name,
+                    "python",
+                    "-c",
+                    script,
+                    str(rel),
                 ],
                 input=content,
                 capture_output=True,
@@ -215,10 +230,7 @@ class ContainerSandbox:
             _logger.error("docker write_file failed, refusing host fallback: %s", exc)
             return {
                 "stdout": "",
-                "stderr": (
-                    f"sandbox write failed: {exc} "
-                    "(host execution disabled for safety)"
-                ),
+                "stderr": (f"sandbox write failed: {exc} (host execution disabled for safety)"),
                 "exit_code": -1,
                 "sandboxed": False,
             }
@@ -229,7 +241,8 @@ class ContainerSandbox:
         try:
             subprocess.run(
                 ["docker", "rm", "-f", self.container_name],
-                capture_output=True, timeout=10,
+                capture_output=True,
+                timeout=10,
             )
             _logger.info("sandbox container removed: %s", self.container_name)
         except (OSError, subprocess.SubprocessError):  # noqa: BLE001 — container teardown best-effort

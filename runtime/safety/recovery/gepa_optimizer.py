@@ -71,6 +71,7 @@ _LOG = logging.getLogger("octopus.gepa")
 @dataclass
 class PromptCandidate:
     """One member of the optimization population."""
+
     prompt: str
     # Per-eval-task scores (parallel lists). Higher = better.
     task_scores: list[float] = field(default_factory=list)
@@ -87,6 +88,7 @@ class PromptCandidate:
         # Short stable id from the prompt's first 40 chars hashed,
         # so logs reading "v3a8c2 dominated v9d40f" stay short.
         import hashlib
+
         return hashlib.sha1(self.prompt.encode("utf-8")).hexdigest()[:6]
 
 
@@ -179,8 +181,9 @@ Constraints:
 @dataclass
 class MutationContext:
     """Inputs to the LLM mutator · keeps the call site terse."""
+
     sample_failures: list[dict[str, Any]]  # [{task, expected, actual, error}]
-    meta_notes: str = ""                    # e.g. "winning on speed but losing on accuracy"
+    meta_notes: str = ""  # e.g. "winning on speed but losing on accuracy"
 
 
 def llm_mutate(
@@ -197,12 +200,11 @@ def llm_mutate(
     from runtime.platform.models.llm import Message, ModelRequest
 
     failures_json = json.dumps(
-        ctx.sample_failures[:5], ensure_ascii=False, indent=2,
+        ctx.sample_failures[:5],
+        ensure_ascii=False,
+        indent=2,
     )
-    user_msg = (
-        f"# CURRENT PROMPT\n{parent.prompt}\n\n"
-        f"# RECENT FAILURES\n{failures_json}\n\n"
-    )
+    user_msg = f"# CURRENT PROMPT\n{parent.prompt}\n\n# RECENT FAILURES\n{failures_json}\n\n"
     if ctx.meta_notes:
         user_msg += f"# NOTES\n{ctx.meta_notes}\n\n"
     user_msg += "Propose the revised prompt as JSON described above."
@@ -210,8 +212,7 @@ def llm_mutate(
     req = ModelRequest(
         model=model,
         messages=[
-            Message(role="system",
-                    content=_MUTATION_SYSTEM % len(parent.prompt)),
+            Message(role="system", content=_MUTATION_SYSTEM % len(parent.prompt)),
             Message(role="user", content=user_msg),
         ],
         max_tokens=2048,
@@ -236,7 +237,7 @@ def llm_mutate(
         if s < 0 or e <= s:
             return None
         try:
-            obj = json.loads(text[s:e + 1])
+            obj = json.loads(text[s : e + 1])
         except json.JSONDecodeError:
             return None
     revised = str(obj.get("revised_prompt") or "").strip()
@@ -259,7 +260,7 @@ def llm_mutate(
 @dataclass
 class GepaConfig:
     n_iter: int = 20
-    eval_tasks: int = 5             # how many tasks per eval batch
+    eval_tasks: int = 5  # how many tasks per eval batch
     early_stop_no_improve: int = 5  # stop after K iters w/ no front change
     seed: int = 0
 
@@ -309,20 +310,20 @@ def gepa_optimize(
 
     # Seed candidate · scored before the loop so iter 0's selection
     # has something to weight against.
-    seed = PromptCandidate(prompt=seed_prompt, born_at_iter=0,
-                           rationale="seed")
+    seed = PromptCandidate(prompt=seed_prompt, born_at_iter=0, rationale="seed")
     seed.task_scores = eval_fn(seed_prompt, cfg.eval_tasks)
-    seed.avg_score = (
-        sum(seed.task_scores) / len(seed.task_scores)
-        if seed.task_scores else 0.0
-    )
+    seed.avg_score = sum(seed.task_scores) / len(seed.task_scores) if seed.task_scores else 0.0
 
     pop: list[PromptCandidate] = [seed]
     front = [seed]
-    history: list[dict[str, Any]] = [{
-        "iter": 0, "front_size": 1, "best_avg": seed.avg_score,
-        "candidate_id": seed.candidate_id,
-    }]
+    history: list[dict[str, Any]] = [
+        {
+            "iter": 0,
+            "front_size": 1,
+            "best_avg": seed.avg_score,
+            "candidate_id": seed.candidate_id,
+        }
+    ]
     no_improve_streak = 0
     last_front_signature = _front_signature(front)
 
@@ -334,9 +335,13 @@ def gepa_optimize(
         )
         child = llm_mutate(parent, ctx, router=router, model=model, iter_idx=i)
         if child is None:
-            history.append({
-                "iter": i, "skipped": True, "reason": "llm_mutate failed",
-            })
+            history.append(
+                {
+                    "iter": i,
+                    "skipped": True,
+                    "reason": "llm_mutate failed",
+                }
+            )
             no_improve_streak += 1
             continue
 
@@ -345,23 +350,24 @@ def gepa_optimize(
         # use a fixed seed for comparability).
         child.task_scores = eval_fn(child.prompt, cfg.eval_tasks)
         child.avg_score = (
-            sum(child.task_scores) / len(child.task_scores)
-            if child.task_scores else 0.0
+            sum(child.task_scores) / len(child.task_scores) if child.task_scores else 0.0
         )
         pop.append(child)
 
         new_front = pareto_front(pop)
         new_sig = _front_signature(new_front)
         improved = new_sig != last_front_signature
-        history.append({
-            "iter": i,
-            "parent_id": parent.candidate_id,
-            "child_id": child.candidate_id,
-            "child_avg": child.avg_score,
-            "front_size": len(new_front),
-            "improved": improved,
-            "rationale": child.rationale,
-        })
+        history.append(
+            {
+                "iter": i,
+                "parent_id": parent.candidate_id,
+                "child_id": child.candidate_id,
+                "child_avg": child.avg_score,
+                "front_size": len(new_front),
+                "improved": improved,
+                "rationale": child.rationale,
+            }
+        )
         front = new_front
         last_front_signature = new_sig
         if improved:

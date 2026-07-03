@@ -51,7 +51,9 @@ class Envelope:
     error: dict[str, Any] | None = None
 
     @staticmethod
-    def request(method: str, params: dict[str, Any] | None = None, id: str | None = None) -> Envelope:
+    def request(
+        method: str, params: dict[str, Any] | None = None, id: str | None = None
+    ) -> Envelope:
         return Envelope(method=method, params=params, id=id or str(uuid.uuid4()))
 
     @staticmethod
@@ -97,20 +99,27 @@ class Envelope:
 
 # 便捷构造器
 
-def hello(tentacle_id: str, protocol_version: str = "1.0",
-          client_type: str = "android_tentacle",
-          client_version: str = "0.1.0",
-          device_meta: dict[str, Any] | None = None,
-          capabilities: list[str] | None = None) -> Envelope:
+
+def hello(
+    tentacle_id: str,
+    protocol_version: str = "1.0",
+    client_type: str = "android_tentacle",
+    client_version: str = "0.1.0",
+    device_meta: dict[str, Any] | None = None,
+    capabilities: list[str] | None = None,
+) -> Envelope:
     """device/hello —— 协议握手."""
-    return Envelope.request("device/hello", {
-        "protocol_version": protocol_version,
-        "client_type": client_type,
-        "client_version": client_version,
-        "tentacle_id": tentacle_id,
-        "device_meta": device_meta or {},
-        "capabilities": capabilities or [],
-    })
+    return Envelope.request(
+        "device/hello",
+        {
+            "protocol_version": protocol_version,
+            "client_type": client_type,
+            "client_version": client_version,
+            "tentacle_id": tentacle_id,
+            "device_meta": device_meta or {},
+            "capabilities": capabilities or [],
+        },
+    )
 
 
 def heartbeat(tentacle_id: str, **extra: Any) -> Envelope:
@@ -119,26 +128,39 @@ def heartbeat(tentacle_id: str, **extra: Any) -> Envelope:
     return Envelope.request("device/heartbeat", params)
 
 
-def tool_execute(tentacle_id: str, tool: str, args: dict[str, Any] | None = None,
-                 timeout_ms: int = 15_000, trace_id: str | None = None,
-                 call_id: str | None = None) -> Envelope:
+def tool_execute(
+    tentacle_id: str,
+    tool: str,
+    args: dict[str, Any] | None = None,
+    timeout_ms: int = 15_000,
+    trace_id: str | None = None,
+    call_id: str | None = None,
+) -> Envelope:
     """tool/execute —— 工具执行请求."""
-    return Envelope.request("tool/execute", {
-        "tentacle_id": tentacle_id,
-        "tool": tool,
-        "args": args or {},
-        "timeout_ms": timeout_ms,
-        "trace_id": trace_id,
-    }, id=call_id)
+    return Envelope.request(
+        "tool/execute",
+        {
+            "tentacle_id": tentacle_id,
+            "tool": tool,
+            "args": args or {},
+            "timeout_ms": timeout_ms,
+            "trace_id": trace_id,
+        },
+        id=call_id,
+    )
 
 
-def screen_changed(tentacle_id: str, current_app: str, screen_hash: str,
-                    tree_delta: dict | None = None) -> Envelope:
+def screen_changed(
+    tentacle_id: str, current_app: str, screen_hash: str, tree_delta: dict | None = None
+) -> Envelope:
     """device/screen_changed —— 屏幕状态变化."""
-    return Envelope.request("device/screen_changed", {
-        "tentacle_id": tentacle_id,
-        "ts": int(time.time() * 1000),
-        "current_app": current_app,
-        "screen_tree_hash": screen_hash,
-        "tree_delta": tree_delta or {},
-    })
+    return Envelope.request(
+        "device/screen_changed",
+        {
+            "tentacle_id": tentacle_id,
+            "ts": int(time.time() * 1000),
+            "current_app": current_app,
+            "screen_tree_hash": screen_hash,
+            "tree_delta": tree_delta or {},
+        },
+    )

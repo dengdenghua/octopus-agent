@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import fnmatch
@@ -11,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 
 class PreviewRefreshBridge:
-
     def __init__(
         self,
         *,
@@ -37,11 +35,11 @@ class PreviewRefreshBridge:
         self._subscribed_type: Any = None
         self._active = False
 
-
     def start(self) -> None:
         if self._active:
             return
         from runtime.sensing.normalize.events import FileChanged
+
         self.bus.subscribe(FileChanged, self._on_file_changed)
         self._subscribed_type = FileChanged
         self._active = True
@@ -50,7 +48,8 @@ class PreviewRefreshBridge:
         if self._active and self._subscribed_type is not None:
             try:
                 self.bus.unsubscribe(
-                    self._subscribed_type, self._on_file_changed,
+                    self._subscribed_type,
+                    self._on_file_changed,
                 )
             except (TypeError, ValueError, AttributeError, OSError):  # noqa: BLE001
                 logger.debug("preview bridge unsubscribe failed", exc_info=True)
@@ -60,7 +59,6 @@ class PreviewRefreshBridge:
             if self._timer is not None:
                 self._timer.cancel()
                 self._timer = None
-
 
     def _matches(self, path: str) -> bool:
         for pat in self.path_exclude:
@@ -87,7 +85,8 @@ class PreviewRefreshBridge:
             self._pending_reason = reason
             if self._timer is None or not self._timer.is_alive():
                 self._timer = threading.Timer(
-                    self.debounce_ms / 1000, self._flush,
+                    self.debounce_ms / 1000,
+                    self._flush,
                 )
                 self._timer.daemon = True
                 self._timer.start()

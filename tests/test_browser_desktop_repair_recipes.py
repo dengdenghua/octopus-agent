@@ -308,9 +308,7 @@ def test_browser_desktop_repair_recipe_evidence_can_verify_recipe(
         review_queue_path=queue_path,
     )
 
-    assert attachment["evidence"]["schema"] == (
-        "octopus.browser_desktop_repair_recipe_evidence.v1"
-    )
+    assert attachment["evidence"]["schema"] == ("octopus.browser_desktop_repair_recipe_evidence.v1")
     assert attachment["verification"]["status"] == "verified"
     assert report["ready"] is True
     assert report["verified_count"] == 1
@@ -553,7 +551,7 @@ def _png(width: int, height: int, pixels: list[tuple[int, int, int, int]]) -> by
     rows = bytearray()
     for y in range(height):
         rows.append(0)
-        for pixel in pixels[y * width: (y + 1) * width]:
+        for pixel in pixels[y * width : (y + 1) * width]:
             rows.extend(pixel)
     raw = zlib.compress(bytes(rows))
     return (

@@ -93,18 +93,9 @@ def _intelligence_store_snapshot() -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         raw = {}
 
-    subscriptions = [
-        item for item in raw.get("subscriptions", [])
-        if isinstance(item, dict)
-    ]
-    reports = [
-        item for item in raw.get("reports", [])
-        if isinstance(item, dict)
-    ]
-    enabled = [
-        item for item in subscriptions
-        if item.get("enabled") is not False
-    ]
+    subscriptions = [item for item in raw.get("subscriptions", []) if isinstance(item, dict)]
+    reports = [item for item in raw.get("reports", []) if isinstance(item, dict)]
+    enabled = [item for item in subscriptions if item.get("enabled") is not False]
 
     last_report_at = ""
     for report in reports:
@@ -158,7 +149,9 @@ def create_evolution_ops_router(
             from runtime.sensing.gateway.openai_gateway import _resolve_actor
 
             return _resolve_actor(
-                request, identity_store, True,
+                request,
+                identity_store,
+                True,
                 jwt_secret=jwt_secret,
                 jwt_issuer=jwt_issuer,
                 jwt_audience=jwt_audience,
@@ -173,21 +166,12 @@ def create_evolution_ops_router(
     def evolution_overview() -> dict[str, Any]:
         skill_perf = _skill_performance_rows(journal, registry)
         used_skill_rates = [
-            float(row["success_rate"])
-            for row in skill_perf
-            if int(row["usage_count"]) > 0
+            float(row["success_rate"]) for row in skill_perf if int(row["usage_count"]) > 0
         ]
-        avg_success = (
-            sum(used_skill_rates) / len(used_skill_rates)
-            if used_skill_rates
-            else 0.0
-        )
+        avg_success = sum(used_skill_rates) / len(used_skill_rates) if used_skill_rates else 0.0
 
         skill_names = _registry_skill_names(registry)
-        auto_skills = [
-            name for name in skill_names
-            if _registry_skill_is_auto(registry, name)
-        ]
+        auto_skills = [name for name in skill_names if _registry_skill_is_auto(registry, name)]
         learned_counts = _learned_section_counts(planner)
         trajectory_rows = _trajectory_rows(journal)
         kg = _knowledge_graph_overview(journal)
@@ -244,17 +228,19 @@ def create_evolution_ops_router(
     ) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         for item in _skill_step_rows(journal):
-            rows.append({
-                "timestamp": _iso(item["ts"]),
-                "skill_name": item["skill_name"],
-                "source_task": item["task_id"],
-                "trigger": (
-                    "auto"
-                    if _registry_skill_is_auto(registry, item["skill_name"])
-                    else "manual"
-                ),
-                "success_rate": 1.0 if item["success"] else 0.0,
-            })
+            rows.append(
+                {
+                    "timestamp": _iso(item["ts"]),
+                    "skill_name": item["skill_name"],
+                    "source_task": item["task_id"],
+                    "trigger": (
+                        "auto"
+                        if _registry_skill_is_auto(registry, item["skill_name"])
+                        else "manual"
+                    ),
+                    "success_rate": 1.0 if item["success"] else 0.0,
+                }
+            )
         rows.sort(key=lambda r: r["timestamp"], reverse=True)
         return rows[:limit]
 
@@ -355,10 +341,7 @@ def create_evolution_ops_router(
         if learned["rules"] > 0:
             by_day[_date_key(_utcnow())]["relationship"] += learned["rules"]
 
-        return [
-            {"date": day, **counts}
-            for day, counts in sorted(by_day.items())
-        ]
+        return [{"date": day, **counts} for day, counts in sorted(by_day.items())]
 
     @router.get("/api/evolution/learning-curve")
     def evolution_learning_curve(
@@ -379,9 +362,8 @@ def create_evolution_ops_router(
         for week, trajs in sorted(buckets.items()):
             if not trajs:
                 continue
-            success_rate = (
-                sum(1 for t in trajs if getattr(t.outcome, "success", False))
-                / len(trajs)
+            success_rate = sum(1 for t in trajs if getattr(t.outcome, "success", False)) / len(
+                trajs
             )
             durations = [
                 max(
@@ -395,14 +377,14 @@ def create_evolution_ops_router(
                 for t in trajs
             ]
             skill_count = sum(len(getattr(t, "steps", []) or []) for t in trajs)
-            rows.append({
-                "week": week,
-                "success_rate": success_rate,
-                "avg_duration_ms": (
-                    sum(durations) / len(durations) if durations else 0
-                ),
-                "skills_used": skill_count,
-            })
+            rows.append(
+                {
+                    "week": week,
+                    "success_rate": success_rate,
+                    "avg_duration_ms": (sum(durations) / len(durations) if durations else 0),
+                    "skills_used": skill_count,
+                }
+            )
         return rows
 
     @router.get("/api/evolution/recommendations")
@@ -412,33 +394,37 @@ def create_evolution_ops_router(
             usage = int(row["usage_count"])
             rate = float(row["success_rate"])
             if usage >= 3 and rate < 0.6:
-                recommendations.append({
-                    "type": "declining_skill",
-                    "title": f"Review {row['name']}",
-                    "description": (
-                        f"{row['name']} succeeded on {rate:.0%} of "
-                        f"{usage} recent calls. Check arguments, permissions, "
-                        "or add a narrower recovery rule."
-                    ),
-                    "severity": "warning" if rate >= 0.35 else "critical",
-                    "action_label": "Inspect failures",
-                    "meta": {"skill_name": row["name"], "usage_count": usage},
-                })
+                recommendations.append(
+                    {
+                        "type": "declining_skill",
+                        "title": f"Review {row['name']}",
+                        "description": (
+                            f"{row['name']} succeeded on {rate:.0%} of "
+                            f"{usage} recent calls. Check arguments, permissions, "
+                            "or add a narrower recovery rule."
+                        ),
+                        "severity": "warning" if rate >= 0.35 else "critical",
+                        "action_label": "Inspect failures",
+                        "meta": {"skill_name": row["name"], "usage_count": usage},
+                    }
+                )
 
         learned = _learned_section_counts(planner)
         if learned["rules"] == 0 and len(_trajectory_rows(journal)) >= 3:
-            recommendations.append({
-                "type": "extraction_opportunity",
-                "title": "Run reflection",
-                "description": (
-                    "Recent trajectories exist, but no learned mitigation "
-                    "rules are active yet. Run the reflection pass to extract "
-                    "repeatable lessons."
-                ),
-                "severity": "info",
-                "action_label": "Reflect",
-                "meta": {"trajectory_count": len(_trajectory_rows(journal))},
-            })
+            recommendations.append(
+                {
+                    "type": "extraction_opportunity",
+                    "title": "Run reflection",
+                    "description": (
+                        "Recent trajectories exist, but no learned mitigation "
+                        "rules are active yet. Run the reflection pass to extract "
+                        "repeatable lessons."
+                    ),
+                    "severity": "info",
+                    "action_label": "Reflect",
+                    "meta": {"trajectory_count": len(_trajectory_rows(journal))},
+                }
+            )
         return recommendations[:12]
 
     @router.post("/api/evolution/learn-from-intel")
@@ -456,7 +442,9 @@ def create_evolution_ops_router(
         return _budget_snapshot(journal)
 
     @router.post("/api/evolution/budget/breaker/reset")
-    def reset_budget_breaker(request: Request, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def reset_budget_breaker(
+        request: Request, body: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         _actor = _require_actor(request)  # noqa: F841 — auth gate only
         component = str((body or {}).get("component") or "").strip()
         if not component:
@@ -482,7 +470,9 @@ def create_evolution_ops_router(
         ]
 
     @router.post("/api/intel-evolution/skills/proposals/approve")
-    def approve_skill_proposal(request: Request, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def approve_skill_proposal(
+        request: Request, body: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         _actor = _require_actor(request)  # noqa: F841 — auth gate only
         proposal_name = str((body or {}).get("name") or "").strip()
         if not proposal_name:
@@ -587,7 +577,9 @@ def create_evolution_ops_router(
         }
 
     @router.post("/api/intel-evolution/skills/proposals/reject")
-    def reject_skill_proposal(request: Request, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def reject_skill_proposal(
+        request: Request, body: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         _actor = _require_actor(request)  # noqa: F841 — auth gate only
         proposal_name = str((body or {}).get("name") or "").strip()
         if proposal_name:
@@ -635,7 +627,8 @@ def create_evolution_ops_router(
         requested = str(payload.get("server_name") or "").strip()
         proposals = _mcp_proposal_rows(journal)
         targets = [
-            proposal for proposal in proposals
+            proposal
+            for proposal in proposals
             if proposal["status"] == "pending_vet"
             and (not requested or proposal["server_name"] == requested)
         ]
@@ -654,14 +647,13 @@ def create_evolution_ops_router(
         return {"ok": True, "vetted": len(targets), "source": "journal"}
 
     @router.post("/api/intel-evolution/mcp/proposals/install")
-    def install_mcp_proposal(request: Request, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def install_mcp_proposal(
+        request: Request, body: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         _actor = _require_actor(request)  # noqa: F841 — auth gate only
         server_name = str((body or {}).get("server_name") or "").strip()
         proposal = next(
-            (
-                row for row in _mcp_proposal_rows(journal)
-                if row["server_name"] == server_name
-            ),
+            (row for row in _mcp_proposal_rows(journal) if row["server_name"] == server_name),
             None,
         )
         if proposal is not None and proposal.get("status") == "vetted":
@@ -681,8 +673,7 @@ def create_evolution_ops_router(
                 "status": "install_requested",
                 "server_name": server_name,
                 "reason": (
-                    "External MCP installation requires manual confirmation "
-                    "in Settings > MCP."
+                    "External MCP installation requires manual confirmation in Settings > MCP."
                 ),
                 "source": "journal",
             }
@@ -704,7 +695,9 @@ def create_evolution_ops_router(
         return {"ok": True, "created": len(goals), "source": "journal"}
 
     @router.post("/api/evolution/curriculum/goals/decide")
-    def decide_curriculum_goal(request: Request, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def decide_curriculum_goal(
+        request: Request, body: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         _actor = _require_actor(request)  # noqa: F841 — auth gate only
         payload = body or {}
         try:
@@ -778,7 +771,8 @@ def create_evolution_ops_router(
         _actor = _require_actor(request)  # noqa: F841 — auth gate only
         row = next(
             (
-                item for item in _protocol_drift_rows(journal, acknowledged=None)
+                item
+                for item in _protocol_drift_rows(journal, acknowledged=None)
                 if int(item["id"]) == drift_id
             ),
             None,

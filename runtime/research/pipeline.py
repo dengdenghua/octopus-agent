@@ -45,11 +45,11 @@ _logger = logging.getLogger(__name__)
 class ResearchAnswer:
     question: str
     answer: str
-    queries: list[str]              # rewritten search queries
-    sources: list[SourceEntry]      # top-K reranked, numbered [1..K]
-    used_indices: list[int]         # which [n] markers the answer cited
-    invalid_indices: list[int]      # out-of-range citation markers (if any)
-    backend: dict[str, str]         # {"rewrite": "llm"/"rule", "rerank": "bm25"/"cohere"}
+    queries: list[str]  # rewritten search queries
+    sources: list[SourceEntry]  # top-K reranked, numbered [1..K]
+    used_indices: list[int]  # which [n] markers the answer cited
+    invalid_indices: list[int]  # out-of-range citation markers (if any)
+    backend: dict[str, str]  # {"rewrite": "llm"/"rule", "rerank": "bm25"/"cohere"}
     stats: dict[str, int] = field(default_factory=dict)
 
     def to_json(self) -> dict[str, Any]:
@@ -105,8 +105,12 @@ def research_answer(
     stats: dict[str, int] = {}
     if not question:
         return ResearchAnswer(
-            question="", answer="", queries=[], sources=[],
-            used_indices=[], invalid_indices=[],
+            question="",
+            answer="",
+            queries=[],
+            sources=[],
+            used_indices=[],
+            invalid_indices=[],
             backend={"rewrite": "rule", "rerank": "bm25"},
             stats=stats,
         )
@@ -116,15 +120,15 @@ def research_answer(
     # URL-guard chain eagerly.
     if search_fn is None:
         from runtime.execution.suckers.web_skills import _web_search
+
         search_fn = _web_search
     if fetch_fn is None:
         from runtime.execution.suckers.web_skills import _fetch_url
+
         fetch_fn = _fetch_url
 
     # ① Query rewrite
-    rr = rewrite_query(
-        question, router=router, n=n_queries, model=rewrite_model, today=today
-    )
+    rr = rewrite_query(question, router=router, n=n_queries, model=rewrite_model, today=today)
     queries = rr.queries or [question]
     stats["queries"] = len(queries)
 
@@ -145,8 +149,12 @@ def research_answer(
 
     if not hits_by_url:
         return ResearchAnswer(
-            question=question, answer="", queries=queries, sources=[],
-            used_indices=[], invalid_indices=[],
+            question=question,
+            answer="",
+            queries=queries,
+            sources=[],
+            used_indices=[],
+            invalid_indices=[],
             backend={"rewrite": rr.backend, "rerank": "bm25"},
             stats=stats,
         )
@@ -178,7 +186,9 @@ def research_answer(
 
     # ⑤ Build citation prompt + call LLM for synthesis.
     prompt, normalized = render_citation_prompt(
-        question, top_sources, today=today,
+        question,
+        top_sources,
+        today=today,
     )
 
     answer_text = ""
@@ -272,8 +282,12 @@ def research_loop(
     question = (question or "").strip()
     if not question:
         return ResearchAnswer(
-            question="", answer="", queries=[], sources=[],
-            used_indices=[], invalid_indices=[],
+            question="",
+            answer="",
+            queries=[],
+            sources=[],
+            used_indices=[],
+            invalid_indices=[],
             backend={"rewrite": "rule", "rerank": "bm25"},
             stats={"rounds": 0},
         )
@@ -281,10 +295,16 @@ def research_loop(
     # Round 1: standard research_answer.
     current = research_answer(
         question,
-        router=router, search_fn=search_fn, fetch_fn=fetch_fn,
-        n_queries=n_queries, hits_per_query=hits_per_query, top_k=top_k,
-        synth_model=synth_model, rewrite_model=rewrite_model,
-        synth_max_tokens=synth_max_tokens, today=today,
+        router=router,
+        search_fn=search_fn,
+        fetch_fn=fetch_fn,
+        n_queries=n_queries,
+        hits_per_query=hits_per_query,
+        top_k=top_k,
+        synth_model=synth_model,
+        rewrite_model=rewrite_model,
+        synth_max_tokens=synth_max_tokens,
+        today=today,
     )
     current.stats["rounds"] = 1
     tried_queries: set[str] = {q.lower() for q in current.queries}
@@ -347,8 +367,7 @@ def research_loop(
                     "url": url,
                     "title": h.get("title") or "",
                     "snippet": h.get("snippet") or "",
-                    "content": (fetched.get("content") or ""
-                                if fetched.get("extracted") else ""),
+                    "content": (fetched.get("content") or "" if fetched.get("extracted") else ""),
                     "metadata": fetched.get("metadata") or {},
                 }
                 new_urls_added += 1
@@ -361,7 +380,9 @@ def research_loop(
         # Re-rerank the full pool against the original question, re-synth.
         ranked = rerank(question, list(pool.values()), top_k=top_k)
         prompt, normalized = render_citation_prompt(
-            question, ranked.sources, today=today,
+            question,
+            ranked.sources,
+            today=today,
         )
         new_answer = ""
         try:
@@ -397,8 +418,7 @@ def research_loop(
         res = (
             resolve_citations(new_answer, normalized)
             if new_answer
-            else CitationResolution(answer="", used_indices=[],
-                                    used_sources=[], invalid_indices=[])
+            else CitationResolution(answer="", used_indices=[], used_sources=[], invalid_indices=[])
         )
 
         current = ResearchAnswer(
@@ -408,8 +428,7 @@ def research_loop(
             sources=normalized,
             used_indices=res.used_indices,
             invalid_indices=res.invalid_indices,
-            backend={"rewrite": current.backend.get("rewrite", "rule"),
-                     "rerank": ranked.backend},
+            backend={"rewrite": current.backend.get("rewrite", "rule"), "rerank": ranked.backend},
             stats={
                 **current.stats,
                 "rounds": round_idx,
@@ -442,10 +461,7 @@ def _decide_follow_ups(
 
     from runtime.platform.prompts import get_prompt
 
-    summary_lines = [
-        f"[{i + 1}] {s.title or s.url} — {s.url}"
-        for i, s in enumerate(sources)
-    ]
+    summary_lines = [f"[{i + 1}] {s.title or s.url} — {s.url}" for i, s in enumerate(sources)]
     prompt = (
         get_prompt("research_gap_analysis")
         .replace("{question}", question)
@@ -502,7 +518,7 @@ def _parse_gap_decision(text: str) -> dict[str, Any]:
             elif c == "}":
                 depth -= 1
                 if depth == 0:
-                    candidate = text[start: i + 1]
+                    candidate = text[start : i + 1]
                     try:
                         data = json.loads(candidate)
                     except json.JSONDecodeError:
@@ -632,8 +648,8 @@ def register_deep_research_skill(
                 "new sources before re-synthesizing. Costlier (2-3x LLM "
                 "calls + extra fetches) — prefer this over research_answer "
                 "ONLY for open-ended/comparative questions where one round "
-                "is unlikely to suffice (e.g. \"compare X vs Y vs Z\", "
-                "\"what's the current state of <fast-moving topic>\"). "
+                'is unlikely to suffice (e.g. "compare X vs Y vs Z", '
+                '"what\'s the current state of <fast-moving topic>"). '
                 "Args: {question: string, max_rounds?: int (1-10, default 3), "
                 "n_queries?: int, hits_per_query?: int, top_k?: int}."
             ),

@@ -192,9 +192,7 @@ def probe_provider(
                 return caps
 
     # Static declaration as fallback baseline.
-    static_caps: ProviderCapabilities = getattr(
-        router, "capabilities", ProviderCapabilities()
-    )
+    static_caps: ProviderCapabilities = getattr(router, "capabilities", ProviderCapabilities())
 
     detected = _run_probes(router, model=model, timeout_s=timeout_s, baseline=static_caps)
 
@@ -297,6 +295,7 @@ def _probe_streaming(router: Any, *, model: str, timeout_s: float) -> bool | Non
         return False
     try:
         from .models import Message, ModelRequest
+
         req = ModelRequest(
             model=model or "probe",
             messages=[Message(role="user", content="ping")],
@@ -327,6 +326,7 @@ def _probe_tool_use(router: Any, *, model: str, timeout_s: float) -> bool | None
         return None
     try:
         from .models import Message, ModelRequest, ToolSpec
+
         req = ModelRequest(
             model=model or "probe",
             messages=[Message(role="user", content="What tools do you have?")],
@@ -357,6 +357,7 @@ def _probe_vision(router: Any, *, model: str, timeout_s: float) -> bool | None:
         return None
     try:
         from .models import Message, ModelRequest
+
         # Minimal 1×1 transparent PNG as base64.
         _TINY_PNG_B64 = (  # noqa: N806
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk"

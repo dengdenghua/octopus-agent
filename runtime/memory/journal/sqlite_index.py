@@ -274,11 +274,7 @@ class JournalIndex:
             params.append(session_id)
 
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-        sql = (
-            "SELECT payload FROM events"
-            + where
-            + " ORDER BY id ASC LIMIT ? OFFSET ?"
-        )
+        sql = "SELECT payload FROM events" + where + " ORDER BY id ASC LIMIT ? OFFSET ?"
         params.append(int(limit))
         params.append(int(offset))
 
@@ -307,9 +303,7 @@ class JournalIndex:
             }
         """
         with self._lock:
-            total_row = self._conn.execute(
-                "SELECT COUNT(*) AS c FROM events"
-            ).fetchone()
+            total_row = self._conn.execute("SELECT COUNT(*) AS c FROM events").fetchone()
             total = int(total_row["c"]) if total_row else 0
 
             by_type: dict[str, int] = {}
@@ -319,9 +313,7 @@ class JournalIndex:
             ).fetchall():
                 by_type[str(r["event_type"])] = int(r["c"])
 
-            last_row = self._conn.execute(
-                "SELECT MAX(last_indexed_at) AS m FROM state"
-            ).fetchone()
+            last_row = self._conn.execute("SELECT MAX(last_indexed_at) AS m FROM state").fetchone()
             last_indexed_at = last_row["m"] if last_row else None
 
         return {

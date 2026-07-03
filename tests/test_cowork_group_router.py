@@ -31,8 +31,12 @@ def test_full_wechat_like_flow(tmp_path) -> None:
     # Mid-conversation, pull in a specialist with a from-join grant.
     r = c.post(
         f"/api/cowork/{t}/members",
-        json={"target_id": "bob", "kind": "agent", "grant": {"scope": "from_join"},
-              "at_message": 12},
+        json={
+            "target_id": "bob",
+            "kind": "agent",
+            "grant": {"scope": "from_join"},
+            "at_message": 12,
+        },
     )
     assert r.status_code == 200
     assert {m["id"] for m in r.json()["state"]["roster"]} == {"user", "alice", "bob"}
@@ -168,10 +172,13 @@ def test_mutations_require_auth_when_enabled(tmp_path) -> None:
     client = TestClient(app)
 
     assert client.get("/api/cowork/thread-auth").status_code == 200
-    assert client.post(
-        "/api/cowork/thread-auth/members",
-        json={"target_id": "alice", "kind": "agent"},
-    ).status_code == 401
+    assert (
+        client.post(
+            "/api/cowork/thread-auth/members",
+            json={"target_id": "alice", "kind": "agent"},
+        ).status_code
+        == 401
+    )
 
     ok = client.post(
         "/api/cowork/thread-auth/members",

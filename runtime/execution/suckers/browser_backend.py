@@ -24,6 +24,7 @@ Action results share the existing wire shape every track already
 returns: ``{"ok": bool, ...}``. ``BrowserResult`` documents that shape
 without forcing a migration.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

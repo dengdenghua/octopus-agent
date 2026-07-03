@@ -56,7 +56,9 @@ _LOCK = threading.Lock()
 
 
 def set_curator_router(
-    router: Any, *, default_model: str | None = None,
+    router: Any,
+    *,
+    default_model: str | None = None,
 ) -> None:
     """Install the LLM router used for the merge/prune pass.
 
@@ -71,6 +73,7 @@ def set_curator_router(
 
 
 # ─── path helpers ───────────────────────────────────────────────
+
 
 def _project_root() -> Path:
     from runtime.platform.process.paths import project_root
@@ -87,6 +90,7 @@ def _archive_dir(agent_id: str) -> Path:
 
 
 # ─── frontmatter helpers ────────────────────────────────────────
+
 
 def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
     lines = text.splitlines()
@@ -105,7 +109,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
             continue
         k, v = raw.split(":", 1)
         meta[k.strip()] = v.strip()
-    body = "\n".join(lines[end + 1:]).lstrip()
+    body = "\n".join(lines[end + 1 :]).lstrip()
     return meta, body
 
 
@@ -123,6 +127,7 @@ def _write_frontmatter(path: Path, meta: dict[str, str], body: str) -> None:
 
 
 # ─── usage tracking ─────────────────────────────────────────────
+
 
 def record_use(agent_id: str, name: str) -> None:
     """Bump ``use_count`` and ``last_used_at`` for a skill.
@@ -151,6 +156,7 @@ def record_use(agent_id: str, name: str) -> None:
 
 
 # ─── SkillCurator ───────────────────────────────────────────────
+
 
 class SkillCurator:
     """Lifecycle manager for learned skills.
@@ -215,7 +221,10 @@ class SkillCurator:
             stats["total"] += 1
             try:
                 self._process_skill(
-                    path, stale_threshold, archive_threshold, stats,
+                    path,
+                    stale_threshold,
+                    archive_threshold,
+                    stats,
                 )
             except Exception as exc:  # noqa: BLE001
                 stats["errors"].append(f"{path.name}: {exc}")
@@ -234,7 +243,9 @@ class SkillCurator:
 
         _LOG.info(
             "SkillCurator pass complete: %d total, %d stale, %d archived",
-            stats["total"], stats["marked_stale"], stats["archived"],
+            stats["total"],
+            stats["marked_stale"],
+            stats["archived"],
         )
         return stats
 
@@ -251,14 +262,16 @@ class SkillCurator:
         for p in sorted(adir.glob("*.md")):
             try:
                 meta, _ = _parse_frontmatter(p.read_text(encoding="utf-8"))
-                out.append({
-                    "name": meta.get("name") or p.stem,
-                    "description": meta.get("description", ""),
-                    "last_used_at": meta.get("last_used_at", ""),
-                    "use_count": int(meta.get("use_count", "0")),
-                    "archived_at": meta.get("archived_at", ""),
-                    "filename": p.name,
-                })
+                out.append(
+                    {
+                        "name": meta.get("name") or p.stem,
+                        "description": meta.get("description", ""),
+                        "last_used_at": meta.get("last_used_at", ""),
+                        "use_count": int(meta.get("use_count", "0")),
+                        "archived_at": meta.get("archived_at", ""),
+                        "filename": p.name,
+                    }
+                )
             except (OSError, TypeError, ValueError):
                 continue
         return out
@@ -337,13 +350,15 @@ class SkillCurator:
             try:
                 meta, _ = _parse_frontmatter(p.read_text(encoding="utf-8"))
                 if meta.get("status") == status:
-                    out.append({
-                        "name": meta.get("name") or p.stem,
-                        "description": meta.get("description", ""),
-                        "last_used_at": meta.get("last_used_at", ""),
-                        "use_count": int(meta.get("use_count", "0")),
-                        "filename": p.name,
-                    })
+                    out.append(
+                        {
+                            "name": meta.get("name") or p.stem,
+                            "description": meta.get("description", ""),
+                            "last_used_at": meta.get("last_used_at", ""),
+                            "use_count": int(meta.get("use_count", "0")),
+                            "filename": p.name,
+                        }
+                    )
             except (OSError, TypeError, ValueError):
                 continue
         return out
@@ -356,6 +371,7 @@ class SkillCurator:
             return True
         try:
             import json
+
             state = json.loads(self._state_path.read_text(encoding="utf-8"))
             last_raw = state.get("last_merge_at", "")
             if not last_raw:
@@ -369,6 +385,7 @@ class SkillCurator:
 
     def _save_last_merge_ts(self, ts: datetime) -> None:
         import json
+
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self._state_path.with_suffix(".tmp")
         tmp.write_text(
@@ -397,12 +414,14 @@ class SkillCurator:
                 continue
             try:
                 meta, _ = _parse_frontmatter(p.read_text(encoding="utf-8"))
-                skills.append({
-                    "name": meta.get("name") or p.stem,
-                    "description": meta.get("description", ""),
-                    "use_count": meta.get("use_count", "0"),
-                    "status": meta.get("status", "active"),
-                })
+                skills.append(
+                    {
+                        "name": meta.get("name") or p.stem,
+                        "description": meta.get("description", ""),
+                        "use_count": meta.get("use_count", "0"),
+                        "status": meta.get("status", "active"),
+                    }
+                )
             except (OSError, TypeError, ValueError):
                 continue
 
@@ -410,9 +429,9 @@ class SkillCurator:
             return {"suggestions": [], "skill_count": 0}
 
         import json
+
         skill_list = "\n".join(
-            f"- {s['name']} (uses={s['use_count']}, status={s['status']}): "
-            f"{s['description'][:80]}"
+            f"- {s['name']} (uses={s['use_count']}, status={s['status']}): {s['description'][:80]}"
             for s in skills
         )
         prompt = (

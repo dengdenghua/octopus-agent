@@ -1,4 +1,5 @@
 """_drive_swarm_mesh — auto-selecting swarm driver (mesh vs team) + fallback."""
+
 from __future__ import annotations
 
 import asyncio
@@ -27,10 +28,7 @@ class _Log:
 
 def _graph(nodes, edges):
     return TaskGraph(
-        nodes=[
-            TaskNode(node_id=n, skill_ref=SkillId("x"), args_template={})
-            for n in nodes
-        ],
+        nodes=[TaskNode(node_id=n, skill_ref=SkillId("x"), args_template={}) for n in nodes],
         edges=[WorkflowEdge(from_node=a, to_node=b) for a, b in edges],
         budget=BudgetSpec(tokens=1, usd=0.1),
         task_type="mixed",
@@ -57,11 +55,14 @@ def _to_thread_seq(*returns):
 
 
 def test_graph_favors_mesh_decision() -> None:
-    assert mod._graph_favors_mesh(_graph(["a", "b"], [])) is False           # too small
-    assert mod._graph_favors_mesh(_graph(["a", "b", "c"], [])) is True        # 3 parallel
-    assert mod._graph_favors_mesh(                                            # 3-node chain
-        _graph(["a", "b", "c"], [("a", "b"), ("b", "c")])
-    ) is False
+    assert mod._graph_favors_mesh(_graph(["a", "b"], [])) is False  # too small
+    assert mod._graph_favors_mesh(_graph(["a", "b", "c"], [])) is True  # 3 parallel
+    assert (
+        mod._graph_favors_mesh(  # 3-node chain
+            _graph(["a", "b", "c"], [("a", "b"), ("b", "c")])
+        )
+        is False
+    )
 
 
 # ── mesh path: parallel graph runs the swarm + emits ─────────────
@@ -69,16 +70,19 @@ def test_graph_favors_mesh_decision() -> None:
 
 def test_parallel_graph_runs_mesh_and_emits(monkeypatch) -> None:
     parallel = _graph(["a", "b", "c"], [])  # favors mesh
-    result = SimpleNamespace(arm_results=[
-        SimpleNamespace(arm_id="builtin_arm", status="success", reason="ok"),
-        SimpleNamespace(arm_id="code_intel_arm", status="success", reason="done"),
-    ])
+    result = SimpleNamespace(
+        arm_results=[
+            SimpleNamespace(arm_id="builtin_arm", status="success", reason="ok"),
+            SimpleNamespace(arm_id="code_intel_arm", status="success", reason="done"),
+        ]
+    )
     monkeypatch.setattr(asyncio, "to_thread", _to_thread_seq(parallel, (result, 5)))
     turn = SimpleNamespace(thread_id="th", id="t1", items=[])
     intent = SimpleNamespace(user_context={})
     asyncio.run(
-        mod._drive_swarm_mesh(SimpleNamespace(), turn, _Log(), _Emitter(), intent,
-                              text="g", topology_id="topo"),
+        mod._drive_swarm_mesh(
+            SimpleNamespace(), turn, _Log(), _Emitter(), intent, text="g", topology_id="topo"
+        ),
     )
     assert len(turn.items) == 1  # all succeeded → just the plain summary
     assert "Ran 2 agents in parallel" in turn.items[0].text
@@ -87,16 +91,19 @@ def test_parallel_graph_runs_mesh_and_emits(monkeypatch) -> None:
 
 def test_failed_agent_surfaces_a_plain_line(monkeypatch) -> None:
     parallel = _graph(["a", "b", "c"], [])
-    result = SimpleNamespace(arm_results=[
-        SimpleNamespace(arm_id="x", status="success", reason=""),
-        SimpleNamespace(arm_id="y", status="failed", reason="timeout"),
-    ])
+    result = SimpleNamespace(
+        arm_results=[
+            SimpleNamespace(arm_id="x", status="success", reason=""),
+            SimpleNamespace(arm_id="y", status="failed", reason="timeout"),
+        ]
+    )
     monkeypatch.setattr(asyncio, "to_thread", _to_thread_seq(parallel, (result, 3)))
     turn = SimpleNamespace(thread_id="th", id="t1", items=[])
     intent = SimpleNamespace(user_context={})
     asyncio.run(
-        mod._drive_swarm_mesh(SimpleNamespace(), turn, _Log(), _Emitter(), intent,
-                              text="g", topology_id="topo"),
+        mod._drive_swarm_mesh(
+            SimpleNamespace(), turn, _Log(), _Emitter(), intent, text="g", topology_id="topo"
+        ),
     )
     bodies = [it.text for it in turn.items]
     assert any("couldn't finish" in b and "timeout" in b for b in bodies)
@@ -118,11 +125,12 @@ def test_small_graph_routes_to_team(monkeypatch) -> None:
     turn = SimpleNamespace(thread_id="th", id="t1", items=[])
     intent = SimpleNamespace(user_context={})
     asyncio.run(
-        mod._drive_swarm_mesh(SimpleNamespace(), turn, _Log(), _Emitter(), intent,
-                              text="g", topology_id="topo-7"),
+        mod._drive_swarm_mesh(
+            SimpleNamespace(), turn, _Log(), _Emitter(), intent, text="g", topology_id="topo-7"
+        ),
     )
     assert team["called"] == "topo-7"  # delegated to the sequential team
-    assert turn.items == []            # no mesh items emitted
+    assert turn.items == []  # no mesh items emitted
 
 
 # ── fallback: a mesh fault never breaks the turn ─────────────────
@@ -131,7 +139,9 @@ def test_small_graph_routes_to_team(monkeypatch) -> None:
 def test_mesh_fault_falls_back_to_react(monkeypatch) -> None:
     parallel = _graph(["a", "b", "c"], [])
     monkeypatch.setattr(
-        asyncio, "to_thread", _to_thread_seq(parallel, RuntimeError("boom")),
+        asyncio,
+        "to_thread",
+        _to_thread_seq(parallel, RuntimeError("boom")),
     )
     monkeypatch.setattr(mod, "GatewayApprovalProvider", lambda *a, **k: object())
     react = {"called": False}
@@ -148,8 +158,9 @@ def test_mesh_fault_falls_back_to_react(monkeypatch) -> None:
     turn = SimpleNamespace(thread_id="th", id="t1", items=[])
     intent = SimpleNamespace(user_context={})
     asyncio.run(
-        mod._drive_swarm_mesh(runtime, turn, _Log(), _Emitter(), intent,
-                              text="g", topology_id="topo"),
+        mod._drive_swarm_mesh(
+            runtime, turn, _Log(), _Emitter(), intent, text="g", topology_id="topo"
+        ),
     )
     assert react["called"] is True
 
@@ -172,8 +183,9 @@ def test_serve_mesh_0_forces_team_even_for_parallel(monkeypatch) -> None:
     turn = SimpleNamespace(thread_id="th", id="t1", items=[])
     intent = SimpleNamespace(user_context={"serve_mesh": "0"})
     asyncio.run(
-        mod._drive_swarm_mesh(SimpleNamespace(), turn, _Log(), _Emitter(), intent,
-                              text="g", topology_id="topo-c"),
+        mod._drive_swarm_mesh(
+            SimpleNamespace(), turn, _Log(), _Emitter(), intent, text="g", topology_id="topo-c"
+        ),
     )
     assert team["called"] == "topo-c"  # forced to the cluster (sequential) team
     assert turn.items == []
@@ -184,14 +196,17 @@ def test_serve_mesh_1_forces_mesh_even_for_small(monkeypatch) -> None:
     would otherwise route to the team."""
     monkeypatch.delenv("OCTOPUS_SERVE_MESH", raising=False)
     small = _graph(["a", "b"], [])  # too small → would go to team
-    result = SimpleNamespace(arm_results=[
-        SimpleNamespace(arm_id="x", status="success", reason="ok"),
-    ])
+    result = SimpleNamespace(
+        arm_results=[
+            SimpleNamespace(arm_id="x", status="success", reason="ok"),
+        ]
+    )
     monkeypatch.setattr(asyncio, "to_thread", _to_thread_seq(small, (result, 2)))
     turn = SimpleNamespace(thread_id="th", id="t1", items=[])
     intent = SimpleNamespace(user_context={"serve_mesh": "1"})
     asyncio.run(
-        mod._drive_swarm_mesh(SimpleNamespace(), turn, _Log(), _Emitter(), intent,
-                              text="g", topology_id="topo"),
+        mod._drive_swarm_mesh(
+            SimpleNamespace(), turn, _Log(), _Emitter(), intent, text="g", topology_id="topo"
+        ),
     )
     assert any("parallel" in it.text for it in turn.items)  # mesh actually ran

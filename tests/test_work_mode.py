@@ -23,18 +23,14 @@ def test_bound_project_is_code_with_project_scope():
 
 def test_personal_workspace_flips_into_code():
     """The merge: a personal thread with a per-thread cwd codes like a project."""
-    wm = resolve_work_mode(
-        {"personal_workspace_enabled": True, "cwd": "/tmp/thread-123"}
-    )
+    wm = resolve_work_mode({"personal_workspace_enabled": True, "cwd": "/tmp/thread-123"})
     assert wm.is_code is True  # personal can code now
     assert wm.scope == "personal"  # …but labelled personal, not project
     assert wm.effective_workspace == "/tmp/thread-123"
 
 
 def test_workspace_scope_personal_also_enables():
-    wm = resolve_work_mode(
-        {"workspace_scope": "personal", "personal_workspace_path": "/tmp/x"}
-    )
+    wm = resolve_work_mode({"workspace_scope": "personal", "personal_workspace_path": "/tmp/x"})
     assert wm.is_code is True and wm.scope == "personal"
 
 

@@ -194,7 +194,10 @@ class IdempotencyGuard:
             if final is None or final.pending is not None:
                 # Owner vanished or timed out. Fall through: run fresh.
                 return self.run(
-                    key=key, fn=fn, args=args, kwargs=kwargs,
+                    key=key,
+                    fn=fn,
+                    args=args,
+                    kwargs=kwargs,
                     ttl_seconds=ttl_seconds,
                 )
             if final.exc is not None:
@@ -233,15 +236,21 @@ class IdempotencyGuard:
         ttl_seconds: float | None = None,
     ) -> Callable[[Callable[..., T]], Callable[..., T]]:
         """Decorator form — auto-hashes (fn name, args, kwargs) for key."""
+
         def decorator(fn: Callable[..., T]) -> Callable[..., T]:
             def wrapper(*args: Any, **kwargs: Any) -> T:
                 key = compute_key(fn.__qualname__, args, kwargs)
                 return self.run(
-                    key=key, fn=fn, args=args, kwargs=kwargs,
+                    key=key,
+                    fn=fn,
+                    args=args,
+                    kwargs=kwargs,
                     ttl_seconds=ttl_seconds,
                 )
+
             wrapper.__wrapped__ = fn  # type: ignore[attr-defined]
             return wrapper
+
         return decorator
 
     def invalidate(self, key: str) -> bool:
@@ -268,9 +277,7 @@ class IdempotencyGuard:
                 "waits": self._waits,
                 "errors_cached": self._errors_cached,
                 "size": len(self._entries),
-                "hit_ratio_bp": (
-                    int(10_000 * self._hits / total) if total > 0 else 0
-                ),
+                "hit_ratio_bp": (int(10_000 * self._hits / total) if total > 0 else 0),
             }
 
     # ── internals ───────────────────────────────────────────

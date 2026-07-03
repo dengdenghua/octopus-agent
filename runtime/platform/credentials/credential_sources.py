@@ -11,8 +11,7 @@ _LOG = logging.getLogger("octopus.credentials.sources")
 
 class CredentialSource(ABC):
     @abstractmethod
-    def load(self) -> dict[str, str]:
-        ...
+    def load(self) -> dict[str, str]: ...
 
 
 class EnvVarSource(CredentialSource):

@@ -124,8 +124,7 @@ def compute_e2e_surpass_certification(
         review_queue_path=review_queue_path,
     )
     quality_reports = [
-        _quality_report(compute, review_queue_path=review_queue_path)
-        for compute in QUALITY_REPORTS
+        _quality_report(compute, review_queue_path=review_queue_path) for compute in QUALITY_REPORTS
     ]
     scorecard_summary = scorecard.get("surpass_summary") or {}
     scorecard_octopus = _nested_int(scorecard, "overall", "octopus")
@@ -206,8 +205,7 @@ def compute_e2e_surpass_certification(
             "id": "e2e_required_domains_present",
             "title": "Required E2E domains are covered",
             "passed": (
-                int(coverage_summary["present_domains"])
-                == int(coverage_summary["total_domains"])
+                int(coverage_summary["present_domains"]) == int(coverage_summary["total_domains"])
             ),
             "score": int(coverage_summary["present_domains"]),
             "target": int(coverage_summary["total_domains"]),
@@ -217,8 +215,7 @@ def compute_e2e_surpass_certification(
             "id": "e2e_required_domains_ready",
             "title": "Required E2E domains are ready",
             "passed": (
-                int(coverage_summary["ready_domains"])
-                == int(coverage_summary["total_domains"])
+                int(coverage_summary["ready_domains"]) == int(coverage_summary["total_domains"])
             ),
             "score": int(coverage_summary["ready_domains"]),
             "target": int(coverage_summary["total_domains"]),
@@ -235,18 +232,13 @@ def compute_e2e_surpass_certification(
         "summary": {
             "scorecard_octopus": scorecard_octopus,
             "scorecard_best_external": _best_external_score(scorecard),
-            "scorecard_evidence_adjusted_octopus": (
-                scorecard_evidence_adjusted_octopus
-            ),
+            "scorecard_evidence_adjusted_octopus": (scorecard_evidence_adjusted_octopus),
             "automation_octopus": automation_octopus,
             "automation_codex": _nested_int(automation, "overall", "codex"),
             "coverage_ready": int(coverage_summary["ready_domains"]),
             "coverage_total": int(coverage_summary["total_domains"]),
             "coverage_gap_domains": int(coverage_summary["gap_domains"]),
-            "quality_ready": sum(
-                1 for report in quality_reports
-                if bool(report.get("ready"))
-            ),
+            "quality_ready": sum(1 for report in quality_reports if bool(report.get("ready"))),
             "quality_total": len(quality_reports),
             "all_dimensions_surpassed": bool(
                 scorecard_summary.get("all_dimensions_surpassed"),
@@ -315,22 +307,26 @@ def _quality_checks(reports: list[dict[str, Any]]) -> list[dict[str, Any]]:
         schema = str(report.get("schema") or "quality_report")
         ready = bool(report.get("ready"))
         score = float(report.get("score") or 0.0)
-        checks.append({
-            "id": f"{schema}:ready",
-            "title": f"{schema} is ready",
-            "passed": ready,
-            "score": int(report.get("passed") or 0),
-            "target": int(report.get("total") or 0),
-            "next_action": _first_next_action(report),
-        })
-        checks.append({
-            "id": f"{schema}:score",
-            "title": f"{schema} score is complete",
-            "passed": score >= 1.0,
-            "score": score,
-            "target": 1.0,
-            "next_action": _first_next_action(report),
-        })
+        checks.append(
+            {
+                "id": f"{schema}:ready",
+                "title": f"{schema} is ready",
+                "passed": ready,
+                "score": int(report.get("passed") or 0),
+                "target": int(report.get("total") or 0),
+                "next_action": _first_next_action(report),
+            }
+        )
+        checks.append(
+            {
+                "id": f"{schema}:score",
+                "title": f"{schema} score is complete",
+                "passed": score >= 1.0,
+                "score": score,
+                "target": 1.0,
+                "next_action": _first_next_action(report),
+            }
+        )
     return checks
 
 
@@ -351,9 +347,7 @@ def _coverage_domains(
         if isinstance(row, dict)
     }
     quality_by_schema = {
-        str(report.get("schema")): report
-        for report in quality_reports
-        if isinstance(report, dict)
+        str(report.get("schema")): report for report in quality_reports if isinstance(report, dict)
     }
     return [
         _coverage_domain_row(
@@ -397,9 +391,8 @@ def _coverage_domain_row(
     missing_quality_schemas = [
         schema for schema in domain.quality_schemas if schema not in quality_by_schema
     ]
-    quality_ready = (
-        not missing_quality_schemas
-        and all(_quality_report_ready(report) for report in quality_reports)
+    quality_ready = not missing_quality_schemas and all(
+        _quality_report_ready(report) for report in quality_reports
     )
 
     automation_rows = [
@@ -412,9 +405,8 @@ def _coverage_domain_row(
         for dimension_id in domain.automation_dimension_ids
         if dimension_id not in automation_dimensions
     ]
-    automation_ready = (
-        not missing_automation_dimensions
-        and all(_automation_dimension_ready(row) for row in automation_rows)
+    automation_ready = not missing_automation_dimensions and all(
+        _automation_dimension_ready(row) for row in automation_rows
     )
 
     present = (

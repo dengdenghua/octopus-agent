@@ -72,10 +72,9 @@ def _load_proposals() -> list[dict[str, Any]]:
 
 def _topology_payload(topology: TeamTopology) -> dict[str, Any]:
     payload = topology.to_dict()
-    payload["subagent_policy"] = evaluate_agent_policy({
-        str(role): spec.agent_id
-        for role, spec in topology.agents.items()
-    })
+    payload["subagent_policy"] = evaluate_agent_policy(
+        {str(role): spec.agent_id for role, spec in topology.agents.items()}
+    )
     return payload
 
 
@@ -150,7 +149,8 @@ def create_organizations_router(
 
     @router.post("/api/organizations/topology-proposals/{idx}/promote")
     async def promote_proposal(
-        idx: int, request: Request,
+        idx: int,
+        request: Request,
     ) -> dict[str, Any]:
         # Mutation: force-auth regardless of global require_auth.
         actor = _auth(request, force=True)
@@ -185,8 +185,7 @@ def create_organizations_router(
             "accepted": result.accepted,
             "reason": result.reason,
             "new_topology": (
-                _topology_payload(result.new_topology)
-                if result.new_topology is not None else None
+                _topology_payload(result.new_topology) if result.new_topology is not None else None
             ),
         }
 

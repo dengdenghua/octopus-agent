@@ -20,6 +20,7 @@ What this tier deliberately does NOT do: behavioural anomaly scoring
 (z-scores over latency/tokens/args). That is the Adaptive tier and
 remains unimplemented — see docs/implementation-status.md.
 """
+
 from __future__ import annotations
 
 import json

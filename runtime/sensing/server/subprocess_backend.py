@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -118,7 +117,6 @@ _OUTPUT_CAP_BYTES = 200_000
 
 
 class SubprocessBackend(LocalBackend):
-
     def __init__(
         self,
         *,
@@ -149,7 +147,6 @@ class SubprocessBackend(LocalBackend):
 
 
 class SubprocessSandbox(Sandbox):
-
     def __init__(self, backend: SubprocessBackend, audit: BackendAudit, span: Any) -> None:
         super().__init__(backend=backend, audit=audit, span=span)
         self.backend: SubprocessBackend = backend  # type: ignore[assignment]
@@ -212,7 +209,6 @@ class SubprocessSandbox(Sandbox):
                     "stdout_truncated": len(stdout) > _OUTPUT_CAP_BYTES,
                     "skill_name": skill_name,
                 }
-
 
     def _build_preexec(self) -> Callable[[], None] | None:
         if sys.platform == "win32":

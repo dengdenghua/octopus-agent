@@ -7,6 +7,7 @@ denylist (``check_file_write``), the capability denylist, or the
 write ``./.env`` / ``./id_rsa`` or run an operator-disabled tool. The path now
 routes through ``gate_inner_dispatch`` + ``strip_model_controlled_overrides``.
 """
+
 from __future__ import annotations
 
 from runtime.execution.suckers import Skill, SkillRegistry

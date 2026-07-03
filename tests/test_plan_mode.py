@@ -13,6 +13,7 @@ Contract pinned
    transition payload · mutates session.metadata for current turn
 6. ``confirm=False`` is a no-op · bad mode is rejected
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -37,11 +38,15 @@ class _StubAgent:
 
 class TestScopePlanMode:
     def test_plan_mode_has_empty_roots(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path))
         sess = Session(
-            actor="u", agent=_StubAgent(), thread_id="t",
+            actor="u",
+            agent=_StubAgent(),
+            thread_id="t",
             metadata={"mode": "plan"},
         )
         scope = resolve_write_scope(sess)
@@ -51,7 +56,9 @@ class TestScopePlanMode:
 
     def test_plan_mode_rejects_all_paths(self):
         sess = Session(
-            actor="u", agent=_StubAgent(), thread_id="t",
+            actor="u",
+            agent=_StubAgent(),
+            thread_id="t",
             metadata={"mode": "plan"},
         )
         scope = resolve_write_scope(sess)
@@ -59,19 +66,21 @@ class TestScopePlanMode:
         assert scope.allows("/etc/passwd") is False
 
     def test_non_plan_modes_still_have_primary(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         """Sanity · plan mode change doesn't break chat/team/code."""
         monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path))
         for mode in ("chat", "team", "code"):
             sess = Session(
-                actor="u", agent=_StubAgent(), thread_id="t",
+                actor="u",
+                agent=_StubAgent(),
+                thread_id="t",
                 metadata={"mode": mode},
             )
             scope = resolve_write_scope(sess)
-            assert scope.primary is not None, (
-                f"mode={mode!r} should have a primary root"
-            )
+            assert scope.primary is not None, f"mode={mode!r} should have a primary root"
 
 
 # ═══════════════════════════════════════════════════════════
@@ -81,7 +90,9 @@ class TestScopePlanMode:
 
 class TestExecutorPlanMode:
     def test_write_skill_in_plan_mode_fails_with_hint(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         """Plan-mode agent calling write_text_file → step fails ·
         error message points at ``exit_plan_mode``."""
@@ -110,28 +121,31 @@ class TestExecutorPlanMode:
         )
         tid = TaskId(uuid4())
         budget = Budget(
-            task_id=tid, limits=BudgetLimits(tokens=1000, usd=0.01),
+            task_id=tid,
+            limits=BudgetLimits(tokens=1000, usd=0.01),
         )
 
         sess = Session(
-            actor="u", agent=_StubAgent(), thread_id="t",
+            actor="u",
+            agent=_StubAgent(),
+            thread_id="t",
             metadata={"mode": "plan"},
         )
         with session_scope(sess):
             step = executor.execute_step(
-                step_id=0, node_id="n0",
+                step_id=0,
+                node_id="n0",
                 sucker_id=SkillId("write_text_file"),
                 args={"path": "note.txt", "content": "x"},
                 caller="arms/x",
-                task_id=tid, arm_id=ArmId("x"),
+                task_id=tid,
+                arm_id=ArmId("x"),
                 budget=budget,
             )
 
         assert not step.success
         # Error surface mentions the escape hatch · not a mystery 500
-        (
-            step.result.error_type or ""
-        ) + " " + " ".join(step.result.stderr_tags or [])
+        (step.result.error_type or "") + " " + " ".join(step.result.stderr_tags or [])
         assert step.result.error_type == "PermissionError"
 
 
@@ -143,14 +157,18 @@ class TestExecutorPlanMode:
 class TestExitPlanModeSkill:
     def test_confirm_false_is_noop(self):
         from runtime.execution.suckers.plan_mode import _exit_plan_mode
+
         result = _exit_plan_mode(plan="do stuff", confirm=False)
         assert result["mode_transitioned"] is False
         assert "confirm" in result["reason"].lower()
 
     def test_invalid_new_mode_rejected(self):
         from runtime.execution.suckers.plan_mode import _exit_plan_mode
+
         result = _exit_plan_mode(
-            plan="x", confirm=True, new_mode="super-admin",
+            plan="x",
+            confirm=True,
+            new_mode="super-admin",
         )
         assert result["mode_transitioned"] is False
         assert "not valid" in result["reason"]
@@ -159,7 +177,9 @@ class TestExitPlanModeSkill:
         from runtime.execution.suckers.plan_mode import _exit_plan_mode
 
         sess = Session(
-            actor="u", agent=_StubAgent(), thread_id="t",
+            actor="u",
+            agent=_StubAgent(),
+            thread_id="t",
             metadata={"mode": "plan"},
         )
         result = _exit_plan_mode(
@@ -180,13 +200,12 @@ class TestExitPlanModeSkill:
         from runtime.execution.suckers.plan_mode import _exit_plan_mode
 
         result = _exit_plan_mode(
-            plan="x", confirm=True, new_mode="code",
+            plan="x",
+            confirm=True,
+            new_mode="code",
         )
         assert "persist_hint" in result
-        assert (
-            result["persist_hint"]["thread_metadata"]["mode"]
-            == "code"
-        )
+        assert result["persist_hint"]["thread_metadata"]["mode"] == "code"
 
     def test_skill_registered_in_base(self):
         """exit_plan_mode is atomic base · every agent MUST have it ·

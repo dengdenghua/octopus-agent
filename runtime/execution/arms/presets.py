@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from runtime.core.graph_runtime import GraphRuntime
@@ -271,8 +270,19 @@ def make_mobile_operator_arm(runtime: GraphRuntime) -> Worker:
     """
     return Worker(
         arm_id=ArmId("mobile_operator_arm"),
-        affinity=["mobile", "android", "gui", "automation", "app",
-                   "手机", "安卓", "触手", "打开app", "自动操作", "打开"],
+        affinity=[
+            "mobile",
+            "android",
+            "gui",
+            "automation",
+            "app",
+            "手机",
+            "安卓",
+            "触手",
+            "打开app",
+            "自动操作",
+            "打开",
+        ],
         allowed_skills=[*_MOBILE_OPS],
         runtime=runtime,
         display_name="Mobile Operator",
@@ -293,8 +303,18 @@ def make_mobile_browser_operator_arm(runtime: GraphRuntime) -> Worker:
     """
     return Worker(
         arm_id=ArmId("mobile_browser_operator_arm"),
-        affinity=["mobile", "android", "browser", "anti_bot", "scraping",
-                   "浏览器", "网页", "反爬", "抓取", "网站自动化"],
+        affinity=[
+            "mobile",
+            "android",
+            "browser",
+            "anti_bot",
+            "scraping",
+            "浏览器",
+            "网页",
+            "反爬",
+            "抓取",
+            "网站自动化",
+        ],
         allowed_skills=[*_MOBILE_BROWSER_OPS],
         runtime=runtime,
         display_name="Mobile Browser Operator",
@@ -319,7 +339,9 @@ def make_general_arm(runtime: GraphRuntime) -> Worker:
         allowed_skills=[*_WEB_READ],
         runtime=runtime,
         display_name="Eve",
-        description=("白幽灵小队的联络与协调中枢（代号 Siren），负责把计划、情报和临场变化编成可执行行动线。"),
+        description=(
+            "白幽灵小队的联络与协调中枢（代号 Siren），负责把计划、情报和临场变化编成可执行行动线。"
+        ),
         soul=_OCTOPUS_SOUL,
         icon="🐙",
     )
@@ -337,7 +359,9 @@ def make_coder_arm_v2(runtime: GraphRuntime) -> Worker:
         ],
         runtime=runtime,
         display_name="Kane",
-        description=("白幽灵小队的副队长与渗透工程师（代号 Paladin），负责逆向、入侵、补丁和现场系统接管。"),
+        description=(
+            "白幽灵小队的副队长与渗透工程师（代号 Paladin），负责逆向、入侵、补丁和现场系统接管。"
+        ),
         soul=_CODER_SOUL,
         icon="💻",
     )
@@ -347,8 +371,15 @@ def make_vibe_selling_arm(runtime: GraphRuntime) -> Worker:
     return Worker(
         arm_id=ArmId("vibe_selling_arm"),
         affinity=[
-            "ecommerce", "content", "social", "marketing",
-            "copywriting", "browser", "shopify", "storefront", "listing",
+            "ecommerce",
+            "content",
+            "social",
+            "marketing",
+            "copywriting",
+            "browser",
+            "shopify",
+            "storefront",
+            "listing",
         ],
         allowed_skills=[
             *_WEB_READ,
@@ -357,7 +388,9 @@ def make_vibe_selling_arm(runtime: GraphRuntime) -> Worker:
         ],
         runtime=runtime,
         display_name="Luna",
-        description=("白幽灵小队的叙事渗透手（代号 Dream Walker），负责内容诱导、传播伪装和行动叙事包装。"),
+        description=(
+            "白幽灵小队的叙事渗透手（代号 Dream Walker），负责内容诱导、传播伪装和行动叙事包装。"
+        ),
         soul=_VIBE_SELLING_SOUL,
         icon="✨",
     )
@@ -384,7 +417,9 @@ def make_ecommerce_mind_arm(runtime: GraphRuntime) -> Worker:
         ],
         runtime=runtime,
         display_name="Shion",
-        description=("白幽灵小队的后勤与分发官（代号 Virus Queen），负责伪装物流、战术采购和补给路径计算。"),
+        description=(
+            "白幽灵小队的后勤与分发官（代号 Virus Queen），负责伪装物流、战术采购和补给路径计算。"
+        ),
         soul=_ECOMMERCE_MIND_SOUL,
         icon="📊",
     )

@@ -8,6 +8,7 @@ batch, and endpoints enforce caller-owns-batch checks.
 See parallel_agents_router.py ``_require_batch_owner`` + orchestrator.py
 ``_BatchEntry.owner_id``.
 """
+
 from __future__ import annotations
 
 import threading
@@ -265,9 +266,9 @@ def test_cancel_all_scoped_to_caller() -> None:
         # Ensure bob's task is actually RUNNING before cancel, so we
         # exercise the cooperative running→cancelled path (not just the
         # trivial pending→cancelled one).
-        assert _wait_until(
-            lambda: "running" in _task_statuses(orch, bob_batch)
-        ), "bob's task never reached running"
+        assert _wait_until(lambda: "running" in _task_statuses(orch, bob_batch)), (
+            "bob's task never reached running"
+        )
 
         # bob calls cancel_all.
         resp = client.post(

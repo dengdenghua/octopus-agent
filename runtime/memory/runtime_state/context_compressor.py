@@ -45,8 +45,8 @@ class ContextCompressor:
                 older_msgs.append(m)
 
         if len(older_msgs) > self.config.preserve_recent_n:
-            recent_msgs = older_msgs[-self.config.preserve_recent_n:]
-            older_msgs = older_msgs[:-self.config.preserve_recent_n]
+            recent_msgs = older_msgs[-self.config.preserve_recent_n :]
+            older_msgs = older_msgs[: -self.config.preserve_recent_n]
         else:
             recent_msgs = older_msgs
             older_msgs = []
@@ -62,13 +62,17 @@ class ContextCompressor:
 
         return system_msgs + [summary_msg] + recent_msgs
 
-    def compress_with_report(self, messages: list[dict[str, str]]) -> tuple[list[dict[str, str]], CompressionResult]:
+    def compress_with_report(
+        self, messages: list[dict[str, str]]
+    ) -> tuple[list[dict[str, str]], CompressionResult]:
         original_chars = sum(len(m.get("content", "")) for m in messages)
         compressed = self.compress(messages)
         compressed_chars = sum(len(m.get("content", "")) for m in compressed)
         ratio = compressed_chars / max(1, original_chars)
 
-        sections_preserved = sum(1 for m in compressed if "[Context Summary]" not in m.get("content", ""))
+        sections_preserved = sum(
+            1 for m in compressed if "[Context Summary]" not in m.get("content", "")
+        )
         sections_summarized = len(messages) - sections_preserved
 
         return compressed, CompressionResult(

@@ -7,13 +7,13 @@ from typing import Any
 from .registry import Skill, SkillRegistry
 from .testing import SkillExpect, SkillTestCase
 
-_MAX_GLOB_RESULTS = 500        # Implementation note.
-_MAX_GREP_FILES = 200          # Implementation note.
-_MAX_GREP_MATCHES = 500        # Implementation note.
+_MAX_GLOB_RESULTS = 500  # Implementation note.
+_MAX_GREP_FILES = 200  # Implementation note.
+_MAX_GREP_MATCHES = 500  # Implementation note.
 _MAX_GREP_FILE_BYTES = 1_024 * 1024  # Implementation note.
-_MAX_TREE_NODES = 1_000        # Implementation note.
-_MAX_TREE_DEPTH = 8            # Implementation note.
-_MAX_RANGE_LINES = 2_000       # Implementation note.
+_MAX_TREE_NODES = 1_000  # Implementation note.
+_MAX_TREE_DEPTH = 8  # Implementation note.
+_MAX_RANGE_LINES = 2_000  # Implementation note.
 
 
 def _safe_resolve(
@@ -25,7 +25,9 @@ def _safe_resolve(
     from runtime.safety.auth.path_guard import check_path
 
     verdict = check_path(
-        path, sandbox_dir=sandbox_dir, allow_sensitive=allow_sensitive,
+        path,
+        sandbox_dir=sandbox_dir,
+        allow_sensitive=allow_sensitive,
     )
     if not verdict.allow:
         return None, f"path_blocked: {verdict.reason}"
@@ -168,20 +170,14 @@ def _grep_text(
                     before = [
                         {
                             "line": j + 1,
-                            "text": (
-                                lines[j] if len(lines[j]) <= 500
-                                else lines[j][:497] + "..."
-                            ),
+                            "text": (lines[j] if len(lines[j]) <= 500 else lines[j][:497] + "..."),
                         }
                         for j in range(start, lineno - 1)
                     ]
                     after = [
                         {
                             "line": j + 1,
-                            "text": (
-                                lines[j] if len(lines[j]) <= 500
-                                else lines[j][:497] + "..."
-                            ),
+                            "text": (lines[j] if len(lines[j]) <= 500 else lines[j][:497] + "..."),
                         }
                         for j in range(lineno, end)
                     ]
@@ -324,7 +320,7 @@ def register_fs_search_skills(registry: SkillRegistry) -> int:
                 "用途: 按 glob (支持 ** 递归) 列文件，按 mtime 倒序返回；用于「找所有 *.py」「找最新改的 .md」之类。\n"
                 "何时不用: 要按内容 / 正则找用 grep_text；只看一个目录的直接子项用 list_cwd；要看完整树形结构用 tree；知道精确路径直接 read_file。\n"
                 "关键参数: pattern (必填, 例如 '**/*.py'); root (默认 '.'); max_results (默认 500, 上限 500); include_dirs (默认 False, 默认只返回文件)。\n"
-                "示例: glob_files({\"pattern\": \"runtime/**/*.py\", \"root\": \".\"})"
+                '示例: glob_files({"pattern": "runtime/**/*.py", "root": "."})'
             ),
             affinity=["file", "search"],
             cost_profile="low",
@@ -353,7 +349,7 @@ def register_fs_search_skills(registry: SkillRegistry) -> int:
                 "用途: 在文本文件里跑 Python 正则搜内容 (不限于代码 — 配置 / 文档 / 日志都行)；返回 [{path, line, text}] 行级匹配。\n"
                 "何时不用: 只想按文件名 / 路径找用 glob_files；要读完整文件用 read_file；要做语义级代码检索用 code_search / lsp_skills；二进制或 >1MB 的文件会被自动跳过。\n"
                 "关键参数: pattern (必填, Python re); root (默认 '.'); glob (默认 '**/*'); ignore_case (默认 False); max_matches (默认 500); max_files (默认 200)。\n"
-                "示例: grep_text({\"pattern\": \"def register_\", \"root\": \"runtime\", \"glob\": \"**/*.py\"})"
+                '示例: grep_text({"pattern": "def register_", "root": "runtime", "glob": "**/*.py"})'
             ),
             affinity=["file", "search", "text"],
             cost_profile="mid",
@@ -382,7 +378,7 @@ def register_fs_search_skills(registry: SkillRegistry) -> int:
                 "用途: 递归打出目录结构 (默认 3 层, 上限 8 层 / 1000 节点)；用于第一次进项目时建立全局认知。\n"
                 "何时不用: 只看一层用 list_cwd 更省 token；按 pattern 找文件用 glob_files；按内容找用 grep_text；要文件元数据用 file_stats。\n"
                 "关键参数: root (默认 '.'); max_depth (默认 3, 上限 8); max_nodes (默认 1000); include_hidden (默认 False)。\n"
-                "示例: tree({\"root\": \"runtime\", \"max_depth\": 2})"
+                '示例: tree({"root": "runtime", "max_depth": 2})'
             ),
             affinity=["file", "io"],
             cost_profile="low",
@@ -411,7 +407,7 @@ def register_fs_search_skills(registry: SkillRegistry) -> int:
                 "用途: 按 1-based 行号读文件的一段切片 (offset + limit, 上限 2000 行)；只想看「前 N 行」「某个区间」时省 token 的首选。\n"
                 "何时不用: 整文件不大用 read_file 一把读完；要找内容位置用 grep_text 后再来精读；要按 pattern 找用 glob_files；二进制 / 非 UTF-8 会拒读。\n"
                 "关键参数: path (必填); offset (默认 1, 起始行号); limit (默认 200, 上限 2000)。\n"
-                "示例: read_file_range({\"path\": \"runtime/execution/suckers/builtins.py\", \"offset\": 100, \"limit\": 50})"
+                '示例: read_file_range({"path": "runtime/execution/suckers/builtins.py", "offset": 100, "limit": 50})'
             ),
             affinity=["file", "io"],
             cost_profile="low",

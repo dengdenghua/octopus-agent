@@ -65,10 +65,10 @@ class TopologyStats:
 @dataclass
 class Proposal:
     kind: str
-    base_topology: str       # fingerprint
+    base_topology: str  # fingerprint
     bucket: str
     detail: dict[str, Any]
-    confidence: float        # 0..1
+    confidence: float  # 0..1
     rationale: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -156,39 +156,43 @@ def _propose_threshold_adjustments(
         if s.avg_iterations >= topology.max_iterations - 0.5 and s.success_rate >= 0.6:
             new_threshold = max(0.1, topology.quality_threshold - 0.1)
             if new_threshold != topology.quality_threshold:
-                out.append(Proposal(
-                    kind="adjust_quality_threshold",
-                    base_topology=s.fingerprint,
-                    bucket=bucket,
-                    detail={
-                        "old_threshold": topology.quality_threshold,
-                        "new_threshold": new_threshold,
-                    },
-                    confidence=min(0.9, 0.4 + 0.1 * s.runs / 10),
-                    rationale=(
-                        f"avg_iterations {s.avg_iterations:.1f}/"
-                        f"{topology.max_iterations} — threshold too strict"
-                    ),
-                ))
+                out.append(
+                    Proposal(
+                        kind="adjust_quality_threshold",
+                        base_topology=s.fingerprint,
+                        bucket=bucket,
+                        detail={
+                            "old_threshold": topology.quality_threshold,
+                            "new_threshold": new_threshold,
+                        },
+                        confidence=min(0.9, 0.4 + 0.1 * s.runs / 10),
+                        rationale=(
+                            f"avg_iterations {s.avg_iterations:.1f}/"
+                            f"{topology.max_iterations} — threshold too strict"
+                        ),
+                    )
+                )
             continue
         # Always passing on iteration 1 → threshold could be tighter.
         if s.avg_iterations <= 1.2 and s.success_rate >= 0.9:
             new_threshold = min(0.95, topology.quality_threshold + 0.1)
             if new_threshold != topology.quality_threshold:
-                out.append(Proposal(
-                    kind="adjust_quality_threshold",
-                    base_topology=s.fingerprint,
-                    bucket=bucket,
-                    detail={
-                        "old_threshold": topology.quality_threshold,
-                        "new_threshold": new_threshold,
-                    },
-                    confidence=min(0.8, 0.3 + 0.1 * s.runs / 10),
-                    rationale=(
-                        f"avg_iterations {s.avg_iterations:.1f} — generator "
-                        f"never challenged; tighten threshold"
-                    ),
-                ))
+                out.append(
+                    Proposal(
+                        kind="adjust_quality_threshold",
+                        base_topology=s.fingerprint,
+                        bucket=bucket,
+                        detail={
+                            "old_threshold": topology.quality_threshold,
+                            "new_threshold": new_threshold,
+                        },
+                        confidence=min(0.8, 0.3 + 0.1 * s.runs / 10),
+                        rationale=(
+                            f"avg_iterations {s.avg_iterations:.1f} — generator "
+                            f"never challenged; tighten threshold"
+                        ),
+                    )
+                )
     return out
 
 
@@ -217,21 +221,23 @@ def _propose_protocol_switch(
         # Sequential losing on quality (avg_score < 0.5) but a sibling
         # evaluator_optimizer is winning in the same bucket.
         if s.avg_score and s.avg_score < 0.5 and s.success_rate < 0.5:
-            out.append(Proposal(
-                kind="switch_protocol",
-                base_topology=s.fingerprint,
-                bucket=bucket,
-                detail={
-                    "from": "sequential",
-                    "to": "evaluator_optimizer",
-                },
-                confidence=min(0.85, 0.4 + 0.1 * s.runs / 10),
-                rationale=(
-                    f"sequential success_rate {s.success_rate:.0%} / "
-                    f"avg_score {s.avg_score:.2f} — sibling "
-                    f"evaluator_optimizer wins this bucket"
-                ),
-            ))
+            out.append(
+                Proposal(
+                    kind="switch_protocol",
+                    base_topology=s.fingerprint,
+                    bucket=bucket,
+                    detail={
+                        "from": "sequential",
+                        "to": "evaluator_optimizer",
+                    },
+                    confidence=min(0.85, 0.4 + 0.1 * s.runs / 10),
+                    rationale=(
+                        f"sequential success_rate {s.success_rate:.0%} / "
+                        f"avg_score {s.avg_score:.2f} — sibling "
+                        f"evaluator_optimizer wins this bucket"
+                    ),
+                )
+            )
     return out
 
 
@@ -277,22 +283,24 @@ def _propose_agent_swaps(
                     best_rate = rate
                     best_agent = cand_id
             if best_agent:
-                out.append(Proposal(
-                    kind="swap_agent",
-                    base_topology=s.fingerprint,
-                    bucket=bucket,
-                    detail={
-                        "role": str(role),
-                        "old_agent": spec.agent_id,
-                        "new_agent": best_agent,
-                        "expected_lift": round(best_rate - s.success_rate, 2),
-                    },
-                    confidence=min(0.8, 0.3 + 0.1 * s.runs / 10),
-                    rationale=(
-                        f"role {role}: agent {best_agent} wins "
-                        f"{best_rate:.0%} vs current {s.success_rate:.0%}"
-                    ),
-                ))
+                out.append(
+                    Proposal(
+                        kind="swap_agent",
+                        base_topology=s.fingerprint,
+                        bucket=bucket,
+                        detail={
+                            "role": str(role),
+                            "old_agent": spec.agent_id,
+                            "new_agent": best_agent,
+                            "expected_lift": round(best_rate - s.success_rate, 2),
+                        },
+                        confidence=min(0.8, 0.3 + 0.1 * s.runs / 10),
+                        rationale=(
+                            f"role {role}: agent {best_agent} wins "
+                            f"{best_rate:.0%} vs current {s.success_rate:.0%}"
+                        ),
+                    )
+                )
                 break  # one swap per topology per tick
     return out
 
@@ -316,9 +324,7 @@ class TopologyEvolver:
             self._proposals_path = Path(proposals_path)
         else:
             try:
-                self._proposals_path = (
-                    app_paths().data_dir / "topology_proposals.json"
-                )
+                self._proposals_path = app_paths().data_dir / "topology_proposals.json"
             except (AttributeError, OSError, TypeError):
                 self._proposals_path = Path("data") / "topology_proposals.json"
 

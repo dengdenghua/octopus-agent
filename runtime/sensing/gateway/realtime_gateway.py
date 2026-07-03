@@ -28,6 +28,7 @@ from typing import Any, Protocol
 
 try:  # Optional-dep guard: mirror sibling gateways (openai_gateway etc.)
     from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
@@ -38,6 +39,7 @@ except ImportError:  # pragma: no cover
         """Fallback shim so type references resolve when fastapi is absent."""
 
         pass
+
 
 from runtime.protocol import (
     ClientMethod,
@@ -662,10 +664,7 @@ class RealtimeGateway:
         conn: RpcConnection,
     ) -> dict[str, Any]:
         cleaned = dict(params)
-        if (
-            cleaned.get("approvalPolicy") == "never"
-            and not self._allow_client_approval_bypass
-        ):
+        if cleaned.get("approvalPolicy") == "never" and not self._allow_client_approval_bypass:
             cleaned["approvalPolicy"] = "on-request"
         if conn.actor_id is not None:
             metadata = cleaned.get("metadata")
@@ -676,7 +675,9 @@ class RealtimeGateway:
             input_blocks = list(blocks) if isinstance(blocks, list) else []
             if not input_blocks:
                 input_blocks.append({"type": "metadata"})
-            first = dict(input_blocks[0]) if isinstance(input_blocks[0], dict) else {"type": "metadata"}
+            first = (
+                dict(input_blocks[0]) if isinstance(input_blocks[0], dict) else {"type": "metadata"}
+            )
             block_metadata = first.get("metadata")
             block_metadata_dict = dict(block_metadata) if isinstance(block_metadata, dict) else {}
             block_metadata_dict.setdefault("actor_id", conn.actor_id)

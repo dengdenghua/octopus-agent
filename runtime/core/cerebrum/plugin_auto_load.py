@@ -21,6 +21,7 @@ feature, not a critical path. If a plugin can't be loaded the model
 still has the original prompt with the mention text, and the user-
 facing error surfaces in the activation report.
 """
+
 from __future__ import annotations
 
 import logging
@@ -44,9 +45,7 @@ class PluginActivation:
 
     @property
     def is_available(self) -> bool:
-        return self.error is None and (
-            self.was_already_started or self.started_now
-        )
+        return self.error is None and (self.was_already_started or self.started_now)
 
 
 @dataclass(frozen=True)
@@ -64,13 +63,12 @@ class PluginActivationReport:
         if not self.activations:
             return ""
         newly_loaded = [
-            a for a in self.activations
-            if (a.loaded_now or a.started_now) and a.is_available
+            a for a in self.activations if (a.loaded_now or a.started_now) and a.is_available
         ]
         already = [
-            a for a in self.activations
-            if a.was_already_started and not a.loaded_now
-            and not a.started_now
+            a
+            for a in self.activations
+            if a.was_already_started and not a.loaded_now and not a.started_now
         ]
         failures = [a for a in self.activations if a.error]
         parts: list[str] = []
@@ -82,16 +80,12 @@ class PluginActivationReport:
             )
         if already:
             parts.append(
-                "Already running: "
-                + ", ".join(f"`{a.plugin_id}`" for a in already)
-                + ".",
+                "Already running: " + ", ".join(f"`{a.plugin_id}`" for a in already) + ".",
             )
         if failures:
             parts.append(
                 "Failed to activate: "
-                + ", ".join(
-                    f"`{a.plugin_id}` ({a.error})" for a in failures
-                )
+                + ", ".join(f"`{a.plugin_id}` ({a.error})" for a in failures)
                 + ".",
             )
         return " ".join(parts)
@@ -122,6 +116,7 @@ def auto_load_pinned_plugins(
     if hub is None:
         try:
             from runtime.platform.plugins.plugin_hub import get_plugin_hub
+
             hub = get_plugin_hub()
         except (ImportError, AttributeError, RuntimeError) as exc:
             _LOG.debug("plugin hub unavailable: %s", exc)

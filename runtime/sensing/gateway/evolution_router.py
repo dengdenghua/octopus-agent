@@ -19,12 +19,12 @@ except ImportError:
 
 
 if FASTAPI_AVAILABLE:
+
     class SubagentPolicyDecisionBody(BaseModel):
         action: str = Field(..., pattern="^(watch|retire|clear)$")
         reason: str = ""
         evidence_item_ids: list[str] = Field(default_factory=list)
         actor: str = "operator_panel"
-
 
     class ScorecardGapQueueBody(BaseModel):
         target_score: int = Field(
@@ -36,23 +36,18 @@ if FASTAPI_AVAILABLE:
         reason: str = "operator_scorecard_gap_review"
         dimension_id: str = ""
 
-
     class VerifierDriftQueueBody(BaseModel):
         limit: int = Field(default=1000, ge=1, le=5000)
 
-
     class RepairRoutePromotionQueueBody(BaseModel):
         limit: int = Field(default=1000, ge=1, le=5000)
-
 
     class BrowserDesktopRepairRecipeQueueBody(BaseModel):
         limit: int = Field(default=1000, ge=1, le=5000)
         min_occurrences: int = Field(default=1, ge=1, le=20)
 
-
     class BrowserDesktopStaleArtifactRejectionBody(BaseModel):
         limit: int = Field(default=1000, ge=1, le=5000)
-
 
     class BrowserDesktopRepairRecipeEvidenceBody(BaseModel):
         item_id: str
@@ -62,13 +57,11 @@ if FASTAPI_AVAILABLE:
         notes: str = ""
         actor: str = "operator_panel"
 
-
     class BrowserDesktopRepairRecipeRerunBody(BaseModel):
         item_id: str
         api_base_url: str = ""
         promote_source_cases: bool = False
         actor: str = "operator_panel"
-
 
     class BrowserDesktopRepairRecipeRerunBatchBody(BaseModel):
         api_base_url: str = ""
@@ -76,12 +69,10 @@ if FASTAPI_AVAILABLE:
         actor: str = "operator_panel"
         limit: int = Field(default=20, ge=1, le=100)
 
-
     class AutomationPolicyRuleInstallBody(BaseModel):
         draft_id: str
         confirm_install: bool = False
         limit: int = Field(default=100, ge=1, le=500)
-
 
     class KimiSwarmLoadTestBody(BaseModel):
         session_id: str = "kimi-swarm-load-test"
@@ -105,6 +96,7 @@ if FASTAPI_AVAILABLE:
         model: str = "kimi-for-coding"
         confirm_real_provider: bool = False
         max_tokens: int = Field(default=16, ge=1, le=512)
+
 
 _LOG = logging.getLogger("octopus.siphon.evolution_router")
 
@@ -393,8 +385,7 @@ def create_evolution_router() -> Any:
                 rows = [
                     row
                     for row in rows
-                    if isinstance(row, dict)
-                    and str(row.get("id") or "") == wanted_dimension
+                    if isinstance(row, dict) and str(row.get("id") or "") == wanted_dimension
                 ]
             rows = rows[: body.limit]
             for row in rows:
@@ -480,14 +471,12 @@ def create_evolution_router() -> Any:
                     "evidence_adjusted_overall": report.get(
                         "evidence_adjusted_overall",
                     ),
-                        "below_target_count": len(report.get("octopus_below_target") or []),
-                        "external_gap_count": len(
-                            report.get("octopus_external_gap_dimensions") or []
-                        ),
-                        "focus_gap_count": len(report.get("octopus_focus_gaps") or []),
-                        "surpass_summary": report.get("surpass_summary"),
-                    },
-                }
+                    "below_target_count": len(report.get("octopus_below_target") or []),
+                    "external_gap_count": len(report.get("octopus_external_gap_dimensions") or []),
+                    "focus_gap_count": len(report.get("octopus_focus_gaps") or []),
+                    "surpass_summary": report.get("surpass_summary"),
+                },
+            }
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
@@ -611,9 +600,9 @@ def create_evolution_router() -> Any:
             report = build_automation_policy_rule_drafts(limit=body.limit)
             draft = next(
                 (
-                    item for item in report.get("drafts") or []
-                    if isinstance(item, dict)
-                    and str(item.get("draft_id") or "") == body.draft_id
+                    item
+                    for item in report.get("drafts") or []
+                    if isinstance(item, dict) and str(item.get("draft_id") or "") == body.draft_id
                 ),
                 None,
             )
@@ -904,6 +893,7 @@ def create_evolution_router() -> Any:
     def get_fitness(agent_id: str, window: int = Query(default=20, ge=5, le=100)) -> dict[str, Any]:
         try:
             from runtime.safety.evolution.fitness import FitnessConfig, compute_fitness
+
             report = compute_fitness(agent_id, FitnessConfig(window=window))
             return {
                 "ok": True,
@@ -920,7 +910,9 @@ def create_evolution_router() -> Any:
                     "dominant_failure": report.l2.dominant_failure,
                     "action": report.l2.action,
                     "confidence": report.l2.confidence,
-                } if report.l2 else None,
+                }
+                if report.l2
+                else None,
                 "governance": {
                     "score": report.governance.score,
                     "penalty": report.governance.penalty,
@@ -928,12 +920,12 @@ def create_evolution_router() -> Any:
                     "recent_total": report.governance.recent_total,
                     "override_count": report.governance.override_count,
                     "gate_failed_count": report.governance.gate_failed_count,
-                    "gate_blocked_override_count": (
-                        report.governance.gate_blocked_override_count
-                    ),
+                    "gate_blocked_override_count": (report.governance.gate_blocked_override_count),
                     "failed_apply_count": report.governance.failed_apply_count,
                     "reasons": report.governance.reasons,
-                } if report.governance else None,
+                }
+                if report.governance
+                else None,
                 "combined": report.combined,
                 "verdict": report.verdict,
             }
@@ -944,6 +936,7 @@ def create_evolution_router() -> Any:
     def get_drift(agent_id: str) -> dict[str, Any]:
         try:
             from runtime.safety.evolution.drift_monitor import DriftMonitor
+
             report = DriftMonitor(agent_id).check()
             return {
                 "ok": True,
@@ -967,6 +960,7 @@ def create_evolution_router() -> Any:
     ) -> dict[str, Any]:
         try:
             from runtime.safety.evolution.proposal_ledger import ProposalLedger, ProposalStatus
+
             ledger = ProposalLedger()
             st = ProposalStatus(status) if status else None
             records = ledger.query(status=st, kind=kind, limit=limit)
@@ -1009,28 +1003,34 @@ def create_evolution_router() -> Any:
             for state in CanaryManager().list_all():
                 metadata = state.metadata if isinstance(state.metadata, dict) else {}
                 if metadata.get("proposal_id") == proposal_id:
-                    canaries.append({
-                        "skill_name": state.skill_name,
-                        "phase": state.phase.value,
-                        "sample_count": state.sample_count,
-                        "success_count": state.success_count,
-                        "failure_count": state.failure_count,
-                        "current_rate": round(state.current_rate, 3),
-                        "entered_ts": state.entered_ts,
-                        "metadata": metadata,
-                    })
+                    canaries.append(
+                        {
+                            "skill_name": state.skill_name,
+                            "phase": state.phase.value,
+                            "sample_count": state.sample_count,
+                            "success_count": state.success_count,
+                            "failure_count": state.failure_count,
+                            "current_rate": round(state.current_rate, 3),
+                            "entered_ts": state.entered_ts,
+                            "metadata": metadata,
+                        }
+                    )
 
             rollbacks = []
-            for rb in ledger.query(status=ProposalStatus.ROLLED_BACK, kind="canary_rollback", limit=10_000):
+            for rb in ledger.query(
+                status=ProposalStatus.ROLLED_BACK, kind="canary_rollback", limit=10_000
+            ):
                 metadata = rb.metadata if isinstance(rb.metadata, dict) else {}
                 if metadata.get("source_proposal_id") == proposal_id:
-                    rollbacks.append({
-                        "id": rb.proposal_id,
-                        "description": rb.description,
-                        "ts": rb.ts,
-                        "rolled_back_ts": rb.rolled_back_ts,
-                        "metadata": metadata,
-                    })
+                    rollbacks.append(
+                        {
+                            "id": rb.proposal_id,
+                            "description": rb.description,
+                            "ts": rb.ts,
+                            "rolled_back_ts": rb.rolled_back_ts,
+                            "metadata": metadata,
+                        }
+                    )
 
             return {
                 "ok": True,
@@ -1065,6 +1065,7 @@ def create_evolution_router() -> Any:
     ) -> dict[str, Any]:
         try:
             from runtime.safety.evolution.canary import CanaryManager, CanaryPhase
+
             cm = CanaryManager()
             canaries = cm.list_all() if include_all else cm.list_active()
             if phase:
@@ -1073,7 +1074,9 @@ def create_evolution_router() -> Any:
                     canaries = [s for s in canaries if s.phase == phase_enum]
                 except Exception:
                     return {"ok": False, "error": f"invalid phase: {phase}"}
-            active_count = sum(1 for s in canaries if s.phase not in (CanaryPhase.FULL, CanaryPhase.ROLLED_BACK))
+            active_count = sum(
+                1 for s in canaries if s.phase not in (CanaryPhase.FULL, CanaryPhase.ROLLED_BACK)
+            )
             rolled_back_count = sum(1 for s in canaries if s.phase == CanaryPhase.ROLLED_BACK)
             full_count = sum(1 for s in canaries if s.phase == CanaryPhase.FULL)
             canaries = sorted(
@@ -1114,6 +1117,7 @@ def create_evolution_router() -> Any:
     def rollback_canary(skill_name: str) -> dict[str, Any]:
         try:
             from runtime.safety.evolution.canary import CanaryManager
+
             cm = CanaryManager()
             state = cm.force_rollback(skill_name, reason="manual API rollback")
             if state is None:
@@ -1277,11 +1281,7 @@ def _scorecard_gap_text(row: dict[str, Any], *, reason: str) -> str:
         if isinstance(row.get("evidence_adjusted_scores"), dict)
         else {}
     )
-    actions = [
-        str(action)
-        for action in row.get("octopus_next_actions") or []
-        if action
-    ]
+    actions = [str(action) for action in row.get("octopus_next_actions") or [] if action]
     lines = [
         f"Real baseline gap for `{row.get('title') or row.get('id')}`.",
         (

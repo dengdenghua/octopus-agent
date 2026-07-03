@@ -122,16 +122,18 @@ def create_thread_state_router(
                 if needle and needle in part.lower():
                     snippet = part
                     break
-            results.append({
-                "thread_id": thread.get("thread_id"),
-                "title": title or "New chat",
-                "snippet": snippet[:240],
-                "created_at": thread.get("created_at"),
-                "updated_at": thread.get("updated_at"),
-                "message_count": len(messages),
-                "values": values,
-                "metadata": thread.get("metadata") or {},
-            })
+            results.append(
+                {
+                    "thread_id": thread.get("thread_id"),
+                    "title": title or "New chat",
+                    "snippet": snippet[:240],
+                    "created_at": thread.get("created_at"),
+                    "updated_at": thread.get("updated_at"),
+                    "message_count": len(messages),
+                    "values": values,
+                    "metadata": thread.get("metadata") or {},
+                }
+            )
             if len(results) >= limit:
                 break
         return {"threads": results}
@@ -148,7 +150,9 @@ def create_thread_state_router(
             raise HTTPException(404, f"thread not found: {thread_id}")
         return thread
 
-    @router.delete("/api/threads/{thread_id}", status_code=204, response_class=Response, response_model=None)
+    @router.delete(
+        "/api/threads/{thread_id}", status_code=204, response_class=Response, response_model=None
+    )
     def delete_thread(request: Request, thread_id: str):
         actor_id = _auth(request)
         _require_store()
@@ -190,12 +194,10 @@ def create_thread_state_router(
             sort_order=sort_order,
         )
         return [
-            thread for thread in results
+            thread
+            for thread in results
             if _can_access(thread, actor_id)
-            if not (
-                isinstance(thread.get("thread_id"), str)
-                and _is_archived(thread["thread_id"])
-            )
+            if not (isinstance(thread.get("thread_id"), str) and _is_archived(thread["thread_id"]))
         ]
 
     @router.get("/api/threads/{thread_id}/state")

@@ -11,6 +11,7 @@ Typical flow:
     3. user: "is my video done yet?"
     4. agnes-video-poll(task_id="xyz") → {"status": "completed", "video_url": "..."}
 """
+
 from __future__ import annotations
 
 import json
@@ -23,9 +24,7 @@ from typing import Any
 # dir at import time so this module is runnable both from inside the
 # octopus runtime AND as a CLI smoke test.
 _GENERATE_SCRIPTS = (
-    Path(__file__).resolve().parent.parent.parent
-    / "agnes-video-generate"
-    / "scripts"
+    Path(__file__).resolve().parent.parent.parent / "agnes-video-generate" / "scripts"
 )
 if str(_GENERATE_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_GENERATE_SCRIPTS))

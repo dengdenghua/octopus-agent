@@ -33,6 +33,7 @@ Downstream call sites can either take a ``session`` keyword explicitly
 This doesn't refactor every caller at once. It introduces the shape;
 downstream code migrates one handler at a time.
 """
+
 from __future__ import annotations
 
 import time
@@ -54,14 +55,16 @@ if TYPE_CHECKING:  # pragma: no cover
 # The master Session ContextVar. New code reads this. Its value is set
 # by `session_scope()`.
 _current_session: ContextVar[Session | None] = ContextVar(
-    "current_session", default=None,
+    "current_session",
+    default=None,
 )
 
 # Legacy ContextVar used by MoliliModelRouter and other pre-session
 # callers. We continue to set/reset it alongside the Session so the old
 # code keeps working while migration rolls forward.
 _current_agent_id: ContextVar[str | None] = ContextVar(
-    "current_agent_id", default=None,
+    "current_agent_id",
+    default=None,
 )
 
 
@@ -96,6 +99,7 @@ class Session:
         Wall-clock (seconds since epoch) when the turn kicked off. Use
         for latency metrics and budget timers.
     """
+
     actor: str | None = None
     agent: Agent | None = None
     thread_id: str | None = None
@@ -153,6 +157,7 @@ def session_scope(session: Session) -> Iterator[Session]:
         from runtime.sensing.model_router.actor_context import (
             current_actor as _molili_actor,
         )
+
         molili_tok = _molili_actor.set(session.actor) if session.actor else None
     except ImportError:  # noqa: BLE001 — molili optional; absence is no-op (real bugs surface as other exceptions)
         pass
@@ -167,6 +172,7 @@ def session_scope(session: Session) -> Iterator[Session]:
                 from runtime.sensing.model_router.actor_context import (
                     current_actor as _molili_actor,
                 )
+
                 _molili_actor.reset(molili_tok)
             except ImportError:  # noqa: BLE001 — molili optional; absence is no-op
                 pass
@@ -191,6 +197,7 @@ def bind_thread_session(
         from runtime.sensing.model_router.actor_context import (
             current_actor as _molili_actor,
         )
+
         if session.actor:
             tok_molili = _molili_actor.set(session.actor)
     except ImportError:  # noqa: BLE001 — molili optional; absence is no-op
@@ -213,6 +220,7 @@ def unbind_thread_session(
             from runtime.sensing.model_router.actor_context import (
                 current_actor as _molili_actor,
             )
+
             _molili_actor.reset(tok_molili)
         except ImportError:  # noqa: BLE001 — molili optional; absence is no-op
             pass

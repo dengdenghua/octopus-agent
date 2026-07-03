@@ -23,20 +23,24 @@ class EvolutionConstraintResult:
 class EvolutionConstraintConfig:
     max_prompt_chars: int = 2_000
     max_prompt_growth_ratio: float = 0.35
-    disallowed_patterns: tuple[str, ...] = field(default_factory=lambda: (
-        r"\bignore\s+(all\s+)?previous\s+instructions\b",
-        r"\bbypass\s+(approval|permission|sandbox|policy|safety)\b",
-        r"\bdisable\s+(approval|permission|sandbox|policy|safety)\b",
-        r"\bnever\s+ask\s+for\s+(approval|permission)\b",
-        r"\bexfiltrat(e|ion)\b",
-        r"\b(api[_-]?key|secret|password|token)\b.*\b(print|dump|expose|send)\b",
-    ))
-    volatile_patterns: tuple[str, ...] = field(default_factory=lambda: (
-        r"\b(current|today'?s)\s+(date|time|timestamp)\b",
-        r"\bnow\(\)",
-        r"\brandom\(",
-        r"\buuid\b",
-    ))
+    disallowed_patterns: tuple[str, ...] = field(
+        default_factory=lambda: (
+            r"\bignore\s+(all\s+)?previous\s+instructions\b",
+            r"\bbypass\s+(approval|permission|sandbox|policy|safety)\b",
+            r"\bdisable\s+(approval|permission|sandbox|policy|safety)\b",
+            r"\bnever\s+ask\s+for\s+(approval|permission)\b",
+            r"\bexfiltrat(e|ion)\b",
+            r"\b(api[_-]?key|secret|password|token)\b.*\b(print|dump|expose|send)\b",
+        )
+    )
+    volatile_patterns: tuple[str, ...] = field(
+        default_factory=lambda: (
+            r"\b(current|today'?s)\s+(date|time|timestamp)\b",
+            r"\bnow\(\)",
+            r"\brandom\(",
+            r"\buuid\b",
+        )
+    )
 
 
 class EvolutionConstraintValidator:
@@ -68,10 +72,13 @@ class EvolutionConstraintValidator:
         *,
         baseline_prompt: str | None = None,
     ) -> bool:
-        return all(r.passed for r in self.validate_prompt(
-            prompt,
-            baseline_prompt=baseline_prompt,
-        ))
+        return all(
+            r.passed
+            for r in self.validate_prompt(
+                prompt,
+                baseline_prompt=baseline_prompt,
+            )
+        )
 
     def _check_non_empty(self, text: str) -> EvolutionConstraintResult:
         if text.strip():

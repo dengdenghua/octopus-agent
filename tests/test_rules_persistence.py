@@ -126,7 +126,9 @@ def _failure_journal() -> InMemoryJournal:
     def _step(sid, sucker, ok=True):
         call = ToolCall(caller="arms/a", sucker_id=sucker, args={})
         return Step(
-            step_id=sid, node_id=f"n{sid}", action=call,
+            step_id=sid,
+            node_id=f"n{sid}",
+            action=call,
             result=ExecutionResult(
                 call_id=call.call_id,
                 status="success" if ok else "failed",
@@ -136,11 +138,14 @@ def _failure_journal() -> InMemoryJournal:
 
     # Implementation note.
     for _ in range(5):
-        j.write_trajectory(Trajectory(
-            task_id=TaskId(uuid4()), arm_id=ArmId("a"),
-            steps=[_step(0, "list_cwd"), _step(1, "count_words")],
-            outcome=TrajectoryOutcome(success=True),
-        ))
+        j.write_trajectory(
+            Trajectory(
+                task_id=TaskId(uuid4()),
+                arm_id=ArmId("a"),
+                steps=[_step(0, "list_cwd"), _step(1, "count_words")],
+                outcome=TrajectoryOutcome(success=True),
+            )
+        )
     return j
 
 
@@ -198,7 +203,8 @@ class TestStaticPlannerAutoPersist:
     def test_rewrite_from_journal_persists(self, tmp_path):
         path = tmp_path / "rules.yaml"
         planner = StaticPlanner(
-            rules=[], auto_persist_rules_path=path,
+            rules=[],
+            auto_persist_rules_path=path,
         )
         result = planner.rewrite_from_journal(_failure_journal())
         if result.applied_count == 0:
@@ -220,7 +226,8 @@ class TestStaticPlannerAutoPersist:
         """Implementation note."""
         path = tmp_path / "rules.yaml"
         dump_rules_to_file(
-            [Rule(name="from_file")], path,
+            [Rule(name="from_file")],
+            path,
         )
         planner = StaticPlanner(
             rules=[Rule(name="from_arg")],
@@ -242,7 +249,9 @@ class TestStaticPlannerAutoPersist:
         p = RewriteProposal(
             kind="lower_rule_priority",
             target_rule_name="r1",
-            rationale="x", confidence=0.9, severity="mid",
+            rationale="x",
+            confidence=0.9,
+            severity="mid",
         )
         # Implementation note.
         planner.apply_rewrite_proposals([p])

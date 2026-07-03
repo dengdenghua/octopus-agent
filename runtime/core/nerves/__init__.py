@@ -1,4 +1,3 @@
-
 from .bus import (
     AbstractEventBus,
     AgentAdded,

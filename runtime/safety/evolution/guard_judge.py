@@ -17,6 +17,7 @@ fail-open, TTL cache, defensive parsing. Different semantics — this
 judges guard accuracy, not message safety — but the wiring shape is
 deliberately the same so future maintainers see one judge pattern.
 """
+
 from __future__ import annotations
 
 import logging
@@ -55,7 +56,9 @@ GuardJudge = Callable[[str, str, str], GuardJudgeVerdict]
 
 
 def null_guard_judge(
-    label: str, guard_message: str, trajectory_excerpt: str,
+    label: str,
+    guard_message: str,
+    trajectory_excerpt: str,
 ) -> GuardJudgeVerdict:
     """Default — always uncertain. Used when no LLM is wired so the
     digest aggregator silently treats every hit as unjudged."""
@@ -155,7 +158,9 @@ def build_guard_judge_from_router(
     from runtime.platform.models.llm import Message, ModelRequest
 
     def _judge(
-        label: str, guard_message: str, trajectory_excerpt: str,
+        label: str,
+        guard_message: str,
+        trajectory_excerpt: str,
     ) -> GuardJudgeVerdict:
         if not label.strip() or not guard_message.strip():
             return GuardJudgeVerdict(action="uncertain", reason="empty_input")
@@ -179,7 +184,8 @@ def build_guard_judge_from_router(
         except Exception as exc:  # noqa: BLE001 — fail open
             _log.warning(
                 "guard_judge router error %s: %s — defaulting uncertain",
-                type(exc).__name__, exc,
+                type(exc).__name__,
+                exc,
             )
             return GuardJudgeVerdict(action="uncertain", reason="router_error")
         return _parse_verdict(resp.text or "")

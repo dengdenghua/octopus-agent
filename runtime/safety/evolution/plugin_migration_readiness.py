@@ -53,9 +53,7 @@ def compute_plugin_migration_readiness(
             "path": str(_CENTRAL_MIGRATION_PATH),
             "present": bool(matrix_text),
             "covered_count": sum(
-                1
-                for row in rows
-                if row["migration_contract"]["central_migration_covered"]
+                1 for row in rows if row["migration_contract"]["central_migration_covered"]
             ),
             "central_tests_present": central_tests,
         },

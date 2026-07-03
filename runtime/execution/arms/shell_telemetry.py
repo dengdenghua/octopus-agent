@@ -19,6 +19,7 @@ Each event carries:
 - categories: string labels (shell_type, command_hash, etc.)
 - extra: free-form context for debugging
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -85,9 +86,7 @@ class ShellExecTelemetry:
                 for k, v in event.to_span_attributes().items():
                     span.set_attribute(k, v)
         except (TypeError, ValueError, AttributeError):
-            _logger.debug(
-                "failed to emit shell exec event: %s", event.name
-            )
+            _logger.debug("failed to emit shell exec event: %s", event.name)
 
     def record_init_success(
         self,
@@ -95,14 +94,16 @@ class ShellExecTelemetry:
         elapsed_ms: float,
         pid: int,
     ) -> None:
-        self._emit(ShellExecEvent(
-            name="ShellExecInitSuccess",
-            metrics={"elapsed_ms": elapsed_ms},
-            categories={
-                "shell_type": shell_type,
-                "pid": str(pid),
-            },
-        ))
+        self._emit(
+            ShellExecEvent(
+                name="ShellExecInitSuccess",
+                metrics={"elapsed_ms": elapsed_ms},
+                categories={
+                    "shell_type": shell_type,
+                    "pid": str(pid),
+                },
+            )
+        )
 
     def record_init_failed(
         self,
@@ -110,15 +111,17 @@ class ShellExecTelemetry:
         elapsed_ms: float,
         error: str,
     ) -> None:
-        self._emit(ShellExecEvent(
-            name="ShellExecInitFailed",
-            metrics={"elapsed_ms": elapsed_ms},
-            categories={
-                "shell_type": shell_type,
-                "error_type": type(error).__name__,
-            },
-            extra={"error": str(error)[:500]},
-        ))
+        self._emit(
+            ShellExecEvent(
+                name="ShellExecInitFailed",
+                metrics={"elapsed_ms": elapsed_ms},
+                categories={
+                    "shell_type": shell_type,
+                    "error_type": type(error).__name__,
+                },
+                extra={"error": str(error)[:500]},
+            )
+        )
 
     def record_spawn_success(
         self,
@@ -128,18 +131,20 @@ class ShellExecTelemetry:
         output_bytes: int,
         exit_code: int,
     ) -> None:
-        self._emit(ShellExecEvent(
-            name="ShellExecSpawnSuccess",
-            metrics={
-                "elapsed_ms": elapsed_ms,
-                "output_bytes": output_bytes,
-                "exit_code": exit_code,
-            },
-            categories={
-                "shell_type": shell_type,
-                "command_hash": self._hash_command(command),
-            },
-        ))
+        self._emit(
+            ShellExecEvent(
+                name="ShellExecSpawnSuccess",
+                metrics={
+                    "elapsed_ms": elapsed_ms,
+                    "output_bytes": output_bytes,
+                    "exit_code": exit_code,
+                },
+                categories={
+                    "shell_type": shell_type,
+                    "command_hash": self._hash_command(command),
+                },
+            )
+        )
 
     def record_spawn_failed(
         self,
@@ -148,16 +153,18 @@ class ShellExecTelemetry:
         elapsed_ms: float,
         error: str,
     ) -> None:
-        self._emit(ShellExecEvent(
-            name="ShellExecSpawnFailed",
-            metrics={"elapsed_ms": elapsed_ms},
-            categories={
-                "shell_type": shell_type,
-                "command_hash": self._hash_command(command),
-                "error_type": type(error).__name__,
-            },
-            extra={"error": str(error)[:500]},
-        ))
+        self._emit(
+            ShellExecEvent(
+                name="ShellExecSpawnFailed",
+                metrics={"elapsed_ms": elapsed_ms},
+                categories={
+                    "shell_type": shell_type,
+                    "command_hash": self._hash_command(command),
+                    "error_type": type(error).__name__,
+                },
+                extra={"error": str(error)[:500]},
+            )
+        )
 
     def record_state_snapshot_capture(
         self,
@@ -165,14 +172,16 @@ class ShellExecTelemetry:
         state_size_bytes: int,
         var_count: int,
     ) -> None:
-        self._emit(ShellExecEvent(
-            name="ShellExecStateSnapshotCapture",
-            metrics={
-                "state_size_bytes": state_size_bytes,
-                "var_count": var_count,
-            },
-            categories={"shell_type": shell_type},
-        ))
+        self._emit(
+            ShellExecEvent(
+                name="ShellExecStateSnapshotCapture",
+                metrics={
+                    "state_size_bytes": state_size_bytes,
+                    "var_count": var_count,
+                },
+                categories={"shell_type": shell_type},
+            )
+        )
 
     def record_state_snapshot_restore(
         self,
@@ -180,27 +189,31 @@ class ShellExecTelemetry:
         elapsed_ms: float,
         restored: bool,
     ) -> None:
-        self._emit(ShellExecEvent(
-            name="ShellExecStateSnapshotRestore",
-            metrics={"elapsed_ms": elapsed_ms},
-            categories={
-                "shell_type": shell_type,
-                "restored": str(restored),
-            },
-        ))
+        self._emit(
+            ShellExecEvent(
+                name="ShellExecStateSnapshotRestore",
+                metrics={"elapsed_ms": elapsed_ms},
+                categories={
+                    "shell_type": shell_type,
+                    "restored": str(restored),
+                },
+            )
+        )
 
     def record_safe_rm_blocked(
         self,
         shell_type: str,
         blocked_command: str,
     ) -> None:
-        self._emit(ShellExecEvent(
-            name="ShellExecSafeRmBlocked",
-            categories={
-                "shell_type": shell_type,
-                "blocked_command": blocked_command[:100],
-            },
-        ))
+        self._emit(
+            ShellExecEvent(
+                name="ShellExecSafeRmBlocked",
+                categories={
+                    "shell_type": shell_type,
+                    "blocked_command": blocked_command[:100],
+                },
+            )
+        )
 
     def record_output_dropped(
         self,
@@ -208,14 +221,16 @@ class ShellExecTelemetry:
         bytes_dropped: int,
         lines_dropped: int,
     ) -> None:
-        self._emit(ShellExecEvent(
-            name="ShellExecOutputDropped",
-            metrics={
-                "bytes_dropped": bytes_dropped,
-                "lines_dropped": lines_dropped,
-            },
-            categories={"shell_type": shell_type},
-        ))
+        self._emit(
+            ShellExecEvent(
+                name="ShellExecOutputDropped",
+                metrics={
+                    "bytes_dropped": bytes_dropped,
+                    "lines_dropped": lines_dropped,
+                },
+                categories={"shell_type": shell_type},
+            )
+        )
 
     def record_process_tree_cleanup(
         self,
@@ -224,15 +239,17 @@ class ShellExecTelemetry:
         elapsed_ms: float,
         success: bool,
     ) -> None:
-        self._emit(ShellExecEvent(
-            name="ShellExecProcessTreeCleanup",
-            metrics={"elapsed_ms": elapsed_ms},
-            categories={
-                "shell_type": shell_type,
-                "pid": str(pid),
-                "success": str(success),
-            },
-        ))
+        self._emit(
+            ShellExecEvent(
+                name="ShellExecProcessTreeCleanup",
+                metrics={"elapsed_ms": elapsed_ms},
+                categories={
+                    "shell_type": shell_type,
+                    "pid": str(pid),
+                    "success": str(success),
+                },
+            )
+        )
 
     @property
     def event_count(self) -> int:

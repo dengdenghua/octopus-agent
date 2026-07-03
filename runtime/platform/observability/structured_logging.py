@@ -56,16 +56,20 @@ from typing import Any
 
 # ── Correlation IDs via contextvars ────────────────────────────
 _session_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "octopus_session_id", default=None,
+    "octopus_session_id",
+    default=None,
 )
 _task_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "octopus_task_id", default=None,
+    "octopus_task_id",
+    default=None,
 )
 _arm_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "octopus_arm_id", default=None,
+    "octopus_arm_id",
+    default=None,
 )
 _request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "octopus_request_id", default=None,
+    "octopus_request_id",
+    default=None,
 )
 # Free-form key-value pairs additional callers can attach.
 # ContextVar default is ``None`` rather than a dict literal: a mutable
@@ -73,7 +77,8 @@ _request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 # so a stray ``extra.update(...)`` in one request would leak into the
 # next. Callers that need to write must ``set()`` a fresh dict first.
 _extra: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
-    "octopus_extra_ctx", default=None,
+    "octopus_extra_ctx",
+    default=None,
 )
 
 
@@ -140,13 +145,32 @@ def get_correlation_ids() -> dict[str, Any]:
 # when harvesting ``record.__dict__`` for the JSON output because
 # they'd bloat every event with duplicate info that ``asctime``,
 # ``levelname``, ``name`` etc. already express cleanly.
-_SKIP_ATTRS: frozenset[str] = frozenset({
-    "name", "msg", "args", "levelname", "levelno", "pathname",
-    "filename", "module", "exc_info", "exc_text", "stack_info",
-    "lineno", "funcName", "created", "msecs", "relativeCreated",
-    "thread", "threadName", "processName", "process", "asctime",
-    "taskName",  # py 3.12
-})
+_SKIP_ATTRS: frozenset[str] = frozenset(
+    {
+        "name",
+        "msg",
+        "args",
+        "levelname",
+        "levelno",
+        "pathname",
+        "filename",
+        "module",
+        "exc_info",
+        "exc_text",
+        "stack_info",
+        "lineno",
+        "funcName",
+        "created",
+        "msecs",
+        "relativeCreated",
+        "thread",
+        "threadName",
+        "processName",
+        "process",
+        "asctime",
+        "taskName",  # py 3.12
+    }
+)
 
 
 class StructuredFormatter(logging.Formatter):
@@ -180,6 +204,7 @@ class StructuredFormatter(logging.Formatter):
         if redact:
             try:
                 from runtime.platform.observability.redactor import Redactor
+
                 self._redactor = Redactor()
             except ImportError:  # noqa: BLE001
                 self._redactor = None
@@ -205,9 +230,7 @@ class StructuredFormatter(logging.Formatter):
 
         # Exception info.
         if record.exc_info:
-            payload["exc"] = "".join(
-                traceback.format_exception(*record.exc_info)
-            ).rstrip()
+            payload["exc"] = "".join(traceback.format_exception(*record.exc_info)).rstrip()
 
         if self._redactor is not None and isinstance(payload.get("msg"), str):
             payload["msg"] = self._redactor.redact(payload["msg"])

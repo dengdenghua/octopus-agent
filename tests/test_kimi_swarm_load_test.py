@@ -49,9 +49,7 @@ def test_kimi_swarm_load_test_writes_control_session_replay(tmp_path: Path) -> N
         item for item in replay["evidence"] if item["action"] == "kimi_swarm_load_step"
     ]
     assert len(step_evidence) == 12
-    assert replay["evidence"][-1]["detail"]["schema"] == (
-        "octopus.kimi_swarm_load_test_summary.v1"
-    )
+    assert replay["evidence"][-1]["detail"]["schema"] == ("octopus.kimi_swarm_load_test_summary.v1")
     assert replay["timeline"]["count"] >= 14
 
     latest = latest_kimi_swarm_load_test(store=store)
@@ -393,8 +391,7 @@ def test_kimi_swarm_load_test_retries_transient_provider_errors(
     retried = [
         item["detail"]
         for item in replay["evidence"]
-        if item.get("action") == "kimi_swarm_load_step"
-        and item["detail"]["attempt_count"] == 2
+        if item.get("action") == "kimi_swarm_load_step" and item["detail"]["attempt_count"] == 2
     ]
     assert len(retried) == 1
     assert retried[0]["attempts"][0]["retryable"] is True
@@ -550,9 +547,7 @@ def test_kimi_swarm_next_stage_blocks_after_provider_quota_limit(
     )
     assert recommendation["next_stage"] == "provider_canary"
     assert recommendation["can_run_recommended_payload"] is False
-    assert recommendation["latest_blocking_failure"]["category"] == (
-        "provider_quota_limit"
-    )
+    assert recommendation["latest_blocking_failure"]["category"] == ("provider_quota_limit")
     assert recommendation["quota_probe_payload"] == {
         "provider_id": "kimi_coding",
         "model": "kimi-for-coding",
@@ -646,9 +641,7 @@ def test_kimi_swarm_resume_plan_uses_failed_full_reference_steps_only(
 
     assert recommendation["next_stage"] == "provider_full_reference"
     assert recommendation["resume_plan"]["remaining_step_count"] == 5
-    assert recommendation["recommended_payload"]["stage_id"] == (
-        "provider_full_reference_resume"
-    )
+    assert recommendation["recommended_payload"]["stage_id"] == ("provider_full_reference_resume")
     assert recommendation["recommended_preflight"]["mode"] == "real_provider_resume"
     assert recommendation["recommended_preflight"]["selected_stage"]["step_count"] == 5
     assert recommendation["can_run_recommended_payload"] is False
@@ -1352,9 +1345,7 @@ def test_kimi_swarm_next_stage_advances_only_with_replay_backed_stage_proofs(
     after_canary = recommend_kimi_swarm_next_stage(store=store, provider_configured=True)
     assert after_canary["next_stage"] == "provider_ramp"
     assert after_canary["recommended_payload"]["max_provider_calls"] == 300
-    assert after_canary["stage_proofs"]["provider_canary"]["stage_id"] == (
-        "provider_canary"
-    )
+    assert after_canary["stage_proofs"]["provider_canary"]["stage_id"] == ("provider_canary")
 
     run_kimi_swarm_load_test(
         config=KimiSwarmLoadTestConfig(

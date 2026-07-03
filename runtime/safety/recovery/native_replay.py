@@ -83,7 +83,7 @@ def build_replay_cases(
     positive_limit: int = 20,
 ) -> list[ReplayCase]:
     cases: list[ReplayCase] = []
-    for idx, failure in enumerate((failures or [])[:max(0, int(failure_limit))]):
+    for idx, failure in enumerate((failures or [])[: max(0, int(failure_limit))]):
         goal = str(failure.get("goal") or "").strip()
         if not goal:
             continue
@@ -97,25 +97,23 @@ def build_replay_cases(
             or failure.get("failure_cluster")
             or f"failure-{idx + 1}"
         )
-        cases.append(ReplayCase(
-            case_id=case_id,
-            kind="failure",
-            task_input=goal,
-            expected_behavior=str(
-                failure.get("last_error")
-                or failure.get("failure_source")
-                or "address the observed failure",
-            ),
-            weight=max(1.0, cluster_count),
-            metadata=dict(failure),
-        ))
+        cases.append(
+            ReplayCase(
+                case_id=case_id,
+                kind="failure",
+                task_input=goal,
+                expected_behavior=str(
+                    failure.get("last_error")
+                    or failure.get("failure_source")
+                    or "address the observed failure",
+                ),
+                weight=max(1.0, cluster_count),
+                metadata=dict(failure),
+            )
+        )
 
-    positive_examples = (
-        positive_dataset.all_examples
-        if positive_dataset is not None
-        else []
-    )
-    for idx, example in enumerate(positive_examples[:max(0, int(positive_limit))]):
+    positive_examples = positive_dataset.all_examples if positive_dataset is not None else []
+    for idx, example in enumerate(positive_examples[: max(0, int(positive_limit))]):
         cases.append(_positive_case(example, idx))
     return cases
 
@@ -212,11 +210,7 @@ def _score_failure_case(prompt: str, case: ReplayCase) -> ReplayCaseResult:
         score += 0.25
         matched.append("corrective-action")
     score = round(min(1.0, score), 3)
-    reason = (
-        "covers failure signals"
-        if score >= 0.7
-        else "missing failure-specific guidance"
-    )
+    reason = "covers failure signals" if score >= 0.7 else "missing failure-specific guidance"
     return ReplayCaseResult(
         case_id=case.case_id,
         kind=case.kind,
@@ -320,10 +314,7 @@ def _weighted_average(results: list[ReplayCaseResult]) -> float:
     total_weight = sum(max(0.0, result.weight) for result in results)
     if total_weight <= 0:
         return 0.5
-    score = (
-        sum(result.score * max(0.0, result.weight) for result in results)
-        / total_weight
-    )
+    score = sum(result.score * max(0.0, result.weight) for result in results) / total_weight
     return round(score, 3)
 
 
@@ -333,14 +324,8 @@ def _candidate_reasons(
     results: list[ReplayCaseResult],
 ) -> list[str]:
     reasons: list[str] = []
-    low_failure = [
-        r.case_id for r in results
-        if r.kind == "failure" and r.score < 0.55
-    ]
-    low_positive = [
-        r.case_id for r in results
-        if r.kind == "positive" and r.score < 0.55
-    ]
+    low_failure = [r.case_id for r in results if r.kind == "failure" and r.score < 0.55]
+    low_positive = [r.case_id for r in results if r.kind == "positive" and r.score < 0.55]
     if low_failure:
         reasons.append(f"weak on failure cases: {', '.join(low_failure[:3])}")
     if low_positive:

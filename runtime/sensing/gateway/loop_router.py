@@ -122,9 +122,7 @@ def create_loop_router(
                 "available": resumed_from_available,
                 "parent_run_id": run.parent_run_id if resumed_from_available else None,
                 "origin_run_id": run.origin_run_id if resumed_from_available else None,
-                "checkpoint_id": (
-                    run.resume_checkpoint_id if resumed_from_available else None
-                ),
+                "checkpoint_id": (run.resume_checkpoint_id if resumed_from_available else None),
             },
             "replay": {
                 **replay,

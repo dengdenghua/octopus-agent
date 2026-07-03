@@ -111,9 +111,7 @@ def _get_review_queue(
     if review_queue is not None:
         return review_queue
     target = (
-        Path(review_queue_path)
-        if review_queue_path is not None
-        else _default_review_queue_path()
+        Path(review_queue_path) if review_queue_path is not None else _default_review_queue_path()
     )
     global _REVIEW_QUEUE_INSTANCE, _REVIEW_QUEUE_PATH
     with _REVIEW_QUEUE_LOCK:
@@ -193,7 +191,8 @@ def _queue_repeated_trust_denials(
         if occurrences < min_occurrences:
             continue
         examples = [
-            item for item in recent
+            item
+            for item in recent
             if isinstance(item, dict) and str(item.get("tool_name") or "") == str(tool_name)
         ]
         latest = examples[-1] if examples else {}
@@ -752,7 +751,8 @@ def create_agent_trace_router(
         )
         draft = next(
             (
-                item for item in report.get("drafts") or []
+                item
+                for item in report.get("drafts") or []
                 if isinstance(item, dict) and str(item.get("draft_id") or "") == draft_id
             ),
             None,

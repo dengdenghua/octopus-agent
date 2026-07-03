@@ -24,6 +24,7 @@ admin / audit callers that genuinely need the override invoke the skill
 handlers (or ``check_path`` / ``check_url``) **directly**, never through the
 model tool-call path. So every model→handler boundary drops them first.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -32,10 +33,12 @@ from typing import Any
 # in model-supplied tool input. Keep in sync with the rationale above and
 # with ``tool_spec_builder._INTERNAL_PARAMS`` (which only governs schema
 # *visibility*, not runtime enforcement).
-MODEL_FORBIDDEN_ARGS: frozenset[str] = frozenset({
-    "allow_sensitive",
-    "allow_private",
-})
+MODEL_FORBIDDEN_ARGS: frozenset[str] = frozenset(
+    {
+        "allow_sensitive",
+        "allow_private",
+    }
+)
 
 
 def strip_model_controlled_overrides(

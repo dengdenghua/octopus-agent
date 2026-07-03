@@ -24,6 +24,7 @@ Layout produced:
     │   └── state.jsonc
     └── sessions/
 """
+
 from __future__ import annotations
 
 import json
@@ -100,8 +101,15 @@ SPECS = [
         ).strip(),
         "arms": ["web_read", "desktop_operator"],
         "affinity": [
-            "assistant", "general", "help", "question", "summary",
-            "desktop", "screenshot", "click", "keyboard",
+            "assistant",
+            "general",
+            "help",
+            "question",
+            "summary",
+            "desktop",
+            "screenshot",
+            "click",
+            "keyboard",
         ],
         "template_id": "octopus",
     },
@@ -110,10 +118,7 @@ SPECS = [
         "name": "Coder",
         "icon": "💻",
         "did": "DID-DB9653-765527",
-        "description": (
-            "Coding-focused agent — writes, debugs, refactors, and "
-            "reviews code."
-        ),
+        "description": ("Coding-focused agent — writes, debugs, refactors, and reviews code."),
         "soul": dedent(
             """
             # Soul
@@ -227,8 +232,13 @@ SPECS = [
         ).strip(),
         "arms": ["web_read", "browser_read", "fs_writer"],
         "affinity": [
-            "ecommerce", "marketing", "copywriting", "content",
-            "social", "campaign", "product",
+            "ecommerce",
+            "marketing",
+            "copywriting",
+            "content",
+            "social",
+            "campaign",
+            "product",
         ],
         "template_id": "vibe-selling",
     },
@@ -293,8 +303,14 @@ SPECS = [
         ).strip(),
         "arms": ["web_read", "browser_read"],
         "affinity": [
-            "ecommerce", "operations", "analytics", "strategy",
-            "supply", "traffic", "cro", "fulfillment",
+            "ecommerce",
+            "operations",
+            "analytics",
+            "strategy",
+            "supply",
+            "traffic",
+            "cro",
+            "fulfillment",
         ],
         "template_id": "ecommerce-mind",
     },
@@ -363,8 +379,10 @@ def build_agent(spec: dict) -> None:
     core = agent_dir / "agent-core"
     _write_if_missing(core / "SOUL.md", spec["soul"] + "\n")
     _write_if_missing(core / "IDENTITY.md", spec["identity"] + "\n")
-    _write_if_missing(core / "USER.md", dedent(
-        """
+    _write_if_missing(
+        core / "USER.md",
+        dedent(
+            """
         # User Profile
 
         <!-- This file holds what the agent learns about the user over
@@ -381,9 +399,12 @@ def build_agent(spec: dict) -> None:
 
         - (none recorded yet)
         """
-    ).lstrip())
-    _write_if_missing(core / "MEMORY.md", dedent(
-        """
+        ).lstrip(),
+    )
+    _write_if_missing(
+        core / "MEMORY.md",
+        dedent(
+            """
         # Long-term Memory
 
         <!-- Agent-writable. Persistent across sessions. Use for
@@ -392,16 +413,20 @@ def build_agent(spec: dict) -> None:
 
         _No memories yet._
         """
-    ).lstrip())
-    _write_if_missing(core / "HEARTBEAT.md", dedent(
-        """
+        ).lstrip(),
+    )
+    _write_if_missing(
+        core / "HEARTBEAT.md",
+        dedent(
+            """
         # Heartbeat Tasks
 
         <!-- Periodic things the agent does automatically, e.g.
              "every 24h, re-check which dependencies have updates".
              Empty by default. -->
         """
-    ).lstrip())
+        ).lstrip(),
+    )
 
     # Copy shared AGENTS.md + BOOTSTRAP.md into each agent (so they can
     # override if they want). Content is the same for now.
@@ -410,8 +435,10 @@ def build_agent(spec: dict) -> None:
     _write_if_missing(core / "AGENTS.md", shared_agents)
     _write_if_missing(core / "BOOTSTRAP.md", shared_bootstrap)
 
-    _write_always(core / "TOOLS.md", dedent(
-        """
+    _write_always(
+        core / "TOOLS.md",
+        dedent(
+            """
         # Available Tools
 
         <!-- Auto-injected by the runtime at agent load — do not edit manually.
@@ -419,7 +446,8 @@ def build_agent(spec: dict) -> None:
 
         <!-- TOOL_LIST -->
         """
-    ).lstrip())
+        ).lstrip(),
+    )
 
     tool_registry = {
         "arms": spec["arms"],
@@ -447,8 +475,7 @@ def build_agent(spec: dict) -> None:
 
     _write_if_missing(
         agent_dir / "runtime" / "state.jsonc",
-        "// Live runtime state · written by the agent during a session.\n"
-        "{}\n",
+        "// Live runtime state · written by the agent during a session.\n{}\n",
     )
 
 

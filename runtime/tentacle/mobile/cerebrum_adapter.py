@@ -74,14 +74,19 @@ class CerebrumDecisionAdapter:
         except Exception as e:
             logger.warning(
                 "Cerebrum plan failed for task=%r device=%s: %s",
-                task, device.tentacle_id, e,
+                task,
+                device.tentacle_id,
+                e,
             )
             # 降级：返回空列表，coordinator 会返回友好提示
             return []
 
         logger.info(
             "Cerebrum planned task=%r strategy=%s nodes=%d edges=%d",
-            task, graph.strategy, len(graph.nodes), len(graph.edges),
+            task,
+            graph.strategy,
+            len(graph.nodes),
+            len(graph.edges),
         )
 
         # 3. 拓扑排序（如果 edges 存在）

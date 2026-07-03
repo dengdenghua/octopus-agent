@@ -9,6 +9,7 @@ sites keep working unchanged.
 
 ``MockModelRouter`` stays here because it depends on instrumentation.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -53,7 +54,6 @@ __all__ = [
 
 
 class MockModelRouter(ModelRouter):
-
     def __init__(
         self,
         response: str | None = None,
@@ -131,8 +131,7 @@ class UnconfiguredModelRouter(ModelRouter):
     """
 
     _MESSAGE = (
-        "no LLM model configured — add one to data/custom_models.json "
-        "(or set ANTHROPIC_API_KEY)"
+        "no LLM model configured — add one to data/custom_models.json (or set ANTHROPIC_API_KEY)"
     )
 
     def call(self, request: ModelRequest) -> ModelResponse:

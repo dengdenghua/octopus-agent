@@ -1,4 +1,5 @@
 """Implementation note."""
+
 # ruff: noqa: SIM102
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from pathlib import Path
 
 # Implementation note.
 
+
 @dataclass
 class LintIssue:
     rule_id: str
@@ -22,12 +24,15 @@ class LintIssue:
     message: str
 
     def format(self) -> str:
-        return f"{self.path}:{self.line}:{self.col}: {self.severity} [{self.rule_id}] {self.message}"
+        return (
+            f"{self.path}:{self.line}:{self.col}: {self.severity} [{self.rule_id}] {self.message}"
+        )
 
 
 @dataclass
 class LintContext:
     """Implementation note."""
+
     path: Path
     tree: ast.AST
     source: str
@@ -43,6 +48,7 @@ class LintContext:
 
 
 # Implementation note.
+
 
 class Rule:
     rule_id: str = ""
@@ -64,12 +70,14 @@ class Rule:
 
 # ─── LINT-01 · NO_BYPASS_IMMUNITY ─────────────────────────
 
+
 class NoBypassImmunityRule(Rule):
     """Implementation note."""
+
     rule_id = "LINT-01"
 
-    BITE_PATTERNS = {"bite"}              # Beak.bite() / beak.bite()
-    CHECK_PATTERNS = {"check"}            # immunity.check()
+    BITE_PATTERNS = {"bite"}  # Beak.bite() / beak.bite()
+    CHECK_PATTERNS = {"check"}  # immunity.check()
 
     def check(self, ctx: LintContext) -> Iterable[LintIssue]:
         for func in _iter_functions(ctx.tree):
@@ -86,15 +94,18 @@ class NoBypassImmunityRule(Rule):
             if bites and not checks:
                 for bite in bites:
                     yield self.issue(
-                        ctx, bite,
-                        f"function '{func.name}' calls beak.bite() but no immunity.check() reaches it"
+                        ctx,
+                        bite,
+                        f"function '{func.name}' calls beak.bite() but no immunity.check() reaches it",
                     )
 
 
 # ─── LINT-02 · NO_MAGIC_ORGAN_COUNT ───────────────────────
 
+
 class NoMagicOrganCountRule(Rule):
     """Implementation note."""
+
     rule_id = "LINT-02"
     severity = "warning"
 
@@ -122,15 +133,30 @@ class NoMagicOrganCountRule(Rule):
 
 # ─── LINT-03 · BIO_NAME_IN_CODE ──────────────────────────
 
+
 class BioNameInCodeRule(Rule):
     """Implementation note."""
+
     rule_id = "LINT-03"
 
     BIO_NAMES = {
-        "Cerebrum", "Ganglia", "Arm", "Sucker", "Beak", "Mantle",
-        "Chromatophore", "Chromatophores", "Siphon", "Hemolymph",
-        "Regeneration", "Genome", "Camouflage", "Ink", "Skin",
-        "SpinalCord", "Immunity",
+        "Cerebrum",
+        "Ganglia",
+        "Arm",
+        "Sucker",
+        "Beak",
+        "Mantle",
+        "Chromatophore",
+        "Chromatophores",
+        "Siphon",
+        "Hemolymph",
+        "Regeneration",
+        "Genome",
+        "Camouflage",
+        "Ink",
+        "Skin",
+        "SpinalCord",
+        "Immunity",
     }
 
     def check(self, ctx: LintContext) -> Iterable[LintIssue]:
@@ -139,8 +165,9 @@ class BioNameInCodeRule(Rule):
             if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
                 if node.name in self.BIO_NAMES:
                     yield self.issue(
-                        ctx, node,
-                        f"'{node.name}' is a biological organ name; use engineering name per NAMING.md"
+                        ctx,
+                        node,
+                        f"'{node.name}' is a biological organ name; use engineering name per NAMING.md",
                     )
             # Implementation note.
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -148,21 +175,29 @@ class BioNameInCodeRule(Rule):
                 for bio in self.BIO_NAMES:
                     if lower.startswith(bio.lower() + "_"):
                         yield self.issue(
-                            ctx, node,
-                            f"function '{node.name}' uses bio prefix; rename to engineering name"
+                            ctx,
+                            node,
+                            f"function '{node.name}' uses bio prefix; rename to engineering name",
                         )
                         break
 
 
 # ─── LINT-04 · NO_RAW_LLM_CALL ────────────────────────────
 
+
 class NoRawLLMCallRule(Rule):
     """Implementation note."""
+
     rule_id = "LINT-04"
 
     FORBIDDEN_MODULES = {
-        "anthropic", "openai", "google.genai", "google.generativeai",
-        "cohere", "mistralai", "together",
+        "anthropic",
+        "openai",
+        "google.genai",
+        "google.generativeai",
+        "cohere",
+        "mistralai",
+        "together",
     }
 
     def check(self, ctx: LintContext) -> Iterable[LintIssue]:
@@ -183,23 +218,27 @@ class NoRawLLMCallRule(Rule):
                 for alias in node.names:
                     if alias.name in self.FORBIDDEN_MODULES:
                         yield self.issue(
-                            ctx, node,
-                            f"raw import of '{alias.name}'; use eyes.ModelRouter instead"
+                            ctx, node, f"raw import of '{alias.name}'; use eyes.ModelRouter instead"
                         )
-            elif isinstance(node, ast.ImportFrom) and node.module and any(
-                node.module == m or node.module.startswith(m + ".")
-                for m in self.FORBIDDEN_MODULES
+            elif (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and any(
+                    node.module == m or node.module.startswith(m + ".")
+                    for m in self.FORBIDDEN_MODULES
+                )
             ):
                 yield self.issue(
-                    ctx, node,
-                    f"raw import from '{node.module}'; use eyes.ModelRouter instead"
+                    ctx, node, f"raw import from '{node.module}'; use eyes.ModelRouter instead"
                 )
 
 
 # ─── LINT-05 · TASK_NEEDS_BUDGET ──────────────────────────
 
+
 class TaskNeedsBudgetRule(Rule):
     """Implementation note."""
+
     rule_id = "LINT-05"
 
     REQUIRED_KWARGS = {"max_tokens", "max_cost_usd"}
@@ -238,15 +277,16 @@ class TaskNeedsBudgetRule(Rule):
             missing = self.REQUIRED_KWARGS - kwargs
             if missing:
                 yield self.issue(
-                    ctx, node,
-                    f"Task() missing required budget kwargs: {sorted(missing)}"
+                    ctx, node, f"Task() missing required budget kwargs: {sorted(missing)}"
                 )
 
 
 # ─── LINT-09 · REFLEX_NO_GENERATE ─────────────────────────
 
+
 class ReflexNoGenerateRule(Rule):
     """Implementation note."""
+
     rule_id = "LINT-09"
 
     GENERATE_METHODS = {"generate", "complete", "create_message", "chat"}
@@ -267,15 +307,18 @@ class ReflexNoGenerateRule(Rule):
                 obj = parts[-2]
                 if method in self.GENERATE_METHODS and any(h in obj for h in self.LLM_LIKE_HINTS):
                     yield self.issue(
-                        ctx, node,
-                        f"reflex layer must not call LLM: '{name}' — use rule/cache/edge_slm only"
+                        ctx,
+                        node,
+                        f"reflex layer must not call LLM: '{name}' — use rule/cache/edge_slm only",
                     )
 
 
 # ─── LINT-10 · CRDT_NOT_LWW ───────────────────────────────
 
+
 class CrdtNotLwwRule(Rule):
     """Implementation note."""
+
     rule_id = "LINT-10"
 
     def check(self, ctx: LintContext) -> Iterable[LintIssue]:
@@ -286,18 +329,21 @@ class CrdtNotLwwRule(Rule):
                 for target in node.targets:
                     if _is_dna_field_assignment(target):
                         yield self.issue(
-                            ctx, node,
-                            "direct assignment on genome.dna.* field; use .set() / .merge() CRDT methods"
+                            ctx,
+                            node,
+                            "direct assignment on genome.dna.* field; use .set() / .merge() CRDT methods",
                         )
             elif isinstance(node, ast.AugAssign):
                 if _is_dna_field_assignment(node.target):
                     yield self.issue(
-                        ctx, node,
-                        "aug-assignment on genome.dna.* field; use CRDT operators instead"
+                        ctx,
+                        node,
+                        "aug-assignment on genome.dna.* field; use CRDT operators instead",
                     )
 
 
 # Implementation note.
+
 
 def _iter_functions(tree: ast.AST):
     for node in ast.walk(tree):
@@ -420,9 +466,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.json:
         import json
+
         payload = [
-            {"rule": i.rule_id, "severity": i.severity, "file": str(i.path),
-             "line": i.line, "col": i.col, "message": i.message}
+            {
+                "rule": i.rule_id,
+                "severity": i.severity,
+                "file": str(i.path),
+                "line": i.line,
+                "col": i.col,
+                "message": i.message,
+            }
             for i in all_issues
         ]
         print(json.dumps(payload, indent=2))

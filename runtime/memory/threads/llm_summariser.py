@@ -22,6 +22,7 @@ Design rules that differ from the mechanical default:
 Used as a ``CompactionPolicy.custom_summariser`` by the realtime
 runtime. See the wiring in ``CerebrumRuntime.start_turn``.
 """
+
 from __future__ import annotations
 
 import logging

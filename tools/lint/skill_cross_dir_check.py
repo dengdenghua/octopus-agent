@@ -30,6 +30,7 @@ Run::
     python tools/lint/skill_cross_dir_check.py --strict   # exit 1 on growth
     python tools/lint/skill_cross_dir_check.py --update-baseline
 """
+
 from __future__ import annotations
 
 import argparse
@@ -52,11 +53,7 @@ def _skill_names_in(root: Path) -> set[str]:
     """Names of subdirs containing SKILL.md."""
     if not root.is_dir():
         return set()
-    return {
-        p.name
-        for p in root.iterdir()
-        if p.is_dir() and (p / _SKILL_MD).is_file()
-    }
+    return {p.name for p in root.iterdir() if p.is_dir() and (p / _SKILL_MD).is_file()}
 
 
 def find_duplicates() -> set[str]:

@@ -27,16 +27,18 @@ from runtime.memory.cowork.ids import (
 _MAX_JSON_BYTES = 512 * 1024
 _MAX_LIST_ITEMS = 512
 _TASK_KINDS = frozenset({"async", "team", "project"})
-_TASK_STATUSES = frozenset({
-    "pending",
-    "ready",
-    "running",
-    "blocked",
-    "done",
-    "failed",
-    "cancelled",
-    "rejected",
-})
+_TASK_STATUSES = frozenset(
+    {
+        "pending",
+        "ready",
+        "running",
+        "blocked",
+        "done",
+        "failed",
+        "cancelled",
+        "rejected",
+    }
+)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS collaboration_rooms (
@@ -146,7 +148,11 @@ def _normalize_task_payload(
     payload["room_id"] = room_id
     kind = str(payload.get("kind") or "").strip().lower()
     if not kind:
-        source = str((payload.get("metadata") or {}).get("source") if isinstance(payload.get("metadata"), dict) else "")
+        source = str(
+            (payload.get("metadata") or {}).get("source")
+            if isinstance(payload.get("metadata"), dict)
+            else ""
+        )
         kind = "project" if source.startswith("projectos") else "team"
     payload["kind"] = kind if kind in _TASK_KINDS else "team"
     status = str(payload.get("status") or "pending").strip().lower()
@@ -155,7 +161,8 @@ def _normalize_task_payload(
         payload["title"] = require_message_text(payload.get("title"), label="task title")
     if "description" in payload and str(payload.get("description") or "").strip():
         payload["description"] = require_message_text(
-            payload.get("description"), label="task description",
+            payload.get("description"),
+            label="task description",
         )
     elif "description" in payload:
         payload["description"] = ""
@@ -276,7 +283,13 @@ class CollaborationStore:
                 "VALUES (?, ?, ?, ?, ?) "
                 "ON CONFLICT(session_id) DO UPDATE SET "
                 "room_id = excluded.room_id, room_json = excluded.room_json, updated_at = excluded.updated_at",
-                (session_id, room_id, _dump(payload, label="room"), created_at, payload["updated_at"]),
+                (
+                    session_id,
+                    room_id,
+                    _dump(payload, label="room"),
+                    created_at,
+                    payload["updated_at"],
+                ),
             )
         return payload
 
@@ -323,7 +336,9 @@ class CollaborationStore:
     def upsert_task(self, session_id: str, task: dict[str, Any]) -> dict[str, Any]:
         session_id = require_cowork_id(session_id, label="session_id")
         payload = dict(task or {})
-        task_id = require_cowork_id(payload.get("id") or payload.get("task_id") or "", label="task_id")
+        task_id = require_cowork_id(
+            payload.get("id") or payload.get("task_id") or "", label="task_id"
+        )
         room_id = require_cowork_id(payload.get("room_id") or "", label="room_id")
         payload = _normalize_task_payload(
             payload,
@@ -344,7 +359,15 @@ class CollaborationStore:
                 "session_id = excluded.session_id, room_id = excluded.room_id, "
                 "status = excluded.status, task_json = excluded.task_json, "
                 "updated_at = excluded.updated_at",
-                (task_id, session_id, room_id, status, _dump(payload, label="task"), created_at, updated_at),
+                (
+                    task_id,
+                    session_id,
+                    room_id,
+                    status,
+                    _dump(payload, label="task"),
+                    created_at,
+                    updated_at,
+                ),
             )
         return payload
 

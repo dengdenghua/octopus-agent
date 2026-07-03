@@ -64,23 +64,27 @@ def test_event_adapter_maps_text_delta() -> None:
 def test_event_adapter_maps_tool_start_and_end() -> None:
     from runtime.sensing.gateway.anthropic_compat.event_adapter import adapt_react_event
 
-    start = adapt_react_event({
-        "kind": "tool_start",
-        "tool_name": "exec_shell",
-        "tool_call_id": "tc_1",
-        "input_preview": {"command": "ls"},
-    })
+    start = adapt_react_event(
+        {
+            "kind": "tool_start",
+            "tool_name": "exec_shell",
+            "tool_call_id": "tc_1",
+            "input_preview": {"command": "ls"},
+        }
+    )
     assert len(start) == 1
     assert start[0].type == "agent.tool_use"
     assert start[0].tool_name == "exec_shell"
     assert start[0].tool_use_id == "tc_1"
 
-    end = adapt_react_event({
-        "kind": "tool_end",
-        "tool_call_id": "tc_1",
-        "status": "success",
-        "output_preview": "file1.txt\n",
-    })
+    end = adapt_react_event(
+        {
+            "kind": "tool_end",
+            "tool_call_id": "tc_1",
+            "status": "success",
+            "output_preview": "file1.txt\n",
+        }
+    )
     assert len(end) == 1
     assert end[0].type == "agent.tool_result"
     assert end[0].tool_use_id == "tc_1"
@@ -89,12 +93,14 @@ def test_event_adapter_maps_tool_start_and_end() -> None:
 def test_event_adapter_approval_emits_requires_action() -> None:
     from runtime.sensing.gateway.anthropic_compat.event_adapter import adapt_react_event
 
-    out = adapt_react_event({
-        "kind": "tool_approval_request",
-        "tool_name": "delete_file",
-        "tool_call_id": "tc_2",
-        "args_preview": "path=/etc/passwd",
-    })
+    out = adapt_react_event(
+        {
+            "kind": "tool_approval_request",
+            "tool_name": "delete_file",
+            "tool_call_id": "tc_2",
+            "args_preview": "path=/etc/passwd",
+        }
+    )
     # custom_tool_use + session.status_idle with requires_action
     assert len(out) == 2
     assert out[0].type == "agent.custom_tool_use"
@@ -153,8 +159,8 @@ def test_sse_emitter_interrupt_survives_late_register() -> None:
     from runtime.sensing.gateway.anthropic_compat.router import _SseEmitter
 
     em = _SseEmitter(None, "sesn_x")
-    em.request_interrupt()         # "*" arrives first
-    em.register_turn("turn_2")     # turn registers afterwards
+    em.request_interrupt()  # "*" arrives first
+    em.register_turn("turn_2")  # turn registers afterwards
     assert em.is_turn_interrupted("turn_2") is True
 
 
@@ -191,9 +197,13 @@ def test_sse_emitter_approval_resolves_allow_and_deny() -> None:
         mgr = SessionManager()
         state = await mgr.create(title="t")
         em = _SseEmitter(mgr, state.session_id)
-        task = asyncio.create_task(em.request_approval(
-            "req", {"itemId": "tc_1", "tool": "exec_shell"}, timeout=5.0,
-        ))
+        task = asyncio.create_task(
+            em.request_approval(
+                "req",
+                {"itemId": "tc_1", "tool": "exec_shell"},
+                timeout=5.0,
+            )
+        )
         await asyncio.sleep(0.02)  # let request_approval register the future
         resolved = em.resolve_approval("tc_1", allow=allow)
         return resolved, await task
@@ -221,7 +231,9 @@ def test_sse_emitter_approval_fails_closed_on_timeout() -> None:
         em = _SseEmitter(mgr, state.session_id)
         # No confirmation arrives → must DENY (old stub auto-accepted).
         return await em.request_approval(
-            "req", {"itemId": "tc_x", "tool": "rm"}, timeout=0.05,
+            "req",
+            {"itemId": "tc_x", "tool": "rm"},
+            timeout=0.05,
         )
 
     assert asyncio.run(_run()) == {"action": "decline"}

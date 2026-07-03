@@ -40,10 +40,7 @@ _PRESETS: dict[str, dict[str, Any]] = {
 
 def apply_preset(name: str, base: AgentConfig | None = None) -> AgentConfig:
     if name not in _PRESETS:
-        raise ValueError(
-            f"unknown preset {name!r} · choose from: "
-            + ", ".join(sorted(_PRESETS))
-        )
+        raise ValueError(f"unknown preset {name!r} · choose from: " + ", ".join(sorted(_PRESETS)))
     overrides = _PRESETS[name]
     if base is None:
         return AgentConfig(**overrides)

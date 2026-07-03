@@ -1,4 +1,5 @@
 """Desktop semantic grounding for the vision loop — incl. Windows UIA."""
+
 from __future__ import annotations
 
 import sys
@@ -15,38 +16,64 @@ def test_format_uia_grounding_emits_actionable_controls() -> None:
         "ok": True,
         "tree": {"name": "Notepad"},
         "nodes": [
-            {"control_type": "Button", "name": "Save",
-             "center": {"x": 100, "y": 50}, "enabled": True, "offscreen": False},
-            {"control_type": "Edit", "name": "",
-             "center": {"x": 200, "y": 150}, "enabled": True, "offscreen": False},
-            {"control_type": "Text", "name": "a label",  # not actionable
-             "center": {"x": 10, "y": 10}, "enabled": True},
-            {"control_type": "Button", "name": "Hidden",  # offscreen
-             "center": {"x": 1, "y": 1}, "enabled": True, "offscreen": True},
-            {"control_type": "Button", "name": "Disabled",  # disabled
-             "center": {"x": 2, "y": 2}, "enabled": False},
-            {"control_type": "Button", "name": "NoCenter",  # no center
-             "center": None, "enabled": True},
+            {
+                "control_type": "Button",
+                "name": "Save",
+                "center": {"x": 100, "y": 50},
+                "enabled": True,
+                "offscreen": False,
+            },
+            {
+                "control_type": "Edit",
+                "name": "",
+                "center": {"x": 200, "y": 150},
+                "enabled": True,
+                "offscreen": False,
+            },
+            {
+                "control_type": "Text",
+                "name": "a label",  # not actionable
+                "center": {"x": 10, "y": 10},
+                "enabled": True,
+            },
+            {
+                "control_type": "Button",
+                "name": "Hidden",  # offscreen
+                "center": {"x": 1, "y": 1},
+                "enabled": True,
+                "offscreen": True,
+            },
+            {
+                "control_type": "Button",
+                "name": "Disabled",  # disabled
+                "center": {"x": 2, "y": 2},
+                "enabled": False,
+            },
+            {
+                "control_type": "Button",
+                "name": "NoCenter",  # no center
+                "center": None,
+                "enabled": True,
+            },
         ],
     }
     out = _format_uia_grounding(tree, max_elements=25)
     assert "Notepad" in out
     assert "Button 'Save' @ (100,50)" in out
     assert "Edit '' @ (200,150)" in out
-    assert "Text" not in out       # filtered: not actionable
-    assert "Hidden" not in out     # filtered: offscreen
-    assert "Disabled" not in out   # filtered: disabled
-    assert "NoCenter" not in out    # filtered: no resolvable center
+    assert "Text" not in out  # filtered: not actionable
+    assert "Hidden" not in out  # filtered: offscreen
+    assert "Disabled" not in out  # filtered: disabled
+    assert "NoCenter" not in out  # filtered: no resolvable center
 
 
 def test_format_uia_grounding_caps_elements() -> None:
     nodes = [
-        {"control_type": "Button", "name": f"b{i}",
-         "center": {"x": i, "y": i}, "enabled": True}
+        {"control_type": "Button", "name": f"b{i}", "center": {"x": i, "y": i}, "enabled": True}
         for i in range(50)
     ]
     out = _format_uia_grounding({"ok": True, "tree": {"name": "X"}, "nodes": nodes}, 5)
-    assert out.count("Button") == 5     # capped at max_elements
+    assert out.count("Button") == 5  # capped at max_elements
     assert "b4" in out and "b5" not in out
 
 

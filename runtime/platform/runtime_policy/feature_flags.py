@@ -82,9 +82,7 @@ class FlagSpec:
 
     @property
     def primary_env(self) -> str:
-        return self.env or (
-            "OCTOPUS_FF_" + self.name.upper().replace(".", "_")
-        )
+        return self.env or ("OCTOPUS_FF_" + self.name.upper().replace(".", "_"))
 
 
 def _coerce_bool(raw: str) -> bool:
@@ -153,9 +151,11 @@ def _resolve(
 
     for name, spec in specs.items():
         coerce = spec.coerce or (
-            _coerce_bool if isinstance(spec.default, bool) else
-            _coerce_int if isinstance(spec.default, int) else
-            _coerce_str
+            _coerce_bool
+            if isinstance(spec.default, bool)
+            else _coerce_int
+            if isinstance(spec.default, int)
+            else _coerce_str
         )
 
         raw = os.environ.get(spec.primary_env)
@@ -310,12 +310,10 @@ _BUILTIN: list[FlagSpec] = [
         default=True,
         legacy_env=("OCTOPUS_INVARIANTS",),
         description=(
-            "Enforce the 34-rule constitution during execution. "
-            "Disable only for debugging."
+            "Enforce the 34-rule constitution during execution. Disable only for debugging."
         ),
         coerce=lambda raw: raw.strip().lower() != "off",
     ),
-
     # ─── Self-evolution ────────────────────────────────────
     FlagSpec(
         name="evolution.auto_trigger",
@@ -338,13 +336,9 @@ _BUILTIN: list[FlagSpec] = [
         name="regeneration.gepa_auto_apply",
         default=False,
         legacy_env=("OCTOPUS_GEPA_AUTO_APPLY",),
-        description=(
-            "Automatically apply GEPA-proposed prompt variants "
-            "without human review."
-        ),
+        description=("Automatically apply GEPA-proposed prompt variants without human review."),
         experimental=True,
     ),
-
     # ─── Camouflage · prompt evolution ─────────────────────
     FlagSpec(
         name="camouflage.enabled",
@@ -359,9 +353,7 @@ _BUILTIN: list[FlagSpec] = [
         legacy_env=("OCTOPUS_CAMOUFLAGE_INTERVAL_SEC",),
         description="Tick interval for the camouflage scheduler.",
     ),
-
     # ─── Intelligence (daily brief) ────────────────────────
-
     # ─── Session store ─────────────────────────────────────
     FlagSpec(
         name="sessions.dated_layout",
@@ -376,7 +368,6 @@ _BUILTIN: list[FlagSpec] = [
         default=True,
         description="Maintain session_index.jsonl for fast thread listing.",
     ),
-
     # ─── Experimental surfaces ────────────────────────────
     FlagSpec(
         name="ui.ambient_suggestions",

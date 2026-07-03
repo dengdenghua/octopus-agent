@@ -245,9 +245,7 @@ def _search_room_tasks(
         description = _as_text(data.get("description"))
         status = _as_text(data.get("status"))
         assignees = " ".join(
-            _as_text(a.get("ref"))
-            for a in (data.get("assignees") or [])
-            if isinstance(a, dict)
+            _as_text(a.get("ref")) for a in (data.get("assignees") or []) if isinstance(a, dict)
         )
         sop_template = _as_text(data.get("sop_template"))
         score = (

@@ -14,9 +14,7 @@ def _client(auth_token: str | None):
     )
 
     app = FastAPI()
-    app.include_router(
-        create_tentacle_join_router(ws_port=8765, auth_token=auth_token)
-    )
+    app.include_router(create_tentacle_join_router(ws_port=8765, auth_token=auth_token))
     return TestClient(app)
 
 

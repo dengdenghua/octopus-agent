@@ -41,11 +41,11 @@ def test_worker_reuses_one_page_across_submits():
     try:
         p1 = w.submit(lambda page: page)
         p2 = w.submit(lambda page: page)
-        assert p1 is p2              # SAME page across calls (persistence)
+        assert p1 is p2  # SAME page across calls (persistence)
         assert state["created"] == 1  # launched exactly once, lazily
     finally:
         w.close()
-    assert state["closed"] == 1       # closed on the owner thread
+    assert state["closed"] == 1  # closed on the owner thread
     assert w.closed is True
 
 
@@ -56,7 +56,7 @@ def test_worker_lazy_no_page_until_first_submit():
         assert state["created"] == 0  # constructing the worker does NOT launch
     finally:
         w.close()
-    assert state["created"] == 0      # never used → never launched → no close
+    assert state["created"] == 0  # never used → never launched → no close
 
 
 def test_worker_op_exception_propagates_to_caller():
@@ -97,7 +97,7 @@ def test_op_timeout_retires_worker():
             w.submit(lambda page: gate.wait(5))  # blocks worker past the timeout
         assert w.closed is True
     finally:
-        gate.set()   # release the worker thread so it can tear down
+        gate.set()  # release the worker thread so it can tear down
         w.close()
 
 
@@ -121,7 +121,9 @@ def test_pool_same_key_same_worker():
 def test_pool_idle_reaping_closes_workers():
     factory, state = _counting_factory()
     pool = BrowserSessionPool(
-        page_factory=factory, idle_ttl_s=0.05, reap_interval_s=0.05,
+        page_factory=factory,
+        idle_ttl_s=0.05,
+        reap_interval_s=0.05,
     )
     try:
         w = pool.get_or_create("sess")
@@ -141,7 +143,10 @@ def test_pool_idle_reaping_closes_workers():
 def test_pool_cap_evicts_when_full():
     factory, _ = _counting_factory()
     pool = BrowserSessionPool(
-        page_factory=factory, max_sessions=2, idle_ttl_s=999, reap_interval_s=999,
+        page_factory=factory,
+        max_sessions=2,
+        idle_ttl_s=999,
+        reap_interval_s=999,
     )
     try:
         pool.get_or_create("a")

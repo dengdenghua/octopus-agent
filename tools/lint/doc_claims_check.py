@@ -18,6 +18,7 @@ Run::
     python tools/lint/doc_claims_check.py           # human-readable report
     python tools/lint/doc_claims_check.py --strict  # exit 1 on drift
 """
+
 from __future__ import annotations
 
 import argparse
@@ -53,11 +54,7 @@ def truth_protocols() -> int:
     proto = ROOT / "protocols"
     if not proto.exists():
         return -1
-    return sum(
-        1
-        for p in proto.glob("*.md")
-        if p.name.lower() != "readme.md"
-    )
+    return sum(1 for p in proto.glob("*.md") if p.name.lower() != "readme.md")
 
 
 TRUTH = {
@@ -107,14 +104,10 @@ def scan_docs() -> list[tuple[Path, int, str, int, int]]:
                         is_plus_form = "+" in match.group(0)
                         if is_plus_form:
                             if truth < claimed or truth >= claimed + 5:
-                                drift.append(
-                                    (path, lineno, line.strip(), claimed, truth)
-                                )
+                                drift.append((path, lineno, line.strip(), claimed, truth))
                         else:
                             if claimed != truth:
-                                drift.append(
-                                    (path, lineno, line.strip(), claimed, truth)
-                                )
+                                drift.append((path, lineno, line.strip(), claimed, truth))
     return drift
 
 
@@ -150,8 +143,11 @@ def scan_protocol_frontmatter() -> list[tuple[Path, str]]:
         status = m.group(1).strip()
         if status not in VALID_STATUSES:
             issues.append(
-                (md, f"invalid implementation_status '{status}' "
-                 f"(must be one of {sorted(VALID_STATUSES)})")
+                (
+                    md,
+                    f"invalid implementation_status '{status}' "
+                    f"(must be one of {sorted(VALID_STATUSES)})",
+                )
             )
             continue
 
@@ -159,16 +155,12 @@ def scan_protocol_frontmatter() -> list[tuple[Path, str]]:
         if status in STATUSES_REQUIRING_EVIDENCE:
             paths = re.findall(r"^  - (.+)$", block, re.MULTILINE)
             if not paths:
-                issues.append(
-                    (md, f"implementation_status={status} but implemented_in is empty")
-                )
+                issues.append((md, f"implementation_status={status} but implemented_in is empty"))
                 continue
             for rel in paths:
                 rel = rel.strip().strip('"').strip("'")
                 if rel and not (ROOT / rel).exists():
-                    issues.append(
-                        (md, f"implemented_in path does not exist: {rel}")
-                    )
+                    issues.append((md, f"implemented_in path does not exist: {rel}"))
     return issues
 
 
@@ -182,8 +174,10 @@ def main() -> int:
 
     organs_truth = truth_organs()
     protos_truth = truth_protocols()
-    print(f"Ground truth: {organs_truth} organs (docs/architecture/organs/), "
-          f"{protos_truth} protocols (protocols/*.md).")
+    print(
+        f"Ground truth: {organs_truth} organs (docs/architecture/organs/), "
+        f"{protos_truth} protocols (protocols/*.md)."
+    )
 
     if not drift and not fm_issues:
         print("OK · no doc-claim drift detected, protocol frontmatter valid.")

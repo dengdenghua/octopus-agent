@@ -11,6 +11,7 @@ surfaces:
 * **mcp**      — ``~/.claude.json`` ``mcpServers`` (global + per-project),
   imported disabled; servers still need their runtime/credentials.
 """
+
 from __future__ import annotations
 
 import json
@@ -48,9 +49,13 @@ def _claude_mcp(claude_json: Path) -> list[MigrationItem]:
             seen.add(name)
             out.append(
                 MigrationItem(
-                    "mcp_server", str(name), "claude",
+                    "mcp_server",
+                    str(name),
+                    "claude",
                     f"MCP server ({scope}) — import disabled; supply runtime/credentials",
-                    str(claude_json), portable=True, needs=mcp_needs(spec),
+                    str(claude_json),
+                    portable=True,
+                    needs=mcp_needs(spec),
                 ),
             )
 
@@ -79,11 +84,15 @@ def scan_claude(home: Path | None = None) -> MigrationPlan:
         agents_dir = plugin_dir / "agents"
         if agents_dir.is_dir():
             for agent_md in sorted(agents_dir.glob("*.md")):
-                items.append(MigrationItem("agent", agent_md.stem, "claude", "subagent", str(agent_md)))
+                items.append(
+                    MigrationItem("agent", agent_md.stem, "claude", "subagent", str(agent_md))
+                )
         commands_dir = plugin_dir / "commands"
         if commands_dir.is_dir():
             for cmd_md in sorted(commands_dir.glob("*.md")):
-                items.append(MigrationItem("command", cmd_md.stem, "claude", "slash command", str(cmd_md)))
+                items.append(
+                    MigrationItem("command", cmd_md.stem, "claude", "slash command", str(cmd_md))
+                )
 
     # ── memory: projects/*/memory/*.md (skip the MEMORY.md index) ──
     projects = root / "projects"

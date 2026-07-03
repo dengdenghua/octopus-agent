@@ -6,6 +6,7 @@
   substantive body.
 * §63: ``_dynamic_exec_guard`` — eval / exec / __import__ in runtime.
 """
+
 from __future__ import annotations
 
 from runtime.core.cerebrum.react_guards import (
@@ -47,32 +48,15 @@ def _step(
 
 class TestPayloadHasLogSwallow:
     def test_log_then_silent(self) -> None:
-        text = (
-            "try:\n"
-            "    do()\n"
-            "except Exception:\n"
-            "    log.error('failed')\n"
-            "    return None\n"
-        )
+        text = "try:\n    do()\nexcept Exception:\n    log.error('failed')\n    return None\n"
         assert _payload_has_log_swallow(text)
 
     def test_log_then_reraise_silent(self) -> None:
-        text = (
-            "try:\n"
-            "    do()\n"
-            "except Exception:\n"
-            "    log.error('failed')\n"
-            "    raise\n"
-        )
+        text = "try:\n    do()\nexcept Exception:\n    log.error('failed')\n    raise\n"
         assert not _payload_has_log_swallow(text)
 
     def test_logger_variant(self) -> None:
-        text = (
-            "try:\n"
-            "    do()\n"
-            "except ValueError:\n"
-            "    _logger.warning('bad input')\n"
-        )
+        text = "try:\n    do()\nexcept ValueError:\n    _logger.warning('bad input')\n"
         assert _payload_has_log_swallow(text)
 
     def test_no_except_silent(self) -> None:
@@ -131,15 +115,30 @@ class TestExceptionSwallowGuard:
                 ),
             ),
         ]
-        assert _exception_swallow_via_log_guard(
-            steps, "done", is_code_mode=False,
-        ) is None
+        assert (
+            _exception_swallow_via_log_guard(
+                steps,
+                "done",
+                is_code_mode=False,
+            )
+            is None
+        )
 
     def test_no_swallow_silent(self) -> None:
-        steps = [_step(1, action='edit_file({"path": "runtime/foo.py", "old_string": "x", "new_string": "y"})')]
-        assert _exception_swallow_via_log_guard(
-            steps, "done", is_code_mode=True,
-        ) is None
+        steps = [
+            _step(
+                1,
+                action='edit_file({"path": "runtime/foo.py", "old_string": "x", "new_string": "y"})',
+            )
+        ]
+        assert (
+            _exception_swallow_via_log_guard(
+                steps,
+                "done",
+                is_code_mode=True,
+            )
+            is None
+        )
 
     def test_swallow_fires(self) -> None:
         steps = [
@@ -153,7 +152,9 @@ class TestExceptionSwallowGuard:
             ),
         ]
         msg = _exception_swallow_via_log_guard(
-            steps, "done", is_code_mode=True,
+            steps,
+            "done",
+            is_code_mode=True,
         )
         assert msg is not None
         assert "runtime/foo.py" in msg
@@ -169,9 +170,14 @@ class TestExceptionSwallowGuard:
                 ),
             ),
         ]
-        assert _exception_swallow_via_log_guard(
-            steps, "I cannot continue — please provide the API key.", is_code_mode=True,
-        ) is None
+        assert (
+            _exception_swallow_via_log_guard(
+                steps,
+                "I cannot continue — please provide the API key.",
+                is_code_mode=True,
+            )
+            is None
+        )
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -265,9 +271,14 @@ class TestLongFunctionGuard:
                 action=f'write_text_file({{"path": "runtime/foo.py", "content": "def big():\\n{body}"}})',
             ),
         ]
-        assert _long_function_guard(
-            steps, "done", is_code_mode=False,
-        ) is None
+        assert (
+            _long_function_guard(
+                steps,
+                "done",
+                is_code_mode=False,
+            )
+            is None
+        )
 
     def test_no_long_silent(self) -> None:
         body = "\\n".join(["    x = 1"] * 50)
@@ -277,9 +288,14 @@ class TestLongFunctionGuard:
                 action=f'write_text_file({{"path": "runtime/foo.py", "content": "def hello():\\n{body}"}})',
             ),
         ]
-        assert _long_function_guard(
-            steps, "done", is_code_mode=True,
-        ) is None
+        assert (
+            _long_function_guard(
+                steps,
+                "done",
+                is_code_mode=True,
+            )
+            is None
+        )
 
     def test_long_fires(self) -> None:
         body = "\\n".join(["    x = 1"] * 200)
@@ -290,7 +306,9 @@ class TestLongFunctionGuard:
             ),
         ]
         msg = _long_function_guard(
-            steps, "done", is_code_mode=True,
+            steps,
+            "done",
+            is_code_mode=True,
         )
         assert msg is not None
         assert "big" in msg
@@ -304,9 +322,14 @@ class TestLongFunctionGuard:
                 action=f'write_text_file({{"path": "runtime/foo.py", "content": "def big():\\n{body}"}})',
             ),
         ]
-        assert _long_function_guard(
-            steps, "I cannot continue — please provide the API key.", is_code_mode=True,
-        ) is None
+        assert (
+            _long_function_guard(
+                steps,
+                "I cannot continue — please provide the API key.",
+                is_code_mode=True,
+            )
+            is None
+        )
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -382,16 +405,28 @@ class TestDynamicExecGuard:
             ),
         ]
         msg = _dynamic_exec_guard(
-            steps, "done", is_code_mode=False,
+            steps,
+            "done",
+            is_code_mode=False,
         )
         assert msg is not None
         assert "dynamic-execution" in msg
 
     def test_no_exec_silent(self) -> None:
-        steps = [_step(1, action='edit_file({"path": "runtime/foo.py", "old_string": "x", "new_string": "y"})')]
-        assert _dynamic_exec_guard(
-            steps, "done", is_code_mode=True,
-        ) is None
+        steps = [
+            _step(
+                1,
+                action='edit_file({"path": "runtime/foo.py", "old_string": "x", "new_string": "y"})',
+            )
+        ]
+        assert (
+            _dynamic_exec_guard(
+                steps,
+                "done",
+                is_code_mode=True,
+            )
+            is None
+        )
 
     def test_eval_fires(self) -> None:
         steps = [
@@ -405,7 +440,9 @@ class TestDynamicExecGuard:
             ),
         ]
         msg = _dynamic_exec_guard(
-            steps, "done", is_code_mode=True,
+            steps,
+            "done",
+            is_code_mode=True,
         )
         assert msg is not None
         assert "runtime/foo.py" in msg
@@ -422,6 +459,11 @@ class TestDynamicExecGuard:
                 ),
             ),
         ]
-        assert _dynamic_exec_guard(
-            steps, "I cannot continue — please provide the API key.", is_code_mode=True,
-        ) is None
+        assert (
+            _dynamic_exec_guard(
+                steps,
+                "I cannot continue — please provide the API key.",
+                is_code_mode=True,
+            )
+            is None
+        )

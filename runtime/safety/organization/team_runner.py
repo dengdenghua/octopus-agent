@@ -232,15 +232,15 @@ class TeamRunner:
                 self._run_sequential(topology, task, context or {}, result)
             elif topology.protocol == CoordinationProtocol.EVALUATOR_OPTIMIZER:
                 self._run_evaluator_optimizer(
-                    topology, task, context or {}, result,
+                    topology,
+                    task,
+                    context or {},
+                    result,
                 )
             else:  # pragma: no cover - guard for future protocols
                 raise ValueError(f"unknown protocol: {topology.protocol}")
             # Mark success when no role recorded an error and we have output.
-            if (
-                result.final_output
-                and not any(o.error for o in result.role_outputs)
-            ):
+            if result.final_output and not any(o.error for o in result.role_outputs):
                 result.success = True
             elif result.error is None:
                 result.error = _first_role_error(result.role_outputs)
@@ -300,10 +300,16 @@ class TeamRunner:
         for iteration in range(topology.max_iterations):
             result.iterations = iteration + 1
             gen_prompt = self._compose_generator_prompt(
-                task, last_gen, last_eval,
+                task,
+                last_gen,
+                last_eval,
             )
             last_gen = self._invoke_role(
-                Role.GENERATOR, gen_spec, gen_prompt, context, topology,
+                Role.GENERATOR,
+                gen_spec,
+                gen_prompt,
+                context,
+                topology,
             )
             result.role_outputs.append(last_gen)
             if last_gen.error:
@@ -311,7 +317,11 @@ class TeamRunner:
 
             eval_prompt = self._compose_evaluator_prompt(task, last_gen.output)
             last_eval = self._invoke_role(
-                Role.EVALUATOR, eval_spec, eval_prompt, context, topology,
+                Role.EVALUATOR,
+                eval_spec,
+                eval_prompt,
+                context,
+                topology,
             )
             last_eval.score = _parse_evaluator_score(last_eval.output)
             result.role_outputs.append(last_eval)
@@ -320,10 +330,7 @@ class TeamRunner:
 
             # Accept when no parseable score (no signal — trust generator),
             # or when score clears the threshold.
-            if (
-                last_eval.score is None
-                or last_eval.score >= topology.quality_threshold
-            ):
+            if last_eval.score is None or last_eval.score >= topology.quality_threshold:
                 result.final_output = last_gen.output
                 return
 
@@ -361,15 +368,17 @@ class TeamRunner:
         if route_decision.get("action") == "block":
             duration = (time.monotonic() - start) * 1000.0
             error = str(route_decision.get("reason") or "subagent blocked by routing policy")
-            self._emit({
-                "type": "team_role_blocked",
-                "topology": topology.name,
-                "role": str(role),
-                "agent_id": spec.agent_id,
-                "duration_ms": duration,
-                "route_decision": route_decision,
-                "error": error,
-            })
+            self._emit(
+                {
+                    "type": "team_role_blocked",
+                    "topology": topology.name,
+                    "role": str(role),
+                    "agent_id": spec.agent_id,
+                    "duration_ms": duration,
+                    "route_decision": route_decision,
+                    "error": error,
+                }
+            )
             return RoleOutput(
                 role=role,
                 agent_id=spec.agent_id,
@@ -388,14 +397,16 @@ class TeamRunner:
         # in the UI before the model spends 30+ seconds churning. Without
         # this the user sees the first role's output drop in only after
         # ``_role_caller`` returns.
-        self._emit({
-            "type": "team_role_start",
-            "topology": topology.name,
-            "role": str(role),
-            "agent_id": spec.agent_id,
-            "use_cheap_model": cheap_for_role,
-            "route_decision": route_decision,
-        })
+        self._emit(
+            {
+                "type": "team_role_start",
+                "topology": topology.name,
+                "role": str(role),
+                "agent_id": spec.agent_id,
+                "use_cheap_model": cheap_for_role,
+                "route_decision": route_decision,
+            }
+        )
         # Forward subagent lifecycle (spawn / sub_tool_start / sub_tool_end /
         # subagent_finished) to the caller's emitter. Older role callers
         # don't accept ``event_emitter``; the TypeError fallback below keeps
@@ -407,17 +418,21 @@ class TeamRunner:
         # line even when the subagent is doing a long tool call that
         # doesn't produce ``sub_text_delta`` chunks.
         stop_heartbeat = threading.Event()
+
         def _heartbeat_loop() -> None:
             elapsed = 0.0
             while not stop_heartbeat.wait(timeout=15.0):
                 elapsed = time.monotonic() - start
-                self._emit({
-                    "type": "team_heartbeat",
-                    "topology": topology.name,
-                    "role": str(role),
-                    "agent_id": spec.agent_id,
-                    "elapsed_s": round(elapsed, 1),
-                })
+                self._emit(
+                    {
+                        "type": "team_heartbeat",
+                        "topology": topology.name,
+                        "role": str(role),
+                        "agent_id": spec.agent_id,
+                        "elapsed_s": round(elapsed, 1),
+                    }
+                )
+
         hb_thread = threading.Thread(
             target=_heartbeat_loop,
             name=f"team-hb-{role}-{spec.agent_id}",
@@ -455,15 +470,17 @@ class TeamRunner:
                     )
         except Exception as exc:  # noqa: BLE001
             duration = (time.monotonic() - start) * 1000.0
-            self._emit({
-                "type": "team_role_end",
-                "topology": topology.name,
-                "role": str(role),
-                "agent_id": spec.agent_id,
-                "status": "error",
-                "duration_ms": duration,
-                "error": f"{type(exc).__name__}: {exc}",
-            })
+            self._emit(
+                {
+                    "type": "team_role_end",
+                    "topology": topology.name,
+                    "role": str(role),
+                    "agent_id": spec.agent_id,
+                    "status": "error",
+                    "duration_ms": duration,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
             return RoleOutput(
                 role=role,
                 agent_id=spec.agent_id,
@@ -483,17 +500,19 @@ class TeamRunner:
         elif isinstance(raw, str):
             output = raw
         duration = (time.monotonic() - start) * 1000.0
-        self._emit({
-            "type": "team_role_end",
-            "topology": topology.name,
-            "role": str(role),
-            "agent_id": spec.agent_id,
-            "status": "error" if error else "success",
-            "duration_ms": duration,
-            "output": output,
-            "error": error,
-            "route_decision": route_decision,
-        })
+        self._emit(
+            {
+                "type": "team_role_end",
+                "topology": topology.name,
+                "role": str(role),
+                "agent_id": spec.agent_id,
+                "status": "error" if error else "success",
+                "duration_ms": duration,
+                "output": output,
+                "error": error,
+                "route_decision": route_decision,
+            }
+        )
         return RoleOutput(
             role=role,
             agent_id=spec.agent_id,
@@ -512,6 +531,7 @@ class TeamRunner:
             from runtime.safety.evolution.subagent_routing import (
                 decide_subagent_route,
             )
+
             decision = decide_subagent_route(
                 role=agent_id,
                 risk_level=_context_risk_level(context),

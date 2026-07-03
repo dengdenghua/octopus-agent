@@ -104,14 +104,8 @@ class BudgetState:
             "call_count": self.call_count,
             "tokens_ceiling": self.tokens_ceiling,
             "usd_ceiling": self.usd_ceiling,
-            "tokens_pct": (
-                self.tokens_used / self.tokens_ceiling
-                if self.tokens_ceiling else None
-            ),
-            "usd_pct": (
-                self.usd_used / self.usd_ceiling
-                if self.usd_ceiling else None
-            ),
+            "tokens_pct": (self.tokens_used / self.tokens_ceiling if self.tokens_ceiling else None),
+            "usd_pct": (self.usd_used / self.usd_ceiling if self.usd_ceiling else None),
         }
 
 
@@ -185,7 +179,9 @@ class TokenBudgetTracker:
             if state is None:
                 state = BudgetState(
                     session_id=session_id,
-                    tokens_ceiling=tokens_ceiling if tokens_ceiling is not None else self._tokens_ceiling,
+                    tokens_ceiling=tokens_ceiling
+                    if tokens_ceiling is not None
+                    else self._tokens_ceiling,
                     usd_ceiling=usd_ceiling if usd_ceiling is not None else self._usd_ceiling,
                 )
                 self._states[session_id] = state
@@ -238,14 +234,8 @@ class TokenBudgetTracker:
                 _LOG.warning("budget on_warning callback raised: %s", exc)
 
         if exceeded is not None:
-            ceiling = (
-                snapshot.tokens_ceiling if exceeded == "tokens"
-                else snapshot.usd_ceiling
-            )
-            used: float = (
-                snapshot.tokens_used if exceeded == "tokens"
-                else snapshot.usd_used
-            )
+            ceiling = snapshot.tokens_ceiling if exceeded == "tokens" else snapshot.usd_ceiling
+            used: float = snapshot.tokens_used if exceeded == "tokens" else snapshot.usd_used
             try:
                 if self._on_exceeded is not None:
                     self._on_exceeded(session_id, snapshot, exceeded)
@@ -296,11 +286,11 @@ class TokenBudgetTracker:
             return {
                 "tokens": (
                     max(0, state.tokens_ceiling - state.tokens_used)
-                    if state.tokens_ceiling else None
+                    if state.tokens_ceiling
+                    else None
                 ),
                 "usd": (
-                    max(0.0, state.usd_ceiling - state.usd_used)
-                    if state.usd_ceiling else None
+                    max(0.0, state.usd_ceiling - state.usd_used) if state.usd_ceiling else None
                 ),
             }
 

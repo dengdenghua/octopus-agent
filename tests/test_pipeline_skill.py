@@ -9,6 +9,7 @@ Covers:
   - Clamping: items > 16 trimmed, stages > 4 trimmed
   - Registration: register_delegation_skills returns 5
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -16,6 +17,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # ── Fixtures ───────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def mock_subagent():
@@ -38,16 +40,20 @@ def mock_builtins():
 @pytest.fixture
 def unlimited_budget():
     """Disable the per-turn delegation cap so tests never hit it."""
-    with patch(
-        "runtime.execution.suckers.delegation_skills._check_absolute_cap",
-        return_value=(0, True),
-    ), patch(
-        "runtime.execution.suckers.delegation_skills._record_delegation",
+    with (
+        patch(
+            "runtime.execution.suckers.delegation_skills._check_absolute_cap",
+            return_value=(0, True),
+        ),
+        patch(
+            "runtime.execution.suckers.delegation_skills._record_delegation",
+        ),
     ):
         yield
 
 
 # ── Guard conditions ───────────────────────────────────────────────────────
+
 
 def test_empty_items_returns_error(unlimited_budget):
     from runtime.execution.suckers.delegation_skills import _run_pipeline
@@ -81,6 +87,7 @@ def test_none_stages_returns_error(unlimited_budget):
 
 
 # ── Stage chaining ─────────────────────────────────────────────────────────
+
 
 def test_item_placeholder_substituted(mock_subagent, unlimited_budget, mock_builtins):
     """Stage 0 receives {item} = the original item string."""
@@ -163,6 +170,7 @@ def test_stage0_output_placeholder(mock_subagent, unlimited_budget, mock_builtin
 
 # ── Concurrency and ordering ───────────────────────────────────────────────
 
+
 def test_multiple_items_all_processed(mock_subagent, unlimited_budget, mock_builtins):
     """All items run and results are returned in original order."""
     from runtime.execution.suckers.delegation_skills import _run_pipeline
@@ -190,6 +198,7 @@ def test_results_in_original_order(mock_subagent, unlimited_budget, mock_builtin
 
     def _stagger(**kwargs):
         import time
+
         prompt = kwargs.get("prompt", "")
         for name, delay in delays.items():
             if name in prompt:
@@ -209,6 +218,7 @@ def test_results_in_original_order(mock_subagent, unlimited_budget, mock_builtin
 
 
 # ── Stage failure isolation ────────────────────────────────────────────────
+
 
 def test_stage_failure_halts_item_chain(mock_subagent, unlimited_budget, mock_builtins):
     """A failing stage marks item as failed and skips subsequent stages."""
@@ -259,6 +269,7 @@ def test_one_item_failure_does_not_stop_others(mock_subagent, unlimited_budget, 
 
 # ── Budget gate ────────────────────────────────────────────────────────────
 
+
 def test_budget_exhausted_returns_error():
     """When the per-turn delegation cap is exhausted, run_pipeline fails closed."""
     from runtime.execution.suckers.delegation_skills import _run_pipeline
@@ -277,6 +288,7 @@ def test_budget_exhausted_returns_error():
 
 
 # ── Clamping ───────────────────────────────────────────────────────────────
+
 
 def test_items_clamped_to_16(mock_subagent, unlimited_budget, mock_builtins):
     """Items list is silently clamped to _PIPELINE_MAX_ITEMS (16)."""
@@ -307,6 +319,7 @@ def test_stages_clamped_to_4(mock_subagent, unlimited_budget, mock_builtins):
 
 
 # ── Registration count ─────────────────────────────────────────────────────
+
 
 def test_register_delegation_skills_returns_8():
     """register_delegation_skills must register exactly 8 skills.

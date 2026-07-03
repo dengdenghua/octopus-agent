@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import queue
@@ -22,7 +21,6 @@ from runtime.safety.chromatophores import SignalBus, SignalEvent
 
 
 class Worker:
-
     def __init__(
         self,
         arm_id: ArmId,
@@ -96,9 +94,7 @@ class Worker:
         """
         if self._signal_bus is None:
             return None
-        return self._signal_bus.send_to_arm(
-            target_arm_id, body, from_arm_id=str(self.arm_id)
-        )
+        return self._signal_bus.send_to_arm(target_arm_id, body, from_arm_id=str(self.arm_id))
 
     def _on_step(self, step: Any, node_index: int, total_nodes: int) -> None:
         """GraphRuntime on_step_callback: drain mailbox between steps.
@@ -114,7 +110,6 @@ class Worker:
         if self._signal_bus is None:
             return
         self.drain_mailbox()
-
 
     def can_use(self, skill_ref: Any) -> bool:
         from runtime.execution.suckers.layers import is_atomic
@@ -135,7 +130,6 @@ class Worker:
             if not self.can_use(node.skill_ref):
                 return False
         return True
-
 
     def handle(
         self,
@@ -196,10 +190,8 @@ class Worker:
             if status != "success":
                 for step in trajectory.steps:
                     if not step.success:
-                        reason = (
-                            f"step {step.step_id} ({step.node_id}) "
-                            f"{step.result.status}"
-                            + (f": {step.result.error_type}" if step.result.error_type else "")
+                        reason = f"step {step.step_id} ({step.node_id}) {step.result.status}" + (
+                            f": {step.result.error_type}" if step.result.error_type else ""
                         )
                         break
                 if not reason and len(trajectory.steps) < len(task.subgraph.nodes):
@@ -238,10 +230,8 @@ class Worker:
 
 
 class ArmPool:
-
     def __init__(self, arms: list[Worker]) -> None:
         self._arms: list[Worker] = list(arms)
-
 
     def add(self, arm: Worker) -> None:
         self._arms.append(arm)
@@ -255,13 +245,8 @@ class ArmPool:
     def __iter__(self):
         return iter(self._arms)
 
-
     def pick_for(self, task: ArmAssignment) -> Worker | None:
-        needed = {
-            node.skill_ref
-            for node in task.subgraph.nodes
-            if node.skill_ref is not None
-        }
+        needed = {node.skill_ref for node in task.subgraph.nodes if node.skill_ref is not None}
 
         candidates: list[tuple[int, int, int, int, Worker]] = []
         for idx, arm in enumerate(self._arms):
@@ -269,22 +254,17 @@ class ArmPool:
                 continue
             allow = {str(skill) for skill in arm.allowed_skills}
             from runtime.execution.suckers.layers import is_atomic
+
             needed_str = {str(s) for s in needed}
             non_atomic_needed = {s for s in needed_str if not is_atomic(s)}
-            coverage = (
-                len(non_atomic_needed)
-                if "*" in allow
-                else len(non_atomic_needed & allow)
-            )
+            coverage = len(non_atomic_needed) if "*" in allow else len(non_atomic_needed & allow)
             # Specialist preference: an arm that EXPLICITLY lists the needed
             # skills beats one that only handles them via the universal atomic
             # bypass (``can_use`` returns True for any atomic skill). Without
             # this every atomic-skill node funnels to the first arm (idx 0) and
             # the swarm never spreads across the registry-derived arms — a node
             # goes to its specialist arm instead, so a diverse layer fans out.
-            explicit = (
-                len(needed_str) if "*" in allow else len(needed_str & allow)
-            )
+            explicit = len(needed_str) if "*" in allow else len(needed_str & allow)
             candidates.append((coverage, explicit, len(arm.affinity), -idx, arm))
 
         if not candidates:
@@ -312,8 +292,7 @@ class ArmPool:
         scored: list[tuple[int, int, int, Worker]] = []
         for idx, arm in enumerate(self._arms):
             score = sum(
-                1 for tag in arm.affinity
-                if isinstance(tag, str) and tag.lower() in haystack
+                1 for tag in arm.affinity if isinstance(tag, str) and tag.lower() in haystack
             )
             if score > 0:
                 scored.append((score, len(arm.affinity), -idx, arm))

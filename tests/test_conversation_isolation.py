@@ -56,6 +56,7 @@ class TestJournalContext:
     def test_thread_isolation(self):
         """Implementation note."""
         import contextvars
+
         values = []
 
         def worker():
@@ -85,10 +86,15 @@ class TestJournalContext:
 def _mk_step(step_id: int = 0, node_id: str = "n0") -> Step:
     call = ToolCall(caller="test", sucker_id="read_file", args={})
     result = ExecutionResult(
-        call_id=call.call_id, status="success", output={"x": 1},
+        call_id=call.call_id,
+        status="success",
+        output={"x": 1},
     )
     return Step(
-        step_id=step_id, node_id=node_id, action=call, result=result,
+        step_id=step_id,
+        node_id=node_id,
+        action=call,
+        result=result,
     )
 
 
@@ -109,7 +115,8 @@ class TestAutoInjection:
     def test_write_trajectory_picks_up_context(self):
         j = InMemoryJournal()
         traj = Trajectory(
-            task_id=TaskId(uuid4()), arm_id=ArmId("a"),
+            task_id=TaskId(uuid4()),
+            arm_id=ArmId("a"),
             steps=[_mk_step()],
             outcome=TrajectoryOutcome(success=True),
         )
@@ -231,6 +238,7 @@ def _build_stack(tmp_path: Path):
 
     class _S:
         pass
+
     s = _S()
     s.planner = planner
     s.runtime = runtime
@@ -270,8 +278,7 @@ class TestChatAutoConversationId:
         # Implementation note.
         r1 = client.post(
             "/v1/chat/completions",
-            json={"model": "x", "messages": [
-                {"role": "user", "content": "list files"}]},
+            json={"model": "x", "messages": [{"role": "user", "content": "list files"}]},
         )
         cid = r1.json()["octopus"]["conversation_id"]
 
@@ -288,7 +295,7 @@ class TestChatAutoConversationId:
 
         # Implementation note.
         events = stack.journal.read_by_conversation(cid)
-        assert len(events) >= 2   # Implementation note.
+        assert len(events) >= 2  # Implementation note.
 
     def test_different_conversations_isolated(self, tmp_path: Path):
         from runtime.sensing.gateway.openai_gateway_router import create_openai_router
@@ -298,12 +305,20 @@ class TestChatAutoConversationId:
         app.include_router(create_openai_router(stack))
         client = TestClient(app)
 
-        r1 = client.post("/v1/chat/completions", json={
-            "model": "x", "messages": [{"role": "user", "content": "a"}],
-        })
-        r2 = client.post("/v1/chat/completions", json={
-            "model": "x", "messages": [{"role": "user", "content": "b"}],
-        })
+        r1 = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "x",
+                "messages": [{"role": "user", "content": "a"}],
+            },
+        )
+        r2 = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "x",
+                "messages": [{"role": "user", "content": "b"}],
+            },
+        )
         cid1 = r1.json()["octopus"]["conversation_id"]
         cid2 = r2.json()["octopus"]["conversation_id"]
         assert cid1 != cid2
@@ -343,14 +358,22 @@ class TestChatAgentStampsJournal:
         class _FakeExecutor:
             journal = None
 
-        reg.register(make_general_agent(GraphRuntime(
-            executor=_FakeExecutor(), journal=None,
-        )))
+        reg.register(
+            make_general_agent(
+                GraphRuntime(
+                    executor=_FakeExecutor(),
+                    journal=None,
+                )
+            )
+        )
 
         app = FastAPI()
-        app.include_router(create_openai_router(
-            stack, agent_registry=reg,
-        ))
+        app.include_router(
+            create_openai_router(
+                stack,
+                agent_registry=reg,
+            )
+        )
         r = TestClient(app).post(
             "/v1/chat/completions",
             json={
@@ -376,10 +399,12 @@ class TestConversationEndpoints:
         from runtime.sensing.gateway.agents_router import create_agents_router
 
         app = FastAPI()
-        app.include_router(create_agents_router(
-            registry=registry or AgentRegistry(),
-            journal=journal,
-        ))
+        app.include_router(
+            create_agents_router(
+                registry=registry or AgentRegistry(),
+                journal=journal,
+            )
+        )
         return app
 
     def test_list_empty(self, tmp_path: Path):

@@ -113,7 +113,10 @@ _LOG = logging.getLogger("octopus.gepa.bridge")
 
 
 def collect_failures_from_journal(
-    journal: Any, *, recipe_id: str | None = None, limit: int = 10,
+    journal: Any,
+    *,
+    recipe_id: str | None = None,
+    limit: int = 10,
 ) -> list[dict[str, Any]]:
     """Pull failed trajectories · optionally filter by recipe.
 
@@ -168,18 +171,21 @@ def collect_failures_from_journal(
                 or getattr(last_step, "error", "")
                 or ""
             )[:150]
-        out.append({
-            "goal": goal,
-            "step_count": len(steps),
-            "last_error": last_err,
-            "recipe_id": rid,
-        })
+        out.append(
+            {
+                "goal": goal,
+                "step_count": len(steps),
+                "last_error": last_err,
+                "recipe_id": rid,
+            }
+        )
         if len(out) >= limit:
             break
     if skipped_empty:
         _LOG.info(
             "gepa: skipped %d empty-goal failure(s) · returned %d usable",
-            skipped_empty, len(out),
+            skipped_empty,
+            len(out),
         )
     return out
 
@@ -219,24 +225,27 @@ def collect_failures_from_ledger(
                     step_count += int(value or 0)
                 except (TypeError, ValueError):
                     continue
-        out.append({
-            "goal": goal,
-            "step_count": step_count,
-            "last_error": str(metadata.get("error") or record.description or "")[:150],
-            "recipe_id": rid if isinstance(rid, str) else None,
-            "source": "proposal_ledger",
-            "proposal_id": record.proposal_id,
-            "turn_id": metadata.get("turn_id"),
-            "thread_id": metadata.get("thread_id"),
-            "failure_source": metadata.get("failure_source"),
-            "code_change_paths": metadata.get("code_change_paths") or [],
-        })
+        out.append(
+            {
+                "goal": goal,
+                "step_count": step_count,
+                "last_error": str(metadata.get("error") or record.description or "")[:150],
+                "recipe_id": rid if isinstance(rid, str) else None,
+                "source": "proposal_ledger",
+                "proposal_id": record.proposal_id,
+                "turn_id": metadata.get("turn_id"),
+                "thread_id": metadata.get("thread_id"),
+                "failure_source": metadata.get("failure_source"),
+                "code_change_paths": metadata.get("code_change_paths") or [],
+            }
+        )
         if len(out) >= limit:
             break
     if skipped_empty:
         _LOG.info(
             "gepa: skipped %d empty-goal ledger failure(s) · returned %d usable",
-            skipped_empty, len(out),
+            skipped_empty,
+            len(out),
         )
     return out
 
@@ -323,9 +332,7 @@ def _candidate_replay_summary(
             "reasons": candidate.reasons,
             "case_count": len(candidate.case_results),
             "weak_cases": [
-                result.to_dict()
-                for result in candidate.case_results
-                if result.score < 0.55
+                result.to_dict() for result in candidate.case_results if result.score < 0.55
             ][:5],
         }
     return None
@@ -371,9 +378,7 @@ def _candidate_turn_replay_summary(
             "passed": candidate.passed,
             "case_count": len(candidate.case_results),
             "weak_cases": [
-                result.to_dict()
-                for result in candidate.case_results
-                if not result.passed
+                result.to_dict() for result in candidate.case_results if not result.passed
             ][:5],
         }
     return None
@@ -395,9 +400,7 @@ def _candidate_llm_replay_summary(
             "passed": candidate.passed,
             "case_count": len(candidate.case_results),
             "weak_cases": [
-                result.to_dict()
-                for result in candidate.case_results
-                if not result.passed
+                result.to_dict() for result in candidate.case_results if not result.passed
             ][:5],
         }
     return None
@@ -535,7 +538,11 @@ def mark_winner_proposal_applied(
             if target_base is not None and record_base is not None:
                 if target_base != record_base:
                     continue
-                if target_variant is not None and record_variant is not None and target_variant != record_variant:
+                if (
+                    target_variant is not None
+                    and record_variant is not None
+                    and target_variant != record_variant
+                ):
                     continue
             elif recipe_id is not None and metadata.get("recipe_id") != recipe_id:
                 continue
@@ -547,7 +554,9 @@ def mark_winner_proposal_applied(
         return {"ok": False, "skipped": True, "reason": "winner_proposal_not_found"}
 
     applied = ledger.mark_applied(winner.proposal_id, fitness_after=fitness_after)
-    metadata = applied.metadata if applied is not None and isinstance(applied.metadata, dict) else {}
+    metadata = (
+        applied.metadata if applied is not None and isinstance(applied.metadata, dict) else {}
+    )
     resolved_canary_key = canary_key or str(metadata.get("canary_key") or "")
     resolved_candidate_id = str(candidate_id or metadata.get("candidate_id") or "")
     resolved_recipe_id = recipe_id if recipe_id is not None else metadata.get("recipe_id")
@@ -590,7 +599,12 @@ def record_winner_canary_outcome(
         return {"ok": False, "skipped": True, "reason": "missing_canary_key"}
     state = CanaryManager(canary_config).record_outcome(canary_key, success=success)
     if state is None:
-        return {"ok": False, "skipped": True, "reason": "canary_not_registered", "canary_key": canary_key}
+        return {
+            "ok": False,
+            "skipped": True,
+            "reason": "canary_not_registered",
+            "canary_key": canary_key,
+        }
     return {
         "ok": True,
         "canary_key": canary_key,
@@ -697,9 +711,8 @@ def record_winner_proposal_and_canary(
         replay_report,
         candidate_id=candidate_id,
     )
-    if (
-        replay_summary is not None
-        and float(replay_summary.get("total") or 0.0) < max(0.0, min_replay_score)
+    if replay_summary is not None and float(replay_summary.get("total") or 0.0) < max(
+        0.0, min_replay_score
     ):
         return {
             "ok": False,
@@ -714,11 +727,9 @@ def record_winner_proposal_and_canary(
         sandbox_replay_report,
         candidate_id=candidate_id,
     )
-    if (
-        sandbox_replay_summary is not None
-        and float(sandbox_replay_summary.get("total") or 0.0)
-        < max(0.0, min_sandbox_replay_score)
-    ):
+    if sandbox_replay_summary is not None and float(
+        sandbox_replay_summary.get("total") or 0.0
+    ) < max(0.0, min_sandbox_replay_score):
         return {
             "ok": False,
             "skipped": True,
@@ -733,10 +744,8 @@ def record_winner_proposal_and_canary(
         turn_replay_report,
         candidate_id=candidate_id,
     )
-    if (
-        turn_replay_summary is not None
-        and float(turn_replay_summary.get("total") or 0.0)
-        < max(0.0, min_turn_replay_score)
+    if turn_replay_summary is not None and float(turn_replay_summary.get("total") or 0.0) < max(
+        0.0, min_turn_replay_score
     ):
         return {
             "ok": False,
@@ -753,10 +762,8 @@ def record_winner_proposal_and_canary(
         llm_replay_report,
         candidate_id=candidate_id,
     )
-    if (
-        llm_replay_summary is not None
-        and float(llm_replay_summary.get("total") or 0.0)
-        < max(0.0, min_llm_replay_score)
+    if llm_replay_summary is not None and float(llm_replay_summary.get("total") or 0.0) < max(
+        0.0, min_llm_replay_score
     ):
         return {
             "ok": False,
@@ -828,8 +835,7 @@ def record_winner_proposal_and_canary(
     proposal = ledger.propose(
         kind="prompt_optimizer_winner",
         description=(
-            f"Prompt optimizer winner {candidate_id} for {scope} "
-            f"avg_score={avg_score:.3f}"
+            f"Prompt optimizer winner {candidate_id} for {scope} avg_score={avg_score:.3f}"
         ),
         proposer="gepa_bridge",
         metadata=metadata,
@@ -934,7 +940,7 @@ def _make_eval_fn(
             if s < 0 or e <= s:
                 return [0.0] * len(goals)
             try:
-                obj = json.loads(text[s:e + 1])
+                obj = json.loads(text[s : e + 1])
             except json.JSONDecodeError:
                 return [0.0] * len(goals)
         scores = obj.get("scores") if isinstance(obj, dict) else None
@@ -942,7 +948,7 @@ def _make_eval_fn(
             return [0.0] * len(goals)
         # Coerce + pad/truncate to expected length.
         out: list[float] = []
-        for s_val in scores[:len(goals)]:
+        for s_val in scores[: len(goals)]:
             try:
                 out.append(max(0.0, min(1.0, float(s_val))))
             except (TypeError, ValueError):
@@ -960,8 +966,10 @@ def _make_failure_sampler(
     """Static failure sampler · returns the same failures list
     on every call (deterministic mutator input). The optimizer
     asks for ``n`` and we return at most ``n``."""
+
     def _sample(_prompt: str, n: int) -> list[dict[str, Any]]:
         return failures[:n]
+
     return _sample
 
 
@@ -993,7 +1001,9 @@ def optimize_for_recipe(
     before deciding to apply.
     """
     journal_failures = collect_failures_from_journal(
-        journal, recipe_id=recipe_id, limit=eval_tasks * 2,
+        journal,
+        recipe_id=recipe_id,
+        limit=eval_tasks * 2,
     )
     ledger_failures = collect_failures_from_ledger(
         ledger_path=ledger_path,
@@ -1041,22 +1051,30 @@ def optimize_for_recipe(
         # whether to run the system longer (no failures) or fix
         # the goal-recording path (only empty goals).
         result = GepaResult(
-            iterations_run=0, final_front=[], best_avg=None,
-            history=[{
-                "skipped": True,
-                "reason": (
-                    f"only {len(failures)} usable failures available "
-                    "(need ≥2). Either run longer to accumulate real "
-                    "failures, or check the trajectory/turn-failure ledger."
-                ),
-                "journal_failures": len(journal_failures),
-                "ledger_failures": len(ledger_failures),
-                "external_failures": len(external_failures),
-            }],
+            iterations_run=0,
+            final_front=[],
+            best_avg=None,
+            history=[
+                {
+                    "skipped": True,
+                    "reason": (
+                        f"only {len(failures)} usable failures available "
+                        "(need ≥2). Either run longer to accumulate real "
+                        "failures, or check the trajectory/turn-failure ledger."
+                    ),
+                    "journal_failures": len(journal_failures),
+                    "ledger_failures": len(ledger_failures),
+                    "external_failures": len(external_failures),
+                }
+            ],
             elapsed_s=0.0,
         )
         if record_winner:
-            result.winner_proposal = {"ok": False, "skipped": True, "reason": "insufficient_failure_signal"}
+            result.winner_proposal = {
+                "ok": False,
+                "skipped": True,
+                "reason": "insufficient_failure_signal",
+            }
         return result
     goals = [f["goal"] for f in failures if f.get("goal")]
     eval_fn = _make_eval_fn(goals, router=router, judge_model=judge_model)
@@ -1107,7 +1125,12 @@ def optimize_for_recipe(
     )
     result.native_turn_replay = turn_replay_report.to_dict()
     llm_replay_report = None
-    if os.environ.get("OCTOPUS_EVOLUTION_LLM_REPLAY", "").strip().lower() in {"1", "true", "yes", "on"}:
+    if os.environ.get("OCTOPUS_EVOLUTION_LLM_REPLAY", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
         llm_replay_report = replay_llm_candidates(
             list(result.final_front or []),
             router=router,
@@ -1159,13 +1182,13 @@ def persist_winner(
         return {"ok": False, "error": "no winner to persist"}
     try:
         from runtime.core.cerebrum.prompt_persistence import dump_section
+
         section = (
             "## GEPA-optimized addendum\n\n"
             f"<!-- candidate {result.best_avg.candidate_id} · "
             f"avg_score {result.best_avg.avg_score:.3f} · "
             f"iter {result.best_avg.born_at_iter} · "
-            f"rationale: {result.best_avg.rationale} -->\n\n"
-            + result.best_avg.prompt
+            f"rationale: {result.best_avg.rationale} -->\n\n" + result.best_avg.prompt
         )
         dump_section(section_path, section, label="gepa")
         return {
@@ -1210,20 +1233,24 @@ def propose_for_losing_recipes(
         evaluator = RecipeEvaluator(journal, RecipeEvaluatorConfig())
         report = evaluator.evaluate()
     except Exception as exc:  # noqa: BLE001
-        return [{
-            "ok": False,
-            "error": f"recipe evaluator failed: {type(exc).__name__}: {exc}",
-        }]
+        return [
+            {
+                "ok": False,
+                "error": f"recipe evaluator failed: {type(exc).__name__}: {exc}",
+            }
+        ]
     losing = [s for s in report.scores if s.verdict == "losing"]
     if not losing:
-        return [{
-            "ok": False,
-            "skipped": True,
-            "reason": (
-                f"no losing recipes (scanned {report.recipes_found} "
-                f"recipes from {report.trajectories_scanned} trajectories)"
-            ),
-        }]
+        return [
+            {
+                "ok": False,
+                "skipped": True,
+                "reason": (
+                    f"no losing recipes (scanned {report.recipes_found} "
+                    f"recipes from {report.trajectories_scanned} trajectories)"
+                ),
+            }
+        ]
 
     # 2. Run GEPA on each, capped at max_recipes. Sort by worst
     # score first · tackle the most-broken recipe first when budget
@@ -1246,24 +1273,30 @@ def propose_for_losing_recipes(
                 trigger="auto_propose",
             )
             rec = record_from_result(
-                result, trigger="auto_propose", recipe_id=s.recipe_id,
+                result,
+                trigger="auto_propose",
+                recipe_id=s.recipe_id,
             )
             store.add(rec)
-            out.append({
-                "ok": True,
-                "recipe_id": s.recipe_id,
-                "ts": rec.ts,
-                "iterations_run": rec.iterations_run,
-                "best_avg_score": rec.best_avg_score,
-                "front_size": rec.front_size,
-                "winner_proposal": getattr(result, "winner_proposal", None),
-            })
+            out.append(
+                {
+                    "ok": True,
+                    "recipe_id": s.recipe_id,
+                    "ts": rec.ts,
+                    "iterations_run": rec.iterations_run,
+                    "best_avg_score": rec.best_avg_score,
+                    "front_size": rec.front_size,
+                    "winner_proposal": getattr(result, "winner_proposal", None),
+                }
+            )
         except Exception as exc:  # noqa: BLE001
-            out.append({
-                "ok": False,
-                "recipe_id": s.recipe_id,
-                "error": f"{type(exc).__name__}: {exc}",
-            })
+            out.append(
+                {
+                    "ok": False,
+                    "recipe_id": s.recipe_id,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
     return out
 
 

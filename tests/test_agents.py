@@ -58,8 +58,10 @@ class TestAgentConstructor:
     def test_rejects_empty_agent_id(self):
         rt = _fake_runtime()
         arm = Worker(
-            arm_id=ArmId("a"), affinity=[],
-            allowed_skills=[SkillId("x")], runtime=rt,
+            arm_id=ArmId("a"),
+            affinity=[],
+            allowed_skills=[SkillId("x")],
+            runtime=rt,
         )
         with pytest.raises(ValueError, match="agent_id"):
             Agent(
@@ -140,7 +142,8 @@ class TestCoderThreeArms:
     def test_coder_task_routes_to_git_arm(self):
         agent = make_coder_agent(_fake_runtime())
         intent = ParsedIntent(
-            raw="x", intent_type="task",
+            raw="x",
+            intent_type="task",
             normalized_goal="git commit my changes",
         )
         arm = agent.pick_arm_for_intent(intent)
@@ -150,7 +153,8 @@ class TestCoderThreeArms:
     def test_coder_task_routes_to_shell_arm(self):
         agent = make_coder_agent(_fake_runtime())
         intent = ParsedIntent(
-            raw="x", intent_type="task",
+            raw="x",
+            intent_type="task",
             normalized_goal="run the test suite in shell",
         )
         arm = agent.pick_arm_for_intent(intent)
@@ -160,7 +164,8 @@ class TestCoderThreeArms:
     def test_coder_task_routes_to_writer_arm(self):
         agent = make_coder_agent(_fake_runtime())
         intent = ParsedIntent(
-            raw="x", intent_type="task",
+            raw="x",
+            intent_type="task",
             normalized_goal="edit the file to fix the bug",
         )
         arm = agent.pick_arm_for_intent(intent)
@@ -193,9 +198,9 @@ class TestAggregateViews:
         """Implementation note."""
         agent = make_coder_agent(_fake_runtime())
         union = set(agent.allowed_skill_union())
-        assert "read_file" in union      # atomic → visible to planner
-        assert "hash_text" in union      # atomic → visible to planner
-        assert "git_commit" in union     # arm-bundled still visible
+        assert "read_file" in union  # atomic → visible to planner
+        assert "hash_text" in union  # atomic → visible to planner
+        assert "git_commit" in union  # arm-bundled still visible
 
 
 # ═══════════════════════════════════════════════════════════
@@ -209,9 +214,7 @@ class TestAgentCanUse:
         for factory in _PRESET_FACTORIES:
             agent = factory(_fake_runtime())
             for atomic in ["list_cwd", "read_file", "count_words", "hash_text"]:
-                assert agent.can_use(atomic), (
-                    f"{agent.agent_id} should use atomic {atomic}"
-                )
+                assert agent.can_use(atomic), f"{agent.agent_id} should use atomic {atomic}"
 
     def test_role_skills_scoped(self):
         general = make_general_agent(_fake_runtime())
@@ -280,7 +283,8 @@ class TestRegistryRouting:
     def test_coder_intent_picks_coder_agent(self):
         reg = self._reg()
         intent = ParsedIntent(
-            raw="x", intent_type="task",
+            raw="x",
+            intent_type="task",
             normalized_goal="refactor and git commit the code",
         )
         a = reg.pick_for_intent(intent)
@@ -290,7 +294,8 @@ class TestRegistryRouting:
     def test_storefront_intent_picks_growth_agent(self):
         reg = self._reg()
         intent = ParsedIntent(
-            raw="x", intent_type="task",
+            raw="x",
+            intent_type="task",
             normalized_goal="list new products on my shopify storefront",
         )
         a = reg.pick_for_intent(intent)
@@ -300,14 +305,18 @@ class TestRegistryRouting:
     def test_unrelated_intent_none_or_weak(self):
         reg = self._reg()
         intent = ParsedIntent(
-            raw="x", intent_type="task",
+            raw="x",
+            intent_type="task",
             normalized_goal="xyzzy plugh",
         )
         a = reg.pick_for_intent(intent)
         if a is not None:
             assert a.agent_id in {
-                "general", "coder", "vibe_selling",
-                "ecommerce_mind", "market_researcher",
+                "general",
+                "coder",
+                "vibe_selling",
+                "ecommerce_mind",
+                "market_researcher",
             }
 
 
@@ -342,7 +351,8 @@ class TestEndToEndPersonaFlow:
 
         agent = make_coder_agent(_fake_runtime())
         intent = ParsedIntent(
-            raw="x", intent_type="task",
+            raw="x",
+            intent_type="task",
             normalized_goal="commit the changes via git",
         )
         arm = agent.pick_arm_for_intent(intent)
@@ -351,10 +361,12 @@ class TestEndToEndPersonaFlow:
 
         # Implementation note.
         router = MockModelRouter(
-            response=json.dumps({
-                "reasoning": "x",
-                "nodes": [{"skill": "git_commit", "args": {}}],
-            }),
+            response=json.dumps(
+                {
+                    "reasoning": "x",
+                    "nodes": [{"skill": "git_commit", "args": {}}],
+                }
+            ),
         )
         composer = ContextComposer(registry=reg, journal=InMemoryJournal())
         planner = LLMPlanner(router=router, registry=reg, composer=composer)
@@ -362,11 +374,9 @@ class TestEndToEndPersonaFlow:
         planner.plan(
             intent,
             allowed_skills=[str(s) for s in arm.allowed_skills],
-            soul=agent.soul,      # ← agent-level persona
+            soul=agent.soul,  # ← agent-level persona
         )
-        sys_msg = next(
-            m.content for m in router.call_log[0].messages if m.role == "system"
-        )
+        sys_msg = next(m.content for m in router.call_log[0].messages if m.role == "system")
         # Implementation note.
         # Implementation note.
         # Implementation note.

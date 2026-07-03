@@ -107,10 +107,7 @@ def create_meta_skill_router(
                 }
                 for s in meta.steps
             ],
-            "edges": [
-                {"from": e.src, "to": e.dst, "kind": e.kind}
-                for e in meta.edges
-            ],
+            "edges": [{"from": e.src, "to": e.dst, "kind": e.kind} for e in meta.edges],
         }
 
     @router.get("/api/meta-skills/{name}/mermaid")
@@ -124,7 +121,9 @@ def create_meta_skill_router(
             raise HTTPException(status_code=404, detail=f"meta_skill {name!r} not found")
         try:
             mm = meta_skill_to_mermaid(
-                meta, direction=direction, include_budget=include_budget,
+                meta,
+                direction=direction,
+                include_budget=include_budget,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

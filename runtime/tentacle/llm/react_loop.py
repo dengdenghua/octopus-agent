@@ -92,8 +92,8 @@ class ReActCallbacks:
     on_tool_call: Callable[[ToolCall], None] | None = None
     on_tool_result: Callable[[ToolCallResult], None] | None = None
     on_step_end: Callable[[int], None] | None = None
-    on_compress: Callable[[int, int], None] | None = None   # (old_len, new_len)
-    on_stuck: Callable[[list[str]], None] | None = None      # (recent_tool_names)
+    on_compress: Callable[[int, int], None] | None = None  # (old_len, new_len)
+    on_stuck: Callable[[list[str]], None] | None = None  # (recent_tool_names)
     on_finish: Callable[[TaskResult], None] | None = None
 
 
@@ -279,7 +279,7 @@ class LightweightReAct:
         if len(self._recent_window) < self.stuck_window:
             return False
         # 取最近 N 个窗口
-        recent = list(self._recent_window)[-self.stuck_window:]
+        recent = list(self._recent_window)[-self.stuck_window :]
         return all(r == recent[0] for r in recent)
 
     @property
@@ -304,8 +304,8 @@ class LightweightReAct:
         if len(messages) < 6:
             return
         keep_recent = 4
-        head = messages[0]                                  # system
-        tail = messages[-(keep_recent):]                    # 最近
+        head = messages[0]  # system
+        tail = messages[-(keep_recent):]  # 最近
         middle = messages[1:-keep_recent]
         # 折叠中间：用一条 assistant 消息总结
         summary = self._summarize_middle(middle)

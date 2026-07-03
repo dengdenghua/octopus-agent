@@ -106,12 +106,12 @@ class RemoteBackend:
 
     id: str
     name: str
-    url: str                                # http(s)://host:port
+    url: str  # http(s)://host:port
     ssh: SshTunnel | None = None
     added_at: str = ""
-    last_health: str | None = None          # "ok" | "error" | None (untested)
+    last_health: str | None = None  # "ok" | "error" | None (untested)
     last_health_at: str | None = None
-    health_detail: str | None = None        # last error message
+    health_detail: str | None = None  # last error message
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -292,13 +292,11 @@ def health_check(
     try:
         if http_client is None:
             import httpx
+
             with httpx.Client(timeout=timeout_seconds) as client:
                 resp = client.get(target)
                 ok = 200 <= resp.status_code < 300
-                detail = (
-                    None if ok
-                    else f"HTTP {resp.status_code}"
-                )
+                detail = None if ok else f"HTTP {resp.status_code}"
         else:
             resp = http_client.get(target, timeout=timeout_seconds)
             ok = 200 <= getattr(resp, "status_code", 0) < 300
@@ -341,11 +339,15 @@ def proxy_request(
     try:
         if http_client is None:
             import httpx
+
             with httpx.Client(timeout=timeout_seconds) as client:
                 resp = client.request(method, target, json=json)
         else:
             resp = http_client.request(
-                method, target, json=json, timeout=timeout_seconds,
+                method,
+                target,
+                json=json,
+                timeout=timeout_seconds,
             )
         status = int(getattr(resp, "status_code", 0) or 0)
         try:
@@ -403,9 +405,9 @@ def _to_ws_url(http_url: str, path: str) -> str:
     """
     base = http_url.rstrip("/")
     if base.startswith("https://"):
-        ws_base = "wss://" + base[len("https://"):]
+        ws_base = "wss://" + base[len("https://") :]
     elif base.startswith("http://"):
-        ws_base = "ws://" + base[len("http://"):]
+        ws_base = "ws://" + base[len("http://") :]
     else:
         # Already a ws:// URL or something weird — pass through.
         ws_base = base
@@ -455,6 +457,7 @@ async def proxy_websocket(
 
     try:
         async with connect as upstream:
+
             async def _client_to_remote() -> None:
                 while True:
                     try:
@@ -489,10 +492,12 @@ async def proxy_websocket(
                         break
 
             import asyncio
+
             t1 = asyncio.create_task(_client_to_remote())
             t2 = asyncio.create_task(_remote_to_client())
             done, pending = await asyncio.wait(
-                {t1, t2}, return_when=asyncio.FIRST_COMPLETED,
+                {t1, t2},
+                return_when=asyncio.FIRST_COMPLETED,
             )
             for task in pending:
                 task.cancel()
@@ -515,11 +520,14 @@ def _ws_error_envelope(message: str) -> str:
     error handler render it without a separate code path.
     """
     import json
-    return json.dumps({
-        "jsonrpc": "2.0",
-        "method": "proxy/error",
-        "params": {"message": message},
-    })
+
+    return json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "method": "proxy/error",
+            "params": {"message": message},
+        }
+    )
 
 
 # ═══════════════════════════════════════════════════════════

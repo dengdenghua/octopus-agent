@@ -15,6 +15,7 @@ Exit codes
 * 0 — preflight ran (regardless of warnings; ops decides)
 * 1 — preflight itself crashed; cron should alert
 """
+
 from __future__ import annotations
 
 import argparse
@@ -70,6 +71,7 @@ def _probe_yaml() -> dict[str, Any]:
             continue
         try:
             import yaml  # type: ignore[import-untyped]
+
             with open(path, encoding="utf-8") as fh:
                 data = yaml.safe_load(fh.read()) or {}
         except Exception as exc:  # noqa: BLE001
@@ -83,8 +85,7 @@ def _probe_yaml() -> dict[str, Any]:
             disabled = safety.get("disabled_guards")
             if isinstance(disabled, list):
                 out["disabled_guards"] = [
-                    str(x).strip() for x in disabled
-                    if isinstance(x, str) and str(x).strip()
+                    str(x).strip() for x in disabled if isinstance(x, str) and str(x).strip()
                 ]
             ets = safety.get("enable_trust_signal")
             if isinstance(ets, bool):
@@ -131,9 +132,7 @@ def _classify_features(
         n = int(raw)
     except ValueError:
         n = 0
-    out["P3_auto_checkpoint"] = (
-        "on" if n > 0 else "off"
-    )
+    out["P3_auto_checkpoint"] = "on" if n > 0 else "off"
 
     # P3 — distributed mirror
     mirror_url = (env.get("OCTOPUS_CHECKPOINT_MIRROR_URL") or "").strip()
@@ -166,10 +165,7 @@ def _classify_features(
     # Kill-switch summary
     env_disabled = (env.get("OCTOPUS_DISABLED_GUARDS") or "").strip()
     yaml_disabled = yaml_settings.get("disabled_guards") or []
-    total_disabled = (
-        len([x for x in env_disabled.split(",") if x.strip()])
-        + len(yaml_disabled)
-    )
+    total_disabled = len([x for x in env_disabled.split(",") if x.strip()]) + len(yaml_disabled)
     if total_disabled > 0:
         out["kill_switch"] = (
             f"{total_disabled} guard(s) disabled "
@@ -251,7 +247,9 @@ def render_text(result: PreflightResult) -> str:
     lines.append("")
     lines.append("YAML settings:")
     yc = result.yaml_settings
-    lines.append(f"  config_path                          = {yc.get('config_path') or '(none found)'}")
+    lines.append(
+        f"  config_path                          = {yc.get('config_path') or '(none found)'}"
+    )
     lines.append(f"  safety.disabled_guards               = {yc.get('disabled_guards')}")
     lines.append(f"  safety.enable_trust_signal           = {yc.get('enable_trust_signal')}")
     lines.append("")
@@ -290,7 +288,8 @@ def render_json(result: PreflightResult) -> str:
             "journal": result.journal,
             "warnings": result.warnings,
         },
-        ensure_ascii=False, indent=2,
+        ensure_ascii=False,
+        indent=2,
     )
 
 
@@ -303,7 +302,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--json", action="store_true",
+        "--json",
+        action="store_true",
         help="Emit machine-readable JSON instead of text.",
     )
     return parser.parse_args(argv)

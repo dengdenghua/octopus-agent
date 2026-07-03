@@ -7,6 +7,7 @@ so ``stream_react_loop`` fell back to ``planner.planner_model`` and smart
 routing silently no-op'd on the primary interactive path. The model is now
 threaded turn_lifecycle → method → module → ``stream_react_loop``.
 """
+
 from __future__ import annotations
 
 import asyncio

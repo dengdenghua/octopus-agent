@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -45,7 +44,6 @@ class InstallResult(BaseModel):
 
 
 class SkillMarket:
-
     # Local-only skill store. The remote registry (an unpublished
     # ``octopus-agent/skill-hub`` repo) was dead plumbing: every fetch 404'd and
     # fell back to the local registry anyway, so the network path is removed.
@@ -74,14 +72,16 @@ class SkillMarket:
             searchable = f"{name} {desc} {' '.join(tags)}".lower()
 
             if query_lower in searchable:
-                results.append(SearchResult(
-                    name=name,
-                    description=desc,
-                    author=entry.get("author", ""),
-                    tags=tags,
-                    version=entry.get("version", "0.1.0"),
-                    installed=self._is_installed(name),
-                ))
+                results.append(
+                    SearchResult(
+                        name=name,
+                        description=desc,
+                        author=entry.get("author", ""),
+                        tags=tags,
+                        version=entry.get("version", "0.1.0"),
+                        installed=self._is_installed(name),
+                    )
+                )
 
             if len(results) >= limit:
                 break

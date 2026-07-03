@@ -78,8 +78,13 @@ def test_run_mix_chat_injects_drafts_and_annotates(monkeypatch) -> None:
         return _envelope("final synthesized answer")
 
     out = mix.run_mix_chat(
-        object(), _intent(), "octopus-mix", "code_arm",
-        actor="u1", agent=None, run_chat=fake_run_chat,
+        object(),
+        _intent(),
+        "octopus-mix",
+        "code_arm",
+        actor="u1",
+        agent=None,
+        run_chat=fake_run_chat,
     )
 
     meta = out["octopus"]["mix"]
@@ -98,7 +103,8 @@ def test_run_mix_chat_injects_drafts_and_annotates(monkeypatch) -> None:
 def test_run_mix_chat_degrades_when_all_proposers_fail(monkeypatch) -> None:
     monkeypatch.delenv("OCTOPUS_MIX_PROPOSERS", raising=False)
     monkeypatch.setattr(
-        mix, "_direct_llm_fallback_with_usage",
+        mix,
+        "_direct_llm_fallback_with_usage",
         lambda *a, **k: (None, {}),
     )
 
@@ -109,8 +115,13 @@ def test_run_mix_chat_degrades_when_all_proposers_fail(monkeypatch) -> None:
         return _envelope("plain single-model answer")
 
     out = mix.run_mix_chat(
-        object(), _intent(), "octopus-mix", "code_arm",
-        actor=None, agent=None, run_chat=fake_run_chat,
+        object(),
+        _intent(),
+        "octopus-mix",
+        "code_arm",
+        actor=None,
+        agent=None,
+        run_chat=fake_run_chat,
     )
 
     meta = out["octopus"]["mix"]
@@ -167,8 +178,12 @@ def test_proposer_calls_pass_max_tokens_cap(monkeypatch) -> None:
     monkeypatch.setattr(mix, "_direct_llm_fallback_with_usage", fake_proposer)
 
     mix.run_mix_chat(
-        object(), _intent(), "octopus-mix", "code_arm",
-        actor="u1", agent=None,
+        object(),
+        _intent(),
+        "octopus-mix",
+        "code_arm",
+        actor="u1",
+        agent=None,
         run_chat=lambda *a, **k: _envelope("final"),  # noqa: ARG005
     )
 
@@ -198,8 +213,12 @@ def test_run_mix_chat_bounds_total_wait_on_a_hung_proposer(monkeypatch) -> None:
 
     started = _time.monotonic()
     out = mix.run_mix_chat(
-        object(), _intent(), "octopus-mix", "code_arm",
-        actor="u1", agent=None,
+        object(),
+        _intent(),
+        "octopus-mix",
+        "code_arm",
+        actor="u1",
+        agent=None,
         run_chat=lambda *a, **k: _envelope("final"),  # noqa: ARG005
     )
     elapsed = _time.monotonic() - started

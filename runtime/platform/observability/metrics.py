@@ -75,8 +75,20 @@ from typing import Any
 
 # Default histogram buckets — covers typical LLM / HTTP latencies.
 DEFAULT_BUCKETS: tuple[float, ...] = (
-    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0,
-    2.5, 5.0, 10.0, 30.0, 60.0, math.inf,
+    0.005,
+    0.01,
+    0.025,
+    0.05,
+    0.1,
+    0.25,
+    0.5,
+    1.0,
+    2.5,
+    5.0,
+    10.0,
+    30.0,
+    60.0,
+    math.inf,
 )
 
 
@@ -101,15 +113,11 @@ def _format_labels(labels: dict[str, str] | tuple[tuple[str, str], ...]) -> str:
 
 def _escape(value: str) -> str:
     """Escape label values per Prometheus text format rules."""
-    return (
-        str(value)
-        .replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("\n", "\\n")
-    )
+    return str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
 # ─── Counter ──────────────────────────────────────────────────
+
 
 class Counter:
     """Monotonically-increasing numeric value."""
@@ -155,6 +163,7 @@ class Counter:
 
 
 # ─── Gauge ────────────────────────────────────────────────────
+
 
 class Gauge:
     """Value that can go up and down."""
@@ -217,6 +226,7 @@ class Gauge:
 
 # ─── Histogram ────────────────────────────────────────────────
 
+
 @dataclass
 class _HistogramSeries:
     """One labeled series inside a histogram."""
@@ -278,7 +288,8 @@ class Histogram:
             series = self._series.get(key)
             if series is None:
                 return {
-                    "count": 0, "sum": 0.0,
+                    "count": 0,
+                    "sum": 0.0,
                     "buckets": {b: 0 for b in self.bucket_bounds},
                 }
             return {
@@ -299,9 +310,7 @@ class Histogram:
                 # Merge le="..." into the label set for the bucket line.
                 merged = dict(label_key) if label_key else {}
                 merged["le"] = "+Inf" if bound == math.inf else _fmt_num(bound)
-                out.append(
-                    f"{self.name}_bucket{_format_labels(merged)} {c}"
-                )
+                out.append(f"{self.name}_bucket{_format_labels(merged)} {c}")
             out.append(f"{self.name}_sum{_format_labels(label_key)} {_fmt_num(total)}")
             out.append(f"{self.name}_count{_format_labels(label_key)} {count}")
         return out
@@ -319,6 +328,7 @@ def _fmt_num(x: float) -> str:
 
 
 # ─── Registry ────────────────────────────────────────────────
+
 
 class MetricsRegistry:
     """Container for all metrics in a process.
@@ -340,7 +350,9 @@ class MetricsRegistry:
         labels: list[str] | None = None,
     ) -> Counter:
         return self._get_or_create(
-            name, lambda: Counter(name, help_text, labels), Counter,
+            name,
+            lambda: Counter(name, help_text, labels),
+            Counter,
         )
 
     def gauge(
@@ -350,7 +362,9 @@ class MetricsRegistry:
         labels: list[str] | None = None,
     ) -> Gauge:
         return self._get_or_create(
-            name, lambda: Gauge(name, help_text, labels), Gauge,
+            name,
+            lambda: Gauge(name, help_text, labels),
+            Gauge,
         )
 
     def histogram(
@@ -361,7 +375,9 @@ class MetricsRegistry:
         buckets: tuple[float, ...] = DEFAULT_BUCKETS,
     ) -> Histogram:
         return self._get_or_create(
-            name, lambda: Histogram(name, help_text, labels, buckets), Histogram,
+            name,
+            lambda: Histogram(name, help_text, labels, buckets),
+            Histogram,
         )
 
     def get(self, name: str) -> Counter | Gauge | Histogram | None:

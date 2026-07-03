@@ -7,6 +7,7 @@ concurrent writer. These tests guard the in-process invariants the change must
 preserve: the sidecar is created, concurrent writes are not lost, and rotation
 never leaves a torn (non-JSON) line behind.
 """
+
 from __future__ import annotations
 
 import json

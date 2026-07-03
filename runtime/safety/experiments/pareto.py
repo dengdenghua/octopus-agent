@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -10,10 +9,7 @@ def pareto_frontier_by_name(
     *,
     maximize: Mapping[str, bool],
 ) -> set[str]:
-    valid = {
-        name: pt for name, pt in points.items()
-        if all(m in pt for m in metrics)
-    }
+    valid = {name: pt for name, pt in points.items() if all(m in pt for m in metrics)}
     if not valid:
         return set()
     if len(valid) == 1:
@@ -21,8 +17,7 @@ def pareto_frontier_by_name(
 
     sign = [1.0 if maximize.get(m, True) else -1.0 for m in metrics]
     vecs = {
-        name: tuple(sign[i] * pt[m] for i, m in enumerate(metrics))
-        for name, pt in valid.items()
+        name: tuple(sign[i] * pt[m] for i, m in enumerate(metrics)) for name, pt in valid.items()
     }
 
     frontier: set[str] = set(valid.keys())

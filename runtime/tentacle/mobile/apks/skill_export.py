@@ -45,7 +45,7 @@ def _default_target_dir() -> Path:
 
 def _asset_filename(skill_name: str) -> str:
     prefix = "android."
-    stem = skill_name[len(prefix):] if skill_name.startswith(prefix) else skill_name
+    stem = skill_name[len(prefix) :] if skill_name.startswith(prefix) else skill_name
     return f"{stem}.md"
 
 

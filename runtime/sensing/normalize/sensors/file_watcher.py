@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -17,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 class FileWatcherSensor(EnvSensor):
-
     def __init__(
         self,
         *,
@@ -28,7 +26,7 @@ class FileWatcherSensor(EnvSensor):
         debounce_ms: int = 200,
         poll_interval_seconds: float = 2.0,
         sensor_id: str = "file_watcher",
-        force_polling: bool = False,           # Implementation note.
+        force_polling: bool = False,  # Implementation note.
     ) -> None:
         super().__init__()
         if not paths:
@@ -49,9 +47,8 @@ class FileWatcherSensor(EnvSensor):
         self._bg_thread: threading.Thread | None = None
         self._stop_evt = threading.Event()
         self._watchdog_observer: Any = None
-        self._snapshot: dict[str, float] = {}     # path → mtime
+        self._snapshot: dict[str, float] = {}  # path → mtime
         self._last_emit_per_path: dict[str, float] = {}
-
 
     def _matches(self, path: str) -> bool:
         name = os.path.basename(path)
@@ -81,16 +78,17 @@ class FileWatcherSensor(EnvSensor):
             with contextlib.suppress(OSError):
                 size = os.path.getsize(path)
         try:
-            self._publish(FileChanged(
-                path=path,
-                change_type=change_type,  # type: ignore[arg-type]
-                old_path=old_path,
-                size_bytes=size,
-            ))
+            self._publish(
+                FileChanged(
+                    path=path,
+                    change_type=change_type,  # type: ignore[arg-type]
+                    old_path=old_path,
+                    size_bytes=size,
+                )
+            )
         except Exception as e:  # noqa: BLE001
             self._last_error = f"{type(e).__name__}: {e}"
             logger.exception("FileWatcherSensor emit failed")
-
 
     def start(self) -> None:
         with self._lock:
@@ -140,7 +138,6 @@ class FileWatcherSensor(EnvSensor):
             metadata=meta,
         )
 
-
     def _try_start_watchdog(self) -> bool:
         try:
             from watchdog.events import FileSystemEventHandler
@@ -177,11 +174,12 @@ class FileWatcherSensor(EnvSensor):
         self._watchdog_observer = obs
         return True
 
-
     def _start_polling(self) -> None:
         self._snapshot = self._scan_mtimes()
         self._bg_thread = threading.Thread(
-            target=self._poll_loop, daemon=True, name=f"skin-{self.sensor_id}",
+            target=self._poll_loop,
+            daemon=True,
+            name=f"skin-{self.sensor_id}",
         )
         self._bg_thread.start()
 
@@ -206,9 +204,7 @@ class FileWatcherSensor(EnvSensor):
             if not root.is_dir():
                 continue
             try:
-                iterator = (
-                    root.rglob("*") if self.recursive else root.glob("*")
-                )
+                iterator = root.rglob("*") if self.recursive else root.glob("*")
                 for p in iterator:
                     if p.is_file():
                         with contextlib.suppress(OSError):
@@ -225,5 +221,5 @@ class FileWatcherSensor(EnvSensor):
         for path in old_set - new_set:
             self._emit(path, "deleted")
         for path in new_set & old_set:
-            if new[path] > old[path] + 0.001:   # 1ms tolerance
+            if new[path] > old[path] + 0.001:  # 1ms tolerance
                 self._emit(path, "modified")

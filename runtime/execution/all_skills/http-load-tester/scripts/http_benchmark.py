@@ -170,16 +170,22 @@ def run_wrk(url, concurrency, duration, threads=None):
 
     cmd = [
         "wrk",
-        "-t", str(threads),
-        "-c", str(concurrency),
-        "-d", f"{duration}s",
+        "-t",
+        str(threads),
+        "-c",
+        str(concurrency),
+        "-d",
+        f"{duration}s",
         "--latency",
         url,
     ]
 
     try:
         proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=duration + 30,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=duration + 30,
         )
         output = proc.stdout + "\n" + proc.stderr
         return parse_wrk_output(output), None
@@ -202,16 +208,23 @@ def run_ab(url, concurrency, duration, requests_per_step=None):
 
     cmd = [
         "ab",
-        "-n", str(requests_per_step),
-        "-c", str(concurrency),
-        "-e", csv_path,
-        "-s", str(min(duration, 120)),
+        "-n",
+        str(requests_per_step),
+        "-c",
+        str(concurrency),
+        "-e",
+        csv_path,
+        "-s",
+        str(min(duration, 120)),
         url,
     ]
 
     try:
         proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=duration * 3 + 60,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=duration * 3 + 60,
         )
         output = proc.stdout + "\n" + proc.stderr
         return parse_ab_output(output, csv_path), None
@@ -270,16 +283,16 @@ def find_inflection_points(results):
         err_rate = curr["errors"] / curr_total * 100 if curr_total > 0 else 0
         prev_err_rate = prev["errors"] / prev_total * 100 if prev_total > 0 else 0
         if err_rate > 1 and (prev_err_rate == 0 or err_rate > prev_err_rate * 2):
-            reasons.append(
-                f"错误率飙升: {prev_err_rate:.2f}% → {err_rate:.2f}%"
-            )
+            reasons.append(f"错误率飙升: {prev_err_rate:.2f}% → {err_rate:.2f}%")
 
         if reasons:
-            inflections.append({
-                "concurrency": curr["concurrency"],
-                "step_index": i,
-                "reasons": reasons,
-            })
+            inflections.append(
+                {
+                    "concurrency": curr["concurrency"],
+                    "step_index": i,
+                    "reasons": reasons,
+                }
+            )
 
     return inflections
 
@@ -330,22 +343,28 @@ def main():
     )
     parser.add_argument("url", help="目标 URL（http:// 或 https://）")
     parser.add_argument(
-        "-s", "--steps",
+        "-s",
+        "--steps",
         default="1,10,50,100,200,500",
         help="并发阶梯（逗号分隔），默认: 1,10,50,100,200,500",
     )
     parser.add_argument(
-        "-d", "--duration",
-        type=int, default=10,
+        "-d",
+        "--duration",
+        type=int,
+        default=10,
         help="每阶段持续时间（秒），默认: 10",
     )
     parser.add_argument(
-        "-n", "--requests",
-        type=int, default=None,
+        "-n",
+        "--requests",
+        type=int,
+        default=None,
         help="使用 ab 时每阶段总请求数（默认: concurrency×100 且至少 1000）",
     )
     parser.add_argument(
-        "-t", "--tool",
+        "-t",
+        "--tool",
         choices=["wrk", "ab"],
         default=None,
         help="指定压测工具（默认自动检测，优先 wrk）",
@@ -357,7 +376,8 @@ def main():
     )
     parser.add_argument(
         "--threads",
-        type=int, default=None,
+        type=int,
+        default=None,
         help="wrk 线程数（默认: min(并发数, CPU核心数)）",
     )
 
@@ -402,7 +422,9 @@ def main():
         if not args.json:
             print(
                 f"[{step_idx + 1}/{len(steps)}] 并发 {conc} 执行中...",
-                end="", flush=True, file=sys.stderr,
+                end="",
+                flush=True,
+                file=sys.stderr,
             )
 
         if tool == "wrk":
@@ -413,13 +435,19 @@ def main():
         if metrics is None:
             if not args.json:
                 print(f" 失败: {err}", file=sys.stderr)
-            results.append({
-                "concurrency": conc,
-                "rps": 0, "avg_latency_ms": 0,
-                "p50_ms": 0, "p90_ms": 0, "p99_ms": 0,
-                "total_requests": 0, "errors": 0,
-                "error_message": err,
-            })
+            results.append(
+                {
+                    "concurrency": conc,
+                    "rps": 0,
+                    "avg_latency_ms": 0,
+                    "p50_ms": 0,
+                    "p90_ms": 0,
+                    "p99_ms": 0,
+                    "total_requests": 0,
+                    "errors": 0,
+                    "error_message": err,
+                }
+            )
             continue
 
         metrics["concurrency"] = conc

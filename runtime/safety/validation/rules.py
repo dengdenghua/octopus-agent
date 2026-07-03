@@ -12,6 +12,7 @@ belongs in the LLM-judge layer · not here · because keyword-only blocking
 over-triggers on legitimate discussion (security researchers / educators
 talking ABOUT phishing or malware shouldn't get blocked).
 """
+
 from __future__ import annotations
 
 import re
@@ -29,9 +30,7 @@ _PII_PATTERNS: list[tuple[str, re.Pattern[str], str, str]] = [
     # Email
     (
         "PRIV-2",
-        re.compile(
-            r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
-        ),
+        re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
         "[REDACTED:email]",
         "email address",
     ),
@@ -109,6 +108,7 @@ _SECRET_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
 @dataclass(frozen=True)
 class RuleHit:
     """One match from a rule pattern · what and where."""
+
     clause_id: str
     category: str  # "pii" | "secret"
     description: str
@@ -128,14 +128,16 @@ def scan_pii(text: str) -> list[RuleHit]:
     for clause_id, pattern, _placeholder, description in _PII_PATTERNS:
         for match in pattern.finditer(text):
             matched = match.group(0)
-            hits.append(RuleHit(
-                clause_id=clause_id,
-                category="pii",
-                description=description,
-                start=match.start(),
-                end=match.end(),
-                matched_text_short=matched[:20],
-            ))
+            hits.append(
+                RuleHit(
+                    clause_id=clause_id,
+                    category="pii",
+                    description=description,
+                    start=match.start(),
+                    end=match.end(),
+                    matched_text_short=matched[:20],
+                )
+            )
     return hits
 
 
@@ -145,17 +147,19 @@ def scan_secrets(text: str) -> list[RuleHit]:
     for clause_id, pattern, description in _SECRET_PATTERNS:
         for match in pattern.finditer(text):
             matched = match.group(0)
-            hits.append(RuleHit(
-                clause_id=clause_id,
-                category="secret",
-                description=description,
-                start=match.start(),
-                end=match.end(),
-                # NEVER store matched secret in full · even 20 chars
-                # of a 40-char token is dangerous. Store just the
-                # prefix and length · audit trail without leaking.
-                matched_text_short=f"{matched[:6]}…(len={len(matched)})",
-            ))
+            hits.append(
+                RuleHit(
+                    clause_id=clause_id,
+                    category="secret",
+                    description=description,
+                    start=match.start(),
+                    end=match.end(),
+                    # NEVER store matched secret in full · even 20 chars
+                    # of a 40-char token is dangerous. Store just the
+                    # prefix and length · audit trail without leaking.
+                    matched_text_short=f"{matched[:6]}…(len={len(matched)})",
+                )
+            )
     return hits
 
 
@@ -180,8 +184,9 @@ def scrub_pii(text: str) -> tuple[str, list[RuleHit]]:
         # identifiable by the range, but for correctness we re-find
         # by clause_id + description.
         placeholder = next(
-            ph for (cid, _p, ph, desc) in _PII_PATTERNS
+            ph
+            for (cid, _p, ph, desc) in _PII_PATTERNS
             if cid == hit.clause_id and desc == hit.description
         )
-        result = result[:hit.start] + placeholder + result[hit.end:]
+        result = result[: hit.start] + placeholder + result[hit.end :]
     return result, hits

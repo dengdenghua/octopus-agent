@@ -40,6 +40,7 @@ Usage from framework code:
 Community hooks live in ``~/.octopus/hooks/*.py`` or project
 ``.octopus/hooks/*.py`` · loaded at runtime startup.
 """
+
 from __future__ import annotations
 
 from .events import (

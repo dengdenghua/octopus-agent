@@ -28,6 +28,7 @@ Exit codes
 * 2 - invalid CLI usage
 * 3 - task not found / already final
 """
+
 from __future__ import annotations
 
 import argparse
@@ -119,10 +120,7 @@ def _render_list(resumable: list[tuple[str, dict[str, Any]]]) -> str:
         ts = (ckpt.get("ts") or "")[:19]
         # Truncate task_id to 32 for table sanity.
         tid_short = tid[:32]
-        lines.append(
-            f"  {tid_short:<32}  {it_done:>4}/{it_max:<4}   "
-            f"{phase:<14}  {ts}"
-        )
+        lines.append(f"  {tid_short:<32}  {it_done:>4}/{it_max:<4}   {phase:<14}  {ts}")
     return "\n".join(lines)
 
 
@@ -277,6 +275,7 @@ def _resume_task(
             from runtime.memory.journal.journal import (
                 JSONLJournal as _RealJournal,
             )
+
             journal_loader = lambda p: _RealJournal(p)  # noqa: E731
         except Exception as exc:  # noqa: BLE001
             _LOG.error("could not load JSONLJournal: %s", exc)
@@ -284,6 +283,7 @@ def _resume_task(
     if stack_builder is None:
         try:
             from runtime.cli_core import _build_stack as _real_build_stack
+
             stack_builder = _real_build_stack
         except Exception as exc:  # noqa: BLE001
             _LOG.error("could not import _build_stack: %s", exc)
@@ -293,6 +293,7 @@ def _resume_task(
             from runtime.core.cerebrum.react_loop import (
                 run_react_loop as _real_runner,
             )
+
             runner = _real_runner
         except Exception as exc:  # noqa: BLE001
             _LOG.error("could not import run_react_loop: %s", exc)
@@ -357,6 +358,7 @@ def _resume_task(
     # original intent was lost.
     try:
         from runtime.platform.models import ParsedIntent
+
         intent = ParsedIntent(
             raw=headline,
             intent_type="task",
@@ -374,7 +376,8 @@ def _resume_task(
     # legacy stack), the failure is swallowed.
     journal_for_audit = getattr(stack, "journal", None) or journal
     if journal_for_audit is not None and hasattr(
-        journal_for_audit, "write_task_resumed",
+        journal_for_audit,
+        "write_task_resumed",
     ):
         with contextlib.suppress(Exception):
             journal_for_audit.write_task_resumed(
@@ -386,7 +389,9 @@ def _resume_task(
     # Drive run_react_loop. Errors here propagate to exit 1 via main().
     try:
         result = runner(
-            stack, intent, None,
+            stack,
+            intent,
+            None,
             max_iterations=max_iterations,
             resume_task_id=task_id,
         )
@@ -405,11 +410,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Inspect and drive ReAct checkpoint resume.",
     )
     parser.add_argument(
-        "--journal-path", type=Path, default=DEFAULT_JOURNAL_PATH,
+        "--journal-path",
+        type=Path,
+        default=DEFAULT_JOURNAL_PATH,
         help=f"Path to JSONL journal file (default: {DEFAULT_JOURNAL_PATH}).",
     )
     parser.add_argument(
-        "--mirror-url", default=None,
+        "--mirror-url",
+        default=None,
         help=(
             "Optional Redis-shape URL for the distributed checkpoint "
             "mirror. When provided, list/show/resume read from the "
@@ -423,20 +431,25 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     show_p = sub.add_parser("show", help="Show latest checkpoint for one task.")
     show_p.add_argument("task_id", help="The task id to inspect.")
     resume_p = sub.add_parser(
-        "resume", help="Resume a task from its latest checkpoint.",
+        "resume",
+        help="Resume a task from its latest checkpoint.",
     )
     resume_p.add_argument("task_id", help="The task id to resume.")
     resume_p.add_argument(
-        "--planner-type", default="static",
+        "--planner-type",
+        default="static",
         choices=("static", "llm"),
         help="Stack planner type (default: static for cheap dry-runs).",
     )
     resume_p.add_argument(
-        "--planner-model", default="mock/planner",
+        "--planner-model",
+        default="mock/planner",
         help="Stack planner model identifier (default: mock/planner).",
     )
     resume_p.add_argument(
-        "--max-iterations", type=int, default=30,
+        "--max-iterations",
+        type=int,
+        default=30,
         help="Cap on additional iterations (default: 30).",
     )
     return parser.parse_args(argv)
@@ -446,6 +459,7 @@ def _resolve_mirror_url(args: argparse.Namespace) -> str | None:
     """Pick the mirror URL: explicit arg wins; otherwise fall back to
     OCTOPUS_CHECKPOINT_MIRROR_URL env var. Empty/unset → None."""
     import os
+
     explicit = (args.mirror_url or "").strip()
     if explicit:
         return explicit
@@ -455,7 +469,8 @@ def _resolve_mirror_url(args: argparse.Namespace) -> str | None:
 
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
-        level=logging.WARNING, format="%(levelname)s %(message)s",
+        level=logging.WARNING,
+        format="%(levelname)s %(message)s",
     )
     try:
         args = _parse_args(argv)

@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -12,8 +11,9 @@ _LOG = logging.getLogger("octopus.gepa.variant_eval")
 @dataclass
 class VariantStat:
     """Per-variant aggregate · one entry per (base_recipe, variant)."""
-    variant_id: str            # "" for legacy (no #suffix), "__default__"
-                               # for control, "vA"/"vB"/... for named
+
+    variant_id: str  # "" for legacy (no #suffix), "__default__"
+    # for control, "vA"/"vB"/... for named
     uses: int = 0
     successes: int = 0
     avg_step_count: float = 0.0
@@ -40,6 +40,7 @@ class VariantStat:
 class VariantComparison:
     """All variants sharing one base recipe · the comparison the
     operator (or auto-promote) reasons over."""
+
     base_recipe_id: str
     variants: list[VariantStat] = field(default_factory=list)
 
@@ -90,28 +91,28 @@ def collect_variant_stats(
         stat = bucket.setdefault(variant, VariantStat(variant_id=variant))
         stat.uses += 1
         if getattr(traj, "outcome", None) and getattr(
-            traj.outcome, "success", False,
+            traj.outcome,
+            "success",
+            False,
         ):
             stat.successes += 1
         # Step count is cheap to track.
         stat.avg_step_count = (
-            (stat.avg_step_count * (stat.uses - 1) + len(traj.steps or []))
-            / stat.uses
-        )
+            stat.avg_step_count * (stat.uses - 1) + len(traj.steps or [])
+        ) / stat.uses
         # Cost · pull from outcome if available.
         cost = float(
             getattr(getattr(traj, "outcome", None), "cost_usd", 0) or 0,
         )
-        stat.avg_cost_usd = (
-            (stat.avg_cost_usd * (stat.uses - 1) + cost) / stat.uses
-        )
+        stat.avg_cost_usd = (stat.avg_cost_usd * (stat.uses - 1) + cost) / stat.uses
     # Materialise.
     out: list[VariantComparison] = []
     for base, bucket in grouped.items():
         cmp_ = VariantComparison(base_recipe_id=base)
         # Stable sort: known variants by id, then "" (legacy) last.
         for vid in sorted(
-            bucket.keys(), key=lambda v: (v == "", v == "__default__", v),
+            bucket.keys(),
+            key=lambda v: (v == "", v == "__default__", v),
         ):
             cmp_.variants.append(bucket[vid])
         out.append(cmp_)
@@ -128,8 +129,9 @@ def collect_variant_stats(
 class PromoteProposal:
     """Suggested weight reshuffle · returned to the operator who
     decides whether to call ``set_weights`` to commit."""
+
     base_recipe_id: str
-    weights: dict[str, int]            # variant_id → new_weight
+    weights: dict[str, int]  # variant_id → new_weight
     default_weight: int | None = None  # None = leave unchanged
     rationale: str = ""
     winner_variant_id: str | None = None
@@ -161,9 +163,9 @@ def propose_weights(
     # Skip the legacy "" bucket and __default__ for "winner" purposes ·
     # they're not promotable variants.
     promotable = [
-        v for v in comparison.variants
-        if v.variant_id and v.variant_id != "__default__"
-        and v.uses >= min_uses
+        v
+        for v in comparison.variants
+        if v.variant_id and v.variant_id != "__default__" and v.uses >= min_uses
     ]
     if len(promotable) < 2:
         return None
@@ -184,7 +186,7 @@ def propose_weights(
         runner_up_lower_bound=runner_up.wilson_lower,
         rationale=(
             f"variant {winner.variant_id} leads {runner_up.variant_id} "
-            f"by {lead*100:.1f}pp on the 95% Wilson lower bound "
+            f"by {lead * 100:.1f}pp on the 95% Wilson lower bound "
             f"({winner.wilson_lower:.3f} vs {runner_up.wilson_lower:.3f}; "
             f"{winner.uses}/{runner_up.uses} samples)"
         ),

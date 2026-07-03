@@ -165,10 +165,7 @@ def compute_automation_policy_rule_coverage(
     """Return a release-gate proof for high-risk automation policy drafts."""
 
     report = build_automation_policy_rule_drafts(targets=targets, limit=limit)
-    drafts = [
-        draft for draft in report.get("drafts") or []
-        if isinstance(draft, dict)
-    ]
+    drafts = [draft for draft in report.get("drafts") or [] if isinstance(draft, dict)]
     required_tools = {
         "live_browser_*",
         "browser_*",
@@ -204,11 +201,7 @@ def compute_automation_policy_rule_coverage(
             installable_deny_count += 1
         evidence = payload.get("evidence")
         evidence = evidence if isinstance(evidence, dict) else {}
-        controls = {
-            str(item)
-            for item in evidence.get("controls") or []
-            if str(item)
-        }
+        controls = {str(item) for item in evidence.get("controls") or [] if str(item)}
         controls_by_tool[tool] = controls
         missing = sorted(required_controls - controls)
         if missing:
@@ -221,10 +214,7 @@ def compute_automation_policy_rule_coverage(
         and not missing_controls
         and installable_deny_count == len(drafts)
     )
-    next_actions = [
-        f"Add automation policy draft for {tool}."
-        for tool in missing_tools
-    ]
+    next_actions = [f"Add automation policy draft for {tool}." for tool in missing_tools]
     next_actions.extend(
         f"Add controls {', '.join(controls)} to automation policy draft for {tool}."
         for tool, controls in sorted(missing_controls.items())
@@ -247,8 +237,7 @@ def compute_automation_policy_rule_coverage(
         "invalid_draft_ids": invalid_draft_ids,
         "required_controls": sorted(required_controls),
         "controls_by_tool": {
-            tool: sorted(controls)
-            for tool, controls in sorted(controls_by_tool.items())
+            tool: sorted(controls) for tool, controls in sorted(controls_by_tool.items())
         },
         "missing_controls": missing_controls,
         "next_actions": next_actions,
@@ -334,10 +323,7 @@ def _drafts_from_plugin_permission_review(plugin: dict[str, Any]) -> list[dict[s
         for item in (permission.get("permissions") or [])
         if _clean_text(item, limit=160)
     ]
-    executable_permissions = [
-        item for item in permissions
-        if not item.startswith("ui:")
-    ]
+    executable_permissions = [item for item in permissions if not item.startswith("ui:")]
     if not executable_permissions:
         return []
     plugin_id = _clean_text(plugin.get("id") or plugin.get("name"), limit=120)
@@ -358,23 +344,31 @@ def _drafts_from_plugin_permission_review(plugin: dict[str, Any]) -> list[dict[s
         server_names = _plugin_mcp_server_names(plugin)
         if server_names:
             for server_name in server_names:
-                targets.append({
-                    "tool": f"mcp__{_tool_fragment(server_name)}__*",
+                targets.append(
+                    {
+                        "tool": f"mcp__{_tool_fragment(server_name)}__*",
+                        "args_contains": "",
+                        "surface": "mcp",
+                    }
+                )
+        else:
+            targets.append(
+                {
+                    "tool": f"mcp__*{_tool_fragment(plugin_id)}*",
                     "args_contains": "",
                     "surface": "mcp",
-                })
-        else:
-            targets.append({
-                "tool": f"mcp__*{_tool_fragment(plugin_id)}*",
-                "args_contains": "",
-                "surface": "mcp",
-            })
-    if any(bool(surfaces.get(key)) for key in ("capabilities", "skills", "apps", "commands", "mcp")):
-        targets.append({
-            "tool": "use_capability",
-            "args_contains": plugin_id,
-            "surface": "capability",
-        })
+                }
+            )
+    if any(
+        bool(surfaces.get(key)) for key in ("capabilities", "skills", "apps", "commands", "mcp")
+    ):
+        targets.append(
+            {
+                "tool": "use_capability",
+                "args_contains": plugin_id,
+                "surface": "capability",
+            }
+        )
     drafts: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     for target in targets:
@@ -406,16 +400,18 @@ def _drafts_from_plugin_permission_review(plugin: dict[str, Any]) -> list[dict[s
             "review_required": True,
         }
         digest = _signature_for_payload(signed_payload)
-        drafts.append({
-            "schema": _DRAFT_SCHEMA,
-            "draft_id": f"prd_{digest[:20]}",
-            "signed_payload": signed_payload,
-            "signature": {
-                "schema": _SIGNATURE_SCHEMA,
-                "algorithm": "sha256:canonical-json",
-                "digest": digest,
-            },
-        })
+        drafts.append(
+            {
+                "schema": _DRAFT_SCHEMA,
+                "draft_id": f"prd_{digest[:20]}",
+                "signed_payload": signed_payload,
+                "signature": {
+                    "schema": _SIGNATURE_SCHEMA,
+                    "algorithm": "sha256:canonical-json",
+                    "digest": digest,
+                },
+            }
+        )
     return drafts
 
 
@@ -476,11 +472,7 @@ def _draft_from_proposal(record: ProposalRecord) -> dict[str, Any] | None:
         return None
     metadata = record.metadata if isinstance(record.metadata, dict) else {}
     item = metadata.get("item") if isinstance(metadata.get("item"), dict) else {}
-    item_metadata = (
-        item.get("metadata")
-        if isinstance(item.get("metadata"), dict)
-        else {}
-    )
+    item_metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
     latest = (
         item_metadata.get("latest_denial")
         if isinstance(item_metadata.get("latest_denial"), dict)
@@ -495,9 +487,7 @@ def _draft_from_proposal(record: ProposalRecord) -> dict[str, Any] | None:
     if not tool_name:
         return None
     reason = _clean_text(
-        latest.get("reason")
-        or item.get("text")
-        or record.description,
+        latest.get("reason") or item.get("text") or record.description,
         limit=240,
     )
     evidence = metadata.get("evidence") if isinstance(metadata.get("evidence"), dict) else {}
@@ -536,7 +526,9 @@ def _signature_for_payload(payload: dict[str, Any]) -> str:
 def _plugin_mcp_server_names(plugin: dict[str, Any]) -> list[str]:
     names: list[str] = []
     runtime = plugin.get("runtime") if isinstance(plugin.get("runtime"), dict) else {}
-    runtime_servers = runtime.get("mcp_servers") if isinstance(runtime.get("mcp_servers"), list) else []
+    runtime_servers = (
+        runtime.get("mcp_servers") if isinstance(runtime.get("mcp_servers"), list) else []
+    )
     for item in runtime_servers:
         if isinstance(item, dict):
             name = _clean_text(item.get("name"), limit=120)
@@ -590,7 +582,7 @@ def _tool_name_from_title(value: Any) -> str:
     text = _clean_text(value, limit=180)
     prefix = "Review repeated denials for "
     if text.startswith(prefix):
-        return text[len(prefix):].strip()
+        return text[len(prefix) :].strip()
     return ""
 
 

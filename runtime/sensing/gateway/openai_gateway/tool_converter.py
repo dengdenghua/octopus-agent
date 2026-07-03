@@ -89,13 +89,15 @@ def _trajectory_research_evidence(trajectory: Any) -> list[dict[str, str]]:
                     if key in seen:
                         continue
                     seen.add(key)
-                    evidence.append({
-                        "tool": tool_name or "source",
-                        "query": query,
-                        "title": title,
-                        "url": url,
-                        "snippet": snippet,
-                    })
+                    evidence.append(
+                        {
+                            "tool": tool_name or "source",
+                            "query": query,
+                            "title": title,
+                            "url": url,
+                            "snippet": snippet,
+                        }
+                    )
             elif tool_name == "fetch_url" or output.get("url"):
                 url = _clean_report_text(output.get("url") or args.get("url") or "", max_len=500)
                 content = _clean_report_text(
@@ -105,13 +107,15 @@ def _trajectory_research_evidence(trajectory: Any) -> list[dict[str, str]]:
                 key = (url, title)
                 if key not in seen:
                     seen.add(key)
-                    evidence.append({
-                        "tool": tool_name or "fetch_url",
-                        "query": query,
-                        "title": title,
-                        "url": url,
-                        "snippet": content,
-                    })
+                    evidence.append(
+                        {
+                            "tool": tool_name or "fetch_url",
+                            "query": query,
+                            "title": title,
+                            "url": url,
+                            "snippet": content,
+                        }
+                    )
         elif isinstance(output, str) and output.strip():
             urls = re.findall(r"https?://[^\s)\]>\"']+", output)
             if urls:
@@ -120,25 +124,29 @@ def _trajectory_research_evidence(trajectory: Any) -> list[dict[str, str]]:
                     if key in seen:
                         continue
                     seen.add(key)
-                    evidence.append({
-                        "tool": tool_name or "source",
-                        "query": query,
-                        "title": url,
-                        "url": url,
-                        "snippet": _clean_report_text(output),
-                    })
+                    evidence.append(
+                        {
+                            "tool": tool_name or "source",
+                            "query": query,
+                            "title": url,
+                            "url": url,
+                            "snippet": _clean_report_text(output),
+                        }
+                    )
             elif tool_name in {"web_search", "fetch_url", "site_search"}:
                 title = query or tool_name or "Tool observation"
                 key = ("", title)
                 if key not in seen:
                     seen.add(key)
-                    evidence.append({
-                        "tool": tool_name or "source",
-                        "query": query,
-                        "title": title,
-                        "url": "",
-                        "snippet": _clean_report_text(output),
-                    })
+                    evidence.append(
+                        {
+                            "tool": tool_name or "source",
+                            "query": query,
+                            "title": title,
+                            "url": "",
+                            "snippet": _clean_report_text(output),
+                        }
+                    )
     return evidence[:30]
 
 
@@ -152,13 +160,11 @@ def _trajectory_tool_lines(trajectory: Any) -> list[str]:
                 max_len=220,
             )
             tool = _react_action_name(action) or action.strip() or "tool"
-            lines.append(
-                f"{index}. {tool}"
-                + (f" -> {observation}" if observation else "")
-            )
+            lines.append(f"{index}. {tool}" + (f" -> {observation}" if observation else ""))
             continue
         try:
             from ..openai_formatting import summarize_step_for_stream as _summarize_step_for_stream
+
             lines.append(f"{index}. {_summarize_step_for_stream(step)}")
         except (ImportError, AttributeError, TypeError):
             lines.append(f"{index}. {getattr(action, 'sucker_id', 'tool')}")

@@ -24,6 +24,7 @@ Sentinel patterns the runtime expects (e.g. `(工具失败)`,
 `(real tool execution succeeded)`, `[1/N tool_name]` parallel-batch
 headers) are NEVER stripped — the regex set guards them.
 """
+
 from __future__ import annotations
 
 import os
@@ -86,13 +87,14 @@ def _strip_html(text: str) -> str:
     # chars so a malformed tag can't eat the whole string.
     cleaned = _HTML_TAG_RE.sub(" ", cleaned)
     # Decode the most common entities.
-    cleaned = (cleaned
-        .replace("&nbsp;", " ")
+    cleaned = (
+        cleaned.replace("&nbsp;", " ")
         .replace("&amp;", "&")
         .replace("&lt;", "<")
         .replace("&gt;", ">")
         .replace("&quot;", '"')
-        .replace("&#39;", "'"))
+        .replace("&#39;", "'")
+    )
     # Collapse the whitespace explosion HTML stripping leaves behind.
     cleaned = re.sub(r"[ \t]+", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
@@ -101,6 +103,7 @@ def _strip_html(text: str) -> str:
 
 def _shorten_long_urls(text: str) -> str:
     """https://very.long/.../...?a=…&b=… → <very.long/...>"""
+
     def _replace(m: re.Match[str]) -> str:
         url = m.group(0)
         m2 = re.match(r"https?://([^/]+)/?(.{0,12})", url)
@@ -109,6 +112,7 @@ def _shorten_long_urls(text: str) -> str:
         host = m2.group(1)
         head = m2.group(2)
         return f"<{host}/{head}…>" if head else f"<{host}/…>"
+
     return _LONG_URL_RE.sub(_replace, text)
 
 
@@ -127,6 +131,7 @@ def _dedup_repeated_lines(text: str) -> str:
     distinct results that happen to share a prefix". Only exact
     duplicates can be dropped without guessing.
     """
+
     def _replace_run(m: re.Match[str]) -> str:
         line = m.group(1)
         # Count line separators (either real \n or escaped \\n).
@@ -148,6 +153,7 @@ _JSON_ARRAY_RE = re.compile(r"\[(\s*\{.*?\}\s*,?\s*){13,}\]", re.DOTALL)
 def _trim_oversized_arrays(text: str) -> str:
     """When JSON output contains a long list of objects, keep first 5
     and last 2 — model rarely needs item #8 of 50."""
+
     def _replace(m: re.Match[str]) -> str:
         body = m.group(0)
         # Cheap object-boundary split; not a full JSON parser, but
@@ -158,6 +164,7 @@ def _trim_oversized_arrays(text: str) -> str:
         head = ", ".join(items[:5])
         tail = ", ".join(items[-2:])
         return f"[{head}, … ({len(items) - 7} more items omitted) …, {tail}]"
+
     return _JSON_ARRAY_RE.sub(_replace, text)
 
 

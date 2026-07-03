@@ -18,18 +18,21 @@ from .prompt_optimizer import PromptOptimizer, VariantReport
 
 @dataclass
 class EvolutionPolicy:
-
     retire_on_losing: bool = True
-    retire_min_uses: int = 5              # Implementation note.
+    retire_min_uses: int = 5  # Implementation note.
     retire_verdicts: tuple[str, ...] = ("losing",)
-    min_variants_after_retire: int = 1    # Implementation note.
+    min_variants_after_retire: int = 1  # Implementation note.
 
     use_pareto: bool = False
     pareto_metrics: tuple[str, ...] = (
-        "success_rate", "avg_cost_usd", "avg_step_count",
+        "success_rate",
+        "avg_cost_usd",
+        "avg_step_count",
     )
     pareto_maximize: tuple[bool, ...] = (
-        True, False, False,  # Implementation note.
+        True,
+        False,
+        False,  # Implementation note.
     )
 
     boost_winning: bool = True
@@ -37,16 +40,15 @@ class EvolutionPolicy:
     max_weight: float = 10.0
 
     mutate_each_step: bool = True
-    mutate_from_best: bool = True          # Implementation note.
-    max_total_variants: int = 10           # Implementation note.
+    mutate_from_best: bool = True  # Implementation note.
+    max_total_variants: int = 10  # Implementation note.
 
-    crossover_each_step: bool = True       # Implementation note.
+    crossover_each_step: bool = True  # Implementation note.
     crossover_requires_winning: bool = True  # Implementation note.
 
 
 @dataclass
 class EvolutionStep:
-
     retired: list[str] = field(default_factory=list)
     boosted: list[tuple[str, float, float]] = field(default_factory=list)
     # (name, old_weight, new_weight)
@@ -73,7 +75,6 @@ class EvolutionStep:
 
 
 class PromptEvolver:
-
     def __init__(
         self,
         optimizer: PromptOptimizer,
@@ -160,7 +161,8 @@ class PromptEvolver:
         return any(marker.lower() in lowered for marker in markers)
 
     def _trust_gate_decision(
-        self, proposal_suffix: str,
+        self,
+        proposal_suffix: str,
     ) -> tuple[bool, str]:
         """Decide whether to admit a mutated variant given current trust.
 
@@ -182,6 +184,7 @@ class PromptEvolver:
             from runtime.safety.validation.trust_signal import (
                 classify_trust_score,
             )
+
             bucket = classify_trust_score(score)
         except Exception:  # noqa: BLE001 — fail-open
             return (True, "")
@@ -191,8 +194,7 @@ class PromptEvolver:
             return (True, "")
         return (
             False,
-            f"trust_gate_block: trust={score:.2f} (suspect) + "
-            "mutation pushes toward relaxation",
+            f"trust_gate_block: trust={score:.2f} (suspect) + mutation pushes toward relaxation",
         )
 
     def step(self) -> EvolutionStep:
@@ -221,18 +223,17 @@ class PromptEvolver:
             )
             return step
 
-
     def _retire_losers(
-        self, report: dict[str, VariantReport], step: EvolutionStep,
+        self,
+        report: dict[str, VariantReport],
+        step: EvolutionStep,
     ) -> None:
         if self.policy.use_pareto:
             candidates = self._retire_candidates_pareto(report)
         else:
             candidates = self._retire_candidates_verdict(report)
 
-        candidates.sort(key=lambda nr: (
-            nr[1].recipe_score.score if nr[1].recipe_score else 0.0
-        ))
+        candidates.sort(key=lambda nr: nr[1].recipe_score.score if nr[1].recipe_score else 0.0)
         for name, _r in candidates:
             remaining = len(self.optimizer.variant_names)
             if remaining <= self.policy.min_variants_after_retire:
@@ -242,30 +243,30 @@ class PromptEvolver:
                 step.retired.append(name)
 
     def _retire_candidates_verdict(
-        self, report: dict[str, VariantReport],
+        self,
+        report: dict[str, VariantReport],
     ) -> list[tuple[str, VariantReport]]:
         return [
-            (name, r) for name, r in report.items()
+            (name, r)
+            for name, r in report.items()
             if r.verdict in self.policy.retire_verdicts
             and r.assignments >= self.policy.retire_min_uses
         ]
 
     def _retire_candidates_pareto(
-        self, report: dict[str, VariantReport],
+        self,
+        report: dict[str, VariantReport],
     ) -> list[tuple[str, VariantReport]]:
         scored = {
-            name: r for name, r in report.items()
-            if r.recipe_score is not None
-            and r.assignments >= self.policy.retire_min_uses
+            name: r
+            for name, r in report.items()
+            if r.recipe_score is not None and r.assignments >= self.policy.retire_min_uses
         }
         if len(scored) <= 1:
             return []
 
         metrics = self.policy.pareto_metrics
-        maximize = {
-            m: self.policy.pareto_maximize[i]
-            for i, m in enumerate(metrics)
-        }
+        maximize = {m: self.policy.pareto_maximize[i] for i, m in enumerate(metrics)}
         points = {
             name: {
                 "success_rate": r.recipe_score.success_rate,
@@ -276,15 +277,16 @@ class PromptEvolver:
             for name, r in scored.items()
         }
         frontier = pareto_frontier_by_name(
-            points, metrics, maximize=maximize,
+            points,
+            metrics,
+            maximize=maximize,
         )
-        return [
-            (name, r) for name, r in scored.items()
-            if name not in frontier
-        ]
+        return [(name, r) for name, r in scored.items() if name not in frontier]
 
     def _boost_winners(
-        self, report: dict[str, VariantReport], step: EvolutionStep,
+        self,
+        report: dict[str, VariantReport],
+        step: EvolutionStep,
     ) -> None:
         for name, r in report.items():
             if r.verdict != "winning":
@@ -301,7 +303,9 @@ class PromptEvolver:
                 step.boosted.append((name, old_variant.weight, new_w))
 
     def _mutate_step(
-        self, report: dict[str, VariantReport], step: EvolutionStep,
+        self,
+        report: dict[str, VariantReport],
+        step: EvolutionStep,
     ) -> None:
         if len(self.optimizer.variant_names) >= self.policy.max_total_variants:
             step.mutation_skipped_reason = "variant_pool_full"
@@ -325,9 +329,7 @@ class PromptEvolver:
             return
         # P0 -> P1: trust-aware gate. When agent is suspect, refuse a
         # mutation whose suffix looks like it would relax safety.
-        proposed_suffix = (
-            getattr(proposal.variant, "system_prompt_suffix", "") or ""
-        )
+        proposed_suffix = getattr(proposal.variant, "system_prompt_suffix", "") or ""
         allow, gate_reason = self._trust_gate_decision(proposed_suffix)
         if not allow:
             step.mutation_skipped_reason = gate_reason
@@ -339,25 +341,23 @@ class PromptEvolver:
             step.mutation_skipped_reason = f"add_failed: {e}"
 
     def _pick_base_for_mutation(
-        self, report: dict[str, VariantReport],
+        self,
+        report: dict[str, VariantReport],
     ) -> str | None:
-        active = [
-            (n, r) for n, r in report.items()
-            if n in self.optimizer.variant_names
-        ]
+        active = [(n, r) for n, r in report.items() if n in self.optimizer.variant_names]
         if not active:
             return None
         if self.policy.mutate_from_best:
             active.sort(
-                key=lambda nr: (
-                    nr[1].recipe_score.score if nr[1].recipe_score else -1.0
-                ),
+                key=lambda nr: nr[1].recipe_score.score if nr[1].recipe_score else -1.0,
                 reverse=True,
             )
         return active[0][0]
 
     def _crossover_step(
-        self, report: dict[str, VariantReport], step: EvolutionStep,
+        self,
+        report: dict[str, VariantReport],
+        step: EvolutionStep,
     ) -> None:
         if len(self.optimizer.variant_names) >= self.policy.max_total_variants:
             step.crossover_skipped_reason = "variant_pool_full"
@@ -365,15 +365,15 @@ class PromptEvolver:
 
         if self.policy.crossover_requires_winning:
             active = [
-                (n, r) for n, r in report.items()
-                if n in self.optimizer.variant_names
-                and r.verdict == "winning"
+                (n, r)
+                for n, r in report.items()
+                if n in self.optimizer.variant_names and r.verdict == "winning"
             ]
         else:
             active = [
-                (n, r) for n, r in report.items()
-                if n in self.optimizer.variant_names
-                and r.verdict in ("winning", "neutral")
+                (n, r)
+                for n, r in report.items()
+                if n in self.optimizer.variant_names and r.verdict in ("winning", "neutral")
             ]
 
         if len(active) < 2:
@@ -381,9 +381,7 @@ class PromptEvolver:
             return
 
         active.sort(
-            key=lambda nr: (
-                nr[1].recipe_score.score if nr[1].recipe_score else -1.0
-            ),
+            key=lambda nr: nr[1].recipe_score.score if nr[1].recipe_score else -1.0,
             reverse=True,
         )
         a_name = active[0][0]

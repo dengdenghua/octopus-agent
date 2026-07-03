@@ -81,7 +81,8 @@ class MCPTrustStore:
         except (OSError, json.JSONDecodeError) as exc:
             _log.warning(
                 "mcp_trust.json unreadable (%s: %s) · starting empty",
-                type(exc).__name__, exc,
+                type(exc).__name__,
+                exc,
             )
             return
         entries = raw.get("entries") or []

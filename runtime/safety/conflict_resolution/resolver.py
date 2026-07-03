@@ -19,6 +19,7 @@ overwrite real evidence.
 This module is the algorithm only. KG / memory_consolidation call into
 ``resolve()`` and act on the returned ``Resolution``.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -29,9 +30,7 @@ from uuid import UUID
 # ─── Data models (mirror protocols/conflict_resolution.md §2) ───────
 
 
-ConflictType = Literal[
-    "direct", "value", "type", "relational", "temporal", "inferred"
-]
+ConflictType = Literal["direct", "value", "type", "relational", "temporal", "inferred"]
 
 
 @dataclass(frozen=True)
@@ -102,9 +101,7 @@ def strategy_temporal_split(
         return None  # Some assertions lack time data — can't decide.
     for i, a in enumerate(assertions):
         for b in assertions[i + 1 :]:
-            if _intervals_overlap(
-                (a.valid_from, a.valid_until), (b.valid_from, b.valid_until)
-            ):
+            if _intervals_overlap((a.valid_from, a.valid_until), (b.valid_from, b.valid_until)):
                 return None  # Overlap → not a clean temporal split.
     return Resolution(
         strategy="temporal_split",
@@ -178,7 +175,8 @@ def strategy_recency(
 
 
 def strategy_escalate(
-    assertions: list[Assertion], conflict: ConflictRecord,
+    assertions: list[Assertion],
+    conflict: ConflictRecord,
 ) -> Resolution:
     """Strategy-6: mark disputed, escalate for human review."""
     conflict.escalated = True

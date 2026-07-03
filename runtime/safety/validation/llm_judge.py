@@ -21,6 +21,7 @@ Features
   parse) degrades to ``allow`` via ``build_judge_from_llm_fn``'s
   exception handling. Regex gate stays the hard floor.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -85,7 +86,10 @@ class _TTLCache:
             return entry.verdict
 
     def put(
-        self, message: str, destination: str, verdict: JudgeVerdict,
+        self,
+        message: str,
+        destination: str,
+        verdict: JudgeVerdict,
     ) -> None:
         k = self._key(message, destination)
         expires = time.monotonic() + self._ttl
@@ -157,11 +161,14 @@ def build_judge_from_router(
         return resp.text or ""
 
     parsed_judge = build_judge_from_llm_fn(
-        _llm_call, prompt_template=prompt_template,
+        _llm_call,
+        prompt_template=prompt_template,
     )
 
     def _cached_judge(
-        message: str, destination: str, session: Any,
+        message: str,
+        destination: str,
+        session: Any,
     ) -> JudgeVerdict:
         if cache_ttl_s > 0:
             hit = cache.get(message, destination)
@@ -175,7 +182,8 @@ def build_judge_from_router(
             # ModelRequest construction failures).
             _log.warning(
                 "llm_judge unexpected error %s: %s · defaulting allow",
-                type(exc).__name__, exc,
+                type(exc).__name__,
+                exc,
             )
             return JudgeVerdict(action="allow", reason="judge_unavailable")
         if cache_ttl_s > 0:

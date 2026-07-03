@@ -34,7 +34,8 @@ class _FakeSpec:
 class TestRunnerContextIsolation:
     def test_invoke_runs_callback_in_isolated_context(self):
         probe: contextvars.ContextVar[str] = contextvars.ContextVar(
-            "debt_probe", default="clean",
+            "debt_probe",
+            default="clean",
         )
 
         def cb() -> None:
@@ -76,24 +77,28 @@ class TestSelectToolSpecs:
         specs = [
             _FakeSpec(n)
             for n in (
-                "read_file", "grep_text", "bb_write",   # atomic
-                "exec_shell", "write_text_file", "edit_file", "propose_patch",  # NOT
+                "read_file",
+                "grep_text",
+                "bb_write",  # atomic
+                "exec_shell",
+                "write_text_file",
+                "edit_file",
+                "propose_patch",  # NOT
             )
         ]
         out = {s.name for s in select_tool_specs((), specs)}
 
         assert "read_file" in out and "grep_text" in out  # atomic read kept
-        assert "bb_write" in out                           # blackboard kept
-        assert "exec_shell" not in out                     # dangerous dropped
+        assert "bb_write" in out  # blackboard kept
+        assert "exec_shell" not in out  # dangerous dropped
         assert "write_text_file" not in out
         assert "edit_file" not in out
         assert "propose_patch" not in out
-        assert out <= ATOMIC_SKILL_NAMES                   # nothing beyond atomic
+        assert out <= ATOMIC_SKILL_NAMES  # nothing beyond atomic
 
     def test_nonempty_allowlist_honours_named_plus_blackboard(self):
         specs = [
-            _FakeSpec(n)
-            for n in ("read_file", "exec_shell", "bb_read", "bb_write", "bb_keys")
+            _FakeSpec(n) for n in ("read_file", "exec_shell", "bb_read", "bb_write", "bb_keys")
         ]
         out = [s.name for s in select_tool_specs(("read_file", "exec_shell"), specs)]
 

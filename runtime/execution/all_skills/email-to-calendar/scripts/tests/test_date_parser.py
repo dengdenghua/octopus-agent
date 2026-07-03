@@ -6,7 +6,7 @@ import sys
 import unittest
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from utils.date_parser import parse_date, parse_time
 
@@ -127,5 +127,5 @@ class TestParseTime(unittest.TestCase):
         self.assertEqual(parse_time("  2:30 PM  "), "14:30")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

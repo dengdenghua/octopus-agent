@@ -84,9 +84,7 @@ def test_file_override_beats_default_but_not_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path = tmp_path / "feature_flags.json"
-    path.write_text(
-        json.dumps({"camouflage.enabled": True}), encoding="utf-8"
-    )
+    path.write_text(json.dumps({"camouflage.enabled": True}), encoding="utf-8")
     monkeypatch.delenv("OCTOPUS_FF_CAMOUFLAGE_ENABLED", raising=False)
     monkeypatch.delenv("OCTOPUS_CAMOUFLAGE_ENABLED", raising=False)
     ff.configure(path)
@@ -129,9 +127,13 @@ def test_file_reload_picks_up_edits(
 def test_int_flags_parse_env_to_int(monkeypatch: pytest.MonkeyPatch) -> None:
     # Self-register a test int flag rather than hardcoding a production flag —
     # so this mechanism test doesn't break when a flag is added/removed.
-    ff.register(ff.FlagSpec(
-        name="test.int_flag", default=1800, legacy_env=("OCTOPUS_TEST_INT_FLAG",),
-    ))
+    ff.register(
+        ff.FlagSpec(
+            name="test.int_flag",
+            default=1800,
+            legacy_env=("OCTOPUS_TEST_INT_FLAG",),
+        )
+    )
     monkeypatch.setenv("OCTOPUS_TEST_INT_FLAG", "3600")
     ff.reload()
     assert ff.value("test.int_flag") == 3600
@@ -140,9 +142,13 @@ def test_int_flags_parse_env_to_int(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_int_flags_fall_back_when_env_invalid(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    ff.register(ff.FlagSpec(
-        name="test.int_flag", default=1800, legacy_env=("OCTOPUS_TEST_INT_FLAG",),
-    ))
+    ff.register(
+        ff.FlagSpec(
+            name="test.int_flag",
+            default=1800,
+            legacy_env=("OCTOPUS_TEST_INT_FLAG",),
+        )
+    )
     monkeypatch.setenv("OCTOPUS_TEST_INT_FLAG", "not-a-number")
     ff.reload()
     # Falls through to default (1800), doesn't crash.
@@ -200,9 +206,7 @@ def test_describe_source_reflects_winner(
 ) -> None:
     monkeypatch.setenv("OCTOPUS_FF_REGENERATION_ENABLED", "0")
     ff.reload()
-    entry = next(
-        e for e in ff.describe() if e["name"] == "regeneration.enabled"
-    )
+    entry = next(e for e in ff.describe() if e["name"] == "regeneration.enabled")
     assert entry["value"] is False
     assert entry["source"] == "env"
 

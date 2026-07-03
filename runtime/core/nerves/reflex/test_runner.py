@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import datetime as _dt
@@ -30,19 +29,22 @@ def _walk_expects(raw_data: Any) -> list[dict[str, Any]]:
         for case in exps:
             if not isinstance(case, dict):
                 continue
-            cases.append({
-                "source_rule_id": rid,
-                "input": str(case.get("input") or "").strip(),
-                "should": str(case.get("should") or "hit").lower(),
-                "rule_id": case.get("rule_id"),
-                "actor": case.get("actor"),
-                "time": case.get("time"),
-            })
+            cases.append(
+                {
+                    "source_rule_id": rid,
+                    "input": str(case.get("input") or "").strip(),
+                    "should": str(case.get("should") or "hit").lower(),
+                    "rule_id": case.get("rule_id"),
+                    "actor": case.get("actor"),
+                    "time": case.get("time"),
+                }
+            )
     return cases
 
 
 def _evaluate_one(
-    case: dict[str, Any], reflex_router: Any,
+    case: dict[str, Any],
+    reflex_router: Any,
 ) -> dict[str, Any]:
     """Run one test case · returns a dict with pass/fail + diagnostic
     fields. Doesn't raise · CI consumers want a list of all failures,
@@ -57,8 +59,10 @@ def _evaluate_one(
         return {**case, "passed": False, "reason": "empty input"}
 
     intent = ParsedIntent(
-        raw=text, intent_type="task",
-        normalized_goal=text, user_context={},
+        raw=text,
+        intent_type="task",
+        normalized_goal=text,
+        user_context={},
     )
 
     # Override the gating evaluator's "now" by patching the router's
@@ -104,15 +108,11 @@ def _evaluate_one(
             **case,
             "passed": False,
             "reason": f"expected {expected_should!r}, got {actual_should!r}"
-                      + (f" (matched={matched_rule_id})" if matched_rule_id else ""),
+            + (f" (matched={matched_rule_id})" if matched_rule_id else ""),
         }
     # If a specific rule_id was demanded, verify it.
     expect_rule = case.get("rule_id")
-    if (
-        expected_should == "hit"
-        and expect_rule
-        and matched_rule_id != expect_rule
-    ):
+    if expected_should == "hit" and expect_rule and matched_rule_id != expect_rule:
         return {
             **case,
             "passed": False,
@@ -138,8 +138,11 @@ def run_tests(
     path = Path(rules_path) if rules_path else find_default_rules_file()
     if path is None or not path.is_file():
         return {
-            "passed": 0, "failed": 0, "total": 0,
-            "failures": [], "cases": [],
+            "passed": 0,
+            "failed": 0,
+            "total": 0,
+            "failures": [],
+            "cases": [],
             "error": "rules file not found",
         }
 
@@ -149,22 +152,30 @@ def run_tests(
     try:
         if path.suffix.lower() in (".yaml", ".yml"):
             import yaml  # type: ignore[import]
+
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         else:
             import json
+
             data = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
         return {
-            "passed": 0, "failed": 0, "total": 0,
-            "failures": [], "cases": [],
+            "passed": 0,
+            "failed": 0,
+            "total": 0,
+            "failures": [],
+            "cases": [],
             "error": f"parse failed: {exc}",
         }
 
     cases = _walk_expects(data)
     if not cases:
         return {
-            "passed": 0, "failed": 0, "total": 0,
-            "failures": [], "cases": [],
+            "passed": 0,
+            "failed": 0,
+            "total": 0,
+            "failures": [],
+            "cases": [],
             "note": "no expects blocks found in rules file",
         }
 
@@ -192,10 +203,7 @@ def format_report(summary: dict[str, Any]) -> str:
         f"Reflex tests · {summary['passed']}/{summary['total']} passed",
     ]
     for f in summary["failures"]:
-        lines.append(
-            f"  ✗ rule={f['source_rule_id']} input={f['input']!r} "
-            f"· {f['reason']}"
-        )
+        lines.append(f"  ✗ rule={f['source_rule_id']} input={f['input']!r} · {f['reason']}")
     if not summary["failures"]:
         lines.append("  ✓ all green")
     return "\n".join(lines)

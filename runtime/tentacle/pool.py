@@ -94,14 +94,21 @@ class TentaclePool:
             self._affinity_index[tentacle.tentacle_type.value].add(tentacle.tentacle_id)
             # 把 platform 也加进去
             self._affinity_index[tentacle.platform].add(tentacle.tentacle_id)
-        await self._emit("tentacle.registered", {
-            "tentacle_id": tentacle.tentacle_id,
-            "tentacle_type": tentacle.tentacle_type.value,
-            "platform": tentacle.platform,
-            "capabilities": tentacle.capabilities,
-        })
-        logger.info("tentacle registered id=%s type=%s caps=%d",
-                    tentacle.tentacle_id, tentacle.tentacle_type.value, len(tentacle.capabilities))
+        await self._emit(
+            "tentacle.registered",
+            {
+                "tentacle_id": tentacle.tentacle_id,
+                "tentacle_type": tentacle.tentacle_type.value,
+                "platform": tentacle.platform,
+                "capabilities": tentacle.capabilities,
+            },
+        )
+        logger.info(
+            "tentacle registered id=%s type=%s caps=%d",
+            tentacle.tentacle_id,
+            tentacle.tentacle_type.value,
+            len(tentacle.capabilities),
+        )
 
     async def unregister(self, tentacle_id: str) -> None:
         """注销一个触手（设备断开时）."""
@@ -146,8 +153,7 @@ class TentaclePool:
         for aff in affinity:
             candidate_ids |= self._affinity_index.get(aff, set())
         candidates = [
-            self._tentacles[tid] for tid in candidate_ids
-            if self._tentacles[tid].is_online
+            self._tentacles[tid] for tid in candidate_ids if self._tentacles[tid].is_online
         ]
         if prefer_typed is not None:
             typed = [c for c in candidates if c.tentacle_type == prefer_typed]
@@ -195,9 +201,7 @@ class TentaclePool:
 
     # ── 屏幕状态订阅 ────────────────────────────────────────
 
-    def subscribe_screen_changes(
-        self, callback: Callable[[dict], Awaitable[None]]
-    ) -> None:
+    def subscribe_screen_changes(self, callback: Callable[[dict], Awaitable[None]]) -> None:
         """订阅屏幕变化事件（异步回调）."""
         self._subscribers.append(callback)
 

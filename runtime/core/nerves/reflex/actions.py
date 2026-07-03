@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -17,17 +16,19 @@ _LOG = logging.getLogger("octopus.reflex.action")
 @dataclass
 class ActionResult:
     """Outcome of executing one action block · journaled for audit."""
+
     rule_id: str
-    kind: str                       # "webhook" | "exec"
+    kind: str  # "webhook" | "exec"
     success: bool
     elapsed_ms: float
-    detail: str = ""                # short status string · e.g. "HTTP 200"
-    error: str = ""                 # exception class:msg when failed
+    detail: str = ""  # short status string · e.g. "HTTP 200"
+    error: str = ""  # exception class:msg when failed
 
 
 @dataclass
 class ActionSpec:
     """Parsed action config for one rule · None when rule has no action."""
+
     webhook: dict[str, Any] | None = None
     exec: dict[str, Any] | None = None
     mqtt: dict[str, Any] | None = None
@@ -58,8 +59,7 @@ def _run_webhook(rule_id: str, cfg: dict[str, Any]) -> ActionResult:
     t0 = time.perf_counter()
     url = str(cfg.get("url") or "").strip()
     if not url:
-        return ActionResult(rule_id, "webhook", False, 0.0,
-                            error="missing url")
+        return ActionResult(rule_id, "webhook", False, 0.0, error="missing url")
     method = str(cfg.get("method") or "POST").upper()
     timeout_s = float(cfg.get("timeout_ms") or 1000) / 1000.0
     headers = cfg.get("headers") if isinstance(cfg.get("headers"), dict) else {}
@@ -73,23 +73,29 @@ def _run_webhook(rule_id: str, cfg: dict[str, Any]) -> ActionResult:
 
     try:
         req = urllib.request.Request(
-            url, data=data, method=method, headers=req_headers,
+            url,
+            data=data,
+            method=method,
+            headers=req_headers,
         )
         with urllib.request.urlopen(req, timeout=timeout_s) as resp:
             status = getattr(resp, "status", 0) or 0
             ok = 200 <= status < 300
             elapsed = (time.perf_counter() - t0) * 1000
-            return ActionResult(rule_id, "webhook", ok, elapsed,
-                                detail=f"HTTP {status}")
+            return ActionResult(rule_id, "webhook", ok, elapsed, detail=f"HTTP {status}")
     except urllib.error.HTTPError as exc:
         elapsed = (time.perf_counter() - t0) * 1000
-        return ActionResult(rule_id, "webhook", False, elapsed,
-                            detail=f"HTTP {exc.code}",
-                            error=f"HTTPError:{exc.reason}")
+        return ActionResult(
+            rule_id,
+            "webhook",
+            False,
+            elapsed,
+            detail=f"HTTP {exc.code}",
+            error=f"HTTPError:{exc.reason}",
+        )
     except Exception as exc:  # noqa: BLE001
         elapsed = (time.perf_counter() - t0) * 1000
-        return ActionResult(rule_id, "webhook", False, elapsed,
-                            error=f"{type(exc).__name__}:{exc}")
+        return ActionResult(rule_id, "webhook", False, elapsed, error=f"{type(exc).__name__}:{exc}")
 
 
 def _run_exec(rule_id: str, cfg: dict[str, Any]) -> ActionResult:
@@ -113,8 +119,12 @@ def _run_exec(rule_id: str, cfg: dict[str, Any]) -> ActionResult:
         else:
             args = shlex.split(cmd, posix=True)
         proc = subprocess.run(
-            args, shell=use_shell, capture_output=True,
-            timeout=timeout_s, check=False, text=True,
+            args,
+            shell=use_shell,
+            capture_output=True,
+            timeout=timeout_s,
+            check=False,
+            text=True,
         )
         elapsed = (time.perf_counter() - t0) * 1000
         ok = proc.returncode == 0
@@ -122,16 +132,13 @@ def _run_exec(rule_id: str, cfg: dict[str, Any]) -> ActionResult:
         tail = (proc.stdout or proc.stderr or "").strip().replace("\n", " ")
         if len(tail) > 120:
             tail = tail[:120] + "…"
-        return ActionResult(rule_id, "exec", ok, elapsed,
-                            detail=f"exit={proc.returncode} {tail}")
+        return ActionResult(rule_id, "exec", ok, elapsed, detail=f"exit={proc.returncode} {tail}")
     except subprocess.TimeoutExpired:
         elapsed = (time.perf_counter() - t0) * 1000
-        return ActionResult(rule_id, "exec", False, elapsed,
-                            error=f"TimeoutExpired:{timeout_s}s")
+        return ActionResult(rule_id, "exec", False, elapsed, error=f"TimeoutExpired:{timeout_s}s")
     except Exception as exc:  # noqa: BLE001
         elapsed = (time.perf_counter() - t0) * 1000
-        return ActionResult(rule_id, "exec", False, elapsed,
-                            error=f"{type(exc).__name__}:{exc}")
+        return ActionResult(rule_id, "exec", False, elapsed, error=f"{type(exc).__name__}:{exc}")
 
 
 def _run_mqtt(rule_id: str, cfg: dict[str, Any]) -> ActionResult:
@@ -166,7 +173,10 @@ def _run_mqtt(rule_id: str, cfg: dict[str, Any]) -> ActionResult:
     except ImportError:
         elapsed = (time.perf_counter() - t0) * 1000
         return ActionResult(
-            rule_id, "mqtt", False, elapsed,
+            rule_id,
+            "mqtt",
+            False,
+            elapsed,
             error="paho-mqtt not installed (pip install paho-mqtt)",
         )
 
@@ -198,7 +208,10 @@ def _run_mqtt(rule_id: str, cfg: dict[str, Any]) -> ActionResult:
             payload_bytes = json.dumps(payload, ensure_ascii=False)
         except (TypeError, ValueError) as exc:
             return ActionResult(
-                rule_id, "mqtt", False, 0.0,
+                rule_id,
+                "mqtt",
+                False,
+                0.0,
                 error=f"payload not JSON-serializable: {exc}",
             )
 
@@ -230,13 +243,19 @@ def _run_mqtt(rule_id: str, cfg: dict[str, Any]) -> ActionResult:
         )
         elapsed = (time.perf_counter() - t0) * 1000
         return ActionResult(
-            rule_id, "mqtt", True, elapsed,
+            rule_id,
+            "mqtt",
+            True,
+            elapsed,
             detail=f"{host}:{port} topic={topic} qos={qos}",
         )
     except Exception as exc:  # noqa: BLE001
         elapsed = (time.perf_counter() - t0) * 1000
         return ActionResult(
-            rule_id, "mqtt", False, elapsed,
+            rule_id,
+            "mqtt",
+            False,
+            elapsed,
             error=f"{type(exc).__name__}:{exc}",
         )
 

@@ -63,9 +63,11 @@ class ProposalLedger:
         model: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> ProposalRecord:
-        h = __import__("hashlib").sha256(
-            f"{kind}:{description}:{datetime.now().isoformat()}".encode()
-        ).hexdigest()[:12]
+        h = (
+            __import__("hashlib")
+            .sha256(f"{kind}:{description}:{datetime.now().isoformat()}".encode())
+            .hexdigest()[:12]
+        )
         record = ProposalRecord(
             proposal_id=h,
             kind=kind,
@@ -82,21 +84,26 @@ class ProposalLedger:
 
     def accept(self, proposal_id: str) -> ProposalRecord | None:
         return self._update_status(
-            proposal_id, ProposalStatus.ACCEPTED,
+            proposal_id,
+            ProposalStatus.ACCEPTED,
         )
 
     def reject(self, proposal_id: str, reason: str | None = None) -> ProposalRecord | None:
         record = self._update_status(
-            proposal_id, ProposalStatus.REJECTED,
+            proposal_id,
+            ProposalStatus.REJECTED,
         )
         if record is not None and reason is not None:
             record.rejection_reason = reason
             self._rewrite_record(record)
         return record
 
-    def mark_applied(self, proposal_id: str, fitness_after: float | None = None) -> ProposalRecord | None:
+    def mark_applied(
+        self, proposal_id: str, fitness_after: float | None = None
+    ) -> ProposalRecord | None:
         record = self._update_status(
-            proposal_id, ProposalStatus.APPLIED,
+            proposal_id,
+            ProposalStatus.APPLIED,
         )
         if record is not None:
             record.applied_ts = datetime.now().isoformat(timespec="seconds")
@@ -107,7 +114,8 @@ class ProposalLedger:
 
     def mark_rolled_back(self, proposal_id: str) -> ProposalRecord | None:
         record = self._update_status(
-            proposal_id, ProposalStatus.ROLLED_BACK,
+            proposal_id,
+            ProposalStatus.ROLLED_BACK,
         )
         if record is not None:
             record.rolled_back_ts = datetime.now().isoformat(timespec="seconds")
@@ -155,30 +163,34 @@ class ProposalLedger:
                     continue
                 try:
                     d = json.loads(line)
-                    records.append(ProposalRecord(
-                        proposal_id=str(d.get("proposal_id", "")),
-                        kind=str(d.get("kind", "")),
-                        description=str(d.get("description", "")),
-                        status=ProposalStatus(d.get("status", "proposed")),
-                        proposer=str(d.get("proposer", "system")),
-                        ts=str(d.get("ts", "")),
-                        fitness_before=d.get("fitness_before"),
-                        fitness_after=d.get("fitness_after"),
-                        model=d.get("model"),
-                        cost_tokens=int(d.get("cost_tokens", 0) or 0),
-                        cost_usd=float(d.get("cost_usd", 0.0) or 0.0),
-                        metadata=d.get("metadata") or {},
-                        applied_ts=d.get("applied_ts"),
-                        rolled_back_ts=d.get("rolled_back_ts"),
-                        rejection_reason=d.get("rejection_reason"),
-                    ))
+                    records.append(
+                        ProposalRecord(
+                            proposal_id=str(d.get("proposal_id", "")),
+                            kind=str(d.get("kind", "")),
+                            description=str(d.get("description", "")),
+                            status=ProposalStatus(d.get("status", "proposed")),
+                            proposer=str(d.get("proposer", "system")),
+                            ts=str(d.get("ts", "")),
+                            fitness_before=d.get("fitness_before"),
+                            fitness_after=d.get("fitness_after"),
+                            model=d.get("model"),
+                            cost_tokens=int(d.get("cost_tokens", 0) or 0),
+                            cost_usd=float(d.get("cost_usd", 0.0) or 0.0),
+                            metadata=d.get("metadata") or {},
+                            applied_ts=d.get("applied_ts"),
+                            rolled_back_ts=d.get("rolled_back_ts"),
+                            rejection_reason=d.get("rejection_reason"),
+                        )
+                    )
                 except Exception as _exc:
                     _LOG.debug("proposal ledger parse failed: %s", _exc)
                     continue
         return records
 
     def _update_status(
-        self, proposal_id: str, new_status: ProposalStatus,
+        self,
+        proposal_id: str,
+        new_status: ProposalStatus,
     ) -> ProposalRecord | None:
         records = self._read_all()
         for r in records:
@@ -202,7 +214,8 @@ class ProposalLedger:
                             d = json.loads(line_stripped)
                             if d.get("proposal_id") == target_id:
                                 lines.append(
-                                    json.dumps(asdict(record), ensure_ascii=False, default=str) + "\n"
+                                    json.dumps(asdict(record), ensure_ascii=False, default=str)
+                                    + "\n"
                                 )
                             else:
                                 lines.append(line)

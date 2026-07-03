@@ -20,13 +20,17 @@ _LOG = logging.getLogger("octopus.evolution.fitness")
 
 def _publish_fitness_event(report: FitnessReport) -> None:
     from runtime.platform.process.eventbus import FitnessComputed, publish_event
-    publish_event(FitnessComputed(
-        event_type="fitness.computed",
-        agent_id=report.agent_id,
-        combined_score=report.combined,
-        verdict=report.verdict,
-        trend=report.l1.trend,
-    ), logger=_LOG)
+
+    publish_event(
+        FitnessComputed(
+            event_type="fitness.computed",
+            agent_id=report.agent_id,
+            combined_score=report.combined,
+            verdict=report.verdict,
+            trend=report.l1.trend,
+        ),
+        logger=_LOG,
+    )
 
 
 @dataclass
@@ -107,8 +111,11 @@ def compute_l1(agent_id: str, *, window: int = 20) -> L1Fitness:
     scores = read_recent_scores(agent_id, limit=window)
     if not scores:
         return L1Fitness(
-            score=0.5, trend="stable", success_rate=0.0,
-            avg_rounds=0.0, soul_impact={},
+            score=0.5,
+            trend="stable",
+            success_rate=0.0,
+            avg_rounds=0.0,
+            soul_impact={},
         )
 
     success_rate = sum(1 for s in scores if s.score >= 1.0) / len(scores)
@@ -161,8 +168,7 @@ def compute_l2(
     scores = read_recent_scores(agent_id, limit=window)
 
     rows = "\n".join(
-        f"  - {s.ts} score={s.score} reason={s.reason} rounds={s.rounds}"
-        for s in scores[:15]
+        f"  - {s.ts} score={s.score} reason={s.reason} rounds={s.rounds}" for s in scores[:15]
     )
     user_msg = (
         f"AGENT: {agent_id}\n"
@@ -217,7 +223,7 @@ def compute_governance_fitness(
     if agent_id:
         wanted_agent = str(agent_id)
         rows = [row for row in rows if str(row.get("agent_id") or "") == wanted_agent]
-    recent = rows[-max(0, window):] if window > 0 else rows
+    recent = rows[-max(0, window) :] if window > 0 else rows
     if not recent:
         return GovernanceFitness(
             score=1.0,
@@ -291,7 +297,8 @@ def compute_fitness(
 
     if l2 is not None:
         combined = round(
-            l1.score * config.l1_weight + l2.score * config.l2_weight, 3,
+            l1.score * config.l1_weight + l2.score * config.l2_weight,
+            3,
         )
     else:
         combined = l1.score

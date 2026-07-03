@@ -39,9 +39,7 @@ def _drive(rt, agent, *, result=None, monkeypatch=None):
     if result is not None and monkeypatch is not None:
         monkeypatch.setattr(mod, "run_local_partner", lambda **kw: result)
     asyncio.run(
-        mod.drive_local_partner(
-            rt, turn, object(), object(), object(), agent, object(), text="go"
-        )
+        mod.drive_local_partner(rt, turn, object(), object(), object(), agent, object(), text="go")
     )
     return turn
 
@@ -132,10 +130,13 @@ def test_non_partner_agent_falls_back(monkeypatch) -> None:
 
 def test_envelope_briefs_prompt_passes_env_and_harvests(monkeypatch) -> None:
     rt = _FakeRuntime()
-    monkeypatch.setattr(mod, "blackboard_brief", lambda tid, **_k: "TEAM: prior finding" if tid else "")
+    monkeypatch.setattr(
+        mod, "blackboard_brief", lambda tid, **_k: "TEAM: prior finding" if tid else ""
+    )
     harvested: dict = {}
     monkeypatch.setattr(
-        mod, "harvest_to_blackboard",
+        mod,
+        "harvest_to_blackboard",
         lambda tid, w, out: harvested.update({"tid": tid, "writer": w, "out": out}),
     )
     seen: dict = {}
@@ -148,7 +149,9 @@ def test_envelope_briefs_prompt_passes_env_and_harvests(monkeypatch) -> None:
     turn = SimpleNamespace(id="turn-1", thread_id="th", items=[], status="inProgress")
     intent = SimpleNamespace(user_context={})
     asyncio.run(
-        mod.drive_local_partner(rt, turn, object(), object(), intent, _agent(), object(), text="do X")
+        mod.drive_local_partner(
+            rt, turn, object(), object(), intent, _agent(), object(), text="do X"
+        )
     )
     # brief was prepended to the prompt the CLI received
     assert "TEAM: prior finding" in seen["prompt"]

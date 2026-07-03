@@ -9,6 +9,7 @@ Kept intentionally small — no diff-matching, no rename detection,
 no renumbering on partial accepts. That belongs downstream in the
 apply step, not in the parser.
 """
+
 from __future__ import annotations
 
 import re
@@ -189,9 +190,7 @@ def _rebuild_diff(
     new_path = "/dev/null" if op == "delete" else f"b/{path}"
     lines: list[str] = [f"--- {old_path}\n", f"+++ {new_path}\n"]
     for h in hunks:
-        lines.append(
-            f"@@ -{h.old_start},{h.old_lines} +{h.new_start},{h.new_lines} @@\n"
-        )
+        lines.append(f"@@ -{h.old_start},{h.old_lines} +{h.new_start},{h.new_lines} @@\n")
         if h.body and not h.body.endswith("\n"):
             lines.append(h.body + "\n")
         else:

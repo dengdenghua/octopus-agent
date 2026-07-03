@@ -4,6 +4,7 @@ Each task gets its own thread and runs independently. The runner
 manages lifecycle (start, cancel, status) and exposes results via
 a REST API. Frontend polls or uses SSE to track progress.
 """
+
 from __future__ import annotations
 
 import logging
@@ -16,6 +17,7 @@ from typing import Any
 
 try:
     from fastapi import APIRouter, HTTPException
+
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
@@ -80,6 +82,7 @@ class ParallelTaskRunner:
             from runtime.safety.validation.prompt_injection import (
                 current_injection_taint,
             )
+
             _taint = current_injection_taint()
             if _taint and _taint != "none" and isinstance(task.context, dict):
                 task.context.setdefault("_inherited_injection_taint", _taint)
@@ -135,6 +138,7 @@ class ParallelTaskRunner:
             )
 
             from runtime.platform.ui.app import get_app_state
+
             state = get_app_state()
             if not state:
                 raise RuntimeError("app state not available")

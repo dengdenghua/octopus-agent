@@ -6,6 +6,7 @@ return envelope reports ``ok``/``successes``/``failures``/``partial``
 plus a ``[partial-degradation]`` note so the lead can decide whether
 to synthesise from partial data or escalate.
 """
+
 from __future__ import annotations
 
 import json
@@ -42,6 +43,7 @@ def _reset_runner_and_budget():
 def _patch_bridge(monkeypatch, scripted: dict[str, Any]):
     """Replace ``call_subagent`` so each (agent_id, prompt) returns a
     canned result. ``scripted`` maps prompt → result dict."""
+
     def _fake_call_subagent(agent_id="", prompt="", **_kw):
         canned = scripted.get(prompt)
         if canned is None:
@@ -87,27 +89,29 @@ def _seed_subagent_reviews(path, *, role: str, statuses: list[str]) -> None:
 
     queue = ReviewQueue(path)
     for idx, status in enumerate(statuses):
-        added = queue.add_from_task_run_review({
-            "status": "completed",
-            "task_id": f"task-{idx}",
-            "thread_id": "thread-1",
-            "turn_id": f"turn-{idx}",
-            "agent_id": role,
-            "learning_candidates": [
-                {
-                    "kind": "subagent_output",
-                    "priority": "P2",
-                    "memory_bucket": "experience",
-                    "title": f"{role} sample {idx}",
-                    "text": f"{role} output {idx}",
-                    "subagent": {
-                        "role": role,
-                        "agent_id": role,
-                        "files_touched": [],
-                    },
-                }
-            ],
-        })
+        added = queue.add_from_task_run_review(
+            {
+                "status": "completed",
+                "task_id": f"task-{idx}",
+                "thread_id": "thread-1",
+                "turn_id": f"turn-{idx}",
+                "agent_id": role,
+                "learning_candidates": [
+                    {
+                        "kind": "subagent_output",
+                        "priority": "P2",
+                        "memory_bucket": "experience",
+                        "title": f"{role} sample {idx}",
+                        "text": f"{role} output {idx}",
+                        "subagent": {
+                            "role": role,
+                            "agent_id": role,
+                            "files_touched": [],
+                        },
+                    }
+                ],
+            }
+        )
         if status != "pending":
             queue.decide(added["items"][0]["id"], action=status, reason="test")
 
@@ -118,11 +122,14 @@ def _seed_subagent_reviews(path, *, role: str, statuses: list[str]) -> None:
 def test_all_three_succeed(monkeypatch):
     from runtime.execution.suckers.delegation_skills import _call_agent_parallel
 
-    _patch_bridge(monkeypatch, {
-        "p1": _ok("o1"),
-        "p2": _ok("o2"),
-        "p3": _ok("o3"),
-    })
+    _patch_bridge(
+        monkeypatch,
+        {
+            "p1": _ok("o1"),
+            "p2": _ok("o2"),
+            "p3": _ok("o3"),
+        },
+    )
 
     r = _call_agent_parallel(specs=_specs("p1", "p2", "p3"))
 
@@ -139,10 +146,13 @@ def test_all_three_succeed(monkeypatch):
 def test_specs_json_string_is_accepted(monkeypatch):
     from runtime.execution.suckers.delegation_skills import _call_agent_parallel
 
-    _patch_bridge(monkeypatch, {
-        "p1": _ok("o1"),
-        "p2": _ok("o2"),
-    })
+    _patch_bridge(
+        monkeypatch,
+        {
+            "p1": _ok("o1"),
+            "p2": _ok("o2"),
+        },
+    )
 
     r = _call_agent_parallel(specs=json.dumps(_specs("p1", "p2")))
 
@@ -155,10 +165,13 @@ def test_specs_json_string_is_accepted(monkeypatch):
 def test_specs_dict_wrapper_is_accepted(monkeypatch):
     from runtime.execution.suckers.delegation_skills import _call_agent_parallel
 
-    _patch_bridge(monkeypatch, {
-        "p1": _ok("o1"),
-        "p2": _ok("o2"),
-    })
+    _patch_bridge(
+        monkeypatch,
+        {
+            "p1": _ok("o1"),
+            "p2": _ok("o2"),
+        },
+    )
 
     r = _call_agent_parallel(specs={"agents": _specs("p1", "p2")})
 
@@ -211,13 +224,17 @@ def test_parallel_spec_carries_dynamic_skill_grants(monkeypatch):
         _fake_call_subagent,
     )
 
-    r = _call_agent_parallel(specs=[{
-        "agent_id": "researcher",
-        "prompt": "Compare two vendors",
-        "skill_packs": ["research", "files"],
-        "skills": ["query_skill"],
-        "plugins": ["browser"],
-    }])
+    r = _call_agent_parallel(
+        specs=[
+            {
+                "agent_id": "researcher",
+                "prompt": "Compare two vendors",
+                "skill_packs": ["research", "files"],
+                "skills": ["query_skill"],
+                "plugins": ["browser"],
+            }
+        ]
+    )
 
     assert r["ok"] is True
     assert len(captured) == 1
@@ -251,10 +268,12 @@ def test_agent_name_task_shape_is_accepted(monkeypatch):
         _fake_call_subagent,
     )
 
-    r = _call_agent_parallel(specs=[
-        {"agent_name": "Agent A", "task": "Task A"},
-        {"agent_name": "Agent B", "task": "Task B"},
-    ])
+    r = _call_agent_parallel(
+        specs=[
+            {"agent_name": "Agent A", "task": "Task A"},
+            {"agent_name": "Agent B", "task": "Task B"},
+        ]
+    )
 
     assert r["ok"] is True
     assert r["success_count"] == 2
@@ -366,11 +385,14 @@ def test_prompt_only_spec_defaults_to_researcher(monkeypatch):
 def test_all_three_fail(monkeypatch):
     from runtime.execution.suckers.delegation_skills import _call_agent_parallel
 
-    _patch_bridge(monkeypatch, {
-        "p1": _fail("TimeoutError: subagent timed out", "timeout"),
-        "p2": _fail("ConnectionError: refused", "transport"),
-        "p3": _fail("RuntimeError: boom"),
-    })
+    _patch_bridge(
+        monkeypatch,
+        {
+            "p1": _fail("TimeoutError: subagent timed out", "timeout"),
+            "p2": _fail("ConnectionError: refused", "transport"),
+            "p3": _fail("RuntimeError: boom"),
+        },
+    )
 
     r = _call_agent_parallel(specs=_specs("p1", "p2", "p3"))
 
@@ -385,11 +407,14 @@ def test_all_three_fail(monkeypatch):
 def test_two_of_three_succeed_marks_partial(monkeypatch):
     from runtime.execution.suckers.delegation_skills import _call_agent_parallel
 
-    _patch_bridge(monkeypatch, {
-        "p1": _ok("alpha"),
-        "p2": _fail("TimeoutError: subagent timed out after 30s", "timeout"),
-        "p3": _ok("gamma"),
-    })
+    _patch_bridge(
+        monkeypatch,
+        {
+            "p1": _ok("alpha"),
+            "p2": _fail("TimeoutError: subagent timed out after 30s", "timeout"),
+            "p3": _ok("gamma"),
+        },
+    )
 
     r = _call_agent_parallel(specs=_specs("p1", "p2", "p3"))
 
@@ -410,11 +435,14 @@ def test_two_of_three_succeed_marks_partial(monkeypatch):
 def test_one_of_three_succeeds(monkeypatch):
     from runtime.execution.suckers.delegation_skills import _call_agent_parallel
 
-    _patch_bridge(monkeypatch, {
-        "p1": _ok("only-one"),
-        "p2": _fail("ConnectionError: refused", "transport"),
-        "p3": _fail("TimeoutError: timed out", "timeout"),
-    })
+    _patch_bridge(
+        monkeypatch,
+        {
+            "p1": _ok("only-one"),
+            "p2": _fail("ConnectionError: refused", "transport"),
+            "p3": _fail("TimeoutError: timed out", "timeout"),
+        },
+    )
 
     r = _call_agent_parallel(specs=_specs("p1", "p2", "p3"))
 
@@ -430,11 +458,14 @@ def test_backward_compat_outputs_field_present(monkeypatch):
     strings, in result order). Keep emitting it."""
     from runtime.execution.suckers.delegation_skills import _call_agent_parallel
 
-    _patch_bridge(monkeypatch, {
-        "a": _ok("A"),
-        "b": _fail("boom"),
-        "c": _ok("C"),
-    })
+    _patch_bridge(
+        monkeypatch,
+        {
+            "a": _ok("A"),
+            "b": _fail("boom"),
+            "c": _ok("C"),
+        },
+    )
 
     r = _call_agent_parallel(specs=_specs("a", "b", "c"))
 
@@ -450,33 +481,38 @@ def test_backward_compat_outputs_field_present(monkeypatch):
 def test_parallel_envelope_preserves_agent_telemetry_and_partial_output(monkeypatch):
     from runtime.execution.suckers.delegation_skills import _call_agent_parallel
 
-    _patch_bridge(monkeypatch, {
-        "ok": {
-            "agent_id": "researcher",
-            "output": "finished synthesis",
-            "success": True,
-            "error": None,
-            "iteration_count": 7,
-            "duration_s": 12.5,
-            "files_touched": ["reports/research.md"],
-            "codename": "Spark-01",
-            "avatar": ":search:",
+    _patch_bridge(
+        monkeypatch,
+        {
+            "ok": {
+                "agent_id": "researcher",
+                "output": "finished synthesis",
+                "success": True,
+                "error": None,
+                "iteration_count": 7,
+                "duration_s": 12.5,
+                "files_touched": ["reports/research.md"],
+                "codename": "Spark-01",
+                "avatar": ":search:",
+            },
+            "cap": {
+                "agent_id": "reviewer",
+                "output": "partial notes before cap",
+                "success": False,
+                "error": "ROUND_CAP_EXCEEDED",
+                "error_type": "round_cap_exceeded",
+                "round_cap_exceeded": True,
+                "rounds_completed": 25,
+            },
         },
-        "cap": {
-            "agent_id": "reviewer",
-            "output": "partial notes before cap",
-            "success": False,
-            "error": "ROUND_CAP_EXCEEDED",
-            "error_type": "round_cap_exceeded",
-            "round_cap_exceeded": True,
-            "rounds_completed": 25,
-        },
-    })
+    )
 
-    r = _call_agent_parallel(specs=[
-        {"agent_id": "researcher", "prompt": "ok"},
-        {"agent_id": "reviewer", "prompt": "cap"},
-    ])
+    r = _call_agent_parallel(
+        specs=[
+            {"agent_id": "researcher", "prompt": "ok"},
+            {"agent_id": "reviewer", "prompt": "cap"},
+        ]
+    )
 
     assert r["ok"] is True
     assert r["partial"] is True
@@ -487,24 +523,29 @@ def test_parallel_envelope_preserves_agent_telemetry_and_partial_output(monkeypa
     assert r["failures"][0]["round_cap_exceeded"] is True
     assert r["failures"][0]["rounds_completed"] == 25
     assert r["failures"][0]["partial_output"] == "partial notes before cap"
-    assert r["partial_outputs"] == [{
-        "agent_id": "reviewer",
-        "spec_index": 1,
-        "task_label": "reviewer",
-        "error": "ROUND_CAP_EXCEEDED",
-        "error_type": "round_cap_exceeded",
-        "output": "partial notes before cap",
-    }]
+    assert r["partial_outputs"] == [
+        {
+            "agent_id": "reviewer",
+            "spec_index": 1,
+            "task_label": "reviewer",
+            "error": "ROUND_CAP_EXCEEDED",
+            "error_type": "round_cap_exceeded",
+            "output": "partial notes before cap",
+        }
+    ]
 
 
 def test_error_type_passes_through_from_bridge(monkeypatch):
     from runtime.execution.suckers.delegation_skills import _call_agent_parallel
 
-    _patch_bridge(monkeypatch, {
-        "p1": _fail("blew up", "custom_explosion"),
-        "p2": _fail("network kaput", "transport"),
-        "p3": _ok("kept-going"),
-    })
+    _patch_bridge(
+        monkeypatch,
+        {
+            "p1": _fail("blew up", "custom_explosion"),
+            "p2": _fail("network kaput", "transport"),
+            "p3": _ok("kept-going"),
+        },
+    )
 
     r = _call_agent_parallel(specs=_specs("p1", "p2", "p3"))
 
@@ -523,12 +564,15 @@ def test_notes_wording_lists_count_and_reasons(monkeypatch):
     deduplicated set of failure reasons."""
     from runtime.execution.suckers.delegation_skills import _call_agent_parallel
 
-    _patch_bridge(monkeypatch, {
-        "p1": _ok("ok-1"),
-        "p2": _fail("TimeoutError: timed out", "timeout"),
-        "p3": _fail("ConnectionError: refused", "transport"),
-        "p4": _fail("TimeoutError: another timeout", "timeout"),
-    })
+    _patch_bridge(
+        monkeypatch,
+        {
+            "p1": _ok("ok-1"),
+            "p2": _fail("TimeoutError: timed out", "timeout"),
+            "p3": _fail("ConnectionError: refused", "transport"),
+            "p4": _fail("TimeoutError: another timeout", "timeout"),
+        },
+    )
 
     r = _call_agent_parallel(specs=_specs("p1", "p2", "p3", "p4"))
 

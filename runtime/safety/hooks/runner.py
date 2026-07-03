@@ -9,6 +9,7 @@ Handlers that raise are **caught** · their exception is logged and
 the hook treated as pass_through. Rationale: a buggy 3rd-party hook
 should not take down the runtime. Same posture as constitution gate.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -111,9 +112,7 @@ def _run_chain(event: HookEvent, event_type: type) -> HookDecision:
         # field it modified · earlier mods survive for untouched
         # fields.
         merged_args = (
-            result.modified_args
-            if result.modified_args is not None
-            else current.modified_args
+            result.modified_args if result.modified_args is not None else current.modified_args
         )
         merged_output = (
             result.modified_output
@@ -142,8 +141,10 @@ def dispatch_pre_tool(
     session: Any = None,
 ) -> HookDecision:
     event = PreToolUseEvent(
-        session=session, sucker_id=sucker_id,
-        args=args, caller=caller,
+        session=session,
+        sucker_id=sucker_id,
+        args=args,
+        caller=caller,
     )
     return _run_chain(event, PreToolUseEvent)
 
@@ -156,8 +157,11 @@ def dispatch_post_tool(
     session: Any = None,
 ) -> HookDecision:
     event = PostToolUseEvent(
-        session=session, sucker_id=sucker_id,
-        args=args, output=output, success=success,
+        session=session,
+        sucker_id=sucker_id,
+        args=args,
+        output=output,
+        success=success,
     )
     return _run_chain(event, PostToolUseEvent)
 
@@ -168,7 +172,9 @@ def dispatch_user_prompt(
     session: Any = None,
 ) -> HookDecision:
     event = UserPromptSubmitEvent(
-        session=session, prompt_text=prompt_text, thread_id=thread_id,
+        session=session,
+        prompt_text=prompt_text,
+        thread_id=thread_id,
     )
     return _run_chain(event, UserPromptSubmitEvent)
 
@@ -180,8 +186,10 @@ def dispatch_stop(
     session: Any = None,
 ) -> HookDecision:
     event = StopEvent(
-        session=session, thread_id=thread_id,
-        success=success, step_count=step_count,
+        session=session,
+        thread_id=thread_id,
+        success=success,
+        step_count=step_count,
     )
     return _run_chain(event, StopEvent)
 
@@ -191,7 +199,8 @@ def dispatch_session_start(
     session: Any = None,
 ) -> HookDecision:
     event = SessionStartEvent(
-        session=session, thread_id=thread_id,
+        session=session,
+        thread_id=thread_id,
     )
     return _run_chain(event, SessionStartEvent)
 
@@ -202,6 +211,8 @@ def dispatch_notification(
     session: Any = None,
 ) -> HookDecision:
     event = NotificationEvent(
-        session=session, kind=kind, details=details or {},
+        session=session,
+        kind=kind,
+        details=details or {},
     )
     return _run_chain(event, NotificationEvent)

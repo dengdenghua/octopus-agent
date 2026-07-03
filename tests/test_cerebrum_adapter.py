@@ -20,6 +20,7 @@ from runtime.tentacle.mobile.device import MobileDevice
 
 # ── fixtures ──────────────────────────────────────────────
 
+
 @pytest.fixture
 def wechat_rule():
     """打开微信规则."""
@@ -72,6 +73,7 @@ async def mock_device():
 
 
 # ── 单元测试：适配器 ──────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_adapter_converts_taskgraph_to_toolcalls(adapter, mock_device):
@@ -170,6 +172,7 @@ async def test_adapter_empty_result_on_plan_failure(mock_device):
 
 # ── 拓扑排序测试 ──────────────────────────────────────────
 
+
 def test_topo_sort_linear_edges():
     """线性 edges 应保持原顺序."""
     from runtime.platform.models import BudgetSpec, TaskGraph, TaskNode, WorkflowEdge
@@ -261,6 +264,7 @@ def test_topo_sort_cycle_fallback():
 
 
 # ── Coordinator 工厂方法测试 ──────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_coordinator_with_cerebrum_factory():

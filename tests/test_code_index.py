@@ -1,4 +1,5 @@
 """Auto-retrieval of relevant source chunks for planner grounding."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -19,10 +20,13 @@ def _make_src(root: Path, files: dict[str, str]) -> None:
 
 
 def test_retrieves_relevant_source_chunk(tmp_path: Path) -> None:
-    _make_src(tmp_path, {
-        "runtime/planner.py": "def plan_tool_calls():\n    # planner builds react steps\n    return step()\n",
-        "runtime/browser.py": "def open_browser():\n    return playwright_launch()\n",
-    })
+    _make_src(
+        tmp_path,
+        {
+            "runtime/planner.py": "def plan_tool_calls():\n    # planner builds react steps\n    return step()\n",
+            "runtime/browser.py": "def open_browser():\n    return playwright_launch()\n",
+        },
+    )
     out = retrieve_code_context("how does plan_tool_calls work", root=tmp_path)
     assert out is not None
     assert "runtime/planner.py:1" in out
@@ -31,11 +35,14 @@ def test_retrieves_relevant_source_chunk(tmp_path: Path) -> None:
 
 
 def test_skips_noise_dirs(tmp_path: Path) -> None:
-    _make_src(tmp_path, {
-        "node_modules/pkg/index.py": "def widget_factory(): return alpha()\n",
-        "tests/test_x.py": "def widget_factory(): pass\n",
-        "src/real.py": "def widget_factory():\n    return real_impl()\n",
-    })
+    _make_src(
+        tmp_path,
+        {
+            "node_modules/pkg/index.py": "def widget_factory(): return alpha()\n",
+            "tests/test_x.py": "def widget_factory(): pass\n",
+            "src/real.py": "def widget_factory():\n    return real_impl()\n",
+        },
+    )
     out = retrieve_code_context("widget factory", root=tmp_path)
     assert out is not None
     assert "src/real.py" in out
@@ -54,7 +61,9 @@ def test_no_overlap_returns_none(tmp_path: Path) -> None:
 
 
 def test_word_query_matches_camelcase_symbol(tmp_path: Path) -> None:
-    _make_src(tmp_path, {"a.py": "class ToolEngine:\n    def execute(self):\n        return run()\n"})
+    _make_src(
+        tmp_path, {"a.py": "class ToolEngine:\n    def execute(self):\n        return run()\n"}
+    )
     out = retrieve_code_context("tool engine execute", root=tmp_path)
     assert out is not None and "ToolEngine" in out
 
@@ -75,16 +84,21 @@ def test_cache_respects_ttl(tmp_path: Path) -> None:
 
 def test_real_repo_smoke() -> None:
     out = retrieve_code_context(
-        "compose context segments token budget", root="runtime", max_chunks=2,
+        "compose context segments token budget",
+        root="runtime",
+        max_chunks=2,
     )
     assert out is None or "RELEVANT SOURCE" in out
 
 
 def test_sink_captures_chosen_chunks_faithfully(tmp_path: Path) -> None:
-    _make_src(tmp_path, {
-        "runtime/planner.py": "def plan_tool_calls():\n    # planner builds react steps\n    return step()\n",
-        "runtime/browser.py": "def open_browser():\n    return playwright_launch()\n",
-    })
+    _make_src(
+        tmp_path,
+        {
+            "runtime/planner.py": "def plan_tool_calls():\n    # planner builds react steps\n    return step()\n",
+            "runtime/browser.py": "def open_browser():\n    return playwright_launch()\n",
+        },
+    )
     sink: list[dict[str, str]] = []
     out = retrieve_code_context("how does plan_tool_calls work", root=tmp_path, _sink=sink)
     assert out is not None
@@ -150,7 +164,11 @@ def test_semantic_fuses_in_a_token_missed_file(tmp_path: Path, monkeypatch) -> N
         code_index,
         "search_persisted",
         lambda _q, **_kw: [
-            {"path": "miss/sem.py", "snippet": "# miss/sem.py\ndef unrelated_symbol(): ...", "score": 0.9}
+            {
+                "path": "miss/sem.py",
+                "snippet": "# miss/sem.py\ndef unrelated_symbol(): ...",
+                "score": 0.9,
+            }
         ],
     )
     out = retrieve_code_context("alpha token", max_chunks=3)
@@ -212,13 +230,13 @@ def test_ast_chunks_at_function_boundaries(tmp_path: Path) -> None:
     # imports + two functions at different lines → each function is its OWN chunk
     # at its real start line, not folded into a single line-1 window.
     src = (
-        "import os\n"          # 1
-        "\n"                   # 2
-        "def alpha_one():\n"   # 3
-        "    return 1\n"       # 4
-        "\n"                   # 5
-        "def beta_two():\n"    # 6
-        "    return 2\n"       # 7
+        "import os\n"  # 1
+        "\n"  # 2
+        "def alpha_one():\n"  # 3
+        "    return 1\n"  # 4
+        "\n"  # 5
+        "def beta_two():\n"  # 6
+        "    return 2\n"  # 7
     )
     _make_src(tmp_path, {"m.py": src})
     out = retrieve_code_context("beta two", root=tmp_path, max_chunks=5)

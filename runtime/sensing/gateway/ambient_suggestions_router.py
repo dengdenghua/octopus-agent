@@ -44,6 +44,7 @@ def _require_flag() -> None:
     because the flag hasn't been turned on yet.
     """
     from runtime.platform import feature_flags as _ff
+
     if not _ff.is_on("ui.ambient_suggestions"):
         raise HTTPException(
             403,
@@ -95,11 +96,10 @@ def create_ambient_suggestions_router(
         title_lookup_raw = payload.get("title_lookup")
         title_lookup: dict[str, str] | None = None
         if isinstance(title_lookup_raw, dict):
-            title_lookup = {
-                str(k): str(v) for k, v in title_lookup_raw.items()
-            }
+            title_lookup = {str(k): str(v) for k, v in title_lookup_raw.items()}
 
         from runtime.memory import ambient_suggestions as _amb
+
         return _amb.generate_suggestions(
             proj,
             agent_id,
@@ -125,12 +125,17 @@ def create_ambient_suggestions_router(
             )
 
         from runtime.memory import ambient_suggestions as _amb
+
         updated = _amb.mark_status(
-            proj, suggestion_id, status, base_dir=base_dir,
+            proj,
+            suggestion_id,
+            status,
+            base_dir=base_dir,
         )
         if updated is None:
             raise HTTPException(
-                404, f"suggestion {suggestion_id!r} not found",
+                404,
+                f"suggestion {suggestion_id!r} not found",
             )
         return {"suggestion": updated}
 
@@ -143,13 +148,16 @@ def create_ambient_suggestions_router(
         proj = _resolve_project(project)
         only_status = status.strip().lower() if isinstance(status, str) and status else None
         if only_status is not None and only_status not in {
-            "pending", "accepted", "dismissed",
+            "pending",
+            "accepted",
+            "dismissed",
         }:
             raise HTTPException(
                 400,
                 "status filter must be one of pending / accepted / dismissed",
             )
         from runtime.memory import ambient_suggestions as _amb
+
         removed = _amb.clear(proj, base_dir=base_dir, only_status=only_status)
         return {"removed": removed}
 

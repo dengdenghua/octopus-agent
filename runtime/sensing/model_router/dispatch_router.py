@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import threading
@@ -8,7 +7,6 @@ from .models import ModelRequest, ModelResponse, ModelRouter
 
 
 class ModelDispatchRouter(ModelRouter):
-
     def __init__(
         self,
         *,
@@ -50,10 +48,7 @@ class ModelDispatchRouter(ModelRouter):
                 yielded_any = True
                 yield evt
         except Exception as exc:
-            if (
-                yielded_any
-                or picked is not self._fallback
-            ):
+            if yielded_any or picked is not self._fallback:
                 raise
             exc_class = type(exc).__name__
             exc_msg = str(exc)
@@ -70,9 +65,14 @@ class ModelDispatchRouter(ModelRouter):
             if rescue is None:
                 raise
             try:
-                rescue_default = getattr(
-                    rescue, "default_model", None,
-                ) or request.model
+                rescue_default = (
+                    getattr(
+                        rescue,
+                        "default_model",
+                        None,
+                    )
+                    or request.model
+                )
                 rewritten = request.model_copy(
                     update={"model": rescue_default},
                 )
@@ -115,9 +115,14 @@ class ModelDispatchRouter(ModelRouter):
                         # Rewrite request.model so the rescue router
                         # (usually an anthropic sub-router) accepts it.
                         try:
-                            rescue_default = getattr(
-                                rescue, "default_model", None,
-                            ) or request.model
+                            rescue_default = (
+                                getattr(
+                                    rescue,
+                                    "default_model",
+                                    None,
+                                )
+                                or request.model
+                            )
                             rewritten = request.model_copy(
                                 update={"model": rescue_default},
                             )

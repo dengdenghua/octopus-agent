@@ -30,7 +30,9 @@ def test_app_paths_are_cwd_relative(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert paths.cron_jobs_path == tmp_path / "data" / "cron_jobs.json"
 
 
-def test_user_store_resolves_paths_at_call_time(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_user_store_resolves_paths_at_call_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.chdir(tmp_path)
 
     stored = user_store.add_fact("Remember the blue deployment", source="test")
@@ -86,12 +88,14 @@ def test_memory_config_clamps_invalid_and_unbounded_values(
     config_path = tmp_path / "data" / "user_memory_config.json"
     config_path.parent.mkdir(parents=True)
     config_path.write_text(
-        json.dumps({
-            "debounce_seconds": 999_999,
-            "max_facts": 999_999,
-            "fact_confidence_threshold": "bad",
-            "max_injection_tokens": 999_999,
-        }),
+        json.dumps(
+            {
+                "debounce_seconds": 999_999,
+                "max_facts": 999_999,
+                "fact_confidence_threshold": "bad",
+                "max_injection_tokens": 999_999,
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -178,7 +182,10 @@ class TestMemoryRouterAuth:
 
     def test_valid_token_accepted_when_required(self) -> None:
         client = self._client(require_auth=True)
-        assert client.get(
-            "/api/memory",
-            headers={"Authorization": "Bearer sk-alice"},
-        ).status_code == 200
+        assert (
+            client.get(
+                "/api/memory",
+                headers={"Authorization": "Bearer sk-alice"},
+            ).status_code
+            == 200
+        )

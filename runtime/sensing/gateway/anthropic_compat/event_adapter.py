@@ -66,36 +66,46 @@ def adapt_react_event(event: dict[str, Any]) -> list[OutboundEvent]:
     if kind == "text_delta":
         delta = event.get("delta", "")
         if delta:
-            results.append(AgentMessageEvent(
-                content=[{"type": "text", "text": delta}],
-            ))
+            results.append(
+                AgentMessageEvent(
+                    content=[{"type": "text", "text": delta}],
+                )
+            )
 
     elif kind == "thinking_delta":
         delta = event.get("delta", "")
         if delta:
-            results.append(AgentThinkingEvent(
-                content=[{"type": "thinking", "thinking": delta}],
-            ))
+            results.append(
+                AgentThinkingEvent(
+                    content=[{"type": "thinking", "thinking": delta}],
+                )
+            )
 
     elif kind == "tool_start":
         tool_name = event.get("tool_name", "")
         tool_call_id = event.get("tool_call_id", _new_event_id())
         input_preview = event.get("input_preview") or {}
-        results.append(AgentToolUseEvent(
-            tool_name=tool_name,
-            tool_use_id=tool_call_id,
-            input=input_preview if isinstance(input_preview, dict) else {"preview": str(input_preview)},
-        ))
+        results.append(
+            AgentToolUseEvent(
+                tool_name=tool_name,
+                tool_use_id=tool_call_id,
+                input=input_preview
+                if isinstance(input_preview, dict)
+                else {"preview": str(input_preview)},
+            )
+        )
 
     elif kind == "tool_end":
         tool_call_id = event.get("tool_call_id", "")
         status = event.get("status", "success")
         output = event.get("output_preview", "") or ""
-        results.append(AgentToolResultEvent(
-            tool_use_id=tool_call_id,
-            status=status,
-            output=str(output)[:4000],
-        ))
+        results.append(
+            AgentToolResultEvent(
+                tool_use_id=tool_call_id,
+                status=status,
+                output=str(output)[:4000],
+            )
+        )
 
     elif kind == "tool_approval_request":
         # Maps to custom_tool_use (the agent is asking the client to
@@ -114,9 +124,11 @@ def adapt_react_event(event: dict[str, Any]) -> list[OutboundEvent]:
 
     elif kind == "react_error":
         message = event.get("message", "unknown error")
-        results.append(SessionErrorEvent(
-            error={"message": str(message), "kind": event.get("kind", "")},
-        ))
+        results.append(
+            SessionErrorEvent(
+                error={"message": str(message), "kind": event.get("kind", "")},
+            )
+        )
 
     elif kind == "throughput":
         # Usage update — not an Anthropic event type, but we track it

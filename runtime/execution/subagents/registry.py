@@ -113,7 +113,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
             continue
         key, value = raw.split(":", 1)
         meta[key.strip()] = _parse_scalar(value)
-    body = "\n".join(lines[end_idx + 1:]).strip()
+    body = "\n".join(lines[end_idx + 1 :]).strip()
     return meta, body
 
 

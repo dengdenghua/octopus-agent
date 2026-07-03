@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import base64
@@ -31,6 +30,7 @@ def _check_url_safe(url: str, allow_private: bool) -> str | None:
     if not url:
         return "missing url"
     from runtime.safety.auth.url_guard import check_url
+
     verdict = check_url(url, allow_private=allow_private)
     if not verdict.allow:
         return f"ssrf_blocked: {verdict.reason}"
@@ -69,7 +69,9 @@ def _browser_get(
         return _navigate_and_read(page, url, timeout_ms, wait_ms, max_bytes)
 
     if not PLAYWRIGHT_AVAILABLE:
-        return {"error": "playwright not installed · `pip install playwright && playwright install chromium`"}
+        return {
+            "error": "playwright not installed · `pip install playwright && playwright install chromium`"
+        }
 
     try:
         with sync_playwright() as pw:
@@ -153,9 +155,7 @@ def _browser_extract(
             try:
                 ctx = browser.new_context()
                 page = ctx.new_page()
-                return _extract_from_page(
-                    page, url, selector, attr, limit, timeout_ms, wait_ms
-                )
+                return _extract_from_page(page, url, selector, attr, limit, timeout_ms, wait_ms)
             finally:
                 browser.close()
     except Exception as e:  # noqa: BLE001
@@ -214,11 +214,15 @@ def _higher_track_backends() -> list[Any]:
         ElectronBackend,
         ExtensionBackend,
     )
+
     return [ExtensionBackend(), ElectronBackend()]
 
 
 def _dispatch_higher_track(
-    verb: str, payload: dict[str, Any], *, url: str = "",
+    verb: str,
+    payload: dict[str, Any],
+    *,
+    url: str = "",
 ) -> dict[str, Any] | None:
     """Run ``verb`` on the highest-priority AVAILABLE non-Playwright track
     (extension → Electron), preserving the PW skills' "navigate then act"
@@ -227,6 +231,7 @@ def _dispatch_higher_track(
     headless Playwright)."""
     try:
         from runtime.execution.suckers.browser_backend import resolve_backend
+
         chosen = resolve_backend(_higher_track_backends())
     except Exception:  # noqa: BLE001 — backend layer optional
         return None
@@ -348,10 +353,12 @@ def _find_matches_in_text(
             break
         left = max(0, idx - context_chars)
         right = min(len(text), idx + len(needle) + context_chars)
-        matches.append({
-            "index": idx,
-            "snippet": text[left:right].replace("\n", " ").strip(),
-        })
+        matches.append(
+            {
+                "index": idx,
+                "snippet": text[left:right].replace("\n", " ").strip(),
+            }
+        )
         start = idx + max(1, len(target))
     return {
         "url": url,
@@ -407,6 +414,7 @@ def _with_page(
     # throwaway-browser behaviour — no surprise persistence, no regression.
     try:
         from runtime.platform.process.session import current_session
+
         sess = current_session()
     except Exception:  # noqa: BLE001 — session module optional
         sess = None
@@ -415,6 +423,7 @@ def _with_page(
             from runtime.execution.suckers.browser_session_worker import (
                 get_browser_session_pool,
             )
+
             pool = get_browser_session_pool()
             key = f"thr:{getattr(sess, 'thread_id', None) or threading.get_ident()}"
             try:
@@ -608,7 +617,11 @@ def _browser_state(
         }
 
     return _with_page(
-        page, _act, verb="state", payload={"max_items": max_items}, url=url,
+        page,
+        _act,
+        verb="state",
+        payload={"max_items": max_items},
+        url=url,
     )
 
 
@@ -662,7 +675,11 @@ def _browser_click(
         }
 
     return _with_page(
-        page, _act, verb="click", payload={"selector": selector}, url=url,
+        page,
+        _act,
+        verb="click",
+        payload={"selector": selector},
+        url=url,
     )
 
 
@@ -717,7 +734,9 @@ def _browser_type(
         }
 
     return _with_page(
-        page, _act, verb="type",
+        page,
+        _act,
+        verb="type",
         payload={"selector": selector, "text": text, "clear": clear_first},
         url=url,
     )
@@ -771,7 +790,8 @@ def _browser_scroll(
         return {"scrolled_to": scrolled_to, "final_url": p.url}
 
     return _with_page(
-        page, _act,
+        page,
+        _act,
         verb="scroll",
         payload={
             "selector": to_selector,
@@ -828,8 +848,11 @@ def _browser_wait(
         return {"waited_for": selector, "state": state, "final_url": p.url}
 
     return _with_page(
-        page, _act, verb="wait",
-        payload={"selector": selector, "timeout": timeout_ms}, url=url,
+        page,
+        _act,
+        verb="wait",
+        payload={"selector": selector, "timeout": timeout_ms},
+        url=url,
     )
 
 
@@ -849,6 +872,7 @@ def _browser_screenshot(
         return {"error": "missing path"}
 
     from runtime.safety.auth.path_guard import check_path
+
     verdict = check_path(path, sandbox_dir=sandbox_dir)
     if not verdict.allow:
         return {"error": f"path_blocked: {verdict.reason}"}
@@ -883,6 +907,7 @@ def _browser_screenshot(
             return {"error": f"screenshot_error: {type(e).__name__}: {e}"}
 
         from pathlib import Path as _P  # noqa: N814
+
         size = 0
         with contextlib.suppress(OSError):
             size = _P(str(resolved)).stat().st_size

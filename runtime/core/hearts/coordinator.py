@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -17,12 +16,11 @@ from typing import Protocol
 
 @dataclass(frozen=True)
 class Lease:
-
     scope: str
     holder_id: str
     acquired_at: float
     expires_at: float
-    fencing_token: int = 0     # Implementation note.
+    fencing_token: int = 0  # Implementation note.
 
     @property
     def ttl_remaining(self) -> float:
@@ -30,7 +28,6 @@ class Lease:
 
 
 class Coordinator(Protocol):
-
     holder_id: str  # Implementation note.
 
     def acquire_lease(self, scope: str, *, ttl: float) -> Lease | None:
@@ -52,6 +49,7 @@ class Coordinator(Protocol):
 
 def _default_holder_id() -> str:
     import uuid
+
     try:
         host = socket.gethostname()
     except OSError:  # noqa: BLE001
@@ -64,7 +62,6 @@ def _default_holder_id() -> str:
 
 
 class InMemoryCoordinator:
-
     def __init__(self, holder_id: str | None = None) -> None:
         self.holder_id = holder_id or _default_holder_id()
         self._leases: dict[str, Lease] = {}
@@ -140,7 +137,6 @@ class InMemoryCoordinator:
 
 
 class FileLockCoordinator:
-
     def __init__(
         self,
         lock_dir: str | Path,
@@ -151,11 +147,8 @@ class FileLockCoordinator:
         self.lock_dir.mkdir(parents=True, exist_ok=True)
         self._counter_path = self.lock_dir / ".fencing_counter"
 
-
     def _lease_path(self, scope: str) -> Path:
-        safe = "".join(
-            c if c.isalnum() or c in "._-" else "_" for c in scope
-        )
+        safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in scope)
         return self.lock_dir / f"{safe}.lease"
 
     def _next_fencing_token(self) -> int:
@@ -171,7 +164,6 @@ class FileLockCoordinator:
         except FileNotFoundError:
             self._counter_path.write_text("1", encoding="utf-8")
             return 1
-
 
     def _exclusive_op(self, path: Path, op):
         f = None
@@ -203,7 +195,6 @@ class FileLockCoordinator:
         f.flush()
         with contextlib.suppress(OSError):
             os.fsync(f.fileno())
-
 
     def acquire_lease(self, scope: str, *, ttl: float) -> Lease | None:
         if ttl <= 0:
@@ -336,7 +327,6 @@ else:  # Unix-like
 
 @dataclass
 class LeaderGuard:
-
     coordinator: Coordinator
     scope: str
     ttl: float

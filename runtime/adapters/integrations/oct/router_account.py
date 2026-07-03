@@ -68,13 +68,17 @@ def create_account_router(
 
     def _require_enabled() -> None:
         if not config.enabled:
-            raise HTTPException(status_code=503, detail="oct 账号网关未启用 · config.oct.enabled=true")
+            raise HTTPException(
+                status_code=503, detail="oct 账号网关未启用 · config.oct.enabled=true"
+            )
 
     def _actor(request: Request) -> str:
         from runtime.adapters.web_auth import _resolve_actor
 
         actor = _resolve_actor(
-            request, identity_store, require_auth,
+            request,
+            identity_store,
+            require_auth,
             jwt_secret=config.jwt_secret or jwt_secret,
             jwt_issuer=config.jwt_issuer or jwt_issuer,
             jwt_audience=jwt_audience,
@@ -107,8 +111,11 @@ def create_account_router(
         """带 dead-token 处理的网关 GET。"""
         try:
             return get_auth(
-                f"{base}{path}", token=link.oct_token, timeout=timeout,
-                params=params or None, http_client=http_client,
+                f"{base}{path}",
+                token=link.oct_token,
+                timeout=timeout,
+                params=params or None,
+                http_client=http_client,
             )
         except OctClientError as exc:
             if is_dead_token(exc.status_code):
@@ -119,7 +126,10 @@ def create_account_router(
     def _post(actor: str, link: OctLink, path: str, body: dict[str, Any]) -> dict[str, Any]:
         try:
             return post_auth(
-                f"{base}{path}", body, token=link.oct_token, timeout=timeout,
+                f"{base}{path}",
+                body,
+                token=link.oct_token,
+                timeout=timeout,
                 http_client=http_client,
             )
         except OctClientError as exc:
@@ -196,18 +206,31 @@ def create_account_router(
         _require_enabled()
         actor = _actor(request)
         link = _link_or_404(actor)
-        return _post(actor, link, "/billing/estimate", {
-            "model": body.model, "messages": body.messages, "maxTokens": body.max_tokens,
-        })
+        return _post(
+            actor,
+            link,
+            "/billing/estimate",
+            {
+                "model": body.model,
+                "messages": body.messages,
+                "maxTokens": body.max_tokens,
+            },
+        )
 
     @router.post("/orders")
     def create_order(body: OrderRequest, request: Request) -> dict[str, Any]:
         _require_enabled()
         actor = _actor(request)
         link = _link_or_404(actor)
-        return _post(actor, link, "/billing/orders", {
-            "goodsId": body.goods_id, "currency": body.currency,
-        })
+        return _post(
+            actor,
+            link,
+            "/billing/orders",
+            {
+                "goodsId": body.goods_id,
+                "currency": body.currency,
+            },
+        )
 
     @router.get("/orders/{order_no}")
     def find_order(order_no: str, request: Request) -> dict[str, Any]:

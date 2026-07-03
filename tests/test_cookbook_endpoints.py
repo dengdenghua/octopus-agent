@@ -19,7 +19,12 @@ def test_snapshot_returns_hardware_and_recommendations(monkeypatch) -> None:
     monkeypatch.setattr(
         hwfit,
         "cookbook_snapshot",
-        lambda: {"hardware": {"backend": "cuda"}, "ollama_available": True, "recommendations": [], "pulls": {}},
+        lambda: {
+            "hardware": {"backend": "cuda"},
+            "ollama_available": True,
+            "recommendations": [],
+            "pulls": {},
+        },
     )
     resp = _client().get("/api/cookbook/snapshot")
     assert resp.status_code == 200

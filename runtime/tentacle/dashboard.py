@@ -169,18 +169,24 @@ def create_tentacle_router(
         all_devices = list(coordinator.pool._tentacles.values())
         result = []
         for d in all_devices:
-            result.append({
-                "tentacle_id": d.tentacle_id,
-                "type": d.tentacle_type.value,
-                "platform": getattr(d, "platform", "unknown"),
-                "status": d.status.value,
-                "is_online": d.is_online,
-                "is_busy": d.is_busy,
-                "capabilities": d.capabilities[:5] if len(d.capabilities) > 5 else d.capabilities,
-                "total_capabilities": len(d.capabilities),
-                "last_used_ago": round(time.time() - d.last_used_at, 1) if d.last_used_at > 0 else None,
-                "meta": d.meta if hasattr(d, "meta") else {},
-            })
+            result.append(
+                {
+                    "tentacle_id": d.tentacle_id,
+                    "type": d.tentacle_type.value,
+                    "platform": getattr(d, "platform", "unknown"),
+                    "status": d.status.value,
+                    "is_online": d.is_online,
+                    "is_busy": d.is_busy,
+                    "capabilities": d.capabilities[:5]
+                    if len(d.capabilities) > 5
+                    else d.capabilities,
+                    "total_capabilities": len(d.capabilities),
+                    "last_used_ago": round(time.time() - d.last_used_at, 1)
+                    if d.last_used_at > 0
+                    else None,
+                    "meta": d.meta if hasattr(d, "meta") else {},
+                }
+            )
         return result
 
     # ── 设备详情 ────────────────────────────────────────
@@ -224,32 +230,40 @@ def create_tentacle_router(
         if coordinator._decision_engine is None:
             raise HTTPException(400, "No decision engine configured")
 
-        task_id = f"web-{int(time.time()*1000)}"
+        task_id = f"web-{int(time.time() * 1000)}"
         start = time.time()
 
         try:
             tool_calls = await coordinator._decision_engine(task, device)
         except Exception as e:
-            _task_history.append({
-                "task_id": task_id, "task": task, "tentacle_id": tentacle_id,
-                "success": False, "error": str(e), "steps": 0,
-                "duration_ms": int((time.time() - start) * 1000),
-                "timestamp": time.time(),
-            })
+            _task_history.append(
+                {
+                    "task_id": task_id,
+                    "task": task,
+                    "tentacle_id": tentacle_id,
+                    "success": False,
+                    "error": str(e),
+                    "steps": 0,
+                    "duration_ms": int((time.time() - start) * 1000),
+                    "timestamp": time.time(),
+                }
+            )
             raise HTTPException(500, f"Decision engine error: {e}") from e
 
         results = []
         for call in tool_calls:
             result = await device.execute(call)
-            results.append({
-                "call_id": call.call_id,
-                "tool": call.tool,
-                "args": call.args,
-                "success": result.success,
-                "data": result.data,
-                "error": result.error_message,
-                "duration_ms": result.duration_ms,
-            })
+            results.append(
+                {
+                    "call_id": call.call_id,
+                    "tool": call.tool,
+                    "args": call.args,
+                    "success": result.success,
+                    "data": result.data,
+                    "error": result.error_message,
+                    "duration_ms": result.duration_ms,
+                }
+            )
             if not result.success:
                 break
 
@@ -257,9 +271,14 @@ def create_tentacle_router(
         duration = int((time.time() - start) * 1000)
 
         record = {
-            "task_id": task_id, "task": task, "tentacle_id": tentacle_id,
-            "success": success, "steps": len(results), "results": results,
-            "duration_ms": duration, "timestamp": time.time(),
+            "task_id": task_id,
+            "task": task,
+            "tentacle_id": tentacle_id,
+            "success": success,
+            "steps": len(results),
+            "results": results,
+            "duration_ms": duration,
+            "timestamp": time.time(),
         }
         _task_history.append(record)
         # 只保留最近 100 条
@@ -289,10 +308,12 @@ def create_tentacle_router(
             raise HTTPException(400, "'max_concurrency' must be an integer") from None
 
         start = time.time()
-        result = await fleet_broadcast(coordinator, task, tentacle_ids, max_concurrency=max_concurrency)
+        result = await fleet_broadcast(
+            coordinator, task, tentacle_ids, max_concurrency=max_concurrency
+        )
 
         record = {
-            "task_id": f"web-bcast-{int(time.time()*1000)}",
+            "task_id": f"web-bcast-{int(time.time() * 1000)}",
             "task": task,
             "broadcast": True,
             "success": result["ok"],
@@ -526,40 +547,50 @@ def create_tentacle_router(
                         # 设备不在线时，尝试启动 mock 流
                         await screen_relay.add_subscriber(tentacle_id, ws)
                         await screen_relay.start_mock_stream(tentacle_id)
-                        await ws.send_json({
-                            "type": "subscribed",
-                            "tentacle_id": tentacle_id,
-                            "mode": "mock",
-                            "message": "Device offline, using mock stream",
-                        })
+                        await ws.send_json(
+                            {
+                                "type": "subscribed",
+                                "tentacle_id": tentacle_id,
+                                "mode": "mock",
+                                "message": "Device offline, using mock stream",
+                            }
+                        )
                     else:
                         await screen_relay.add_subscriber(tentacle_id, ws)
-                        await ws.send_json({
-                            "type": "subscribed",
-                            "tentacle_id": tentacle_id,
-                            "mode": "live",
-                        })
+                        await ws.send_json(
+                            {
+                                "type": "subscribed",
+                                "tentacle_id": tentacle_id,
+                                "mode": "live",
+                            }
+                        )
                     logger.info(
                         "screen subscribe: ws=%s device=%s",
-                        ws.client, tentacle_id,
+                        ws.client,
+                        tentacle_id,
                     )
 
                 elif action == "unsubscribe":
                     await screen_relay.unsubscribe(tentacle_id, ws)
-                    await ws.send_json({
-                        "type": "unsubscribed",
-                        "tentacle_id": tentacle_id,
-                    })
+                    await ws.send_json(
+                        {
+                            "type": "unsubscribed",
+                            "tentacle_id": tentacle_id,
+                        }
+                    )
                     logger.info(
                         "screen unsubscribe: ws=%s device=%s",
-                        ws.client, tentacle_id,
+                        ws.client,
+                        tentacle_id,
                     )
 
                 else:
-                    await ws.send_json({
-                        "type": "error",
-                        "message": f"Unknown action: {action}",
-                    })
+                    await ws.send_json(
+                        {
+                            "type": "error",
+                            "message": f"Unknown action: {action}",
+                        }
+                    )
 
         except WebSocketDisconnect:
             logger.info("screen stream client disconnected: %s", ws.client)
@@ -594,6 +625,7 @@ def create_tentacle_router(
 
         # 自动订阅 pc-host
         from runtime.tentacle.mobile.pc_screen_capture import PC_HOST_ID
+
         await screen_relay.add_subscriber(PC_HOST_ID, ws)
 
         try:
@@ -628,9 +660,7 @@ def create_tentacle_router(
                 config.jpeg_quality = int(body["quality"])
 
         try:
-            coordinator.pc_screen_capture = PcScreenCapture(
-                coordinator.screen_relay, config=config
-            )
+            coordinator.pc_screen_capture = PcScreenCapture(coordinator.screen_relay, config=config)
             await coordinator.pc_screen_capture.start()
             return {"status": "started", "stats": coordinator.pc_screen_capture.stats}
         except Exception as e:
@@ -675,7 +705,9 @@ def create_tentacle_router(
         """
         handler = coordinator.remote_input_handler
         if handler is None:
-            raise HTTPException(400, "Remote input not enabled. Start coordinator with remote_input=True")
+            raise HTTPException(
+                400, "Remote input not enabled. Start coordinator with remote_input=True"
+            )
 
         return await handler.handle_input(body)
 
@@ -689,6 +721,7 @@ def create_tentacle_router(
         nonlocal _mcp_session_manager
         if _mcp_session_manager is None:
             from runtime.tentacle.mobile.mcp_server import SseSessionManager, TentacleMcpServer
+
             mcp_server = TentacleMcpServer(coordinator=coordinator)
             _mcp_session_manager = SseSessionManager(mcp_server)
         return _mcp_session_manager

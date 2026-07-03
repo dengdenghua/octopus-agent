@@ -18,6 +18,7 @@ approval channel. So the gate has to live here, fail-closed:
 Every entry point is best-effort: taint propagation must never crash a
 sub-agent run.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -36,6 +37,7 @@ def mark_inherited_ephemeral_taint(context: Any) -> None:
             from runtime.safety.validation.prompt_injection import (
                 mark_injection_taint,
             )
+
             mark_injection_taint(inherited)
     except Exception:  # noqa: BLE001 - taint propagation is best-effort
         pass
@@ -51,12 +53,14 @@ def ephemeral_injection_taint_block(call: Any, tool_name: str) -> str | None:
         from runtime.safety.validation.prompt_injection import (
             injection_taint_gates,
         )
+
         if not injection_taint_gates():
             return None
         from runtime.safety.approval.approval_gate import (
             assess_approval_risk,
             is_durable_persistence_write,
         )
+
         # Durable-persistence writes (memory/soul) launder injection across
         # turns even though they're low-risk — block them too.
         if is_durable_persistence_write(tool_name):
@@ -83,7 +87,9 @@ def ephemeral_injection_taint_block(call: Any, tool_name: str) -> str | None:
 
 
 def scan_and_escalate_ephemeral_taint(
-    tool_name: str, affinity: Any, rendered: str,
+    tool_name: str,
+    affinity: Any,
+    rendered: str,
 ) -> None:
     """Raise the turn taint if an untrusted tool returned injection-flagged
     content, so a later risky tool in the same ephemeral run is gated too."""
@@ -93,6 +99,7 @@ def scan_and_escalate_ephemeral_taint(
             mark_injection_taint,
             scan_for_injection,
         )
+
         if is_untrusted_tool(str(tool_name), list(affinity or [])):
             scan = scan_for_injection(rendered)
             if scan.flagged:

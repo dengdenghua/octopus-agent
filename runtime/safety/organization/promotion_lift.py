@@ -33,31 +33,31 @@ def compute_topology_promotion_lift(
         mutation = str(topology.metadata.get("mutation") or "")
         if not base_fingerprint or not mutation:
             continue
-        before = _stats([
-            row for row in rows
-            if str(row.get("fingerprint") or "") == base_fingerprint
-        ])
-        after = _stats([
-            row for row in rows
-            if str(row.get("fingerprint") or "") == topology.fingerprint
-        ])
-        reports.append({
-            "topology": topology.name,
-            "fingerprint": topology.fingerprint,
-            "base_fingerprint": base_fingerprint,
-            "bucket": topology.task_bucket,
-            "mutation": mutation,
-            "promotion_source": str(topology.metadata.get("promotion_source") or ""),
-            "promotion_detail": (
-                topology.metadata.get("promotion_detail")
-                if isinstance(topology.metadata.get("promotion_detail"), dict)
-                else {}
-            ),
-            "before": before,
-            "after": after,
-            "lift": _lift(before, after),
-            "verdict": _verdict(before, after),
-        })
+        before = _stats(
+            [row for row in rows if str(row.get("fingerprint") or "") == base_fingerprint]
+        )
+        after = _stats(
+            [row for row in rows if str(row.get("fingerprint") or "") == topology.fingerprint]
+        )
+        reports.append(
+            {
+                "topology": topology.name,
+                "fingerprint": topology.fingerprint,
+                "base_fingerprint": base_fingerprint,
+                "bucket": topology.task_bucket,
+                "mutation": mutation,
+                "promotion_source": str(topology.metadata.get("promotion_source") or ""),
+                "promotion_detail": (
+                    topology.metadata.get("promotion_detail")
+                    if isinstance(topology.metadata.get("promotion_detail"), dict)
+                    else {}
+                ),
+                "before": before,
+                "after": after,
+                "lift": _lift(before, after),
+                "verdict": _verdict(before, after),
+            }
+        )
     return {
         "schema": _SCHEMA,
         "count": len(reports),
@@ -81,7 +81,9 @@ def _stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "success_rate": round(
             sum(1 for row in rows if row.get("success")) / len(rows),
             3,
-        ) if rows else None,
+        )
+        if rows
+        else None,
         "avg_quality_score": round(mean(scored), 3) if scored else None,
         "avg_duration_ms": round(mean(durations), 1) if durations else None,
     }

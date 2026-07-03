@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -7,7 +6,8 @@ from contextvars import ContextVar
 
 _AGENT_ID: ContextVar[str | None] = ContextVar("octopus_journal_agent_id", default=None)
 _CONVERSATION_ID: ContextVar[str | None] = ContextVar(
-    "octopus_journal_conversation_id", default=None,
+    "octopus_journal_conversation_id",
+    default=None,
 )
 
 

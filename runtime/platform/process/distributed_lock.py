@@ -96,11 +96,18 @@ class LockBackend(Protocol):
     """Anything that can acquire / renew / release a fenced lease."""
 
     def acquire(
-        self, scope: str, *, holder_id: str, ttl_seconds: float,
+        self,
+        scope: str,
+        *,
+        holder_id: str,
+        ttl_seconds: float,
     ) -> Lease | None: ...
 
     def renew(
-        self, lease: Lease, *, ttl_seconds: float,
+        self,
+        lease: Lease,
+        *,
+        ttl_seconds: float,
     ) -> Lease | None: ...
 
     def release(self, lease: Lease) -> bool: ...
@@ -129,7 +136,11 @@ class InMemoryLockBackend:
         return self._counter[scope]
 
     def acquire(
-        self, scope: str, *, holder_id: str, ttl_seconds: float,
+        self,
+        scope: str,
+        *,
+        holder_id: str,
+        ttl_seconds: float,
     ) -> Lease | None:
         if ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be > 0")
@@ -145,21 +156,28 @@ class InMemoryLockBackend:
                     new_expires = now + ttl_seconds
                     self._holders[scope] = (holder_id, cur_token, new_expires)
                     return Lease(
-                        scope=scope, holder_id=holder_id,
-                        acquired_at=now, expires_at=new_expires,
+                        scope=scope,
+                        holder_id=holder_id,
+                        acquired_at=now,
+                        expires_at=new_expires,
                         token=cur_token,
                     )
             # Acquire fresh — bump token monotonically.
             token = self._next_token(scope)
             self._holders[scope] = (holder_id, token, now + ttl_seconds)
             return Lease(
-                scope=scope, holder_id=holder_id,
-                acquired_at=now, expires_at=now + ttl_seconds,
+                scope=scope,
+                holder_id=holder_id,
+                acquired_at=now,
+                expires_at=now + ttl_seconds,
                 token=token,
             )
 
     def renew(
-        self, lease: Lease, *, ttl_seconds: float,
+        self,
+        lease: Lease,
+        *,
+        ttl_seconds: float,
     ) -> Lease | None:
         if ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be > 0")
@@ -174,8 +192,10 @@ class InMemoryLockBackend:
             new_expires = now + ttl_seconds
             self._holders[lease.scope] = (cur_holder, cur_token, new_expires)
             return Lease(
-                scope=lease.scope, holder_id=cur_holder,
-                acquired_at=lease.acquired_at, expires_at=new_expires,
+                scope=lease.scope,
+                holder_id=cur_holder,
+                acquired_at=lease.acquired_at,
+                expires_at=new_expires,
                 token=cur_token,
             )
 
@@ -223,6 +243,7 @@ class RedisLockBackend:
             self._coord = coordinator
         else:
             from runtime.core.hearts.redis_coordinator import RedisCoordinator
+
             if client is None:
                 raise ValueError("client or coordinator required")
             self._coord = RedisCoordinator(client, key_prefix=key_prefix)
@@ -240,7 +261,11 @@ class RedisLockBackend:
         )
 
     def acquire(
-        self, scope: str, *, holder_id: str, ttl_seconds: float,
+        self,
+        scope: str,
+        *,
+        holder_id: str,
+        ttl_seconds: float,
     ) -> Lease | None:
         # RedisCoordinator's holder_id is configured at construction.
         # If callers pass a different holder_id we honor it by
@@ -254,12 +279,16 @@ class RedisLockBackend:
         return self._to_lease(scope, raw)
 
     def renew(
-        self, lease: Lease, *, ttl_seconds: float,
+        self,
+        lease: Lease,
+        *,
+        ttl_seconds: float,
     ) -> Lease | None:
         # RedisCoordinator.renew_lease takes its own Lease type.
         from runtime.core.hearts.redis_coordinator import (
             Lease as _CoordLease,
         )
+
         coord_lease = _CoordLease(
             scope=lease.scope,
             holder_id=lease.holder_id,
@@ -279,6 +308,7 @@ class RedisLockBackend:
         from runtime.core.hearts.redis_coordinator import (
             Lease as _CoordLease,
         )
+
         coord_lease = _CoordLease(
             scope=lease.scope,
             holder_id=lease.holder_id,
@@ -340,7 +370,9 @@ class DistributedLock:
     def try_acquire(self, *, ttl_seconds: float) -> Lease | None:
         """Non-blocking acquire. Returns ``Lease`` or ``None``."""
         lease = self.backend.acquire(
-            self.scope, holder_id=self.holder_id, ttl_seconds=ttl_seconds,
+            self.scope,
+            holder_id=self.holder_id,
+            ttl_seconds=ttl_seconds,
         )
         if lease is not None:
             self._lease = lease

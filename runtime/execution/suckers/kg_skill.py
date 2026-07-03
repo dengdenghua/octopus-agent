@@ -72,24 +72,26 @@ def _get_default_kg() -> Any:
 
 
 def register_kg_skill(registry: SkillRegistry) -> int:
-    registry.register(Skill(
-        name="kg_query",
-        description=(
-            "Query the Knowledge Graph for stored facts. "
-            "Pass subject/predicate/object for SPO matching, "
-            "or entity for 1-hop neighbors."
-        ),
-        affinity=["knowledge", "memory"],
-        cost_profile="low",
-        trusted_source="skill://public/kg_query",
-        handler=_kg_query,
-        tests=[
-            SkillTestCase(
-                name="empty_query_returns_structure",
-                tier="golden",
-                args={},
-                expect=SkillExpect(schema_keys=["count", "triples"]),
+    registry.register(
+        Skill(
+            name="kg_query",
+            description=(
+                "Query the Knowledge Graph for stored facts. "
+                "Pass subject/predicate/object for SPO matching, "
+                "or entity for 1-hop neighbors."
             ),
-        ],
-    ))
+            affinity=["knowledge", "memory"],
+            cost_profile="low",
+            trusted_source="skill://public/kg_query",
+            handler=_kg_query,
+            tests=[
+                SkillTestCase(
+                    name="empty_query_returns_structure",
+                    tier="golden",
+                    args={},
+                    expect=SkillExpect(schema_keys=["count", "triples"]),
+                ),
+            ],
+        )
+    )
     return 1

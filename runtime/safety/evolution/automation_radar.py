@@ -46,9 +46,7 @@ DIMENSIONS: tuple[AutomationRadarDimension, ...] = (
         why="Split observe, preview, lease, and execute so desktop control stays useful and reviewable.",
         scores={"codex": 94, "claude_code": 85, "cursor": 78, "octopus": 95},
         evidence_check_ids=("desktop_preview_execute_lease",),
-        next_actions=(
-            "Add more lease-conflict regression cases for parallel desktop runs.",
-        ),
+        next_actions=("Add more lease-conflict regression cases for parallel desktop runs.",),
     ),
     AutomationRadarDimension(
         id="desktop_semantic_grounding",
@@ -57,9 +55,7 @@ DIMENSIONS: tuple[AutomationRadarDimension, ...] = (
         why="Use accessibility trees and control metadata instead of relying on pixels alone.",
         scores={"codex": 93, "claude_code": 84, "cursor": 78, "octopus": 95},
         evidence_check_ids=("desktop_uia_grounding",),
-        next_actions=(
-            "Attach UIA match traces to every promoted desktop replay case.",
-        ),
+        next_actions=("Attach UIA match traces to every promoted desktop replay case.",),
     ),
     AutomationRadarDimension(
         id="visual_replay_validation",
@@ -68,9 +64,7 @@ DIMENSIONS: tuple[AutomationRadarDimension, ...] = (
         why="Turn visual failures into replay-gated evidence with pixel assertions.",
         scores={"codex": 93, "claude_code": 84, "cursor": 80, "octopus": 96},
         evidence_check_ids=("browser_pixel_replay_gate",),
-        next_actions=(
-            "Track pixel-replay latency budgets in CI for larger replay corpora.",
-        ),
+        next_actions=("Track pixel-replay latency budgets in CI for larger replay corpora.",),
     ),
     AutomationRadarDimension(
         id="repair_recipe_learning",
@@ -134,9 +128,7 @@ DIMENSIONS: tuple[AutomationRadarDimension, ...] = (
             "browser_session_lifecycle",
             "desktop_preview_execute_lease",
         ),
-        next_actions=(
-            "Keep signed high-risk automation policy coverage release-gated.",
-        ),
+        next_actions=("Keep signed high-risk automation policy coverage release-gated.",),
     ),
     AutomationRadarDimension(
         id="productized_api_bridge",
@@ -149,9 +141,7 @@ DIMENSIONS: tuple[AutomationRadarDimension, ...] = (
             "desktop_preview_execute_lease",
             "operator_visibility",
         ),
-        next_actions=(
-            "Keep automation radar links wired into scorecard drill-downs.",
-        ),
+        next_actions=("Keep automation radar links wired into scorecard drill-downs.",),
     ),
 )
 
@@ -172,9 +162,7 @@ def compute_automation_radar(
     policy_rule_drafts = _automation_policy_rule_draft_summary()
     policy_coverage = _automation_policy_rule_coverage_summary()
     checks_by_id = {
-        str(row.get("id")): row
-        for row in quality.get("checks", [])
-        if isinstance(row, dict)
+        str(row.get("id")): row for row in quality.get("checks", []) if isinstance(row, dict)
     }
     dimensions = [
         _dimension_row(
@@ -184,10 +172,7 @@ def compute_automation_radar(
         )
         for dimension in DIMENSIONS
     ]
-    overall = {
-        competitor: _weighted_score(dimensions, competitor)
-        for competitor in COMPETITORS
-    }
+    overall = {competitor: _weighted_score(dimensions, competitor) for competitor in COMPETITORS}
     gaps = [
         row
         for row in dimensions
@@ -198,8 +183,7 @@ def compute_automation_radar(
     strengths = [
         row
         for row in dimensions
-        if row["scores"]["octopus"] >= row["scores"]["codex"]
-        and row["evidence_ready"]
+        if row["scores"]["octopus"] >= row["scores"]["codex"] and row["evidence_ready"]
     ]
     return {
         "schema": "octopus.automation_radar.v1",
@@ -251,9 +235,7 @@ def _dimension_row(
         if check_id in checks_by_id
     ]
     missing_check_ids = [
-        check_id
-        for check_id in dimension.evidence_check_ids
-        if check_id not in checks_by_id
+        check_id for check_id in dimension.evidence_check_ids if check_id not in checks_by_id
     ]
     evidence_ready = (
         not missing_check_ids
@@ -311,24 +293,28 @@ def _drilldown_links(dimension_id: str) -> list[dict[str, Any]]:
         "repair_recipe_learning",
         "operator_visibility",
     }:
-        links.append({
-            "id": "browser_desktop_repair_recipes",
-            "label": "Browser repair recipes",
-            "method": "GET",
-            "href": "/api/evolution/browser-desktop-repair-recipes",
-        })
+        links.append(
+            {
+                "id": "browser_desktop_repair_recipes",
+                "label": "Browser repair recipes",
+                "method": "GET",
+                "href": "/api/evolution/browser-desktop-repair-recipes",
+            }
+        )
     if dimension_id in {
         "desktop_preview_execute",
         "desktop_semantic_grounding",
         "automation_safety",
         "productized_api_bridge",
     }:
-        links.append({
-            "id": "computer_status",
-            "label": "Computer automation status",
-            "method": "GET",
-            "href": "/api/computer/status",
-        })
+        links.append(
+            {
+                "id": "computer_status",
+                "label": "Computer automation status",
+                "method": "GET",
+                "href": "/api/computer/status",
+            }
+        )
     return links
 
 
@@ -339,10 +325,7 @@ def _weighted_score(
     total_weight = sum(int(row["weight"]) for row in dimensions)
     if total_weight <= 0:
         return 0
-    weighted = sum(
-        int(row["weight"]) * int(row["scores"][competitor])
-        for row in dimensions
-    )
+    weighted = sum(int(row["weight"]) * int(row["scores"][competitor]) for row in dimensions)
     return int(round(weighted / total_weight))
 
 
@@ -356,11 +339,7 @@ def _ranking(overall: dict[str, int]) -> list[dict[str, Any]]:
 
 def _verdict(overall: dict[str, int]) -> str:
     octopus = overall.get("octopus", 0)
-    best_other = max(
-        score
-        for competitor, score in overall.items()
-        if competitor != "octopus"
-    )
+    best_other = max(score for competitor, score in overall.items() if competitor != "octopus")
     if octopus > best_other:
         return "leading"
     if octopus >= best_other - 2:
@@ -400,8 +379,7 @@ def _automation_policy_rule_draft_summary() -> dict[str, Any]:
         verified = sum(
             1
             for draft in drafts
-            if isinstance(draft, dict)
-            and verify_policy_review_rule_draft(draft).get("ok") is True
+            if isinstance(draft, dict) and verify_policy_review_rule_draft(draft).get("ok") is True
         )
         return {
             "schema": report.get("schema"),

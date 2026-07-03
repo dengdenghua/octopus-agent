@@ -11,6 +11,7 @@ activates the two surfaces apply deliberately left staged:
   has no ``enabled`` field, so adding one to ``config.yaml`` auto-launches it —
   the user pastes, supplies credentials, and enables explicitly.
 """
+
 from __future__ import annotations
 
 import json

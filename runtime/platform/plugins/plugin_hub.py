@@ -109,16 +109,18 @@ class PluginHub:
             if manifest_data is None:
                 continue
             pname = manifest_data.get("name", item.name)
-            results.append({
-                "id": pname,
-                "name": pname,
-                "version": manifest_data.get("version", "0.1.0"),
-                "description": manifest_data.get("description", ""),
-                "author": manifest_data.get("author", ""),
-                "tags": manifest_data.get("tags", []),
-                "dir": str(item),
-                "loaded": pname in self._plugins,
-            })
+            results.append(
+                {
+                    "id": pname,
+                    "name": pname,
+                    "version": manifest_data.get("version", "0.1.0"),
+                    "description": manifest_data.get("description", ""),
+                    "author": manifest_data.get("author", ""),
+                    "tags": manifest_data.get("tags", []),
+                    "dir": str(item),
+                    "loaded": pname in self._plugins,
+                }
+            )
         return results
 
     # ── Load ───────────────────────────────────────────────────
@@ -230,7 +232,9 @@ class PluginHub:
 
     @staticmethod
     def _validate_manifest_provides(
-        name: str, instance: Any, manifest: Any,
+        name: str,
+        instance: Any,
+        manifest: Any,
     ) -> None:
         """Warn when ``manifest.provides`` doesn't match the instance's actual
         registered capabilities. An empty ``provides`` is fine (auto-detection
@@ -239,8 +243,7 @@ class PluginHub:
         if not declared:
             return
         actual = {
-            str(getattr(c, "name", c))
-            for c in (getattr(instance, "capabilities", None) or [])
+            str(getattr(c, "name", c)) for c in (getattr(instance, "capabilities", None) or [])
         }
         missing = declared - actual
         extra = actual - declared
@@ -252,7 +255,8 @@ class PluginHub:
                 parts.append(f"provided but not declared: {sorted(extra)}")
             _LOG.warning(
                 "Plugin %s manifest.provides mismatch — %s",
-                name, "; ".join(parts),
+                name,
+                "; ".join(parts),
             )
 
     def load_all(self) -> list[str]:
@@ -394,22 +398,24 @@ class PluginHub:
             caps = []
             for c in instance.capabilities:
                 caps.append({"type": c.type, "name": c.name, "description": c.description})
-            result.append({
-                "id": pname,
-                "name": getattr(instance, "name", pname),
-                "version": getattr(instance, "version", "0.1.0"),
-                "description": getattr(instance, "description", ""),
-                "author": getattr(instance, "author", ""),
-                "capabilities": caps,
-                "config_schema": ctx.manifest.config_schema if ctx else {},
-                "config_ui": instance.config_ui_component,
-                "loaded": True,
-                "enabled": True,
-                "error": None,
-                "dir": ctx.plugin_dir if ctx else "",
-                "dependencies": getattr(instance, "dependencies", []),
-                "state": "active",
-            })
+            result.append(
+                {
+                    "id": pname,
+                    "name": getattr(instance, "name", pname),
+                    "version": getattr(instance, "version", "0.1.0"),
+                    "description": getattr(instance, "description", ""),
+                    "author": getattr(instance, "author", ""),
+                    "capabilities": caps,
+                    "config_schema": ctx.manifest.config_schema if ctx else {},
+                    "config_ui": instance.config_ui_component,
+                    "loaded": True,
+                    "enabled": True,
+                    "error": None,
+                    "dir": ctx.plugin_dir if ctx else "",
+                    "dependencies": getattr(instance, "dependencies", []),
+                    "state": "active",
+                }
+            )
         return result
 
     # ── Internal helpers ───────────────────────────────────────
@@ -423,6 +429,7 @@ class PluginHub:
                     raw = path.read_text(encoding="utf-8")
                     if filename.endswith(".yaml"):
                         import yaml
+
                         data = yaml.safe_load(raw)
                     else:
                         data = json.loads(raw)
@@ -481,16 +488,20 @@ class PluginHub:
                             try:
                                 result = getattr(instance, _handler_name)(body, headers)
                                 import inspect
+
                                 if inspect.iscoroutine(result):
                                     result = await result
                                 return result
                             except Exception as exc:
                                 _LOG.error(
                                     "Webhook handler %s/%s failed: %s",
-                                    _name, _handler_name, exc,
+                                    _name,
+                                    _handler_name,
+                                    exc,
                                 )
                                 return {"error": str(exc)}
                         return {"error": f"handler {_handler_name} not found"}
+
                     return _handler
 
                 handler = _build_webhook_handler()
@@ -504,7 +515,11 @@ class PluginHub:
 
                 _LOG.info(
                     "Mounted webhook: %s%s [%s] -> %s.%s",
-                    route_prefix, path, method.upper(), name, handler_name,
+                    route_prefix,
+                    path,
+                    method.upper(),
+                    name,
+                    handler_name,
                 )
 
             self._fastapi_app.include_router(router)

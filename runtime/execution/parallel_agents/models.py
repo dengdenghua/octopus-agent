@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -16,22 +15,18 @@ ParallelTaskStatus = Literal[
 ]
 
 
-
-
 class DispatchTaskInput(BaseModel):
-
     model_config = ConfigDict(extra="ignore")
 
     description: str
     subagent_name: str = "general-purpose"
-    task_id: str | None = None           # Implementation note.
+    task_id: str | None = None  # Implementation note.
     depends_on: list[str] = Field(default_factory=list)
     priority: int = 0
     write_paths: list[str] = Field(default_factory=list)
 
 
 class WorkContract(BaseModel):
-
     model_config = ConfigDict(extra="ignore")
 
     contract_id: str
@@ -46,7 +41,6 @@ class WorkContract(BaseModel):
 
 
 class BatchPhase(BaseModel):
-
     model_config = ConfigDict(extra="ignore")
 
     phase_index: int
@@ -55,7 +49,6 @@ class BatchPhase(BaseModel):
 
 
 class BatchPlan(BaseModel):
-
     model_config = ConfigDict(extra="ignore")
 
     batch_id: str
@@ -74,10 +67,10 @@ class DispatchRequest(BaseModel):
 
     tasks: list[DispatchTaskInput]
     max_concurrency: int | None = None
-    aggregation_strategy: str | None = None   # "concat" | "vote" | ... (stub)
-    execution_mode: str | None = None         # "parallel" | "sequential"
-    thread_id: str | None = None              # Implementation note.
-    model_name: str | None = None             # Implementation note.
+    aggregation_strategy: str | None = None  # "concat" | "vote" | ... (stub)
+    execution_mode: str | None = None  # "parallel" | "sequential"
+    thread_id: str | None = None  # Implementation note.
+    model_name: str | None = None  # Implementation note.
 
 
 class SplitRequest(BaseModel):
@@ -91,25 +84,21 @@ class SplitRequest(BaseModel):
     model_name: str | None = None
 
 
-
-
 class TaskResult(BaseModel):
-
     task_id: str
     batch_id: str
     description: str | None = None
-    status: str                   # Implementation note.
+    status: str  # Implementation note.
     result: str | None = None
     error: str | None = None
-    started_at: str | None = None      # ISO8601
-    completed_at: str | None = None    # ISO8601
+    started_at: str | None = None  # ISO8601
+    completed_at: str | None = None  # ISO8601
     duration_seconds: float | None = None
     subagent_name: str = "general-purpose"
     work_contract: WorkContract | None = None
 
 
 class BatchStreamEvent(BaseModel):
-
     type: Literal["stage_change", "task_update", "tool_call", "batch_complete"]
     batch_id: str
     sequence: int | None = None
@@ -135,7 +124,6 @@ class BatchStreamEvent(BaseModel):
 
 
 class BatchResult(BaseModel):
-
     batch_id: str
     status: str
     total_tasks: int
@@ -156,7 +144,6 @@ class BatchResult(BaseModel):
 
 
 class BatchRecoveryTask(BaseModel):
-
     model_config = ConfigDict(extra="ignore")
 
     task_id: str
@@ -177,7 +164,6 @@ class BatchRecoveryTask(BaseModel):
 
 
 class BatchRecoverySnapshot(BaseModel):
-
     model_config = ConfigDict(
         extra="ignore",
         populate_by_name=True,
@@ -214,20 +200,16 @@ class BatchRecoverySnapshot(BaseModel):
 
 
 class OrchestratorStatus(BaseModel):
-
     active_count: int = 0
     pending_count: int = 0
     completed_count: int = 0
     failed_count: int = 0
     cancelled_count: int = 0
     max_concurrency: int = 0
-    batches: dict[str, str] = Field(default_factory=dict)   # batch_id → status
-
-
+    batches: dict[str, str] = Field(default_factory=dict)  # batch_id → status
 
 
 class SplitTask(BaseModel):
-
     task_id: str
     description: str
     subagent_name: str = "general-purpose"
@@ -236,9 +218,7 @@ class SplitTask(BaseModel):
 
 
 class SplitResult(BaseModel):
-
     tasks: list[SplitTask] = Field(default_factory=list)
     dag_levels: list[list[str]] = Field(default_factory=list)
     total_levels: int = 0
     is_parallelizable: bool = False
-

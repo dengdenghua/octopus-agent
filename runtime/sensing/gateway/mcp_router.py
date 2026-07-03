@@ -29,6 +29,7 @@ The factory returns a wrapper carrying two mutable dicts:
 Exposing these lets other app wiring (health endpoint, UI app
 startup log) inspect what's registered without re-doing the work.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -90,6 +91,7 @@ class McpRouter:
     introspect. Keeps the external ``app.include_router`` pattern
     while still giving app.py's health endpoint a way to count
     live MCP servers."""
+
     router: Any
     config_state: dict[str, Any] = field(
         default_factory=lambda: {"mcp_servers": {}},
@@ -233,9 +235,7 @@ def create_mcp_router(
         transport = str(entry.get("transport") or preset.get("transport") or "stdio")
         url = str(entry.get("url") or preset.get("url") or "")
         is_remote = transport in ("http", "sse") or bool(url)
-        name_prefix = (
-            entry.get("name_prefix") or preset.get("name_prefix") or name
-        )
+        name_prefix = entry.get("name_prefix") or preset.get("name_prefix") or name
 
         if is_remote:
             # Remote (streamable-http / SSE) server.
@@ -268,31 +268,30 @@ def create_mcp_router(
             if not command:
                 return {
                     "ok": False,
-                    "error": (
-                        f"no command configured for {name!r} "
-                        "(not a known preset)"
-                    ),
+                    "error": (f"no command configured for {name!r} (not a known preset)"),
                 }
             config = MCPServerConfig(
-                name=name, command=command, args=list(args), env=dict(env),
+                name=name,
+                command=command,
+                args=list(args),
+                env=dict(env),
             )
             summary = {"command": command, "args": list(args), "env": dict(env)}
 
         before = set(registry.all_names())
         client = None
         try:
-            client = (
-                HttpMCPClient(config)
-                if is_remote
-                else PersistentStdioMCPClient(config)
-            )
+            client = HttpMCPClient(config) if is_remote else PersistentStdioMCPClient(config)
             # Production path · enforce user trust approval. The
             # frontend Settings → MCP page surfaces an "Approve" CTA
             # that calls ``/api/mcp/trust``; until then the bridge
             # refuses to register tools from the server.
             register_mcp_tools_as_skills(
-                registry, client, name_prefix=name_prefix,
-                require_trust=True, server_name=name,
+                registry,
+                client,
+                name_prefix=name_prefix,
+                require_trust=True,
+                server_name=name,
             )
         except Exception as e:  # noqa: BLE001
             # Spawn / connection can fail in dozens of ways (missing
@@ -339,7 +338,8 @@ def create_mcp_router(
 
     @router.put("/api/mcp/config")
     def api_mcp_config_update(
-        body: dict[str, Any], request: Request,
+        body: dict[str, Any],
+        request: Request,
     ) -> dict[str, Any]:
         servers = body.get("mcp_servers")
         if not isinstance(servers, dict):
@@ -353,16 +353,20 @@ def create_mcp_router(
             entry: dict[str, Any] = {
                 "enabled": enabled,
                 "description": str(
-                    payload.get("description")
-                    or MCP_PRESETS.get(name, {}).get("description")
-                    or ""
+                    payload.get("description") or MCP_PRESETS.get(name, {}).get("description") or ""
                 ),
             }
             # Pass-through known fields (stdio: command/args/env;
             # remote: transport/url/headers).
             for key in (
-                "command", "args", "env", "name_prefix", "bridge",
-                "transport", "url", "headers",
+                "command",
+                "args",
+                "env",
+                "name_prefix",
+                "bridge",
+                "transport",
+                "url",
+                "headers",
             ):
                 if key in payload:
                     entry[key] = payload[key]
@@ -386,6 +390,7 @@ def create_mcp_router(
     def api_mcp_trust_list() -> dict[str, Any]:
         """List all MCP trust entries · UI renders approval chips."""
         from runtime.adapters.mcp_client.trust import get_trust_store
+
         store = get_trust_store()
         return {
             "entries": [
@@ -410,8 +415,11 @@ def create_mcp_router(
             raise HTTPException(400, "tool_names must be a list")
         note = str(body.get("note") or "")
         from runtime.adapters.mcp_client.trust import get_trust_store
+
         entry = get_trust_store().approve(
-            name, [str(t) for t in tool_names], note=note,
+            name,
+            [str(t) for t in tool_names],
+            note=note,
         )
         return {
             "ok": True,
@@ -442,7 +450,8 @@ def create_mcp_router(
 
     @router.post("/api/mcp/oauth/authorize")
     def api_mcp_oauth_authorize(
-        body: dict[str, Any], request: Request,
+        body: dict[str, Any],
+        request: Request,
     ) -> dict[str, Any]:
         server = str(body.get("server") or "").strip()
         url = str(body.get("url") or "").strip()
@@ -466,7 +475,8 @@ def create_mcp_router(
         client_id = store.get_client(endpoints.issuer)
         if not client_id and endpoints.registration_url:
             client_id = oauth_discovery.register_client(
-                endpoints.registration_url, redirect_uri=redirect_uri,
+                endpoints.registration_url,
+                redirect_uri=redirect_uri,
             )
             if client_id:
                 store.save_client(endpoints.issuer, client_id)
@@ -549,8 +559,10 @@ window.close();
             return _page(f"Token exchange failed: {exc}", ok=False)
 
         store.save_tokens(
-            pending.server, token_response,
-            token_url=pending.token_url, client_id=pending.client_id,
+            pending.server,
+            token_response,
+            token_url=pending.token_url,
+            client_id=pending.client_id,
         )
         return _page(f"Authorized {pending.server}. You can close this tab.", ok=True)
 
@@ -579,6 +591,7 @@ window.close();
         that revocation actually takes effect.
         """
         from runtime.adapters.mcp_client.trust import get_trust_store
+
         revoked = get_trust_store().revoke(server_name)
         runtime_status: dict[str, Any] | None = None
         if server_name in mcp_runtime:

@@ -229,9 +229,7 @@ def test_promotion_applier_applies_browser_desktop_repair_recipe_to_proposal_led
     assert result["results"][0]["artifact"]["type"] == "proposal_ledger"
     assert len(proposals) == 1
     evidence = proposals[0].metadata["evidence"]
-    assert evidence["schema"] == (
-        "octopus.browser_desktop_repair_recipe_promotion_evidence.v1"
-    )
+    assert evidence["schema"] == ("octopus.browser_desktop_repair_recipe_promotion_evidence.v1")
     assert evidence["recipe_id"] == "browser-desktop-recipe:abc123"
     assert evidence["occurrences"] == 3
     assert evidence["case_ids"] == ["browser-pixel::one.png", "browser-pixel::two.png"]
@@ -315,10 +313,7 @@ def test_policy_review_promotion_creates_proposal_with_replay_evidence(
     assert result["results"][0]["artifact"]["type"] == "proposal_ledger"
     assert len(proposals) == 1
     assert proposals[0].metadata["review_queue_item_id"] == item["id"]
-    assert (
-        proposals[0].metadata["evidence"]["replay"]["case_id"]
-        == "task-run:abc123"
-    )
+    assert proposals[0].metadata["evidence"]["replay"]["case_id"] == "task-run:abc123"
 
 
 def test_policy_review_promotion_uses_item_replay_gate_evidence(
@@ -358,9 +353,7 @@ def test_policy_review_promotion_uses_item_replay_gate_evidence(
     )
 
     assert result["applied"] == 1
-    assert proposals[0].metadata["evidence"]["replay"]["case_id"] == (
-        "browser-pixel::artifact.png"
-    )
+    assert proposals[0].metadata["evidence"]["replay"]["case_id"] == ("browser-pixel::artifact.png")
     assert proposals[0].metadata["evidence"]["replay_gate"]["reason"] == (
         "operator_verified_browser_pixel_case"
     )

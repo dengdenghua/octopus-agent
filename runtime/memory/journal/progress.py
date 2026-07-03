@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,7 +20,6 @@ ProgressStatus = Literal["running", "completed", "failed", "unknown"]
 
 @dataclass
 class TaskProgressSnapshot:
-
     task_id: str
     total_nodes: int
     nodes_completed: int
@@ -112,9 +110,7 @@ def _aggregate(task_id: str, events: list[JournalEvent]) -> TaskProgressSnapshot
         elif isinstance(e, TrajectoryEvent):
             status = "completed" if e.trajectory.outcome.success else "failed"
             if e.trajectory.step_count > 0:
-                nodes_completed = sum(
-                    1 for s in e.trajectory.steps if s.success
-                )
+                nodes_completed = sum(1 for s in e.trajectory.steps if s.success)
             current_node_id = None
             current_node_index = None
             cost = e.trajectory.outcome.cost

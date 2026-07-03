@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -91,7 +90,6 @@ def create_local_auth_router(
                 raise HTTPException(status_code=403, detail="用户名不在白名单")
             return
 
-
     @router.post("/login", response_model=LoginResponse)
     def login(body: LoginRequest, request: Request) -> LoginResponse:
         _require_enabled()
@@ -103,11 +101,7 @@ def create_local_auth_router(
         if identity_store is not None:
             from runtime.safety.auth.identity import Identity
 
-            existing = (
-                identity_store.get(actor_id)
-                if hasattr(identity_store, "get")
-                else None
-            )
+            existing = identity_store.get(actor_id) if hasattr(identity_store, "get") else None
             if existing is None:
                 meta: dict[str, Any] = {
                     "provider": "local",
@@ -150,7 +144,8 @@ def create_local_auth_router(
 
         logger.info(
             "local_auth login · actor=%s created=%s",
-            actor_id, created,
+            actor_id,
+            created,
         )
         _ = request
 

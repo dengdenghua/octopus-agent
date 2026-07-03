@@ -150,19 +150,16 @@ def _strip_fillers(q: str) -> str:
     low = q.lower()
     for f in _EN_FILLERS:
         if low.startswith(f):
-            return q[len(f):].strip()
+            return q[len(f) :].strip()
     for f in _CN_FILLERS:
         if q.startswith(f):
-            return q[len(f):].strip()
+            return q[len(f) :].strip()
     return q
 
 
 def _looks_time_sensitive(q: str) -> bool:
     low = q.lower()
-    return (
-        any(h in low for h in _RECENCY_HINTS_EN)
-        or any(h in q for h in _RECENCY_HINTS_CN)
-    )
+    return any(h in low for h in _RECENCY_HINTS_EN) or any(h in q for h in _RECENCY_HINTS_CN)
 
 
 def _parse_query_array(text: str) -> list[str]:
@@ -180,7 +177,7 @@ def _parse_query_array(text: str) -> list[str]:
             elif c == "]":
                 depth -= 1
                 if depth == 0:
-                    candidate = text[start: i + 1]
+                    candidate = text[start : i + 1]
                     try:
                         data = json.loads(candidate)
                     except json.JSONDecodeError:

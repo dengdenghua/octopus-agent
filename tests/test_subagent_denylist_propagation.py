@@ -6,6 +6,7 @@ This is the multi-agent permission separation contract: even when
 the user's global denylist allows a path, the parent can pin
 additional restrictions just for THIS sub-agent's run.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

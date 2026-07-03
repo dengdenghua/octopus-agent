@@ -1,4 +1,3 @@
-
 """Sandbox backends · Docker / K8s / SSH / subprocess · **未自动接线**。
 
 ⚠️ **实装状态（2026-06-30 核查）**：本包的全部 backend 类

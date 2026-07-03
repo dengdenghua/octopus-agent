@@ -44,9 +44,7 @@ def _client(thread_id: str, suckers: list[str]):
                 step_id=i,
                 node_id=f"n{i}",
                 action=call,
-                result=ExecutionResult(
-                    call_id=call.call_id, status="success", output={"ok": True}
-                ),
+                result=ExecutionResult(call_id=call.call_id, status="success", output={"ok": True}),
             )
         )
     # The trajectory react_loop would have written for this conversation.
@@ -68,9 +66,7 @@ def _client(thread_id: str, suckers: list[str]):
 def test_rec_stop_forges_skill_from_thread_trajectory():
     client, registry = _client("t1", ["list_cwd", "count_words"])
     client.post("/api/teach-repeat/record/start", json={"thread_id": "t1", "name": "demo"})
-    resp = client.post(
-        "/api/teach-repeat/record/stop", json={"thread_id": "t1", "use_llm": True}
-    )
+    resp = client.post("/api/teach-repeat/record/stop", json={"thread_id": "t1", "use_llm": True})
     data = resp.json()
     assert data["status"] == "promoted"
     assert len(data["forged"]) == 1

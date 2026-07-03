@@ -9,6 +9,7 @@ Reads pytest collection output, parses the "N items collected" line,
 returns the count. Use this to replace hardcoded "3802 tests" /
 "3800+ tests" references with a living number.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -36,9 +37,7 @@ def count_live_tests() -> int:
                 return int(parts[0])
             except (ValueError, IndexError):
                 continue
-    raise RuntimeError(
-        f"Could not parse test count from pytest --collect-only:\n{result.stdout}"
-    )
+    raise RuntimeError(f"Could not parse test count from pytest --collect-only:\n{result.stdout}")
 
 
 def check_docs_fresh(live_count: int) -> int:
@@ -65,8 +64,7 @@ def check_docs_fresh(live_count: int) -> int:
             # Below the floor → docs over-promise
             if live_count < claimed_floor:
                 stale.append(
-                    f"{roadmap.relative_to(root)}: claims {claimed_floor}+ "
-                    f"but live={live_count}"
+                    f"{roadmap.relative_to(root)}: claims {claimed_floor}+ but live={live_count}"
                 )
             # 200+ above → docs under-report; round up
             elif live_count >= claimed_floor + 200:

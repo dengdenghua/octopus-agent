@@ -4,6 +4,7 @@ Each task runs in its own ``git worktree`` off HEAD, so parallel file writes
 never collide; every worktree + branch is removed afterwards and the main
 checkout is left untouched.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -21,7 +22,8 @@ from runtime.execution.subagents.worktree_loop import (
 )
 
 pytestmark = pytest.mark.skipif(
-    shutil.which("git") is None, reason="git not available",
+    shutil.which("git") is None,
+    reason="git not available",
 )
 
 
@@ -32,7 +34,9 @@ def _init_repo(tmp_path: Path) -> Path:
     def g(*args: str) -> None:
         subprocess.run(
             ["git", "-C", str(repo), *args],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         )
 
     g("init", "-q")
@@ -47,7 +51,9 @@ def _init_repo(tmp_path: Path) -> Path:
 def _worktree_count(repo: Path) -> int:
     out = subprocess.run(
         ["git", "-C", str(repo), "worktree", "list"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
     return len([line for line in out.splitlines() if line.strip()])
 
@@ -137,7 +143,9 @@ def test_subagent_worktree_worker_passes_workspace_path(monkeypatch):
 
     def fake(agent_id: str = "", prompt: str = "", workspace_path: str = "", **_kw):
         captured.update(
-            agent_id=agent_id, prompt=prompt, workspace_path=workspace_path,
+            agent_id=agent_id,
+            prompt=prompt,
+            workspace_path=workspace_path,
         )
         return {"success": True, "output": "ok"}
 

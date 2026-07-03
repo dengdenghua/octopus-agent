@@ -23,6 +23,7 @@ as the agent writes to them.
 Arms are resolved from ``tool-registry.jsonc::arms`` against a name →
 factory registry defined in ``runtime.execution.arms.presets``.
 """
+
 from __future__ import annotations
 
 import os
@@ -110,11 +111,12 @@ def _render_agent_identity_banner(agent_id: str, display_name: str) -> str:
         + ". This is your active persona for this turn. Octopus is the "
         "runtime/product name, not your speaking name.\n\n"
         "When asked who you are / 你是谁 / 你叫什么, answer as this agent. "
-        f"Begin with \"我是 {display_name}\" in Chinese or "
-        f"\"I'm {display_name}\" in English. Do NOT answer with the "
+        f'Begin with "我是 {display_name}" in Chinese or '
+        f'"I\'m {display_name}" in English. Do NOT answer with the '
         "product/runtime name unless it is this agent's own display name. "
         "Do NOT name the underlying model provider."
     )
+
 
 # ═══════════════════════════════════════════════════════════
 # persona file composition
@@ -219,6 +221,7 @@ def _compose_soul(
             from runtime.safety.validation import (
                 get_constitution_summary,
             )
+
             parts.append(get_constitution_summary())
         except ImportError:  # noqa: BLE001 — optional integration; proceed without
             pass
@@ -228,7 +231,7 @@ def _compose_soul(
         parts.append(
             "## REMINDER\n\n"
             f"You are {display_name}. If asked who you are, say "
-            f"\"我是 {display_name}\" or \"I'm {display_name}\". "
+            f'"我是 {display_name}" or "I\'m {display_name}". '
             "Do not collapse this agent persona into the Octopus product name."
         )
     return "\n\n".join(parts)
@@ -240,7 +243,8 @@ def _compose_soul(
 
 
 def _memory_tier_paths(
-    agent_dir: Path, core: Path,
+    agent_dir: Path,
+    core: Path,
 ) -> list[tuple[str, Path]]:
     """Return (label, path) pairs for the 3 memory tiers.
 
@@ -296,10 +300,7 @@ def _memory_tier_paths(
         agent_id=agent_dir.name,
         metadata=metadata,
     )
-    return [
-        (name, core / "MEMORY.md") if name == "agent" else (name, path)
-        for name, path in tiers
-    ]
+    return [(name, core / "MEMORY.md") if name == "agent" else (name, path) for name, path in tiers]
 
 
 _LONG_TERM_MEMORY_RE = re.compile(
@@ -317,6 +318,7 @@ def _runtime_metadata(metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         return metadata
     try:
         from runtime.platform.process.session import current_session
+
         session = current_session()
         if session is not None and isinstance(session.metadata, dict):
             return session.metadata
@@ -410,6 +412,7 @@ def _is_template_only(text: str) -> bool:
         # "- (none recorded yet)" / "- (unknown)"
         re.compile(r"^-\s*\(\s*(none recorded yet|unknown)\s*\)\s*$"),
     ]
+
     def is_sentinel(ln: str) -> bool:
         if ln in sentinel_exact:
             return True
@@ -449,18 +452,20 @@ def _build_arms(
     # could plan a call but no arm would accept the skill → runtime fail.
     if private_skills:
         from runtime.platform.models import ArmId, SkillId
-        arms.append(Worker(
-            arm_id=ArmId(f"{agent_id}_private_arm"),
-            affinity=[],
-            allowed_skills=[SkillId(s) for s in private_skills],
-            runtime=runtime,
-            display_name=f"{agent_id} private skills",
-            description=(
-                "Agent-private skill whitelist — individual skills "
-                "beyond the bundled arms."
-            ),
-            icon="🔑",
-        ))
+
+        arms.append(
+            Worker(
+                arm_id=ArmId(f"{agent_id}_private_arm"),
+                affinity=[],
+                allowed_skills=[SkillId(s) for s in private_skills],
+                runtime=runtime,
+                display_name=f"{agent_id} private skills",
+                description=(
+                    "Agent-private skill whitelist — individual skills beyond the bundled arms."
+                ),
+                icon="🔑",
+            )
+        )
 
     return ArmPool(arms)
 
@@ -499,7 +504,10 @@ def load_agent(agent_dir: Path, runtime: GraphRuntime, shared_dir: Path) -> Agen
 
     soul = _compose_soul(agent_dir, shared_dir, profile=profile)
     arms = _build_arms(
-        runtime, arm_ids, agent_id, private_skills=private_skills,
+        runtime,
+        arm_ids,
+        agent_id,
+        private_skills=private_skills,
     )
 
     return Agent(
@@ -516,13 +524,15 @@ def load_agent(agent_dir: Path, runtime: GraphRuntime, shared_dir: Path) -> Agen
     )
 
 
-_LOAD_ALL_SKIP_IDS = frozenset({
-    # `desktop_operator` is kept on disk for backward-compat tests
-    # (see presets.make_desktop_operator_agent) but NOT auto-registered
-    # into the agent registry — desktop capability is primarily an arm
-    # of the `general` agent, not a standalone persona.
-    "desktop_operator",
-})
+_LOAD_ALL_SKIP_IDS = frozenset(
+    {
+        # `desktop_operator` is kept on disk for backward-compat tests
+        # (see presets.make_desktop_operator_agent) but NOT auto-registered
+        # into the agent registry — desktop capability is primarily an arm
+        # of the `general` agent, not a standalone persona.
+        "desktop_operator",
+    }
+)
 
 
 def load_all_agents(
@@ -539,6 +549,7 @@ def load_all_agents(
 
     out: list[Agent] = []
     import logging as _logging
+
     _logger = _logging.getLogger(__name__)
     for entry in sorted(agents_root.iterdir()):
         if not entry.is_dir():
@@ -557,6 +568,8 @@ def load_all_agents(
         except Exception as exc:  # noqa: BLE001 — broad catch by design
             _logger.warning(
                 "load_all_agents: skipping %s · %s: %s",
-                entry.name, type(exc).__name__, exc,
+                entry.name,
+                type(exc).__name__,
+                exc,
             )
     return out

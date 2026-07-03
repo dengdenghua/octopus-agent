@@ -79,10 +79,7 @@ class UserCustomToolResultEvent(BaseModel):
 
 # Discriminated union for inbound events
 InboundEvent = (
-    UserMessageEvent
-    | UserInterruptEvent
-    | UserToolConfirmationEvent
-    | UserCustomToolResultEvent
+    UserMessageEvent | UserInterruptEvent | UserToolConfirmationEvent | UserCustomToolResultEvent
 )
 
 

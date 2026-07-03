@@ -6,6 +6,7 @@ runtime/adapters/mcp_client/oauth.py and oauth_discovery.py were complete,
 independently-tested modules with zero production callers — these tests
 cover the router wiring that closes that gap.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -37,7 +38,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 @pytest.fixture
 def secured_client(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[TestClient, dict[str, str]]:
     from runtime.safety.auth import Identity, IdentityStore
 
@@ -59,7 +61,9 @@ _ENDPOINTS = OAuthEndpoints(
 
 class TestOAuthAuthorize:
     def test_happy_path_discovers_and_registers_client(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch,
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(
             "runtime.adapters.mcp_client.oauth_discovery.discover",
@@ -88,7 +92,9 @@ class TestOAuthAuthorize:
         assert store.get_client(_ENDPOINTS.issuer) == "dcr-client-id"
 
     def test_reuses_cached_client_id_without_reregistering(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch,
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(
             "runtime.adapters.mcp_client.oauth_discovery.discover",
@@ -101,7 +107,8 @@ class TestOAuthAuthorize:
             return "should-not-be-used"
 
         monkeypatch.setattr(
-            "runtime.adapters.mcp_client.oauth_discovery.register_client", _register,
+            "runtime.adapters.mcp_client.oauth_discovery.register_client",
+            _register,
         )
         oauth.get_oauth_store().save_client(_ENDPOINTS.issuer, "cached-client-id")
 
@@ -114,7 +121,9 @@ class TestOAuthAuthorize:
         assert calls["n"] == 0
 
     def test_discovery_failure_returns_400(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch,
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(
             "runtime.adapters.mcp_client.oauth_discovery.discover",
@@ -127,7 +136,9 @@ class TestOAuthAuthorize:
         assert r.status_code == 400
 
     def test_no_client_id_and_no_registration_endpoint_returns_400(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch,
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         no_dcr = OAuthEndpoints(
             issuer="https://auth.example.com",
@@ -162,7 +173,9 @@ class TestOAuthCallback:
         )
 
     def test_exchanges_code_and_saves_tokens(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch,
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         state = self._start_pending()
         monkeypatch.setattr(
@@ -179,7 +192,9 @@ class TestOAuthCallback:
         assert store.bearer("acme") == "AT"
 
     def test_state_is_single_use_csrf_protection(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch,
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         state = self._start_pending()
         monkeypatch.setattr(
@@ -205,7 +220,9 @@ class TestOAuthCallback:
         assert "Authorization failed" in r.text
 
     def test_token_exchange_exception_shows_error_page_not_500(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch,
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         state = self._start_pending()
 
@@ -221,18 +238,23 @@ class TestOAuthCallback:
 class TestOAuthStatusAndForget:
     def test_status_reflects_token_presence(self, client: TestClient) -> None:
         assert client.get("/api/mcp/oauth/status?server=acme").json() == {
-            "server": "acme", "authorized": False,
+            "server": "acme",
+            "authorized": False,
         }
         oauth.get_oauth_store().save_tokens(
-            "acme", {"access_token": "AT", "expires_in": 3600},
-            token_url="https://t", client_id="cid",
+            "acme",
+            {"access_token": "AT", "expires_in": 3600},
+            token_url="https://t",
+            client_id="cid",
         )
         assert client.get("/api/mcp/oauth/status?server=acme").json()["authorized"] is True
 
     def test_forget_revokes_tokens(self, client: TestClient) -> None:
         oauth.get_oauth_store().save_tokens(
-            "acme", {"access_token": "AT", "expires_in": 3600},
-            token_url="https://t", client_id="cid",
+            "acme",
+            {"access_token": "AT", "expires_in": 3600},
+            token_url="https://t",
+            client_id="cid",
         )
         r = client.delete("/api/mcp/oauth/acme")
         assert r.status_code == 200
@@ -242,17 +264,22 @@ class TestOAuthStatusAndForget:
 
 class TestHttpMCPClientBearerInjection:
     def test_injects_bearer_token_from_oauth_store(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from runtime.adapters.mcp_client.client import HttpMCPClient
         from runtime.adapters.mcp_client.types import MCPServerConfig
 
         oauth.get_oauth_store().save_tokens(
-            "acme", {"access_token": "OAUTH-TOKEN", "expires_in": 3600},
-            token_url="https://t", client_id="cid",
+            "acme",
+            {"access_token": "OAUTH-TOKEN", "expires_in": 3600},
+            token_url="https://t",
+            client_id="cid",
         )
         config = MCPServerConfig(
-            name="acme", transport="http", url="https://mcp.acme.example/v1",
+            name="acme",
+            transport="http",
+            url="https://mcp.acme.example/v1",
         )
         client_obj = HttpMCPClient.__new__(HttpMCPClient)
         client_obj.config = config
@@ -264,24 +291,30 @@ class TestHttpMCPClientBearerInjection:
             raise RuntimeError("not actually connecting")
 
         monkeypatch.setattr(
-            "mcp.client.streamable_http.streamablehttp_client", _fake_streamable,
+            "mcp.client.streamable_http.streamablehttp_client",
+            _fake_streamable,
         )
         with pytest.raises(RuntimeError):
             client_obj._transport()
         assert captured["headers"] == {"Authorization": "Bearer OAUTH-TOKEN"}
 
     def test_explicit_authorization_header_wins_over_oauth(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from runtime.adapters.mcp_client.client import HttpMCPClient
         from runtime.adapters.mcp_client.types import MCPServerConfig
 
         oauth.get_oauth_store().save_tokens(
-            "acme", {"access_token": "OAUTH-TOKEN", "expires_in": 3600},
-            token_url="https://t", client_id="cid",
+            "acme",
+            {"access_token": "OAUTH-TOKEN", "expires_in": 3600},
+            token_url="https://t",
+            client_id="cid",
         )
         config = MCPServerConfig(
-            name="acme", transport="http", url="https://mcp.acme.example/v1",
+            name="acme",
+            transport="http",
+            url="https://mcp.acme.example/v1",
             headers={"Authorization": "Bearer MANUAL-TOKEN"},
         )
         client_obj = HttpMCPClient.__new__(HttpMCPClient)
@@ -294,20 +327,24 @@ class TestHttpMCPClientBearerInjection:
             raise RuntimeError("not actually connecting")
 
         monkeypatch.setattr(
-            "mcp.client.streamable_http.streamablehttp_client", _fake_streamable,
+            "mcp.client.streamable_http.streamablehttp_client",
+            _fake_streamable,
         )
         with pytest.raises(RuntimeError):
             client_obj._transport()
         assert captured["headers"] == {"Authorization": "Bearer MANUAL-TOKEN"}
 
     def test_no_header_when_server_never_authorized(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from runtime.adapters.mcp_client.client import HttpMCPClient
         from runtime.adapters.mcp_client.types import MCPServerConfig
 
         config = MCPServerConfig(
-            name="never-authorized", transport="http", url="https://mcp.example/v1",
+            name="never-authorized",
+            transport="http",
+            url="https://mcp.example/v1",
         )
         client_obj = HttpMCPClient.__new__(HttpMCPClient)
         client_obj.config = config
@@ -319,7 +356,8 @@ class TestHttpMCPClientBearerInjection:
             raise RuntimeError("not actually connecting")
 
         monkeypatch.setattr(
-            "mcp.client.streamable_http.streamablehttp_client", _fake_streamable,
+            "mcp.client.streamable_http.streamablehttp_client",
+            _fake_streamable,
         )
         with pytest.raises(RuntimeError):
             client_obj._transport()
@@ -334,24 +372,33 @@ class TestOAuthEndpointsRequireAuthWhenEnabled:
     exempt_from_auth below)."""
 
     def test_authorize_and_status_require_auth(
-        self, secured_client: tuple[TestClient, dict[str, str]],
+        self,
+        secured_client: tuple[TestClient, dict[str, str]],
     ) -> None:
         client, headers = secured_client
-        assert client.post(
-            "/api/mcp/oauth/authorize",
-            json={"server": "acme", "url": "https://mcp.acme.example"},
-        ).status_code == 401
+        assert (
+            client.post(
+                "/api/mcp/oauth/authorize",
+                json={"server": "acme", "url": "https://mcp.acme.example"},
+            ).status_code
+            == 401
+        )
         assert client.get("/api/mcp/oauth/status?server=acme").status_code == 401
         assert client.delete("/api/mcp/oauth/acme").status_code == 401
 
         # With credentials the request proceeds past auth (status/forget
         # don't touch the network, so they're safe to check end-to-end).
-        assert client.get(
-            "/api/mcp/oauth/status?server=acme", headers=headers,
-        ).status_code == 200
+        assert (
+            client.get(
+                "/api/mcp/oauth/status?server=acme",
+                headers=headers,
+            ).status_code
+            == 200
+        )
 
     def test_callback_is_exempt_from_auth(
-        self, secured_client: tuple[TestClient, dict[str, str]],
+        self,
+        secured_client: tuple[TestClient, dict[str, str]],
     ) -> None:
         """The callback is reached by the OAuth *provider* redirecting the
         user's own browser — a top-level navigation that cannot carry our

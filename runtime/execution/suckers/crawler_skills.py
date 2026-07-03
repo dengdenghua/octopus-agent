@@ -233,12 +233,14 @@ def _crawl_site(
                     user_agent=user_agent,
                 )
                 if browser_err:
-                    records.append({
-                        "url": url,
-                        "depth": depth,
-                        "status_code": None,
-                        "error": browser_err,
-                    })
+                    records.append(
+                        {
+                            "url": url,
+                            "depth": depth,
+                            "status_code": None,
+                            "error": browser_err,
+                        }
+                    )
                     continue
                 fetched = _fetch_page_browser(
                     page,
@@ -262,10 +264,12 @@ def _crawl_site(
                         user_agent=user_agent,
                     )
                     if browser_err:
-                        skipped.append({
-                            "url": url,
-                            "reason": f"browser_fallback_unavailable: {browser_err}",
-                        })
+                        skipped.append(
+                            {
+                                "url": url,
+                                "reason": f"browser_fallback_unavailable: {browser_err}",
+                            }
+                        )
                     else:
                         rendered = _fetch_page_browser(
                             page,
@@ -275,19 +279,23 @@ def _crawl_site(
                             max_bytes=max_bytes,
                         )
                         if rendered.error:
-                            skipped.append({
-                                "url": url,
-                                "reason": f"browser_fallback_failed: {rendered.error}",
-                            })
+                            skipped.append(
+                                {
+                                    "url": url,
+                                    "reason": f"browser_fallback_failed: {rendered.error}",
+                                }
+                            )
                         else:
                             fetched = rendered
             if fetched.error:
-                records.append({
-                    "url": url,
-                    "depth": depth,
-                    "status_code": fetched.status_code,
-                    "error": fetched.error,
-                })
+                records.append(
+                    {
+                        "url": url,
+                        "depth": depth,
+                        "status_code": fetched.status_code,
+                        "error": fetched.error,
+                    }
+                )
                 continue
 
             parser = _parse_html(fetched.text)
@@ -692,8 +700,8 @@ def register_crawler_skills(registry: SkillRegistry) -> int:
                 "delay_ms default 250; render_mode is http|auto|browser (default http; "
                 "auto retries likely JS apps with Playwright); browser_wait_ms default 500; "
                 "output_path optional .jsonl; sandbox_dir optional.\n"
-                "Example: crawl_site({\"start_url\":\"https://example.com/docs\","
-                "\"max_pages\":30,\"max_depth\":2})"
+                'Example: crawl_site({"start_url":"https://example.com/docs",'
+                '"max_pages":30,"max_depth":2})'
             ),
             summary="Bounded site crawler with robots, de-dupe, and JSONL output.",
             affinity=["crawler", "web", "scrape"],

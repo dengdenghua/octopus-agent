@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import threading
@@ -18,8 +17,8 @@ ClaimVerdict = Literal["win", "lose", "coexist"]
 
 # ─── ResourceClaim ─────────────────────────────────────────
 
-class ResourceClaim(BaseModel):
 
+class ResourceClaim(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     claim_id: UUID = Field(default_factory=new_id)
@@ -40,8 +39,8 @@ class ResourceClaim(BaseModel):
 
 # ─── BoidsArbitrator ───────────────────────────────────────
 
-class BoidsArbitrator:
 
+class BoidsArbitrator:
     def __init__(self, signal_bus: SignalBus | None = None) -> None:
         self._lock = threading.Lock()
         self._holders: dict[str, ResourceClaim] = {}
@@ -123,17 +122,13 @@ class BoidsArbitrator:
     def _gc_expired_locked(self) -> int:
         now = now_utc()
         removed = 0
-        expired_uris = [
-            uri for uri, c in self._holders.items() if c.is_expired(now)
-        ]
+        expired_uris = [uri for uri, c in self._holders.items() if c.is_expired(now)]
         for uri in expired_uris:
             del self._holders[uri]
             removed += 1
         empty_uris: list[str] = []
         for uri, bucket in self._ro_holders.items():
-            expired_arms = [
-                a for a, c in bucket.items() if c.is_expired(now)
-            ]
+            expired_arms = [a for a, c in bucket.items() if c.is_expired(now)]
             for a in expired_arms:
                 del bucket[a]
                 removed += 1
@@ -142,7 +137,6 @@ class BoidsArbitrator:
         for uri in empty_uris:
             del self._ro_holders[uri]
         return removed
-
 
     def active_claims(self) -> list[ResourceClaim]:
         with self._lock:
@@ -155,7 +149,8 @@ class BoidsArbitrator:
     # ─── Alignment (Boids 原则 2:同 affinity 同 tick 启动) ──────
 
     def alignment_groups(
-        self, arms: list[tuple[ArmId, list[str]]],
+        self,
+        arms: list[tuple[ArmId, list[str]]],
     ) -> dict[str, list[ArmId]]:
         """Group arms by shared affinity for coordinated start (Alignment).
 
@@ -201,7 +196,4 @@ class BoidsArbitrator:
             # Nobody is overloaded; cohesion has nothing to do.
             return {}
         # Redirect up to max_redirect idle arms toward the busiest.
-        return {
-            idle: busiest_arm
-            for idle in idle_arms[:max_redirect]
-        }
+        return {idle: busiest_arm for idle in idle_arms[:max_redirect]}

@@ -17,27 +17,25 @@ from .variant import ABSplitter, Variant, VariantStats  # noqa: E402
 
 @dataclass(frozen=True)
 class PromptVariant:
-
     name: str
-    system_prompt_suffix: str = ""   # Implementation note.
+    system_prompt_suffix: str = ""  # Implementation note.
     weight: float = 1.0
-    description: str = ""             # Implementation note.
+    description: str = ""  # Implementation note.
 
     parents: tuple[str, ...] = ()
     generation: int = 0
-    origin: str = "seed"              # seed | mutation | crossover
+    origin: str = "seed"  # seed | mutation | crossover
     reason: str = ""
 
 
 @dataclass
 class VariantReport:
-
     name: str
     assignments: int
     successes: int
     failures: int
     success_rate: float
-    recipe_score: Any = None          # Implementation note.
+    recipe_score: Any = None  # Implementation note.
     recipe_hash: str = ""
 
     @property
@@ -48,7 +46,6 @@ class VariantReport:
 
 
 class PromptOptimizer:
-
     def __init__(
         self,
         stack: Any,
@@ -60,9 +57,7 @@ class PromptOptimizer:
         if not variants:
             raise ValueError("PromptOptimizer requires at least one variant")
         if not isinstance(stack.planner, LLMPlanner):
-            raise TypeError(
-                "PromptOptimizer only supports LLMPlanner · StaticPlanner 配方固定"
-            )
+            raise TypeError("PromptOptimizer only supports LLMPlanner · StaticPlanner 配方固定")
         self.stack = stack
         self.sticky = sticky
         self.auto_persist_path = auto_persist_path
@@ -87,7 +82,6 @@ class PromptOptimizer:
         self._task_variant_map: dict[str, str] = {}  # Implementation note.
         self._autosave()
 
-
     def plan(self, intent: ParsedIntent, task_id: UUID | TaskId | str) -> TaskGraph:
         key = str(task_id)
         v = self._splitter.assign_for(key) if self.sticky else self._splitter.next_variant()
@@ -108,7 +102,6 @@ class PromptOptimizer:
         if name is None:
             return
         self._splitter.record_outcome(name, success=success)
-
 
     def report(self, journal: Any = None) -> dict[str, VariantReport]:
         journal = journal or self.stack.journal
@@ -133,7 +126,6 @@ class PromptOptimizer:
                 recipe_hash=recipe_hash,
             )
         return out
-
 
     def retire_variant(self, name: str) -> bool:
         if name not in self._variants:
@@ -208,7 +200,6 @@ class PromptOptimizer:
             s.successes = st.successes
             s.failures = st.failures
 
-
     @property
     def variant_names(self) -> list[str]:
         return list(self._variants.keys())
@@ -218,7 +209,6 @@ class PromptOptimizer:
 
     def variant_for_task(self, task_id: UUID | TaskId | str) -> str | None:
         return self._task_variant_map.get(str(task_id))
-
 
     def _autosave(self) -> None:
         if self.auto_persist_path is None:
@@ -234,7 +224,6 @@ class PromptOptimizer:
             )
         except (OSError, ValueError, TypeError, AttributeError) as exc:
             _logger.debug("PromptOptimizer autosave skipped: %s", exc)
-
 
     def lineage(self, name: str, *, max_depth: int = 20) -> list[PromptVariant]:
         chain: list[PromptVariant] = []
@@ -304,16 +293,18 @@ def load_variants_from_yaml(path: Any) -> list[PromptVariant]:
             raise ValueError(f"{path}: variants[{i}] must be a mapping")
         parents_raw = item.get("parents", [])
         parents = tuple(str(p) for p in parents_raw) if parents_raw else ()
-        out.append(PromptVariant(
-            name=item["name"],
-            system_prompt_suffix=item.get("system_prompt_suffix", ""),
-            weight=float(item.get("weight", 1.0)),
-            description=item.get("description", ""),
-            parents=parents,
-            generation=int(item.get("generation", 0)),
-            origin=str(item.get("origin", "seed")),
-            reason=str(item.get("reason", "")),
-        ))
+        out.append(
+            PromptVariant(
+                name=item["name"],
+                system_prompt_suffix=item.get("system_prompt_suffix", ""),
+                weight=float(item.get("weight", 1.0)),
+                description=item.get("description", ""),
+                parents=parents,
+                generation=int(item.get("generation", 0)),
+                origin=str(item.get("origin", "seed")),
+                reason=str(item.get("reason", "")),
+            )
+        )
     return out
 
 
@@ -357,7 +348,5 @@ def _build_ancestors_dict(
         "generation": v.generation,
     }
     if v.parents:
-        node["parents"] = [
-            _build_ancestors_dict(p, known, visited) for p in v.parents
-        ]
+        node["parents"] = [_build_ancestors_dict(p, known, visited) for p in v.parents]
     return node

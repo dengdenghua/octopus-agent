@@ -78,8 +78,11 @@ class TestListAgents:
         # than exact count so adding a new preset doesn't break the
         # test. Six core presets must always be there.
         required = {
-            "general", "coder", "vibe_selling",
-            "ecommerce_mind", "market_researcher",
+            "general",
+            "coder",
+            "vibe_selling",
+            "ecommerce_mind",
+            "market_researcher",
         }
         missing = required - names
         assert not missing, f"missing required presets: {missing}"
@@ -92,8 +95,15 @@ class TestListAgents:
         data = TestClient(app).get("/api/agents").json()
         for agent in data:
             for key in [
-                "name", "display_name", "description", "icon",
-                "avatar_url", "visual_urls", "model", "tool_groups", "soul",
+                "name",
+                "display_name",
+                "description",
+                "icon",
+                "avatar_url",
+                "visual_urls",
+                "model",
+                "tool_groups",
+                "soul",
             ]:
                 assert key in agent, f"missing '{key}' in {agent['name']}"
 
@@ -103,7 +113,10 @@ class TestListAgents:
         data = TestClient(app).get("/api/agents").json()
         coder = next(a for a in data if a["name"] == "coder")
         assert coder["tool_groups"] == [
-            "web_read_arm", "fs_writer_arm", "git_arm", "shell_arm",
+            "web_read_arm",
+            "fs_writer_arm",
+            "git_arm",
+            "shell_arm",
             "coder_private_arm",
         ]
 
@@ -114,27 +127,33 @@ class TestListAgents:
 
     def test_system_and_capability_agents_are_hidden_from_list(self):
         registry = AgentRegistry()
-        registry.register(Agent(
-            agent_id="general",
-            display_name="Octopus",
-            description="",
-            soul="",
-            arms=ArmPool([make_web_read_arm(_rt())]),
-        ))
-        registry.register(Agent(
-            agent_id="admin",
-            display_name="Admin",
-            description="",
-            soul="",
-            arms=ArmPool([make_web_read_arm(_rt())]),
-        ))
-        registry.register(Agent(
-            agent_id="desktop_operator",
-            display_name="Desktop Operator",
-            description="[legacy] desktop automation persona",
-            soul="",
-            arms=ArmPool([make_web_read_arm(_rt())]),
-        ))
+        registry.register(
+            Agent(
+                agent_id="general",
+                display_name="Octopus",
+                description="",
+                soul="",
+                arms=ArmPool([make_web_read_arm(_rt())]),
+            )
+        )
+        registry.register(
+            Agent(
+                agent_id="admin",
+                display_name="Admin",
+                description="",
+                soul="",
+                arms=ArmPool([make_web_read_arm(_rt())]),
+            )
+        )
+        registry.register(
+            Agent(
+                agent_id="desktop_operator",
+                display_name="Desktop Operator",
+                description="[legacy] desktop automation persona",
+                soul="",
+                arms=ArmPool([make_web_read_arm(_rt())]),
+            )
+        )
         app = FastAPI()
         app.include_router(create_agents_router(registry=registry))
 
@@ -181,18 +200,22 @@ class TestAgentDetail:
         r = TestClient(app).get("/api/agents/ghost")
         assert r.status_code == 404
 
-    def test_delete_agent_removes_disk_and_registry(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_delete_agent_removes_disk_and_registry(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
         (tmp_path / "custom_agent" / "agent-core").mkdir(parents=True)
         (tmp_path / "custom_agent" / "profile.jsonc").write_text("{}", encoding="utf-8")
         registry = AgentRegistry()
-        registry.register(Agent(
-            agent_id="custom_agent",
-            display_name="Custom Agent",
-            description="",
-            soul="",
-            arms=ArmPool([make_web_read_arm(_rt())]),
-        ))
+        registry.register(
+            Agent(
+                agent_id="custom_agent",
+                display_name="Custom Agent",
+                description="",
+                soul="",
+                arms=ArmPool([make_web_read_arm(_rt())]),
+            )
+        )
         app = FastAPI()
         app.include_router(create_agents_router(registry=registry))
 
@@ -202,18 +225,22 @@ class TestAgentDetail:
         assert not registry.has("custom_agent")
         assert not (tmp_path / "custom_agent").exists()
 
-    def test_delete_builtin_agent_is_rejected(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_delete_builtin_agent_is_rejected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
         (tmp_path / "general" / "agent-core").mkdir(parents=True)
         (tmp_path / "general" / "profile.jsonc").write_text("{}", encoding="utf-8")
         registry = AgentRegistry()
-        registry.register(Agent(
-            agent_id="general",
-            display_name="General",
-            description="",
-            soul="",
-            arms=ArmPool([make_web_read_arm(_rt())]),
-        ))
+        registry.register(
+            Agent(
+                agent_id="general",
+                display_name="General",
+                description="",
+                soul="",
+                arms=ArmPool([make_web_read_arm(_rt())]),
+            )
+        )
         app = FastAPI()
         app.include_router(create_agents_router(registry=registry))
 
@@ -236,13 +263,15 @@ class TestAgentDetail:
         (outside / "marker.txt").write_text("keep", encoding="utf-8")
         (agents_root / "custom_agent").symlink_to(outside, target_is_directory=True)
         registry = AgentRegistry()
-        registry.register(Agent(
-            agent_id="custom_agent",
-            display_name="Custom Agent",
-            description="",
-            soul="",
-            arms=ArmPool([make_web_read_arm(_rt())]),
-        ))
+        registry.register(
+            Agent(
+                agent_id="custom_agent",
+                display_name="Custom Agent",
+                description="",
+                soul="",
+                arms=ArmPool([make_web_read_arm(_rt())]),
+            )
+        )
         app = FastAPI()
         app.include_router(create_agents_router(registry=registry))
 
@@ -274,7 +303,9 @@ class TestAgentDetail:
         assert r.status_code == 500
         assert not (tmp_path / "custom_agent").exists()
 
-    def test_market_install_hot_registers_and_uninstall_removes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_market_install_hot_registers_and_uninstall_removes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
         monkeypatch.setattr(agent_world_router, "_INSTALL_STATE", tmp_path / "installed.json")
         runtime = _rt()
@@ -299,7 +330,9 @@ class TestAgentDetail:
         assert not registry.has("test_writer")
         assert not (tmp_path / "test_writer").exists()
 
-    def test_market_install_rejects_unsafe_agent_id(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_market_install_rejects_unsafe_agent_id(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
         monkeypatch.setattr(agent_world_router, "_INSTALL_STATE", tmp_path / "installed.json")
         app = FastAPI()
@@ -400,7 +433,9 @@ class TestAgentDetail:
         assert not (tmp_path / "agents" / "financial_pitch_agent").exists()
         assert not (tmp_path / "installed.json").exists()
 
-    def test_market_uninstall_rejects_local_agent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_market_uninstall_rejects_local_agent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
         monkeypatch.setattr(agent_world_router, "_INSTALL_STATE", tmp_path / "installed.json")
         (tmp_path / "general" / "agent-core").mkdir(parents=True)
@@ -413,7 +448,9 @@ class TestAgentDetail:
         assert r.status_code == 400
         assert (tmp_path / "general").exists()
 
-    def test_market_store_preserves_local_agent_tool_registry(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_market_store_preserves_local_agent_tool_registry(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
         monkeypatch.setattr(agent_world_router, "_INSTALL_STATE", tmp_path / "installed.json")
         agent_core = tmp_path / "analyst" / "agent-core"
@@ -446,7 +483,9 @@ class TestAgentDetail:
         assert set(data["visual_urls"]) == {"front", "side", "back"}
         assert data["character_profile"]["epithet"] == "Signal Reader"
 
-    def test_market_requires_auth_when_enabled(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_market_requires_auth_when_enabled(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
         monkeypatch.setattr(agent_world_router, "_INSTALL_STATE", tmp_path / "installed.json")
         store = IdentityStore()
@@ -461,12 +500,17 @@ class TestAgentDetail:
         client = TestClient(app)
 
         assert client.get("/api/agent-market/store").status_code == 401
-        assert client.get(
-            "/api/agent-market/store",
-            headers={"Authorization": "Bearer sk-alice"},
-        ).status_code == 200
+        assert (
+            client.get(
+                "/api/agent-market/store",
+                headers={"Authorization": "Bearer sk-alice"},
+            ).status_code
+            == 200
+        )
 
-    def test_update_agent_display_name_writes_profile_and_registry(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_update_agent_display_name_writes_profile_and_registry(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
         agent_core = tmp_path / "general" / "agent-core"
         agent_core.mkdir(parents=True)
@@ -480,19 +524,26 @@ class TestAgentDetail:
             encoding="utf-8",
         )
         registry = AgentRegistry()
-        registry.register(Agent(
-            agent_id="general",
-            display_name="Old Name",
-            description="old",
-            soul="old soul",
-            arms=ArmPool([make_web_read_arm(_rt())]),
-        ))
+        registry.register(
+            Agent(
+                agent_id="general",
+                display_name="Old Name",
+                description="old",
+                soul="old soul",
+                arms=ArmPool([make_web_read_arm(_rt())]),
+            )
+        )
         app = FastAPI()
         app.include_router(create_agents_router(registry=registry, runtime=_rt()))
 
         r = TestClient(app).put(
             "/api/agents/general",
-            json={"display_name": "New Name", "description": "new", "model": None, "soul": "new soul"},
+            json={
+                "display_name": "New Name",
+                "description": "new",
+                "model": None,
+                "soul": "new soul",
+            },
         )
 
         assert r.status_code == 200
@@ -522,13 +573,15 @@ class TestAgentDetail:
             encoding="utf-8",
         )
         registry = AgentRegistry()
-        registry.register(Agent(
-            agent_id="general",
-            display_name="Old Name",
-            description="old",
-            soul="old soul",
-            arms=ArmPool([make_web_read_arm(_rt())]),
-        ))
+        registry.register(
+            Agent(
+                agent_id="general",
+                display_name="Old Name",
+                description="old",
+                soul="old soul",
+                arms=ArmPool([make_web_read_arm(_rt())]),
+            )
+        )
 
         def fail_load(*_args, **_kwargs):
             raise ValueError("broken reload")
@@ -563,13 +616,15 @@ class TestAgentDetail:
         old_tool_registry = '{"arms":["web_read"],"extra_affinity":[],"private_skills":[]}'
         tool_registry.write_text(old_tool_registry, encoding="utf-8")
         registry = AgentRegistry()
-        registry.register(Agent(
-            agent_id="general",
-            display_name="Old Name",
-            description="old",
-            soul="old soul",
-            arms=ArmPool([make_web_read_arm(_rt())]),
-        ))
+        registry.register(
+            Agent(
+                agent_id="general",
+                display_name="Old Name",
+                description="old",
+                soul="old soul",
+                arms=ArmPool([make_web_read_arm(_rt())]),
+            )
+        )
 
         def fail_load(*_args, **_kwargs):
             raise ValueError("broken registry")
@@ -594,7 +649,9 @@ class TestAgentDetail:
         for key in ["arm_id", "display_name", "description", "affinity", "icon"]:
             assert key in arm
 
-    def test_generate_agent_visuals_mock_writes_three_views(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_generate_agent_visuals_mock_writes_three_views(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
         monkeypatch.setenv("OCTOPUS_IMAGE_GEN_PROVIDER", "mock")
         (tmp_path / "general" / "agent-core").mkdir(parents=True)
@@ -603,13 +660,15 @@ class TestAgentDetail:
             encoding="utf-8",
         )
         registry = AgentRegistry()
-        registry.register(Agent(
-            agent_id="general",
-            display_name="Octopus",
-            description="general",
-            soul="",
-            arms=ArmPool([make_web_read_arm(_rt())]),
-        ))
+        registry.register(
+            Agent(
+                agent_id="general",
+                display_name="Octopus",
+                description="general",
+                soul="",
+                arms=ArmPool([make_web_read_arm(_rt())]),
+            )
+        )
         app = FastAPI()
         app.include_router(create_agents_router(registry=registry))
 
@@ -755,11 +814,7 @@ class TestAgentDetail:
             prompts.append((kwargs["size"], kwargs["prompt"]))
             return {
                 "data": [
-                    {
-                        "b64_json": base64.b64encode(
-                            _png_bytes((0, 255, 0, 255))
-                        ).decode("ascii")
-                    }
+                    {"b64_json": base64.b64encode(_png_bytes((0, 255, 0, 255))).decode("ascii")}
                 ]
             }
 
@@ -792,7 +847,9 @@ class TestAgentDetail:
         assert (tmp_path / "coder" / "avatar.png").is_file()
         assert result.files["avatar"] == tmp_path / "coder" / "avatar.png"
 
-    def test_get_agent_visual_serves_generated_view(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_get_agent_visual_serves_generated_view(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
         visuals = tmp_path / "general" / "visuals"
         visuals.mkdir(parents=True)
@@ -920,10 +977,13 @@ class TestAuth:
     def test_require_auth_blocks_anon(self, registry_with_presets):
         store = IdentityStore()
         app = FastAPI()
-        app.include_router(create_agents_router(
-            registry=registry_with_presets,
-            identity_store=store, require_auth=True,
-        ))
+        app.include_router(
+            create_agents_router(
+                registry=registry_with_presets,
+                identity_store=store,
+                require_auth=True,
+            )
+        )
         r = TestClient(app).get("/api/agents")
         assert r.status_code == 401
 
@@ -931,10 +991,13 @@ class TestAuth:
         store = IdentityStore()
         store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
         app = FastAPI()
-        app.include_router(create_agents_router(
-            registry=registry_with_presets,
-            identity_store=store, require_auth=True,
-        ))
+        app.include_router(
+            create_agents_router(
+                registry=registry_with_presets,
+                identity_store=store,
+                require_auth=True,
+            )
+        )
         r = TestClient(app).get(
             "/api/agents",
             headers={"Authorization": "Bearer sk-alice"},
@@ -981,6 +1044,7 @@ def _build_chat_stack(tmp_path: Path):
 
     class _Stack:
         pass
+
     s = _Stack()
     s.planner = planner
     s.runtime = runtime
@@ -999,10 +1063,12 @@ class TestChatAgentRouting:
         agent_reg.register(make_general_agent(_rt()))
 
         app = FastAPI()
-        app.include_router(create_openai_router(
-            stack,
-            agent_registry=agent_reg,
-        ))
+        app.include_router(
+            create_openai_router(
+                stack,
+                agent_registry=agent_reg,
+            )
+        )
         r = TestClient(app).post(
             "/v1/chat/completions",
             json={
@@ -1023,9 +1089,12 @@ class TestChatAgentRouting:
         agent_reg = AgentRegistry()
 
         app = FastAPI()
-        app.include_router(create_openai_router(
-            stack, agent_registry=agent_reg,
-        ))
+        app.include_router(
+            create_openai_router(
+                stack,
+                agent_registry=agent_reg,
+            )
+        )
         r = TestClient(app).post(
             "/v1/chat/completions",
             json={
@@ -1062,9 +1131,12 @@ class TestChatAgentRouting:
         agent_reg.register(make_general_agent(_rt()))
 
         app = FastAPI()
-        app.include_router(create_openai_router(
-            stack, agent_registry=agent_reg,
-        ))
+        app.include_router(
+            create_openai_router(
+                stack,
+                agent_registry=agent_reg,
+            )
+        )
         r = TestClient(app).post(
             "/v1/chat/completions",
             json={
@@ -1116,6 +1188,7 @@ class TestIsolation:
             icon="🔎",
         )
         from runtime.execution.agents import Agent
+
         custom = Agent(
             agent_id="git_auditor",
             display_name="Git Auditor",

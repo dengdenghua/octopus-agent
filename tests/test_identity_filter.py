@@ -1,4 +1,5 @@
 """Implementation note."""
+
 from __future__ import annotations
 
 import pytest
@@ -23,39 +24,66 @@ class TestVendorCoverage:
     @pytest.mark.parametrize(
         "vendor",
         [
-            "Anthropic", "OpenAI", "Moonshot AI", "DeepSeek", "MiniMax",
-            "Google", "Microsoft", "Meta", "Alibaba",
+            "Anthropic",
+            "OpenAI",
+            "Moonshot AI",
+            "DeepSeek",
+            "MiniMax",
+            "Google",
+            "Microsoft",
+            "Meta",
+            "Alibaba",
             # The AWS regression set · MUST be scrubbed after this fix.
-            "AWS", "Amazon", "Amazon Web Services", "Bedrock",
+            "AWS",
+            "Amazon",
+            "Amazon Web Services",
+            "Bedrock",
             # 2025 additions
-            "Groq", "xAI", "Cohere", "Mistral", "Mistral AI",
+            "Groq",
+            "xAI",
+            "Cohere",
+            "Mistral",
+            "Mistral AI",
         ],
     )
     def test_en_vendor_scrubbed(self, vendor: str):
         text = f"I'm an AI assistant built by {vendor}, helping you."
         out = identity_filter.filter_text(text)
-        assert vendor not in out, (
-            f"vendor {vendor!r} leaked through filter: {out!r}"
-        )
+        assert vendor not in out, f"vendor {vendor!r} leaked through filter: {out!r}"
 
     @pytest.mark.parametrize(
         "vendor",
         [
-            "Anthropic", "OpenAI", "月之暗面", "深度求索", "DeepSeek",
-            "MiniMax", "Google", "谷歌", "智谱", "阿里", "字节跳动",
+            "Anthropic",
+            "OpenAI",
+            "月之暗面",
+            "深度求索",
+            "DeepSeek",
+            "MiniMax",
+            "Google",
+            "谷歌",
+            "智谱",
+            "阿里",
+            "字节跳动",
             "百度",
             # AWS regression (ZH)
-            "AWS", "亚马逊", "Amazon", "Bedrock",
+            "AWS",
+            "亚马逊",
+            "Amazon",
+            "Bedrock",
             # 2025 additions
-            "Groq", "xAI", "Cohere", "Mistral", "百川", "零一万物",
+            "Groq",
+            "xAI",
+            "Cohere",
+            "Mistral",
+            "百川",
+            "零一万物",
         ],
     )
     def test_zh_vendor_scrubbed(self, vendor: str):
         text = f"我是 Octopus, 一个由 {vendor} 构建的 AI 助手。"
         out = identity_filter.filter_text(text)
-        assert vendor not in out, (
-            f"vendor {vendor!r} leaked through filter: {out!r}"
-        )
+        assert vendor not in out, f"vendor {vendor!r} leaked through filter: {out!r}"
 
 
 class TestAWSRegression:
@@ -86,8 +114,18 @@ class TestAWSRegression:
 class TestModelNames:
     @pytest.mark.parametrize(
         "model",
-        ["Claude", "Kimi", "GPT-4", "Gemini", "GLM-4",
-         "Yi-34B", "Grok-3", "Llama", "LLaMA", "Mistral"],
+        [
+            "Claude",
+            "Kimi",
+            "GPT-4",
+            "Gemini",
+            "GLM-4",
+            "Yi-34B",
+            "Grok-3",
+            "Llama",
+            "LLaMA",
+            "Mistral",
+        ],
     )
     def test_model_name_scrubbed(self, model: str):
         text = f"I'm {model}, ready to help."

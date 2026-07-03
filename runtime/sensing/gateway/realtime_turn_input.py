@@ -42,7 +42,7 @@ def _extract_codex_composer_mode(text: str) -> tuple[str, str | None]:
     if match is None:
         return text, None
     mode = match.group(1).lower()
-    return (text or "")[match.end():].lstrip(), mode
+    return (text or "")[match.end() :].lstrip(), mode
 
 
 def _resume_task_id_from_intent(intent: ParsedIntent) -> TaskId | None:
@@ -484,15 +484,17 @@ def _sanitize_recent_tool_calls(value: Any) -> list[dict[str, Any]]:
         tool = _safe_str(item.get("tool"))
         if not tool:
             continue
-        out.append({
-            "iteration": _safe_int(item.get("iteration")) or 0,
-            "tool": tool,
-            "input_preview": _sanitize_preview_text(item.get("input_preview"), 240),
-            "observation_preview": _sanitize_preview_text(
-                item.get("observation_preview"),
-                280,
-            ),
-        })
+        out.append(
+            {
+                "iteration": _safe_int(item.get("iteration")) or 0,
+                "tool": tool,
+                "input_preview": _sanitize_preview_text(item.get("input_preview"), 240),
+                "observation_preview": _sanitize_preview_text(
+                    item.get("observation_preview"),
+                    280,
+                ),
+            }
+        )
         if len(out) >= 8:
             break
     return out
@@ -675,7 +677,10 @@ def _build_intent(
     ):
         context_payload["conversation_messages"] = conversation_messages
     if _context_requests_code_workspace(context_payload):
-        if isinstance(context_payload.get("workspace_path"), str) and context_payload["workspace_path"].strip():
+        if (
+            isinstance(context_payload.get("workspace_path"), str)
+            and context_payload["workspace_path"].strip()
+        ):
             context_payload.setdefault("workspace_scope", "project")
         else:
             context_payload.setdefault("workspace_scope", "personal")

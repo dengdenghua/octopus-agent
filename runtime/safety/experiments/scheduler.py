@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -15,7 +14,6 @@ _LOG = logging.getLogger("octopus.camouflage.scheduler")
 
 @dataclass
 class CamouflageConfig:
-
     enabled: bool = False
     interval_sec: int = 600
     initial_delay_sec: int = 60
@@ -67,7 +65,6 @@ class CamouflageScheduler:
         self._tick_count = 0
         self._last_step_summary: str = ""
         self._last_error: str = ""
-
 
     def start(
         self,
@@ -137,7 +134,6 @@ class CamouflageScheduler:
         if t is not None and t.is_alive():
             t.join(timeout=timeout)
 
-
     def status(self) -> dict[str, Any]:
         with self._lock:
             running = bool(self._thread and self._thread.is_alive())
@@ -178,7 +174,6 @@ class CamouflageScheduler:
                 }
             return out
 
-
     def assign_variant_suffix(self, task_id: str) -> tuple[str, str]:
         with self._lock:
             opt = self._optimizer
@@ -201,7 +196,6 @@ class CamouflageScheduler:
             opt.record_outcome(str(task_id), success=success)
         except Exception as exc:  # noqa: BLE001
             _LOG.debug("camouflage record_outcome failed: %s", exc)
-
 
     def _build_components(self, router: Any) -> None:
         from runtime.safety.experiments import (
@@ -264,9 +258,10 @@ class CamouflageScheduler:
             min_variants_to_act=2,
         )
         self._auto_retire = AutoRetireScheduler(
-            self._evolver, config=retire_cfg, bus=None,
+            self._evolver,
+            config=retire_cfg,
+            bus=None,
         )
-
 
     def _run_loop(self) -> None:
         if self._stop_event.wait(timeout=self._config.initial_delay_sec):
@@ -310,12 +305,8 @@ class CamouflageScheduler:
                         {"name": n, "old_weight": ow, "new_weight": nw}
                         for (n, ow, nw) in step.boosted
                     ],
-                    "mutated": (
-                        step.mutation.variant.name if step.mutation else None
-                    ),
-                    "crossover": (
-                        step.crossover.variant.name if step.crossover else None
-                    ),
+                    "mutated": (step.mutation.variant.name if step.mutation else None),
+                    "crossover": (step.crossover.variant.name if step.crossover else None),
                     "summary": step.summary,
                 }
             try:

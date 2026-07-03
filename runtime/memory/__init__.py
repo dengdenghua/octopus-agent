@@ -20,6 +20,7 @@
   diagnostics/    → 诊断与追溯（trace_store / error_classifier /
                     wiki_compiler）
 """
+
 from __future__ import annotations
 
 from .diagnostics import (  # noqa: F401

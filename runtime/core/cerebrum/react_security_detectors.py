@@ -207,7 +207,7 @@ def _payload_has_network_in_loop(text: str) -> bool:
     for match in _LOOP_HEAD_RE.finditer(text):
         indent = match.group("indent")
         body_indent_marker = indent + " "
-        rest = text[match.end():]
+        rest = text[match.end() :]
         body_lines: list[str] = []
         for raw in rest.splitlines():
             if not raw.strip():
@@ -229,10 +229,7 @@ def _step_introduces_network_in_loop(step: ReActStep) -> bool:
     if _is_test_path(path):
         return False
     new_text, old_text = _extract_step_payloads(step)
-    return (
-        _payload_has_network_in_loop(new_text)
-        and not _payload_has_network_in_loop(old_text)
-    )
+    return _payload_has_network_in_loop(new_text) and not _payload_has_network_in_loop(old_text)
 
 
 # ──────────────────────────────────────────────────────────────────

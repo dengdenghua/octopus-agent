@@ -9,6 +9,7 @@ Read-only scan that maps a Codex install onto octopus's importable surfaces:
 * **mcp**     — ``config.toml`` ``[mcp_servers.*]`` (imported disabled; the
   server still needs its runtime/credentials, never auto-launched).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -71,9 +72,13 @@ def scan_codex(home: Path | None = None) -> MigrationPlan:
     for name, needs in _mcp_servers(config_toml):
         items.append(
             MigrationItem(
-                "mcp_server", name, "codex",
+                "mcp_server",
+                name,
+                "codex",
                 "MCP server — import disabled; supply runtime/credentials to enable",
-                str(config_toml), portable=True, needs=needs,
+                str(config_toml),
+                portable=True,
+                needs=needs,
             ),
         )
 

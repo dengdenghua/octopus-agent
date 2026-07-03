@@ -1,4 +1,5 @@
 """Routing policy that uses subagent fitness before delegated work runs."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -72,10 +73,7 @@ def decide_subagent_route(
             action="block",
             reason=(
                 f"{role_id} was retired by operator policy"
-                + (
-                    f": {policy.get('reason')}"
-                    if policy.get("reason") else ""
-                )
+                + (f": {policy.get('reason')}" if policy.get("reason") else "")
             ),
             risk_level=risk,
             verdict="operator_retired",
@@ -93,10 +91,7 @@ def decide_subagent_route(
             action="allow_with_warning",
             reason=(
                 f"{role_id} is on the operator watchlist"
-                + (
-                    f": {policy.get('reason')}"
-                    if policy.get("reason") else ""
-                )
+                + (f": {policy.get('reason')}" if policy.get("reason") else "")
             ),
             risk_level=risk,
             verdict="operator_watch",
@@ -136,9 +131,7 @@ def decide_subagent_route(
         return SubagentRouteDecision(
             role=role_id,
             action="block",
-            reason=(
-                f"{role_id} is a retire_candidate and this task is {risk}-risk"
-            ),
+            reason=(f"{role_id} is a retire_candidate and this task is {risk}-risk"),
             risk_level=risk,
             verdict=verdict,
             score=score,

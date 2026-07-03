@@ -8,6 +8,7 @@ Three layers covered here:
                                   rule added during one turn affects
                                   the next without reboot.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -167,9 +168,7 @@ class TestPermissionsExampleFile:
 
     def setup_method(self) -> None:
         self.path = _repo_root() / "permissions.example.json"
-        assert self.path.is_file(), (
-            f"permissions.example.json missing at repo root: {self.path}"
-        )
+        assert self.path.is_file(), f"permissions.example.json missing at repo root: {self.path}"
 
     def test_is_valid_json_with_v1_schema(self) -> None:
         import json as _json
@@ -189,8 +188,7 @@ class TestPermissionsExampleFile:
 
         raw = _json.loads(self.path.read_text(encoding="utf-8"))
         assert len(policy.rules) == len(raw["rules"]), (
-            "example file has rule entries that fail to parse — "
-            "either fix them, or drop them"
+            "example file has rule entries that fail to parse — either fix them, or drop them"
         )
 
     def test_decisions_match_documented_intent(self) -> None:
@@ -402,13 +400,15 @@ class TestPermissionsRouter:
         assert (data_dir / "permissions.json").exists()
 
     def test_missing_token_rejected_when_required(
-        self, secured_router_client: tuple[TestClient, dict[str, str]],
+        self,
+        secured_router_client: tuple[TestClient, dict[str, str]],
     ) -> None:
         client, _headers = secured_router_client
         assert client.get("/api/permissions").status_code == 401
 
     def test_valid_token_accepted_when_required(
-        self, secured_router_client: tuple[TestClient, dict[str, str]],
+        self,
+        secured_router_client: tuple[TestClient, dict[str, str]],
     ) -> None:
         client, headers = secured_router_client
         assert client.get("/api/permissions", headers=headers).status_code == 200

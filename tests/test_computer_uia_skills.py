@@ -159,18 +159,20 @@ def test_find_requires_query(fake_uia):
 
 
 def test_uia_replay_assertion_validates_action_coordinates() -> None:
-    result = uia_replay_assertion_for_action({
-        "action": "click",
-        "x": 60,
-        "y": 40,
-        "source": "uia",
-        "matched_control": {
-            "name": "OK",
-            "automation_id": "okButton",
-            "center": {"x": 60, "y": 40},
-            "rect": {"left": 10, "top": 20, "right": 110, "bottom": 60},
-        },
-    })
+    result = uia_replay_assertion_for_action(
+        {
+            "action": "click",
+            "x": 60,
+            "y": 40,
+            "source": "uia",
+            "matched_control": {
+                "name": "OK",
+                "automation_id": "okButton",
+                "center": {"x": 60, "y": 40},
+                "rect": {"left": 10, "top": 20, "right": 110, "bottom": 60},
+            },
+        }
+    )
 
     assert result["schema"] == "octopus.computer_uia_replay_assertion.v1"
     assert result["ok"] is True
@@ -178,17 +180,19 @@ def test_uia_replay_assertion_validates_action_coordinates() -> None:
 
 
 def test_uia_replay_assertion_rejects_drifted_coordinates() -> None:
-    result = uia_replay_assertion_for_action({
-        "action": "click",
-        "x": 10,
-        "y": 10,
-        "source": "uia",
-        "matched_control": {
-            "name": "OK",
-            "center": {"x": 60, "y": 40},
-            "rect": {"left": 10, "top": 20, "right": 110, "bottom": 60},
-        },
-    })
+    result = uia_replay_assertion_for_action(
+        {
+            "action": "click",
+            "x": 10,
+            "y": 10,
+            "source": "uia",
+            "matched_control": {
+                "name": "OK",
+                "center": {"x": 60, "y": 40},
+                "rect": {"left": 10, "top": 20, "right": 110, "bottom": 60},
+            },
+        }
+    )
 
     assert result["ok"] is False
     assert "coordinates do not match" in result["reason"]

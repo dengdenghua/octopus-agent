@@ -16,6 +16,7 @@ Step 1 covers **known** authorization endpoints (the caller supplies
 Tokens live in ``~/.octopus/mcp_oauth.json`` (chmod 0600). Encryption-at-rest is
 a follow-up; for now file perms match how local CLIs store OAuth tokens.
 """
+
 from __future__ import annotations
 
 import base64
@@ -34,8 +35,8 @@ from urllib import request as urllib_request
 
 from runtime.platform.io import atomic_write_json
 
-_PENDING_TTL = 600.0   # authorize→callback round-trip window (10 min)
-_REFRESH_SKEW = 60.0   # refresh when within 60s of expiry
+_PENDING_TTL = 600.0  # authorize→callback round-trip window (10 min)
+_REFRESH_SKEW = 60.0  # refresh when within 60s of expiry
 
 
 # ── PKCE + URL ───────────────────────────────────────────
@@ -88,23 +89,34 @@ def _post_form(url: str, data: dict[str, str], timeout: float = 30.0) -> dict[st
 
 
 def exchange_code(
-    *, token_url: str, code: str, code_verifier: str, client_id: str, redirect_uri: str,
+    *,
+    token_url: str,
+    code: str,
+    code_verifier: str,
+    client_id: str,
+    redirect_uri: str,
 ) -> dict[str, Any]:
-    return _post_form(token_url, {
-        "grant_type": "authorization_code",
-        "code": code,
-        "code_verifier": code_verifier,
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-    })
+    return _post_form(
+        token_url,
+        {
+            "grant_type": "authorization_code",
+            "code": code,
+            "code_verifier": code_verifier,
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+        },
+    )
 
 
 def refresh_access(*, token_url: str, refresh_token: str, client_id: str) -> dict[str, Any]:
-    return _post_form(token_url, {
-        "grant_type": "refresh_token",
-        "refresh_token": refresh_token,
-        "client_id": client_id,
-    })
+    return _post_form(
+        token_url,
+        {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": client_id,
+        },
+    )
 
 
 # ── Store ────────────────────────────────────────────────
@@ -216,13 +228,23 @@ class MCPOAuthStore:
             os.chmod(self._path, 0o600)
 
     def start_pending(
-        self, *, server: str, code_verifier: str, redirect_uri: str,
-        token_url: str, client_id: str,
+        self,
+        *,
+        server: str,
+        code_verifier: str,
+        redirect_uri: str,
+        token_url: str,
+        client_id: str,
     ) -> str:
         state = secrets.token_urlsafe(32)
         with self._lock:
             self._pending[state] = _Pending(
-                server, code_verifier, redirect_uri, token_url, client_id, time.time(),
+                server,
+                code_verifier,
+                redirect_uri,
+                token_url,
+                client_id,
+                time.time(),
             )
             self._save()
         return state
@@ -236,11 +258,18 @@ class MCPOAuthStore:
             return pend
 
     def save_tokens(
-        self, server: str, token_response: dict[str, Any], *, token_url: str, client_id: str,
+        self,
+        server: str,
+        token_response: dict[str, Any],
+        *,
+        token_url: str,
+        client_id: str,
     ) -> None:
         with self._lock:
             prior = self._tokens.get(server)
-            refresh = str(token_response.get("refresh_token") or (prior.refresh_token if prior else ""))
+            refresh = str(
+                token_response.get("refresh_token") or (prior.refresh_token if prior else "")
+            )
             self._tokens[server] = _Tokens(
                 access_token=str(token_response.get("access_token", "")),
                 refresh_token=refresh,

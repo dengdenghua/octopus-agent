@@ -102,11 +102,13 @@ class TestHappyPath:
 
         def _alpha() -> None:
             try:
-                graph = planner.plan(ParsedIntent(
-                    raw="goal-alpha",
-                    intent_type="task",
-                    normalized_goal="goal-alpha",
-                ))
+                graph = planner.plan(
+                    ParsedIntent(
+                        raw="goal-alpha",
+                        intent_type="task",
+                        normalized_goal="goal-alpha",
+                    )
+                )
                 results["alpha_graph"] = graph.planner_usage
                 router.allow_beta_response.set()
                 assert beta_done.wait(timeout=5)
@@ -116,11 +118,13 @@ class TestHappyPath:
 
         def _beta() -> None:
             try:
-                graph = planner.plan(ParsedIntent(
-                    raw="goal-beta",
-                    intent_type="task",
-                    normalized_goal="goal-beta",
-                ))
+                graph = planner.plan(
+                    ParsedIntent(
+                        raw="goal-beta",
+                        intent_type="task",
+                        normalized_goal="goal-beta",
+                    )
+                )
                 results["beta_graph"] = graph.planner_usage
                 results["beta_last"] = planner.last_plan_usage
                 beta_done.set()

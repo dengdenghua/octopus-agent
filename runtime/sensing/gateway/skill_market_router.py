@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from typing import Any
@@ -31,6 +30,7 @@ def create_skill_market_router(
 
     if skill_market is None:
         from runtime.platform.plugins.skill_market import SkillMarket
+
         skill_market = SkillMarket(skills_dir=skills_dir)
 
     def _auth_dep(request: Request) -> None:

@@ -26,7 +26,10 @@ def test_skill_market_router_requires_auth_when_enabled() -> None:
     client = TestClient(app)
 
     assert client.get("/api/skills/market/installed").status_code == 401
-    assert client.get(
-        "/api/skills/market/installed",
-        headers={"Authorization": "Bearer sk-alice"},
-    ).status_code == 200
+    assert (
+        client.get(
+            "/api/skills/market/installed",
+            headers={"Authorization": "Bearer sk-alice"},
+        ).status_code
+        == 200
+    )

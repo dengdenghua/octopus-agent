@@ -64,7 +64,8 @@ from runtime.core.cerebrum.react_types import ReActStep
 _OBS_DISPLAY_MAX = 280
 _OBS_HTML_INDICATOR = "<html"
 _OBS_JSON_CONTENT_KEY_RE = re.compile(
-    r'"content"\s*:\s*"', re.IGNORECASE,
+    r'"content"\s*:\s*"',
+    re.IGNORECASE,
 )
 
 
@@ -81,7 +82,7 @@ def _summarize_observation(text: str) -> str:
         )
         idx = t.find(', _sentinel:"')
         if idx != -1:
-            t = t[:idx] + '}'  # Implementation note.
+            t = t[:idx] + "}"  # Implementation note.
 
     if len(t) > _OBS_DISPLAY_MAX:
         t = t[:_OBS_DISPLAY_MAX] + " …(已截断)"
@@ -108,9 +109,9 @@ def _safe_for_streamdown(text: str) -> str:
     return text
 
 
-
 _FINAL_RE = re.compile(
-    r"Final\s*Answer\s*:\s*(.+)", re.IGNORECASE | re.DOTALL,
+    r"Final\s*Answer\s*:\s*(.+)",
+    re.IGNORECASE | re.DOTALL,
 )
 _THOUGHT_RE = re.compile(
     r"Thought\s*:\s*(.+?)(?:\n\s*Action|\n\s*Final|\n\n|$)",
@@ -297,7 +298,8 @@ def _format_action(name: str, args: dict[str, Any]) -> str:
 
 
 def _is_format_violation(
-    step: ReActStep, final_answer: str | None,
+    step: ReActStep,
+    final_answer: str | None,
 ) -> bool:
     """True when the LLM returned text but produced zero ReAct anchors.
 
@@ -313,21 +315,13 @@ def _is_format_violation(
         # upstream error); caller's existing exception path handles
         # that.
         return False
-    return (
-        final_answer is None
-        and not step.thought
-        and not step.action
-        and not step.observation
-    )
-
-
+    return final_answer is None and not step.thought and not step.action and not step.observation
 
 
 def _placeholder_observation(action: str) -> str:
     if not action or action.lower() in {"none", "n/a", ""}:
         return "N/A"
     return f"(未执行观察) Action '{action}' 已记录,但本次 ReAct 未启用工具执行。请继续推理。"
-
 
 
 _ACTION_CALL_RE = re.compile(
@@ -389,8 +383,6 @@ def _parse_action(action_text: str) -> tuple[str, dict[str, Any]] | None:
     return (name, parsed)
 
 
-
-
 def _latest_todo_items(steps: list[ReActStep]) -> list[dict[str, Any]]:
     """Return the most recent todo_write payload from the trajectory."""
     for step in reversed(steps):
@@ -428,21 +420,23 @@ def _has_code_write(steps: list[ReActStep]) -> bool:
 # completion guard, the post-write verification guard, and the public
 # ``_has_code_write`` helper all stay aligned. Adding a new edit-style
 # skill (e.g. ``patch_file_v2``) needs exactly one update here.
-_CODE_WRITE_TOOLS: frozenset[str] = frozenset({
-    # Legacy text writers
-    "write_text_file",
-    "append_text_file",
-    "edit_text_file",
-    # Newer Edit-style skills (octopus optimisation §2.1 / §2.2)
-    "edit_file",
-    "multi_edit_file",
-    # Aliases used by other registries / external integrations
-    "edit_code",
-    "str_replace",
-    "write_file",
-    "create_file",
-    "apply_patch",
-})
+_CODE_WRITE_TOOLS: frozenset[str] = frozenset(
+    {
+        # Legacy text writers
+        "write_text_file",
+        "append_text_file",
+        "edit_text_file",
+        # Newer Edit-style skills (octopus optimisation §2.1 / §2.2)
+        "edit_file",
+        "multi_edit_file",
+        # Aliases used by other registries / external integrations
+        "edit_code",
+        "str_replace",
+        "write_file",
+        "create_file",
+        "apply_patch",
+    }
+)
 
 
 def _is_code_write_step(step: ReActStep) -> bool:
@@ -514,14 +508,16 @@ def _extract_step_payloads(step: ReActStep) -> tuple[str, str]:
     return ("\n".join(new_chunks), "\n".join(old_chunks))
 
 
-_VERIFY_TOOLS: frozenset[str] = frozenset({
-    "exec_shell",
-    "shell_command",
-    "bash",
-    "run_tests",
-    "run_checks",
-    "verify",
-})
+_VERIFY_TOOLS: frozenset[str] = frozenset(
+    {
+        "exec_shell",
+        "shell_command",
+        "bash",
+        "run_tests",
+        "run_checks",
+        "verify",
+    }
+)
 
 # Verification markers grouped by language. The "all" bucket is the
 # legacy flat list — kept for the language-agnostic
@@ -561,9 +557,7 @@ _LANG_VERIFY_MARKERS: dict[str, tuple[str, ...]] = {
 }
 
 _VERIFY_MARKERS_ALL: tuple[str, ...] = tuple(
-    marker
-    for markers in _LANG_VERIFY_MARKERS.values()
-    for marker in markers
+    marker for markers in _LANG_VERIFY_MARKERS.values() for marker in markers
 )
 
 
@@ -627,7 +621,9 @@ def _has_code_verification(steps: list[ReActStep]) -> bool:
 
 
 def _has_language_specific_verification(
-    steps: list[ReActStep], *, language: str,
+    steps: list[ReActStep],
+    *,
+    language: str,
 ) -> bool:
     """True if any step ran a verifier whose markers belong to ``language``.
 
@@ -894,9 +890,15 @@ def _has_wire_contract_test_write(steps: list[ReActStep]) -> bool:
 # First-party packages are pinned: anything else must show up in a
 # write to pyproject.toml within the same trajectory.
 
-_FIRST_PARTY_TOP_LEVEL: frozenset[str] = frozenset({
-    "runtime", "tests", "frontend", "tools", "scripts",
-})
+_FIRST_PARTY_TOP_LEVEL: frozenset[str] = frozenset(
+    {
+        "runtime",
+        "tests",
+        "frontend",
+        "tools",
+        "scripts",
+    }
+)
 
 _IMPORT_LINE_RE = re.compile(
     r"(?:^|\n)\s*(?:from\s+(?P<from>[A-Za-z_][A-Za-z0-9_.]*)\s+import|"
@@ -953,7 +955,14 @@ def _step_writes_dep_manifest(step: ReActStep) -> bool:
         return False
     norm = path.replace("\\", "/").lower()
     base = norm.rsplit("/", 1)[-1]
-    return base in {"pyproject.toml", "requirements.txt", "setup.py", "setup.cfg", "poetry.lock", "uv.lock"}
+    return base in {
+        "pyproject.toml",
+        "requirements.txt",
+        "setup.py",
+        "setup.cfg",
+        "poetry.lock",
+        "uv.lock",
+    }
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -1138,7 +1147,7 @@ def _payload_has_broad_except_suppression(text: str) -> bool:
         return False
     for match in _BROAD_EXCEPT_HEAD_RE.finditer(text):
         # Find the FIRST non-empty line after the except header line.
-        rest = text[match.end():]
+        rest = text[match.end() :]
         first_line = ""
         for line in rest.splitlines():
             if line.strip():
@@ -1166,10 +1175,9 @@ def _step_introduces_broad_except_suppression(step: ReActStep) -> bool:
     if _is_test_path(path):
         return False
     new_text, old_text = _extract_step_payloads(step)
-    return (
-        _payload_has_broad_except_suppression(new_text)
-        and not _payload_has_broad_except_suppression(old_text)
-    )
+    return _payload_has_broad_except_suppression(
+        new_text
+    ) and not _payload_has_broad_except_suppression(old_text)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -1229,7 +1237,7 @@ def _normalize_frontend_path(path: str) -> str:
     """
     norm = path.replace("\\", "/").lstrip("./")
     if norm.startswith("frontend/"):
-        norm = norm[len("frontend/"):]
+        norm = norm[len("frontend/") :]
     return norm
 
 
@@ -1265,7 +1273,9 @@ def _matches_tsconfig_pattern(rel_path: str, pattern: str) -> bool:
 
 
 def _is_frontend_path_outside_tsconfig(
-    path: str, *, repo_root: str | None = None,
+    path: str,
+    *,
+    repo_root: str | None = None,
 ) -> bool:
     """Whether a TypeScript edit lands outside the tsc include set.
 
@@ -1290,13 +1300,13 @@ def _is_frontend_path_outside_tsconfig(
     includes = config.get("include") or []
     if not includes:
         return False
-    return not any(
-        _matches_tsconfig_pattern(rel, str(pattern)) for pattern in includes
-    )
+    return not any(_matches_tsconfig_pattern(rel, str(pattern)) for pattern in includes)
 
 
 def _step_edits_frontend_outside_tsconfig(
-    step: ReActStep, *, repo_root: str | None = None,
+    step: ReActStep,
+    *,
+    repo_root: str | None = None,
 ) -> bool:
     path = _extract_step_path(step)
     if not path:
@@ -1334,7 +1344,9 @@ def _step_payload_line_count(step: ReActStep) -> int:
 
 
 def _step_is_oversized_edit(
-    step: ReActStep, *, threshold: int = _OVERSIZED_EDIT_LINE_THRESHOLD,
+    step: ReActStep,
+    *,
+    threshold: int = _OVERSIZED_EDIT_LINE_THRESHOLD,
 ) -> bool:
     """Whether this single edit step writes more than ``threshold`` lines.
 
@@ -1520,7 +1532,9 @@ _FULL_REWRITE_THRESHOLD = 100  # lines
 
 
 def _step_is_full_file_rewrite_attempt(
-    step: ReActStep, *, repo_root: str | None = None,
+    step: ReActStep,
+    *,
+    repo_root: str | None = None,
 ) -> tuple[bool, str | None, int]:
     """Return ``(is_rewrite, path, existing_line_count)``.
 
@@ -1791,7 +1805,9 @@ def _step_introduces_hardcoded_path(step: ReActStep) -> list[str]:
     if _is_test_path(path):
         return []
     norm = path.lower()
-    if not norm.endswith((".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".yaml", ".yml", ".toml", ".json", ".env")):
+    if not norm.endswith(
+        (".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".yaml", ".yml", ".toml", ".json", ".env")
+    ):
         return []
     new_text, old_text = _extract_step_payloads(step)
     new_hits = set(_detect_hardcoded_paths_in_payload(new_text))
@@ -1886,8 +1902,16 @@ _PYTEST_SKIP_HEAD_RE = re.compile(
     r"\bpytest\.skip\s*\(\s*(?P<call>[^)]*)\)",
 )
 _PLACEHOLDER_REASONS: tuple[str, ...] = (
-    "todo", "tbd", "fixme", "skip", "broken", "fix later", "wip",
-    "temp", "temporary", "disabled",
+    "todo",
+    "tbd",
+    "fixme",
+    "skip",
+    "broken",
+    "fix later",
+    "wip",
+    "temp",
+    "temporary",
+    "disabled",
 )
 
 
@@ -1929,10 +1953,7 @@ def _step_introduces_undocumented_skip(step: ReActStep) -> bool:
     if not path.lower().endswith((".py", ".pyi")):
         return False
     new_text, old_text = _extract_step_payloads(step)
-    return (
-        _payload_has_undocumented_skip(new_text)
-        and not _payload_has_undocumented_skip(old_text)
-    )
+    return _payload_has_undocumented_skip(new_text) and not _payload_has_undocumented_skip(old_text)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -1985,23 +2006,55 @@ def _step_deleted_test_functions(step: ReActStep) -> list[str]:
 # describes the BEHAVIOR under test (``test_handles_empty_input``,
 # ``test_retries_on_timeout``).
 
-_GENERIC_TEST_STEMS: frozenset[str] = frozenset({
-    "basic", "simple", "works", "ok", "thing", "stuff",
-    "function", "method", "case", "example", "default",
-    "something", "anything", "test", "main", "run", "execution",
-    # Single-letter / numeric placeholders.
-    "a", "b", "c", "x", "y", "z",
-    "1", "2", "3", "01", "02", "first", "second", "third",
-    # Obvious placeholders.
-    "todo", "tbd", "fixme", "wip", "tmp",
-})
+_GENERIC_TEST_STEMS: frozenset[str] = frozenset(
+    {
+        "basic",
+        "simple",
+        "works",
+        "ok",
+        "thing",
+        "stuff",
+        "function",
+        "method",
+        "case",
+        "example",
+        "default",
+        "something",
+        "anything",
+        "test",
+        "main",
+        "run",
+        "execution",
+        # Single-letter / numeric placeholders.
+        "a",
+        "b",
+        "c",
+        "x",
+        "y",
+        "z",
+        "1",
+        "2",
+        "3",
+        "01",
+        "02",
+        "first",
+        "second",
+        "third",
+        # Obvious placeholders.
+        "todo",
+        "tbd",
+        "fixme",
+        "wip",
+        "tmp",
+    }
+)
 
 
 def _is_generic_test_name(name: str) -> bool:
     """Whether ``test_NAME`` has a placeholder stem."""
     if not name.startswith("test_"):
         return False
-    stem = name[len("test_"):].lower().strip("_")
+    stem = name[len("test_") :].lower().strip("_")
     if not stem:
         return True  # Just ``test_`` itself.
     return stem in _GENERIC_TEST_STEMS
@@ -2010,10 +2063,7 @@ def _is_generic_test_name(name: str) -> bool:
 def _detect_generic_test_names_in_payload(text: str) -> list[str]:
     if not text:
         return []
-    return [
-        name for name in _test_function_names(text)
-        if _is_generic_test_name(name)
-    ]
+    return [name for name in _test_function_names(text) if _is_generic_test_name(name)]
 
 
 def _step_introduces_generic_test_name(step: ReActStep) -> list[str]:
@@ -2179,7 +2229,10 @@ def _is_abstract_or_stub_body(body: str) -> bool:
         stripped_lines.append(stripped)
     if not stripped_lines:
         return True
-    return all(line in {"pass", "...", "raise NotImplementedError", "raise NotImplementedError()"} for line in stripped_lines)
+    return all(
+        line in {"pass", "...", "raise NotImplementedError", "raise NotImplementedError()"}
+        for line in stripped_lines
+    )
 
 
 def _detect_async_without_await_in_payload(text: str) -> list[str]:
@@ -2194,7 +2247,7 @@ def _detect_async_without_await_in_payload(text: str) -> list[str]:
             continue
         # Look upwards for an @abstractmethod decorator on the
         # immediately preceding lines (within 3 lines).
-        head = text[max(0, match.start() - 200):match.start()]
+        head = text[max(0, match.start() - 200) : match.start()]
         recent_decorators = head.rsplit("\n", 4)[-3:]
         if any(_ABSTRACT_DECORATOR_RE.search(line) for line in recent_decorators):
             continue
@@ -2251,7 +2304,7 @@ def _payload_has_log_swallow(text: str) -> bool:
         indent = match.group("indent")
         body_indent_marker = indent + " "  # body must be more indented
         # Read body lines until we hit a line at the same indent or less.
-        rest = text[match.end():]
+        rest = text[match.end() :]
         body_lines: list[str] = []
         for raw in rest.splitlines():
             stripped = raw.rstrip()
@@ -2278,10 +2331,7 @@ def _step_introduces_log_swallow(step: ReActStep) -> bool:
     if _is_test_path(path):
         return False
     new_text, old_text = _extract_step_payloads(step)
-    return (
-        _payload_has_log_swallow(new_text)
-        and not _payload_has_log_swallow(old_text)
-    )
+    return _payload_has_log_swallow(new_text) and not _payload_has_log_swallow(old_text)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -2367,7 +2417,6 @@ def _step_introduces_long_function(step: ReActStep) -> list[tuple[str, int]]:
     new_long = _detect_long_functions_in_payload(new_text)
     old_long_names = {name for name, _lines in _detect_long_functions_in_payload(old_text)}
     return [(name, lines) for name, lines in new_long if name not in old_long_names]
-
 
 
 # ──────────────────────────────────────────────────────────────────

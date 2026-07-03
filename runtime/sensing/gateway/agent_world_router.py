@@ -6,6 +6,7 @@ persists install/uninstall state to a lightweight JSON file under the
 user's home directory. This makes the frontend Agent Market usable even
 before a remote marketplace exists.
 """
+
 from __future__ import annotations
 
 import json
@@ -59,28 +60,226 @@ _AGENCY_AGENT_DIRS = {
     "testing": "coder",
 }
 BUILTIN_TEMPLATES: list[dict[str, Any]] = [
-    {"id": "test_writer", "display_name": "Test Writer", "description": "Writes focused unit, integration, and regression tests from changed code.", "author": "octopus", "category": "coder", "tags": ["test", "coverage", "pytest"], "icon": "🧪", "featured": True},
-    {"id": "code_reviewer", "display_name": "Code Reviewer", "description": "Finds logic gaps, unsafe changes, and maintainability issues before merge.", "author": "octopus", "category": "coder", "tags": ["review", "quality", "diff"], "icon": "🧐", "featured": True},
-    {"id": "security_auditor", "display_name": "Security Auditor", "description": "Audits code for auth flaws, injection risks, secrets, and unsafe file operations.", "author": "octopus", "category": "specialist", "tags": ["security", "audit", "owasp"], "icon": "🔐", "featured": True},
-    {"id": "api_architect", "display_name": "API Architect", "description": "Designs service boundaries, request contracts, and migration-friendly API changes.", "author": "octopus", "category": "specialist", "tags": ["api", "architecture", "backend"], "icon": "🧭", "featured": True},
-    {"id": "frontend_copilot", "display_name": "Frontend Copilot", "description": "Builds polished UI flows, empty states, loading states, and responsive layouts.", "author": "octopus", "category": "creative", "tags": ["ui", "react", "tailwind"], "icon": "🎨", "featured": True},
-    {"id": "docs_writer", "display_name": "Docs Writer", "description": "Turns implementation details into README, migration notes, and user-facing docs.", "author": "octopus", "category": "assistant", "tags": ["docs", "readme", "guide"], "icon": "📝", "featured": False},
-    {"id": "bug_hunter", "display_name": "Bug Hunter", "description": "Reproduces bugs, narrows root causes, and proposes the smallest safe fix.", "author": "octopus", "category": "coder", "tags": ["bug", "debug", "triage"], "icon": "🐛", "featured": True},
-    {"id": "refactor_surgeon", "display_name": "Refactor Surgeon", "description": "Performs targeted refactors while preserving behavior and minimizing blast radius.", "author": "octopus", "category": "coder", "tags": ["refactor", "cleanup", "maintainability"], "icon": "✂️", "featured": False},
-    {"id": "release_manager", "display_name": "Release Manager", "description": "Prepares changelogs, verifies ship readiness, and checks release blocking issues.", "author": "octopus", "category": "automation", "tags": ["release", "changelog", "ship"], "icon": "🚀", "featured": False},
-    {"id": "data_analyst", "display_name": "Data Analyst", "description": "Reads datasets, summarizes metrics, and produces analysis notebooks or reports.", "author": "octopus", "category": "researcher", "tags": ["data", "analysis", "notebook"], "icon": "📊", "featured": False},
-    {"id": "deep_researcher", "display_name": "Deep Researcher", "description": "Performs broad multi-file and multi-source investigations before implementation.", "author": "octopus", "category": "researcher", "tags": ["research", "investigation", "planning"], "icon": "🔬", "featured": True},
-    {"id": "performance_engineer", "display_name": "Performance Engineer", "description": "Finds bottlenecks, reduces bundle size, and improves runtime performance.", "author": "octopus", "category": "specialist", "tags": ["performance", "profiling", "optimization"], "icon": "⚙️", "featured": False},
-    {"id": "cli_builder", "display_name": "CLI Builder", "description": "Designs commands, flags, help text, and ergonomic terminal-first workflows.", "author": "octopus", "category": "coder", "tags": ["cli", "terminal", "argparse"], "icon": "⌨️", "featured": False},
-    {"id": "database_migrator", "display_name": "Database Migrator", "description": "Plans safe schema changes, backfills, and rollback-aware migrations.", "author": "octopus", "category": "specialist", "tags": ["database", "migration", "sql"], "icon": "🗃️", "featured": False},
-    {"id": "observability_ops", "display_name": "Observability Ops", "description": "Improves logs, metrics, tracing, and alertability for production services.", "author": "octopus", "category": "automation", "tags": ["logs", "metrics", "tracing"], "icon": "📡", "featured": False},
-    {"id": "prompt_designer", "display_name": "Prompt Designer", "description": "Tunes prompts, structured outputs, and tool-use contracts for AI products.", "author": "octopus", "category": "creative", "tags": ["prompt", "llm", "ai"], "icon": "✨", "featured": False},
-    {"id": "workflow_automator", "display_name": "Workflow Automator", "description": "Builds repeatable workflow, task, and ops automations across tools.", "author": "octopus", "category": "automation", "tags": ["workflow", "ops", "automation"], "icon": "🔁", "featured": False},
-    {"id": "knowledge_curator", "display_name": "Knowledge Curator", "description": "Collects scattered project knowledge into reusable reference pages and guides.", "author": "octopus", "category": "assistant", "tags": ["knowledge", "wiki", "curation"], "icon": "📚", "featured": False},
-    {"id": "content_strategist", "display_name": "Content Strategist", "description": "Creates landing copy, positioning, and campaign messaging for product launches.", "author": "octopus", "category": "creative", "tags": ["marketing", "copywriting", "content"], "icon": "📣", "featured": False},
-    {"id": "support_triager", "display_name": "Support Triager", "description": "Turns user reports into repro steps, suspected root causes, and fix tickets.", "author": "octopus", "category": "assistant", "tags": ["support", "triage", "issues"], "icon": "🧰", "featured": False},
-    {"id": "browser_operator", "display_name": "Browser Operator", "description": "Handles browser-based workflows, form filling, and visual verification steps.", "author": "octopus", "category": "automation", "tags": ["browser", "web", "operator"], "icon": "🌐", "featured": False},
-    {"id": "product_analyst", "display_name": "Product Analyst", "description": "Converts qualitative requests into specs, risks, tradeoffs, and delivery slices.", "author": "octopus", "category": "researcher", "tags": ["product", "spec", "analysis"], "icon": "🧠", "featured": False},
+    {
+        "id": "test_writer",
+        "display_name": "Test Writer",
+        "description": "Writes focused unit, integration, and regression tests from changed code.",
+        "author": "octopus",
+        "category": "coder",
+        "tags": ["test", "coverage", "pytest"],
+        "icon": "🧪",
+        "featured": True,
+    },
+    {
+        "id": "code_reviewer",
+        "display_name": "Code Reviewer",
+        "description": "Finds logic gaps, unsafe changes, and maintainability issues before merge.",
+        "author": "octopus",
+        "category": "coder",
+        "tags": ["review", "quality", "diff"],
+        "icon": "🧐",
+        "featured": True,
+    },
+    {
+        "id": "security_auditor",
+        "display_name": "Security Auditor",
+        "description": "Audits code for auth flaws, injection risks, secrets, and unsafe file operations.",
+        "author": "octopus",
+        "category": "specialist",
+        "tags": ["security", "audit", "owasp"],
+        "icon": "🔐",
+        "featured": True,
+    },
+    {
+        "id": "api_architect",
+        "display_name": "API Architect",
+        "description": "Designs service boundaries, request contracts, and migration-friendly API changes.",
+        "author": "octopus",
+        "category": "specialist",
+        "tags": ["api", "architecture", "backend"],
+        "icon": "🧭",
+        "featured": True,
+    },
+    {
+        "id": "frontend_copilot",
+        "display_name": "Frontend Copilot",
+        "description": "Builds polished UI flows, empty states, loading states, and responsive layouts.",
+        "author": "octopus",
+        "category": "creative",
+        "tags": ["ui", "react", "tailwind"],
+        "icon": "🎨",
+        "featured": True,
+    },
+    {
+        "id": "docs_writer",
+        "display_name": "Docs Writer",
+        "description": "Turns implementation details into README, migration notes, and user-facing docs.",
+        "author": "octopus",
+        "category": "assistant",
+        "tags": ["docs", "readme", "guide"],
+        "icon": "📝",
+        "featured": False,
+    },
+    {
+        "id": "bug_hunter",
+        "display_name": "Bug Hunter",
+        "description": "Reproduces bugs, narrows root causes, and proposes the smallest safe fix.",
+        "author": "octopus",
+        "category": "coder",
+        "tags": ["bug", "debug", "triage"],
+        "icon": "🐛",
+        "featured": True,
+    },
+    {
+        "id": "refactor_surgeon",
+        "display_name": "Refactor Surgeon",
+        "description": "Performs targeted refactors while preserving behavior and minimizing blast radius.",
+        "author": "octopus",
+        "category": "coder",
+        "tags": ["refactor", "cleanup", "maintainability"],
+        "icon": "✂️",
+        "featured": False,
+    },
+    {
+        "id": "release_manager",
+        "display_name": "Release Manager",
+        "description": "Prepares changelogs, verifies ship readiness, and checks release blocking issues.",
+        "author": "octopus",
+        "category": "automation",
+        "tags": ["release", "changelog", "ship"],
+        "icon": "🚀",
+        "featured": False,
+    },
+    {
+        "id": "data_analyst",
+        "display_name": "Data Analyst",
+        "description": "Reads datasets, summarizes metrics, and produces analysis notebooks or reports.",
+        "author": "octopus",
+        "category": "researcher",
+        "tags": ["data", "analysis", "notebook"],
+        "icon": "📊",
+        "featured": False,
+    },
+    {
+        "id": "deep_researcher",
+        "display_name": "Deep Researcher",
+        "description": "Performs broad multi-file and multi-source investigations before implementation.",
+        "author": "octopus",
+        "category": "researcher",
+        "tags": ["research", "investigation", "planning"],
+        "icon": "🔬",
+        "featured": True,
+    },
+    {
+        "id": "performance_engineer",
+        "display_name": "Performance Engineer",
+        "description": "Finds bottlenecks, reduces bundle size, and improves runtime performance.",
+        "author": "octopus",
+        "category": "specialist",
+        "tags": ["performance", "profiling", "optimization"],
+        "icon": "⚙️",
+        "featured": False,
+    },
+    {
+        "id": "cli_builder",
+        "display_name": "CLI Builder",
+        "description": "Designs commands, flags, help text, and ergonomic terminal-first workflows.",
+        "author": "octopus",
+        "category": "coder",
+        "tags": ["cli", "terminal", "argparse"],
+        "icon": "⌨️",
+        "featured": False,
+    },
+    {
+        "id": "database_migrator",
+        "display_name": "Database Migrator",
+        "description": "Plans safe schema changes, backfills, and rollback-aware migrations.",
+        "author": "octopus",
+        "category": "specialist",
+        "tags": ["database", "migration", "sql"],
+        "icon": "🗃️",
+        "featured": False,
+    },
+    {
+        "id": "observability_ops",
+        "display_name": "Observability Ops",
+        "description": "Improves logs, metrics, tracing, and alertability for production services.",
+        "author": "octopus",
+        "category": "automation",
+        "tags": ["logs", "metrics", "tracing"],
+        "icon": "📡",
+        "featured": False,
+    },
+    {
+        "id": "prompt_designer",
+        "display_name": "Prompt Designer",
+        "description": "Tunes prompts, structured outputs, and tool-use contracts for AI products.",
+        "author": "octopus",
+        "category": "creative",
+        "tags": ["prompt", "llm", "ai"],
+        "icon": "✨",
+        "featured": False,
+    },
+    {
+        "id": "workflow_automator",
+        "display_name": "Workflow Automator",
+        "description": "Builds repeatable workflow, task, and ops automations across tools.",
+        "author": "octopus",
+        "category": "automation",
+        "tags": ["workflow", "ops", "automation"],
+        "icon": "🔁",
+        "featured": False,
+    },
+    {
+        "id": "knowledge_curator",
+        "display_name": "Knowledge Curator",
+        "description": "Collects scattered project knowledge into reusable reference pages and guides.",
+        "author": "octopus",
+        "category": "assistant",
+        "tags": ["knowledge", "wiki", "curation"],
+        "icon": "📚",
+        "featured": False,
+    },
+    {
+        "id": "content_strategist",
+        "display_name": "Content Strategist",
+        "description": "Creates landing copy, positioning, and campaign messaging for product launches.",
+        "author": "octopus",
+        "category": "creative",
+        "tags": ["marketing", "copywriting", "content"],
+        "icon": "📣",
+        "featured": False,
+    },
+    {
+        "id": "support_triager",
+        "display_name": "Support Triager",
+        "description": "Turns user reports into repro steps, suspected root causes, and fix tickets.",
+        "author": "octopus",
+        "category": "assistant",
+        "tags": ["support", "triage", "issues"],
+        "icon": "🧰",
+        "featured": False,
+    },
+    {
+        "id": "browser_operator",
+        "display_name": "Browser Operator",
+        "description": "Handles browser-based workflows, form filling, and visual verification steps.",
+        "author": "octopus",
+        "category": "automation",
+        "tags": ["browser", "web", "operator"],
+        "icon": "🌐",
+        "featured": False,
+    },
+    {
+        "id": "product_analyst",
+        "display_name": "Product Analyst",
+        "description": "Converts qualitative requests into specs, risks, tradeoffs, and delivery slices.",
+        "author": "octopus",
+        "category": "researcher",
+        "tags": ["product", "spec", "analysis"],
+        "icon": "🧠",
+        "featured": False,
+    },
 ]
 
 
@@ -100,9 +299,7 @@ def _read_install_state() -> set[str]:
 
 
 def _write_install_state(installed: set[str]) -> None:
-    safe_installed = sorted(
-        agent_id for agent_id in installed if _is_safe_agent_id(agent_id)
-    )
+    safe_installed = sorted(agent_id for agent_id in installed if _is_safe_agent_id(agent_id))
     atomic_write_json(
         _INSTALL_STATE,
         {"installed": safe_installed},
@@ -196,9 +393,7 @@ def _template_skill_catalog(template: dict[str, Any]) -> list[str]:
     if not source_root.is_dir():
         return _template_private_skills(template)
     names = [
-        path.parent.name
-        for path in sorted(source_root.rglob("SKILL.md"))
-        if path.parent.is_dir()
+        path.parent.name for path in sorted(source_root.rglob("SKILL.md")) if path.parent.is_dir()
     ]
     return list(dict.fromkeys(name for name in names if name))
 
@@ -220,19 +415,23 @@ def _load_agency_templates() -> list[dict[str, Any]]:
             slug = path.stem.lower().replace("_", "-")
             agent_id = f"agency_{slug.replace('-', '_')}"
             tags = ["agency-agents", division, *[p for p in slug.split("-")[:4] if p != division]]
-            templates.append({
-                "id": agent_id,
-                "display_name": meta.get("name") or _slug_to_title(path.stem),
-                "description": meta.get("description") or meta.get("vibe") or f"{_slug_to_title(path.stem)} from The Agency.",
-                "author": "msitarzewski/agency-agents",
-                "category": category,
-                "tags": list(dict.fromkeys(tags)),
-                "icon": meta.get("emoji") or "🤖",
-                "featured": False,
-                "source_repo": "agency-agents",
-                "source_path": str(path.relative_to(_AGENCY_AGENTS_ROOT)),
-                "source_url": f"https://github.com/msitarzewski/agency-agents/blob/main/{path.relative_to(_AGENCY_AGENTS_ROOT).as_posix()}",
-            })
+            templates.append(
+                {
+                    "id": agent_id,
+                    "display_name": meta.get("name") or _slug_to_title(path.stem),
+                    "description": meta.get("description")
+                    or meta.get("vibe")
+                    or f"{_slug_to_title(path.stem)} from The Agency.",
+                    "author": "msitarzewski/agency-agents",
+                    "category": category,
+                    "tags": list(dict.fromkeys(tags)),
+                    "icon": meta.get("emoji") or "🤖",
+                    "featured": False,
+                    "source_repo": "agency-agents",
+                    "source_path": str(path.relative_to(_AGENCY_AGENTS_ROOT)),
+                    "source_url": f"https://github.com/msitarzewski/agency-agents/blob/main/{path.relative_to(_AGENCY_AGENTS_ROOT).as_posix()}",
+                }
+            )
     return templates
 
 
@@ -265,23 +464,31 @@ def _load_financial_services_templates() -> list[dict[str, Any]]:
         agent_id = f"financial_{slug.replace('-', '_')}"
         repo_path = Path("plugins") / path.relative_to(_FINANCIAL_SERVICES_ROOT)
         key_skills = _parse_agent_key_skills(body)
-        skill_source_root = str((path.parent.parent / "skills").relative_to(_FINANCIAL_SERVICES_ROOT))
-        tags = ["financial-services", "finance", *[p for p in slug.split("-") if p not in {"agent"}]]
-        templates.append({
-            "id": agent_id,
-            "display_name": display_names.get(slug, _slug_to_title(slug)),
-            "description": meta["description"],
-            "author": "anthropics/financial-services",
-            "category": "financial",
-            "tags": list(dict.fromkeys(tags)),
-            "icon": icons.get(slug, "💼"),
-            "featured": False,
-            "source_repo": "financial-services",
-            "source_path": str(path.relative_to(_FINANCIAL_SERVICES_ROOT)),
-            "source_url": f"https://github.com/anthropics/financial-services/blob/main/{repo_path.as_posix()}",
-            "private_skills": key_skills,
-            "skill_source_root": skill_source_root,
-        })
+        skill_source_root = str(
+            (path.parent.parent / "skills").relative_to(_FINANCIAL_SERVICES_ROOT)
+        )
+        tags = [
+            "financial-services",
+            "finance",
+            *[p for p in slug.split("-") if p not in {"agent"}],
+        ]
+        templates.append(
+            {
+                "id": agent_id,
+                "display_name": display_names.get(slug, _slug_to_title(slug)),
+                "description": meta["description"],
+                "author": "anthropics/financial-services",
+                "category": "financial",
+                "tags": list(dict.fromkeys(tags)),
+                "icon": icons.get(slug, "💼"),
+                "featured": False,
+                "source_repo": "financial-services",
+                "source_path": str(path.relative_to(_FINANCIAL_SERVICES_ROOT)),
+                "source_url": f"https://github.com/anthropics/financial-services/blob/main/{repo_path.as_posix()}",
+                "private_skills": key_skills,
+                "skill_source_root": skill_source_root,
+            }
+        )
     return templates
 
 
@@ -315,24 +522,24 @@ def _load_hardware_startup_templates() -> list[dict[str, Any]]:
         slug = str(meta["name"]).strip().lower().replace("_", "-")
         agent_id = f"hardware_{slug.replace('-', '_')}"
         key_skills = _parse_agent_key_skills(body)
-        skill_source_root = str(
-            (path.parent.parent / "skills").relative_to(_HARDWARE_STARTUP_ROOT)
-        )
+        skill_source_root = str((path.parent.parent / "skills").relative_to(_HARDWARE_STARTUP_ROOT))
         tags = ["hardware-startup", *[p for p in slug.split("-") if p not in {"agent"}]]
-        templates.append({
-            "id": agent_id,
-            "display_name": display_names.get(slug, _slug_to_title(slug)),
-            "description": meta["description"],
-            "author": "octopus/hardware-startup",
-            "category": "specialist",
-            "tags": list(dict.fromkeys(tags)),
-            "icon": icons.get(slug, "🛠️"),
-            "featured": False,
-            "source_repo": "hardware-startup",
-            "source_path": str(path.relative_to(_HARDWARE_STARTUP_ROOT)),
-            "private_skills": key_skills,
-            "skill_source_root": skill_source_root,
-        })
+        templates.append(
+            {
+                "id": agent_id,
+                "display_name": display_names.get(slug, _slug_to_title(slug)),
+                "description": meta["description"],
+                "author": "octopus/hardware-startup",
+                "category": "specialist",
+                "tags": list(dict.fromkeys(tags)),
+                "icon": icons.get(slug, "🛠️"),
+                "featured": False,
+                "source_repo": "hardware-startup",
+                "source_path": str(path.relative_to(_HARDWARE_STARTUP_ROOT)),
+                "private_skills": key_skills,
+                "skill_source_root": skill_source_root,
+            }
+        )
     return templates
 
 
@@ -382,12 +589,14 @@ def _register_public_prompt_skills(skill_registry: Any, skills_root: Path) -> in
     try:
         from runtime.execution.suckers.market_skills import register_market_skills
 
-        return int(register_market_skills(
-            skill_registry,
-            all_skills_dir=skills_root,
-            respect_enabled_flag=False,
-            verify_tests=False,
-        ))
+        return int(
+            register_market_skills(
+                skill_registry,
+                all_skills_dir=skills_root,
+                respect_enabled_flag=False,
+                verify_tests=False,
+            )
+        )
     except Exception:  # noqa: BLE001 - copied skills are optional; agent still installs
         return 0
 
@@ -494,8 +703,7 @@ def _is_market_managed_agent(
         return False
     return (
         str(profile.get("templateId") or "").strip() == agent_id
-        and str(profile.get("creator") or "").strip()
-        == str(template.get("author") or "").strip()
+        and str(profile.get("creator") or "").strip() == str(template.get("author") or "").strip()
     )
 
 
@@ -644,8 +852,10 @@ def _avatar_url_for(
     agent_dir: Path,
     profile: dict[str, Any] | None = None,
 ) -> str | None:
-    if profile is not None and "avatar" in profile and (
-        profile.get("avatar") is None or profile.get("avatar") is False
+    if (
+        profile is not None
+        and "avatar" in profile
+        and (profile.get("avatar") is None or profile.get("avatar") is False)
     ):
         return None
     for ext in ("png", "webp", "jpg", "jpeg", "svg"):
@@ -662,10 +872,7 @@ def _agent_visual_urls_for(agent_id: str, agent_dir: Path) -> dict[str, str]:
         for ext in ("png", "jpg", "jpeg", "webp", "svg"):
             path = visuals_dir / f"{view}.{ext}"
             if path.is_file():
-                urls[view] = (
-                    f"/api/agents/{agent_id}/visuals/{view}"
-                    f"?v={int(path.stat().st_mtime)}"
-                )
+                urls[view] = f"/api/agents/{agent_id}/visuals/{view}?v={int(path.stat().st_mtime)}"
                 break
 
     reference = visuals_dir / "reference.png"
@@ -694,11 +901,7 @@ def _list_local_agents() -> list[dict[str, Any]]:
             agent_id = str(profile.get("id") or agent_dir.name)
             display_name = str(profile.get("name") or agent_id)
             description = str(profile.get("description") or "")
-            icon = (
-                str(profile.get("icon") or "")
-                if "icon" in profile
-                else "🤖"
-            )
+            icon = str(profile.get("icon") or "") if "icon" in profile else "🤖"
             author = _normalize_local_author(profile.get("creator"))
             category = str(profile.get("category") or _category_for(agent_id))
             tags = _tags_for(agent_id, profile)
@@ -711,37 +914,40 @@ def _list_local_agents() -> list[dict[str, Any]]:
             # user-created folders.
             is_installed = True
             mtime = profile_path.stat().st_mtime
-            agents.append({
-                "id": agent_id,
-                "name": agent_id,
-                "display_name": display_name,
-                "description": description,
-                "author": author,
-                "category": category,
-                "tags": tags,
-                "icon": icon,
-                "avatar_url": avatar_url,
-                "visual_urls": _agent_visual_urls_for(agent_id, agent_dir),
-                "character_profile": profile.get("character_profile") or None,
-                "model": _model_name_for_wire(profile.get("model")),
-                "tool_groups": tool_registry["arms"],
-                "extra_affinity": tool_registry["extra_affinity"],
-                "private_skills": private_skills,
-                "capabilities": profile.get("capabilities") or {},
-                "version": str(profile.get("templateVersion") or "1.0.0"),
-                "downloads": 0,
-                "rating": 4.6 if is_official else 4.2,
-                "rating_count": 0,
-                "is_featured": agent_id in {"general", "coder", "ecommerce_mind", "vibe_selling"},
-                "is_official": is_official,
-                "is_installed": is_installed,
-                "created_at": str(mtime),
-                "key_skills": private_skills or profile.get("key_skills") or [],
-                "available_skills": profile.get("available_skills")
-                or private_skills
-                or profile.get("key_skills")
-                or [],
-            })
+            agents.append(
+                {
+                    "id": agent_id,
+                    "name": agent_id,
+                    "display_name": display_name,
+                    "description": description,
+                    "author": author,
+                    "category": category,
+                    "tags": tags,
+                    "icon": icon,
+                    "avatar_url": avatar_url,
+                    "visual_urls": _agent_visual_urls_for(agent_id, agent_dir),
+                    "character_profile": profile.get("character_profile") or None,
+                    "model": _model_name_for_wire(profile.get("model")),
+                    "tool_groups": tool_registry["arms"],
+                    "extra_affinity": tool_registry["extra_affinity"],
+                    "private_skills": private_skills,
+                    "capabilities": profile.get("capabilities") or {},
+                    "version": str(profile.get("templateVersion") or "1.0.0"),
+                    "downloads": 0,
+                    "rating": 4.6 if is_official else 4.2,
+                    "rating_count": 0,
+                    "is_featured": agent_id
+                    in {"general", "coder", "ecommerce_mind", "vibe_selling"},
+                    "is_official": is_official,
+                    "is_installed": is_installed,
+                    "created_at": str(mtime),
+                    "key_skills": private_skills or profile.get("key_skills") or [],
+                    "available_skills": profile.get("available_skills")
+                    or private_skills
+                    or profile.get("key_skills")
+                    or [],
+                }
+            )
             seen.add(agent_id)
 
     # 本地角色库只保留物理存在于 agents/ 下的默认角色(含 echo 9 角色 + 系统内建
@@ -829,7 +1035,13 @@ def create_agent_world_router(
             agents = [a for a in agents if a["category"] == category]
         if search:
             q = search.lower()
-            agents = [a for a in agents if q in a["display_name"].lower() or q in a["description"].lower() or any(q in t for t in a["tags"])]
+            agents = [
+                a
+                for a in agents
+                if q in a["display_name"].lower()
+                or q in a["description"].lower()
+                or any(q in t for t in a["tags"])
+            ]
         if sort == "rating":
             agents.sort(key=lambda a: a["rating"], reverse=True)
         elif sort == "created_at":
@@ -837,9 +1049,11 @@ def create_agent_world_router(
         elif sort == "name":
             agents.sort(key=lambda a: a["display_name"].lower())
         else:
-            agents.sort(key=lambda a: (a["downloads"], a["is_featured"], a["is_official"]), reverse=True)
+            agents.sort(
+                key=lambda a: (a["downloads"], a["is_featured"], a["is_official"]), reverse=True
+            )
         total = len(agents)
-        paged = agents[offset:offset + limit]
+        paged = agents[offset : offset + limit]
         page = offset // limit + 1
         return {"agents": paged, "total": total, "page": page, "page_size": limit}
 
@@ -899,9 +1113,8 @@ def create_agent_world_router(
         try:
             _write_install_state(installed)
         except OSError as exc:
-            if (
-                not had_agent_root
-                and _is_market_managed_agent(agent_root, agent_id, template=template, installed=installed)
+            if not had_agent_root and _is_market_managed_agent(
+                agent_root, agent_id, template=template, installed=installed
             ):
                 shutil.rmtree(agent_root, ignore_errors=True)
             raise HTTPException(
@@ -933,7 +1146,9 @@ def create_agent_world_router(
             raise HTTPException(400, str(exc)) from exc
         template = _template_by_id(agent_id)
         if not template:
-            raise HTTPException(400, f"agent is local and cannot be uninstalled from market: {agent_id}")
+            raise HTTPException(
+                400, f"agent is local and cannot be uninstalled from market: {agent_id}"
+            )
         installed = _read_install_state()
         agent_root = default_agents_root() / agent_id
         if agent_root.exists() or agent_root.is_symlink():
@@ -1014,7 +1229,9 @@ def create_agent_world_router(
         )
 
         path = str(body.get("path") or "").strip()
-        agent_name = str(body.get("agent_name") or body.get("agentId") or body.get("agent_id") or "").strip()
+        agent_name = str(
+            body.get("agent_name") or body.get("agentId") or body.get("agent_id") or ""
+        ).strip()
         if not path:
             raise HTTPException(400, "path is required")
         if not agent_name:

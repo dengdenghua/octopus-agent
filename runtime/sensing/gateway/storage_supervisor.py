@@ -217,9 +217,7 @@ def start_storage_heartbeat() -> None:
             return
         _heartbeat_started = True
         _state["heartbeat"] = True
-    threading.Thread(
-        target=_heartbeat_loop, name="storage-heartbeat", daemon=True
-    ).start()
+    threading.Thread(target=_heartbeat_loop, name="storage-heartbeat", daemon=True).start()
     _LOG.info("octopus-storage heartbeat supervisor started")
 
 

@@ -142,8 +142,7 @@ def _generate_with_agnes(
         image.strip() for image in (reference_images or []) if image and image.strip()
     ][:3]
     model = (
-        os.getenv("AGNES_IMAGE_REFERENCE_MODEL", "").strip()
-        or "agnes-image-2.0-flash"
+        os.getenv("AGNES_IMAGE_REFERENCE_MODEL", "").strip() or "agnes-image-2.0-flash"
         if clean_reference_images
         else agnes_config["model"]
     )
@@ -202,9 +201,7 @@ def _generate_with_agnes(
 
 def _resolve_agnes_config() -> dict[str, str]:
     env_key = (os.getenv("AGNES_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
-    env_base_url = (
-        os.getenv("AGNES_BASE_URL", "").strip() or "https://apihub.agnes-ai.com/v1"
-    )
+    env_base_url = os.getenv("AGNES_BASE_URL", "").strip() or "https://apihub.agnes-ai.com/v1"
     env_model = os.getenv("AGNES_IMAGE_MODEL", "").strip()
     config = {
         "api_key": env_key,
@@ -388,9 +385,7 @@ def _write_agnes_image_result(data: dict[str, Any], output: Path, *, timeout: in
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             output.write_bytes(resp.read())
     except OSError as exc:
-        raise RuntimeError(
-            f"agnes image download failed: {type(exc).__name__}: {exc}"
-        ) from exc
+        raise RuntimeError(f"agnes image download failed: {type(exc).__name__}: {exc}") from exc
 
 
 def _postprocess_agent_visual(path: Path) -> None:
@@ -658,7 +653,9 @@ def _make_avatar_from_front(front_path: Path, avatar_path: Path) -> Path | None:
     crop = image.crop((left, top, right, bottom))
     canvas_size = max(crop.width, crop.height)
     canvas = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
-    canvas.alpha_composite(crop, ((canvas_size - crop.width) // 2, (canvas_size - crop.height) // 2))
+    canvas.alpha_composite(
+        crop, ((canvas_size - crop.width) // 2, (canvas_size - crop.height) // 2)
+    )
     avatar = canvas.resize((512, 512), Image.Resampling.LANCZOS)
     avatar_path.parent.mkdir(parents=True, exist_ok=True)
     avatar.save(avatar_path)
@@ -677,9 +674,7 @@ def _generate_with_command(
     if not command_template and provider == "opencli-jimeng":
         command_template = 'opencli jimeng generate --prompt "$prompt" --output "$output"'
     if not command_template:
-        raise RuntimeError(
-            "OCTOPUS_IMAGE_GEN_COMMAND is required for this image provider"
-        )
+        raise RuntimeError("OCTOPUS_IMAGE_GEN_COMMAND is required for this image provider")
 
     output = output_dir / "reference.png"
     # 对用户可控的文本字段进行 shell 转义,防止命令注入。
@@ -785,13 +780,13 @@ def _mock_visual_svg(*, agent_id: str, display_name: str, view: str) -> str:
   <g opacity="{opacity}" filter="url(#glow)">
     <rect x="{320 - width / 2:.1f}" y="220" width="{width}" height="330" rx="{min(width / 2, 92):.1f}" fill="url(#body)" opacity=".22" stroke="#7dd3fc" stroke-width="2"/>
     <circle cx="320" cy="260" r="{58 if view != "side" else 45}" fill="url(#core)"/>
-    <rect x="{320 - width * .34:.1f}" y="320" width="{width * .68:.1f}" height="202" rx="{width * .22:.1f}" fill="url(#body)" stroke="#facc15" stroke-width="2" opacity=".96"/>
-    <path d="M{320 - width * .42:.1f} 396 C{320 - width * .75:.1f} 448 {320 - width * .72:.1f} 540 {320 - width * .36:.1f} 584" fill="none" stroke="#f472b6" stroke-width="34" stroke-linecap="round"/>
-    <path d="M{320 + width * .42:.1f} 396 C{320 + width * .75:.1f} 448 {320 + width * .72:.1f} 540 {320 + width * .36:.1f} 584" fill="none" stroke="#f472b6" stroke-width="34" stroke-linecap="round"/>
-    <path d="M{320 - width * .2:.1f} 514 C{320 - width * .42:.1f} 586 {320 - width * .3:.1f} 650 {320 - width * .05:.1f} 670" fill="none" stroke="#df3cf0" stroke-width="32" stroke-linecap="round"/>
-    <path d="M{320 + width * .2:.1f} 514 C{320 + width * .42:.1f} 586 {320 + width * .3:.1f} 650 {320 + width * .05:.1f} 670" fill="none" stroke="#df3cf0" stroke-width="32" stroke-linecap="round"/>
-    <circle cx="{320 - width * .42:.1f}" cy="246" r="14" fill="#37306b"/>
-    <circle cx="{320 + width * .42:.1f}" cy="246" r="14" fill="#37306b"/>
+    <rect x="{320 - width * 0.34:.1f}" y="320" width="{width * 0.68:.1f}" height="202" rx="{width * 0.22:.1f}" fill="url(#body)" stroke="#facc15" stroke-width="2" opacity=".96"/>
+    <path d="M{320 - width * 0.42:.1f} 396 C{320 - width * 0.75:.1f} 448 {320 - width * 0.72:.1f} 540 {320 - width * 0.36:.1f} 584" fill="none" stroke="#f472b6" stroke-width="34" stroke-linecap="round"/>
+    <path d="M{320 + width * 0.42:.1f} 396 C{320 + width * 0.75:.1f} 448 {320 + width * 0.72:.1f} 540 {320 + width * 0.36:.1f} 584" fill="none" stroke="#f472b6" stroke-width="34" stroke-linecap="round"/>
+    <path d="M{320 - width * 0.2:.1f} 514 C{320 - width * 0.42:.1f} 586 {320 - width * 0.3:.1f} 650 {320 - width * 0.05:.1f} 670" fill="none" stroke="#df3cf0" stroke-width="32" stroke-linecap="round"/>
+    <path d="M{320 + width * 0.2:.1f} 514 C{320 + width * 0.42:.1f} 586 {320 + width * 0.3:.1f} 650 {320 + width * 0.05:.1f} 670" fill="none" stroke="#df3cf0" stroke-width="32" stroke-linecap="round"/>
+    <circle cx="{320 - width * 0.42:.1f}" cy="246" r="14" fill="#37306b"/>
+    <circle cx="{320 + width * 0.42:.1f}" cy="246" r="14" fill="#37306b"/>
   </g>
   <text x="320" y="764" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#ffffff">{safe_name}</text>
 </svg>"""
@@ -799,8 +794,5 @@ def _mock_visual_svg(*, agent_id: str, display_name: str, view: str) -> str:
 
 def _escape_xml(value: str) -> str:
     return (
-        value.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )

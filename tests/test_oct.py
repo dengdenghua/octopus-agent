@@ -79,16 +79,21 @@ class _FakeHttp:
     def _key(self, url: str) -> str:
         return url.rstrip("/").rsplit("/", 1)[-1]
 
-    def post(self, url: str, json: dict | None = None, headers: dict | None = None, timeout: Any = None) -> _Resp:
+    def post(
+        self, url: str, json: dict | None = None, headers: dict | None = None, timeout: Any = None
+    ) -> _Resp:
         self.calls.append(("POST", url, headers))
         return self.routes[self._key(url)]
 
-    def get(self, url: str, headers: dict | None = None, params: dict | None = None, timeout: Any = None) -> _Resp:
+    def get(
+        self, url: str, headers: dict | None = None, params: dict | None = None, timeout: Any = None
+    ) -> _Resp:
         self.calls.append(("GET", url, headers))
         return self.routes[self._key(url)]
 
 
 # ─── config ─────────────────────────────────────────────
+
 
 def test_config_defaults() -> None:
     c = OctConfig()
@@ -104,6 +109,7 @@ def test_load_config_from_dict() -> None:
 
 # ─── client helpers ─────────────────────────────────────
 
+
 def test_mask_email() -> None:
     assert mask_email("alice@example.com") == "a***@example.com"
     assert mask_email("nope") == "***"
@@ -117,7 +123,9 @@ def test_dead_token_and_credits_codes() -> None:
 
 def test_post_public_parses() -> None:
     fake = _FakeHttp({"login": _Resp({"token": "jwt", "userId": "u1"})})
-    out = post_public("https://x/auth/email/login", {"email": "a@b.com"}, timeout=5, http_client=fake)
+    out = post_public(
+        "https://x/auth/email/login", {"email": "a@b.com"}, timeout=5, http_client=fake
+    )
     assert out["token"] == "jwt"
 
 
@@ -131,9 +139,12 @@ def test_get_auth_sends_bearer_and_raises_on_4xx() -> None:
 
 # ─── links store ────────────────────────────────────────
 
+
 def test_link_store_roundtrip(tmp_path: Any) -> None:
     store = OctLinkStore(path=tmp_path / "l.json")
-    store.put(OctLink(octopus_user_id="oct:a@b.com", oct_user_id="u1", oct_token="jwt", email="a@b.com"))
+    store.put(
+        OctLink(octopus_user_id="oct:a@b.com", oct_user_id="u1", oct_token="jwt", email="a@b.com")
+    )
     assert store.get("oct:a@b.com").oct_token == "jwt"
     assert store.all_actor_ids() == ["oct:a@b.com"]
     store.update_credits("oct:a@b.com", {"credits": 100}, now=1.0)
@@ -150,9 +161,12 @@ def test_actor_from_email_lowercases() -> None:
 
 # ─── auth router (TestClient + fake gateway) ─────────────
 
+
 def _auth_app(routes: dict[str, _Resp], *, store: OctLinkStore, enabled: bool = True) -> TestClient:
     cfg = OctConfig(enabled=enabled)
-    router = create_auth_router(config=cfg, link_store=store, jwt_secret=_SECRET, http_client=_FakeHttp(routes))
+    router = create_auth_router(
+        config=cfg, link_store=store, jwt_secret=_SECRET, http_client=_FakeHttp(routes)
+    )
     app = FastAPI()
     app.include_router(router)
     return TestClient(app)
@@ -161,8 +175,12 @@ def _auth_app(routes: dict[str, _Resp], *, store: OctLinkStore, enabled: bool = 
 def test_email_login_stores_link_and_issues_jwt(tmp_path: Any) -> None:
     store = OctLinkStore(path=tmp_path / "l.json")
     client = _auth_app(
-        {"send": _Resp({"ok": True, "ttlSeconds": 300}),
-         "login": _Resp({"token": "gw-jwt", "userId": "u1", "email": "a@b.com", "isNewUser": True})},
+        {
+            "send": _Resp({"ok": True, "ttlSeconds": 300}),
+            "login": _Resp(
+                {"token": "gw-jwt", "userId": "u1", "email": "a@b.com", "isNewUser": True}
+            ),
+        },
         store=store,
     )
     assert client.post("/api/auth/oct/email/send", json={"email": "a@b.com"}).status_code == 200
@@ -186,7 +204,9 @@ def test_email_login_bad_code_is_401(tmp_path: Any) -> None:
 def test_email_bad_format_is_400(tmp_path: Any) -> None:
     store = OctLinkStore(path=tmp_path / "l.json")
     client = _auth_app({"send": _Resp({"ok": True})}, store=store)
-    assert client.post("/api/auth/oct/email/send", json={"email": "not-an-email"}).status_code == 400
+    assert (
+        client.post("/api/auth/oct/email/send", json={"email": "not-an-email"}).status_code == 400
+    )
 
 
 def test_disabled_returns_503(tmp_path: Any) -> None:
@@ -197,6 +217,7 @@ def test_disabled_returns_503(tmp_path: Any) -> None:
 
 # ─── account router ─────────────────────────────────────
 
+
 def _bearer(actor: str = "oct:a@b.com") -> dict[str, str]:
     import time
 
@@ -204,20 +225,27 @@ def _bearer(actor: str = "oct:a@b.com") -> dict[str, str]:
 
     now = int(time.time())
     token = encode_jwt_hs256(
-        {"sub": actor, "iat": now, "exp": now + 3600, "iss": "octopus-agent"}, secret=_SECRET,
+        {"sub": actor, "iat": now, "exp": now + 3600, "iss": "octopus-agent"},
+        secret=_SECRET,
     )
     return {"Authorization": f"Bearer {token}"}
 
 
-def _account_app(routes: dict[str, _Resp], *, store: OctLinkStore, actor: str = "oct:a@b.com") -> TestClient:
+def _account_app(
+    routes: dict[str, _Resp], *, store: OctLinkStore, actor: str = "oct:a@b.com"
+) -> TestClient:
     from runtime.safety.auth.identity import Identity, IdentityStore
 
     ids = IdentityStore()
     ids.add(Identity(actor_id=actor, roles=("user", "oct"), metadata={"provider": "oct"}))
     cfg = OctConfig(enabled=True)
     router = create_account_router(
-        config=cfg, link_store=store, identity_store=ids, require_auth=False,
-        jwt_secret=_SECRET, http_client=_FakeHttp(routes),
+        config=cfg,
+        link_store=store,
+        identity_store=ids,
+        require_auth=False,
+        jwt_secret=_SECRET,
+        http_client=_FakeHttp(routes),
     )
     app = FastAPI()
     app.include_router(router)
@@ -226,10 +254,14 @@ def _account_app(routes: dict[str, _Resp], *, store: OctLinkStore, actor: str = 
 
 def test_account_refresh_pulls_balance_membership(tmp_path: Any) -> None:
     store = OctLinkStore(path=tmp_path / "l.json")
-    store.put(OctLink(octopus_user_id="oct:a@b.com", oct_user_id="u1", oct_token="jwt", email="a@b.com"))
+    store.put(
+        OctLink(octopus_user_id="oct:a@b.com", oct_user_id="u1", oct_token="jwt", email="a@b.com")
+    )
     client = _account_app(
-        {"balance": _Resp({"credits": 500, "paidCredits": 500}),
-         "membership": _Resp({"active": True, "remainingDays": 10})},
+        {
+            "balance": _Resp({"credits": 500, "paidCredits": 500}),
+            "membership": _Resp({"active": True, "remainingDays": 10}),
+        },
         store=store,
     )
     r = client.post("/api/account/oct/refresh", headers=_bearer())
@@ -246,15 +278,26 @@ def test_account_404_when_no_link(tmp_path: Any) -> None:
 
 # ─── model router ───────────────────────────────────────
 
+
 def test_model_router_calls_gateway_and_meters(tmp_path: Any) -> None:
     store = OctLinkStore(path=tmp_path / "l.json")
-    store.put(OctLink(octopus_user_id="oct:a@b.com", oct_user_id="u1", oct_token="gw-jwt", email="a@b.com"))
-    chat = _Resp({"choices": [{"message": {"content": "hi"}}],
-                  "usage": {"prompt_tokens": 12, "completion_tokens": 7}})
+    store.put(
+        OctLink(
+            octopus_user_id="oct:a@b.com", oct_user_id="u1", oct_token="gw-jwt", email="a@b.com"
+        )
+    )
+    chat = _Resp(
+        {
+            "choices": [{"message": {"content": "hi"}}],
+            "usage": {"prompt_tokens": 12, "completion_tokens": 7},
+        }
+    )
     mr = OctModelRouter(link_store=store, http_client=_FakeHttp({"completions": chat}))
     tok = current_actor.set("oct:a@b.com")
     try:
-        resp = mr.call(ModelRequest(model="qwen3.5-flash", messages=[Message(role="user", content="hi")]))
+        resp = mr.call(
+            ModelRequest(model="qwen3.5-flash", messages=[Message(role="user", content="hi")])
+        )
     finally:
         current_actor.reset(tok)
     assert resp.text == "hi" and resp.input_tokens == 12 and resp.output_tokens == 7
@@ -264,7 +307,9 @@ def test_model_router_calls_gateway_and_meters(tmp_path: Any) -> None:
 def test_model_router_401_raises_credentials(tmp_path: Any) -> None:
     store = OctLinkStore(path=tmp_path / "l.json")
     store.put(OctLink(octopus_user_id="oct:a@b.com", oct_user_id="u1", oct_token="gw-jwt"))
-    mr = OctModelRouter(link_store=store, http_client=_FakeHttp({"completions": _Resp({"d": 1}, status=401)}))
+    mr = OctModelRouter(
+        link_store=store, http_client=_FakeHttp({"completions": _Resp({"d": 1}, status=401)})
+    )
     tok = current_actor.set("oct:a@b.com")
     try:
         with pytest.raises(OctCredentialsRequired):
@@ -276,7 +321,9 @@ def test_model_router_401_raises_credentials(tmp_path: Any) -> None:
 def test_model_router_402_raises_runtime(tmp_path: Any) -> None:
     store = OctLinkStore(path=tmp_path / "l.json")
     store.put(OctLink(octopus_user_id="oct:a@b.com", oct_user_id="u1", oct_token="gw-jwt"))
-    mr = OctModelRouter(link_store=store, http_client=_FakeHttp({"completions": _Resp({"d": 1}, status=402)}))
+    mr = OctModelRouter(
+        link_store=store, http_client=_FakeHttp({"completions": _Resp({"d": 1}, status=402)})
+    )
     tok = current_actor.set("oct:a@b.com")
     try:
         with pytest.raises(RuntimeError, match="积分"):
@@ -294,15 +341,21 @@ def test_model_router_no_actor_raises(tmp_path: Any) -> None:
 
 # ─── fallback router (actor 感知,保 P0) ──────────────────
 
+
 class _Tag(ModelRouter):
     def __init__(self, tag: str) -> None:
         self.tag = tag
         self.default_model = "m-" + tag
 
     def call(self, request: ModelRequest) -> ModelResponse:
-        return ModelResponse(text=self.tag, input_tokens=1, output_tokens=1,
-                             cost=CostEntry(tokens_in=1, tokens_out=1, usd=0.0),
-                             model="x", provider=self.tag)
+        return ModelResponse(
+            text=self.tag,
+            input_tokens=1,
+            output_tokens=1,
+            cost=CostEntry(tokens_in=1, tokens_out=1, usd=0.0),
+            model="x",
+            provider=self.tag,
+        )
 
 
 def _fb(store: OctLinkStore) -> OctFallbackRouter:
@@ -331,7 +384,9 @@ def test_fallback_actor_no_link_uses_self(tmp_path: Any) -> None:
 
 def test_fallback_actor_with_link_uses_oct(tmp_path: Any) -> None:
     store = OctLinkStore(path=tmp_path / "l.json")
-    store.put(OctLink(octopus_user_id="oct:a@b.com", oct_user_id="u1", oct_token="jwt", email="a@b.com"))
+    store.put(
+        OctLink(octopus_user_id="oct:a@b.com", oct_user_id="u1", oct_token="jwt", email="a@b.com")
+    )
     assert _call_fb(_fb(store), "oct:a@b.com") == "OCT"
 
 
@@ -343,6 +398,7 @@ def test_fallback_invalid_token_uses_self(tmp_path: Any) -> None:
 
 
 # ─── 审查后加固(评审 #1/#2/#9/#6)───────────────────────
+
 
 def _tools_request() -> ModelRequest:
     from runtime.sensing.model_router.models import ToolSpec
@@ -368,7 +424,9 @@ def test_model_router_401_marks_token_invalid(tmp_path: Any) -> None:
     # 评审 #9:401 时标记 link 失效 → 下回合 OctFallbackRouter 降级自配
     store = OctLinkStore(path=tmp_path / "l.json")
     store.put(OctLink(octopus_user_id="oct:a@b.com", oct_user_id="u1", oct_token="gw-jwt"))
-    mr = OctModelRouter(link_store=store, http_client=_FakeHttp({"completions": _Resp({"d": 1}, status=401)}))
+    mr = OctModelRouter(
+        link_store=store, http_client=_FakeHttp({"completions": _Resp({"d": 1}, status=401)})
+    )
     tok = current_actor.set("oct:a@b.com")
     try:
         with pytest.raises(OctCredentialsRequired):

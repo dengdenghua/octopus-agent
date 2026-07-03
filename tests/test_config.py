@@ -47,7 +47,7 @@ class TestSchemaDefaults:
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
-            PlannerConfig(type="weird")   # type: ignore[arg-type]
+            PlannerConfig(type="weird")  # type: ignore[arg-type]
 
     def test_budget_must_be_positive(self):
         from pydantic import ValidationError
@@ -83,14 +83,14 @@ class TestLoadFromDict:
         assert cfg.planner.type == "static"  # default
 
     def test_full_config(self):
-        cfg = load_from_dict({
-            "name": "x",
-            "planner": {"type": "llm", "model": "mock/test"},
-            "budget": {"max_tokens": 1000, "max_usd": 0.05},
-            "intel_sources": [
-                {"source_id": "s1", "query": "q1"}
-            ],
-        })
+        cfg = load_from_dict(
+            {
+                "name": "x",
+                "planner": {"type": "llm", "model": "mock/test"},
+                "budget": {"max_tokens": 1000, "max_usd": 0.05},
+                "intel_sources": [{"source_id": "s1", "query": "q1"}],
+            }
+        )
         assert cfg.planner.type == "llm"
         assert cfg.budget.max_tokens == 1000
         assert len(cfg.intel_sources) == 1
@@ -104,27 +104,25 @@ class TestLoadFromDict:
 class TestEnvInterpolation:
     def test_env_var_substituted(self, monkeypatch):
         monkeypatch.setenv("MY_KEY", "sk-secret")
-        cfg = load_from_dict({
-            "planner": {
-                "type": "llm",
-                "model": "claude-haiku-4-5",
-                "anthropic_api_key": "${MY_KEY}",
+        cfg = load_from_dict(
+            {
+                "planner": {
+                    "type": "llm",
+                    "model": "claude-haiku-4-5",
+                    "anthropic_api_key": "${MY_KEY}",
+                }
             }
-        })
+        )
         assert cfg.planner.anthropic_api_key == "sk-secret"
 
     def test_missing_env_becomes_empty(self, monkeypatch):
         monkeypatch.delenv("NOT_SET_12345", raising=False)
-        cfg = load_from_dict({
-            "planner": {"type": "llm", "mock_response": "${NOT_SET_12345}"}
-        })
+        cfg = load_from_dict({"planner": {"type": "llm", "mock_response": "${NOT_SET_12345}"}})
         assert cfg.planner.mock_response == ""
 
     def test_nested_list_interpolation(self, monkeypatch):
         monkeypatch.setenv("TRUST", "mcp://fs/*")
-        cfg = load_from_dict({
-            "immunity": {"trusted_sources": ["skill://public/*", "${TRUST}"]}
-        })
+        cfg = load_from_dict({"immunity": {"trusted_sources": ["skill://public/*", "${TRUST}"]}})
         assert cfg.immunity.trusted_sources[1] == "mcp://fs/*"
 
 
@@ -137,10 +135,7 @@ class TestLoadFromYaml:
     def test_valid_yaml_file(self, tmp_path: Path):
         path = tmp_path / "cfg.yaml"
         path.write_text(
-            "name: test-yaml\n"
-            "planner:\n"
-            "  type: llm\n"
-            "  model: mock/test\n",
+            "name: test-yaml\nplanner:\n  type: llm\n  model: mock/test\n",
             encoding="utf-8",
         )
         cfg = load_from_yaml(path)
@@ -180,13 +175,11 @@ class TestBuildFromConfig:
         stack = build_from_config(AgentConfig())
         # 5 builtins + web (httpx available) + maybe mcp
         assert len(stack.registry) >= 5
-        assert not stack.is_llm_planner   # default static
+        assert not stack.is_llm_planner  # default static
 
     def test_llm_planner_stack(self):
         cfg = AgentConfig(
-            planner=PlannerConfig(
-                type="llm", model="mock/test", mock_response='{"nodes":[]}'
-            )
+            planner=PlannerConfig(type="llm", model="mock/test", mock_response='{"nodes":[]}')
         )
         stack = build_from_config(cfg)
         assert stack.is_llm_planner
@@ -195,13 +188,15 @@ class TestBuildFromConfig:
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
         monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
-        cfg = load_from_dict({
-            "planner": {"type": "llm", "model": "oct"},
-            "oct": {
-                "enabled": True,
-                "jwt_secret": "oct-test-secret-key-32chars-long",
-            },
-        })
+        cfg = load_from_dict(
+            {
+                "planner": {"type": "llm", "model": "oct"},
+                "oct": {
+                    "enabled": True,
+                    "jwt_secret": "oct-test-secret-key-32chars-long",
+                },
+            }
+        )
 
         stack = build_from_config(cfg)
 
@@ -218,9 +213,7 @@ class TestBuildFromConfig:
 
         from runtime.platform.models import ParsedIntent
 
-        graph = stack.planner.plan(
-            ParsedIntent(raw=goal, intent_type="task", normalized_goal=goal)
-        )
+        graph = stack.planner.plan(ParsedIntent(raw=goal, intent_type="task", normalized_goal=goal))
 
         assert graph.strategy == "research_web_search"
         assert graph.nodes[0].skill_ref == "web_search"
@@ -282,9 +275,7 @@ class TestExampleYamlFile:
         example = Path(__file__).parent.parent / "config.example.yaml"
         if not example.exists():
             pytest.skip("config.example.yaml not shipped")
-        text = example.read_text(encoding="utf-8").replace(
-            "claude-haiku-4-5-20251001", "mock/test"
-        )
+        text = example.read_text(encoding="utf-8").replace("claude-haiku-4-5-20251001", "mock/test")
         patched = tmp_path / "patched.yaml"
         patched.write_text(text, encoding="utf-8")
         cfg = load_from_yaml(patched)
@@ -312,10 +303,15 @@ class TestCLIConfigFlag:
             "  max_usd: 0.05\n",
             encoding="utf-8",
         )
-        rc = main([
-            "--no-color", "run", "list files",
-            "--config", str(cfg_path),
-        ])
+        rc = main(
+            [
+                "--no-color",
+                "run",
+                "list files",
+                "--config",
+                str(cfg_path),
+            ]
+        )
         assert rc in (0, 1)  # Implementation note.
         out = capsys.readouterr().out
         assert "config-driven" in out

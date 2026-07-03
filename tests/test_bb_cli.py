@@ -1,4 +1,5 @@
 """Cross-process blackboard CLI — real subprocesses sharing one workspace."""
+
 from __future__ import annotations
 
 import os
@@ -10,7 +11,10 @@ from pathlib import Path
 def _bb(args: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "runtime", "bb", *args],
-        env=env, capture_output=True, text=True, timeout=90,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=90,
     )
 
 
@@ -41,6 +45,5 @@ def test_bb_cli_requires_db_env(tmp_path: Path) -> None:
 
 
 def test_bb_cli_missing_key_exits_1(tmp_path: Path) -> None:
-    env = {**os.environ, "OCTOPUS_BLACKBOARD_DB": str(tmp_path / "d.db"),
-           "OCTOPUS_TURN_ID": "t1"}
+    env = {**os.environ, "OCTOPUS_BLACKBOARD_DB": str(tmp_path / "d.db"), "OCTOPUS_TURN_ID": "t1"}
     assert _bb(["get", "absent"], env).returncode == 1

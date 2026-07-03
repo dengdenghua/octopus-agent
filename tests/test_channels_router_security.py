@@ -7,6 +7,7 @@ pairings. Now all mutations require admin role.
 
 See channels_router.py ``_require_admin`` + system_router pattern.
 """
+
 from __future__ import annotations
 
 import pytest

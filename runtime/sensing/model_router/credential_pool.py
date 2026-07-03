@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import random
@@ -33,7 +32,6 @@ class PoolReport(BaseModel):
 
 
 class CredentialPool:
-
     def __init__(
         self,
         keys: list[str],
@@ -57,8 +55,7 @@ class CredentialPool:
             available = [k for k in self._keys if k not in self._exhausted]
             if not available:
                 raise AllKeysExhausted(
-                    f"all {len(self._keys)} key(s) exhausted; "
-                    f"cooldown={self._cooldown}s"
+                    f"all {len(self._keys)} key(s) exhausted; cooldown={self._cooldown}s"
                 )
             if self._strategy == "round_robin":
                 return self._acquire_round_robin(available)
@@ -84,12 +81,14 @@ class CredentialPool:
             self._recover_expired()
             stats = []
             for k in self._keys:
-                stats.append(KeyStats(
-                    key_fingerprint=_fingerprint(k),
-                    total_usd=self._usage.get(k, 0.0),
-                    total_calls=self._calls.get(k, 0),
-                    exhausted_at=self._exhausted.get(k),
-                ))
+                stats.append(
+                    KeyStats(
+                        key_fingerprint=_fingerprint(k),
+                        total_usd=self._usage.get(k, 0.0),
+                        total_calls=self._calls.get(k, 0),
+                        exhausted_at=self._exhausted.get(k),
+                    )
+                )
             return PoolReport(
                 total_keys=len(self._keys),
                 available_keys=len(self._keys) - len(self._exhausted),
@@ -121,10 +120,7 @@ class CredentialPool:
 
     def _recover_expired(self) -> None:
         now = time.monotonic()
-        expired = [
-            k for k, t in self._exhausted.items()
-            if now - t >= self._cooldown
-        ]
+        expired = [k for k, t in self._exhausted.items() if now - t >= self._cooldown]
         for k in expired:
             del self._exhausted[k]
 

@@ -31,11 +31,14 @@ from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent 
 def stack():
     cfg = AgentConfig(
         planner=PlannerConfig(
-            type="llm", model="mock/gw",
-            mock_response=json.dumps({
-                "reasoning": "r",
-                "nodes": [{"skill": "list_cwd", "args": {"path": "."}}],
-            }),
+            type="llm",
+            model="mock/gw",
+            mock_response=json.dumps(
+                {
+                    "reasoning": "r",
+                    "nodes": [{"skill": "list_cwd", "args": {"path": "."}}],
+                }
+            ),
         ),
     )
     return build_from_config(cfg)
@@ -88,10 +91,13 @@ class TestMixVirtualModel:
         assert "octopus-mix" in ids
 
     def test_chat_completion_routes_through_mix(self, client):
-        r = client.post("/v1/chat/completions", json={
-            "model": "octopus-mix",
-            "messages": [{"role": "user", "content": "explain mixture of agents"}],
-        })
+        r = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "octopus-mix",
+                "messages": [{"role": "user", "content": "explain mixture of agents"}],
+            },
+        )
         assert r.status_code == 200
         data = r.json()
         # echoes the virtual model + carries Mix provenance
@@ -104,11 +110,14 @@ class TestMixVirtualModel:
         assert isinstance(data["choices"][0]["message"]["content"], str)
 
     def test_mix_streaming_emits_valid_sse(self, client):
-        r = client.post("/v1/chat/completions", json={
-            "model": "octopus-mix",
-            "stream": True,
-            "messages": [{"role": "user", "content": "hi"}],
-        })
+        r = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "octopus-mix",
+                "stream": True,
+                "messages": [{"role": "user", "content": "hi"}],
+            },
+        )
         assert r.status_code == 200
         body = r.text
         assert "chat.completion.chunk" in body
@@ -116,15 +125,21 @@ class TestMixVirtualModel:
 
     def test_mix_config_get_and_put(self, client, monkeypatch, tmp_path):
         from runtime.sensing.gateway.openai_gateway import mix
+
         monkeypatch.setattr(mix, "_config_path", lambda: tmp_path / "mix_config.json")
         # default GET (no file yet) returns the shape with defaults
         r = client.get("/api/mix-config")
         assert r.status_code == 200
         assert set(r.json()) >= {"proposers", "aggregator", "n"}
         # PUT validates + persists, GET round-trips it
-        r = client.put("/api/mix-config", json={
-            "proposers": ["m1", "m2"], "aggregator": "agg", "n": 2,
-        })
+        r = client.put(
+            "/api/mix-config",
+            json={
+                "proposers": ["m1", "m2"],
+                "aggregator": "agg",
+                "n": 2,
+            },
+        )
         assert r.status_code == 200
         assert r.json()["proposers"] == ["m1", "m2"]
         got = client.get("/api/mix-config").json()
@@ -139,12 +154,13 @@ class TestMixVirtualModel:
 
 class TestChatCompletionsNonStream:
     def test_happy_path(self, client):
-        r = client.post("/v1/chat/completions", json={
-            "model": "octopus-agent",
-            "messages": [
-                {"role": "user", "content": "list cwd"}
-            ],
-        })
+        r = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "octopus-agent",
+                "messages": [{"role": "user", "content": "list cwd"}],
+            },
+        )
         assert r.status_code == 200
         data = r.json()
 
@@ -175,41 +191,52 @@ class TestChatCompletionsNonStream:
         assert data["octopus"]["planner_usage"]["input_tokens"] == 100
 
     def test_multimodal_content_text_extracted(self, client):
-        r = client.post("/v1/chat/completions", json={
-            "model": "octopus-agent",
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "list the current directory"},
-                    {"type": "image_url", "image_url": "data:..."},  # Implementation note.
+        r = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "octopus-agent",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "list the current directory"},
+                            {"type": "image_url", "image_url": "data:..."},  # Implementation note.
+                        ],
+                    }
                 ],
-            }],
-        })
+            },
+        )
         assert r.status_code == 200
         # Implementation note.
 
     def test_last_user_message_wins(self, client):
         """Implementation note."""
-        r = client.post("/v1/chat/completions", json={
-            "messages": [
-                {"role": "user", "content": "old question"},
-                {"role": "assistant", "content": "old answer"},
-                {"role": "user", "content": "the real goal"},
-            ],
-        })
+        r = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [
+                    {"role": "user", "content": "old question"},
+                    {"role": "assistant", "content": "old answer"},
+                    {"role": "user", "content": "the real goal"},
+                ],
+            },
+        )
         assert r.status_code == 200
 
     def test_full_history_reaches_planner_context(self, client, stack):
         """The gateway should keep the last user message as the goal
         while still passing prior turns into the planner prompt."""
-        r = client.post("/v1/chat/completions", json={
-            "messages": [
-                {"role": "system", "content": "Always prefer concise plans."},
-                {"role": "user", "content": "My project is octopus-agent."},
-                {"role": "assistant", "content": "Noted."},
-                {"role": "user", "content": "Use that context now."},
-            ],
-        })
+        r = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [
+                    {"role": "system", "content": "Always prefer concise plans."},
+                    {"role": "user", "content": "My project is octopus-agent."},
+                    {"role": "assistant", "content": "Noted."},
+                    {"role": "user", "content": "Use that context now."},
+                ],
+            },
+        )
         assert r.status_code == 200
 
         planner_request = stack.planner.router.call_log[0]
@@ -221,15 +248,18 @@ class TestChatCompletionsNonStream:
         assert "USER GOAL: Use that context now." in planner_user_prompt
 
     def test_explicit_profile_memory_reaches_planner_context(self, client, stack):
-        r = client.post("/v1/chat/completions", json={
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "remember that I prefer concise Chinese answers",
-                },
-                {"role": "user", "content": "Use my preference now."},
-            ],
-        })
+        r = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "remember that I prefer concise Chinese answers",
+                    },
+                    {"role": "user", "content": "Use my preference now."},
+                ],
+            },
+        )
         assert r.status_code == 200
 
         planner_request = stack.planner.router.call_log[0]
@@ -250,9 +280,9 @@ class TestChatCompletionsErrors:
         assert r.status_code == 400
 
     def test_only_system_no_user_400(self, client):
-        r = client.post("/v1/chat/completions", json={
-            "messages": [{"role": "system", "content": "you are x"}]
-        })
+        r = client.post(
+            "/v1/chat/completions", json={"messages": [{"role": "system", "content": "you are x"}]}
+        )
         assert r.status_code == 400
         assert "no user message" in r.json()["detail"]
 
@@ -264,9 +294,12 @@ class TestChatCompletionsErrors:
         app.include_router(create_openai_router(stack))
         client = TestClient(app)
 
-        r = client.post("/v1/chat/completions", json={
-            "messages": [{"role": "user", "content": "no rules"}],
-        })
+        r = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": "no rules"}],
+            },
+        )
         assert r.status_code == 200
         payload = r.json()
         assert payload["object"] == "chat.completion"
@@ -277,16 +310,18 @@ def test_custom_model_ignores_configured_max_tokens(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     (data_dir / "custom_models.json").write_text(
-        json.dumps({
-            "mimo2.5": {
-                "model": "mimo-v2.5-pro",
-                "max_tokens": 8192000,
-                "supports_thinking": True,
-                # Non-openai-compat custom models clamp to the gateway
-                # default (131072). Openai-compat is exercised below.
-                "provider": "anthropic",
+        json.dumps(
+            {
+                "mimo2.5": {
+                    "model": "mimo-v2.5-pro",
+                    "max_tokens": 8192000,
+                    "supports_thinking": True,
+                    # Non-openai-compat custom models clamp to the gateway
+                    # default (131072). Openai-compat is exercised below.
+                    "provider": "anthropic",
+                }
             }
-        }),
+        ),
         encoding="utf-8",
     )
     monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
@@ -304,13 +339,15 @@ def test_custom_model_without_max_tokens_uses_unbounded_default(tmp_path, monkey
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     (data_dir / "custom_models.json").write_text(
-        json.dumps({
-            "mimo2.5": {
-                "model": "mimo-v2.5-pro",
-                "supports_thinking": True,
-                "provider": "anthropic",
+        json.dumps(
+            {
+                "mimo2.5": {
+                    "model": "mimo-v2.5-pro",
+                    "supports_thinking": True,
+                    "provider": "anthropic",
+                }
             }
-        }),
+        ),
         encoding="utf-8",
     )
     monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
@@ -333,13 +370,15 @@ def test_custom_openai_compat_model_returns_unbounded(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     (data_dir / "custom_models.json").write_text(
-        json.dumps({
-            "mimo2.5": {
-                "model": "mimo-v2.5-pro",
-                "supports_thinking": True,
-                "provider": "openai-compatible",
+        json.dumps(
+            {
+                "mimo2.5": {
+                    "model": "mimo-v2.5-pro",
+                    "supports_thinking": True,
+                    "provider": "openai-compatible",
+                }
             }
-        }),
+        ),
         encoding="utf-8",
     )
     monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
@@ -367,13 +406,15 @@ def test_custom_openai_compat_models_list_variant_returns_unbounded(
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     (data_dir / "custom_models.json").write_text(
-        json.dumps({
-            "kimi-code": {
-                "models": ["kimi-for-coding"],
-                "supports_thinking": True,
-                "provider": "openai",
+        json.dumps(
+            {
+                "kimi-code": {
+                    "models": ["kimi-for-coding"],
+                    "supports_thinking": True,
+                    "provider": "openai",
+                }
             }
-        }),
+        ),
         encoding="utf-8",
     )
     monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
@@ -418,7 +459,10 @@ def test_direct_llm_fallback_strips_inline_reasoning_from_reply():
     )
 
     reply, usage = _direct_llm_fallback_with_usage(
-        _Stack(), intent, agent=None, model="gpt-5-test",
+        _Stack(),
+        intent,
+        agent=None,
+        model="gpt-5-test",
     )
 
     assert reply == "final answer"
@@ -433,7 +477,8 @@ def test_direct_llm_fallback_strips_inline_reasoning_from_reply():
 class TestChatCompletionsStream:
     def test_stream_returns_event_stream(self, client):
         with client.stream(
-            "POST", "/v1/chat/completions",
+            "POST",
+            "/v1/chat/completions",
             json={
                 "stream": True,
                 "messages": [{"role": "user", "content": "list"}],
@@ -455,7 +500,7 @@ class TestChatCompletionsStream:
             # Implementation note.
             for line in body.splitlines():
                 if line.startswith("data: ") and "[DONE]" not in line:
-                    payload = line[len("data: "):]
+                    payload = line[len("data: ") :]
                     parsed = json.loads(payload)
                     assert parsed["object"] == "chat.completion.chunk"
                     assert "choices" in parsed
@@ -508,9 +553,14 @@ class TestChatCompletionsStream:
             },
         )
 
-        events = list(_stream_direct_llm_fallback(
-            _Stack(), intent, agent=None, model="glm-test",
-        ))
+        events = list(
+            _stream_direct_llm_fallback(
+                _Stack(),
+                intent,
+                agent=None,
+                model="glm-test",
+            )
+        )
 
         assert events
         assert not any(kind == "reasoning" for kind, _delta, _final in events)
@@ -538,9 +588,12 @@ class TestMountOnUIApp:
         assert client.get("/v1/models").status_code == 200
 
         # Implementation note.
-        r = client.post("/v1/chat/completions", json={
-            "messages": [{"role": "user", "content": "list"}],
-        })
+        r = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": "list"}],
+            },
+        )
         assert r.status_code == 200
 
 
@@ -552,9 +605,12 @@ class TestMountOnUIApp:
 class TestOpenAISDKCompat:
     def test_response_matches_chatcompletion_model(self, client):
         """Implementation note."""
-        data = client.post("/v1/chat/completions", json={
-            "messages": [{"role": "user", "content": "list"}],
-        }).json()
+        data = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": "list"}],
+            },
+        ).json()
 
         # Implementation note.
         required = {"id", "object", "created", "model", "choices", "usage"}
@@ -585,10 +641,13 @@ class TestCompatPathBindsSession:
 
         monkeypatch.setattr(stack.runtime, "run", _spy_run)
 
-        r = client.post("/v1/chat/completions", json={
-            "messages": [{"role": "user", "content": "list"}],
-            "conversation_id": "convo-sync-1",
-        })
+        r = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": "list"}],
+                "conversation_id": "convo-sync-1",
+            },
+        )
         assert r.status_code == 200
         assert len(captured) == 1
         session = captured[0]
@@ -610,11 +669,15 @@ class TestCompatPathBindsSession:
 
         monkeypatch.setattr(stack.runtime, "run", _spy_run)
 
-        with client.stream("POST", "/v1/chat/completions", json={
-            "messages": [{"role": "user", "content": "list"}],
-            "conversation_id": "convo-stream-1",
-            "stream": True,
-        }) as r:
+        with client.stream(
+            "POST",
+            "/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": "list"}],
+                "conversation_id": "convo-stream-1",
+                "stream": True,
+            },
+        ) as r:
             assert r.status_code == 200
             for _ in r.iter_lines():
                 pass

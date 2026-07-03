@@ -22,6 +22,7 @@ Adding a new OpenAI-compat provider
 3. Pass the response to ``iter_openai_sse(response, model=..., provider=...)``.
 4. ``yield from`` the result. Done.
 """
+
 from __future__ import annotations
 
 import json
@@ -120,7 +121,8 @@ def iter_openai_sse(
         if reasoning_piece:
             accumulated_reasoning.append(reasoning_piece)
             yield ModelStreamEvent(
-                type="thinking_delta", delta=reasoning_piece,
+                type="thinking_delta",
+                delta=reasoning_piece,
             )
 
         piece = _render_content_delta(delta.get("content"))
@@ -147,7 +149,8 @@ def iter_openai_sse(
                     args_piece = fn.get("arguments")
                     if isinstance(args_piece, dict):
                         slot["arguments"] = json.dumps(
-                            args_piece, ensure_ascii=False,
+                            args_piece,
+                            ensure_ascii=False,
                         )
                     elif args_piece:
                         slot["arguments"] += str(args_piece)
@@ -163,7 +166,8 @@ def iter_openai_sse(
             args_piece = legacy_function_call.get("arguments")
             if isinstance(args_piece, dict):
                 slot["arguments"] = json.dumps(
-                    args_piece, ensure_ascii=False,
+                    args_piece,
+                    ensure_ascii=False,
                 )
             elif args_piece:
                 slot["arguments"] += str(args_piece)
@@ -198,6 +202,7 @@ def iter_openai_sse(
             # loop) treats an empty "done" as a finished step and can
             # decide to re-prompt or finalise.
             import logging as _logging
+
             _logging.getLogger(__name__).warning(
                 "openai-compat stream cut short (%s) — finalising on accumulated text",
                 exc.__class__.__name__,
@@ -235,11 +240,13 @@ def iter_openai_sse(
             slot = tool_state[index]
             args_raw = slot.get("arguments") or ""
             args = parse_tool_call_arguments(args_raw)
-            tool_calls.append(ToolCall(
-                id=str(slot.get("id") or ""),
-                name=str(slot.get("name") or ""),
-                input=args if isinstance(args, dict) else {},
-            ))
+            tool_calls.append(
+                ToolCall(
+                    id=str(slot.get("id") or ""),
+                    name=str(slot.get("name") or ""),
+                    input=args if isinstance(args, dict) else {},
+                )
+            )
             yield ModelStreamEvent(type="tool_use", tool_call=tool_calls[-1])
 
     yield ModelStreamEvent(

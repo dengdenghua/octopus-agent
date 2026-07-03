@@ -96,9 +96,7 @@ def test_local_prefers_fastembed(monkeypatch) -> None:
 
     monkeypatch.setattr(eb, "_fastembed_model", lambda: _FE())
     # sentence-transformers must NOT be consulted when fastembed handles it
-    monkeypatch.setattr(
-        eb, "_st_model", lambda: (_ for _ in ()).throw(AssertionError("ST used"))
-    )
+    monkeypatch.setattr(eb, "_st_model", lambda: (_ for _ in ()).throw(AssertionError("ST used")))
     assert eb.embed_texts(["x", "y"]) == [[0.5, 0.5], [0.5, 0.5]]
 
 

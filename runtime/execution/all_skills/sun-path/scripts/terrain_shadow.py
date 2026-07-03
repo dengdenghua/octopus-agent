@@ -4,6 +4,7 @@ Reads a GeoTIFF DEM, computes sun position, and outputs a binary shadow raster
 (1 = in shadow, 0 = in sun) and optional hillshade-style plot.
 Designed for modest memory use (process by blocks if needed); single read for small DEMs.
 """
+
 import argparse
 import datetime
 import math
@@ -32,7 +33,9 @@ def _horizontal_distance_m(transform, crs_is_geographic, x0, y0, x1, y1, lat_rad
     return math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2)
 
 
-def compute_shadow_grid(dem, transform, nodata, lat_deg, lon_deg, dt_utc, crs_is_geographic, step_pixels=1):
+def compute_shadow_grid(
+    dem, transform, nodata, lat_deg, lon_deg, dt_utc, crs_is_geographic, step_pixels=1
+):
     """
     Compute binary shadow (1=shadow, 0=sun) for DEM array.
     dem: 2D float array (height, width); row-major [row, col].
@@ -72,9 +75,7 @@ def compute_shadow_grid(dem, transform, nodata, lat_deg, lon_deg, dt_utc, crs_is
                 if r1 < 0 or r1 >= rows or c1 < 0 or c1 >= cols:
                     break
                 x1, y1 = xy(transform, r1, c1)
-                h_m = _horizontal_distance_m(
-                    transform, crs_is_geographic, x0, y0, x1, y1, lat_rad
-                )
+                h_m = _horizontal_distance_m(transform, crs_is_geographic, x0, y0, x1, y1, lat_rad)
                 z_ray = z0 + h_m * math.tan(alt_rad)
                 z_block = dem[r1, c1]
                 if nodata is not None and (np.isnan(z_block) or z_block == nodata):
@@ -155,7 +156,11 @@ def main():
         print("Sun below horizon; output is full shadow.")
 
     profile.update(dtype=np.uint8, count=1, nodata=None)
-    out_path = args.output if args.output.endswith(".tif") or args.output.endswith(".tiff") else args.output + ".tif"
+    out_path = (
+        args.output
+        if args.output.endswith(".tif") or args.output.endswith(".tiff")
+        else args.output + ".tif"
+    )
     with rasterio.open(out_path, "w", **profile) as dst:
         dst.write(shadow, 1)
     print(f"Shadow raster written to {out_path}")
@@ -163,6 +168,7 @@ def main():
     if args.plot:
         try:
             import matplotlib.pyplot as plt
+
             fig, ax = plt.subplots(figsize=(8, 8))
             ax.imshow(shadow, cmap="gray", vmin=0, vmax=1)
             ax.set_title(f"Terrain shadow\n{dt_utc.strftime('%Y-%m-%d %H:%M')} UTC, alt={alt:.1f}°")

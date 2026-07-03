@@ -82,7 +82,9 @@ def should_require_todo_protocol(
         goal_mode = user_context.get("goal_mode") or user_context.get("completion_policy")
     if goal_mode is None and isinstance(metadata, dict):
         goal_mode = metadata.get("goal_mode") or metadata.get("completion_policy")
-    if goal_mode is True or (isinstance(goal_mode, str) and goal_mode.lower() in {"goal", "goal_mode", "true"}):
+    if goal_mode is True or (
+        isinstance(goal_mode, str) and goal_mode.lower() in {"goal", "goal_mode", "true"}
+    ):
         return True
 
     capability = None
@@ -103,11 +105,7 @@ def should_require_todo_protocol(
 def render_todo_protocol_guidance(*, required: bool, mode: str = "") -> str:
     """Render a compact system guidance block for checklist behavior."""
 
-    lead = (
-        "TASK CHECKLIST PROTOCOL REQUIRED"
-        if required
-        else "TASK CHECKLIST PROTOCOL AVAILABLE"
-    )
+    lead = "TASK CHECKLIST PROTOCOL REQUIRED" if required else "TASK CHECKLIST PROTOCOL AVAILABLE"
     scope = f" for {mode} mode" if mode else ""
     requirement = (
         "For this turn, call `todo_write` before giving the final answer. "

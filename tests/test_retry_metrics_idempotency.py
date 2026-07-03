@@ -103,7 +103,9 @@ class TestRetryPolicy:
         policy = RetryPolicy(
             on=(),
             retry_if=lambda e: getattr(e, "transient", False),
-            attempts=3, base_delay=0.001, jitter=0,
+            attempts=3,
+            base_delay=0.001,
+            jitter=0,
         )
         assert retry_call(flaky, policy=policy, sleep=lambda s: None) == "ok"
 
@@ -213,7 +215,8 @@ class TestMetricsRegistry:
 
         r = MetricsRegistry()
         h = r.histogram(
-            "latency", buckets=(0.1, 0.5, 1.0, math.inf),
+            "latency",
+            buckets=(0.1, 0.5, 1.0, math.inf),
         )
         h.observe(0.05)
         h.observe(0.3)

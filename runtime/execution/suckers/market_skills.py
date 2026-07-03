@@ -10,14 +10,23 @@ from .registry import Skill, SkillRegistry
 
 _log = logging.getLogger(__name__)
 
-_MAX_INSTRUCTIONS_BYTES = 32 * 1024     # Implementation note.
-_MAX_RESOURCES_PER_SKILL = 50           # Implementation note.
+_MAX_INSTRUCTIONS_BYTES = 32 * 1024  # Implementation note.
+_MAX_RESOURCES_PER_SKILL = 50  # Implementation note.
 
-_KNOWN_META_KEYS = frozenset({
-    "name", "description", "enabled", "always_apply",
-    "allowed-tools", "allowed_tools", "version", "license",
-    "tags", "affinity",
-})
+_KNOWN_META_KEYS = frozenset(
+    {
+        "name",
+        "description",
+        "enabled",
+        "always_apply",
+        "allowed-tools",
+        "allowed_tools",
+        "version",
+        "license",
+        "tags",
+        "affinity",
+    }
+)
 
 _FRONTMATTER = re.compile(
     r"\A\s*---\s*\n(.*?)\n---\s*(?:\n|$)",
@@ -57,7 +66,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     if not m:
         return {}, text.strip()
     head = m.group(1)
-    body = text[m.end():].strip()
+    body = text[m.end() :].strip()
     meta: dict[str, Any] = {}
 
     #     key: value
@@ -106,8 +115,6 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
         meta[key] = _coerce(rest)
         i += 1
     return meta, body
-
-
 
 
 def _make_prompt_handler(
@@ -161,6 +168,7 @@ def _make_prompt_handler(
             "cwd": str(skill_dir.resolve()),
             "allowed_tools": list(allowed_tools),
         }
+
     _handler.__name__ = f"_prompt_skill_{name}"
     return _handler
 
@@ -180,13 +188,7 @@ def _try_real_research_swarm(kw: dict[str, Any]) -> dict[str, Any] | None:
     user a hand-written summary. This wires the skill to the real
     ``TeamRunner`` so a single skill call actually runs the swarm.
     """
-    topic = (
-        kw.get("topic")
-        or kw.get("query")
-        or kw.get("question")
-        or kw.get("user_request")
-        or ""
-    )
+    topic = kw.get("topic") or kw.get("query") or kw.get("question") or kw.get("user_request") or ""
     if not isinstance(topic, str) or not topic.strip():
         return None
     try:
@@ -228,14 +230,16 @@ def _try_real_research_swarm(kw: dict[str, Any]) -> dict[str, Any] | None:
     final_text = ""
     role_outputs: list[dict[str, Any]] = []
     try:
-        for ro in (result.role_outputs or []):
-            role_outputs.append({
-                "role": str(getattr(ro, "role", "")),
-                "agent_id": getattr(ro, "agent_id", ""),
-                "output": getattr(ro, "output", ""),
-                "error": getattr(ro, "error", None),
-                "duration_ms": getattr(ro, "duration_ms", 0),
-            })
+        for ro in result.role_outputs or []:
+            role_outputs.append(
+                {
+                    "role": str(getattr(ro, "role", "")),
+                    "agent_id": getattr(ro, "agent_id", ""),
+                    "output": getattr(ro, "output", ""),
+                    "error": getattr(ro, "error", None),
+                    "duration_ms": getattr(ro, "duration_ms", 0),
+                }
+            )
         final_text = (result.final_output or "").strip()
     except AttributeError:  # noqa: BLE001 — result shape may vary across protocol versions
         # Result shape can vary across protocol versions; fall through.
@@ -255,8 +259,6 @@ def _try_real_research_swarm(kw: dict[str, Any]) -> dict[str, Any] | None:
         "roles": role_outputs,
         "instructions_mode": False,
     }
-
-
 
 
 def _sanitize_skill_name(raw: str, fallback: str) -> str:
@@ -339,8 +341,7 @@ def register_market_skills(
         else:
             aliases_tuple = ()
         aliases_tuple = tuple(
-            _sanitize_skill_name(a, dir_name) for a in aliases_tuple
-            if a and a != name
+            _sanitize_skill_name(a, dir_name) for a in aliases_tuple if a and a != name
         )
 
         if respect_enabled_flag:
@@ -356,9 +357,13 @@ def register_market_skills(
                 continue
 
         if len(body.encode("utf-8")) > _MAX_INSTRUCTIONS_BYTES:
-            body = body.encode("utf-8")[:_MAX_INSTRUCTIONS_BYTES].decode(
-                "utf-8", errors="ignore",
-            ) + "\n\n[... truncated ...]"
+            body = (
+                body.encode("utf-8")[:_MAX_INSTRUCTIONS_BYTES].decode(
+                    "utf-8",
+                    errors="ignore",
+                )
+                + "\n\n[... truncated ...]"
+            )
 
         allowed = meta.get("allowed-tools") or meta.get("allowed_tools") or ()
         if isinstance(allowed, str):
@@ -389,14 +394,19 @@ def register_market_skills(
                     cost_profile="low",
                     trusted_source=f"skill://all_skills/{dir_name}",
                     handler=_make_prompt_handler(
-                        skill_dir, name, body, allowed_tuple,
+                        skill_dir,
+                        name,
+                        body,
+                        allowed_tuple,
                     ),
                 ),
                 verify_tests=verify_tests,
             )
         except Exception as exc:  # noqa: BLE001
             _log.warning(
-                "market_skills: register %r failed: %s", name, exc,
+                "market_skills: register %r failed: %s",
+                name,
+                exc,
             )
             continue
         seen_names.add(name)
@@ -414,7 +424,10 @@ def register_market_skills(
                         cost_profile="low",
                         trusted_source=f"skill://all_skills/{dir_name}#alias",
                         handler=_make_prompt_handler(
-                            skill_dir, alias, body, allowed_tuple,
+                            skill_dir,
+                            alias,
+                            body,
+                            allowed_tuple,
                         ),
                     ),
                     verify_tests=verify_tests,
@@ -422,7 +435,9 @@ def register_market_skills(
             except Exception as exc:  # noqa: BLE001
                 _log.warning(
                     "market_skills: alias %r of %r failed: %s",
-                    alias, name, exc,
+                    alias,
+                    name,
+                    exc,
                 )
                 continue
             seen_names.add(alias)
@@ -430,7 +445,8 @@ def register_market_skills(
 
     _log.debug(
         "market_skills: registered %d prompt skills from %s",
-        registered, all_skills_dir,
+        registered,
+        all_skills_dir,
     )
     return registered
 
@@ -465,9 +481,10 @@ def load_single_market_skill(
     name = _sanitize_skill_name(str(meta.get("name") or skill_id), skill_id)
     if name != skill_id:
         _log.warning(
-            "load_single_market_skill: name mismatch dir=%s frontmatter=%s · "
-            "using %s",
-            skill_id, meta.get("name"), name,
+            "load_single_market_skill: name mismatch dir=%s frontmatter=%s · using %s",
+            skill_id,
+            meta.get("name"),
+            name,
         )
     description = str(meta.get("description") or "").strip() or f"Prompt skill from {skill_id}."
 
@@ -475,15 +492,17 @@ def load_single_market_skill(
         return False
 
     if len(body.encode("utf-8")) > _MAX_INSTRUCTIONS_BYTES:
-        body = body.encode("utf-8")[:_MAX_INSTRUCTIONS_BYTES].decode(
-            "utf-8", errors="ignore",
-        ) + "\n\n[... truncated ...]"
+        body = (
+            body.encode("utf-8")[:_MAX_INSTRUCTIONS_BYTES].decode(
+                "utf-8",
+                errors="ignore",
+            )
+            + "\n\n[... truncated ...]"
+        )
 
     allowed = meta.get("allowed-tools") or meta.get("allowed_tools") or ()
     if isinstance(allowed, str):
-        allowed_tuple: tuple[str, ...] = tuple(
-            t.strip() for t in allowed.split(",") if t.strip()
-        )
+        allowed_tuple: tuple[str, ...] = tuple(t.strip() for t in allowed.split(",") if t.strip())
     elif isinstance(allowed, (list, tuple)):
         allowed_tuple = tuple(str(t).strip() for t in allowed if str(t).strip())
     else:
@@ -513,7 +532,9 @@ def load_single_market_skill(
         )
     except Exception as exc:  # noqa: BLE001
         _log.warning(
-            "load_single_market_skill: register %r failed: %s", name, exc,
+            "load_single_market_skill: register %r failed: %s",
+            name,
+            exc,
         )
         return False
     return True

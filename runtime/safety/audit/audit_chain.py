@@ -216,8 +216,11 @@ class AuditChain:
             ts = datetime.now(UTC).isoformat()
             key_id = self._active
             body = {
-                "seq": seq, "ts": ts, "kind": kind,
-                "payload": dict(payload), "key_id": key_id,
+                "seq": seq,
+                "ts": ts,
+                "kind": kind,
+                "payload": dict(payload),
+                "key_id": key_id,
             }
             body_bytes = canonical_bytes(body)
             mac = _compute_mac(
@@ -226,8 +229,11 @@ class AuditChain:
                 body_bytes,
             )
             entry = AuditEntry(
-                seq=seq, ts=ts, kind=kind,
-                payload=dict(payload), key_id=key_id,
+                seq=seq,
+                ts=ts,
+                kind=kind,
+                payload=dict(payload),
+                key_id=key_id,
                 prev_mac=self._last_mac or "",
                 mac=mac,
             )
@@ -263,22 +269,22 @@ class AuditChain:
                         entry = AuditEntry.from_dict(raw)
                     except (ValueError, KeyError) as exc:
                         return VerifyReport(
-                            ok=False, entries_checked=entries_checked,
+                            ok=False,
+                            entries_checked=entries_checked,
                             broken_at=expected_seq,
                             error=f"malformed line at seq={expected_seq}: {exc}",
                         )
                     if entry.seq != expected_seq:
                         return VerifyReport(
-                            ok=False, entries_checked=entries_checked,
+                            ok=False,
+                            entries_checked=entries_checked,
                             broken_at=entry.seq,
-                            error=(
-                                f"seq gap: expected {expected_seq} "
-                                f"got {entry.seq}"
-                            ),
+                            error=(f"seq gap: expected {expected_seq} got {entry.seq}"),
                         )
                     if entry.prev_mac != prev_mac:
                         return VerifyReport(
-                            ok=False, entries_checked=entries_checked,
+                            ok=False,
+                            entries_checked=entries_checked,
                             broken_at=entry.seq,
                             error=(
                                 f"prev_mac mismatch at seq={entry.seq}: "
@@ -288,23 +294,27 @@ class AuditChain:
                     key = self._keys.get(entry.key_id)
                     if key is None:
                         return VerifyReport(
-                            ok=False, entries_checked=entries_checked,
+                            ok=False,
+                            entries_checked=entries_checked,
                             broken_at=entry.seq,
-                            error=(
-                                f"unknown key_id {entry.key_id!r} at "
-                                f"seq={entry.seq}"
-                            ),
+                            error=(f"unknown key_id {entry.key_id!r} at seq={entry.seq}"),
                         )
                     body = {
-                        "seq": entry.seq, "ts": entry.ts, "kind": entry.kind,
-                        "payload": entry.payload, "key_id": entry.key_id,
+                        "seq": entry.seq,
+                        "ts": entry.ts,
+                        "kind": entry.kind,
+                        "payload": entry.payload,
+                        "key_id": entry.key_id,
                     }
                     expected_mac = _compute_mac(
-                        key, entry.prev_mac, canonical_bytes(body),
+                        key,
+                        entry.prev_mac,
+                        canonical_bytes(body),
                     )
                     if not hmac.compare_digest(expected_mac, entry.mac):
                         return VerifyReport(
-                            ok=False, entries_checked=entries_checked,
+                            ok=False,
+                            entries_checked=entries_checked,
                             broken_at=entry.seq,
                             error=f"MAC mismatch at seq={entry.seq}",
                         )
@@ -313,7 +323,8 @@ class AuditChain:
                     entries_checked += 1
         except Exception as exc:  # noqa: BLE001
             return VerifyReport(
-                ok=False, entries_checked=entries_checked,
+                ok=False,
+                entries_checked=entries_checked,
                 error=f"{type(exc).__name__}: {exc}",
             )
         return VerifyReport(ok=True, entries_checked=entries_checked)

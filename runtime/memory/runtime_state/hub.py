@@ -67,10 +67,7 @@ class MemoryHub:
         records = self.collect(query)
         scored = [
             record
-            for record in (
-                self._with_score(record, query.text)
-                for record in records
-            )
+            for record in (self._with_score(record, query.text) for record in records)
             if record.score > 0 or not query.text.strip()
         ]
         scored.sort(
@@ -107,7 +104,8 @@ class MemoryHub:
         except (OSError, TypeError, ValueError, AttributeError):
             config = {}
         if not config.get("enabled", True) or not config.get(
-            "injection_enabled", True,
+            "injection_enabled",
+            True,
         ):
             return []
 
@@ -122,9 +120,7 @@ class MemoryHub:
                 continue
             category = str(fact.get("category") or "context")
             kind: MemoryKind = (
-                "intelligence_report"
-                if category == "intelligence_report"
-                else "fact"
+                "intelligence_report" if category == "intelligence_report" else "fact"
             )
             out.append(
                 MemoryRecord(
@@ -135,7 +131,8 @@ class MemoryHub:
                     scope=str(fact.get("scope") or "global"),
                     scope_key=_scope_key_for_fact(fact),
                     confidence=_float_between(
-                        fact.get("confidence"), default=0.75,
+                        fact.get("confidence"),
+                        default=0.75,
                     ),
                     tags=[category],
                     created_at=str(fact.get("createdAt") or ""),
@@ -151,8 +148,7 @@ class MemoryHub:
                 (
                     "global",
                     "",
-                    Path(os.environ.get("OCTOPUS_HOME") or Path.home() / ".octopus")
-                    / "MEMORY.md",
+                    Path(os.environ.get("OCTOPUS_HOME") or Path.home() / ".octopus") / "MEMORY.md",
                 )
             )
         paths.append(
@@ -165,6 +161,7 @@ class MemoryHub:
         if query.team_id:
             try:
                 from runtime.memory.runtime_state.scope_paths import safe_path_segment
+
                 clean_team_id = safe_path_segment(query.team_id, "team")
             except (ImportError, AttributeError):
                 clean_team_id = re.sub(r"\s+", "-", query.team_id.strip())
@@ -172,11 +169,7 @@ class MemoryHub:
                 (
                     "team",
                     query.team_id,
-                    self.repo_root
-                    / "teams"
-                    / clean_team_id
-                    / "team-core"
-                    / "MEMORY.md",
+                    self.repo_root / "teams" / clean_team_id / "team-core" / "MEMORY.md",
                 )
             )
             if query.agent_id:
@@ -197,11 +190,7 @@ class MemoryHub:
                 (
                     "agent",
                     query.agent_id,
-                    self.repo_root
-                    / "agents"
-                    / query.agent_id
-                    / "agent-core"
-                    / "MEMORY.md",
+                    self.repo_root / "agents" / query.agent_id / "agent-core" / "MEMORY.md",
                 )
             )
 

@@ -37,6 +37,7 @@ def bridge_typed_bus_to_eventbus(typed_bus: Any) -> None:
     _base_cls = None
     try:
         from runtime.core.nerves.bus import NervesEvent
+
         _base_cls = NervesEvent
     except ImportError:  # noqa: BLE001 — nerves.bus optional; bridge runs without typed-base check
         pass
@@ -87,16 +88,21 @@ def bridge_hook_registry_to_eventbus(hook_registry: Any) -> None:
     }
 
     for hook_point, event_type in _HOOK_MAP.items():
+
         def _make_bridge(et: str) -> Any:
             def _bridge(ctx: Any) -> None:
                 bus.emit(et, payload={"hook": et})
+
             return _bridge
+
         hook_registry.add_hook(hook_point, _make_bridge(event_type))
 
     _LOG.debug("HookRegistry → EventBus bridge established")
 
 
-def install_all_bridges(*, signal_bus: Any = None, typed_bus: Any = None, hook_registry: Any = None) -> None:
+def install_all_bridges(
+    *, signal_bus: Any = None, typed_bus: Any = None, hook_registry: Any = None
+) -> None:
     if signal_bus is not None:
         bridge_signal_bus_to_eventbus(signal_bus)
     if typed_bus is not None:

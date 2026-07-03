@@ -33,9 +33,7 @@ def compute_browser_desktop_repair_recipes(
     min_occurrences: int = 1,
 ) -> dict[str, Any]:
     queue = ReviewQueue(
-        Path(review_queue_path)
-        if review_queue_path is not None
-        else app_paths().review_queue_path,
+        Path(review_queue_path) if review_queue_path is not None else app_paths().review_queue_path,
     )
     rows = queue.items(
         status="pending",
@@ -81,14 +79,9 @@ def queue_browser_desktop_repair_recipes(
         limit=limit,
         min_occurrences=min_occurrences,
     )
-    recipes = [
-        row for row in report.get("recipes") or []
-        if isinstance(row, dict)
-    ]
+    recipes = [row for row in report.get("recipes") or [] if isinstance(row, dict)]
     queue = ReviewQueue(
-        Path(review_queue_path)
-        if review_queue_path is not None
-        else app_paths().review_queue_path,
+        Path(review_queue_path) if review_queue_path is not None else app_paths().review_queue_path,
     )
     created = 0
     updated = 0
@@ -141,9 +134,7 @@ def reject_stale_browser_desktop_replay_artifacts(
     limit: int = 1000,
 ) -> dict[str, Any]:
     queue = ReviewQueue(
-        Path(review_queue_path)
-        if review_queue_path is not None
-        else app_paths().review_queue_path,
+        Path(review_queue_path) if review_queue_path is not None else app_paths().review_queue_path,
     )
     rows = queue.items(
         status="pending",
@@ -173,8 +164,7 @@ def reject_stale_browser_desktop_replay_artifacts(
             item_id,
             action="rejected",
             reason=(
-                "Rejected stale browser/desktop replay case: "
-                f"{stale}; regenerate replay evidence."
+                f"Rejected stale browser/desktop replay case: {stale}; regenerate replay evidence."
             ),
         )
         rejected.append(
@@ -200,15 +190,12 @@ def reject_stale_browser_desktop_replay_artifacts(
     for row in recipe_items:
         recipe = _dict(_dict(row.get("metadata")).get("recipe"))
         source_ids = [
-            str(item_id)
-            for item_id in recipe.get("source_item_ids") or []
-            if str(item_id or "")
+            str(item_id) for item_id in recipe.get("source_item_ids") or [] if str(item_id or "")
         ]
         if not source_ids:
             continue
         if not all(
-            replay_status.get(item_id) in {"rejected", "archived"}
-            for item_id in source_ids
+            replay_status.get(item_id) in {"rejected", "archived"} for item_id in source_ids
         ):
             continue
         item_id = str(row.get("id") or "")
@@ -246,9 +233,7 @@ def compute_browser_desktop_repair_recipe_verifications(
     limit: int = 1000,
 ) -> dict[str, Any]:
     queue = ReviewQueue(
-        Path(review_queue_path)
-        if review_queue_path is not None
-        else app_paths().review_queue_path,
+        Path(review_queue_path) if review_queue_path is not None else app_paths().review_queue_path,
     )
     recipe_items = queue.items(
         status="pending",
@@ -260,13 +245,9 @@ def compute_browser_desktop_repair_recipe_verifications(
         limit=max(1, int(limit)),
     )["items"]
     replay_status = {
-        str(item.get("id") or ""): str(item.get("status") or "pending")
-        for item in replay_items
+        str(item.get("id") or ""): str(item.get("status") or "pending") for item in replay_items
     }
-    verifications = [
-        _verification_from_recipe_item(item, replay_status)
-        for item in recipe_items
-    ]
+    verifications = [_verification_from_recipe_item(item, replay_status) for item in recipe_items]
     verified = sum(1 for row in verifications if row["status"] == "verified")
     blocked = sum(1 for row in verifications if row["status"] != "verified")
     return {
@@ -291,9 +272,7 @@ def attach_browser_desktop_repair_recipe_evidence(
     review_queue_path: str | Path | None = None,
 ) -> dict[str, Any]:
     queue = ReviewQueue(
-        Path(review_queue_path)
-        if review_queue_path is not None
-        else app_paths().review_queue_path,
+        Path(review_queue_path) if review_queue_path is not None else app_paths().review_queue_path,
     )
     evidence = {
         "schema": EVIDENCE_SCHEMA,
@@ -301,11 +280,7 @@ def attach_browser_desktop_repair_recipe_evidence(
         "actor": str(actor or "operator_panel")[:120],
         "passed": bool(passed),
         "provided": _unique_strings(provided or []),
-        "artifacts": [
-            artifact
-            for artifact in artifacts or []
-            if isinstance(artifact, dict)
-        ][:20],
+        "artifacts": [artifact for artifact in artifacts or [] if isinstance(artifact, dict)][:20],
         "notes": str(notes or "")[:1200],
     }
     result = queue.update_metadata(
@@ -318,7 +293,8 @@ def attach_browser_desktop_repair_recipe_evidence(
     )
     current = next(
         (
-            row for row in verification.get("verifications") or []
+            row
+            for row in verification.get("verifications") or []
             if isinstance(row, dict) and row.get("item_id") == item_id
         ),
         None,
@@ -342,9 +318,7 @@ def rerun_browser_desktop_repair_recipe_evidence(
     api_request: Callable[[str, str, dict[str, Any] | None], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     queue = ReviewQueue(
-        Path(review_queue_path)
-        if review_queue_path is not None
-        else app_paths().review_queue_path,
+        Path(review_queue_path) if review_queue_path is not None else app_paths().review_queue_path,
     )
     item = _recipe_item(queue, item_id)
     recipe = _dict(_dict(item.get("metadata")).get("recipe"))
@@ -359,9 +333,7 @@ def rerun_browser_desktop_repair_recipe_evidence(
         )
     )
     api_checks = [
-        str(check)
-        for check in plan.get("api_checks") or []
-        if str(check or "").startswith("/api/")
+        str(check) for check in plan.get("api_checks") or [] if str(check or "").startswith("/api/")
     ]
     provided: list[str] = []
     for check in api_checks:
@@ -376,18 +348,9 @@ def rerun_browser_desktop_repair_recipe_evidence(
     for artifact in artifacts:
         provided.extend(_provided_evidence_from_artifact(artifact))
     provided = _unique_strings(provided)
-    required = [
-        str(item)
-        for item in plan.get("evidence_required") or []
-        if str(item or "")
-    ]
-    missing = [
-        item for item in required
-        if item not in set(provided)
-    ]
-    passed = not missing and all(
-        artifact.get("ok") is True for artifact in artifacts
-    )
+    required = [str(item) for item in plan.get("evidence_required") or [] if str(item or "")]
+    missing = [item for item in required if item not in set(provided)]
+    passed = not missing and all(artifact.get("ok") is True for artifact in artifacts)
     promoted_sources = 0
     if passed and promote_source_cases:
         for source_item_id in recipe.get("source_item_ids") or []:
@@ -447,7 +410,8 @@ def rerun_browser_desktop_repair_recipe_batch(
         limit=max(1, int(limit)),
     )
     targets = [
-        row for row in report.get("verifications") or []
+        row
+        for row in report.get("verifications") or []
         if isinstance(row, dict) and row.get("status") != "verified"
     ][: max(1, int(limit))]
     results = [
@@ -482,21 +446,25 @@ def _cluster_key(row: dict[str, Any]) -> str:
         health = _dict(metadata.get("health"))
         issues = health.get("issues") if isinstance(health.get("issues"), list) else []
         issue_text = ",".join(sorted(str(issue) for issue in issues)) or "healthy"
-        return "|".join((
-            "browser_session",
-            str(last_action.get("status") or "unknown"),
-            str(last_action.get("action") or "unknown"),
-            issue_text,
-        ))
+        return "|".join(
+            (
+                "browser_session",
+                str(last_action.get("status") or "unknown"),
+                str(last_action.get("action") or "unknown"),
+                issue_text,
+            )
+        )
     if kind == "computer_activity_replay_case":
         last_activity = _dict(metadata.get("last_activity"))
         action = _dict(last_activity.get("action"))
-        return "|".join((
-            "computer_activity",
-            str(last_activity.get("event") or "unknown"),
-            str(action.get("action") or "unknown"),
-            f"pending:{int(metadata.get('pending_count') or 0)}",
-        ))
+        return "|".join(
+            (
+                "computer_activity",
+                str(last_activity.get("event") or "unknown"),
+                str(action.get("action") or "unknown"),
+                f"pending:{int(metadata.get('pending_count') or 0)}",
+            )
+        )
     return "|".join(("unknown", kind))
 
 
@@ -508,9 +476,7 @@ def _verification_from_recipe_item(
     recipe = _dict(metadata.get("recipe"))
     evidence = _dict(metadata.get("verification_evidence"))
     source_item_ids = [
-        str(item_id)
-        for item_id in recipe.get("source_item_ids") or []
-        if str(item_id or "")
+        str(item_id) for item_id in recipe.get("source_item_ids") or [] if str(item_id or "")
     ]
     source_status_counts: dict[str, int] = {}
     for item_id in source_item_ids:
@@ -521,10 +487,11 @@ def _verification_from_recipe_item(
         for name in _dict(recipe.get("verification_plan")).get("evidence_required") or []
         if str(name or "")
     ]
-    provided_evidence = evidence.get("provided") if isinstance(evidence.get("provided"), list) else []
+    provided_evidence = (
+        evidence.get("provided") if isinstance(evidence.get("provided"), list) else []
+    )
     missing_evidence = [
-        name for name in missing_evidence
-        if name not in {str(item) for item in provided_evidence}
+        name for name in missing_evidence if name not in {str(item) for item in provided_evidence}
     ]
     blockers: list[str] = []
     if source_status_counts.get("pending", 0):
@@ -659,7 +626,7 @@ def _produce_browser_pixel_evidence(
             },
             api_base_url=api_base_url,
             api_request=api_request,
-        )
+        ),
     ]
     navigate_url = _pixel_recipe_url(recipe)
     if navigate_url:
@@ -788,10 +755,7 @@ def _run_pixel_comparison(
 
 
 def _public_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: value for key, value in artifact.items()
-        if not str(key).startswith("_")
-    }
+    return {key: value for key, value in artifact.items() if not str(key).startswith("_")}
 
 
 def _pixel_session_id(recipe: dict[str, Any]) -> str:
@@ -964,7 +928,6 @@ def _default_api_request(
     return parsed if isinstance(parsed, dict) else {"value": parsed}
 
 
-
 def _api_check_ok(path: str, data: dict[str, Any]) -> bool:
     if data.get("ok") is False:
         return False
@@ -1006,13 +969,9 @@ def _recipe_from_cluster(key: str, rows: list[dict[str, Any]]) -> dict[str, Any]
     first = rows[0]
     kind = str(first.get("candidate_kind") or "unknown")
     metadata = _dict(first.get("metadata"))
-    case_ids = _unique_strings(
-        _case_id(_dict(row.get("metadata")))
-        for row in rows
-    )
+    case_ids = _unique_strings(_case_id(_dict(row.get("metadata"))) for row in rows)
     fingerprints = _unique_strings(
-        str(_dict(row.get("metadata")).get("fingerprint") or "")
-        for row in rows
+        str(_dict(row.get("metadata")).get("fingerprint") or "") for row in rows
     )
     priority = "P0" if any(str(row.get("priority") or "") == "P0" for row in rows) else "P1"
     if len(rows) >= 3:
@@ -1049,7 +1008,9 @@ def _title(kind: str, metadata: dict[str, Any], occurrences: int) -> str:
         action = str(_dict(metadata.get("last_action")).get("action") or "session")
         return f"Stabilize browser session replay: {action}"
     if kind == "computer_activity_replay_case":
-        action = str(_dict(_dict(metadata.get("last_activity")).get("action")).get("action") or "activity")
+        action = str(
+            _dict(_dict(metadata.get("last_activity")).get("action")).get("action") or "activity"
+        )
         return f"Stabilize desktop activity replay: {action}"
     return f"Stabilize browser/desktop replay cluster ({occurrences} case(s))"
 
@@ -1057,12 +1018,16 @@ def _title(kind: str, metadata: dict[str, Any], occurrences: int) -> str:
 def _evidence_summary(kind: str, metadata: dict[str, Any], occurrences: int) -> dict[str, Any]:
     if kind == "browser_pixel_replay_gate_case":
         replay_case = _dict(metadata.get("replay_gate_case"))
-        failures = replay_case.get("failures") if isinstance(replay_case.get("failures"), list) else []
+        failures = (
+            replay_case.get("failures") if isinstance(replay_case.get("failures"), list) else []
+        )
         return {
             "occurrences": occurrences,
             "failure_reason": _pixel_reason(metadata),
             "failure_count": len(failures) or int(metadata.get("failure_count") or 0),
-            "artifact": metadata.get("artifact") if isinstance(metadata.get("artifact"), dict) else {},
+            "artifact": metadata.get("artifact")
+            if isinstance(metadata.get("artifact"), dict)
+            else {},
         }
     if kind == "browser_session_replay_case":
         return {
@@ -1143,7 +1108,9 @@ def _pixel_reason(metadata: dict[str, Any]) -> str:
         for item in failures
         if isinstance(item, dict) and item.get("reason")
     ]
-    return "; ".join(reasons) or str(_dict(metadata.get("replay_gate")).get("reason") or "browser_pixel_evidence_failed")
+    return "; ".join(reasons) or str(
+        _dict(metadata.get("replay_gate")).get("reason") or "browser_pixel_evidence_failed"
+    )
 
 
 def _artifact_shape(metadata: dict[str, Any]) -> str:
@@ -1158,9 +1125,11 @@ def _case_id(metadata: dict[str, Any]) -> str:
 
 def _recipe_text(recipe: dict[str, Any]) -> str:
     steps = recipe.get("recommended_steps")
-    step_text = "\n".join(
-        f"- {step}" for step in steps if isinstance(step, str)
-    ) if isinstance(steps, list) else ""
+    step_text = (
+        "\n".join(f"- {step}" for step in steps if isinstance(step, str))
+        if isinstance(steps, list)
+        else ""
+    )
     cases = ", ".join(str(case_id) for case_id in recipe.get("case_ids") or [])
     return (
         f"{recipe.get('title')}\n"

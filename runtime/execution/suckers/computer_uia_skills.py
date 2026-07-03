@@ -332,9 +332,7 @@ def _computer_uia_find(
 
 def uia_replay_assertion_for_action(action: dict[str, Any]) -> dict[str, Any]:
     matched = (
-        action.get("matched_control")
-        if isinstance(action.get("matched_control"), dict)
-        else {}
+        action.get("matched_control") if isinstance(action.get("matched_control"), dict) else {}
     )
     rect = matched.get("rect") if isinstance(matched.get("rect"), dict) else {}
     center = matched.get("center") if isinstance(matched.get("center"), dict) else {}

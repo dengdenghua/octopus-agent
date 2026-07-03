@@ -113,9 +113,7 @@ def _lookup(ref: str, outputs: dict[str, Any]) -> Any:
                     f"expected int index for list, got {seg!r} (template {ref!r})"
                 ) from e
             if idx >= len(value):
-                raise TemplateResolutionError(
-                    f"index {idx} out of range in {ref!r}"
-                )
+                raise TemplateResolutionError(f"index {idx} out of range in {ref!r}")
             value = value[idx]
         else:
             raise TemplateResolutionError(
@@ -154,7 +152,6 @@ def _resolve_value(value: Any, prev_outputs: dict[str, Any]) -> Any:
 
 
 class GraphRuntime:
-
     def __init__(
         self,
         executor: ToolExecutor,
@@ -171,8 +168,12 @@ class GraphRuntime:
         self.max_parallel = max_parallel
         self.canary_config = canary_config
         self.evolution_metadata_root = evolution_metadata_root
-        if self.canary_config is not None and getattr(self.canary_config, "rollback_handler", None) is None:
+        if (
+            self.canary_config is not None
+            and getattr(self.canary_config, "rollback_handler", None) is None
+        ):
             try:
+
                 def _auto_rollback_handler(skill_name: str, _state: Any, reason: str) -> Any:
                     from runtime.safety.evolution.rollback_coordinator import RollbackCoordinator
 
@@ -282,35 +283,45 @@ class GraphRuntime:
                 recipe_hash=graph.recipe_hash,
             )
 
-            use_parallel = (
-                self.max_parallel > 1
-                and len(graph.nodes) > 1
-                and len(graph.edges) > 0
-            )
+            use_parallel = self.max_parallel > 1 and len(graph.nodes) > 1 and len(graph.edges) > 0
             if use_parallel:
                 layers = _topo_layers(graph.nodes, graph.edges)
                 steps, outputs_by_node = self._run_layered(
-                    layers, graph, steps, outputs_by_node,
-                    budget=budget, caller=caller, arm_id=arm_id,
-                    base_args=base_args, stop_on_failure=stop_on_failure,
-                    resume_from=resume_from, actor=actor,
-                    planner=planner, max_replans=max_replans,
-                    span=span, on_step_callback=on_step_callback,
+                    layers,
+                    graph,
+                    steps,
+                    outputs_by_node,
+                    budget=budget,
+                    caller=caller,
+                    arm_id=arm_id,
+                    base_args=base_args,
+                    stop_on_failure=stop_on_failure,
+                    resume_from=resume_from,
+                    actor=actor,
+                    planner=planner,
+                    max_replans=max_replans,
+                    span=span,
+                    on_step_callback=on_step_callback,
                 )
             else:
                 steps, outputs_by_node = self._run_sequential(
-                    graph, steps, outputs_by_node,
-                    budget=budget, caller=caller, arm_id=arm_id,
-                    base_args=base_args, stop_on_failure=stop_on_failure,
-                    resume_from=resume_from, actor=actor,
-                    planner=planner, max_replans=max_replans,
-                    span=span, on_step_callback=on_step_callback,
+                    graph,
+                    steps,
+                    outputs_by_node,
+                    budget=budget,
+                    caller=caller,
+                    arm_id=arm_id,
+                    base_args=base_args,
+                    stop_on_failure=stop_on_failure,
+                    resume_from=resume_from,
+                    actor=actor,
+                    planner=planner,
+                    max_replans=max_replans,
+                    span=span,
+                    on_step_callback=on_step_callback,
                 )
 
-            overall_ok = (
-                len(steps) >= len(graph.nodes)
-                and all(s.success for s in steps)
-            )
+            overall_ok = len(steps) >= len(graph.nodes) and all(s.success for s in steps)
             traj = Trajectory(
                 task_id=graph.task_id,
                 arm_id=arm_id,
@@ -369,7 +380,11 @@ class GraphRuntime:
             except TemplateResolutionError as e:
                 span.set_attribute("octopus.graph.template_error", str(e))
                 failed_step = self._make_template_error_step(
-                    i, node, merged, e, caller,
+                    i,
+                    node,
+                    merged,
+                    e,
+                    caller,
                 )
                 self.journal.write_step(
                     task_id=graph.task_id,
@@ -382,9 +397,14 @@ class GraphRuntime:
                 break
 
             step = self._execute_node(
-                i, node, resolved, graph,
-                budget=budget, caller=caller,
-                arm_id=arm_id, actor=actor,
+                i,
+                node,
+                resolved,
+                graph,
+                budget=budget,
+                caller=caller,
+                arm_id=arm_id,
+                actor=actor,
             )
             steps.append(step)
             if step.success:
@@ -404,17 +424,22 @@ class GraphRuntime:
                 )
                 if retry_step.success:
                     steps[-1] = retry_step
-                    outputs_by_node[node.node_id] = (
-                        retry_step.result.output
-                    )
+                    outputs_by_node[node.node_id] = retry_step.result.output
                 else:
                     self._try_replan(
-                        i, node, retry_step, graph,
-                        steps, outputs_by_node,
-                        budget=budget, caller=caller,
-                        arm_id=arm_id, base_args=base_args,
+                        i,
+                        node,
+                        retry_step,
+                        graph,
+                        steps,
+                        outputs_by_node,
+                        budget=budget,
+                        caller=caller,
+                        arm_id=arm_id,
+                        base_args=base_args,
                         stop_on_failure=stop_on_failure,
-                        actor=actor, planner=planner,
+                        actor=actor,
+                        planner=planner,
                         max_replans=max_replans,
                         on_step_callback=on_step_callback,
                     )
@@ -422,10 +447,7 @@ class GraphRuntime:
 
             self._fire_step_callback(on_step_callback, step, i, total_nodes)
 
-            if (
-                self.checkpoint_every_n_nodes > 0
-                and (i + 1) % self.checkpoint_every_n_nodes == 0
-            ):
+            if self.checkpoint_every_n_nodes > 0 and (i + 1) % self.checkpoint_every_n_nodes == 0:
                 self.journal.write_checkpoint(
                     task_id=graph.task_id,
                     arm_id=arm_id,
@@ -468,14 +490,20 @@ class GraphRuntime:
                 merged = {**base_args, **node.args_template}
                 try:
                     resolved = resolve_templates(
-                        merged, outputs_by_node,
+                        merged,
+                        outputs_by_node,
                     )
                 except TemplateResolutionError as e:
                     span.set_attribute(
-                        "octopus.graph.template_error", str(e),
+                        "octopus.graph.template_error",
+                        str(e),
                     )
                     failed_step = self._make_template_error_step(
-                        global_idx, node, merged, e, caller,
+                        global_idx,
+                        node,
+                        merged,
+                        e,
+                        caller,
                     )
                     self.journal.write_step(
                         task_id=graph.task_id,
@@ -496,21 +524,34 @@ class GraphRuntime:
             if len(layer_nodes) == 1:
                 gi, node, resolved = layer_nodes[0]
                 step = self._execute_node(
-                    gi, node, resolved, graph,
-                    budget=budget, caller=caller,
-                    arm_id=arm_id, actor=actor,
+                    gi,
+                    node,
+                    resolved,
+                    graph,
+                    budget=budget,
+                    caller=caller,
+                    arm_id=arm_id,
+                    actor=actor,
                 )
                 steps.append(step)
                 if step.success:
                     outputs_by_node[node.node_id] = step.result.output
                 elif stop_on_failure:
                     self._retry_or_replan(
-                        gi, node, resolved, step, graph,
-                        steps, outputs_by_node,
-                        budget=budget, caller=caller,
-                        arm_id=arm_id, base_args=base_args,
+                        gi,
+                        node,
+                        resolved,
+                        step,
+                        graph,
+                        steps,
+                        outputs_by_node,
+                        budget=budget,
+                        caller=caller,
+                        arm_id=arm_id,
+                        base_args=base_args,
                         stop_on_failure=stop_on_failure,
-                        actor=actor, planner=planner,
+                        actor=actor,
+                        planner=planner,
                         max_replans=max_replans,
                         on_step_callback=on_step_callback,
                     )
@@ -518,35 +559,40 @@ class GraphRuntime:
                 self._fire_step_callback(on_step_callback, step, gi, total_nodes)
             else:
                 layer_results = self._run_layer_parallel(
-                    layer_nodes, graph,
-                    budget=budget, caller=caller,
-                    arm_id=arm_id, actor=actor,
+                    layer_nodes,
+                    graph,
+                    budget=budget,
+                    caller=caller,
+                    arm_id=arm_id,
+                    actor=actor,
                 )
                 failed_any = False
                 for _gi, node, step in layer_results:
                     steps.append(step)
                     if step.success:
-                        outputs_by_node[node.node_id] = (
-                            step.result.output
-                        )
+                        outputs_by_node[node.node_id] = step.result.output
                     elif stop_on_failure:
                         failed_any = True
 
                 if failed_any:
-                    resolved_by_gi = {
-                        g: r for g, _n, r in layer_nodes
-                    }
+                    resolved_by_gi = {g: r for g, _n, r in layer_nodes}
                     for gi, node, step in layer_results:
                         if not step.success:
                             self._retry_or_replan(
-                                gi, node,
+                                gi,
+                                node,
                                 resolved_by_gi.get(gi, {}),
-                                step, graph,
-                                steps, outputs_by_node,
-                                budget=budget, caller=caller,
-                                arm_id=arm_id, base_args=base_args,
+                                step,
+                                graph,
+                                steps,
+                                outputs_by_node,
+                                budget=budget,
+                                caller=caller,
+                                arm_id=arm_id,
+                                base_args=base_args,
                                 stop_on_failure=stop_on_failure,
-                                actor=actor, planner=planner,
+                                actor=actor,
+                                planner=planner,
                                 max_replans=max_replans,
                                 on_step_callback=on_step_callback,
                             )
@@ -556,9 +602,7 @@ class GraphRuntime:
                 for _gi, _node, step in layer_results:
                     self._fire_step_callback(on_step_callback, step, _gi, total_nodes)
 
-            completed_count = sum(
-                1 for s in steps if s.success
-            )
+            completed_count = sum(1 for s in steps if s.success)
             if (
                 self.checkpoint_every_n_nodes > 0
                 and completed_count > 0
@@ -592,9 +636,14 @@ class GraphRuntime:
             for gi, node, resolved in layer_nodes:
                 fut = pool.submit(
                     self._execute_node,
-                    gi, node, resolved, graph,
-                    budget=budget, caller=caller,
-                    arm_id=arm_id, actor=actor,
+                    gi,
+                    node,
+                    resolved,
+                    graph,
+                    budget=budget,
+                    caller=caller,
+                    arm_id=arm_id,
+                    actor=actor,
                 )
                 futures[fut] = (gi, node)
             for fut in as_completed(futures):
@@ -666,12 +715,19 @@ class GraphRuntime:
             outputs_by_node[node.node_id] = retry_step.result.output
         else:
             self._try_replan(
-                i, node, retry_step, graph,
-                steps, outputs_by_node,
-                budget=budget, caller=caller,
-                arm_id=arm_id, base_args=base_args,
+                i,
+                node,
+                retry_step,
+                graph,
+                steps,
+                outputs_by_node,
+                budget=budget,
+                caller=caller,
+                arm_id=arm_id,
+                base_args=base_args,
                 stop_on_failure=stop_on_failure,
-                actor=actor, planner=planner,
+                actor=actor,
+                planner=planner,
                 max_replans=max_replans,
                 on_step_callback=on_step_callback,
             )
@@ -699,6 +755,7 @@ class GraphRuntime:
             return
         try:
             from runtime.platform.models import ParsedIntent
+
             failed_info = (
                 f"节点 {node.node_id} (skill={node.skill_ref}) "
                 f"执行失败: "
@@ -708,18 +765,14 @@ class GraphRuntime:
                 raw=failed_info,
                 intent_type="task",
                 normalized_goal=(
-                    f"[REPLAN] 原计划第 {i+1}/{len(graph.nodes)} 步失败。"
+                    f"[REPLAN] 原计划第 {i + 1}/{len(graph.nodes)} 步失败。"
                     f"已完成节点: {list(outputs_by_node.keys())}。"
                     f"失败原因: {failed_info}。"
                     "请规划替代方案完成剩余任务。"
                 ),
             )
             new_graph = planner.plan(replan_intent)
-            if (
-                new_graph
-                and hasattr(new_graph, "nodes")
-                and new_graph.nodes
-            ):
+            if new_graph and hasattr(new_graph, "nodes") and new_graph.nodes:
                 replan_traj = self.run(
                     new_graph,
                     budget=budget,
@@ -734,11 +787,7 @@ class GraphRuntime:
                 )
                 steps.extend(replan_traj.steps)
                 for s in replan_traj.steps:
-                    if (
-                        s.success
-                        and s.result
-                        and s.result.output
-                    ):
+                    if s.success and s.result and s.result.output:
                         outputs_by_node[s.node_id] = s.result.output
         except (ConnectionError, TimeoutError, TypeError, ValueError) as exc:
             _logger.warning("replan failed: %s", exc)

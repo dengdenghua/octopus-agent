@@ -449,10 +449,13 @@ def test_control_sessions_require_auth_when_enabled(tmp_path) -> None:
     client = TestClient(app)
 
     assert client.get("/api/control-sessions").status_code == 401
-    assert client.post(
-        "/api/control-sessions",
-        json={"session_id": "ctrl-auth-1", "surface": "browser", "target_id": "tab"},
-    ).status_code == 401
+    assert (
+        client.post(
+            "/api/control-sessions",
+            json={"session_id": "ctrl-auth-1", "surface": "browser", "target_id": "tab"},
+        ).status_code
+        == 401
+    )
     assert client.post("/api/control-sessions/ctrl-auth-1/takeover").status_code == 401
 
     ok = client.get(
@@ -460,3 +463,79 @@ def test_control_sessions_require_auth_when_enabled(tmp_path) -> None:
         headers={"Authorization": "Bearer sk-alice"},
     )
     assert ok.status_code == 200
+
+
+def test_control_sessions_object_level_ownership_isolates_actors(tmp_path) -> None:
+    # Regression for the control-session IDOR: with auth on, one authenticated
+    # user must not be able to enumerate, read, or drive another user's session.
+    store_id = IdentityStore()
+    store_id.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    store_id.add(Identity(actor_id="bob"), api_key_plaintext="sk-bob")
+    app = FastAPI()
+    app.include_router(
+        create_control_sessions_router(
+            store=ControlSessionStore(base_dir=tmp_path),
+            identity_store=store_id,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+    alice = {"Authorization": "Bearer sk-alice"}
+    bob = {"Authorization": "Bearer sk-bob"}
+
+    created = client.post(
+        "/api/control-sessions",
+        json={"session_id": "ctrl-alice-1", "surface": "browser", "target_id": "tab"},
+        headers=alice,
+    )
+    assert created.status_code == 200
+    assert created.json()["session"]["creator_actor"] == "alice"
+
+    client.post(
+        "/api/control-sessions/ctrl-alice-1/evidence",
+        json={"evidence_id": "ev-1", "kind": "log", "summary": "hi", "detail": {"x": 1}},
+        headers=alice,
+    )
+
+    # Bob cannot enumerate Alice's session...
+    bob_list = client.get("/api/control-sessions", headers=bob)
+    assert bob_list.status_code == 200
+    assert bob_list.json()["count"] == 0
+
+    # ...and every per-session route returns 404 (not 403 — don't confirm it exists).
+    for method, path in [
+        ("get", "/api/control-sessions/ctrl-alice-1"),
+        ("get", "/api/control-sessions/ctrl-alice-1/replay"),
+        ("get", "/api/control-sessions/ctrl-alice-1/timeline"),
+        ("get", "/api/control-sessions/ctrl-alice-1/evidence/ev-1/detail"),
+        ("post", "/api/control-sessions/ctrl-alice-1/takeover"),
+        ("post", "/api/control-sessions/ctrl-alice-1/stop"),
+        ("post", "/api/control-sessions/ctrl-alice-1/pause"),
+    ]:
+        resp = getattr(client, method)(path, headers=bob)
+        assert resp.status_code == 404, f"{method} {path} leaked to non-owner: {resp.status_code}"
+
+    bob_action = client.post(
+        "/api/control-sessions/ctrl-alice-1/actions",
+        json={"action_type": "click", "descriptor": {}},
+        headers=bob,
+    )
+    assert bob_action.status_code == 404
+
+    # Bob also can't hijack the id via create-or-takeover.
+    bob_takeover = client.post(
+        "/api/control-sessions",
+        json={"session_id": "ctrl-alice-1", "surface": "browser", "takeover": True},
+        headers=bob,
+    )
+    assert bob_takeover.status_code == 404
+
+    # Alice retains full access to her own session.
+    assert client.get("/api/control-sessions/ctrl-alice-1", headers=alice).status_code == 200
+    assert client.get("/api/control-sessions", headers=alice).json()["count"] == 1
+    assert (
+        client.get(
+            "/api/control-sessions/ctrl-alice-1/evidence/ev-1/detail", headers=alice
+        ).status_code
+        == 200
+    )

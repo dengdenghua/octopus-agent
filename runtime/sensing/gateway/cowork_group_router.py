@@ -202,11 +202,7 @@ def create_cowork_group_router(
 
         path = team_tasks_state_path or (app_paths().data_dir / "team_tasks.json")
         tasks = _load_tasks(Path(path))
-        return [
-            t.model_dump()
-            for t in tasks.values()
-            if t.room_id == room_id
-        ]
+        return [t.model_dump() for t in tasks.values() if t.room_id == room_id]
 
     def _room_messages(thread_id: str, room_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
         canonical = _collaboration_store().messages_for_session(thread_id, limit=limit)
@@ -222,9 +218,7 @@ def create_cowork_group_router(
             self.thread_id = thread_id
 
         def search(self, room_id: str, query: str, *, limit: int = 50) -> list[dict[str, Any]]:
-            canonical = _collaboration_store().search_messages(
-                self.thread_id, query, limit=limit
-            )
+            canonical = _collaboration_store().search_messages(self.thread_id, query, limit=limit)
             if canonical:
                 return canonical
             return _room_message_store().search(room_id, query, limit=limit)
@@ -247,8 +241,10 @@ def create_cowork_group_router(
         from runtime.memory.cowork.session import resolve_session
 
         session = resolve_session(
-            group_store, thread_id,
-            async_store=_async_store(), presence_store=_presence_store(),
+            group_store,
+            thread_id,
+            async_store=_async_store(),
+            presence_store=_presence_store(),
             room_message_store=None,
             room_messages_provider=lambda room_id: _room_messages(thread_id, room_id),
             room_participants_provider=_room_participants,
@@ -499,7 +495,8 @@ def create_cowork_group_router(
 
         state = group_store.state(thread_id)
         participants = [
-            (m.id, m.id) for m in state.roster
+            (m.id, m.id)
+            for m in state.roster
             if m.kind == "agent" and m.role == "participant" and not m.muted
         ]
         return {"nominated": gate(participants, text, threshold=threshold)}
@@ -540,7 +537,9 @@ def create_cowork_group_router(
         from runtime.memory.cowork.presence import group_presence
 
         members = group_presence(
-            group_store, _presence_store(), thread_id,
+            group_store,
+            _presence_store(),
+            thread_id,
             online_window_s=max(1, online_window_s),
         )
         return {"thread_id": thread_id, "members": [m.to_dict() for m in members]}
@@ -569,7 +568,9 @@ def create_cowork_group_router(
         from runtime.memory.cowork.catchup import build_catchup
 
         cu = build_catchup(
-            group_store.state(thread_id), member_id, messages=[],
+            group_store.state(thread_id),
+            member_id,
+            messages=[],
             blackboard=group_store.blackboard_snapshot(thread_id),
         )
         if cu is None:
@@ -669,8 +670,12 @@ def create_cowork_group_router(
         from runtime.memory.cowork.group import ContextGrant
 
         res = fork(
-            group_store, thread_id, body.child_thread, actor=_actor(request),
-            members=body.members, grant=ContextGrant.from_dict(body.grant),
+            group_store,
+            thread_id,
+            body.child_thread,
+            actor=_actor(request),
+            members=body.members,
+            grant=ContextGrant.from_dict(body.grant),
             at_message=body.at_message,
         )
         return {"ok": True, **res}
@@ -684,8 +689,9 @@ def create_cowork_group_router(
         """Merge a breakout's conclusion back onto the parent's blackboard."""
         from runtime.memory.cowork.breakout import merge_back
 
-        res = merge_back(group_store, child_thread, thread_id, actor=_actor(request),
-                         summary=body.summary)
+        res = merge_back(
+            group_store, child_thread, thread_id, actor=_actor(request), summary=body.summary
+        )
         return {"ok": True, **res, "blackboard": group_store.blackboard_snapshot(thread_id)}
 
     @router.get("/api/cowork/{thread_id}/plan")
@@ -724,9 +730,7 @@ def create_cowork_group_router(
         group_store.append(thread_id, ev)
         return {"ok": True, "state": group_store.state(thread_id).to_dict()}
 
-    @router.delete(
-        "/api/cowork/{thread_id}/members/{member_id}", dependencies=[Depends(_auth_dep)]
-    )
+    @router.delete("/api/cowork/{thread_id}/members/{member_id}", dependencies=[Depends(_auth_dep)])
     def remove_member(thread_id: str, member_id: str, request: Request) -> dict[str, Any]:
         """Remove a member. Their past blackboard writes stay (attributed)."""
         group_store.append(

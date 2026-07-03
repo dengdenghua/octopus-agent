@@ -20,6 +20,7 @@ The parser is deliberately permissive: malformed tokens are ignored,
 and the original text is preserved for the model so it still sees the
 human-readable phrasing.
 """
+
 from __future__ import annotations
 
 import re
@@ -78,11 +79,7 @@ class InputMentions:
     @property
     def has_any(self) -> bool:
         return bool(
-            self.plugins
-            or self.skills
-            or self.agents
-            or self.packs
-            or self.surfaces,
+            self.plugins or self.skills or self.agents or self.packs or self.surfaces,
         )
 
     def render_hint(self) -> str:

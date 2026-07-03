@@ -267,11 +267,7 @@ def render_thinking_guidance(plan: dict[str, Any] | ThinkingPlan | None) -> str:
     risks = payload.get("risks")
     risk_lines = []
     if isinstance(risks, list):
-        risk_lines = [
-            f"- {item}"
-            for item in risks
-            if isinstance(item, str) and item.strip()
-        ]
+        risk_lines = [f"- {item}" for item in risks if isinstance(item, str) and item.strip()]
 
     flags = []
     if payload.get("needs_search"):

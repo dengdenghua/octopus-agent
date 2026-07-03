@@ -153,10 +153,8 @@ def _personalize_reflex_reply(reply: str, agent: Any) -> str:
     ).strip()
     if not display_name:
         return reply
-    return (
-        reply
-        .replace("我是 Octopus", f"我是 {display_name}")
-        .replace("I'm Octopus", f"I'm {display_name}")
+    return reply.replace("我是 Octopus", f"我是 {display_name}").replace(
+        "I'm Octopus", f"I'm {display_name}"
     )
 
 

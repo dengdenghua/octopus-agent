@@ -220,10 +220,7 @@ def local_non_tool_reply(goal: str) -> str | None:
         if re.search(r"(再见|拜拜|bye|byebye)", g, re.IGNORECASE):
             return "回头见。"
         return "你好，我在。"
-    return (
-        "当前没有可用的对话模型路由，不能可靠回答这个非工具问题。"
-        "请启用完整 LLM planner 后重试。"
-    )
+    return "当前没有可用的对话模型路由，不能可靠回答这个非工具问题。请启用完整 LLM planner 后重试。"
 
 
 __all__ = [

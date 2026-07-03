@@ -10,6 +10,7 @@ todo protocol), ``execution`` (skill policy) and ``platform``
 runner shouldn't reach up into the web layer to call it. ``tool_bridge``
 re-exports it for the gateway's streaming path.
 """
+
 from __future__ import annotations
 
 import inspect
@@ -22,47 +23,60 @@ from runtime.core.cerebrum.capability_router import (
 from runtime.core.cerebrum.todo_protocol import context_mode
 from runtime.platform.models.llm import ToolSpec
 
-PRIORITY_SKILLS: frozenset[str] = frozenset({
-    "todo_write",
-    "search_capabilities",
-    "query_capability",
-    "use_capability",
-    "call_agent_parallel",
-    "bb_keys",
-    "bb_read",
-    "bb_write",
-    "deep-research-swarm",
-    "deep-research",
-    "report-writing",
-    "docx",
-})
+PRIORITY_SKILLS: frozenset[str] = frozenset(
+    {
+        "todo_write",
+        "search_capabilities",
+        "query_capability",
+        "use_capability",
+        "call_agent_parallel",
+        "bb_keys",
+        "bb_read",
+        "bb_write",
+        "deep-research-swarm",
+        "deep-research",
+        "report-writing",
+        "docx",
+    }
+)
 
 
-TASK_CHAIN_SKILLS: frozenset[str] = frozenset({
-    "deep-research-swarm",
-    "deep-research",
-    "report-writing",
-    "docx",
-})
+TASK_CHAIN_SKILLS: frozenset[str] = frozenset(
+    {
+        "deep-research-swarm",
+        "deep-research",
+        "report-writing",
+        "docx",
+    }
+)
 
 
-TASK_CHAIN_MODES: frozenset[str] = frozenset({
-    "agent",
-    "react",
-    "deep",
-    "deep_research",
-    "research",
-    "swarm",
-    "swarms",
-    "team",
-    "code",
-})
+TASK_CHAIN_MODES: frozenset[str] = frozenset(
+    {
+        "agent",
+        "react",
+        "deep",
+        "deep_research",
+        "research",
+        "swarm",
+        "swarms",
+        "team",
+        "code",
+    }
+)
 
 
-_INTERNAL_PARAMS = frozenset({
-    "sandbox_dir", "allow_sensitive", "self", "cls",
-    "_kw", "kwargs", "args",
-})
+_INTERNAL_PARAMS = frozenset(
+    {
+        "sandbox_dir",
+        "allow_sensitive",
+        "self",
+        "cls",
+        "_kw",
+        "kwargs",
+        "args",
+    }
+)
 
 
 def _input_schema_from_handler(handler: Any) -> dict[str, Any]:
@@ -139,7 +153,10 @@ def _input_schema_from_handler(handler: Any) -> dict[str, Any]:
 
 
 def build_anthropic_tool_specs(
-    registry: Any, *, max_skills: int = 50, agent: Any = None,
+    registry: Any,
+    *,
+    max_skills: int = 50,
+    agent: Any = None,
     user_context: dict[str, Any] | None = None,
     goal: str = "",
 ) -> list[ToolSpec]:
@@ -190,6 +207,7 @@ def build_anthropic_tool_specs(
     if agent is not None:
         try:
             from runtime.execution.misc.skill_policy import filter_allowed_names
+
             all_names = filter_allowed_names(all_names, agent=agent)
         except (AttributeError, TypeError, ValueError):
             # ``filter_allowed_names`` is the agent's tool allow-list gate —
@@ -202,7 +220,8 @@ def build_anthropic_tool_specs(
 
             logging.getLogger(__name__).warning(
                 "filter_allowed_names failed for agent=%r; denying all skills",
-                getattr(agent, "agent_id", agent), exc_info=True,
+                getattr(agent, "agent_id", agent),
+                exc_info=True,
             )
             all_names = []
 
@@ -252,9 +271,11 @@ def build_anthropic_tool_specs(
             if handler is not None
             else {"type": "object", "properties": {}, "additionalProperties": True}
         )
-        specs.append(ToolSpec(
-            name=name,
-            description=desc,
-            input_schema=input_schema,
-        ))
+        specs.append(
+            ToolSpec(
+                name=name,
+                description=desc,
+                input_schema=input_schema,
+            )
+        )
     return specs

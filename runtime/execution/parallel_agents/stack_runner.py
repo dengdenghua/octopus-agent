@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import inspect
@@ -152,9 +151,7 @@ def make_stack_subagent_runner(
     summ = summarizer or _summarize_trajectory
 
     try:
-        _accepted: set[str] = set(
-            inspect.signature(planner.plan).parameters.keys()
-        )
+        _accepted: set[str] = set(inspect.signature(planner.plan).parameters.keys())
     except (TypeError, ValueError):  # pragma: no cover
         _accepted = {"allowed_skills", "soul", "model"}
 
@@ -183,6 +180,7 @@ def make_stack_subagent_runner(
             plan_kwargs["allowed_skills"] = agent.allowed_skill_union() or None
             try:
                 from runtime.execution.agents.loader import compose_runtime_soul
+
                 runtime_soul = compose_runtime_soul(agent, metadata=context or {})
             except (ImportError, AttributeError):  # noqa: BLE001
                 runtime_soul = agent.soul
@@ -199,7 +197,11 @@ def make_stack_subagent_runner(
         user_context = {
             "subagent_name": subagent_name,
             "parallel": True,
-            **({"thread_id": ctx["thread_id"]} if isinstance(ctx, dict) and ctx.get("thread_id") else {}),
+            **(
+                {"thread_id": ctx["thread_id"]}
+                if isinstance(ctx, dict) and ctx.get("thread_id")
+                else {}
+            ),
         }
         if isinstance(ctx, dict):
             for key in (
@@ -246,10 +248,7 @@ def make_stack_subagent_runner(
         )
 
         arm_for_log = agent.agent_id if agent is not None else default_arm
-        actor = (
-            ctx.get("actor") or ctx.get("file_write_owner")
-            if isinstance(ctx, dict) else None
-        )
+        actor = ctx.get("actor") or ctx.get("file_write_owner") if isinstance(ctx, dict) else None
         runtime_metadata = (
             ctx.get("runtime_session_metadata")
             if isinstance(ctx, dict) and isinstance(ctx.get("runtime_session_metadata"), dict)
@@ -262,17 +261,19 @@ def make_stack_subagent_runner(
         )
 
         # 6. Execute
-        with session_scope(Session(
-            thread_id=ctx.get("thread_id") if isinstance(ctx, dict) else None,
-            metadata=runtime_metadata,
-        )):
+        with session_scope(
+            Session(
+                thread_id=ctx.get("thread_id") if isinstance(ctx, dict) else None,
+                metadata=runtime_metadata,
+            )
+        ):
             traj: Trajectory = runtime.run(
                 graph,
                 budget=budget,
                 caller=f"parallel/{arm_for_log}",
                 arm_id=ArmId(arm_for_log),
                 actor=actor,
-        )
+            )
         _emit_trajectory_tool_events(
             traj,
             emit_tool_event=emit_tool_event,

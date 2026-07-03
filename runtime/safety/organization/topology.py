@@ -87,7 +87,7 @@ class RoutingRule:
     from_role: Role
     label: str
     next_role: Role
-    max_loops: int = 3   # safety net against infinite re-routes
+    max_loops: int = 3  # safety net against infinite re-routes
 
 
 @dataclass(frozen=True)
@@ -117,8 +117,7 @@ class TeamTopology:
         if self.protocol == CoordinationProtocol.SEQUENTIAL:
             if Role.PLANNER not in self.agents and Role.GENERATOR not in self.agents:
                 raise ValueError(
-                    "sequential protocol requires at least one of "
-                    "planner or generator",
+                    "sequential protocol requires at least one of planner or generator",
                 )
         elif self.protocol == CoordinationProtocol.EVALUATOR_OPTIMIZER:
             if Role.GENERATOR not in self.agents:
@@ -147,7 +146,8 @@ class TeamTopology:
             "agents": {
                 str(role): asdict(spec)
                 for role, spec in sorted(
-                    self.agents.items(), key=lambda kv: str(kv[0]),
+                    self.agents.items(),
+                    key=lambda kv: str(kv[0]),
                 )
             },
             "routing": [
@@ -174,10 +174,7 @@ class TeamTopology:
             "task_bucket": self.task_bucket,
             "quality_threshold": self.quality_threshold,
             "max_iterations": self.max_iterations,
-            "agents": {
-                str(role): asdict(spec)
-                for role, spec in self.agents.items()
-            },
+            "agents": {str(role): asdict(spec) for role, spec in self.agents.items()},
             "routing": [
                 {
                     "from_role": str(r.from_role),

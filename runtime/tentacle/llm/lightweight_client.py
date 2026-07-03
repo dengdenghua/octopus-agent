@@ -109,7 +109,9 @@ class LlmConfig:
         )
 
     @classmethod
-    def ollama(cls, base_url: str = "http://localhost:11434/v1", model: str = "qwen2.5:7b") -> LlmConfig:
+    def ollama(
+        cls, base_url: str = "http://localhost:11434/v1", model: str = "qwen2.5:7b"
+    ) -> LlmConfig:
         # Ollama OpenAI 兼容模式不需要 key
         return cls(base_url=base_url, api_key="ollama", model=model)
 
@@ -126,8 +128,7 @@ class LlmConfig:
             return
         if not self.api_key.strip():
             raise ValueError(
-                f"LLM api_key missing for model={self.model!r}. "
-                f"Set env var or pass explicitly."
+                f"LLM api_key missing for model={self.model!r}. Set env var or pass explicitly."
             )
 
 
@@ -286,11 +287,13 @@ class LightweightLlmClient:
             except json.JSONDecodeError:
                 logger.warning("Bad tool args JSON: %r", args_str)
                 args = {"_raw": args_str}
-            tool_calls.append(ToolCall(
-                id=tc.get("id", ""),
-                name=fn.get("name", ""),
-                arguments=args,
-            ))
+            tool_calls.append(
+                ToolCall(
+                    id=tc.get("id", ""),
+                    name=fn.get("name", ""),
+                    arguments=args,
+                )
+            )
 
         finish_raw = choice.get("finish_reason", "stop")
         try:

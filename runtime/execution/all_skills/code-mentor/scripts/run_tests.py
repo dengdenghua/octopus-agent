@@ -36,13 +36,13 @@ class TestResult:
 
     def to_dict(self):
         return {
-            'passed': self.passed,
-            'failed': self.failed,
-            'errors': self.errors,
-            'skipped': self.skipped,
-            'total': self.total,
-            'duration': self.duration,
-            'failures': self.failures
+            "passed": self.passed,
+            "failed": self.failed,
+            "errors": self.errors,
+            "skipped": self.skipped,
+            "total": self.total,
+            "duration": self.duration,
+            "failures": self.failures,
         }
 
 
@@ -64,44 +64,31 @@ class PytestRunner(TestRunner):
 
         try:
             # Run pytest with verbose output and JSON report
-            cmd = [
-                'python', '-m', 'pytest',
-                self.target,
-                '-v',
-                '--tb=short'
-            ]
+            cmd = ["python", "-m", "pytest", self.target, "-v", "--tb=short"]
 
-            process = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
 
             # Parse output
             output = process.stdout + process.stderr
-            lines = output.split('\n')
+            lines = output.split("\n")
 
             for line in lines:
-                if ' PASSED' in line:
+                if " PASSED" in line:
                     result.passed += 1
-                elif ' FAILED' in line:
+                elif " FAILED" in line:
                     result.failed += 1
                     # Extract test name and failure info
-                    test_name = line.split('::')[1].split(' ')[0] if '::' in line else 'unknown'
-                    result.failures.append({
-                        'test': test_name,
-                        'message': 'See output for details'
-                    })
-                elif ' ERROR' in line:
+                    test_name = line.split("::")[1].split(" ")[0] if "::" in line else "unknown"
+                    result.failures.append({"test": test_name, "message": "See output for details"})
+                elif " ERROR" in line:
                     result.errors += 1
-                elif ' SKIPPED' in line:
+                elif " SKIPPED" in line:
                     result.skipped += 1
 
                 # Extract duration
-                if 'passed in' in line or 'failed in' in line:
+                if "passed in" in line or "failed in" in line:
                     try:
-                        duration_str = line.split(' in ')[1].split('s')[0]
+                        duration_str = line.split(" in ")[1].split("s")[0]
                         result.duration = float(duration_str)
                     except Exception:
                         pass
@@ -128,41 +115,28 @@ class UnittestRunner(TestRunner):
         result = TestResult()
 
         try:
-            cmd = [
-                'python', '-m', 'unittest',
-                'discover',
-                '-s', self.target,
-                '-v'
-            ]
+            cmd = ["python", "-m", "unittest", "discover", "-s", self.target, "-v"]
 
-            process = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
 
             output = process.stdout + process.stderr
-            lines = output.split('\n')
+            lines = output.split("\n")
 
             for line in lines:
-                if ' ... ok' in line:
+                if " ... ok" in line:
                     result.passed += 1
-                elif 'FAIL:' in line:
+                elif "FAIL:" in line:
                     result.failed += 1
-                    test_name = line.replace('FAIL:', '').strip()
-                    result.failures.append({
-                        'test': test_name,
-                        'message': 'See output for details'
-                    })
-                elif 'ERROR:' in line:
+                    test_name = line.replace("FAIL:", "").strip()
+                    result.failures.append({"test": test_name, "message": "See output for details"})
+                elif "ERROR:" in line:
                     result.errors += 1
 
             # Parse summary line
             for line in reversed(lines):
-                if 'Ran ' in line and ' test' in line:
+                if "Ran " in line and " test" in line:
                     with contextlib.suppress(BaseException):
-                        result.total = int(line.split('Ran ')[1].split(' test')[0])
+                        result.total = int(line.split("Ran ")[1].split(" test")[0])
                     break
 
             return result
@@ -182,33 +156,28 @@ class JestRunner(TestRunner):
         result = TestResult()
 
         try:
-            cmd = ['npx', 'jest', self.target, '--verbose']
+            cmd = ["npx", "jest", self.target, "--verbose"]
 
-            process = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
 
             output = process.stdout + process.stderr
-            lines = output.split('\n')
+            lines = output.split("\n")
 
             for line in lines:
-                if '✓' in line or 'PASS' in line:
+                if "✓" in line or "PASS" in line:
                     result.passed += 1
-                elif '✕' in line or 'FAIL' in line:
+                elif "✕" in line or "FAIL" in line:
                     result.failed += 1
 
             # Parse summary
             for line in lines:
-                if 'Tests:' in line:
-                    parts = line.split(',')
+                if "Tests:" in line:
+                    parts = line.split(",")
                     for part in parts:
-                        if 'passed' in part:
+                        if "passed" in part:
                             with contextlib.suppress(BaseException):
                                 result.passed = int(part.split()[0])
-                        elif 'failed' in part:
+                        elif "failed" in part:
                             with contextlib.suppress(BaseException):
                                 result.failed = int(part.split()[0])
 
@@ -217,7 +186,9 @@ class JestRunner(TestRunner):
             return result
 
         except FileNotFoundError:
-            print("Error: Jest not found. Install with: npm install --save-dev jest", file=sys.stderr)
+            print(
+                "Error: Jest not found. Install with: npm install --save-dev jest", file=sys.stderr
+            )
             sys.exit(1)
         except Exception as e:
             print(f"Error running tests: {e}", file=sys.stderr)
@@ -227,29 +198,29 @@ class JestRunner(TestRunner):
 def detect_framework(target):
     """Detect testing framework to use."""
     # Check if it's a Python file
-    if target.endswith('.py') or os.path.isdir(target):
+    if target.endswith(".py") or os.path.isdir(target):
         # Check for pytest markers
         if os.path.isfile(target):
             with open(target) as f:
                 content = f.read()
-                if 'import pytest' in content or '@pytest' in content:
-                    return 'pytest'
-                if 'import unittest' in content or 'class Test' in content:
-                    return 'unittest'
+                if "import pytest" in content or "@pytest" in content:
+                    return "pytest"
+                if "import unittest" in content or "class Test" in content:
+                    return "unittest"
         else:
             # Check for pytest.ini or setup.cfg
-            if os.path.exists('pytest.ini') or os.path.exists('setup.cfg'):
-                return 'pytest'
-            return 'unittest'
+            if os.path.exists("pytest.ini") or os.path.exists("setup.cfg"):
+                return "pytest"
+            return "unittest"
 
     # Check if it's JavaScript
-    elif target.endswith('.js') or target.endswith('.test.js'):
-        return 'jest'
+    elif target.endswith(".js") or target.endswith(".test.js"):
+        return "jest"
 
-    return 'pytest'  # Default
+    return "pytest"  # Default
 
 
-def run_tests(target, framework=None, output_format='text'):
+def run_tests(target, framework=None, output_format="text"):
     """Run tests and format output."""
     if not os.path.exists(target):
         print(f"Error: Target '{target}' not found", file=sys.stderr)
@@ -260,11 +231,11 @@ def run_tests(target, framework=None, output_format='text'):
         framework = detect_framework(target)
 
     # Create appropriate runner
-    if framework == 'pytest':
+    if framework == "pytest":
         runner = PytestRunner(target)
-    elif framework == 'unittest':
+    elif framework == "unittest":
         runner = UnittestRunner(target)
-    elif framework == 'jest':
+    elif framework == "jest":
         runner = JestRunner(target)
     else:
         print(f"Error: Unsupported framework '{framework}'", file=sys.stderr)
@@ -277,7 +248,7 @@ def run_tests(target, framework=None, output_format='text'):
     result = runner.run()
 
     # Output results
-    if output_format == 'json':
+    if output_format == "json":
         print(json.dumps(result.to_dict(), indent=2))
     else:
         print("=" * 60)
@@ -298,7 +269,7 @@ def run_tests(target, framework=None, output_format='text'):
             print("FAILURES:")
             for failure in result.failures:
                 print(f"  - {failure['test']}")
-                if failure.get('message'):
+                if failure.get("message"):
                     print(f"    {failure['message']}")
             print()
 
@@ -312,17 +283,21 @@ def run_tests(target, framework=None, output_format='text'):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Run and format test results')
-    parser.add_argument('target', help='Test file or directory to run')
-    parser.add_argument('--framework', choices=['pytest', 'unittest', 'jest'],
-                        help='Testing framework to use (auto-detected if not specified)')
-    parser.add_argument('--format', choices=['text', 'json'], default='text',
-                        help='Output format (default: text)')
+    parser = argparse.ArgumentParser(description="Run and format test results")
+    parser.add_argument("target", help="Test file or directory to run")
+    parser.add_argument(
+        "--framework",
+        choices=["pytest", "unittest", "jest"],
+        help="Testing framework to use (auto-detected if not specified)",
+    )
+    parser.add_argument(
+        "--format", choices=["text", "json"], default="text", help="Output format (default: text)"
+    )
 
     args = parser.parse_args()
 
     run_tests(args.target, args.framework, args.format)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

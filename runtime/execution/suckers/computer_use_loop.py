@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import base64
@@ -22,7 +21,13 @@ from .computer_skills import (
 from .registry import Skill, SkillRegistry
 
 _VALID_ACTIONS = {
-    "click", "type", "key", "move", "wait", "done", "fail",
+    "click",
+    "type",
+    "key",
+    "move",
+    "wait",
+    "done",
+    "fail",
 }
 
 
@@ -31,15 +36,13 @@ _VALID_ACTIONS = {
 
 
 class VisionPlanner(Protocol):
-
     def next_action(
         self,
         *,
         goal: str,
         screenshot_path: str,
         history: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        ...
+    ) -> dict[str, Any]: ...
 
 
 # ═══════════════════════════════════════════════════════════
@@ -48,7 +51,6 @@ class VisionPlanner(Protocol):
 
 @dataclass
 class MockVisionPlanner:
-
     actions: list[dict[str, Any]] = field(default_factory=list)
     calls: list[dict[str, Any]] = field(default_factory=list)
 
@@ -59,11 +61,13 @@ class MockVisionPlanner:
         screenshot_path: str,
         history: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        self.calls.append({
-            "goal": goal,
-            "screenshot_path": screenshot_path,
-            "history_len": len(history),
-        })
+        self.calls.append(
+            {
+                "goal": goal,
+                "screenshot_path": screenshot_path,
+                "history_len": len(history),
+            }
+        )
         if self.calls and len(self.calls) - 1 < len(self.actions):
             return dict(self.actions[len(self.calls) - 1])
         return {"action": "fail", "reason": "mock script exhausted"}
@@ -92,10 +96,9 @@ provided screenshot."""
 
 @dataclass
 class ModelRouterVisionPlanner:
-
     router: ModelRouter
     model: str = "claude-sonnet-4-6"
-    system_provider: str = "anthropic"   # anthropic / openai / mock
+    system_provider: str = "anthropic"  # anthropic / openai / mock
     max_tokens: int = 512
     system_prompt: str = _SYSTEM_PROMPT
     # Optional semantic-grounding hook. Called fresh each step; its text (e.g.
@@ -179,7 +182,7 @@ def _parse_action_text(text: str) -> dict[str, Any]:
         except IndexError:  # noqa: BLE001 — empty list edge case; benign
             pass
     if "{" in text and "}" in text:
-        text = text[text.index("{"): text.rindex("}") + 1]
+        text = text[text.index("{") : text.rindex("}") + 1]
     try:
         obj = json.loads(text)
     except json.JSONDecodeError:
@@ -214,7 +217,10 @@ def _run_computer_use_loop(
         cap = _screen_capture(path=shot_path, sandbox_dir=sandbox_dir)
         if "error" in cap:
             return _final(
-                "error", goal, history, screenshots_saved,
+                "error",
+                goal,
+                history,
+                screenshots_saved,
                 reason=f"screenshot failed: {cap['error']}",
                 iterations=iteration,
             )
@@ -228,14 +234,20 @@ def _run_computer_use_loop(
             )
         except Exception as e:  # noqa: BLE001
             return _final(
-                "error", goal, history, screenshots_saved,
+                "error",
+                goal,
+                history,
+                screenshots_saved,
                 reason=f"planner raised: {type(e).__name__}: {e}",
                 iterations=iteration,
             )
 
         if not isinstance(action, dict) or "action" not in action:
             return _final(
-                "error", goal, history, screenshots_saved,
+                "error",
+                goal,
+                history,
+                screenshots_saved,
                 reason="planner returned malformed action",
                 iterations=iteration,
             )
@@ -243,7 +255,10 @@ def _run_computer_use_loop(
         kind = action.get("action")
         if kind not in _VALID_ACTIONS:
             return _final(
-                "error", goal, history, screenshots_saved,
+                "error",
+                goal,
+                history,
+                screenshots_saved,
                 reason=f"unknown action: {kind!r}",
                 iterations=iteration,
             )
@@ -251,7 +266,10 @@ def _run_computer_use_loop(
         if kind == "done":
             history.append({"action": action, "result_summary": "done"})
             return _final(
-                "success", goal, history, screenshots_saved,
+                "success",
+                goal,
+                history,
+                screenshots_saved,
                 summary=str(action.get("summary", "")),
                 iterations=iteration + 1,
             )
@@ -259,22 +277,30 @@ def _run_computer_use_loop(
         if kind == "fail":
             history.append({"action": action, "result_summary": "fail"})
             return _final(
-                "planner_gave_up", goal, history, screenshots_saved,
+                "planner_gave_up",
+                goal,
+                history,
+                screenshots_saved,
                 reason=str(action.get("reason", "")),
                 iterations=iteration + 1,
             )
 
         result = _dispatch_action(action)
         summary = _summarize_action_result(action, result)
-        history.append({
-            "action": action,
-            "result": result,
-            "result_summary": summary,
-        })
+        history.append(
+            {
+                "action": action,
+                "result": result,
+                "result_summary": summary,
+            }
+        )
 
         if "error" in result and stop_on_error:
             return _final(
-                "error", goal, history, screenshots_saved,
+                "error",
+                goal,
+                history,
+                screenshots_saved,
                 reason=f"action failed: {summary}",
                 iterations=iteration + 1,
             )
@@ -284,7 +310,9 @@ def _run_computer_use_loop(
 
     return _final(
         "max_iterations",
-        goal, history, screenshots_saved,
+        goal,
+        history,
+        screenshots_saved,
         reason=f"reached max_iterations={max_iterations}",
         iterations=max_iterations,
     )
@@ -321,7 +349,8 @@ def _dispatch_action(action: dict[str, Any]) -> dict[str, Any]:
 
 
 def _summarize_action_result(
-    action: dict[str, Any], result: dict[str, Any],
+    action: dict[str, Any],
+    result: dict[str, Any],
 ) -> str:
     if "error" in result:
         return f"error: {result['error']}"

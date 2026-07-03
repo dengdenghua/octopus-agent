@@ -38,12 +38,12 @@ class TentacleType(StrEnum):
 class TentacleStatus(StrEnum):
     """触手在线状态机."""
 
-    OFFLINE = "offline"           # 未连接
-    CONNECTING = "connecting"     # 重连中
-    ONLINE = "online"             # 在线，空闲
-    BUSY = "busy"                 # 在线，被占用
-    ERROR = "error"               # 错误状态
-    LOCKED = "locked"             # 被其他 Arm 持锁
+    OFFLINE = "offline"  # 未连接
+    CONNECTING = "connecting"  # 重连中
+    ONLINE = "online"  # 在线，空闲
+    BUSY = "busy"  # 在线，被占用
+    ERROR = "error"  # 错误状态
+    LOCKED = "locked"  # 被其他 Arm 持锁
 
 
 @dataclass(slots=True)
@@ -80,12 +80,12 @@ class Heartbeat:
 class ToolCall:
     """工具调用请求（Runtime → Tentacle）."""
 
-    call_id: str                          # 全局唯一 ID
+    call_id: str  # 全局唯一 ID
     tentacle_id: str
-    tool: str                             # 如 "android.tap"
+    tool: str  # 如 "android.tap"
     args: dict[str, Any] = field(default_factory=dict)
     timeout_ms: int = 15_000
-    trace_id: str | None = None           # 关联到 trace_store 的 trace
+    trace_id: str | None = None  # 关联到 trace_store 的 trace
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -108,7 +108,7 @@ class ToolResult:
     error_code: int | None = None
     error_message: str | None = None
     duration_ms: int = 0
-    screenshot_after: str | None = None    # 引用，不内联
+    screenshot_after: str | None = None  # 引用，不内联
     screen_hash_after: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -180,7 +180,7 @@ class Tentacle(Protocol):
     # ── 身份（必填） ──────────────────────────────────────────
     tentacle_id: str
     tentacle_type: TentacleType
-    platform: str                      # android / macos / windows / linux
+    platform: str  # android / macos / windows / linux
     meta: dict[str, Any]
 
     # ── 能力（动态上报） ──────────────────────────────────────

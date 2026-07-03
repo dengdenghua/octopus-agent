@@ -124,9 +124,7 @@ class TestStdioClient:
     @pytest.mark.skipif(not STDIO_AVAILABLE, reason="mcp SDK required")
     def test_constructs_when_sdk_available(self):
         """Implementation note."""
-        client = StdioMCPClient(
-            MCPServerConfig(name="x", command="nonexistent-cmd")
-        )
+        client = StdioMCPClient(MCPServerConfig(name="x", command="nonexistent-cmd"))
         assert not client._closed
         client.close()
         assert client._closed
@@ -136,7 +134,8 @@ class TestStdioClient:
         """Implementation note."""
         client = StdioMCPClient(
             MCPServerConfig(
-                name="x", command="cmd_definitely_does_not_exist_12345",
+                name="x",
+                command="cmd_definitely_does_not_exist_12345",
                 timeout_ms=3000,
             )
         )
@@ -194,9 +193,7 @@ class _FakeSession:
         pass
 
     async def list_tools(self):
-        return _FakeToolsResult(
-            [_FakeTool("remote_echo", "echo a message", {"type": "object"})]
-        )
+        return _FakeToolsResult([_FakeTool("remote_echo", "echo a message", {"type": "object"})])
 
     async def call_tool(self, _name, args):
         return _FakeCallResult([_FakeContent(f"echoed:{args.get('msg')}")])
@@ -218,9 +215,7 @@ class TestHttpClient:
 
         monkeypatch.setattr(client_mod, "HTTP_AVAILABLE", False)
         with pytest.raises(MCPClientError, match="mcp SDK not installed"):
-            HttpMCPClient(
-                MCPServerConfig(name="r", transport="http", url="http://x/mcp")
-            )
+            HttpMCPClient(MCPServerConfig(name="r", transport="http", url="http://x/mcp"))
 
     @pytest.mark.skipif(not HTTP_AVAILABLE, reason="mcp SDK required")
     def test_requires_url(self):
@@ -240,8 +235,10 @@ class TestHttpClient:
     def test_call_tool_catches_connection_failure(self):
         client = HttpMCPClient(
             MCPServerConfig(
-                name="r", transport="http",
-                url="http://127.0.0.1:1/mcp", timeout_ms=2000,
+                name="r",
+                transport="http",
+                url="http://127.0.0.1:1/mcp",
+                timeout_ms=2000,
             )
         )
         result = client.call_tool("any_tool", {})
@@ -254,9 +251,7 @@ class TestHttpClient:
     def test_success_path_maps_tools_and_results(self, monkeypatch):
         import mcp
 
-        client = HttpMCPClient(
-            MCPServerConfig(name="srv", transport="http", url="http://x/mcp")
-        )
+        client = HttpMCPClient(MCPServerConfig(name="srv", transport="http", url="http://x/mcp"))
         monkeypatch.setattr(client, "_transport", lambda: _FakeTransport())
         monkeypatch.setattr(mcp, "ClientSession", _FakeSession)
 

@@ -15,6 +15,7 @@ Read-only scan mapping a Qoder install onto octopus's importable surfaces:
 
 Stdlib-only and side-effect-free, like the other adapters.
 """
+
 from __future__ import annotations
 
 import json
@@ -38,9 +39,13 @@ def _qoder_mcp(mcp_json: Path) -> list[MigrationItem]:
         return []
     return [
         MigrationItem(
-            "mcp_server", str(name), "qoder",
+            "mcp_server",
+            str(name),
+            "qoder",
             "MCP server — import disabled; supply runtime/credentials to enable",
-            str(mcp_json), portable=True, needs=mcp_needs(spec),
+            str(mcp_json),
+            portable=True,
+            needs=mcp_needs(spec),
         )
         for name, spec in servers.items()
     ]
@@ -49,10 +54,7 @@ def _qoder_mcp(mcp_json: Path) -> list[MigrationItem]:
 def _user_mcp_path(base: Path) -> Path:
     # Qoder is an Electron/VSCode-family desktop app; its user MCP config lives
     # outside ~/.qoder. macOS path (the only desktop Qoder ships today).
-    return (
-        base / "Library" / "Application Support" / "Qoder"
-        / "SharedClientCache" / "mcp.json"
-    )
+    return base / "Library" / "Application Support" / "Qoder" / "SharedClientCache" / "mcp.json"
 
 
 def scan_qoder(home: Path | None = None) -> MigrationPlan:
@@ -95,9 +97,13 @@ def scan_qoder(home: Path | None = None) -> MigrationPlan:
             _, desc = read_skill_meta(recipe)
             items.append(
                 MigrationItem(
-                    "command", stem, "qoder",
+                    "command",
+                    stem,
+                    "qoder",
                     desc or "Qoder Canvas recipe",
-                    str(recipe), portable=False, needs=("canvas",),
+                    str(recipe),
+                    portable=False,
+                    needs=("canvas",),
                 ),
             )
 

@@ -53,6 +53,7 @@ much lower round cap than the parent (5 vs 30 in the parent's
 without converging, it returns whatever text it produced so far;
 the parent decides whether to re-spawn or move on.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -78,13 +79,13 @@ EPHEMERAL_MAX_ROUNDS: int = 5  # default for simple roles
 # Per-role overrides for roles that need deeper exploration/execution.
 # Target: align with Claude Code depth (20-30 rounds for research tasks).
 EPHEMERAL_MAX_ROUNDS_BY_ROLE: dict[str, int] = {
-    "researcher": 25,      # web_search + fetch + synthesize
-    "explorer": 15,        # file traversal + grep + read
-    "implementer": 30,     # edit + verify + test cycles
-    "debugger": 20,        # trace + hypothesis + verify
-    "architect": 15,       # read + analyze + design
-    "designer": 20,        # read + plan + decompose
-    "planner": 12,         # breakdown + estimate
+    "researcher": 25,  # web_search + fetch + synthesize
+    "explorer": 15,  # file traversal + grep + read
+    "implementer": 30,  # edit + verify + test cycles
+    "debugger": 20,  # trace + hypothesis + verify
+    "architect": 15,  # read + analyze + design
+    "designer": 20,  # read + plan + decompose
+    "planner": 12,  # breakdown + estimate
     # reviewer/arbiter/synthesizer stay at 5 (single-shot opinion)
 }
 
@@ -136,8 +137,21 @@ _CONTINUE_AFTER_LENGTH_LIMIT = (
 )
 
 _TRUNCATION_ENDINGS = (
-    ".", "!", "?", "。", "！", "？", ")", "]", "】", "」", "”",
-    "'", '"', "`", "…",
+    ".",
+    "!",
+    "?",
+    "。",
+    "！",
+    "？",
+    ")",
+    "]",
+    "】",
+    "」",
+    "”",
+    "'",
+    '"',
+    "`",
+    "…",
 )
 
 
@@ -151,9 +165,13 @@ def _looks_truncated_text(
     stripped = text.rstrip()
     if not stripped:
         return False
-    if max_tokens > 0 and output_tokens > 0 and (
-        output_tokens >= max(1, int(max_tokens * 0.9))
-        and len(stripped) >= max(1200, int(max_tokens * 0.75))
+    if (
+        max_tokens > 0
+        and output_tokens > 0
+        and (
+            output_tokens >= max(1, int(max_tokens * 0.9))
+            and len(stripped) >= max(1200, int(max_tokens * 0.75))
+        )
     ):
         return True
     if max_tokens > 0 and len(stripped) >= max(2000, int(max_tokens * 1.5)):
@@ -229,11 +247,7 @@ def make_llm_ephemeral_runner(
     """
     # Resolve the model identifier ONCE at factory time · avoids
     # re-probing ``router`` on every call.
-    model = (
-        default_model
-        or getattr(router, "default_model", None)
-        or ""
-    )
+    model = default_model or getattr(router, "default_model", None) or ""
     if not model:
         raise ValueError(
             "make_llm_ephemeral_runner: could not determine model · "
@@ -270,7 +284,8 @@ def make_llm_ephemeral_runner(
         # explicit override or cheap-routing — in ``call.context["model_name"]``.
         # Honor it so this run reaches the requested backend.
         effective_model = _select_call_model(
-            model, getattr(call, "context", None),
+            model,
+            getattr(call, "context", None),
         )
 
         # Single-shot fallback path · used when no registry was
@@ -289,9 +304,7 @@ def make_llm_ephemeral_runner(
             # Pull the optional event_emitter injected by the bridge so
             # we can forward role text as ``sub_text_delta`` chunks the
             # parent gateway can render live.
-            _ctx_emitter_single = (
-                call.context.get("event_emitter") if call.context else None
-            )
+            _ctx_emitter_single = call.context.get("event_emitter") if call.context else None
             stream_fn_single = getattr(router, "call_stream", None)
             if callable(stream_fn_single):
                 accumulated = ""
@@ -301,24 +314,27 @@ def make_llm_ephemeral_runner(
                             chunk = event.delta or ""
                             if chunk:
                                 accumulated += chunk
-                                _safe_ctx_emit(_ctx_emitter_single, {
-                                    "type": "sub_text_delta",
-                                    "agent_id": call.role.id,
-                                    "round": 1,
-                                    "delta": chunk,
-                                })
+                                _safe_ctx_emit(
+                                    _ctx_emitter_single,
+                                    {
+                                        "type": "sub_text_delta",
+                                        "agent_id": call.role.id,
+                                        "round": 1,
+                                        "delta": chunk,
+                                    },
+                                )
                         elif event.type == "done":
                             fin = event.final
                             if fin is not None and not accumulated:
-                                accumulated = str(
-                                    getattr(fin, "text", "") or ""
-                                )
+                                accumulated = str(getattr(fin, "text", "") or "")
                             break
                 except (ConnectionError, TimeoutError, OSError, ValueError, TypeError) as exc:  # noqa: BLE001
                     _log.warning(
-                        "ephemeral LLM runner (single-shot stream) · "
-                        "role=%s model=%s · %s: %s",
-                        call.role.id, effective_model, type(exc).__name__, exc,
+                        "ephemeral LLM runner (single-shot stream) · role=%s model=%s · %s: %s",
+                        call.role.id,
+                        effective_model,
+                        type(exc).__name__,
+                        exc,
                     )
                     raise
                 return accumulated
@@ -326,15 +342,18 @@ def make_llm_ephemeral_runner(
                 "ephemeral LLM runner (single-shot) · role=%s "
                 "model=%s · call_stream unavailable, falling back "
                 "to non-streaming call() — no live token streaming",
-                call.role.id, effective_model,
+                call.role.id,
+                effective_model,
             )
             try:
                 resp = router.call(req)
             except (ConnectionError, TimeoutError, OSError, ValueError, TypeError) as exc:  # noqa: BLE001
                 _log.warning(
-                    "ephemeral LLM runner (single-shot) · role=%s "
-                    "model=%s · %s: %s",
-                    call.role.id, effective_model, type(exc).__name__, exc,
+                    "ephemeral LLM runner (single-shot) · role=%s model=%s · %s: %s",
+                    call.role.id,
+                    effective_model,
+                    type(exc).__name__,
+                    exc,
                 )
                 raise
             return str(getattr(resp, "text", None) or "")
@@ -345,21 +364,13 @@ def make_llm_ephemeral_runner(
         from runtime.execution.tool_spec_builder import (
             build_anthropic_tool_specs,
         )
+
         all_specs = build_anthropic_tool_specs(registry)
-        ctx_allowlist = (
-            call.context.get("tool_allowlist") if call.context else None
-        )
+        ctx_allowlist = call.context.get("tool_allowlist") if call.context else None
         if isinstance(ctx_allowlist, (list, tuple, set)):
-            allowlist = tuple(
-                str(name).strip()
-                for name in ctx_allowlist
-                if str(name).strip()
-            )
+            allowlist = tuple(str(name).strip() for name in ctx_allowlist if str(name).strip())
         else:
-            allowlist = (
-                tuple(call.role.tool_allowlist)
-                if call.role.tool_allowlist else ()
-            )
+            allowlist = tuple(call.role.tool_allowlist) if call.role.tool_allowlist else ()
         tool_specs = select_tool_specs(allowlist, all_specs)
 
         if not tool_specs:
@@ -382,9 +393,7 @@ def make_llm_ephemeral_runner(
         _ctx_emitter = call.context.get("event_emitter") if call.context else None
 
         # Role-specific round cap (align with Claude Code depth for research tasks)
-        max_rounds = EPHEMERAL_MAX_ROUNDS_BY_ROLE.get(
-            call.role.id, EPHEMERAL_MAX_ROUNDS
-        )
+        max_rounds = EPHEMERAL_MAX_ROUNDS_BY_ROLE.get(call.role.id, EPHEMERAL_MAX_ROUNDS)
 
         messages: list[Any] = [
             Message(role="system", content=call.composed_system_prompt),
@@ -423,25 +432,27 @@ def make_llm_ephemeral_runner(
                     "round=%d · call_stream unavailable, falling back "
                     "to non-streaming call() — UI will show no "
                     "live token streaming for this role",
-                    call.role.id, effective_model, round_i,
+                    call.role.id,
+                    effective_model,
+                    round_i,
                 )
                 try:
                     resp = router.call(req)
                 except (ConnectionError, TimeoutError, OSError, ValueError, TypeError) as exc:  # noqa: BLE001
                     _log.warning(
-                        "ephemeral agentic runner · role=%s model=%s "
-                        "round=%d · %s: %s",
-                        call.role.id, effective_model, round_i,
-                        type(exc).__name__, exc,
+                        "ephemeral agentic runner · role=%s model=%s round=%d · %s: %s",
+                        call.role.id,
+                        effective_model,
+                        round_i,
+                        type(exc).__name__,
+                        exc,
                     )
                     return accumulated_text or ""
                 text = str(getattr(resp, "text", None) or "")
                 tool_calls = list(getattr(resp, "tool_calls", []) or [])
                 int(getattr(resp, "input_tokens", 0) or 0)
                 output_tokens_round = int(getattr(resp, "output_tokens", 0) or 0)
-                finish_reason_round = str(
-                    getattr(resp, "finish_reason", "stop") or "stop"
-                )
+                finish_reason_round = str(getattr(resp, "finish_reason", "stop") or "stop")
             else:
                 try:
                     for event in stream_fn(req):
@@ -455,34 +466,34 @@ def make_llm_ephemeral_runner(
                                 # prose live. ``sub_text_delta`` is the
                                 # role-scoped equivalent of react_loop's
                                 # ``text_delta``.
-                                _safe_ctx_emit(_ctx_emitter, {
-                                    "type": "sub_text_delta",
-                                    "agent_id": call.role.id,
-                                    "round": round_i + 1,
-                                    "delta": chunk,
-                                })
+                                _safe_ctx_emit(
+                                    _ctx_emitter,
+                                    {
+                                        "type": "sub_text_delta",
+                                        "agent_id": call.role.id,
+                                        "round": round_i + 1,
+                                        "delta": chunk,
+                                    },
+                                )
                         elif etype == "tool_use" and event.tool_call is not None:
                             tool_calls.append(event.tool_call)
                         elif etype == "done":
                             fin = event.final
                             if fin is not None:
-                                int(
-                                    getattr(fin, "input_tokens", 0) or 0
-                                )
-                                output_tokens_round = int(
-                                    getattr(fin, "output_tokens", 0) or 0
-                                )
+                                int(getattr(fin, "input_tokens", 0) or 0)
+                                output_tokens_round = int(getattr(fin, "output_tokens", 0) or 0)
                                 finish_reason_round = str(
-                                    getattr(fin, "finish_reason", "stop")
-                                    or "stop"
+                                    getattr(fin, "finish_reason", "stop") or "stop"
                                 )
                             break
                 except (ConnectionError, TimeoutError, OSError, ValueError, TypeError) as exc:  # noqa: BLE001
                     _log.warning(
-                        "ephemeral agentic runner · role=%s model=%s "
-                        "round=%d · %s: %s",
-                        call.role.id, effective_model, round_i,
-                        type(exc).__name__, exc,
+                        "ephemeral agentic runner · role=%s model=%s round=%d · %s: %s",
+                        call.role.id,
+                        effective_model,
+                        round_i,
+                        type(exc).__name__,
+                        exc,
                     )
                     return accumulated_text + text or accumulated_text
 
@@ -491,20 +502,22 @@ def make_llm_ephemeral_runner(
 
             # Done · LLM produced text but no more tool calls.
             if not tool_calls:
-                if (
-                    _is_length_limited_finish(finish_reason_round)
-                    and round_i + 1 < max_rounds
-                ):
+                if _is_length_limited_finish(finish_reason_round) and round_i + 1 < max_rounds:
                     _log.info(
                         "ephemeral agentic runner · role=%s model=%s "
                         "round=%d · continuing after finish_reason=%s",
-                        call.role.id, effective_model, round_i, finish_reason_round,
+                        call.role.id,
+                        effective_model,
+                        round_i,
+                        finish_reason_round,
                     )
                     messages.append(Message(role="assistant", content=text))
-                    messages.append(Message(
-                        role="user",
-                        content=_CONTINUE_AFTER_LENGTH_LIMIT,
-                    ))
+                    messages.append(
+                        Message(
+                            role="user",
+                            content=_CONTINUE_AFTER_LENGTH_LIMIT,
+                        )
+                    )
                     continue
                 if (
                     not _is_length_limited_finish(finish_reason_round)
@@ -518,25 +531,29 @@ def make_llm_ephemeral_runner(
                     _log.info(
                         "ephemeral agentic runner · role=%s model=%s "
                         "round=%d · continuing after inferred truncation",
-                        call.role.id, effective_model, round_i,
+                        call.role.id,
+                        effective_model,
+                        round_i,
                     )
                     messages.append(Message(role="assistant", content=text))
-                    messages.append(Message(
-                        role="user",
-                        content=_CONTINUE_AFTER_LENGTH_LIMIT,
-                    ))
+                    messages.append(
+                        Message(
+                            role="user",
+                            content=_CONTINUE_AFTER_LENGTH_LIMIT,
+                        )
+                    )
                     continue
                 if _is_length_limited_finish(finish_reason_round):
-                    notice = (
-                        "\n\n[response truncated: model stopped at the "
-                        "output length limit]"
+                    notice = "\n\n[response truncated: model stopped at the output length limit]"
+                    _safe_ctx_emit(
+                        _ctx_emitter,
+                        {
+                            "type": "sub_text_delta",
+                            "agent_id": call.role.id,
+                            "round": round_i + 1,
+                            "delta": notice,
+                        },
                     )
-                    _safe_ctx_emit(_ctx_emitter, {
-                        "type": "sub_text_delta",
-                        "agent_id": call.role.id,
-                        "round": round_i + 1,
-                        "delta": notice,
-                    })
                     return accumulated_text + notice
                 return accumulated_text
 
@@ -547,15 +564,20 @@ def make_llm_ephemeral_runner(
             if text:
                 assistant_blocks.append({"type": "text", "text": text})
             for tc in tool_calls:
-                assistant_blocks.append({
-                    "type": "tool_use",
-                    "id": tc.id,
-                    "name": tc.name,
-                    "input": tc.input,
-                })
-            messages.append(Message(
-                role="assistant", content=assistant_blocks,
-            ))
+                assistant_blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": tc.id,
+                        "name": tc.name,
+                        "input": tc.input,
+                    }
+                )
+            messages.append(
+                Message(
+                    role="assistant",
+                    content=assistant_blocks,
+                )
+            )
 
             # Execute each tool through the registry's handler.
             # Emit sub-tool-start/end events around each call so the
@@ -575,22 +597,28 @@ def make_llm_ephemeral_runner(
                 _args_preview = ""
                 try:
                     import json as _json
+
                     _args_preview = _json.dumps(
-                        getattr(tc, "input", {}) or {}, ensure_ascii=False,
+                        getattr(tc, "input", {}) or {},
+                        ensure_ascii=False,
                     )[:200]
                 except (TypeError, ValueError):  # noqa: BLE001
                     _args_preview = repr(getattr(tc, "input", {}))[:200]
-                _safe_ctx_emit(_ctx_emitter, {
-                    "type": "sub_tool_start",
-                    "agent_id": call.role.id,
-                    "round": round_i + 1,
-                    "skill": getattr(tc, "name", "") or "",
-                    "tool_call_id": getattr(tc, "id", "") or "",
-                    "args_preview": _args_preview,
-                })
+                _safe_ctx_emit(
+                    _ctx_emitter,
+                    {
+                        "type": "sub_tool_start",
+                        "agent_id": call.role.id,
+                        "round": round_i + 1,
+                        "skill": getattr(tc, "name", "") or "",
+                        "tool_call_id": getattr(tc, "id", "") or "",
+                        "args_preview": _args_preview,
+                    },
+                )
                 _sub_tool_t0 = time.monotonic()
                 output, is_error = _execute_tool_in_subagent(
-                    registry, tc,
+                    registry,
+                    tc,
                 )
                 _duration_ms = int((time.monotonic() - _sub_tool_t0) * 1000)
                 _emit_sub_tool_event(
@@ -602,15 +630,18 @@ def make_llm_ephemeral_runner(
                     is_error=is_error,
                     duration_ms=_duration_ms,
                 )
-                _safe_ctx_emit(_ctx_emitter, {
-                    "type": "sub_tool_end",
-                    "agent_id": call.role.id,
-                    "round": round_i + 1,
-                    "skill": getattr(tc, "name", "") or "",
-                    "tool_call_id": getattr(tc, "id", "") or "",
-                    "status": "failed" if is_error else "success",
-                    "duration_ms": _duration_ms,
-                })
+                _safe_ctx_emit(
+                    _ctx_emitter,
+                    {
+                        "type": "sub_tool_end",
+                        "agent_id": call.role.id,
+                        "round": round_i + 1,
+                        "skill": getattr(tc, "name", "") or "",
+                        "tool_call_id": getattr(tc, "id", "") or "",
+                        "status": "failed" if is_error else "success",
+                        "duration_ms": _duration_ms,
+                    },
+                )
                 block: dict[str, Any] = {
                     "type": "tool_result",
                     "tool_use_id": tc.id,
@@ -619,9 +650,12 @@ def make_llm_ephemeral_runner(
                 if is_error:
                     block["is_error"] = True
                 tool_results.append(block)
-            messages.append(Message(
-                role="user", content=tool_results,
-            ))
+            messages.append(
+                Message(
+                    role="user",
+                    content=tool_results,
+                )
+            )
 
         # Hit the round cap. Raise so the bridge can surface a real
         # failure (success=false + error) instead of returning a
@@ -682,6 +716,7 @@ def _emit_sub_tool_event(
     """
     try:
         from runtime.platform.process.session import current_session
+
         sess = current_session()
     except (ImportError, TypeError, AttributeError, OSError):  # noqa: BLE001
         return
@@ -735,6 +770,7 @@ def _emit_sub_tool_event(
             SubToolEndEvent,
             SubToolStartEvent,
         )
+
         task_id_obj = meta.get("task_id")
         if kind == "sub_tool_start":
             ev = SubToolStartEvent(
@@ -801,6 +837,7 @@ def _emit_subagent_lifecycle_event(
     payload = payload or {}
     try:
         from runtime.platform.process.session import current_session
+
         sess = current_session()
     except (ImportError, TypeError, AttributeError, OSError):  # noqa: BLE001
         return
@@ -845,6 +882,7 @@ def _emit_subagent_lifecycle_event(
             SubToolEndEvent,
             SubToolStartEvent,
         )
+
         if kind == "subagent_spawned":
             ev = SubToolStartEvent(
                 task_id=task_id_obj,
@@ -920,9 +958,8 @@ def _ephemeral_write_confine_block(call: Any, skill: Any) -> str | None:
         return None
     name = (getattr(call, "name", "") or "").lower()
     affinity = [str(a).lower() for a in (getattr(skill, "affinity", None) or [])]
-    is_write = (
-        any(tok in name for tok in ("write", "edit", "patch", "create", "append"))
-        or any(a in ("write", "edit", "filesystem", "file-write") for a in affinity)
+    is_write = any(tok in name for tok in ("write", "edit", "patch", "create", "append")) or any(
+        a in ("write", "edit", "filesystem", "file-write") for a in affinity
     )
     if not is_write:
         return None
@@ -943,7 +980,8 @@ def _ephemeral_write_confine_block(call: Any, skill: Any) -> str | None:
 
 
 def _execute_tool_in_subagent(
-    registry: Any, call: Any,
+    registry: Any,
+    call: Any,
 ) -> tuple[str, bool]:
     """Run one tool_use call inside an ephemeral sub-agent.
 
@@ -957,6 +995,7 @@ def _execute_tool_in_subagent(
     Returns ``(output_text, is_error)``.
     """
     import json
+
     try:
         if not registry.has(call.name):
             return (f"(skill not found: {call.name})", True)
@@ -1015,16 +1054,15 @@ def _execute_tool_in_subagent(
     # escalate the turn taint so a LATER risky tool in the same ephemeral run
     # is gated too — mirrors the executor chokepoint's post-success scan.
     scan_and_escalate_ephemeral_taint(
-        call.name, getattr(skill, "affinity", None), rendered,
+        call.name,
+        getattr(skill, "affinity", None),
+        rendered,
     )
     # Same 4kB cap as parent agentic loop · keeps sub-agent context
     # from blowing up on a single huge tool result (e.g. a full-page
     # web_search output).
     if len(rendered) > 4000:
-        rendered = (
-            rendered[:4000]
-            + f"\n\n...(truncated, {len(rendered) - 4000} more chars)"
-        )
+        rendered = rendered[:4000] + f"\n\n...(truncated, {len(rendered) - 4000} more chars)"
     return (rendered, False)
 
 

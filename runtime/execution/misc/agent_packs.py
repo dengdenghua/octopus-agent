@@ -97,7 +97,9 @@ def scan_agent_pack(root: str | Path) -> AgentPackPreview:
         apps.extend(_scan_app_modules(plugin_dir, plugin, warnings))
         agents.extend(_scan_markdown_modules(plugin_dir / "agents", "agent", plugin, warnings))
         skills.extend(_scan_skill_modules(plugin_dir / "skills", plugin, warnings))
-        commands.extend(_scan_markdown_modules(plugin_dir / "commands", "command", plugin, warnings))
+        commands.extend(
+            _scan_markdown_modules(plugin_dir / "commands", "command", plugin, warnings)
+        )
         mcp_servers.extend(_scan_mcp_servers(plugin_dir / ".mcp.json", plugin, warnings))
 
     managed_agents, subagents = _scan_managed_agents(base, warnings)
@@ -125,7 +127,10 @@ def import_agent_from_pack(
     skills_root: str | Path,
 ) -> AgentPackImportResult:
     preview = scan_agent_pack(root)
-    module = next((agent for agent in preview.agents if agent.name == agent_name or agent.id == agent_name), None)
+    module = next(
+        (agent for agent in preview.agents if agent.name == agent_name or agent.id == agent_name),
+        None,
+    )
     if module is None:
         raise AgentPackAgentNotFound(f"agent not found in pack: {agent_name}")
 
@@ -161,7 +166,9 @@ def import_agent_from_pack(
     if mcp_tools:
         warnings.append("MCP tools were detected and left disabled: " + ", ".join(mcp_tools))
 
-    plugin_skills = [skill for skill in preview.skills if skill.source_plugin == module.source_plugin]
+    plugin_skills = [
+        skill for skill in preview.skills if skill.source_plugin == module.source_plugin
+    ]
     selected_skills = _select_agent_skills(body, plugin_skills)
     copied_skills: list[str] = []
     skipped_skills: list[str] = []
@@ -416,15 +423,17 @@ def _scan_app_modules(
         for child in sorted(apps_dir.iterdir()):
             if not child.is_dir():
                 continue
-            candidates.extend([
-                child / "octopus-app.jsonc",
-                child / "app.jsonc",
-                child / "app.json",
-                child / "app.yaml",
-                child / "meta.jsonc",
-                child / "meta.json",
-                child / "meta.yaml",
-            ])
+            candidates.extend(
+                [
+                    child / "octopus-app.jsonc",
+                    child / "app.jsonc",
+                    child / "app.json",
+                    child / "app.yaml",
+                    child / "meta.jsonc",
+                    child / "meta.json",
+                    child / "meta.yaml",
+                ]
+            )
 
     for manifest in candidates:
         if manifest in seen_paths or not manifest.is_file():
@@ -535,7 +544,10 @@ def _iter_app_manifest_entries(
 def _normalize_app_actions(raw: Any) -> list[dict[str, Any]]:
     items: list[Any]
     if isinstance(raw, dict):
-        items = [{**value, "name": key} if isinstance(value, dict) else {"name": key} for key, value in raw.items()]
+        items = [
+            {**value, "name": key} if isinstance(value, dict) else {"name": key}
+            for key, value in raw.items()
+        ]
     elif isinstance(raw, list):
         items = raw
     else:
@@ -560,12 +572,16 @@ def _normalize_app_actions(raw: Any) -> list[dict[str, Any]]:
             or item.get("parameters")
             or {}
         )
-        actions.append({
-            "name": name,
-            "description": str(item.get("description") or ""),
-            "input_schema": schema if isinstance(schema, dict) else {},
-            "requires_confirmation": bool(item.get("requires_confirmation") or item.get("confirm")),
-        })
+        actions.append(
+            {
+                "name": name,
+                "description": str(item.get("description") or ""),
+                "input_schema": schema if isinstance(schema, dict) else {},
+                "requires_confirmation": bool(
+                    item.get("requires_confirmation") or item.get("confirm")
+                ),
+            }
+        )
     return actions
 
 
@@ -897,7 +913,9 @@ def _cleanup_copied_skill_dirs(skills_root: Path, copied_skills: list[str]) -> N
 
 
 def _titleize(value: str) -> str:
-    return " ".join(part.capitalize() for part in re.split(r"[-_\s]+", value.strip()) if part) or value
+    return (
+        " ".join(part.capitalize() for part in re.split(r"[-_\s]+", value.strip()) if part) or value
+    )
 
 
 def _select_agent_skills(body: str, plugin_skills: list[PackModule]) -> list[PackModule]:

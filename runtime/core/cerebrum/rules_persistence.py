@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -91,14 +90,16 @@ def load_rules_from_yaml(text: str) -> list[Rule]:
     for i, item in enumerate(raw):
         if not isinstance(item, dict):
             raise ValueError(f"rules[{i}] must be a mapping")
-        out.append(Rule(
-            name=str(item["name"]),
-            intent_types=list(item.get("intent_types") or []),
-            keywords=list(item.get("keywords") or []),
-            skill_sequence=[SkillId(s) for s in (item.get("skill_sequence") or [])],
-            node_args_templates=list(item.get("node_args_templates") or []),
-            priority=int(item.get("priority", 0)),
-        ))
+        out.append(
+            Rule(
+                name=str(item["name"]),
+                intent_types=list(item.get("intent_types") or []),
+                keywords=list(item.get("keywords") or []),
+                skill_sequence=[SkillId(s) for s in (item.get("skill_sequence") or [])],
+                node_args_templates=list(item.get("node_args_templates") or []),
+                priority=int(item.get("priority", 0)),
+            )
+        )
     return out
 
 
@@ -140,7 +141,7 @@ def _fallback_parse(text: str) -> dict[str, Any]:
             current["node_args_templates"] = current_templates
             continue
         if current_templates is not None and line.startswith("      - "):
-            val = line[len("      - "):].strip()
+            val = line[len("      - ") :].strip()
             if val == "null":
                 current_templates.append(None)
             else:
@@ -172,9 +173,7 @@ def _parse_scalar(raw: str) -> Any:
         parts = [p.strip() for p in inner.split(",")]
         out: list[Any] = []
         for p in parts:
-            if (p.startswith("'") and p.endswith("'")) or (
-                p.startswith('"') and p.endswith('"')
-            ):
+            if (p.startswith("'") and p.endswith("'")) or (p.startswith('"') and p.endswith('"')):
                 s = p[1:-1]
                 if p[0] == "'":
                     s = s.replace("''", "'")
@@ -182,9 +181,7 @@ def _parse_scalar(raw: str) -> Any:
             else:
                 out.append(p)
         return out
-    if (raw.startswith("'") and raw.endswith("'")) or (
-        raw.startswith('"') and raw.endswith('"')
-    ):
+    if (raw.startswith("'") and raw.endswith("'")) or (raw.startswith('"') and raw.endswith('"')):
         s = raw[1:-1]
         if raw[0] == "'":
             s = s.replace("''", "'")

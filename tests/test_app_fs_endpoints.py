@@ -19,6 +19,7 @@ absolute path the caller named — see ``_assert_in_scope`` and
 ``TestFailClosed`` below. Auth is enforced once at the router level when
 an identity store is wired and ``require_auth`` is set (``TestFsAuth``).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -65,7 +66,9 @@ def scoped_client(metadata: dict[str, object]) -> TestClient:
 
 class TestFsTree:
     def test_returns_filesystem_roots(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         r = client.get("/api/fs/roots")
 
@@ -76,7 +79,8 @@ class TestFsTree:
         assert all(e["type"] == "dir" for e in entries)
 
     def test_import_directory_preserves_relative_tree(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         r = client.post(
             "/api/fs/import-directory",
@@ -100,7 +104,9 @@ class TestFsTree:
         assert (imported / "src" / "app.ts").read_text(encoding="utf-8") == "export {}"
 
     def test_returns_entries_for_valid_dir(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         (tmp_path / "a.txt").write_text("hi")
         (tmp_path / "sub").mkdir()
@@ -118,21 +124,21 @@ class TestFsTree:
         # exist anywhere in tmp".
         assert {"a.txt", "sub", "b.txt"}.issubset(names)
         # Dirs sorted before files among the test's own writes.
-        own_top = [
-            e["name"]
-            for e in entries
-            if e["depth"] == 0 and e["name"] in {"a.txt", "sub"}
-        ]
+        own_top = [e["name"] for e in entries if e["depth"] == 0 and e["name"] in {"a.txt", "sub"}]
         assert own_top == ["sub", "a.txt"]
 
     def test_nonexistent_dir_returns_404(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         r = client.get(f"/api/fs/tree?path={tmp_path / 'nope'}")
         assert r.status_code == 404
 
     def test_file_instead_of_dir_returns_404(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         f = tmp_path / "x.txt"
         f.write_text("x")
@@ -140,7 +146,9 @@ class TestFsTree:
         assert r.status_code == 404
 
     def test_depth_cap_respected(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         """Deeply nested dirs beyond ``depth`` should not appear."""
         deep = tmp_path / "l0" / "l1" / "l2" / "l3"
@@ -153,7 +161,9 @@ class TestFsTree:
         assert max(depths) <= 1
 
     def test_ignores_heavy_project_dirs_by_default(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         (tmp_path / ".git" / "objects" / "aa").mkdir(parents=True)
         (tmp_path / ".git" / "objects" / "aa" / "pack").write_text("x")
@@ -177,7 +187,9 @@ class TestFsTree:
         assert names >= {"src", "app.py"}
 
     def test_can_include_ignored_dirs_when_requested(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         (tmp_path / ".git" / "objects").mkdir(parents=True)
 
@@ -193,7 +205,9 @@ class TestFsTree:
 
 class TestFsRead:
     def test_read_small_file(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         f = tmp_path / "x.txt"
         f.write_text("line1\nline2\nline3\n")
@@ -204,7 +218,9 @@ class TestFsRead:
         assert data["truncated"] is False
 
     def test_read_respects_max_lines(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         f = tmp_path / "big.txt"
         f.write_text("\n".join(f"row{i}" for i in range(100)))
@@ -214,19 +230,24 @@ class TestFsRead:
         assert data["truncated"] is True
 
     def test_missing_file_returns_404(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         r = client.get(f"/api/fs/read?path={tmp_path / 'ghost.txt'}")
         assert r.status_code == 404
 
     def test_directory_returns_404(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         r = client.get(f"/api/fs/read?path={tmp_path}")
         assert r.status_code == 404
 
     def test_thread_workspace_rejects_outside_file(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         workspace = tmp_path / "workspace"
         workspace.mkdir()
@@ -253,7 +274,9 @@ class TestFsRead:
 
 class TestFsWrite:
     def test_write_creates_file(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         target = tmp_path / "out" / "nested" / "file.txt"
         r = client.post(
@@ -267,21 +290,26 @@ class TestFsWrite:
         assert data["bytes"] == len(b"hello world")
 
     def test_write_missing_path_rejected(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         r = client.post("/api/fs/write", json={"content": "x"})
         assert r.status_code == 400
 
     def test_write_empty_path_rejected(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         r = client.post(
-            "/api/fs/write", json={"path": "   ", "content": "x"},
+            "/api/fs/write",
+            json={"path": "   ", "content": "x"},
         )
         assert r.status_code == 400
 
     def test_write_non_string_content_rejected(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         r = client.post(
             "/api/fs/write",
@@ -290,17 +318,21 @@ class TestFsWrite:
         assert r.status_code == 400
 
     def test_write_overwrites(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         f = tmp_path / "x.txt"
         f.write_text("first")
         client.post(
-            "/api/fs/write", json={"path": str(f), "content": "second"},
+            "/api/fs/write",
+            json={"path": str(f), "content": "second"},
         )
         assert f.read_text(encoding="utf-8") == "second"
 
     def test_workspace_path_rejects_outside_write(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         workspace = tmp_path / "workspace"
         workspace.mkdir()
@@ -322,19 +354,13 @@ class TestFsWrite:
 
 class TestFsRevertDiff:
     def test_revert_diff_restores_file_content(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         target = tmp_path / "sample.txt"
         target.write_text("alpha\nnew\nomega\n", encoding="utf-8")
-        diff = (
-            "--- a/sample.txt\n"
-            "+++ b/sample.txt\n"
-            "@@ -1,3 +1,3 @@\n"
-            " alpha\n"
-            "-old\n"
-            "+new\n"
-            " omega\n"
-        )
+        diff = "--- a/sample.txt\n+++ b/sample.txt\n@@ -1,3 +1,3 @@\n alpha\n-old\n+new\n omega\n"
 
         r = client.post(
             "/api/fs/revert-diff",
@@ -346,19 +372,13 @@ class TestFsRevertDiff:
         assert target.read_text(encoding="utf-8") == "alpha\nold\nomega\n"
 
     def test_revert_diff_can_reject_one_hunk_only(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         target = tmp_path / "sample.txt"
         target.write_text("alpha\nnew\nomega\nkeep\n", encoding="utf-8")
-        diff = (
-            "--- a/sample.txt\n"
-            "+++ b/sample.txt\n"
-            "@@ -1,3 +1,3 @@\n"
-            " alpha\n"
-            "-old\n"
-            "+new\n"
-            " omega\n"
-        )
+        diff = "--- a/sample.txt\n+++ b/sample.txt\n@@ -1,3 +1,3 @@\n alpha\n-old\n+new\n omega\n"
 
         r = client.post(
             "/api/fs/revert-diff",
@@ -369,19 +389,13 @@ class TestFsRevertDiff:
         assert target.read_text(encoding="utf-8") == "alpha\nold\nomega\nkeep\n"
 
     def test_revert_diff_conflict_returns_409(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         target = tmp_path / "sample.txt"
         target.write_text("alpha\nchanged-again\nomega\n", encoding="utf-8")
-        diff = (
-            "--- a/sample.txt\n"
-            "+++ b/sample.txt\n"
-            "@@ -1,3 +1,3 @@\n"
-            " alpha\n"
-            "-old\n"
-            "+new\n"
-            " omega\n"
-        )
+        diff = "--- a/sample.txt\n+++ b/sample.txt\n@@ -1,3 +1,3 @@\n alpha\n-old\n+new\n omega\n"
 
         r = client.post(
             "/api/fs/revert-diff",
@@ -392,16 +406,13 @@ class TestFsRevertDiff:
         assert target.read_text(encoding="utf-8") == "alpha\nchanged-again\nomega\n"
 
     def test_revert_diff_can_delete_created_file(
-        self, client: TestClient, tmp_path: Path,
+        self,
+        client: TestClient,
+        tmp_path: Path,
     ) -> None:
         target = tmp_path / "created.txt"
         target.write_text("created\n", encoding="utf-8")
-        diff = (
-            "--- a/created.txt\n"
-            "+++ b/created.txt\n"
-            "@@ -0,0 +1 @@\n"
-            "+created\n"
-        )
+        diff = "--- a/created.txt\n+++ b/created.txt\n@@ -0,0 +1 @@\n+created\n"
 
         r = client.post(
             "/api/fs/revert-diff",
@@ -417,20 +428,15 @@ class TestFsRevertDiff:
         assert not target.exists()
 
     def test_revert_diff_respects_workspace_scope(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         workspace = tmp_path / "workspace"
         workspace.mkdir()
         outside = tmp_path / "outside.txt"
         outside.write_text("new\n", encoding="utf-8")
         client = scoped_client({})
-        diff = (
-            "--- a/outside.txt\n"
-            "+++ b/outside.txt\n"
-            "@@ -1 +1 @@\n"
-            "-old\n"
-            "+new\n"
-        )
+        diff = "--- a/outside.txt\n+++ b/outside.txt\n@@ -1 +1 @@\n-old\n+new\n"
 
         r = client.post(
             "/api/fs/revert-diff",
@@ -452,7 +458,9 @@ class TestFailClosed:
     """
 
     def test_unscoped_read_outside_roots_is_403(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         allowed = tmp_path / "allowed"
         allowed.mkdir()
@@ -471,7 +479,9 @@ class TestFailClosed:
         assert r.status_code == 403
 
     def test_unscoped_write_outside_roots_is_403(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         allowed = tmp_path / "allowed"
         allowed.mkdir()
@@ -487,7 +497,9 @@ class TestFailClosed:
         assert not target.exists()
 
     def test_unscoped_read_inside_roots_is_allowed(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         allowed = tmp_path / "allowed"
         allowed.mkdir()
@@ -516,9 +528,12 @@ class TestFsAuth:
         store = IdentityStore()
         store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
         app = FastAPI()
-        app.include_router(create_fs_router(
-            identity_store=store, require_auth=require_auth,
-        ))
+        app.include_router(
+            create_fs_router(
+                identity_store=store,
+                require_auth=require_auth,
+            )
+        )
         return TestClient(app)
 
     def test_no_auth_required_by_default(self) -> None:

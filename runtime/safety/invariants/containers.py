@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -12,7 +11,6 @@ T = TypeVar("T")
 
 
 class AppendOnlyList(Generic[T]):
-
     __slots__ = ("_data", "_rule_id")
 
     def __init__(self, initial: list[T] | None = None, rule_id: str = "APPEND_ONLY") -> None:
@@ -43,7 +41,6 @@ class AppendOnlyList(Generic[T]):
     def snapshot(self) -> list[T]:
         return list(self._data)
 
-
     def __setitem__(self, *args: object, **kwargs: object) -> None:
         raise InvariantViolation(self._rule_id, "item assignment forbidden on AppendOnlyList")
 
@@ -67,7 +64,6 @@ class AppendOnlyList(Generic[T]):
 
 
 class AppendOnlyMapping(Generic[K, V]):
-
     __slots__ = ("_data", "_rule_id")
 
     def __init__(self, rule_id: str = "APPEND_ONLY_MAP") -> None:
@@ -105,7 +101,6 @@ class AppendOnlyMapping(Generic[K, V]):
 
     def __repr__(self) -> str:
         return f"AppendOnlyMapping(n={len(self._data)})"
-
 
     def __setitem__(self, *args: object, **kwargs: object) -> None:
         raise InvariantViolation(self._rule_id, "use put() not []=")

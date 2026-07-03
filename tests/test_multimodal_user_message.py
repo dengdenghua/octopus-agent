@@ -4,6 +4,7 @@ Validates that an image attachment with a data URL is folded into the
 user message as an OpenAI-style `content` array, while non-image
 attachments and bare text fall back to plain string content.
 """
+
 from __future__ import annotations
 
 from runtime.core.cerebrum.react_loop import (
@@ -39,27 +40,27 @@ def test_looks_like_image_falsy_input() -> None:
 
 
 def test_image_blocks_data_url_takes_priority() -> None:
-    blocks = _image_blocks_from_attachments([
-        {"data_url": "data:image/png;base64,AAA="}
-    ])
+    blocks = _image_blocks_from_attachments([{"data_url": "data:image/png;base64,AAA="}])
     assert len(blocks) == 1
     assert blocks[0]["type"] == "image_url"
     assert blocks[0]["image_url"]["url"].startswith("data:image/")
 
 
 def test_image_blocks_hosted_url_with_media_type() -> None:
-    blocks = _image_blocks_from_attachments([
-        {"url": "https://example.com/cat.png", "mediaType": "image/png"}
-    ])
+    blocks = _image_blocks_from_attachments(
+        [{"url": "https://example.com/cat.png", "mediaType": "image/png"}]
+    )
     assert len(blocks) == 1
     assert blocks[0]["image_url"]["url"] == "https://example.com/cat.png"
 
 
 def test_image_blocks_filters_non_image() -> None:
-    blocks = _image_blocks_from_attachments([
-        {"url": "https://example.com/doc.pdf", "mediaType": "application/pdf"},
-        {"data_url": "data:image/png;base64,AAA="},
-    ])
+    blocks = _image_blocks_from_attachments(
+        [
+            {"url": "https://example.com/doc.pdf", "mediaType": "application/pdf"},
+            {"data_url": "data:image/png;base64,AAA="},
+        ]
+    )
     assert len(blocks) == 1
 
 
@@ -71,9 +72,11 @@ def test_image_blocks_handles_invalid_input() -> None:
 
 
 def test_image_blocks_skips_attachment_without_url() -> None:
-    blocks = _image_blocks_from_attachments([
-        {"filename": "cat.png", "mediaType": "image/png"}  # no url
-    ])
+    blocks = _image_blocks_from_attachments(
+        [
+            {"filename": "cat.png", "mediaType": "image/png"}  # no url
+        ]
+    )
     assert blocks == []
 
 

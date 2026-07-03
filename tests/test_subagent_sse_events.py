@@ -37,6 +37,7 @@ def _session(monkeypatch):
     session = _FakeSession(journal)
 
     import runtime.platform.process.session as _sess
+
     monkeypatch.setattr(_sess, "current_session", lambda: session)
     return session, journal
 
@@ -177,6 +178,7 @@ def test_no_journal_no_crash(monkeypatch):
         metadata: dict = {}
 
     import runtime.platform.process.session as _sess
+
     monkeypatch.setattr(_sess, "current_session", lambda: _SessionNoJournal())
 
     # Should not raise.

@@ -21,6 +21,7 @@ Design, following the protocol pseudocode and invariants:
 Risk only ever *tightens*: the engine quarantines on a high score, it
 never uses a low score to override Innate/Memory rejections.
 """
+
 from __future__ import annotations
 
 import math
@@ -108,9 +109,7 @@ class AdaptiveImmunity:
         # cold-start call (no baseline yet) would quarantine — and with
         # no recovery path, since a quarantined call never executes to
         # feed learn(). Floor it just above cold-start.
-        self.quarantine_threshold = max(
-            float(quarantine_threshold), self._cold_start + 1e-3
-        )
+        self.quarantine_threshold = max(float(quarantine_threshold), self._cold_start + 1e-3)
         self._quarantine_ttl = max(1.0, float(quarantine_ttl_s))
         self._baselines: dict[str, _Baseline] = {}
         # sucker_id → monotonic expiry time; accessed under _lock.

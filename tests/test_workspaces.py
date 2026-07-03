@@ -7,6 +7,7 @@ The manager is deliberately small — just enough to prove:
 * ``discard`` refuses to delete anything outside its configured root.
 * Slug sanitisation handles the shapes a realtime thread id can take.
 """
+
 from __future__ import annotations
 
 import json

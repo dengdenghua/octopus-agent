@@ -6,6 +6,7 @@ sandbox-arg injector — so a write skill would run with ``sandbox_dir=None``
 when the Session pins ``_locked_write_root`` it injects it as ``sandbox_dir``
 for write skills, and blocks (fail-closed) a write skill that can't take one.
 """
+
 from __future__ import annotations
 
 from typing import Any

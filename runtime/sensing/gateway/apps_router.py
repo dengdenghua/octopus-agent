@@ -53,7 +53,9 @@ def discover_apps(roots: list[Path] | None = None) -> list[dict[str, Any]]:
                 )
                 continue
             for app in preview.apps:
-                plugin = next((item for item in preview.plugins if item.id == app.source_plugin), None)
+                plugin = next(
+                    (item for item in preview.plugins if item.id == app.source_plugin), None
+                )
                 app_id = app.name
                 apps[app_id] = {
                     "id": app_id,
@@ -71,7 +73,8 @@ def discover_apps(roots: list[Path] | None = None) -> list[dict[str, Any]]:
                     "connector_id": app.metadata.get("connector_id"),
                     "permissions": app.metadata.get("permissions") or [],
                     "actions": app.metadata.get("actions") or [],
-                    "action_count": app.metadata.get("action_count") or len(app.metadata.get("actions") or []),
+                    "action_count": app.metadata.get("action_count")
+                    or len(app.metadata.get("actions") or []),
                 }
     return sorted(apps.values(), key=lambda item: str(item["name"]).lower())
 

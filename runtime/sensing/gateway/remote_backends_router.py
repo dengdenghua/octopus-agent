@@ -36,6 +36,7 @@ from runtime.sensing.gateway.remote_transport import (
 
 def _require_flag() -> None:
     from runtime.platform import feature_flags as _ff
+
     if not _ff.is_on("ui.remote_transport"):
         raise HTTPException(
             403,
@@ -70,6 +71,7 @@ def create_remote_backends_router(
 
     if store_path is None:
         from runtime.platform.process.paths import app_paths
+
         store_path = app_paths().data_dir / "remote_backends.json"
 
     registry = BackendRegistry(store_path)
@@ -136,6 +138,7 @@ def create_remote_backends_router(
     def list_backends(request: Request) -> dict[str, Any]:
         _auth_http(request)
         from runtime.platform import feature_flags as _ff
+
         return {
             "enabled": _ff.is_on("ui.remote_transport"),
             "backends": [_safe_dict(b) for b in registry.list()],
@@ -161,7 +164,8 @@ def create_remote_backends_router(
             ssh = SshTunnel.from_dict(ssh_raw)
             if ssh is None:
                 raise HTTPException(
-                    400, "ssh.host is required when ssh is provided",
+                    400,
+                    "ssh.host is required when ssh is provided",
                 )
         try:
             backend = registry.add(name=name, url=url, ssh=ssh)
@@ -245,10 +249,12 @@ def create_remote_backends_router(
 
         await ws.accept()
         from runtime.platform import feature_flags as _ff
+
         if not _ff.is_on("ui.remote_transport"):
             from runtime.sensing.gateway.remote_transport import (
                 _ws_error_envelope,
             )
+
             await ws.send_text(
                 _ws_error_envelope("remote_transport feature flag is disabled"),
             )
@@ -260,6 +266,7 @@ def create_remote_backends_router(
             from runtime.sensing.gateway.remote_transport import (
                 _ws_error_envelope,
             )
+
             await ws.send_text(
                 _ws_error_envelope(f"backend {backend_id!r} not found"),
             )

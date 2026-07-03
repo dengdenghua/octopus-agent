@@ -22,8 +22,11 @@ class TestReflexHitEvent:
     def test_write_and_read(self):
         j = InMemoryJournal()
         j.write_reflex_hit(
-            rule_id="ping", kind="regex", latency_ms=0.5,
-            intent_goal="ping", response={"reply": "pong"},
+            rule_id="ping",
+            kind="regex",
+            latency_ms=0.5,
+            intent_goal="ping",
+            response={"reply": "pong"},
         )
         events = j.read_all()
         assert len(events) == 1
@@ -37,8 +40,11 @@ class TestReflexHitEvent:
         path = tmp_path / "events.jsonl"
         j1 = JSONLJournal(path)
         j1.write_reflex_hit(
-            rule_id="version", kind="regex", latency_ms=0.3,
-            intent_goal="version", response={"version": "0.1"},
+            rule_id="version",
+            kind="regex",
+            latency_ms=0.3,
+            intent_goal="version",
+            response={"version": "0.1"},
         )
 
         # Implementation note.
@@ -51,8 +57,11 @@ class TestReflexHitEvent:
     def test_read_by_type_filters(self):
         j = InMemoryJournal()
         j.write_reflex_hit(
-            rule_id="x", kind="regex", latency_ms=0.1,
-            intent_goal="x", response={"reply": "y"},
+            rule_id="x",
+            kind="regex",
+            latency_ms=0.1,
+            intent_goal="x",
+            response={"reply": "y"},
         )
         hits = j.read_by_type("reflex_hit")
         assert len(hits) == 1
@@ -64,15 +73,15 @@ class TestReflexHitEvent:
 
 
 class TestRunGoalReflex:
-    def test_ping_skips_planner_and_journals_reflex_hit(
-        self, tmp_path: Path, capsys
-    ):
+    def test_ping_skips_planner_and_journals_reflex_hit(self, tmp_path: Path, capsys):
         """Implementation note."""
         from runtime.cli import run_goal
 
         journal_path = tmp_path / "events.jsonl"
         rc = run_goal(
-            "ping", intent_type="task", journal_file=str(journal_path),
+            "ping",
+            intent_type="task",
+            journal_file=str(journal_path),
             color=False,
         )
         assert rc == 0
@@ -176,27 +185,37 @@ def gateway_with_reflex():
 
     cfg = AgentConfig(
         planner=PlannerConfig(
-            type="llm", model="mock/g",
-            mock_response=json.dumps({
-                "reasoning": "plan", "nodes": [{"skill": "list_cwd", "args": {}}],
-            }),
+            type="llm",
+            model="mock/g",
+            mock_response=json.dumps(
+                {
+                    "reasoning": "plan",
+                    "nodes": [{"skill": "list_cwd", "args": {}}],
+                }
+            ),
         ),
     )
     stack = build_from_config(cfg)
     app = FastAPI()
-    app.include_router(create_openai_router(
-        stack, reflex_router=_build_reflex_router(),
-    ))
+    app.include_router(
+        create_openai_router(
+            stack,
+            reflex_router=_build_reflex_router(),
+        )
+    )
     return stack, TestClient(app)
 
 
 class TestGatewayReflex:
     def test_ping_returns_reflex_completion(self, gateway_with_reflex):
         stack, client = gateway_with_reflex
-        r = client.post("/v1/chat/completions", json={
-            "model": "octopus-agent",
-            "messages": [{"role": "user", "content": "ping"}],
-        })
+        r = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "octopus-agent",
+                "messages": [{"role": "user", "content": "ping"}],
+            },
+        )
         assert r.status_code == 200
         data = r.json()
         # Implementation note.
@@ -215,9 +234,12 @@ class TestGatewayReflex:
 
     def test_non_ping_goes_to_planner(self, gateway_with_reflex):
         stack, client = gateway_with_reflex
-        r = client.post("/v1/chat/completions", json={
-            "messages": [{"role": "user", "content": "list current directory"}],
-        })
+        r = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": "list current directory"}],
+            },
+        )
         assert r.status_code == 200
         data = r.json()
         # Implementation note.
@@ -230,10 +252,13 @@ class TestGatewayReflex:
         task_id + trajectory (the verifiable/replayable trace), instead of the
         reflex fast-path that returns no trace."""
         stack, client = gateway_with_reflex
-        data = client.post("/v1/chat/completions", json={
-            "deep": True,
-            "messages": [{"role": "user", "content": "ping"}],
-        }).json()
+        data = client.post(
+            "/v1/chat/completions",
+            json={
+                "deep": True,
+                "messages": [{"role": "user", "content": "ping"}],
+            },
+        ).json()
         assert data["octopus"].get("reflex") is not True
         assert data["octopus"].get("deep_requested") is True
         assert data["octopus"].get("task_id")  # a real run has a task id
@@ -241,25 +266,32 @@ class TestGatewayReflex:
 
     def test_execution_deep_alias_also_bypasses_reflex(self, gateway_with_reflex):
         _, client = gateway_with_reflex
-        data = client.post("/v1/chat/completions", json={
-            "execution": "deep",
-            "messages": [{"role": "user", "content": "ping"}],
-        }).json()
+        data = client.post(
+            "/v1/chat/completions",
+            json={
+                "execution": "deep",
+                "messages": [{"role": "user", "content": "ping"}],
+            },
+        ).json()
         assert data["octopus"].get("reflex") is not True
         assert data["octopus"].get("deep_requested") is True
 
     def test_without_deep_ping_still_reflex(self, gateway_with_reflex):
         """Control: same trivial input without the flag short-circuits to reflex."""
         _, client = gateway_with_reflex
-        data = client.post("/v1/chat/completions", json={
-            "messages": [{"role": "user", "content": "ping"}],
-        }).json()
+        data = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": "ping"}],
+            },
+        ).json()
         assert data["octopus"].get("reflex") is True
 
     def test_reflex_stream_frames(self, gateway_with_reflex):
         stack, client = gateway_with_reflex
         with client.stream(
-            "POST", "/v1/chat/completions",
+            "POST",
+            "/v1/chat/completions",
             json={
                 "stream": True,
                 "messages": [{"role": "user", "content": "ping"}],
@@ -277,5 +309,5 @@ class TestGatewayReflex:
         # Implementation note.
         for line in body.splitlines():
             if line.startswith("data: ") and "[DONE]" not in line:
-                parsed = json.loads(line[len("data: "):])
+                parsed = json.loads(line[len("data: ") :])
                 assert parsed["object"] == "chat.completion.chunk"

@@ -15,6 +15,7 @@ parallel fan-out, native tool-use, or final-answer handling fails CI loudly.
 
 Add a case here whenever you fix or change loop behaviour; it pins the fix.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -49,7 +50,10 @@ class _ReplayRouter:
     """
 
     def __init__(
-        self, turns: list[Any], *, supports_tool_use: bool = False,
+        self,
+        turns: list[Any],
+        *,
+        supports_tool_use: bool = False,
     ) -> None:
         self.turns = turns
         self.calls = 0
@@ -124,7 +128,8 @@ def _build_executor(skills: list[tuple[str, Any]]) -> ToolExecutor:
     return ToolExecutor(
         registry=reg,
         immunity=TrustEngine(
-            trusted_sources=["builtin://*"], unknown_policy="allow",
+            trusted_sources=["builtin://*"],
+            unknown_policy="allow",
         ),
     )
 
@@ -139,7 +144,8 @@ def _run_trajectory(case: dict[str, Any], monkeypatch) -> tuple[list[str], str]:
 
     executor = _build_executor(case.get("skills", []))
     router = _ReplayRouter(
-        case["responses"], supports_tool_use=bool(case.get("native")),
+        case["responses"],
+        supports_tool_use=bool(case.get("native")),
     )
     stack = _Stack(executor, router)
     intent = ParsedIntent(
@@ -152,7 +158,10 @@ def _run_trajectory(case: dict[str, Any], monkeypatch) -> tuple[list[str], str]:
     events: list[dict[str, Any]] = []
     result = None
     gen = stream_react_loop(
-        stack, intent, agent=None, model="test-model",
+        stack,
+        intent,
+        agent=None,
+        model="test-model",
         max_iterations=case.get("max_iter", 6),
     )
     try:
@@ -161,11 +170,7 @@ def _run_trajectory(case: dict[str, Any], monkeypatch) -> tuple[list[str], str]:
     except StopIteration as stop:
         result = stop.value
 
-    tool_chain = [
-        str(e.get("tool_name"))
-        for e in events
-        if e.get("type") == "tool_start"
-    ]
+    tool_chain = [str(e.get("tool_name")) for e in events if e.get("type") == "tool_start"]
     final = (result.final_answer if result is not None else "") or ""
     return tool_chain, final
 
@@ -247,7 +252,7 @@ GOLDEN_CASES: list[dict[str, Any]] = [
         "skills": [("flaky", _fail)],
         "intent": "调用会失败的工具",
         "responses": [
-            'Thought: 试一下\nAction: flaky({})',
+            "Thought: 试一下\nAction: flaky({})",
             "Final Answer: 工具失败,已知悉并改道。",
         ],
         "expect_tools": ["flaky"],
@@ -262,7 +267,7 @@ GOLDEN_CASES: list[dict[str, Any]] = [
         "skills": [("read_file", _echo)],
         "intent": "调一个不存在的工具",
         "responses": [
-            'Thought: 调\nAction: nonexistent_tool({})',
+            "Thought: 调\nAction: nonexistent_tool({})",
             "Final Answer: 该工具不存在,改用其它方案。",
         ],
         "expect_tools": [],
@@ -289,10 +294,8 @@ GOLDEN_CASES: list[dict[str, Any]] = [
 def test_trajectory_regression(case: dict[str, Any], monkeypatch) -> None:
     tool_chain, final = _run_trajectory(case, monkeypatch)
     assert tool_chain == case["expect_tools"], (
-        f"{case['id']}: tool chain drifted — "
-        f"expected {case['expect_tools']}, got {tool_chain}"
+        f"{case['id']}: tool chain drifted — expected {case['expect_tools']}, got {tool_chain}"
     )
     assert case["expect_final"] in final, (
-        f"{case['id']}: final answer drifted — "
-        f"{case['expect_final']!r} not in {final!r}"
+        f"{case['id']}: final answer drifted — {case['expect_final']!r} not in {final!r}"
     )

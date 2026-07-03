@@ -43,6 +43,7 @@ A pure YAML/JSON template is more verbose than a natural-language
 * **Cost-controllable** · ``BudgetSpec`` is bound to the whole
   pipeline, matching the ``Recipe`` pattern
 """
+
 from __future__ import annotations
 
 import json
@@ -84,8 +85,7 @@ class MetaStep:
         # ``{n0.output}`` from later steps.
         if not re.match(r"^[a-z][a-z0-9_]{0,31}$", self.node_id):
             raise ValueError(
-                f"step node_id must match ^[a-z][a-z0-9_]{{0,31}}$, "
-                f"got {self.node_id!r}"
+                f"step node_id must match ^[a-z][a-z0-9_]{{0,31}}$, got {self.node_id!r}"
             )
         if not self.skill_ref or not self.skill_ref.strip():
             raise ValueError(f"step {self.node_id!r} has empty skill_ref")
@@ -124,7 +124,7 @@ class MetaSkill:
     can be re-compiled and re-run many times with different
     ``user_input`` · the cost is just one validator pass + one
     graph build.
-"""
+    """
 
     name: str
     description: str = ""
@@ -147,15 +147,15 @@ class MetaSkill:
     def __post_init__(self) -> None:
         if not re.match(r"^[a-z0-9][a-z0-9_-]{0,63}$", self.name):
             raise ValueError(
-                f"meta-skill name must match ^[a-z0-9][a-z0-9_-]{{0,63}}$, "
-                f"got {self.name!r}"
+                f"meta-skill name must match ^[a-z0-9][a-z0-9_-]{{0,63}}$, got {self.name!r}"
             )
         if not self.steps:
             raise ValueError(f"meta-skill {self.name!r} has no steps")
         node_ids = {s.node_id for s in self.steps}
         if len(node_ids) != len(self.steps):
             dups = [
-                s.node_id for s in self.steps
+                s.node_id
+                for s in self.steps
                 if sum(1 for x in self.steps if x.node_id == s.node_id) > 1
             ]
             raise ValueError(
@@ -177,14 +177,9 @@ class MetaSkill:
         for step in self.steps:
             for dep in step.depends_on:
                 if dep not in node_ids:
-                    raise ValueError(
-                        f"step {step.node_id!r} depends_on unknown "
-                        f"step {dep!r}"
-                    )
+                    raise ValueError(f"step {step.node_id!r} depends_on unknown step {dep!r}")
                 if dep == step.node_id:
-                    raise ValueError(
-                        f"step {step.node_id!r} cannot depend on itself"
-                    )
+                    raise ValueError(f"step {step.node_id!r} cannot depend on itself")
 
 
 # ── YAML / JSON loader ─────────────────────────────────────
@@ -232,34 +227,37 @@ def meta_skill_from_dict(data: dict[str, Any]) -> MetaSkill:
     for raw in raw_steps:
         if not isinstance(raw, dict):
             raise ValueError(
-                f"meta-skill {name!r}: each step must be a mapping, "
-                f"got {type(raw).__name__}"
+                f"meta-skill {name!r}: each step must be a mapping, got {type(raw).__name__}"
             )
         node_id = str(raw.get("node_id") or raw.get("id") or "").strip()
         if not node_id:
             raise ValueError(f"meta-skill {name!r}: step missing node_id")
         skill_ref = str(raw.get("skill") or raw.get("skill_ref") or "").strip()
-        steps.append(MetaStep(
-            node_id=node_id,
-            skill_ref=skill_ref,
-            args_template=dict(raw.get("args") or {}),
-            depends_on=tuple(raw.get("depends_on") or ()),
-            failure_retry=int(raw.get("failure_retry") or 0),
-            timeout_ms=int(raw.get("timeout_ms") or 30_000),
-            kind=raw.get("kind") or "sucker",
-        ))
+        steps.append(
+            MetaStep(
+                node_id=node_id,
+                skill_ref=skill_ref,
+                args_template=dict(raw.get("args") or {}),
+                depends_on=tuple(raw.get("depends_on") or ()),
+                failure_retry=int(raw.get("failure_retry") or 0),
+                timeout_ms=int(raw.get("timeout_ms") or 30_000),
+                kind=raw.get("kind") or "sucker",
+            )
+        )
 
     raw_edges = data.get("edges") or []
     edges: list[MetaEdge] = []
     for raw in raw_edges:
         if not isinstance(raw, dict):
             continue
-        edges.append(MetaEdge(
-            from_node=str(raw.get("from") or raw.get("from_node") or "").strip(),
-            to_node=str(raw.get("to") or raw.get("to_node") or "").strip(),
-            kind=raw.get("kind") or "normal",
-            condition=raw.get("condition"),
-        ))
+        edges.append(
+            MetaEdge(
+                from_node=str(raw.get("from") or raw.get("from_node") or "").strip(),
+                to_node=str(raw.get("to") or raw.get("to_node") or "").strip(),
+                kind=raw.get("kind") or "normal",
+                condition=raw.get("condition"),
+            )
+        )
 
     budget = data.get("budget") or {}
     if not isinstance(budget, dict):
@@ -311,7 +309,8 @@ def meta_skill_from_yaml_text(text: str) -> MetaSkill:
 # still points at the step's actual ``node_id`` in the runtime's
 # ``outputs_by_node`` dict.
 def _rewrite_template_refs(
-    args: dict[str, Any], alias_to_id: dict[str, str] | None = None,
+    args: dict[str, Any],
+    alias_to_id: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Rewrite ``{friendly.output}`` → ``{step_node_id.output}``.
 
@@ -385,30 +384,36 @@ def compile_to_task_graph(
         for k, v in user_input.items():
             args.setdefault(f"user_input.{k}", v)
 
-        nodes.append(TaskNode(
-            node_id=step.node_id,
-            kind=step.kind,
-            skill_ref=SkillId(step.skill_ref),
-            args_template=args,
-            failure_retry=step.failure_retry,
-            timeout_ms=step.timeout_ms,
-        ))
+        nodes.append(
+            TaskNode(
+                node_id=step.node_id,
+                kind=step.kind,
+                skill_ref=SkillId(step.skill_ref),
+                args_template=args,
+                failure_retry=step.failure_retry,
+                timeout_ms=step.timeout_ms,
+            )
+        )
 
         # 3. Edges derived from depends_on (or from explicit edges).
         for dep in step.depends_on:
-            edges.append(WorkflowEdge(
-                from_node=dep,
-                to_node=step.node_id,
-                kind="normal",
-            ))
+            edges.append(
+                WorkflowEdge(
+                    from_node=dep,
+                    to_node=step.node_id,
+                    kind="normal",
+                )
+            )
 
     for e in meta.edges:
-        edges.append(WorkflowEdge(
-            from_node=e.from_node,
-            to_node=e.to_node,
-            kind=e.kind,
-            condition=e.condition,
-        ))
+        edges.append(
+            WorkflowEdge(
+                from_node=e.from_node,
+                to_node=e.to_node,
+                kind=e.kind,
+                condition=e.condition,
+            )
+        )
 
     return TaskGraph(
         nodes=nodes,
@@ -466,22 +471,24 @@ def list_meta_skills(scope: str = "global") -> list[dict[str, Any]]:
         try:
             text = p.read_text(encoding="utf-8")
             meta = meta_skill_from_yaml_text(text)
-            out.append({
-                "name": meta.name,
-                "file": p.name,
-                "path": str(p),
-                "description": meta.description,
-                "when_to_use": meta.when_to_use,
-                "affinity": list(meta.affinity),
-                "steps": [s.node_id for s in meta.steps],
-                "step_count": len(meta.steps),
-                "budget_tokens": meta.budget_tokens,
-                "budget_usd": meta.budget_usd,
-                "budget_latency_ms": meta.budget_latency_ms,
-                "version": meta.version,
-                "kind": meta.kind,
-                "display_name": _display_name(meta),
-            })
+            out.append(
+                {
+                    "name": meta.name,
+                    "file": p.name,
+                    "path": str(p),
+                    "description": meta.description,
+                    "when_to_use": meta.when_to_use,
+                    "affinity": list(meta.affinity),
+                    "steps": [s.node_id for s in meta.steps],
+                    "step_count": len(meta.steps),
+                    "budget_tokens": meta.budget_tokens,
+                    "budget_usd": meta.budget_usd,
+                    "budget_latency_ms": meta.budget_latency_ms,
+                    "version": meta.version,
+                    "kind": meta.kind,
+                    "display_name": _display_name(meta),
+                }
+            )
         except (OSError, ValueError, TypeError):
             continue
     return out
@@ -803,10 +810,7 @@ def _depth_levels(steps: Sequence[MetaStep]) -> list[list[str]]:
     buckets: dict[int, list[str]] = {}
     for nid, d in depth.items():
         buckets.setdefault(d, []).append(nid)
-    return [
-        sorted(buckets[d])
-        for d in sorted(buckets.keys())
-    ]
+    return [sorted(buckets[d]) for d in sorted(buckets.keys())]
 
 
 def meta_skill_to_mermaid(
@@ -844,9 +848,7 @@ def meta_skill_to_mermaid(
             %% budget: 60k tokens, $1.50, 30m
     """
     if direction not in ("LR", "TD", "RL", "BT"):
-        raise ValueError(
-            f"invalid direction {direction!r}: must be LR / TD / RL / BT"
-        )
+        raise ValueError(f"invalid direction {direction!r}: must be LR / TD / RL / BT")
 
     steps = list(meta.steps)
     children = _adjacency(steps)
@@ -862,18 +864,12 @@ def meta_skill_to_mermaid(
 
     # Node declarations
     for step in steps:
-        role = "root" if step.node_id in roots else (
-            "sink" if step.node_id in sinks else "bridge"
-        )
+        role = "root" if step.node_id in roots else ("sink" if step.node_id in sinks else "bridge")
         args_summary = _summarize_args(step.args_template)
         # Mermaid ``["..."]`` labels — escape internal quotes.
         safe_skill = step.skill_ref.replace('"', '\\"')
         if args_summary:
-            label = (
-                f"{step.node_id}<br/>"
-                f"{safe_skill}<br/>"
-                f"{args_summary.replace(chr(34), '&quot;')}"
-            )
+            label = f"{step.node_id}<br/>{safe_skill}<br/>{args_summary.replace(chr(34), '&quot;')}"
         else:
             label = f"{step.node_id}<br/>{safe_skill}"
         lines.append(f'    {step.node_id}["{label}"]:::{role}')
@@ -889,9 +885,7 @@ def meta_skill_to_mermaid(
         if len(bucket) <= 1:
             continue
         sg_id = f"par_lvl_{level_idx}"
-        lines.append(
-            f'    subgraph {sg_id}["⚡ parallel · {len(bucket)} tasks"]'
-        )
+        lines.append(f'    subgraph {sg_id}["⚡ parallel · {len(bucket)} tasks"]')
         # ``direction LR`` inside the subgraph keeps members on a row
         # even when the outer flow is TD.
         lines.append("        direction LR")
@@ -901,8 +895,7 @@ def meta_skill_to_mermaid(
         # Style the subgraph border lightly so it reads as a hint,
         # not a hard boundary.
         lines.append(
-            f"    style {sg_id} fill:#fafafa,stroke:#c8c8c8,"
-            f"stroke-dasharray:3 3,color:#666"
+            f"    style {sg_id} fill:#fafafa,stroke:#c8c8c8,stroke-dasharray:3 3,color:#666"
         )
 
     # Edges — for each step, one arrow per parent in ``depends_on``.
@@ -913,9 +906,7 @@ def meta_skill_to_mermaid(
     # Subgraph for affinity / kind so the top of the diagram
     # is human-readable.
     affinity_str = ", ".join(meta.affinity) or "—"
-    lines.append(
-        f"    subgraph meta[\"能力包 {meta.name}\"]"
-    )
+    lines.append(f'    subgraph meta["能力包 {meta.name}"]')
     lines.append(
         f'        meta_attr["kind={meta.kind} · display={display_name_for_kind(meta.kind)}'
         f'<br/>affinity: {affinity_str}"]'

@@ -26,13 +26,23 @@ def test_full_cowork_chain(tmp_path) -> None:
     t = "thread-e2e"
 
     # 1) Start a 1:1, then pull in a specialist mid-thread with a from_join grant.
-    assert c.post(f"/api/cowork/{t}/members",
-                  json={"target_id": "user", "kind": "human"}).status_code == 200
-    assert c.post(f"/api/cowork/{t}/members",
-                  json={"target_id": "alice", "kind": "agent"}).status_code == 200
-    r = c.post(f"/api/cowork/{t}/members",
-               json={"target_id": "bob", "kind": "agent",
-                     "grant": {"scope": "from_join"}, "at_message": 5})
+    assert (
+        c.post(f"/api/cowork/{t}/members", json={"target_id": "user", "kind": "human"}).status_code
+        == 200
+    )
+    assert (
+        c.post(f"/api/cowork/{t}/members", json={"target_id": "alice", "kind": "agent"}).status_code
+        == 200
+    )
+    r = c.post(
+        f"/api/cowork/{t}/members",
+        json={
+            "target_id": "bob",
+            "kind": "agent",
+            "grant": {"scope": "from_join"},
+            "at_message": 5,
+        },
+    )
     assert r.status_code == 200
     assert {m["id"] for m in r.json()["state"]["roster"]} == {"user", "alice", "bob"}
 
@@ -42,17 +52,26 @@ def test_full_cowork_chain(tmp_path) -> None:
     assert set(c.get(f"/api/cowork/{t}").json()["responders"]) == {"alice", "bob"}
 
     # 3) Shared blackboard write, attributed + visible to the group.
-    c.post(f"/api/cowork/{t}/blackboard",
-           json={"key": "decision", "value": "enter the nutrition market"})
-    assert c.get(f"/api/cowork/{t}").json()["blackboard"]["decision"] == "enter the nutrition market"
+    c.post(
+        f"/api/cowork/{t}/blackboard",
+        json={"key": "decision", "value": "enter the nutrition market"},
+    )
+    assert (
+        c.get(f"/api/cowork/{t}").json()["blackboard"]["decision"] == "enter the nutrition market"
+    )
 
     # 4) Async task: assign → list shows it → complete lands on the blackboard.
-    task = c.post(f"/api/cowork/{t}/tasks",
-                  json={"assignee": "alice", "prompt": "scan nutrition competitors"}).json()["task"]
+    task = c.post(
+        f"/api/cowork/{t}/tasks", json={"assignee": "alice", "prompt": "scan nutrition competitors"}
+    ).json()["task"]
     assert task["status"] == "pending"
-    assert any(x["task_id"] == task["task_id"] for x in c.get(f"/api/cowork/{t}/tasks").json()["tasks"])
-    done = c.post(f"/api/cowork/{t}/tasks/{task['task_id']}/complete",
-                  json={"result": "found 3 rivals undercutting on price"})
+    assert any(
+        x["task_id"] == task["task_id"] for x in c.get(f"/api/cowork/{t}/tasks").json()["tasks"]
+    )
+    done = c.post(
+        f"/api/cowork/{t}/tasks/{task['task_id']}/complete",
+        json={"result": "found 3 rivals undercutting on price"},
+    )
     assert done.status_code == 200
     board = done.json()["blackboard"]
     assert any("rivals" in str(v) for v in board.values())  # result landed on the board

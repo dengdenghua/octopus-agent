@@ -239,27 +239,29 @@ def read_config() -> dict[str, Any]:
     if not isinstance(raw, dict):
         return default_config()
     config = default_config()
-    config.update({
-        "enabled": bool(raw.get("enabled", config["enabled"])),
-        "storage_path": str(_memory_path()),
-        "auto_capture_enabled": bool(
-            raw.get("auto_capture_enabled", config["auto_capture_enabled"])
-        ),
-        "debounce_seconds": _coerce_int(
-            raw.get("debounce_seconds"),
-            int(config["debounce_seconds"]),
-        ),
-        "max_facts": _coerce_int(raw.get("max_facts"), int(config["max_facts"])),
-        "fact_confidence_threshold": _coerce_float(
-            raw.get("fact_confidence_threshold"),
-            float(config["fact_confidence_threshold"]),
-        ),
-        "injection_enabled": bool(raw.get("injection_enabled", config["injection_enabled"])),
-        "max_injection_tokens": _coerce_int(
-            raw.get("max_injection_tokens"),
-            int(config["max_injection_tokens"]),
-        ),
-    })
+    config.update(
+        {
+            "enabled": bool(raw.get("enabled", config["enabled"])),
+            "storage_path": str(_memory_path()),
+            "auto_capture_enabled": bool(
+                raw.get("auto_capture_enabled", config["auto_capture_enabled"])
+            ),
+            "debounce_seconds": _coerce_int(
+                raw.get("debounce_seconds"),
+                int(config["debounce_seconds"]),
+            ),
+            "max_facts": _coerce_int(raw.get("max_facts"), int(config["max_facts"])),
+            "fact_confidence_threshold": _coerce_float(
+                raw.get("fact_confidence_threshold"),
+                float(config["fact_confidence_threshold"]),
+            ),
+            "injection_enabled": bool(raw.get("injection_enabled", config["injection_enabled"])),
+            "max_injection_tokens": _coerce_int(
+                raw.get("max_injection_tokens"),
+                int(config["max_injection_tokens"]),
+            ),
+        }
+    )
     return read_config_from_raw(config)
 
 
@@ -338,36 +340,40 @@ def normalize_memory(raw: Any) -> dict[str, Any]:
             confidence = float(item.get("confidence", 0.8))
         except (TypeError, ValueError):
             confidence = 0.8
-        facts.append({
-            "id": str(item.get("id") or uuid4().hex),
-            "content": content,
-            "category": _clean_label(item.get("category") or "context", fallback="context"),
-            "confidence": max(0.0, min(1.0, confidence)),
-            "createdAt": str(item.get("createdAt") or last_updated),
-            "source": _clean_label(item.get("source") or "manual", fallback="manual"),
-            "scope": _normalize_scope(
-                item.get("scope") or "global",
-                agent_id=item.get("agent_id"),
-                project=item.get("project"),
-            ),
-            "agent_id": _clean_scope_value(item.get("agent_id")),
-            "project": _clean_scope_value(item.get("project")),
-        })
-    base.update({
-        "version": str(raw.get("version") or "1"),
-        "lastUpdated": last_updated,
-        "user": {
-            "workContext": _section(user.get("workContext"), last_updated),
-            "personalContext": _section(user.get("personalContext"), last_updated),
-            "topOfMind": _section(user.get("topOfMind"), last_updated),
-        },
-        "history": {
-            "recentMonths": _section(history.get("recentMonths"), last_updated),
-            "earlierContext": _section(history.get("earlierContext"), last_updated),
-            "longTermBackground": _section(history.get("longTermBackground"), last_updated),
-        },
-        "facts": facts[-_configured_max_facts():],
-    })
+        facts.append(
+            {
+                "id": str(item.get("id") or uuid4().hex),
+                "content": content,
+                "category": _clean_label(item.get("category") or "context", fallback="context"),
+                "confidence": max(0.0, min(1.0, confidence)),
+                "createdAt": str(item.get("createdAt") or last_updated),
+                "source": _clean_label(item.get("source") or "manual", fallback="manual"),
+                "scope": _normalize_scope(
+                    item.get("scope") or "global",
+                    agent_id=item.get("agent_id"),
+                    project=item.get("project"),
+                ),
+                "agent_id": _clean_scope_value(item.get("agent_id")),
+                "project": _clean_scope_value(item.get("project")),
+            }
+        )
+    base.update(
+        {
+            "version": str(raw.get("version") or "1"),
+            "lastUpdated": last_updated,
+            "user": {
+                "workContext": _section(user.get("workContext"), last_updated),
+                "personalContext": _section(user.get("personalContext"), last_updated),
+                "topOfMind": _section(user.get("topOfMind"), last_updated),
+            },
+            "history": {
+                "recentMonths": _section(history.get("recentMonths"), last_updated),
+                "earlierContext": _section(history.get("earlierContext"), last_updated),
+                "longTermBackground": _section(history.get("longTermBackground"), last_updated),
+            },
+            "facts": facts[-_configured_max_facts() :],
+        }
+    )
     return base
 
 
@@ -400,7 +406,7 @@ def _clean_section_summary(value: Any) -> str:
 
 def _clean_label(value: Any, *, fallback: str) -> str:
     text = " ".join(str(value or "").split()).strip()
-    return (text[:MAX_LABEL_CHARS].rstrip() or fallback)
+    return text[:MAX_LABEL_CHARS].rstrip() or fallback
 
 
 def _coerce_int(value: Any, default: int) -> int:

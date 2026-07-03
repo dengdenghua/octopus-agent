@@ -1,4 +1,5 @@
 """Static Vite/React WebUI mounting helpers."""
+
 from __future__ import annotations
 
 import os
@@ -20,9 +21,7 @@ def _find_webui_dist() -> Path | None:
     # Historical note: before the ui package moved under ``runtime/platform``
     # the hop count was 3 · the old comment/code wasn't updated when the
     # move happened, which silently 404'd /ui/ on dev builds.
-    candidate = (
-        Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "dist"
-    )
+    candidate = Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "dist"
     if candidate.is_dir() and (candidate / "index.html").is_file():
         return candidate
 
@@ -56,6 +55,7 @@ def _mount_webui(app: Any, dist: Path) -> None:
             def _make_handler(fp: Path):
                 def _h() -> FileResponse:
                     return FileResponse(str(fp))
+
                 return _h
 
             app.get(ui_path, include_in_schema=False)(_make_handler(file))

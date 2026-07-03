@@ -3,6 +3,7 @@
 Bridges the frontend codebase-index-panel to the existing SQLite-based
 code search infrastructure in code_intelligence_skills.py.
 """
+
 from __future__ import annotations
 
 import re
@@ -57,7 +58,14 @@ def _count_db_rows() -> tuple[int, int]:
 
 def _get_db_stats() -> dict[str, Any]:
     if not _DB_PATH.exists():
-        return {"total_files": 0, "total_chunks": 0, "total_embeddings": 0, "db_size_bytes": 0, "languages": {}, "chunk_types": {}}
+        return {
+            "total_files": 0,
+            "total_chunks": 0,
+            "total_embeddings": 0,
+            "db_size_bytes": 0,
+            "languages": {},
+            "chunk_types": {},
+        }
     try:
         conn = sqlite3.connect(str(_DB_PATH))
         rows = conn.execute("SELECT path FROM code_chunks").fetchall()
@@ -68,7 +76,15 @@ def _get_db_stats() -> dict[str, Any]:
         for p in paths:
             files_set.add(p)
             ext = Path(p).suffix.lower()
-            lang = {".py": "python", ".ts": "typescript", ".tsx": "tsx", ".js": "javascript", ".go": "go", ".rs": "rust", ".java": "java"}.get(ext, ext or "unknown")
+            lang = {
+                ".py": "python",
+                ".ts": "typescript",
+                ".tsx": "tsx",
+                ".js": "javascript",
+                ".go": "go",
+                ".rs": "rust",
+                ".java": "java",
+            }.get(ext, ext or "unknown")
             langs[lang] = langs.get(lang, 0) + 1
         return {
             "total_files": len(files_set),
@@ -79,7 +95,14 @@ def _get_db_stats() -> dict[str, Any]:
             "chunk_types": {"code": len(paths)},
         }
     except Exception:
-        return {"total_files": 0, "total_chunks": 0, "total_embeddings": 0, "db_size_bytes": 0, "languages": {}, "chunk_types": {}}
+        return {
+            "total_files": 0,
+            "total_chunks": 0,
+            "total_embeddings": 0,
+            "db_size_bytes": 0,
+            "languages": {},
+            "chunk_types": {},
+        }
 
 
 def _run_indexing(workspace: str, force: bool = False) -> None:
@@ -101,16 +124,39 @@ def _run_indexing(workspace: str, force: bool = False) -> None:
             _get_embedder,
             _save_persisted_index,
         )
+
         embedder = _get_embedder()
         if embedder is None:
             _index_state["errors"].append("sentence-transformers not installed")
             return
 
         root = Path(workspace)
-        exts = {".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java", ".rb", ".c", ".cpp", ".h"}
-        all_files = [p for p in root.rglob("*") if p.is_file() and p.suffix in exts
-                     and not any(part.startswith(".") or part in ("node_modules", "__pycache__", ".venv", "dist", "build") for part in p.parts)
-                     and p.stat().st_size <= 200_000]
+        exts = {
+            ".py",
+            ".ts",
+            ".tsx",
+            ".js",
+            ".jsx",
+            ".go",
+            ".rs",
+            ".java",
+            ".rb",
+            ".c",
+            ".cpp",
+            ".h",
+        }
+        all_files = [
+            p
+            for p in root.rglob("*")
+            if p.is_file()
+            and p.suffix in exts
+            and not any(
+                part.startswith(".")
+                or part in ("node_modules", "__pycache__", ".venv", "dist", "build")
+                for part in p.parts
+            )
+            and p.stat().st_size <= 200_000
+        ]
         _index_state["total_files"] = len(all_files)
 
         index = _build_index(embedder, workspace, exts)
@@ -121,6 +167,7 @@ def _run_indexing(workspace: str, force: bool = False) -> None:
         _index_state["embedded_chunks"] = len(index)
         _index_state["progress_pct"] = 100
         from datetime import datetime
+
         _index_state["last_indexed_at"] = datetime.now().isoformat()
     except Exception as exc:
         _index_state["errors"].append(str(exc))
@@ -130,6 +177,7 @@ def _run_indexing(workspace: str, force: bool = False) -> None:
 
 
 if FASTAPI_AVAILABLE:
+
     class IndexStartRequest(BaseModel):
         force: bool = False
         workspace: str = "."
@@ -173,7 +221,9 @@ def create_index_router(
         chunks, embeddings = _count_db_rows()
         return {
             **_index_state,
-            "status": "running" if _index_state["running"] else ("ready" if chunks > 0 else "empty"),
+            "status": "running"
+            if _index_state["running"]
+            else ("ready" if chunks > 0 else "empty"),
             "total_chunks": _index_state.get("total_chunks") or chunks,
             "embedded_chunks": _index_state.get("embedded_chunks") or embeddings,
         }
@@ -229,6 +279,7 @@ def create_index_router(
         t0 = time.monotonic()
         try:
             from runtime.execution.suckers.code_intelligence_skills import _code_search
+
             raw = _code_search(query=body.query, directory=body.workspace, top_k=body.top_k)
         except Exception as exc:
             raise HTTPException(500, str(exc)) from exc
@@ -239,19 +290,23 @@ def create_index_router(
             snippet = item.get("snippet", "")
             lines = snippet.split("\n")
             name_match = re.search(r"(?:def|class|function|export)\s+(\w+)", snippet)
-            name = name_match.group(1) if name_match else path.split("/")[-1] if "/" in path else path
-            results.append({
-                "chunk_id": f"{path}:{hash(snippet) & 0xFFFF:04x}",
-                "file_path": path,
-                "start_line": 1,
-                "end_line": len(lines),
-                "content": snippet,
-                "chunk_type": "code",
-                "name": name,
-                "language": Path(path).suffix.lstrip(".") if path else "unknown",
-                "similarity": item.get("score", 0),
-                "context_header": lines[0] if lines else "",
-            })
+            name = (
+                name_match.group(1) if name_match else path.split("/")[-1] if "/" in path else path
+            )
+            results.append(
+                {
+                    "chunk_id": f"{path}:{hash(snippet) & 0xFFFF:04x}",
+                    "file_path": path,
+                    "start_line": 1,
+                    "end_line": len(lines),
+                    "content": snippet,
+                    "chunk_type": "code",
+                    "name": name,
+                    "language": Path(path).suffix.lstrip(".") if path else "unknown",
+                    "similarity": item.get("score", 0),
+                    "context_header": lines[0] if lines else "",
+                }
+            )
 
         elapsed_ms = int((time.monotonic() - t0) * 1000)
         return {

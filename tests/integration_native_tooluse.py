@@ -26,6 +26,7 @@ What it asserts:
   2. real dispatch    — the skill ran (a ``tool_start`` event was emitted);
   3. end-to-end       — the loop returned a non-empty final answer.
 """
+
 from __future__ import annotations
 
 import json
@@ -72,7 +73,8 @@ def _build_executor() -> ToolExecutor:
     return ToolExecutor(
         registry=reg,
         immunity=TrustEngine(
-            trusted_sources=["builtin://*"], unknown_policy="allow",
+            trusted_sources=["builtin://*"],
+            unknown_policy="allow",
         ),
     )
 
@@ -131,8 +133,10 @@ def _resolve_router_and_model(argv: list[str]) -> tuple[Any, str] | None:
         from runtime.sensing.model_router.openai_router import OpenAIModelRouter
 
         router = OpenAIModelRouter(
-            base_url=cfg["base_url"], api_key=cfg["api_key"],
-            default_model=model, timeout_seconds=60.0,
+            base_url=cfg["base_url"],
+            api_key=cfg["api_key"],
+            default_model=model,
+            timeout_seconds=60.0,
         )
         return router, model
 
@@ -180,7 +184,11 @@ def main(argv: list[str]) -> int:
     result = None
     try:
         gen = stream_react_loop(
-            stack, intent, agent=None, model=model, max_iterations=5,
+            stack,
+            intent,
+            agent=None,
+            model=model,
+            max_iterations=5,
         )
         while True:
             events.append(next(gen))
@@ -191,8 +199,7 @@ def main(argv: list[str]) -> int:
     print(f"\nwall-clock: {elapsed * 1000:.0f} ms")
     tool_starts = [e for e in events if e.get("type") == "tool_start"]
     print(
-        f"requests-with-tools: {router.requests_with_tools} | "
-        f"tool_start events: {len(tool_starts)}"
+        f"requests-with-tools: {router.requests_with_tools} | tool_start events: {len(tool_starts)}"
     )
     for s in tool_starts:
         print(f"  → tool_start iter={s.get('iteration')} name={s.get('tool_name')}")

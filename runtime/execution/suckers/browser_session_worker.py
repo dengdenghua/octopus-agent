@@ -57,7 +57,8 @@ def _default_page_factory(headless: bool) -> tuple[Any, Callable[[], None]]:
     profile = os.environ.get("OCTOPUS_BROWSER_PROFILE", "").strip()
     if profile:
         context = pw.chromium.launch_persistent_context(
-            user_data_dir=profile, headless=headless,
+            user_data_dir=profile,
+            headless=headless,
         )
         page = context.pages[0] if context.pages else context.new_page()
 
@@ -91,16 +92,16 @@ class BrowserSessionWorker:
         headless: bool = True,
         op_timeout_s: float = _OP_TIMEOUT_S,
     ) -> None:
-        self._factory: PageFactory = page_factory or (
-            lambda: _default_page_factory(headless)
-        )
+        self._factory: PageFactory = page_factory or (lambda: _default_page_factory(headless))
         self._op_timeout_s = op_timeout_s
         self._q: queue.Queue[Any] = queue.Queue()
         self._lock = threading.Lock()
         self._closed = False
         self.last_used = time.monotonic()
         self._thread = threading.Thread(
-            target=self._run, name="browser-session", daemon=True,
+            target=self._run,
+            name="browser-session",
+            daemon=True,
         )
         self._thread.start()
 
@@ -182,7 +183,9 @@ class BrowserSessionPool:
         self._page_factory = page_factory
         self._stop = threading.Event()
         self._reaper = threading.Thread(
-            target=self._reap_loop, name="browser-session-reaper", daemon=True,
+            target=self._reap_loop,
+            name="browser-session-reaper",
+            daemon=True,
         )
         self._reap_interval_s = reap_interval_s
         self._reaper.start()
@@ -208,10 +211,7 @@ class BrowserSessionPool:
     def _reap_loop(self) -> None:
         while not self._stop.wait(self._reap_interval_s):
             with self._lock:
-                stale = [
-                    k for k, w in self._workers.items()
-                    if w.idle_seconds > self._idle_ttl_s
-                ]
+                stale = [k for k, w in self._workers.items() if w.idle_seconds > self._idle_ttl_s]
                 for k in stale:
                     self._workers.pop(k).close(wait=False)
 

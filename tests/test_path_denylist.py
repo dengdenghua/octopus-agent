@@ -1,4 +1,5 @@
 """Tests for path denylist (Marvis-style "不可读取文件夹")."""
+
 from __future__ import annotations
 
 import json
@@ -130,7 +131,8 @@ def test_path_guard_blocks_user_added(tmp_path: Path, tmp_state: Path) -> None:
 
 
 def test_path_guard_allow_sensitive_bypasses_denylist(
-    tmp_path: Path, tmp_state: Path,
+    tmp_path: Path,
+    tmp_state: Path,
 ) -> None:
     """``allow_sensitive=True`` is the explicit override gate;
     callers that pass it have signed off on whatever they're
@@ -144,7 +146,8 @@ def test_path_guard_allow_sensitive_bypasses_denylist(
 
 
 def test_path_guard_unrelated_path_passes(
-    tmp_path: Path, tmp_state: Path,
+    tmp_path: Path,
+    tmp_state: Path,
 ) -> None:
     """Files outside the denylist still resolve normally."""
     f = tmp_path / "innocent.txt"

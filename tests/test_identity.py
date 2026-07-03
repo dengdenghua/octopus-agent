@@ -80,7 +80,7 @@ class TestStoreCRUD:
     def test_add_with_bare_hex_hash(self):
         """Implementation note."""
         s = IdentityStore()
-        raw_hex = hash_api_key("sk-raw")[len("sha256:"):]
+        raw_hex = hash_api_key("sk-raw")[len("sha256:") :]
         s.add(Identity(actor_id="carol"), api_key_hash=raw_hex)
         assert s.verify_api_key("sk-raw").actor_id == "carol"
 
@@ -199,13 +199,18 @@ from runtime.sensing.gateway import create_openai_router  # noqa: E402
 
 
 def _stack():
-    cfg = AgentConfig(planner=PlannerConfig(
-        type="llm", model="mock/g",
-        mock_response=json.dumps({
-            "reasoning": "r",
-            "nodes": [{"skill": "list_cwd", "args": {"path": "."}}],
-        }),
-    ))
+    cfg = AgentConfig(
+        planner=PlannerConfig(
+            type="llm",
+            model="mock/g",
+            mock_response=json.dumps(
+                {
+                    "reasoning": "r",
+                    "nodes": [{"skill": "list_cwd", "args": {"path": "."}}],
+                }
+            ),
+        )
+    )
     return build_from_config(cfg)
 
 
@@ -240,9 +245,13 @@ class TestGatewayBearerActor:
         store = IdentityStore()
         store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
         app = FastAPI()
-        app.include_router(create_openai_router(
-            stack, identity_store=store, require_auth=False,
-        ))
+        app.include_router(
+            create_openai_router(
+                stack,
+                identity_store=store,
+                require_auth=False,
+            )
+        )
         client = TestClient(app)
 
         r = client.post(
@@ -273,9 +282,13 @@ class TestGatewayBearerActor:
         stack = _stack()
         store = IdentityStore()
         app = FastAPI()
-        app.include_router(create_openai_router(
-            stack, identity_store=store, require_auth=True,
-        ))
+        app.include_router(
+            create_openai_router(
+                stack,
+                identity_store=store,
+                require_auth=True,
+            )
+        )
         client = TestClient(app)
 
         r = client.post(
@@ -290,9 +303,13 @@ class TestGatewayBearerActor:
         store = IdentityStore()
         store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
         app = FastAPI()
-        app.include_router(create_openai_router(
-            stack, identity_store=store, require_auth=True,
-        ))
+        app.include_router(
+            create_openai_router(
+                stack,
+                identity_store=store,
+                require_auth=True,
+            )
+        )
         client = TestClient(app)
 
         r = client.post(
@@ -355,12 +372,12 @@ class TestMultiUserAudit:
         )
 
         alice_tasks = {
-            e.task_id for e in stack.journal.read_by_actor("alice")
+            e.task_id
+            for e in stack.journal.read_by_actor("alice")
             if e.event_type == "task_started"
         }
         bob_tasks = {
-            e.task_id for e in stack.journal.read_by_actor("bob")
-            if e.event_type == "task_started"
+            e.task_id for e in stack.journal.read_by_actor("bob") if e.event_type == "task_started"
         }
         assert len(alice_tasks) == 2
         assert len(bob_tasks) == 1

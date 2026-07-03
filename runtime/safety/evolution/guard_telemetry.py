@@ -12,6 +12,7 @@ dependency-free so it can be called from the hot ReAct loop without
 risk — a telemetry failure must NEVER break a turn, so ``record`` is
 wrapped to swallow its own errors.
 """
+
 from __future__ import annotations
 
 import json
@@ -68,12 +69,12 @@ class GuardVerdictRecord:
     """
 
     label: str
-    hit_ts: str          # the ts of the original hit
-    action: str          # "true_positive" | "false_positive" | "uncertain"
-    judged_ts: str       # when the judge ran
+    hit_ts: str  # the ts of the original hit
+    action: str  # "true_positive" | "false_positive" | "uncertain"
+    judged_ts: str  # when the judge ran
     reason: str = ""
     confidence: float = 0.0
-    hit_seq: int = 0     # the seq of the original hit
+    hit_seq: int = 0  # the seq of the original hit
 
 
 class GuardTelemetry:
@@ -174,27 +175,31 @@ class GuardTelemetry:
                     continue
                 kind = d.get("kind")
                 if kind == "verdict":
-                    verdicts.append(GuardVerdictRecord(
-                        label=str(d.get("label", "")),
-                        hit_ts=str(d.get("hit_ts", "")),
-                        action=str(d.get("action", "uncertain")),
-                        judged_ts=str(d.get("judged_ts", "")),
-                        reason=str(d.get("reason", "")),
-                        confidence=float(d.get("confidence", 0.0) or 0.0),
-                        hit_seq=int(d.get("hit_seq", 0) or 0),
-                    ))
+                    verdicts.append(
+                        GuardVerdictRecord(
+                            label=str(d.get("label", "")),
+                            hit_ts=str(d.get("hit_ts", "")),
+                            action=str(d.get("action", "uncertain")),
+                            judged_ts=str(d.get("judged_ts", "")),
+                            reason=str(d.get("reason", "")),
+                            confidence=float(d.get("confidence", 0.0) or 0.0),
+                            hit_seq=int(d.get("hit_seq", 0) or 0),
+                        )
+                    )
                 else:
                     # Default to "hit" — covers legacy lines without kind
                     # field, written before the verdict schema landed.
-                    hits.append(GuardHitRecord(
-                        label=str(d.get("label", "")),
-                        category=str(d.get("category", "")),
-                        ts=str(d.get("ts", "")),
-                        goal_digest=str(d.get("goal_digest", "")),
-                        iteration=d.get("iteration"),
-                        metadata=d.get("metadata"),
-                        seq=int(d.get("seq", 0) or 0),
-                    ))
+                    hits.append(
+                        GuardHitRecord(
+                            label=str(d.get("label", "")),
+                            category=str(d.get("category", "")),
+                            ts=str(d.get("ts", "")),
+                            goal_digest=str(d.get("goal_digest", "")),
+                            iteration=d.get("iteration"),
+                            metadata=d.get("metadata"),
+                            seq=int(d.get("seq", 0) or 0),
+                        )
+                    )
         return (hits, verdicts)
 
     def unjudged_hits(self) -> list[GuardHitRecord]:
@@ -207,10 +212,7 @@ class GuardTelemetry:
         """
         hits, verdicts = self._read_with_verdicts()
         judged_keys = {(v.label, v.hit_ts, v.hit_seq) for v in verdicts}
-        return [
-            h for h in hits
-            if (h.label, h.ts, h.seq) not in judged_keys
-        ]
+        return [h for h in hits if (h.label, h.ts, h.seq) not in judged_keys]
 
     def stats(self) -> dict[str, Any]:
         """Aggregate hits by label and by category.
@@ -268,7 +270,8 @@ class GuardTelemetry:
         verdict_by_label: dict[str, dict[str, int]] = {}
         for v in verdicts:
             bucket = verdict_by_label.setdefault(
-                v.label, {"true_positive": 0, "false_positive": 0, "uncertain": 0},
+                v.label,
+                {"true_positive": 0, "false_positive": 0, "uncertain": 0},
             )
             if v.action in bucket:
                 bucket[v.action] += 1
@@ -276,7 +279,8 @@ class GuardTelemetry:
         label_precision: dict[str, dict[str, Any]] = {}
         for label in by_label:
             bucket = verdict_by_label.get(
-                label, {"true_positive": 0, "false_positive": 0, "uncertain": 0},
+                label,
+                {"true_positive": 0, "false_positive": 0, "uncertain": 0},
             )
             tp = bucket["true_positive"]
             fp = bucket["false_positive"]
@@ -303,16 +307,19 @@ class GuardTelemetry:
             prec = label_precision[label]["precision"]
             if prec is not None and prec < min_precision_for_tuning:
                 continue
-            tuning_candidates.append({
-                "label": label,
-                "count": count,
-                "precision": prec,
-            })
+            tuning_candidates.append(
+                {
+                    "label": label,
+                    "count": count,
+                    "precision": prec,
+                }
+            )
 
-        category_share = {
-            cat: round(count / total, 4)
-            for cat, count in by_category.most_common()
-        } if total else {}
+        category_share = (
+            {cat: round(count / total, 4) for cat, count in by_category.most_common()}
+            if total
+            else {}
+        )
         dominant_category = by_category.most_common(1)[0][0] if total else None
 
         return {
@@ -342,8 +349,7 @@ class GuardTelemetry:
         if d["total_hits"] == 0:
             return "Guard telemetry: no hits recorded yet."
         lines = [
-            f"Guard telemetry digest — {d['total_hits']} total hits"
-            f" ({d['judged_total']} judged)",
+            f"Guard telemetry digest — {d['total_hits']} total hits ({d['judged_total']} judged)",
             f"  dominant category: {d['dominant_category']}",
             "  by category:",
         ]
@@ -358,10 +364,7 @@ class GuardTelemetry:
             for cand in d["tuning_candidates"]:
                 prec = cand.get("precision")
                 prec_str = f"{prec:.0%}" if prec is not None else "  ?"
-                lines.append(
-                    f"    {cand['label']:32s} {cand['count']:5d}"
-                    f"  (precision={prec_str})"
-                )
+                lines.append(f"    {cand['label']:32s} {cand['count']:5d}  (precision={prec_str})")
         else:
             lines.append("  no tuning candidates above threshold")
         return "\n".join(lines)

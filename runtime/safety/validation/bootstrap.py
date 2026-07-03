@@ -19,6 +19,7 @@ hard-enforces or stays audit-only is the existing profile decision
 audit). Judge failures fail open; the regex rule layer remains the
 hard floor either way.
 """
+
 from __future__ import annotations
 
 import logging

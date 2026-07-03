@@ -36,30 +36,32 @@ def register_sub_agent_skill(registry: Any) -> None:
         SkillTestCase,
     )
 
-    registry.register(Skill(
-        name="call_agent",
-        description=(
-            "Deprecated legacy bridge. Subagents are not skills; use the "
-            "subagent/Agent dispatch channel instead."
-        ),
-        affinity=["legacy", "subagent"],
-        cost_profile="high",
-        trusted_source="skill://legacy/call_agent",
-        handler=_call_agent,
-        tests=[
-            SkillTestCase(
-                name="no_runner_returns_error",
-                tier="golden",
-                args={"agent_id": "coder", "prompt": "do x"},
-                expect=SkillExpect(schema_keys=["success", "error"]),
-                custom_predicate=lambda r: (
-                    isinstance(r, dict)
-                    and r.get("success") is False
-                    and "runner" in (r.get("error") or "")
-                ),
+    registry.register(
+        Skill(
+            name="call_agent",
+            description=(
+                "Deprecated legacy bridge. Subagents are not skills; use the "
+                "subagent/Agent dispatch channel instead."
             ),
-        ],
-    ))
+            affinity=["legacy", "subagent"],
+            cost_profile="high",
+            trusted_source="skill://legacy/call_agent",
+            handler=_call_agent,
+            tests=[
+                SkillTestCase(
+                    name="no_runner_returns_error",
+                    tier="golden",
+                    args={"agent_id": "coder", "prompt": "do x"},
+                    expect=SkillExpect(schema_keys=["success", "error"]),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict)
+                        and r.get("success") is False
+                        and "runner" in (r.get("error") or "")
+                    ),
+                ),
+            ],
+        )
+    )
 
 
 __all__ = [

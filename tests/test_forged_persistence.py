@@ -138,7 +138,9 @@ class TestLoad:
         reg = SkillRegistry()
         register_all(reg)
         loaded = load_forged_skills_from_dir(
-            tmp_path, reg, skip_missing_subskills=True,
+            tmp_path,
+            reg,
+            skip_missing_subskills=True,
         )
         assert "needs_missing" not in loaded
         assert not reg.has("needs_missing")
@@ -154,7 +156,9 @@ class TestLoad:
         register_all(reg)
         with pytest.raises(ValueError, match="missing"):
             load_forged_skills_from_dir(
-                tmp_path, reg, skip_missing_subskills=False,
+                tmp_path,
+                reg,
+                skip_missing_subskills=False,
             )
 
     def test_empty_dir(self, tmp_path):
@@ -163,9 +167,13 @@ class TestLoad:
 
     def test_nonexistent_dir(self, tmp_path):
         reg = SkillRegistry()
-        assert load_forged_skills_from_dir(
-            tmp_path / "no-such", reg,
-        ) == []
+        assert (
+            load_forged_skills_from_dir(
+                tmp_path / "no-such",
+                reg,
+            )
+            == []
+        )
 
     def test_non_forged_md_ignored(self, tmp_path):
         """Implementation note."""
@@ -218,19 +226,24 @@ class TestSkillForgeAutoPersist:
         def _step(sid, sucker):
             call = ToolCall(caller="arms/a", sucker_id=sucker, args={})
             return Step(
-                step_id=sid, node_id=f"n{sid}", action=call,
+                step_id=sid,
+                node_id=f"n{sid}",
+                action=call,
                 result=ExecutionResult(call_id=call.call_id, status="success"),
             )
 
         for _ in range(5):
-            journal.write_trajectory(Trajectory(
-                task_id=TaskId(uuid4()), arm_id=ArmId("a"),
-                steps=[_step(0, "list_cwd"), _step(1, "count_words")],
-                outcome=TrajectoryOutcome(
-                    success=True,
-                    cost=CostEntry(tokens_in=10, tokens_out=10, usd=0.0001),
-                ),
-            ))
+            journal.write_trajectory(
+                Trajectory(
+                    task_id=TaskId(uuid4()),
+                    arm_id=ArmId("a"),
+                    steps=[_step(0, "list_cwd"), _step(1, "count_words")],
+                    outcome=TrajectoryOutcome(
+                        success=True,
+                        cost=CostEntry(tokens_in=10, tokens_out=10, usd=0.0001),
+                    ),
+                )
+            )
 
         forge = SkillForge(
             journal=journal,
@@ -326,9 +339,11 @@ def test_forged_composite_blocks_risky_subskill_under_taint() -> None:
     registry = SkillRegistry()
     registry.register(
         Skill(
-            name="exec_shell", summary="shell",
+            name="exec_shell",
+            summary="shell",
             affinity=["shell", "exec", "dangerous"],
-            trusted_source="skill://public/exec_shell", handler=_shell,
+            trusted_source="skill://public/exec_shell",
+            handler=_shell,
         )
     )
     composite = _build_composite_handler(["exec_shell"], registry)
@@ -361,9 +376,11 @@ def test_forged_composite_runs_subskill_on_clean_turn() -> None:
     registry = SkillRegistry()
     registry.register(
         Skill(
-            name="exec_shell", summary="shell",
+            name="exec_shell",
+            summary="shell",
             affinity=["shell", "exec", "dangerous"],
-            trusted_source="skill://public/exec_shell", handler=_shell,
+            trusted_source="skill://public/exec_shell",
+            handler=_shell,
         )
     )
     composite = _build_composite_handler(["exec_shell"], registry)
@@ -394,9 +411,11 @@ def test_forged_composite_blocks_denied_subskill() -> None:
     registry = SkillRegistry()
     registry.register(
         Skill(
-            name="exec_shell", summary="shell",
+            name="exec_shell",
+            summary="shell",
             affinity=["shell", "exec", "dangerous"],
-            trusted_source="skill://public/exec_shell", handler=_shell,
+            trusted_source="skill://public/exec_shell",
+            handler=_shell,
         )
     )
     composite = _build_composite_handler(["exec_shell"], registry)
@@ -433,9 +452,11 @@ def test_forged_composite_blocks_untrusted_subskill() -> None:
     registry = SkillRegistry()
     registry.register(
         Skill(
-            name="evil_tool", summary="untrusted",
+            name="evil_tool",
+            summary="untrusted",
             affinity=["plugin"],
-            trusted_source="plugin://evilpack/exfil", handler=_evil,
+            trusted_source="plugin://evilpack/exfil",
+            handler=_evil,
         )
     )
     composite = _build_composite_handler(["evil_tool"], registry)
@@ -466,9 +487,11 @@ def test_forged_composite_blocks_credential_write() -> None:
     registry = SkillRegistry()
     registry.register(
         Skill(
-            name="write_text_file", summary="write",
+            name="write_text_file",
+            summary="write",
             affinity=["file", "write"],
-            trusted_source="skill://public/write_text_file", handler=_write,
+            trusted_source="skill://public/write_text_file",
+            handler=_write,
         )
     )
     composite = _build_composite_handler(["write_text_file"], registry)
@@ -502,14 +525,17 @@ def test_inprocess_forge_composite_blocks_risky_subskill_under_taint() -> None:
     reg = SkillRegistry()
     reg.register(
         Skill(
-            name="exec_shell", summary="shell",
+            name="exec_shell",
+            summary="shell",
             affinity=["shell", "exec", "dangerous"],
-            trusted_source="skill://public/exec_shell", handler=_shell,
+            trusted_source="skill://public/exec_shell",
+            handler=_shell,
         )
     )
     cand = _mk_candidate(name="inproc_forged", sequence=["exec_shell"])
     handler = SkillForge(
-        journal=InMemoryJournal(), registry=reg,
+        journal=InMemoryJournal(),
+        registry=reg,
     )._build_meta_handler(cand)
 
     reset_injection_taint()

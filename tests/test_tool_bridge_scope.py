@@ -543,16 +543,11 @@ def test_agentic_stream_requires_todo_before_complex_final():
     events = list(stream_agentic_fallback(_stack_with_todo(router), intent, _agent()))
 
     assert router.calls == 3
-    assert any(
-        event[0] == "tool_start" and event[1]["name"] == "todo_write"
-        for event in events
-    )
+    assert any(event[0] == "tool_start" and event[1]["name"] == "todo_write" for event in events)
     assert events[-1] == ("done", "", "final")
 
     second_request_text = "\n".join(
-        str(msg.content)
-        for msg in router.requests[1].messages
-        if msg.role == "user"
+        str(msg.content) for msg in router.requests[1].messages if msg.role == "user"
     )
     assert "task checklist required" in second_request_text
 
@@ -657,17 +652,13 @@ def test_agentic_stream_requires_todo_update_after_tools(tmp_path):
 
     assert router.calls == 5
     todo_starts = [
-        event
-        for event in events
-        if event[0] == "tool_start" and event[1]["name"] == "todo_write"
+        event for event in events if event[0] == "tool_start" and event[1]["name"] == "todo_write"
     ]
     assert len(todo_starts) == 2
     assert events[-1] == ("done", "", "final")
 
     fourth_request_text = "\n".join(
-        str(msg.content)
-        for msg in router.requests[3].messages
-        if msg.role == "user"
+        str(msg.content) for msg in router.requests[3].messages if msg.role == "user"
     )
     assert "checklist update required" in fourth_request_text
 

@@ -192,9 +192,7 @@ def _record_rejected_step(
     step.observation = observation
     steps.append(step)
     messages.append(Message(role="assistant", content=step.action))
-    messages.append(
-        Message(role="user", content=f"Observation: {observation}\n\n继续下一轮推理。")
-    )
+    messages.append(Message(role="user", content=f"Observation: {observation}\n\n继续下一轮推理。"))
 
 
 def _looks_like_observation_echo(text: str) -> bool:
@@ -712,13 +710,9 @@ def stream_react_loop(
     )
 
     _native_mode = bool(tools_active) and native_tool_use_active(router, effective_model)
-    _native_goal = (
-        getattr(intent, "normalized_goal", "") or getattr(intent, "raw", "") or ""
-    )
+    _native_goal = getattr(intent, "normalized_goal", "") or getattr(intent, "raw", "") or ""
     _native_tool_specs = (
-        build_loop_tool_specs(executor, agent=agent, goal=_native_goal)
-        if _native_mode
-        else []
+        build_loop_tool_specs(executor, agent=agent, goal=_native_goal) if _native_mode else []
     )
     if _native_mode and not _native_tool_specs:
         # Spec build came back empty — nothing to call natively, so stay on
@@ -821,9 +815,9 @@ def stream_react_loop(
         "browser_regression_preview_url"
     )
     _runtime_surfaces = _uc.get("runtime_surfaces") or _metadata.get("runtime_surfaces")
-    _browser_surface_value = str(
-        _uc.get("browser_surface") or _metadata.get("browser_surface") or ""
-    ).strip().lower()
+    _browser_surface_value = (
+        str(_uc.get("browser_surface") or _metadata.get("browser_surface") or "").strip().lower()
+    )
     _surface_names = (
         {str(item).lower() for item in _runtime_surfaces}
         if isinstance(_runtime_surfaces, list)
@@ -932,9 +926,7 @@ def stream_react_loop(
     if isinstance(_effective_wp, str) and _effective_wp.strip():
         _effective_wp_text = _effective_wp.strip()
         _workspace_label = (
-            "个人隔离工作目录"
-            if not (isinstance(_wp, str) and _wp.strip())
-            else "当前工作目录"
+            "个人隔离工作目录" if not (isinstance(_wp, str) and _wp.strip()) else "当前工作目录"
         )
         system_parts.append(
             f"\n{_workspace_label}: {_effective_wp_text}\n"
@@ -1139,9 +1131,7 @@ def stream_react_loop(
             system_parts.append(_workflow_preset_prompt)
     if _mode_contract_value:
         system_parts.append(
-            "\n<mode-contract>\n"
-            + _mode_contract_value[:4000]
-            + "\n</mode-contract>"
+            "\n<mode-contract>\n" + _mode_contract_value[:4000] + "\n</mode-contract>"
         )
     if _is_codex_composer_plan_or_spec:
         system_parts.append(
@@ -1357,15 +1347,12 @@ def stream_react_loop(
                             _capability_activation.pinned_plugins,
                         )
                         _codex_handled_plugins.update(
-                            plugin_id.lower()
-                            for plugin_id in codex_report.handled_plugin_ids
+                            plugin_id.lower() for plugin_id in codex_report.handled_plugin_ids
                         )
                         codex_obs = codex_report.render_observation()
                         if codex_obs:
                             volatile_parts.append(
-                                "<codex-plugin-injection>\n"
-                                f"{codex_obs}\n"
-                                "</codex-plugin-injection>",
+                                f"<codex-plugin-injection>\n{codex_obs}\n</codex-plugin-injection>",
                             )
                     except (ImportError, AttributeError, TypeError, ValueError):
                         _logger.debug(
@@ -2013,12 +2000,9 @@ def stream_react_loop(
                         # token is part of the user-visible answer.
                         if evt.delta:
                             joined = "".join(text_parts)
-                            if (
-                                not _final_stream_guarded
-                                and _final_answer_needs_pre_emit_guard(
-                                    joined,
-                                    is_code_mode=_is_code_mode,
-                                )
+                            if not _final_stream_guarded and _final_answer_needs_pre_emit_guard(
+                                joined,
+                                is_code_mode=_is_code_mode,
                             ):
                                 _final_stream_started = False
                                 continue
@@ -2180,6 +2164,7 @@ def stream_react_loop(
             if _in_tok or _out_tok:
                 with contextlib.suppress(Exception):
                     from runtime.platform.budget import UsagePricing
+
                     UsagePricing.get().record(
                         str(getattr(resp, "model", "") or "unknown"),
                         _in_tok,
@@ -2754,7 +2739,9 @@ def stream_react_loop(
                                         if isinstance(observation, str) and observation
                                         else observation
                                     ),
-                                    "duration_ms": int((time.monotonic() - _tool_started_at) * 1000),
+                                    "duration_ms": int(
+                                        (time.monotonic() - _tool_started_at) * 1000
+                                    ),
                                     **_tool_event_extras_from_beak_step(beak_step, resolved_name),
                                 },
                                 origin="react_compat",
@@ -2829,14 +2816,11 @@ def stream_react_loop(
                 _diag_status = str(_diag_record.get("status") or "skipped")
                 _diag_reason = str(_diag_record.get("reason") or "")
                 _diag_target = str(_diag_record.get("target") or "")
-                _diag_text = (
-                    f"{_diag_status}: {_diag_reason}"
-                    + (f" · {_diag_target}" if _diag_target else "")
+                _diag_text = f"{_diag_status}: {_diag_reason}" + (
+                    f" · {_diag_target}" if _diag_target else ""
                 )
                 step.observation = (
-                    (step.observation or observation)
-                    + "\n\n[写后诊断记录]\n"
-                    + _diag_text
+                    (step.observation or observation) + "\n\n[写后诊断记录]\n" + _diag_text
                 )
                 _auto_diag = _run_auto_diagnostics(
                     stack,
@@ -2844,9 +2828,7 @@ def stream_react_loop(
                 )
                 if _auto_diag:
                     step.observation = (
-                        (step.observation or observation)
-                        + "\n\n[自动诊断结果]\n"
-                        + _auto_diag
+                        (step.observation or observation) + "\n\n[自动诊断结果]\n" + _auto_diag
                     )
                 _prefetch = _prefetch_related_files(step.action, _working_set)
                 if _prefetch:
@@ -2905,12 +2887,9 @@ def stream_react_loop(
             ) + "\n\n".join(_midflight_nudges)
 
         if maybe_final:
-            _deferred_final_emit = (
-                not _final_stream_started
-                and _final_answer_needs_pre_emit_guard(
-                    maybe_final,
-                    is_code_mode=_is_code_mode,
-                )
+            _deferred_final_emit = not _final_stream_started and _final_answer_needs_pre_emit_guard(
+                maybe_final,
+                is_code_mode=_is_code_mode,
             )
             _guard_hit = _evaluate_final_answer_guards(
                 steps=steps,
@@ -2932,7 +2911,9 @@ def stream_react_loop(
                     + _guard_message
                 )
             elif _deferred_final_emit:
-                _delta = maybe_final[_streamed_final_chars:] if _streamed_final_chars else maybe_final
+                _delta = (
+                    maybe_final[_streamed_final_chars:] if _streamed_final_chars else maybe_final
+                )
                 yield {
                     "type": "text_delta",
                     "delta": _delta,

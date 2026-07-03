@@ -179,10 +179,7 @@ class TestDistributedLock:
                 with lock_lock:
                     winners.append(holder_id)
 
-        threads = [
-            threading.Thread(target=worker, args=(f"holder-{i}",))
-            for i in range(20)
-        ]
+        threads = [threading.Thread(target=worker, args=(f"holder-{i}",)) for i in range(20)]
         for t in threads:
             t.start()
         for t in threads:
@@ -207,11 +204,15 @@ class TestLLMResponseCache:
         from runtime.sensing.model_router.models import Message, ModelRequest
 
         req1 = ModelRequest(
-            model="m", max_tokens=10, temperature=0.0,
+            model="m",
+            max_tokens=10,
+            temperature=0.0,
             messages=[Message(role="user", content="hello")],
         )
         req2 = ModelRequest(
-            model="m", max_tokens=10, temperature=0.0,
+            model="m",
+            max_tokens=10,
+            temperature=0.0,
             messages=[Message(role="user", content="hello")],
         )
         assert make_cache_key(req1) == make_cache_key(req2)
@@ -221,11 +222,15 @@ class TestLLMResponseCache:
         from runtime.sensing.model_router.models import Message, ModelRequest
 
         req1 = ModelRequest(
-            model="m", max_tokens=10, temperature=0.0,
+            model="m",
+            max_tokens=10,
+            temperature=0.0,
             messages=[Message(role="user", content="hello")],
         )
         req2 = ModelRequest(
-            model="m", max_tokens=10, temperature=0.0,
+            model="m",
+            max_tokens=10,
+            temperature=0.0,
             messages=[Message(role="user", content="world")],
         )
         assert make_cache_key(req1) != make_cache_key(req2)
@@ -236,7 +241,8 @@ class TestLLMResponseCache:
 
         cached = CachedModelRouter(router_fixture)
         req = ModelRequest(
-            model="m", temperature=0.0,
+            model="m",
+            temperature=0.0,
             messages=[Message(role="user", content="a")],
         )
         r1 = cached.call(req)
@@ -251,11 +257,13 @@ class TestLLMResponseCache:
 
         cached = CachedModelRouter(router_fixture)
         req1 = ModelRequest(
-            model="m", temperature=0.0,
+            model="m",
+            temperature=0.0,
             messages=[Message(role="user", content="a")],
         )
         req2 = ModelRequest(
-            model="m", temperature=0.0,
+            model="m",
+            temperature=0.0,
             messages=[Message(role="user", content="b")],
         )
         cached.call(req1)
@@ -268,7 +276,8 @@ class TestLLMResponseCache:
 
         cached = CachedModelRouter(router_fixture)
         req = ModelRequest(
-            model="m", temperature=0.7,
+            model="m",
+            temperature=0.7,
             messages=[Message(role="user", content="a")],
         )
         cached.call(req)
@@ -284,7 +293,8 @@ class TestLLMResponseCache:
 
         cached = CachedModelRouter(router_fixture, cache_temp_zero_only=False)
         req = ModelRequest(
-            model="m", temperature=0.5,
+            model="m",
+            temperature=0.5,
             messages=[Message(role="user", content="a")],
         )
         cached.call(req)
@@ -297,7 +307,8 @@ class TestLLMResponseCache:
 
         cached = CachedModelRouter(router_fixture)
         req = ModelRequest(
-            model="m", temperature=0.0,
+            model="m",
+            temperature=0.0,
             messages=[Message(role="user", content="a")],
         )
         cached.call(req)
@@ -315,7 +326,8 @@ class TestLLMResponseCache:
 
         cached = CachedModelRouter(router_fixture)
         req = ModelRequest(
-            model="m", temperature=0.0,
+            model="m",
+            temperature=0.0,
             messages=[Message(role="user", content="a")],
         )
         cached.call(req)
@@ -336,7 +348,8 @@ class TestLLMResponseCache:
         cache = LLMResponseCache(backend=backend, ttl_seconds=0.05)
         cached = CachedModelRouter(router_fixture, cache=cache)
         req = ModelRequest(
-            model="m", temperature=0.0,
+            model="m",
+            temperature=0.0,
             messages=[Message(role="user", content="a")],
         )
         cached.call(req)
@@ -378,11 +391,13 @@ class TestHealthCheck:
 
         reg = HealthRegistry(parallel=False)
         reg.register(HealthCheck(name="a", check=lambda: True, kind="readiness"))
-        reg.register(HealthCheck(
-            name="b",
-            check=lambda: HealthStatus(name="b", status="pass"),
-            kind="readiness",
-        ))
+        reg.register(
+            HealthCheck(
+                name="b",
+                check=lambda: HealthStatus(name="b", status="pass"),
+                kind="readiness",
+            )
+        )
         result = reg.probe(kind="readiness")
         assert result["status"] == "pass"
         assert len(result["checks"]) == 2
@@ -449,9 +464,7 @@ class TestHealthCheck:
         def _timed_probe(*, parallel: bool) -> float:
             reg = HealthRegistry(parallel=parallel)
             for i in range(5):
-                reg.register(
-                    HealthCheck(name=f"s{i}", check=slow, timeout_seconds=2)
-                )
+                reg.register(HealthCheck(name=f"s{i}", check=slow, timeout_seconds=2))
             started = time.time()
             result = reg.probe()
             assert result["status"] == "pass"

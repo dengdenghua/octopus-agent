@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from collections import defaultdict
@@ -19,21 +18,19 @@ Severity = Literal["low", "mid", "high"]
 
 
 class LearnedRule(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     rule_id: str = Field(..., min_length=1)
     sucker_id: SkillId
-    error_signature: str         # Implementation note.
-    pattern: str                 # Implementation note.
-    mitigation: str              # Implementation note.
+    error_signature: str  # Implementation note.
+    pattern: str  # Implementation note.
+    mitigation: str  # Implementation note.
     hit_count: int = Field(..., ge=1)
     severity: Severity = "mid"
     source_trajectory_ids: list[str] = Field(default_factory=list)
 
 
 class RuleExtractionReport(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     trajectories_scanned: int
@@ -48,11 +45,11 @@ class RuleExtractionReport(BaseModel):
 
 @dataclass
 class ExtractorConfig:
-    min_hits: int = 3                  # Implementation note.
+    min_hits: int = 3  # Implementation note.
     severity_thresholds: dict[Severity, int] = field(
         default_factory=lambda: {"low": 3, "mid": 5, "high": 10}
     )
-    max_rules_per_run: int = 30       # Implementation note.
+    max_rules_per_run: int = 30  # Implementation note.
     include_partial_as_failure: bool = False
 
 
@@ -62,7 +59,6 @@ class ExtractorConfig:
 
 
 class RuleExtractor:
-
     def __init__(
         self,
         journal: Journal,
@@ -70,7 +66,6 @@ class RuleExtractor:
     ) -> None:
         self.journal = journal
         self.config = config or ExtractorConfig()
-
 
     def extract(self) -> RuleExtractionReport:
         with trace_stage("regeneration.rule_extractor.extract"):
@@ -104,7 +99,6 @@ class RuleExtractor:
                 clusters_formed=len(clusters),
                 rules_produced=rules,
             )
-
 
     def _all_trajectories(self) -> list[Trajectory]:
         events = self.journal.read_by_type("trajectory")
@@ -257,9 +251,7 @@ def format_rules_for_prompt(
     if not rules:
         return ""
 
-    sorted_rules = sorted(
-        rules, key=lambda r: (_sev_rank(r.severity), r.hit_count), reverse=True
-    )
+    sorted_rules = sorted(rules, key=lambda r: (_sev_rank(r.severity), r.hit_count), reverse=True)
 
     lines = [header]
     used = len(header)

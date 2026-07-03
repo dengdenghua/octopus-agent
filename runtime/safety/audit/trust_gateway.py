@@ -172,22 +172,25 @@ def summarize_trust_denials(
         if decision != "rejected" and action not in {"deny", "block", "halt"}:
             continue
         tool_name = str(row.get("tool_name") or (trust or {}).get("tool_name") or "")
-        denied.append({
-            "id": row.get("id"),
-            "ts": row.get("requested_at") or row.get("decided_at") or row.get("ts"),
-            "thread_id": row.get("thread_id"),
-            "turn_id": row.get("turn_id"),
-            "agent_id": row.get("agent_id"),
-            "tool_name": tool_name,
-            "decision": decision or "rejected",
-            "action": action or "deny",
-            "reason": row.get("reason") or ((trust or {}).get("reason") if isinstance(trust, dict) else ""),
-            "risk_level": (
-                ((trust.get("risk") or {}).get("level"))
-                if isinstance(trust, dict) and isinstance(trust.get("risk"), dict)
-                else ""
-            ),
-        })
+        denied.append(
+            {
+                "id": row.get("id"),
+                "ts": row.get("requested_at") or row.get("decided_at") or row.get("ts"),
+                "thread_id": row.get("thread_id"),
+                "turn_id": row.get("turn_id"),
+                "agent_id": row.get("agent_id"),
+                "tool_name": tool_name,
+                "decision": decision or "rejected",
+                "action": action or "deny",
+                "reason": row.get("reason")
+                or ((trust or {}).get("reason") if isinstance(trust, dict) else ""),
+                "risk_level": (
+                    ((trust.get("risk") or {}).get("level"))
+                    if isinstance(trust, dict) and isinstance(trust.get("risk"), dict)
+                    else ""
+                ),
+            }
+        )
     by_tool = Counter(item["tool_name"] for item in denied if item["tool_name"])
     by_action = Counter(item["action"] for item in denied if item["action"])
     return {
@@ -195,7 +198,7 @@ def summarize_trust_denials(
         "total": len(denied),
         "by_tool": dict(by_tool),
         "by_action": dict(by_action),
-        "recent": denied[-max(1, int(limit)):],
+        "recent": denied[-max(1, int(limit)) :],
     }
 
 

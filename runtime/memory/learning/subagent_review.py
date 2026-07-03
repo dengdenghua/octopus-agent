@@ -5,6 +5,7 @@ turn. This module converts a completed subagent result into the existing
 ``ReviewQueue`` shape, but only when there is enough trace context to audit
 where the candidate came from.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -58,9 +59,7 @@ def queue_subagent_review_candidate(
         trace=trace,
     )
     queue = review_queue or ReviewQueue(
-        Path(review_queue_path)
-        if review_queue_path is not None
-        else _path_from_context(body)
+        Path(review_queue_path) if review_queue_path is not None else _path_from_context(body)
     )
     return {"queued": True, "queue": queue.add_from_task_run_review(review)}
 
@@ -147,10 +146,7 @@ def _trace_context(context: dict[str, Any], session: Any) -> dict[str, str]:
         "parent_agent_id": _clean(parent_agent_id, limit=120),
         "fingerprint": _clean(
             context.get("trace_fingerprint")
-            or "|".join(
-                str(part or "")
-                for part in (thread_id, turn_id, task_id, parent_agent_id)
-            ),
+            or "|".join(str(part or "") for part in (thread_id, turn_id, task_id, parent_agent_id)),
             limit=240,
         ),
     }

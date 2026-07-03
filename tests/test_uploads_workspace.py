@@ -16,20 +16,24 @@ class _ThreadStore:
 
 def _client(workspace_root: Path, legacy_root: Path | None = None) -> TestClient:
     app = FastAPI()
-    app.include_router(create_uploads_router(
-        thread_store=_ThreadStore(),
-        workspace_root=workspace_root,
-        legacy_upload_root=legacy_root,
-    ))
+    app.include_router(
+        create_uploads_router(
+            thread_store=_ThreadStore(),
+            workspace_root=workspace_root,
+            legacy_upload_root=legacy_root,
+        )
+    )
     return TestClient(app)
 
 
 def _legacy_client(upload_root: Path) -> TestClient:
     app = FastAPI()
-    app.include_router(create_uploads_router(
-        thread_store=_ThreadStore(),
-        upload_root=upload_root,
-    ))
+    app.include_router(
+        create_uploads_router(
+            thread_store=_ThreadStore(),
+            upload_root=upload_root,
+        )
+    )
     return TestClient(app)
 
 

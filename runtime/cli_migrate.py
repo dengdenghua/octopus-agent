@@ -6,6 +6,7 @@ Thin CLI wrapper over ``runtime.platform.migration``:
 * ``--apply``        → stage into ``.octopus/imported/``
 * ``--apply --activate`` → also activate memory + emit MCP config snippets
 """
+
 from __future__ import annotations
 
 from pathlib import Path

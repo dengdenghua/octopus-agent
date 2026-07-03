@@ -36,12 +36,7 @@ def get_gmail_account() -> str:
 def _run_gog_command(args: list[str]) -> dict[str, Any]:
     """Run a gog command and return structured result."""
     try:
-        result = subprocess.run(
-            ["gog"] + args,
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
+        result = subprocess.run(["gog"] + args, capture_output=True, text=True, timeout=60)
 
         if result.returncode == 0:
             # Try to parse as JSON
@@ -54,7 +49,7 @@ def _run_gog_command(args: list[str]) -> dict[str, Any]:
             return {
                 "success": False,
                 "error": result.stderr or result.stdout,
-                "returncode": result.returncode
+                "returncode": result.returncode,
             }
     except subprocess.TimeoutExpired:
         return {"success": False, "error": "Command timed out"}
@@ -87,10 +82,7 @@ def read_email(email_id: str, provider: str | None = None) -> dict[str, Any]:
 
 
 def search_emails(
-    query: str,
-    max_results: int = 20,
-    include_body: bool = False,
-    provider: str | None = None
+    query: str, max_results: int = 20, include_body: bool = False, provider: str | None = None
 ) -> dict[str, Any]:
     """
     Search for emails matching a query.
@@ -121,7 +113,7 @@ def modify_email(
     email_id: str,
     remove_labels: list[str] | None = None,
     add_labels: list[str] | None = None,
-    provider: str | None = None
+    provider: str | None = None,
 ) -> dict[str, Any]:
     """
     Modify an email (add/remove labels).
@@ -152,12 +144,7 @@ def modify_email(
     return {"success": False, "error": f"Unknown provider: {provider}"}
 
 
-def send_email(
-    to: str,
-    subject: str,
-    body: str,
-    provider: str | None = None
-) -> dict[str, Any]:
+def send_email(to: str, subject: str, body: str, provider: str | None = None) -> dict[str, Any]:
     """
     Send an email.
 
@@ -228,7 +215,9 @@ def main():
         if not email_id:
             print("Error: --email-id required", file=sys.stderr)
             sys.exit(1)
-        remove_labels = args.get("remove_labels", "").split(",") if args.get("remove_labels") else None
+        remove_labels = (
+            args.get("remove_labels", "").split(",") if args.get("remove_labels") else None
+        )
         add_labels = args.get("add_labels", "").split(",") if args.get("add_labels") else None
         result = modify_email(email_id, remove_labels, add_labels, provider)
 

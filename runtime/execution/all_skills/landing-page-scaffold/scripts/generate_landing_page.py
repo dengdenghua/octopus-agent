@@ -25,53 +25,53 @@ DEFAULT_CONFIG = {
             {"value": "10,000+", "label": "Active Users"},
             {"value": "99.9%", "label": "Uptime"},
             {"value": "4.9/5", "label": "User Rating"},
-            {"value": "50M+", "label": "Tasks Completed"}
+            {"value": "50M+", "label": "Tasks Completed"},
         ],
         "logos": ["Acme Corp", "Globex", "Initech", "Umbrella", "Stark Inc"],
         "testimonials": [
             {
                 "quote": "This tool completely transformed how our team works. We shipped 3x faster in the first month.",
                 "author": "Sarah Chen",
-                "role": "CTO, TechFlow"
+                "role": "CTO, TechFlow",
             },
             {
                 "quote": "The best investment we made this year. Simple to set up, powerful in practice.",
                 "author": "Marcus Rivera",
-                "role": "VP Engineering, ScaleUp"
-            }
-        ]
+                "role": "VP Engineering, ScaleUp",
+            },
+        ],
     },
     "features": [
         {
             "title": "Lightning Fast",
             "description": "Built for speed from the ground up. Sub-100ms response times on every action.",
-            "icon": "zap"
+            "icon": "zap",
         },
         {
             "title": "Team Collaboration",
             "description": "Real-time editing, comments, and shared workspaces that keep everyone in sync.",
-            "icon": "users"
+            "icon": "users",
         },
         {
             "title": "Smart Analytics",
             "description": "Actionable insights with dashboards that surface what matters most to your team.",
-            "icon": "chart"
+            "icon": "chart",
         },
         {
             "title": "Enterprise Security",
             "description": "SOC 2 compliant with SSO, RBAC, and end-to-end encryption built in.",
-            "icon": "shield"
+            "icon": "shield",
         },
         {
             "title": "API First",
             "description": "RESTful API with SDKs in every major language. Build custom integrations in minutes.",
-            "icon": "code"
+            "icon": "code",
         },
         {
             "title": "24/7 Support",
             "description": "Dedicated support team with average response time under 5 minutes.",
-            "icon": "headphone"
-        }
+            "icon": "headphone",
+        },
     ],
     "pricing": {
         "tiers": [
@@ -80,35 +80,54 @@ DEFAULT_CONFIG = {
                 "price": "$0",
                 "period": "/month",
                 "description": "For individuals and small projects",
-                "features": ["Up to 3 projects", "1 GB storage", "Basic analytics", "Community support"],
+                "features": [
+                    "Up to 3 projects",
+                    "1 GB storage",
+                    "Basic analytics",
+                    "Community support",
+                ],
                 "cta_text": "Start Free",
-                "highlighted": False
+                "highlighted": False,
             },
             {
                 "name": "Pro",
                 "price": "$29",
                 "period": "/month",
                 "description": "For growing teams that need more",
-                "features": ["Unlimited projects", "100 GB storage", "Advanced analytics", "Priority support", "Custom integrations", "Team management"],
+                "features": [
+                    "Unlimited projects",
+                    "100 GB storage",
+                    "Advanced analytics",
+                    "Priority support",
+                    "Custom integrations",
+                    "Team management",
+                ],
                 "cta_text": "Start Free Trial",
-                "highlighted": True
+                "highlighted": True,
             },
             {
                 "name": "Enterprise",
                 "price": "Custom",
                 "period": "",
                 "description": "For large organizations with specific needs",
-                "features": ["Everything in Pro", "Unlimited storage", "SSO & SAML", "Dedicated account manager", "SLA guarantee", "Custom contracts"],
+                "features": [
+                    "Everything in Pro",
+                    "Unlimited storage",
+                    "SSO & SAML",
+                    "Dedicated account manager",
+                    "SLA guarantee",
+                    "Custom contracts",
+                ],
                 "cta_text": "Contact Sales",
-                "highlighted": False
-            }
+                "highlighted": False,
+            },
         ]
     },
     "cta": {
         "headline": "Ready to get started?",
         "description": "Join thousands of teams already using our platform. No credit card required.",
         "button_text": "Start Your Free Trial",
-        "button_url": "#"
+        "button_url": "#",
     },
     "theme": {
         "primary": "#4F46E5",
@@ -122,8 +141,8 @@ DEFAULT_CONFIG = {
         "text_light": "#64748B",
         "border": "#E2E8F0",
         "radius": "12px",
-        "font_family": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
-    }
+        "font_family": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+    },
 }
 
 ICON_SVG = {
@@ -152,7 +171,9 @@ def css_safe(text):
 
 def icon_svg(name, size=24):
     """Return an inline SVG icon. Falls back to a circle if icon name is unknown."""
-    inner = ICON_SVG.get(name, '<circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>')
+    inner = ICON_SVG.get(
+        name, '<circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>'
+    )
     return f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 24 24">{inner}</svg>'
 
 
@@ -184,15 +205,15 @@ def build_html(config):
     # --- Stats ---
     stats_html = ""
     for stat in c["social_proof"]["stats"]:
-        stats_html += f'''<div class="stat-item">
+        stats_html += f"""<div class="stat-item">
   <div class="stat-value">{e(stat["value"])}</div>
   <div class="stat-label">{e(stat["label"])}</div>
-</div>\n'''
+</div>\n"""
 
     # --- Testimonials ---
     testimonials_html = ""
     for t_item in c["social_proof"]["testimonials"]:
-        testimonials_html += f'''<div class="testimonial-card">
+        testimonials_html += f"""<div class="testimonial-card">
   <div class="testimonial-icon">{icon_svg("quote", 20)}</div>
   <p class="testimonial-quote">{e(t_item["quote"])}</p>
   <div class="testimonial-author">
@@ -202,16 +223,16 @@ def build_html(config):
       <div class="author-role">{e(t_item["role"])}</div>
     </div>
   </div>
-</div>\n'''
+</div>\n"""
 
     # --- Features ---
     features_html = ""
     for feat in c["features"]:
-        features_html += f'''<div class="feature-card">
+        features_html += f"""<div class="feature-card">
   <div class="feature-icon">{icon_svg(feat.get("icon", "check"), 28)}</div>
   <h3 class="feature-title">{e(feat["title"])}</h3>
   <p class="feature-desc">{e(feat["description"])}</p>
-</div>\n'''
+</div>\n"""
 
     # --- Pricing tiers ---
     pricing_html = ""
@@ -220,9 +241,9 @@ def build_html(config):
         badge = '<div class="tier-badge">Most Popular</div>' if tier.get("highlighted") else ""
         features_list = ""
         for f in tier["features"]:
-            features_list += f'<li>{icon_svg("check", 16)} {e(f)}</li>\n'
+            features_list += f"<li>{icon_svg('check', 16)} {e(f)}</li>\n"
         btn_class = "btn-primary" if tier.get("highlighted") else "btn-outline"
-        pricing_html += f'''<div class="tier-card{hl_class}">
+        pricing_html += f"""<div class="tier-card{hl_class}">
   {badge}
   <h3 class="tier-name">{e(tier["name"])}</h3>
   <p class="tier-desc">{e(tier["description"])}</p>
@@ -232,7 +253,7 @@ def build_html(config):
   </div>
   <ul class="tier-features">{features_list}</ul>
   <a href="#" class="btn {btn_class}">{e(tier["cta_text"])}</a>
-</div>\n'''
+</div>\n"""
 
     # --- CTA section ---
     cta = c["cta"]
@@ -861,7 +882,9 @@ def main():
     parser.add_argument("--description", "-d", help="Product description")
     parser.add_argument("--primary-color", help="Primary theme color (hex, e.g. #4F46E5)")
     parser.add_argument("--output", "-o", help="Output HTML file path (default: stdout)")
-    parser.add_argument("--open", action="store_true", help="Open in default browser after generation")
+    parser.add_argument(
+        "--open", action="store_true", help="Open in default browser after generation"
+    )
     args = parser.parse_args()
 
     config = load_config(args)

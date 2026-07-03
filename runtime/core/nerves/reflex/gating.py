@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import datetime as _dt
@@ -15,12 +14,13 @@ _DAY_NAMES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 @dataclass
 class GatingSpec:
     """Parsed gating config · None when the rule has no enabled_when."""
-    actors: set[str] | None = None         # whitelist
+
+    actors: set[str] | None = None  # whitelist
     deny_actors: set[str] = field(default_factory=set)
-    window_start: _dt.time | None = None    # inclusive
-    window_end: _dt.time | None = None      # exclusive
-    days_of_week: set[int] | None = None    # 0=Mon, 6=Sun
-    rollout_pct: int | None = None          # 0..100
+    window_start: _dt.time | None = None  # inclusive
+    window_end: _dt.time | None = None  # exclusive
+    days_of_week: set[int] | None = None  # 0=Mon, 6=Sun
+    rollout_pct: int | None = None  # 0..100
 
     @classmethod
     def from_entry(cls, raw: Any) -> GatingSpec | None:
@@ -132,9 +132,7 @@ class GatingSpec:
                 "end": self.window_end.strftime("%H:%M"),
             }
         if self.days_of_week is not None:
-            out["days_of_week"] = [
-                _DAY_NAMES[i] for i in sorted(self.days_of_week)
-            ]
+            out["days_of_week"] = [_DAY_NAMES[i] for i in sorted(self.days_of_week)]
         if self.rollout_pct is not None:
             out["rollout_pct"] = self.rollout_pct
         return out

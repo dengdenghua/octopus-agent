@@ -40,23 +40,11 @@ def project_memory_path(metadata: dict[str, Any] | None = None) -> Path:
 
 
 def agent_memory_path(repo_root: Path, agent_id: str) -> Path:
-    return (
-        repo_root
-        / "agents"
-        / safe_path_segment(agent_id, "agent")
-        / "agent-core"
-        / "MEMORY.md"
-    )
+    return repo_root / "agents" / safe_path_segment(agent_id, "agent") / "agent-core" / "MEMORY.md"
 
 
 def team_memory_path(repo_root: Path, team_id: str) -> Path:
-    return (
-        repo_root
-        / "teams"
-        / safe_path_segment(team_id, "team")
-        / "team-core"
-        / "MEMORY.md"
-    )
+    return repo_root / "teams" / safe_path_segment(team_id, "team") / "team-core" / "MEMORY.md"
 
 
 def team_agent_memory_path(repo_root: Path, team_id: str, agent_id: str) -> Path:
@@ -126,9 +114,11 @@ def visible_memory_tier_paths(
     team_id = metadata.get("team_id")
     if isinstance(team_id, str) and team_id.strip():
         clean_team_id = team_id.strip()
-        tiers.extend([
-            ("team", team_memory_path(repo_root, clean_team_id)),
-            ("team-agent", team_agent_memory_path(repo_root, clean_team_id, agent_id)),
-        ])
+        tiers.extend(
+            [
+                ("team", team_memory_path(repo_root, clean_team_id)),
+                ("team-agent", team_agent_memory_path(repo_root, clean_team_id, agent_id)),
+            ]
+        )
     tiers.append(("agent", agent_memory_path(repo_root, agent_id)))
     return tiers

@@ -78,7 +78,7 @@ def build_turn_replay_cases(
 ) -> list[TurnReplayCase]:
     cases: list[TurnReplayCase] = []
     seen: set[str] = set()
-    for idx, failure in enumerate((failures or [])[:max(0, int(limit))]):
+    for idx, failure in enumerate((failures or [])[: max(0, int(limit))]):
         kind = _classify_failure(failure)
         if kind is None:
             continue
@@ -92,14 +92,16 @@ def build_turn_replay_cases(
         if dedupe_key in seen:
             continue
         seen.add(dedupe_key)
-        cases.append(TurnReplayCase(
-            case_id=case_id,
-            kind=kind,
-            task_input=str(failure.get("goal") or "").strip(),
-            expected_behavior=_expected_behavior(kind),
-            weight=_case_weight(kind, failure),
-            metadata=dict(failure),
-        ))
+        cases.append(
+            TurnReplayCase(
+                case_id=case_id,
+                kind=kind,
+                task_input=str(failure.get("goal") or "").strip(),
+                expected_behavior=_expected_behavior(kind),
+                weight=_case_weight(kind, failure),
+                metadata=dict(failure),
+            )
+        )
     return cases
 
 
@@ -110,8 +112,12 @@ def replay_turn_candidates(
     cases: list[TurnReplayCase] | None = None,
     min_case_score: float = 0.62,
 ) -> TurnReplayReport:
-    replay_cases = cases if cases is not None else build_turn_replay_cases(
-        failures=failures,
+    replay_cases = (
+        cases
+        if cases is not None
+        else build_turn_replay_cases(
+            failures=failures,
+        )
     )
     reports = [
         _replay_turn_candidate(
@@ -169,25 +175,25 @@ def _score_turn_case(
         matched_signals=matched,
         missing_signals=missing,
         reason=(
-            "turn behavior covered"
-            if passed
-            else _failure_reason(case.kind, missing, penalty)
+            "turn behavior covered" if passed else _failure_reason(case.kind, missing, penalty)
         ),
     )
 
 
 def _classify_failure(failure: dict[str, Any]) -> str | None:
-    text = _normalize(" ".join(
-        str(failure.get(key) or "")
-        for key in (
-            "failure_cluster",
-            "failure_source",
-            "last_error",
-            "goal",
-            "summary",
-            "reason",
+    text = _normalize(
+        " ".join(
+            str(failure.get(key) or "")
+            for key in (
+                "failure_cluster",
+                "failure_source",
+                "last_error",
+                "goal",
+                "summary",
+                "reason",
+            )
         )
-    ))
+    )
     if _has(text, r"length|truncate|截断|max[_ -]?tokens|finish_reason"):
         return "report_truncation"
     if _has(text, r"tool|skill|permission|权限|无法调用|不能调用|no tools"):
@@ -268,12 +274,20 @@ def _weighted_average(
     total_weight = 0.0
     total = 0.0
     for result in results:
-        weight = max(0.0, float(by_id.get(result.case_id, TurnReplayCase(
-            case_id=result.case_id,
-            kind=result.kind,
-            task_input="",
-            expected_behavior="",
-        )).weight))
+        weight = max(
+            0.0,
+            float(
+                by_id.get(
+                    result.case_id,
+                    TurnReplayCase(
+                        case_id=result.case_id,
+                        kind=result.kind,
+                        task_input="",
+                        expected_behavior="",
+                    ),
+                ).weight
+            ),
+        )
         total += result.score * weight
         total_weight += weight
     if total_weight <= 0:

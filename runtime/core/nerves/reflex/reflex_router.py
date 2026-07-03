@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import hashlib
@@ -19,7 +18,6 @@ from runtime.platform.models import ParsedIntent
 
 
 class ReflexMatch(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     rule_id: str
@@ -30,7 +28,6 @@ class ReflexMatch(BaseModel):
 
 
 class ReflexMiss(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     tried_rules: list[str] = Field(default_factory=list)
@@ -59,7 +56,6 @@ class Reflex(ABC):
 
 
 class RegexMatcher(Reflex):
-
     kind: Literal["regex"] = "regex"
 
     def __init__(
@@ -103,7 +99,6 @@ class RegexMatcher(Reflex):
 
 
 class DeterministicMatcher(Reflex):
-
     kind: Literal["deterministic"] = "deterministic"
 
     def __init__(
@@ -143,14 +138,12 @@ class DeterministicMatcher(Reflex):
 
 @dataclass
 class CacheHit:
-
     key: str
     value: Any
     ts: float = field(default_factory=time.time)
 
 
 class CacheMatcher(Reflex):
-
     kind: Literal["cache"] = "cache"
 
     def __init__(
@@ -166,14 +159,12 @@ class CacheMatcher(Reflex):
         self.priority = priority
         self._store: dict[str, CacheHit] = {}
 
-
     def put(self, intent: ParsedIntent, response: Any) -> None:
         key = self.key_for(intent)
         if len(self._store) >= self.max_entries:
             first_key = next(iter(self._store))
             del self._store[first_key]
         self._store[key] = CacheHit(key=key, value=response)
-
 
     def try_match(self, intent: ParsedIntent) -> ReflexMatch | None:
         t0 = time.monotonic()
@@ -201,7 +192,6 @@ class CacheMatcher(Reflex):
         ]
         return hashlib.blake2b("|".join(parts).encode("utf-8"), digest_size=12).hexdigest()
 
-
     def size(self) -> int:
         return len(self._store)
 
@@ -214,7 +204,6 @@ class CacheMatcher(Reflex):
 
 
 class ReflexRouter:
-
     FORCE_DELIBERATIVE_TYPES = {"plan", "refactor", "debug", "design"}
 
     def __init__(
@@ -254,11 +243,13 @@ class ReflexRouter:
             _gate_actor: str | None = None
             try:
                 from runtime.platform.process.session import current_session as _cs
+
                 _sess = _cs()
                 _gate_actor = getattr(_sess, "actor", None) if _sess else None
             except Exception:  # noqa: BLE001
                 pass
             import datetime as _dt
+
             _gate_now = _dt.datetime.now()
 
             for reflex in self._reflexes:
@@ -270,7 +261,8 @@ class ReflexRouter:
                 # would be misleading).
                 gating = getattr(reflex, "_gating_spec", None)
                 if gating is not None and not gating.is_active(
-                    actor=_gate_actor, now=_gate_now,
+                    actor=_gate_actor,
+                    now=_gate_now,
                 ):
                     continue
                 self._try_count_by_rule[reflex.rule_id] = (
@@ -296,14 +288,15 @@ class ReflexRouter:
                 return match
 
             span.set_attribute("octopus.reflex.hit", False)
-            return ReflexMiss(tried_rules=tried, reason="no_matcher_returned_high_enough_confidence")
+            return ReflexMiss(
+                tried_rules=tried, reason="no_matcher_returned_high_enough_confidence"
+            )
 
     @staticmethod
     def _force_deliberative(intent: ParsedIntent) -> bool:
         if intent.flags.get("deep"):
             return True
         return intent.intent_type in ReflexRouter.FORCE_DELIBERATIVE_TYPES
-
 
     @property
     def hit_rate(self) -> float:
@@ -329,7 +322,9 @@ class ReflexRouter:
         return out
 
     def coverage_summary(
-        self, *, stale_hours: float = 24.0,
+        self,
+        *,
+        stale_hours: float = 24.0,
     ) -> dict[str, Any]:
         """Identify rules that look unused · feeds the admin UI's
         "rules to prune" callout.
@@ -369,8 +364,10 @@ class ReflexRouter:
     # ─── hot-reload support ──────────────────────────────────
 
     def replace_reflexes(
-        self, reflexes: Iterable[Reflex],
-        *, reset_stats: bool = False,
+        self,
+        reflexes: Iterable[Reflex],
+        *,
+        reset_stats: bool = False,
     ) -> int:
         """Swap the matcher list in-place · returns the new count.
 
@@ -434,8 +431,7 @@ class ReflexRouter:
                         "weight": w,
                         "hits": hits.get(vid, 0),
                         "preview": (
-                            (resp.get("reply") if isinstance(resp, dict) else str(resp))
-                            or ""
+                            (resp.get("reply") if isinstance(resp, dict) else str(resp)) or ""
                         )[:60],
                     }
                     for (w, resp, vid) in variants
@@ -450,8 +446,7 @@ class ReflexRouter:
             spec = getattr(r, "_action_spec", None)
             if spec is not None:
                 entry["actions"] = [
-                    k for k in ("webhook", "mqtt", "exec")
-                    if getattr(spec, k, None) is not None
+                    k for k in ("webhook", "mqtt", "exec") if getattr(spec, k, None) is not None
                 ]
             # Surface gating · sanitised describe() avoids leaking
             # sensitive actor lists if any. Lets the admin UI render

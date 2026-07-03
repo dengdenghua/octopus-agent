@@ -5,6 +5,7 @@ trust when its trace-linked outputs survive operator review, and loses trust
 when candidates are rejected or archived. The score is not a model-quality
 claim; it is an operational signal for routing, retirement, and promotion.
 """
+
 from __future__ import annotations
 
 import json
@@ -32,7 +33,9 @@ def compute_subagent_fitness(
     role: str | None = None,
     limit: int = 2000,
 ) -> dict[str, Any]:
-    path = Path(review_queue_path) if review_queue_path is not None else app_paths().review_queue_path
+    path = (
+        Path(review_queue_path) if review_queue_path is not None else app_paths().review_queue_path
+    )
     queue = ReviewQueue(path)
     rows = queue.items(limit=max(1, min(int(limit), 5000)))["items"]
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -69,7 +72,8 @@ def compute_subagent_fitness(
         "roles": reports,
         "role_count": len(reports),
         "top_risks": [
-            item for item in sorted(
+            item
+            for item in sorted(
                 reports,
                 key=lambda row: (row["score"], -row["sample_count"], row["role"]),
             )
@@ -140,7 +144,9 @@ def _role_from_item(row: dict[str, Any]) -> str:
 
 def _role_from_route_item(row: dict[str, Any]) -> str:
     metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
-    route = metadata.get("route_decision") if isinstance(metadata.get("route_decision"), dict) else {}
+    route = (
+        metadata.get("route_decision") if isinstance(metadata.get("route_decision"), dict) else {}
+    )
     return _clean(route.get("role") or row.get("agent_id"), limit=80)
 
 
@@ -176,11 +182,13 @@ def _next_actions(reports: list[dict[str, Any]]) -> list[dict[str, str]]:
         verdict = str(report.get("verdict") or "")
         if verdict not in {"retire_candidate", "watch"}:
             continue
-        actions.append({
-            "role": str(report.get("role") or ""),
-            "verdict": verdict,
-            "action": str(report.get("recommendation") or ""),
-        })
+        actions.append(
+            {
+                "role": str(report.get("role") or ""),
+                "verdict": verdict,
+                "action": str(report.get("recommendation") or ""),
+            }
+        )
     return actions[:5]
 
 
@@ -237,9 +245,7 @@ def _route_decision_row(
     step_id = _clean(decision.get("step_id") or decision.get("task_id"), limit=120)
     created_at = _clean(decision.get("created_at"), limit=80)
     status = "rejected" if action == "block" else "archived"
-    item_id = "route-" + "-".join(
-        part for part in (job_id, step_id, role, action) if part
-    )
+    item_id = "route-" + "-".join(part for part in (job_id, step_id, role, action) if part)
     return {
         "id": item_id[:80],
         "status": status,

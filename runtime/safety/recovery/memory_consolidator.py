@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from collections import defaultdict
@@ -19,7 +18,6 @@ MemoryScope = Literal["agent", "group", "global"]
 
 
 class ConsolidatedMemory(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     memory_id: UUID = Field(..., description="stable id for the consolidated memory")
@@ -41,7 +39,6 @@ class ConsolidatedMemory(BaseModel):
 
 
 class ConsolidationReport(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     trajectories_scanned: int
@@ -55,7 +52,7 @@ class ConsolidationReport(BaseModel):
 
 @dataclass
 class ConsolidatorConfig:
-    min_samples_per_cluster: int = 2    # Implementation note.
+    min_samples_per_cluster: int = 2  # Implementation note.
     hot_tier_recency_hours: int = 24
     cold_tier_age_days: int = 30
     max_memories: int = 50
@@ -67,7 +64,6 @@ class ConsolidatorConfig:
 
 
 class MemoryConsolidator:
-
     def __init__(
         self,
         journal: Journal,
@@ -79,7 +75,9 @@ class MemoryConsolidator:
     def consolidate(self) -> ConsolidationReport:
         tagged = self._collect_trajectories()
         return self._consolidate_subset(
-            [t for t, _ in tagged], scope="global", scope_key="",
+            [t for t, _ in tagged],
+            scope="global",
+            scope_key="",
         )
 
     def consolidate_scoped(
@@ -98,7 +96,8 @@ class MemoryConsolidator:
             if include_global:
                 sub = self._consolidate_subset(
                     [t for t, _ in tagged],
-                    scope="global", scope_key="",
+                    scope="global",
+                    scope_key="",
                 )
                 all_memories.extend(sub.memories_produced)
                 scanned = sub.trajectories_scanned
@@ -107,7 +106,9 @@ class MemoryConsolidator:
             for agent_id in agents or []:
                 subset = [t for t, aid in tagged if aid == agent_id]
                 sub = self._consolidate_subset(
-                    subset, scope="agent", scope_key=agent_id,
+                    subset,
+                    scope="agent",
+                    scope_key=agent_id,
                 )
                 all_memories.extend(sub.memories_produced)
                 clusters_total += sub.clusters_formed
@@ -116,7 +117,9 @@ class MemoryConsolidator:
                 member_set = set(members)
                 subset = [t for t, aid in tagged if aid in member_set]
                 sub = self._consolidate_subset(
-                    subset, scope="group", scope_key=group_name,
+                    subset,
+                    scope="group",
+                    scope_key=group_name,
                 )
                 all_memories.extend(sub.memories_produced)
                 clusters_total += sub.clusters_formed
@@ -126,7 +129,6 @@ class MemoryConsolidator:
                 clusters_formed=clusters_total,
                 memories_produced=all_memories,
             )
-
 
     def _collect_trajectories(self) -> list[tuple[Trajectory, str | None]]:
         events = self.journal.read_by_type("trajectory")
@@ -160,9 +162,7 @@ class MemoryConsolidator:
                 _, traj, agent_id = max(swarm_entries, key=lambda e: e[0])
                 tagged.append((traj, agent_id))
             else:
-                tagged.extend(
-                    (traj, agent_id) for _, traj, agent_id in bucket
-                )
+                tagged.extend((traj, agent_id) for _, traj, agent_id in bucket)
         return tagged
 
     def _consolidate_subset(
@@ -181,10 +181,16 @@ class MemoryConsolidator:
         for (arm_id, strategy), cluster in clusters.items():
             if len(cluster) < self.config.min_samples_per_cluster:
                 continue
-            memories.append(self._summarize_cluster(
-                arm_id, strategy, cluster, now,
-                scope=scope, scope_key=scope_key,
-            ))
+            memories.append(
+                self._summarize_cluster(
+                    arm_id,
+                    strategy,
+                    cluster,
+                    now,
+                    scope=scope,
+                    scope_key=scope_key,
+                )
+            )
 
         memories.sort(key=lambda m: -m.trajectories_count)
         memories = memories[: self.config.max_memories]
@@ -264,7 +270,13 @@ def filter_memories_for_agent(
     group_set = set(groups or [])
     out: list[ConsolidatedMemory] = []
     for m in memories:
-        if m.scope == "global" or m.scope == "agent" and m.scope_key == agent_id or m.scope == "group" and m.scope_key in group_set:
+        if (
+            m.scope == "global"
+            or m.scope == "agent"
+            and m.scope_key == agent_id
+            or m.scope == "group"
+            and m.scope_key in group_set
+        ):
             out.append(m)
     return out
 

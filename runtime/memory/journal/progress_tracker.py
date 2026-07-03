@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -18,7 +17,6 @@ from .progress import TaskProgressSnapshot
 
 
 class TaskProgressTracker:
-
     def __init__(self, streaming_journal: Any) -> None:
         self._journal = streaming_journal
         self._lock = threading.RLock()
@@ -49,7 +47,6 @@ class TaskProgressTracker:
     def __exit__(self, *exc: object) -> None:
         self.close()
 
-
     @property
     def snapshots(self) -> list[TaskProgressSnapshot]:
         with self._lock:
@@ -75,7 +72,6 @@ class TaskProgressTracker:
         with self._lock:
             return sum(1 for s in self._by_task.values() if s.status == "running")
 
-
     def _on_event(self, ev: JournalEvent) -> None:
         if ev.task_id is None:
             return
@@ -89,7 +85,6 @@ class TaskProgressTracker:
             # follow-up; for now just preserve the swallow behavior
             # and let a future logging sweep narrow it.
             _ = e  # noqa: F841
-
 
     def _ingest(self, ev: JournalEvent) -> None:
         task_id = str(ev.task_id)
@@ -129,9 +124,7 @@ class TaskProgressTracker:
                     usd_spent=round(ev.usd_spent, 6),
                 )
             elif isinstance(ev, TrajectoryEvent):
-                final_status = (
-                    "completed" if ev.trajectory.outcome.success else "failed"
-                )
+                final_status = "completed" if ev.trajectory.outcome.success else "failed"
                 nc = sum(1 for s in ev.trajectory.steps if s.success)
                 cost = ev.trajectory.outcome.cost
                 tokens = cost.tokens if cost.tokens > 0 else snap.tokens_spent

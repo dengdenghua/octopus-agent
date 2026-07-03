@@ -99,6 +99,5 @@ def search_persisted(
     scored = [(_cosine(q, vec), p, chunk) for p, chunk, vec in rows]
     scored.sort(key=lambda t: -t[0])
     return [
-        {"path": p, "snippet": c, "score": round(s, 4)}
-        for s, p, c in scored[: max(1, int(top_k))]
+        {"path": p, "snippet": c, "score": round(s, 4)} for s, p, c in scored[: max(1, int(top_k))]
     ]

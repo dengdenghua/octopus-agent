@@ -44,13 +44,46 @@ from typing import Any
 
 # Very small stopword list — we keep it short so domain-specific
 # terms like "file", "code", "write" stay informative.
-_STOPWORDS: frozenset[str] = frozenset({
-    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
-    "has", "have", "in", "is", "it", "its", "of", "on", "or", "that",
-    "the", "this", "to", "was", "were", "will", "with", "would",
-    # Agent-specific noise
-    "returns", "return", "use", "used", "using", "into", "out",
-})
+_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "for",
+        "from",
+        "has",
+        "have",
+        "in",
+        "is",
+        "it",
+        "its",
+        "of",
+        "on",
+        "or",
+        "that",
+        "the",
+        "this",
+        "to",
+        "was",
+        "were",
+        "will",
+        "with",
+        "would",
+        # Agent-specific noise
+        "returns",
+        "return",
+        "use",
+        "used",
+        "using",
+        "into",
+        "out",
+    }
+)
 
 _TOKEN_RE = re.compile(r"[a-z0-9_]+")
 
@@ -136,11 +169,7 @@ class TfIdfSkillSearcher(SkillSearcher):
         for name, doc_vec in self._doc_vectors.items():
             if not doc_vec:
                 continue
-            dot = sum(
-                q_vec[t] * doc_vec[t]
-                for t in q_vec
-                if t in doc_vec
-            )
+            dot = sum(q_vec[t] * doc_vec[t] for t in q_vec if t in doc_vec)
             if dot <= 0:
                 continue
             doc_norm = math.sqrt(sum(v * v for v in doc_vec.values()))
@@ -159,12 +188,17 @@ class TfIdfSkillSearcher(SkillSearcher):
         docs: dict[str, list[str]] = {}
         for name in self._enabled_names():
             skill = self._registry.get(name)
-            text = " ".join(filter(None, [
-                skill.name.replace("_", " "),
-                skill.summary,
-                skill.description,
-                " ".join(skill.affinity),
-            ]))
+            text = " ".join(
+                filter(
+                    None,
+                    [
+                        skill.name.replace("_", " "),
+                        skill.summary,
+                        skill.description,
+                        " ".join(skill.affinity),
+                    ],
+                )
+            )
             docs[name] = _tokenize(text)
 
         # Document frequency per term.
@@ -174,9 +208,7 @@ class TfIdfSkillSearcher(SkillSearcher):
                 df[term] += 1
 
         n = max(1, len(docs))
-        self._idf = {
-            term: math.log(n / freq) + 1.0 for term, freq in df.items()
-        }
+        self._idf = {term: math.log(n / freq) + 1.0 for term, freq in df.items()}
 
         # Per-doc TF-IDF vectors.
         self._doc_vectors = {}

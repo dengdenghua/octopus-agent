@@ -67,9 +67,7 @@ def _seed_journal(path: Path) -> None:
     )
     intent = ParsedIntent(raw="seed", intent_type="task", normalized_goal="seed")
     graph = planner.plan(intent)
-    budget = Budget(
-        task_id=graph.task_id, limits=BudgetLimits(tokens=10_000, usd=0.10)
-    )
+    budget = Budget(task_id=graph.task_id, limits=BudgetLimits(tokens=10_000, usd=0.10))
     runtime.run(graph, budget=budget, caller="arms/seed", arm_id=ArmId("seed_arm"))
 
 
@@ -163,21 +161,15 @@ class TestBasicRoutes:
         assert "kimi_coding" in data["model_compat"]["profile_ids"]
         assert "deepseek" in data["model_compat"]["profile_ids"]
         assert "qwen" in data["model_compat"]["profile_ids"]
-        probes = {
-            item["profile_id"]: item
-            for item in data["model_compat"]["sample_probes"]
-        }
+        probes = {item["profile_id"]: item for item in data["model_compat"]["sample_probes"]}
         assert probes["kimi_coding"]["smoke_provider_configured"] is True
         assert probes["kimi_coding"]["base_url_resolves_to"] == "kimi_coding"
         assert probes["kimi_coding"]["model_resolves_to"] == "kimi_coding"
         contracts = {
-            item["profile_id"]: item
-            for item in data["model_compat"]["request_contract_probes"]
+            item["profile_id"]: item for item in data["model_compat"]["request_contract_probes"]
         }
         assert contracts["kimi_coding"]["contract_ready"] is True
-        assert "sampling_parameters_removed" in contracts["kimi_coding"][
-            "risk_reasons"
-        ]
+        assert "sampling_parameters_removed" in contracts["kimi_coding"]["risk_reasons"]
         assert "tool_schema_normalized" in contracts["qwen"]["risk_reasons"]
         assert _check_by_id(data, "openai_compat_profiles")["passed"] is True
         assert data["orchestration"]["schema"] == "octopus.orchestration_surface_self_check.v1"
@@ -197,15 +189,13 @@ class TestBasicRoutes:
         assert data["orchestration"]["route_methods"][
             "/api/agents/parallel/batch/{batch_id}/recovery-snapshot"
         ] == ["GET"]
-        assert data["orchestration"]["route_methods"][
-            "/api/agents/parallel/stream/{batch_id}"
-        ] == ["GET"]
+        assert data["orchestration"]["route_methods"]["/api/agents/parallel/stream/{batch_id}"] == [
+            "GET"
+        ]
         assert data["orchestration"]["missing_model_fields"] == []
         assert data["orchestration"]["missing_methods"] == []
         assert _check_by_id(data, "orchestration_surface")["passed"] is True
-        assert data["run_evidence"]["schema"] == (
-            "octopus.run_evidence_surface_self_check.v1"
-        )
+        assert data["run_evidence"]["schema"] == ("octopus.run_evidence_surface_self_check.v1")
         assert data["run_evidence"]["ready"] is True
         assert data["run_evidence"]["missing_required_routes"] == []
         assert data["run_evidence"]["missing_route_methods"] == []
@@ -231,29 +221,20 @@ class TestBasicRoutes:
         assert data["run_evidence"]["route_methods"][
             "/api/agent-trace/review-queue/promotions/apply"
         ] == ["POST"]
-        assert data["run_evidence"]["route_methods"][
-            "/api/loops/{run_id}/replay-case"
-        ] == ["GET"]
+        assert data["run_evidence"]["route_methods"]["/api/loops/{run_id}/replay-case"] == ["GET"]
         evidence_methods = {
-            item["method"]: item
-            for item in data["run_evidence"]["method_contracts"]
+            item["method"]: item for item in data["run_evidence"]["method_contracts"]
         }
         assert evidence_methods["AgentTraceStore.task_run_review"]["present"] is True
         assert evidence_methods["AgentTraceStore.replay_gate"]["present"] is True
-        assert evidence_methods["ExperienceLedger.add_from_task_run_review"][
-            "present"
-        ] is True
+        assert evidence_methods["ExperienceLedger.add_from_task_run_review"]["present"] is True
         assert evidence_methods["ReviewQueue.add_from_task_run_review"]["present"] is True
         assert evidence_methods["PromotionApplier.apply"]["present"] is True
-        assert evidence_methods[
-            "process_timeline.build_task_run_process_timeline"
-        ]["present"] is True
-        assert evidence_methods["loop_replay.build_loop_run_replay_case"][
-            "present"
-        ] is True
-        assert evidence_methods["loop_recovery.build_loop_run_resume_proposal"][
-            "present"
-        ] is True
+        assert (
+            evidence_methods["process_timeline.build_task_run_process_timeline"]["present"] is True
+        )
+        assert evidence_methods["loop_replay.build_loop_run_replay_case"]["present"] is True
+        assert evidence_methods["loop_recovery.build_loop_run_resume_proposal"]["present"] is True
         assert _check_by_id(data, "run_evidence_surface")["passed"] is True
         assert data["automation"]["schema"] == "octopus.automation_surface_self_check.v1"
         assert data["automation"]["ready"] is True
@@ -274,34 +255,21 @@ class TestBasicRoutes:
             "computer_lease": True,
             "pixel_replay_gate": True,
         }
-        assert data["automation"]["route_methods"][
-            "/api/browser/session/replay-case/queue"
-        ] == ["POST"]
-        assert data["automation"]["route_methods"][
-            "/api/computer/actions/execute"
-        ] == ["POST"]
-        assert data["automation"]["route_methods"][
-            "/api/computer/uia/tree"
-        ] == ["GET"]
+        assert data["automation"]["route_methods"]["/api/browser/session/replay-case/queue"] == [
+            "POST"
+        ]
+        assert data["automation"]["route_methods"]["/api/computer/actions/execute"] == ["POST"]
+        assert data["automation"]["route_methods"]["/api/computer/uia/tree"] == ["GET"]
         automation_methods = {
-            item["method"]: item
-            for item in data["automation"]["method_contracts"]
+            item["method"]: item for item in data["automation"]["method_contracts"]
         }
-        assert automation_methods["BrowserSessionCenter.health_report"][
-            "present"
-        ] is True
-        assert automation_methods["browser_replay.browser_session_replay_identity"][
-            "present"
-        ] is True
-        assert automation_methods["browser_pixel.browser_pixel_replay_gate_case"][
-            "present"
-        ] is True
-        assert automation_methods["computer_skills._screen_capture"][
-            "present"
-        ] is True
-        assert automation_methods["computer_uia.uia_replay_assertion_for_action"][
-            "present"
-        ] is True
+        assert automation_methods["BrowserSessionCenter.health_report"]["present"] is True
+        assert (
+            automation_methods["browser_replay.browser_session_replay_identity"]["present"] is True
+        )
+        assert automation_methods["browser_pixel.browser_pixel_replay_gate_case"]["present"] is True
+        assert automation_methods["computer_skills._screen_capture"]["present"] is True
+        assert automation_methods["computer_uia.uia_replay_assertion_for_action"]["present"] is True
         assert _check_by_id(data, "automation_surface")["passed"] is True
         assert _check_by_id(data, "frontend_origin")["passed"] is True
         assert _check_by_id(data, "vite_proxy_target")["passed"] is True
@@ -326,20 +294,12 @@ class TestBasicRoutes:
 
         assert data["ready"] is False
         assert data["run_evidence"]["ready"] is False
-        assert "/api/agent-trace/stats" in data["run_evidence"][
-            "missing_required_routes"
-        ]
-        assert "/api/loops/{run_id}/replay-case" in data["run_evidence"][
-            "missing_required_routes"
-        ]
+        assert "/api/agent-trace/stats" in data["run_evidence"]["missing_required_routes"]
+        assert "/api/loops/{run_id}/replay-case" in data["run_evidence"]["missing_required_routes"]
         assert _check_by_id(data, "run_evidence_surface")["passed"] is False
         assert data["automation"]["ready"] is False
-        assert "/api/browser/session/replay-case" in data["automation"][
-            "missing_required_routes"
-        ]
-        assert "/api/computer/actions/execute" in data["automation"][
-            "missing_required_routes"
-        ]
+        assert "/api/browser/session/replay-case" in data["automation"]["missing_required_routes"]
+        assert "/api/computer/actions/execute" in data["automation"]["missing_required_routes"]
         assert _check_by_id(data, "automation_surface")["passed"] is False
 
     def test_runtime_self_check_flags_noncanonical_frontend_origin(self):
@@ -364,10 +324,7 @@ class TestBasicRoutes:
             "id": "frontend_origin",
             "severity": "error",
             "passed": False,
-            "detail": (
-                "origin=http://127.0.0.1:3000 "
-                "canonical=http://localhost:3000"
-            ),
+            "detail": ("origin=http://127.0.0.1:3000 canonical=http://localhost:3000"),
         }
         assert any("origin=http://127.0.0.1:3000" in item for item in data["next_actions"])
 
@@ -400,7 +357,9 @@ class TestBasicRoutes:
         assert data["backend"]["port"] == 8123
 
     def test_runtime_self_check_reports_process_api_and_webui_state(
-        self, tmp_path: Path, monkeypatch,
+        self,
+        tmp_path: Path,
+        monkeypatch,
     ):
         dist = tmp_path / "dist"
         assets = dist / "assets"
@@ -434,7 +393,9 @@ class TestBasicRoutes:
         assert _check_by_id(data, "webui_dist")["passed"] is True
 
     def test_runtime_self_check_warns_on_invalid_webui_dist(
-        self, tmp_path: Path, monkeypatch,
+        self,
+        tmp_path: Path,
+        monkeypatch,
     ):
         monkeypatch.setenv("OCTOPUS_WEBUI_DIST", str(tmp_path / "missing"))
         app = create_app(

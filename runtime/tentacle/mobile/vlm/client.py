@@ -118,8 +118,7 @@ class VlmConfig:
         """校验 API Key 是否已设置."""
         if not self.api_key or not self.api_key.strip():
             raise ValueError(
-                f"VLM api_key missing for model={self.model!r}. "
-                f"Set env var or pass explicitly."
+                f"VLM api_key missing for model={self.model!r}. Set env var or pass explicitly."
             )
 
 
@@ -130,11 +129,11 @@ class VlmConfig:
 class SuggestedAction:
     """VLM 建议的操作."""
 
-    action: str                               # 如 "tap", "swipe", "type", "scroll"
-    target: str                               # 目标描述（如 "登录按钮"）
+    action: str  # 如 "tap", "swipe", "type", "scroll"
+    target: str  # 目标描述（如 "登录按钮"）
     coordinates: tuple[int, int] | None = None  # 建议坐标 (x, y)
-    text: str | None = None                   # 输入文本（type 时）
-    confidence: float = 0.0                   # 置信度 0-1
+    text: str | None = None  # 输入文本（type 时）
+    confidence: float = 0.0  # 置信度 0-1
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -153,10 +152,10 @@ class SuggestedAction:
 class ScreenAnalysis:
     """VLM 屏幕分析结果."""
 
-    description: str                          # 屏幕内容描述
+    description: str  # 屏幕内容描述
     suggested_actions: list[SuggestedAction]  # 建议的操作列表
-    current_app: str | None = None            # 识别出的当前 App
-    screen_state: str = ""                    # 屏幕状态摘要
+    current_app: str | None = None  # 识别出的当前 App
+    screen_state: str = ""  # 屏幕状态摘要
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -271,10 +270,12 @@ class VlmClient:
             "\n- screen_state: 屏幕状态摘要（如'登录页'、'首页'、'弹窗遮挡'等）"
         )
 
-        user_content.append({
-            "type": "text",
-            "text": "\n".join(text_parts),
-        })
+        user_content.append(
+            {
+                "type": "text",
+                "text": "\n".join(text_parts),
+            }
+        )
 
         messages = [
             {
@@ -396,7 +397,7 @@ class VlmClient:
                     f"这是操作后的截图。\n\n"
                     f"期望的操作结果：{expected_result}\n\n"
                     "请判断操作后的截图是否符合期望结果。"
-                    "\n请以 JSON 格式返回：{\"verified\": true/false, \"reason\": \"判断理由\"}"
+                    '\n请以 JSON 格式返回：{"verified": true/false, "reason": "判断理由"}'
                 ),
             },
         ]
@@ -482,7 +483,10 @@ class VlmClient:
                     err = {"error": {"message": str(e)}}
                 logger.error(
                     "VLM HTTP %s (attempt %d/%d): %s",
-                    e.code, attempt + 1, self.config.max_retries + 1, err,
+                    e.code,
+                    attempt + 1,
+                    self.config.max_retries + 1,
+                    err,
                 )
                 last_error = e
                 # 429 / 5xx 可重试
@@ -492,7 +496,9 @@ class VlmClient:
                 latency_ms = int((time.time() - start) * 1000)
                 logger.error(
                     "VLM URL error (attempt %d/%d): %s",
-                    attempt + 1, self.config.max_retries + 1, e,
+                    attempt + 1,
+                    self.config.max_retries + 1,
+                    e,
                 )
                 last_error = e
 
@@ -519,13 +525,15 @@ class VlmClient:
                 coords = (int(coords[0]), int(coords[1]))
             else:
                 coords = None
-            actions.append(SuggestedAction(
-                action=str(act_data.get("action", "")),
-                target=str(act_data.get("target", "")),
-                coordinates=coords,
-                text=act_data.get("text"),
-                confidence=float(act_data.get("confidence", 0.0)),
-            ))
+            actions.append(
+                SuggestedAction(
+                    action=str(act_data.get("action", "")),
+                    target=str(act_data.get("target", "")),
+                    coordinates=coords,
+                    text=act_data.get("text"),
+                    confidence=float(act_data.get("confidence", 0.0)),
+                )
+            )
 
         return ScreenAnalysis(
             description=str(data.get("description", "")),
@@ -545,11 +553,14 @@ class VlmClient:
         # 尝试直接解析
         try:
             return json.loads(text)
-        except json.JSONDecodeError:  # expected · falls through to the code-block/brace extraction below
+        except (
+            json.JSONDecodeError
+        ):  # expected · falls through to the code-block/brace extraction below
             pass
 
         # 尝试提取 ```json ... ``` 代码块
         import re
+
         json_block = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
         if json_block:
             try:
@@ -562,8 +573,10 @@ class VlmClient:
         brace_end = text.rfind("}")
         if brace_start != -1 and brace_end > brace_start:
             try:
-                return json.loads(text[brace_start:brace_end + 1])
-            except json.JSONDecodeError:  # expected · falls through to the logged safe-default below
+                return json.loads(text[brace_start : brace_end + 1])
+            except (
+                json.JSONDecodeError
+            ):  # expected · falls through to the logged safe-default below
                 pass
 
         logger.warning("VLM 返回内容无法解析为 JSON: %s", text[:200])
@@ -590,17 +603,21 @@ class FakeVlmTransport:
         if not self._responses:
             # 返回默认空响应
             return {
-                "choices": [{
-                    "message": {
-                        "content": json.dumps({
-                            "description": "测试屏幕",
-                            "suggested_actions": [],
-                            "current_app": None,
-                            "screen_state": "test",
-                        }),
-                    },
-                    "finish_reason": "stop",
-                }],
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "description": "测试屏幕",
+                                    "suggested_actions": [],
+                                    "current_app": None,
+                                    "screen_state": "test",
+                                }
+                            ),
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
                 "usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
                 "model": "test-vlm",
             }

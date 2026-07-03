@@ -156,11 +156,7 @@ def normalize_tool_lifecycle_event(
     duration_ms = payload.get("duration_ms")
     if not isinstance(duration_ms, int):
         duration_ms = None
-    extras = {
-        key: value
-        for key, value in payload.items()
-        if key not in _LIFECYCLE_KNOWN_KEYS
-    }
+    extras = {key: value for key, value in payload.items() if key not in _LIFECYCLE_KNOWN_KEYS}
     return NormalizedToolLifecycleEvent(
         kind=kind,
         id=str(raw_id),
@@ -190,9 +186,7 @@ def tool_lifecycle_event_to_react_event(
     if event.kind == "tool_start":
         base["input_preview"] = event.input
     else:
-        base["status"] = event.status or (
-            "error" if event.is_error else "success"
-        )
+        base["status"] = event.status or ("error" if event.is_error else "success")
         base["output_preview"] = "" if event.output is None else str(event.output)
     if event.duration_ms is not None:
         base["duration_ms"] = event.duration_ms
@@ -217,9 +211,7 @@ def tool_lifecycle_event_to_trace_payload(
         payload["input"] = event.input
         payload["input_preview"] = event.input
     else:
-        payload["status"] = event.status or (
-            "error" if event.is_error else "success"
-        )
+        payload["status"] = event.status or ("error" if event.is_error else "success")
         payload["is_error"] = event.is_error
         payload["output"] = event.output
         payload["output_preview"] = event.output
@@ -240,10 +232,7 @@ def output_signals_error(output: Any) -> bool:
     if isinstance(err, str) and err.strip() and ok is not True:
         return True
     status = output.get("status")
-    return bool(
-        isinstance(status, str)
-        and status.lower() in ("error", "failed", "failure")
-    )
+    return bool(isinstance(status, str) and status.lower() in ("error", "failed", "failure"))
 
 
 def render_tool_output(output: Any, *, max_chars: int | None = None) -> str:
@@ -260,8 +249,7 @@ def render_tool_output(output: Any, *, max_chars: int | None = None) -> str:
 
     if max_chars is not None and max_chars >= 0 and len(rendered) > max_chars:
         rendered = (
-            rendered[:max_chars]
-            + f"\n\n...(truncated, {len(rendered) - max_chars} more chars)"
+            rendered[:max_chars] + f"\n\n...(truncated, {len(rendered) - max_chars} more chars)"
         )
     return rendered
 

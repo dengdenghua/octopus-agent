@@ -145,13 +145,15 @@ def _verification_plan_for_code_paths(
             if check.command in seen:
                 continue
             seen.add(check.command)
-            commands.append({
-                "kind": check.kind,
-                "command": check.command,
-                "reason": check.reason,
-                "priority": check.priority,
-                "target": matrix.target,
-            })
+            commands.append(
+                {
+                    "kind": check.kind,
+                    "command": check.command,
+                    "reason": check.reason,
+                    "priority": check.priority,
+                    "target": matrix.target,
+                }
+            )
     return {
         "schema": "octopus.verification_plan.v1",
         "workspace": cwd,
@@ -164,8 +166,7 @@ def _verification_plan_stdout_tail(plan: dict[str, Any]) -> str:
     commands = plan.get("commands") if isinstance(plan, dict) else None
     if not isinstance(commands, list) or not commands:
         return (
-            "Run an appropriate test, lint, typecheck, or build command "
-            "and retry the final answer."
+            "Run an appropriate test, lint, typecheck, or build command and retry the final answer."
         )
     lines = ["Recommended verification commands:"]
     for command in commands[:5]:
@@ -180,8 +181,7 @@ def _verification_plan_stdout_tail(plan: dict[str, Any]) -> str:
         lines.append(f"- [{kind}] {cmd}{suffix}")
     if len(lines) == 1:
         return (
-            "Run an appropriate test, lint, typecheck, or build command "
-            "and retry the final answer."
+            "Run an appropriate test, lint, typecheck, or build command and retry the final answer."
         )
     return "\n".join(lines)
 
@@ -325,14 +325,17 @@ def _classify_verification_failure(item: VerificationItem) -> dict[str, Any]:
     command = (item.command or "").lower()
     kind = item.kind
 
-    if any(marker in lowered for marker in (
-        "command not found",
-        "not recognized as an internal or external command",
-        "could not determine executable",
-        "no module named",
-        "npx: not found",
-        "[winerror 2]",
-    )):
+    if any(
+        marker in lowered
+        for marker in (
+            "command not found",
+            "not recognized as an internal or external command",
+            "could not determine executable",
+            "no module named",
+            "npx: not found",
+            "[winerror 2]",
+        )
+    ):
         diagnosis = {
             "category": "environment_missing_tool",
             "action": "install_or_select_available_verifier",
@@ -383,7 +386,9 @@ def _classify_verification_failure(item: VerificationItem) -> dict[str, Any]:
         }
         diagnosis["repair_route"] = _repair_route_for_diagnosis(diagnosis)
         return diagnosis
-    if kind == "test" or any(marker in command for marker in ("pytest", "vitest", "jest", "playwright", "test")):
+    if kind == "test" or any(
+        marker in command for marker in ("pytest", "vitest", "jest", "playwright", "test")
+    ):
         diagnosis = {
             "category": "test_failure",
             "action": "fix_code_or_test_expectation",
@@ -462,14 +467,17 @@ def _repair_route_for_diagnosis(diagnosis: dict[str, Any]) -> dict[str, Any]:
             ],
         },
     }
-    route = routes.get(category, {
-        "route": "verification_output_triage",
-        "strategy": "inspect_output_then_choose_repair",
-        "next_actions": [
-            "Read the verifier output.",
-            "Choose the narrowest repair path before broad tests.",
-        ],
-    })
+    route = routes.get(
+        category,
+        {
+            "route": "verification_output_triage",
+            "strategy": "inspect_output_then_choose_repair",
+            "next_actions": [
+                "Read the verifier output.",
+                "Choose the narrowest repair path before broad tests.",
+            ],
+        },
+    )
     return {
         **route,
         "retryable": bool(diagnosis.get("retryable")),
@@ -491,7 +499,9 @@ def _repair_routes_from_failed_verifications(
     seen: set[str] = set()
     for item in failed_verifications:
         diagnosis = item.get("diagnosis") if isinstance(item.get("diagnosis"), dict) else {}
-        route = diagnosis.get("repair_route") if isinstance(diagnosis.get("repair_route"), dict) else {}
+        route = (
+            diagnosis.get("repair_route") if isinstance(diagnosis.get("repair_route"), dict) else {}
+        )
         route_id = str(route.get("route") or "").strip()
         if not route_id or route_id in seen:
             continue
@@ -535,9 +545,7 @@ def _failed_turn_metadata(
         "verification_count": len(verification_items),
         "failed_verifications": failed_verifications,
         "verification_plan": verification_plan,
-        "primary_repair_route": (
-            str(repair_routes[0].get("route") or "") if repair_routes else ""
-        ),
+        "primary_repair_route": (str(repair_routes[0].get("route") or "") if repair_routes else ""),
         "repair_routes": repair_routes,
         "has_code_changes": bool(code_change_paths),
     }

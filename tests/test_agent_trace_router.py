@@ -40,12 +40,15 @@ def _client_with_trace(
     include_write_diagnostic: bool = False,
 ) -> TestClient:
     fake_api_key = "sk-kimi-" + ("A" * 32)
-    secret_action = "exec_shell(" + json.dumps({
-        "command": (
-            'curl -H "Authorization: Bearer '
-            f'{fake_api_key}" https://x'
-        ),
-    }) + ")"
+    secret_action = (
+        "exec_shell("
+        + json.dumps(
+            {
+                "command": (f'curl -H "Authorization: Bearer {fake_api_key}" https://x'),
+            }
+        )
+        + ")"
+    )
     store = AgentTraceStore(tmp_path / "agent_trace.sqlite")
     store.record_event(
         thread_id="thread-1",
@@ -346,14 +349,8 @@ def test_trace_task_run_review_endpoint_exposes_replay_and_candidates(
     assert review["replay"]["replayable"] is True
     assert review["resume"]["available"] is False
     assert review["summary"]["tool_calls_started"] == 1
-    assert any(
-        finding["type"] == "success_pattern"
-        for finding in review["findings"]
-    )
-    assert any(
-        item["kind"] == "success_pattern"
-        for item in review["learning_candidates"]
-    )
+    assert any(finding["type"] == "success_pattern" for finding in review["findings"])
+    assert any(item["kind"] == "success_pattern" for item in review["learning_candidates"])
     assert replay_case_response.status_code == 200
     replay_case = replay_case_response.json()["replay_case"]
     assert replay_case["schema"] == "octopus.task_run_replay_case.v1"
@@ -398,6 +395,7 @@ def test_trace_task_run_review_can_commit_to_experience_ledger(
     # (== "now") fall inside the half-open [week_start, week_start+7)
     # window regardless of which day of the week the test runs.
     from datetime import UTC, datetime
+
     today_iso = datetime.now(UTC).date().isoformat()
     summary = client.get(
         "/api/agent-trace/experience-ledger/weekly-summary",
@@ -419,16 +417,11 @@ def test_trace_task_run_review_can_commit_to_experience_ledger(
         "backlog_candidate",
     }
     assert all(
-        record["metadata"]["replay"]["case_id"].startswith("task-run:")
-        for record in records
+        record["metadata"]["replay"]["case_id"].startswith("task-run:") for record in records
     )
+    assert all(len(record["metadata"]["replay"]["fingerprint"]) == 16 for record in records)
     assert all(
-        len(record["metadata"]["replay"]["fingerprint"]) == 16
-        for record in records
-    )
-    assert all(
-        record["metadata"]["citation"]["schema"]
-        == "octopus.experience_replay_citation.v1"
+        record["metadata"]["citation"]["schema"] == "octopus.experience_replay_citation.v1"
         for record in records
     )
     assert all(
@@ -470,10 +463,7 @@ def test_trace_task_run_review_can_enter_review_queue(
         "experience",
         "experiment_backlog",
     }
-    assert all(
-        item["metadata"]["replay"]["case_id"].startswith("task-run:")
-        for item in items
-    )
+    assert all(item["metadata"]["replay"]["case_id"].startswith("task-run:") for item in items)
     assert all(item["metadata"]["resume"]["available"] is False for item in items)
     assert summary.status_code == 200
     assert summary.json()["pending_count"] == 2
@@ -851,8 +841,7 @@ def test_trace_task_run_process_timeline_merges_review_and_ledger(
     assert "success_pattern" in kinds
     assert "experience_record" in kinds
     diagnostic = next(
-        node for node in timeline["timeline"]
-        if node["kind"] == "post_write_diagnostic"
+        node for node in timeline["timeline"] if node["kind"] == "post_write_diagnostic"
     )
     assert diagnostic["status"] == "failed"
     assert diagnostic["tool"] == "write_text_file"
@@ -1118,10 +1107,7 @@ def test_trace_router_exposes_loop_run_checkpoints_and_resume_proposals(tmp_path
     assert review.status_code == 200
     review_body = review.json()["review"]
     assert review_body["status"] == "failed"
-    assert any(
-        step["kind"] == "loop_attempt"
-        for step in review_body["replay"]["steps"]
-    )
+    assert any(step["kind"] == "loop_attempt" for step in review_body["replay"]["steps"])
     assert review_body["resume"]["source"] == "trace_store"
     assert review_body["resume"]["latest_checkpoint"]["trace_checkpoint_id"] > 0
 
@@ -1217,12 +1203,11 @@ def test_trace_router_review_prefers_loop_checkpoint_under_newer_generic_checkpo
     assert review.status_code == 200
     review_body = review.json()["review"]
     assert review_body["status"] == "failed"
-    assert any(
-        step["kind"] == "loop_attempt"
-        for step in review_body["replay"]["steps"]
-    )
+    assert any(step["kind"] == "loop_attempt" for step in review_body["replay"]["steps"])
     assert review_body["summary"]["trace_checkpoint_id"] == loop_checkpoint["id"]
-    assert review_body["resume"]["latest_checkpoint"]["trace_checkpoint_id"] == loop_checkpoint["id"]
+    assert (
+        review_body["resume"]["latest_checkpoint"]["trace_checkpoint_id"] == loop_checkpoint["id"]
+    )
 
     assert replay_case.status_code == 200
     assert replay_case.json()["replay_case"]["resume"]["source"] == "trace_store"

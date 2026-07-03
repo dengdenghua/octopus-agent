@@ -1,4 +1,5 @@
 """Inline fallback/admin HTML pages for the UI app."""
+
 from __future__ import annotations
 
 _INDEX_HTML = """<!doctype html>

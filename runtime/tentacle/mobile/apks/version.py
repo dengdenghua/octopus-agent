@@ -15,9 +15,9 @@ from dataclasses import dataclass
 class OctopusMobileVersion:
     """Octopus Mobile 版本声明."""
 
-    min_supported: str          # octopus-agent 最低支持的 Octopus Mobile 版本
-    recommended: str            # 推荐的 Octopus Mobile 版本
-    protocol_version: str       # 协议版本
+    min_supported: str  # octopus-agent 最低支持的 Octopus Mobile 版本
+    recommended: str  # 推荐的 Octopus Mobile 版本
+    protocol_version: str  # 协议版本
     notes: str = ""
 
 

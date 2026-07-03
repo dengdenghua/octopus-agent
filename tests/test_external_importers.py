@@ -14,13 +14,16 @@ def test_import_external_sessions_reads_successful_json_session(tmp_path) -> Non
     session = tmp_path / "claude" / "session.json"
     session.parent.mkdir()
     session.write_text(
-        json.dumps({
-            "session_id": "s1",
-            "messages": [
-                {"role": "user", "content": "帮我写项目计划"},
-                {"role": "assistant", "content": "已完成项目计划。"},
-            ],
-        }, ensure_ascii=False),
+        json.dumps(
+            {
+                "session_id": "s1",
+                "messages": [
+                    {"role": "user", "content": "帮我写项目计划"},
+                    {"role": "assistant", "content": "已完成项目计划。"},
+                ],
+            },
+            ensure_ascii=False,
+        ),
         encoding="utf-8",
     )
 

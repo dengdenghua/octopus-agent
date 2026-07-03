@@ -140,9 +140,7 @@ def test_with_resources_populates_from_resolver():
 def test_with_resources_noop_for_undeclared_skill():
     from runtime.execution.swarm.runtime import _split_per_node
 
-    rt = SwarmRuntime(
-        arm_pool=ArmPool([]), max_workers=2, skill_resources=lambda ref: []
-    )
+    rt = SwarmRuntime(arm_pool=ArmPool([]), max_workers=2, skill_resources=lambda ref: [])
     [assignment] = _split_per_node(_graph_with_skill("read_file"))
     assert rt._with_resources(assignment).exclusive_resources == []  # noqa: SLF001
 

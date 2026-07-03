@@ -80,12 +80,14 @@ def _scan_codex_plugin_skills(plugin_dir: Path, manifest: dict[str, Any]) -> lis
             if name in seen:
                 continue
             seen.add(name)
-            out.append({
-                "name": name,
-                "description": meta.get("description", ""),
-                "path": str(skill_file.parent),
-                "registered": False,
-            })
+            out.append(
+                {
+                    "name": name,
+                    "description": meta.get("description", ""),
+                    "path": str(skill_file.parent),
+                    "registered": False,
+                }
+            )
     return out
 
 
@@ -122,25 +124,30 @@ def _registry_plugin_entries(registry: SkillRegistry) -> dict[str, dict[str, Any
         plugin_id = rest.split("/", 1)[0].strip()
         if not plugin_id:
             continue
-        entry = by_plugin.setdefault(plugin_id, {
-            "id": plugin_id,
-            "kind": "plugin",
-            "source": "pluginhub-runtime",
-            "display_name": plugin_id,
-            "description": "Runtime plugin registered with executable skills.",
-            "status": "registered",
-            "capabilities": [],
-            "skills": [],
-            "registered_actions": [],
-            "mcp_servers": [],
-            "path": "",
-        })
-        entry["skills"].append({
-            "name": name,
-            "description": skill.effective_summary,
-            "registered": True,
-            "registered_as": name,
-        })
+        entry = by_plugin.setdefault(
+            plugin_id,
+            {
+                "id": plugin_id,
+                "kind": "plugin",
+                "source": "pluginhub-runtime",
+                "display_name": plugin_id,
+                "description": "Runtime plugin registered with executable skills.",
+                "status": "registered",
+                "capabilities": [],
+                "skills": [],
+                "registered_actions": [],
+                "mcp_servers": [],
+                "path": "",
+            },
+        )
+        entry["skills"].append(
+            {
+                "name": name,
+                "description": skill.effective_summary,
+                "registered": True,
+                "registered_as": name,
+            }
+        )
         entry["registered_actions"].append(name)
     return by_plugin
 
@@ -236,24 +243,29 @@ def _registered_skill_pack_entries(registry: SkillRegistry) -> dict[str, dict[st
         pack_id = source.removeprefix("skill://all_skills/").split("#", 1)[0]
         if not pack_id:
             continue
-        entry = out.setdefault(pack_id, {
-            "id": pack_id,
-            "kind": "skill_pack",
-            "source": "registered-skill-pack",
-            "display_name": pack_id,
-            "description": skill.effective_summary,
-            "status": "registered",
-            "capabilities": list(skill.affinity),
-            "skills": [],
-            "registered_actions": [],
-            "mcp_servers": [],
-            "path": "",
-        })
-        entry["skills"].append({
-            "name": name,
-            "description": skill.effective_summary,
-            "registered": True,
-        })
+        entry = out.setdefault(
+            pack_id,
+            {
+                "id": pack_id,
+                "kind": "skill_pack",
+                "source": "registered-skill-pack",
+                "display_name": pack_id,
+                "description": skill.effective_summary,
+                "status": "registered",
+                "capabilities": list(skill.affinity),
+                "skills": [],
+                "registered_actions": [],
+                "mcp_servers": [],
+                "path": "",
+            },
+        )
+        entry["skills"].append(
+            {
+                "name": name,
+                "description": skill.effective_summary,
+                "registered": True,
+            }
+        )
         entry["registered_actions"].append(name)
     return out
 
@@ -293,12 +305,14 @@ def _merge_entries(entries: list[dict[str, dict[str, Any]]]) -> list[dict[str, A
 
 
 def list_capability_entries(registry: SkillRegistry) -> list[dict[str, Any]]:
-    return _merge_entries([
-        _registry_plugin_entries(registry),
-        _codex_plugin_entries(registry),
-        _meta_skill_entries(),
-        _registered_skill_pack_entries(registry),
-    ])
+    return _merge_entries(
+        [
+            _registry_plugin_entries(registry),
+            _codex_plugin_entries(registry),
+            _meta_skill_entries(),
+            _registered_skill_pack_entries(registry),
+        ]
+    )
 
 
 def _score(entry: dict[str, Any], query: str) -> int:
@@ -509,8 +523,11 @@ def _use_capability_for_registry(registry: SkillRegistry):
         # single-action approval gate reviewed use_capability, NOT this inner
         # tool).
         from runtime.execution.tool_engine.skill_gate import gate_inner_dispatch
+
         _block = gate_inner_dispatch(
-            skill, call_args, caller=f"use_capability:{entry.get('id')}",
+            skill,
+            call_args,
+            caller=f"use_capability:{entry.get('id')}",
         )
         if _block is not None:
             return {
@@ -540,45 +557,51 @@ def _use_capability_for_registry(registry: SkillRegistry):
 
 
 def register_capability_skills(registry: SkillRegistry) -> int:
-    registry.register(Skill(
-        name="search_capabilities",
-        summary="Search top-level plugins and skill packs.",
-        description=(
-            "Search package-level capabilities first: plugins, skill packs, and "
-            "meta-skill packages. Use this before searching low-level skills when "
-            "the task sounds like a product capability, plugin, workflow, or tool box."
-        ),
-        affinity=["meta", "capability", "plugin", "skill-pack"],
-        cost_profile="low",
-        trusted_source="skill://public/search_capabilities",
-        handler=_search_capabilities_for_registry(registry),
-    ))
-    registry.register(Skill(
-        name="query_capability",
-        summary="Inspect one plugin or skill pack.",
-        description=(
-            "Return the package-level details for one plugin or skill pack, including "
-            "registered actions, child skills, MCP servers, and when-to-use guidance."
-        ),
-        affinity=["meta", "capability", "plugin", "skill-pack"],
-        cost_profile="low",
-        trusted_source="skill://public/query_capability",
-        handler=_query_capability_for_registry(registry),
-    ))
-    registry.register(Skill(
-        name="use_capability",
-        summary="Activate or run a package-level capability.",
-        description=(
-            "Use a plugin or skill pack as a top-level capability. Without action it "
-            "returns the package's registered actions and guidance. With action and "
-            "args it runs that registered child action internally, so the model does "
-            "not need to see every child tool in the first tool list."
-        ),
-        affinity=["meta", "capability", "plugin", "skill-pack"],
-        cost_profile="low",
-        trusted_source="skill://public/use_capability",
-        handler=_use_capability_for_registry(registry),
-    ))
+    registry.register(
+        Skill(
+            name="search_capabilities",
+            summary="Search top-level plugins and skill packs.",
+            description=(
+                "Search package-level capabilities first: plugins, skill packs, and "
+                "meta-skill packages. Use this before searching low-level skills when "
+                "the task sounds like a product capability, plugin, workflow, or tool box."
+            ),
+            affinity=["meta", "capability", "plugin", "skill-pack"],
+            cost_profile="low",
+            trusted_source="skill://public/search_capabilities",
+            handler=_search_capabilities_for_registry(registry),
+        )
+    )
+    registry.register(
+        Skill(
+            name="query_capability",
+            summary="Inspect one plugin or skill pack.",
+            description=(
+                "Return the package-level details for one plugin or skill pack, including "
+                "registered actions, child skills, MCP servers, and when-to-use guidance."
+            ),
+            affinity=["meta", "capability", "plugin", "skill-pack"],
+            cost_profile="low",
+            trusted_source="skill://public/query_capability",
+            handler=_query_capability_for_registry(registry),
+        )
+    )
+    registry.register(
+        Skill(
+            name="use_capability",
+            summary="Activate or run a package-level capability.",
+            description=(
+                "Use a plugin or skill pack as a top-level capability. Without action it "
+                "returns the package's registered actions and guidance. With action and "
+                "args it runs that registered child action internally, so the model does "
+                "not need to see every child tool in the first tool list."
+            ),
+            affinity=["meta", "capability", "plugin", "skill-pack"],
+            cost_profile="low",
+            trusted_source="skill://public/use_capability",
+            handler=_use_capability_for_registry(registry),
+        )
+    )
     return len(CAPABILITY_SKILL_NAMES)
 
 

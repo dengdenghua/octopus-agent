@@ -80,10 +80,7 @@ def resolve_session(
     if presence_store is not None:
         from runtime.memory.cowork.presence import group_presence
 
-        presence = [
-            m.to_dict()
-            for m in group_presence(group_store, presence_store, thread_id)
-        ]
+        presence = [m.to_dict() for m in group_presence(group_store, presence_store, thread_id)]
 
     room_messages: list[dict[str, Any]] = []
     room_participants: list[dict[str, Any]] = []

@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -13,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 class NervesEvent(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
 
@@ -21,7 +19,6 @@ E = TypeVar("E", bound=NervesEvent)
 
 
 class SkillRegistered(NervesEvent):
-
     skill_name: str
     trusted_source: str = ""
     forged: bool = False
@@ -29,24 +26,20 @@ class SkillRegistered(NervesEvent):
 
 
 class SkillRetired(NervesEvent):
-
     skill_name: str
     reason: str = ""
 
 
 class AgentAdded(NervesEvent):
-
     agent_id: str
     display_name: str = ""
 
 
 class AgentRemoved(NervesEvent):
-
     agent_id: str
 
 
 class BudgetPressure(NervesEvent):
-
     task_id: str
     percent_used: float
     limit_tokens: int = 0
@@ -54,7 +47,6 @@ class BudgetPressure(NervesEvent):
 
 
 class ConversationOpened(NervesEvent):
-
     conversation_id: str
     agent_id: str | None = None
     channel_id: str | None = None
@@ -64,7 +56,6 @@ Subscription = Callable[[E], None]
 
 
 class AbstractEventBus(ABC):
-
     @abstractmethod
     def subscribe(
         self,
@@ -89,11 +80,11 @@ class AbstractEventBus(ABC):
         def _wrap(handler: Callable[[E], None]) -> Callable[[E], None]:
             self.subscribe(event_type, handler)
             return handler
+
         return _wrap
 
 
 class TypedEventBus(AbstractEventBus):
-
     def __init__(self, *, crash_resilient: bool = True) -> None:
         self._subs: dict[type, list[Callable]] = {}
         self._lock = threading.RLock()
@@ -105,10 +96,7 @@ class TypedEventBus(AbstractEventBus):
         handler: Callable[[E], None],
     ) -> None:
         if not isinstance(event_type, type) or not issubclass(event_type, NervesEvent):
-            raise TypeError(
-                f"event_type must be subclass of NervesEvent · "
-                f"got {event_type!r}"
-            )
+            raise TypeError(f"event_type must be subclass of NervesEvent · got {event_type!r}")
         if not callable(handler):
             raise TypeError(f"handler must be callable · got {handler!r}")
 
@@ -156,7 +144,9 @@ class TypedEventBus(AbstractEventBus):
                 if self._crash_resilient:
                     logger.warning(
                         "subscriber %r raised on %s: %s",
-                        handler, type(event).__name__, e,
+                        handler,
+                        type(event).__name__,
+                        e,
                     )
                 else:
                     raise
@@ -166,6 +156,7 @@ class TypedEventBus(AbstractEventBus):
         def _wrap(handler: Callable[[E], None]) -> Callable[[E], None]:
             self.subscribe(event_type, handler)
             return handler
+
         return _wrap
 
     def __repr__(self) -> str:

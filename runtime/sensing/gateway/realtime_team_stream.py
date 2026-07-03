@@ -1207,9 +1207,11 @@ async def _drive_group_fanout(
 
         spoke = 0
         if chat_members:
-            scale_mode = str(
-                ctx.get("swarm_scale_mode") or ctx.get("fanout_scale_mode") or "safe"
-            ).strip().lower()
+            scale_mode = (
+                str(ctx.get("swarm_scale_mode") or ctx.get("fanout_scale_mode") or "safe")
+                .strip()
+                .lower()
+            )
             if scale_mode not in {"safe", "full"}:
                 scale_mode = "safe"
             requested_limit = ctx.get("swarm_max_members") or ctx.get("max_members")

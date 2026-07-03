@@ -56,7 +56,11 @@ _AUTO_BLOCK_HEADER = "# ─── auto-suggested rules · review then deploy ─
 
 def _git(args: list[str], cwd: Path) -> tuple[int, str, str]:
     proc = subprocess.run(
-        ["git", *args], cwd=cwd, capture_output=True, text=True, timeout=15,
+        ["git", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=15,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
@@ -127,8 +131,7 @@ def generate_pr(
         rel = file_path.name
         _git(["add", "--", rel], cwd=cwd)
         bullets = "\n".join(
-            f"- {s.get('prompt', '?')!r} (×{s.get('count', 0)})"
-            for s in suggestions[:10]
+            f"- {s.get('prompt', '?')!r} (×{s.get('count', 0)})" for s in suggestions[:10]
         )
         msg = (
             f"reflex: auto-suggest {len(suggestions)} rule(s)\n\n"
@@ -137,7 +140,10 @@ def generate_pr(
         )
         proc = subprocess.run(
             ["git", "commit", "-m", msg, "--", rel],
-            cwd=cwd, capture_output=True, text=True, timeout=15,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         if proc.returncode != 0:
             # Roll back the branch on commit failure.
@@ -161,7 +167,8 @@ def generate_pr(
 
         if push:
             push_code, _, push_err = _git(
-                ["push", "-u", "origin", branch], cwd=cwd,
+                ["push", "-u", "origin", branch],
+                cwd=cwd,
             )
             if push_code != 0:
                 result["push_error"] = push_err.strip()
@@ -172,12 +179,23 @@ def generate_pr(
                         result["pr_error"] = "gh CLI not installed"
                     else:
                         proc = subprocess.run(
-                            ["gh", "pr", "create",
-                             "--base", base_branch,
-                             "--head", branch,
-                             "--title", f"reflex: auto-suggest {len(snippets)} rule(s)",
-                             "--body", msg],
-                            cwd=cwd, capture_output=True, text=True, timeout=20,
+                            [
+                                "gh",
+                                "pr",
+                                "create",
+                                "--base",
+                                base_branch,
+                                "--head",
+                                branch,
+                                "--title",
+                                f"reflex: auto-suggest {len(snippets)} rule(s)",
+                                "--body",
+                                msg,
+                            ],
+                            cwd=cwd,
+                            capture_output=True,
+                            text=True,
+                            timeout=20,
                         )
                         if proc.returncode == 0:
                             result["pr_url"] = proc.stdout.strip()

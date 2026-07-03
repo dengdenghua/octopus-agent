@@ -138,7 +138,8 @@ def audit(strict: bool = False) -> int:
 
     seen_keys = {f"{p.relative_to(REPO_ROOT).as_posix()}:{n}" for p, n, _ in hits}
     new_hits = [
-        (p, n, s) for p, n, s in hits
+        (p, n, s)
+        for p, n, s in hits
         if f"{p.relative_to(REPO_ROOT).as_posix()}:{n}" not in baseline
     ]
     stale_baseline = baseline - seen_keys
@@ -172,8 +173,7 @@ def audit(strict: bool = False) -> int:
     else:
         baseline_count = len(baseline & seen_keys)
         print(
-            f"OK · {baseline_count} baseline silent swallow(s) still present "
-            "(no new ones)",
+            f"OK · {baseline_count} baseline silent swallow(s) still present (no new ones)",
         )
 
     if strict and (new_hits or stale_baseline):
@@ -184,11 +184,13 @@ def audit(strict: bool = False) -> int:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
-        "--strict", action="store_true",
+        "--strict",
+        action="store_true",
         help="exit 1 if any NEW unjustified swallows or stale baseline entries are found",
     )
     p.add_argument(
-        "--write-baseline", action="store_true",
+        "--write-baseline",
+        action="store_true",
         help="snapshot current state to the baseline file (run once after a sweep)",
     )
     args = p.parse_args()

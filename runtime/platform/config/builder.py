@@ -92,9 +92,11 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
     registry = SkillRegistry()
     if config.enable_web_skills:
         from runtime.execution.all_skills import register_all
+
         register_all(registry)
     else:
         from runtime.execution.suckers.builtins import register_builtins
+
         register_builtins(registry)
 
     # 2. MCP servers: connect configured servers one by one. Each server gets
@@ -241,9 +243,7 @@ def _build_planner(
             # configured, a clear "no model configured" error beats the old
             # Molili fallback's confusing login gate.
             self_fallback = build_fallback_router_from_custom_models(p.model)
-            router = ModelDispatchRouter(
-                fallback=self_fallback or UnconfiguredModelRouter()
-            )
+            router = ModelDispatchRouter(fallback=self_fallback or UnconfiguredModelRouter())
         else:
             from runtime.sensing.model_router.anthropic_router import AnthropicModelRouter
             from runtime.sensing.model_router.dispatch_router import ModelDispatchRouter
@@ -278,7 +278,6 @@ def _build_planner(
         fallback_skill=SkillId("list_cwd"),
         auto_persist_rules_path=config.learn.static_rules_persist_path,
     )
-
 
 
 def _default_static_rules(*, enable_web_skills: bool) -> list[Rule]:
@@ -323,8 +322,10 @@ def _default_static_rules(*, enable_web_skills: bool) -> list[Rule]:
     )
     return rules
 
+
 def _register_mcp_server(
-    registry: SkillRegistry, entry: MCPServerConfigEntry,
+    registry: SkillRegistry,
+    entry: MCPServerConfigEntry,
 ) -> MCPClient | None:
     """Register one MCP server from config and expose its tools as skills.
 
@@ -365,23 +366,16 @@ def _register_mcp_server(
     )
     client: MCPClient
     try:
-        client = (
-            HttpMCPClient(config)
-            if is_remote
-            else PersistentStdioMCPClient(config)
-        )
+        client = HttpMCPClient(config) if is_remote else PersistentStdioMCPClient(config)
     except MCPClientError:
         return None
     except OSError:
         return None
     try:
-        register_mcp_tools_as_skills(
-            registry, client, name_prefix=entry.name_prefix
-        )
+        register_mcp_tools_as_skills(registry, client, name_prefix=entry.name_prefix)
     except (OSError, TypeError, ValueError):
         # Release the client (subprocess / connection) when registration fails.
         with contextlib.suppress((OSError, IOError)):
             client.close()
         return None
     return client
-

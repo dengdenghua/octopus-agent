@@ -22,6 +22,7 @@ Hermetic isolation
 it's None). The fastest way to get that is ``build_from_config`` with
 a minimal AgentConfig · identical to what other integration tests use.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -36,7 +37,8 @@ from runtime.platform.ui.app import create_app
 
 @pytest.fixture
 def isolated_cwd(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[Path]:
     monkeypatch.chdir(tmp_path)
     yield tmp_path
@@ -47,7 +49,8 @@ def stack(isolated_cwd: Path):
     """Full stack so ``thread_store`` binds inside create_app."""
     cfg = AgentConfig(
         planner=PlannerConfig(
-            type="llm", model="mock/up",
+            type="llm",
+            model="mock/up",
             mock_response='{"reasoning":"r","nodes":[]}',
         ),
     )
@@ -57,7 +60,9 @@ def stack(isolated_cwd: Path):
 @pytest.fixture
 def client(stack, isolated_cwd: Path) -> TestClient:
     app = create_app(
-        journal=stack.journal, registry=stack.registry, stack=stack,
+        journal=stack.journal,
+        registry=stack.registry,
+        stack=stack,
     )
     return TestClient(app)
 
@@ -83,7 +88,8 @@ class TestUploadPost:
         assert "artifact_url" in entry
 
     def test_multiple_files_in_one_request(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         r = client.post(
             "/api/threads/t2/uploads",
@@ -99,7 +105,8 @@ class TestUploadPost:
         assert names == {"a.txt", "b.bin"}
 
     def test_filename_path_traversal_stripped(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         """Malicious filename like ``../../etc/passwd`` must be
         sanitized to its basename · otherwise uploads could land
@@ -108,7 +115,9 @@ class TestUploadPost:
             "/api/threads/t3/uploads",
             files={
                 "files": (
-                    "../../evil.txt", b"X", "text/plain",
+                    "../../evil.txt",
+                    b"X",
+                    "text/plain",
                 ),
             },
         )
@@ -165,7 +174,8 @@ class TestUploadsDelete:
         assert listing["count"] == 0
 
     def test_delete_missing_returns_404(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         r = client.delete(
             "/api/threads/del_t/uploads/never_existed.txt",
@@ -180,7 +190,8 @@ class TestUploadsDelete:
 
 class TestArtifactServe:
     def test_serves_uploaded_file_content(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         client.post(
             "/api/threads/art_t/uploads",
@@ -191,20 +202,15 @@ class TestArtifactServe:
         assert r.content == b"hello from artifact"
 
     def test_absolute_path_inside_thread_upload_root_still_serves(
-        self, client: TestClient, isolated_cwd: Path,
+        self,
+        client: TestClient,
+        isolated_cwd: Path,
     ) -> None:
         client.post(
             "/api/threads/art_abs/uploads",
             files={"files": ("a.txt", b"hello from artifact", "text/plain")},
         )
-        absolute = (
-            isolated_cwd
-            / "data"
-            / "workspaces"
-            / "art_abs"
-            / "upload"
-            / "a.txt"
-        ).resolve()
+        absolute = (isolated_cwd / "data" / "workspaces" / "art_abs" / "upload" / "a.txt").resolve()
 
         r = client.get(f"/api/threads/art_abs/artifacts/{absolute}")
 
@@ -212,7 +218,9 @@ class TestArtifactServe:
         assert r.content == b"hello from artifact"
 
     def test_absolute_path_outside_thread_upload_root_returns_404(
-        self, client: TestClient, isolated_cwd: Path,
+        self,
+        client: TestClient,
+        isolated_cwd: Path,
     ) -> None:
         secret = isolated_cwd / "secret.txt"
         secret.write_text("nope", encoding="utf-8")
@@ -222,13 +230,15 @@ class TestArtifactServe:
         assert r.status_code == 404
 
     def test_missing_artifact_returns_404(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         r = client.get("/api/threads/art_t/artifacts/ghost.txt")
         assert r.status_code == 404
 
     def test_download_param_sets_filename(
-        self, client: TestClient,
+        self,
+        client: TestClient,
     ) -> None:
         """Implementation note."""
         client.post(
@@ -249,7 +259,8 @@ class TestArtifactServe:
 
 class TestNoStackDegraded:
     def test_returns_503_when_thread_store_missing(
-        self, isolated_cwd: Path,
+        self,
+        isolated_cwd: Path,
     ) -> None:
         """A minimal ``create_app()`` with no stack leaves
         ``thread_store=None``. The upload endpoints must 503
