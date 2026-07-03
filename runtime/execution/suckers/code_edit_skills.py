@@ -62,7 +62,9 @@ def _get_parser(language: str):
         if language == "python":
             from tree_sitter_python import language as lang_func
         elif language in ("javascript", "typescript"):
-            from tree_sitter_typescript import language as lang_func
+            # tree-sitter-typescript ships two grammars and exports
+            # language_typescript / language_tsx — there is no bare `language`.
+            from tree_sitter_typescript import language_typescript as lang_func
         else:
             return None
     except ImportError:

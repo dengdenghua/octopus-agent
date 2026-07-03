@@ -80,6 +80,12 @@ desktop = [
     "pillow>=10.0",
     "uiautomation>=2.0; platform_system == 'Windows'",
 ]
+# ── Code intelligence (AST code_search / code_edit) ──────
+code-intel = [
+    "tree-sitter>=0.23",
+    "tree-sitter-python>=0.23",
+    "tree-sitter-typescript>=0.23",
+]
 discord = [
     "cryptography>=42.0",
 ]
@@ -123,6 +129,10 @@ all = [
     "pyautogui>=0.9.54",
     "pillow>=10.0",
     "uiautomation>=2.0; platform_system == 'Windows'",
+    # code intelligence (AST)
+    "tree-sitter>=0.23",
+    "tree-sitter-python>=0.23",
+    "tree-sitter-typescript>=0.23",
     # observability
     "opentelemetry-api>=1.25",
     "opentelemetry-sdk>=1.25",

@@ -224,6 +224,35 @@ def test_ast_mode_dependency_missing(monkeypatch, tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# TypeScript grammar loads and resolves definitions end to end
+# ---------------------------------------------------------------------------
+
+def test_typescript_function_definitions_end_to_end(tmp_path: Path) -> None:
+    # Regression: the grammar package exports language_typescript, not
+    # `language` — the old import made _get_parser return None silently.
+    pytest.importorskip("tree_sitter_typescript")
+    from runtime.execution.suckers.code_edit_skills import _get_parser
+
+    assert _get_parser("typescript") is not None
+    assert _get_parser("javascript") is not None
+
+    _write(
+        tmp_path,
+        "app.ts",
+        "function greet(name: string): string {\n  return `hi ${name}`;\n}\n",
+    )
+    out = cis._code_search(
+        mode="ast",
+        query_type="function_definitions",
+        target_name="greet",
+        root=str(tmp_path),
+    )
+    assert out.get("error") is None
+    assert "typescript" in out.get("languages", [])
+    assert any(m["path"].endswith("app.ts") for m in out.get("matches", []))
+
+
+# ---------------------------------------------------------------------------
 # helper: ensure module imports cleanly when run individually
 # ---------------------------------------------------------------------------
 
