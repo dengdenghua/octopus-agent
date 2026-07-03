@@ -55,6 +55,7 @@ as a repository-root child.
 | `.env` | Local-only secret file |
 | `skills.lock.json` | Locked skill-package manifest (parallel to `uv.lock`) |
 | `CLAUDE.md` | Agent operating instructions read by Claude Code / agents |
+| `.git-blame-ignore-revs` | Mechanical commits skipped by `git blame` (repo-wide format sweeps) |
 
 ## Local State
 

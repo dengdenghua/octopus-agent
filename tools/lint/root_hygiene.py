@@ -103,6 +103,7 @@ ROOT_ALLOWLIST: set[str] = {
     ".github",
     ".gitignore",
     ".gitattributes",
+    ".git-blame-ignore-revs",
     ".editorconfig",
     ".pre-commit-config.yaml",
     # ── .NET / OS noise that the .gitignore already covers ─
