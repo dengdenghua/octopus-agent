@@ -1214,7 +1214,7 @@ def create_config_router(
             "_status": status,
         }
 
-    # ─── Merged listing · molili presets + custom models ─────
+    # ─── Merged listing · Octopus presets + custom models ─────
     # Frontend ModelPicker consumes this · it's declared on the
     # config router so it runs BEFORE the openai_gateway's own
     # /api/llm-models (FastAPI picks first-match). Living here
@@ -1342,28 +1342,6 @@ def create_config_router(
 
     @router.get("/api/llm-models")
     def api_llm_models() -> dict[str, Any]:
-        molili_presets = [
-            {
-                "id": "minimax-m2.5", "name": "minimax-m2.5",
-                "display_name": "MiniMax M2.5", "provider": "molili",
-            },
-            {
-                "id": "glm-4.7", "name": "glm-4.7",
-                "display_name": "GLM-4.7", "provider": "molili",
-            },
-            {
-                "id": "kimi-k2.5", "name": "kimi-k2.5",
-                "display_name": "Kimi K2.5", "provider": "molili",
-            },
-            {
-                "id": "deepseek-v3.2", "name": "deepseek-v3.2",
-                "display_name": "DeepSeek-V3.2", "provider": "molili",
-            },
-            {
-                "id": "qwen3-max", "name": "qwen3-max",
-                "display_name": "Qwen3-Max", "provider": "molili",
-            },
-        ]
         custom: list[dict[str, Any]] = []
         for e in custom_models_state.values():
             entry_id = e["id"]
@@ -1438,7 +1416,7 @@ def create_config_router(
                 "supports_tool_use": True,
             },
         ]
-        return {"models": mix_presets + molili_presets + custom}
+        return {"models": mix_presets + custom}
 
     # ─── Constitution profile ────────────────────────────────
     #

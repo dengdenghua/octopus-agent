@@ -8,7 +8,7 @@ export async function loadModels(): Promise<Model[]> {
   // the OpenAI-compat gateway which exposes *skills* (e.g.
   // "octopus-agent/list_cwd") as "models" for external clients that
   // want to call a skill via model= routing. For the in-app
-  // ModelPicker we want real LLM options (GLM / MiniMax / Kimi / …).
+  // ModelPicker we want real LLM options (Octopus Mix + configured custom models).
   const res = await fetch(`${getBackendBaseURL()}/api/llm-models`, {
     headers: authHeaders(),
   });

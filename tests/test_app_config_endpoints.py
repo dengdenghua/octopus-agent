@@ -19,7 +19,7 @@ Endpoints covered
     GET    /api/config/custom-models          · list
     PUT    /api/config/custom-models/{id}     · upsert + persist
     DELETE /api/config/custom-models/{id}     · remove + persist
-    GET    /api/llm-models                    · merged list (molili + custom)
+    GET    /api/llm-models                    · merged list (Octopus + custom)
 
 Design notes
 ------------
@@ -769,14 +769,34 @@ class TestLlmModelsMerge:
         assert r.status_code == 200
         data = r.json()
         # The merged endpoint must include the custom model alongside
-        # whatever built-in molili presets exist. Shape sanity:
+        # Octopus-native presets. Shape sanity:
         assert "models" in data or "data" in data or isinstance(data, dict)
         # Loosely assert the custom id is somewhere in the response
-        # (the exact structure isn't locked — depends on molili
-        # gateway, which we're not mocking here).
+        # (the exact structure isn't locked — depends on configured
+        # custom models, which we're not mocking here).
         blob = repr(data)
         assert "mirror-x" in blob or "Mirror X" in blob
         assert "supports_thinking" in blob
+
+    def test_llm_models_do_not_advertise_legacy_molili_presets(
+        self, client: TestClient,
+    ) -> None:
+        """The React model picker should not surface retired Molili gateway
+        presets such as MiniMax M2.5 unless the user explicitly configures
+        them as custom models.
+        """
+        r = client.get("/api/llm-models")
+        assert r.status_code == 200
+        models = r.json()["models"]
+        ids = {row.get("id") for row in models}
+        names = {row.get("display_name") for row in models}
+        providers = {row.get("provider") for row in models}
+
+        assert "molili" not in providers
+        assert "minimax-m2.5" not in ids
+        assert "MiniMax M2.5" not in names
+        assert "kimi-k2.5" not in ids
+        assert "Kimi K2.5" not in names
 
     def test_custom_model_flags_appear_in_merged_list(
         self,
