@@ -57,6 +57,7 @@ tier: "standard"
 | `anthropic_router.py` | — |
 | `capability_probe.py` | Provider Capability Auto-Detection. |
 | `credential_pool.py` | — |
+| `custom_model_flags.py` | Operator-declared capability flags from ``custom_models.json``. |
 | `dispatch_router.py` | — |
 | `gemini_router.py` | — |
 | `hf_catalog.py` | Live local-model catalog from the HuggingFace Hub (GGUF), with offline fallback. |

@@ -76,6 +76,7 @@ Suckers = skill pool.
 | `forged_persistence.py` | — |
 | `fs_search_skills.py` | — |
 | `hub/installer.py` | — |
+| `image_search_backends.py` | Image-search provider backends for the kimi-compat skill group. |
 | `kg_skill.py` | — |
 | `kimi_compat_skills.py` | — |
 | `layers.py` | — |
