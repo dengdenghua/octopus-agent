@@ -165,8 +165,9 @@ def client(isolated_cwd: Path) -> TestClient:
 
 class TestPreviewStreamEndpoint:
     def test_route_registered(self, client: TestClient) -> None:
-        routes = {r.path for r in client.app.routes}
-        assert "/api/preview/stream" in routes
+        from tests.route_utils import route_paths
+
+        assert "/api/preview/stream" in route_paths(client.app)
 
     def test_journal_counts_preview_refresh(self, client: TestClient) -> None:
         r = client.get("/api/journal")

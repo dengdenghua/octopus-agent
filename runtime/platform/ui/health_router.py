@@ -380,9 +380,35 @@ def _process_info() -> dict[str, Any]:
     }
 
 
+def _iter_app_routes(app: Any) -> list[Any]:
+    """Every route reachable from the app, nested includes included.
+
+    starlette >=1.3 / fastapi >=0.139 wrap included routers in entries
+    that expose children via ``original_router`` (or ``app`` for mounts)
+    instead of flattening them — a plain ``app.routes`` scan then sees a
+    couple dozen wrappers and every surface check reports its routes
+    missing.
+    """
+    stack = list(getattr(app, "routes", []) or [])
+    seen: set[int] = set()
+    collected: list[Any] = []
+    while stack:
+        route = stack.pop()
+        if id(route) in seen:
+            continue
+        seen.add(id(route))
+        collected.append(route)
+        stack.extend(getattr(route, "routes", []) or [])
+        for container_attr in ("original_router", "app"):
+            container = getattr(route, container_attr, None)
+            if container is not None:
+                stack.extend(getattr(container, "routes", []) or [])
+    return collected
+
+
 def _api_surface_info(request: Request | None) -> dict[str, Any]:
     app = getattr(request, "app", None) if request is not None else None
-    routes = list(getattr(app, "routes", []) or [])
+    routes = _iter_app_routes(app)
     route_paths = sorted(
         {
             str(getattr(route, "path", "") or "")
@@ -1085,7 +1111,7 @@ def _route_surface_info(
     required_routes: dict[str, list[str]],
 ) -> dict[str, Any]:
     app = getattr(request, "app", None) if request is not None else None
-    routes = list(getattr(app, "routes", []) or [])
+    routes = _iter_app_routes(app)
     route_methods: dict[str, list[str]] = {}
     for route in routes:
         path = str(getattr(route, "path", "") or "")

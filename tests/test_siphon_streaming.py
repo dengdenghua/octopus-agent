@@ -179,8 +179,9 @@ class TestSSEEndpoint:
         """Implementation note."""
         app = create_app(journal_path=None)
         # Implementation note.
-        paths = {r.path for r in app.routes}
-        assert "/api/stream" in paths
+        from tests.route_utils import route_paths
+
+        assert "/api/stream" in route_paths(app)
 
     def test_app_uses_streaming_journal(self):
         """Implementation note."""

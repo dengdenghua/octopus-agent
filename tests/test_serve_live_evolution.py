@@ -322,11 +322,13 @@ class TestServePromptEvolution:
 
         assert rc == 0
         app = captured["app"]
+        from tests.route_utils import iter_routes
+
         post_routes = [
             route
-            for route in app.routes
+            for route in iter_routes(app)
             if getattr(route, "path", None) == "/v1/chat/completions"
-            and "POST" in getattr(route, "methods", set())
+            and "POST" in (getattr(route, "methods", None) or set())
         ]
         assert len(post_routes) == 1
 
