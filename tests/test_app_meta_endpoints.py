@@ -474,6 +474,11 @@ parameters:
 
 
 class TestPlugins:
+    # Pin a plugin port that is actually committed to the repo
+    # (.octopus/plugins/codex/ whitelists product-design + remotion; the
+    # other ~20 ports are gitignored local copies). Pinning "browser"
+    # made these tests green only on dev machines and red on any clean
+    # checkout / CI.
     def test_copied_codex_plugins_are_registered_for_frontend(
         self,
         client: TestClient,
@@ -485,13 +490,14 @@ class TestPlugins:
             pytest.skip("no codex plugins installed in test environment")
 
         by_id = {plugin["id"]: plugin for plugin in plugins}
-        assert "browser" in by_id
-        assert by_id["browser"]["source"] == "codex"
-        assert by_id["browser"]["enabled"] is True
-        assert by_id["browser"]["state"] == "registered"
-        assert isinstance(by_id["browser"]["capabilities"], list)
-        assert by_id["browser"]["logo_url"].endswith("/assets/browser.png")
-        assert by_id["browser"]["icon_url"].endswith("/assets/composer-icon.png")
+        assert "product-design" in by_id
+        plugin = by_id["product-design"]
+        assert plugin["source"] == "codex"
+        assert plugin["enabled"] is True
+        assert plugin["state"] == "registered"
+        assert isinstance(plugin["capabilities"], list)
+        assert plugin["logo_url"].endswith("/logo.png")
+        assert plugin["icon_url"].endswith("/composerIcon.svg")
 
     def test_plugin_detail_and_capabilities(
         self,
@@ -501,13 +507,13 @@ class TestPlugins:
         if not r.json():
             pytest.skip("no codex plugins installed in test environment")
 
-        detail = client.get("/api/plugins/browser")
+        detail = client.get("/api/plugins/product-design")
         assert detail.status_code == 200
-        assert detail.json()["id"] == "browser"
+        assert detail.json()["id"] == "product-design"
 
         caps = client.get("/api/plugins/capabilities?type=codex")
         assert caps.status_code == 200
-        assert any(cap["provider"] == "browser" for cap in caps.json())
+        assert any(cap["provider"] == "product-design" for cap in caps.json())
 
     def test_plugin_assets_are_served(
         self,
@@ -517,7 +523,7 @@ class TestPlugins:
         if not r.json():
             pytest.skip("no codex plugins installed in test environment")
 
-        detail = client.get("/api/plugins/browser").json()
+        detail = client.get("/api/plugins/product-design").json()
         logo_url = detail["logo_url"]
         assert logo_url
 

@@ -397,6 +397,24 @@ class TestBasicRoutes:
         tmp_path: Path,
         monkeypatch,
     ):
+        # Hermetic fallback dist: the "invalid env dist degrades to a warn
+        # but the UI still serves from the fallback" contract needs a
+        # fallback to exist, and frontend/dist is a gitignored local build
+        # (absent on a clean checkout / CI). Fabricate a project root that
+        # has one, with the real pyproject so the version check stays green.
+        import shutil
+
+        fake_root = tmp_path / "root"
+        (fake_root / "frontend" / "dist").mkdir(parents=True)
+        (fake_root / "frontend" / "dist" / "index.html").write_text("<html></html>")
+        shutil.copyfile(
+            Path(__file__).resolve().parent.parent / "pyproject.toml",
+            fake_root / "pyproject.toml",
+        )
+        monkeypatch.setattr(
+            "runtime.platform.ui.health_router.project_root",
+            lambda *_: fake_root,
+        )
         monkeypatch.setenv("OCTOPUS_WEBUI_DIST", str(tmp_path / "missing"))
         app = create_app(
             journal_path=tmp_path / "events.jsonl",
