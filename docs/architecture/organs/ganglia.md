@@ -1,6 +1,6 @@
 # 🕸️ Ganglia · 神经节
 
-> ⚠️ **状态：部分实装** — DAG 执行引擎已实装于 `runtime/core/graph_runtime/runtime.py`（`GraphRuntime` / `SwarmRuntime`，拓扑分层并行执行）。**未实装的是"独立 Ganglion 自治层 / 断联自治"**——每条 Arm 配一个本地 Ganglion 在 Cerebrum 断联时自治决策的能力。本文档描述的是该未实装部分的设计愿景。
+> ⚠️ **状态：部分实装** — DAG runtime 已实装于 `runtime/core/graph_runtime/runtime.py`（`GraphRuntime` / `SwarmRuntime`，拓扑分层并行执行）。**未实装的是"独立 Ganglion 自治层 / 断联自治"**——每条 Arm 配一个本地 Ganglion 在 Cerebrum 断联时自治决策的能力。本文档描述的是该未实装部分的设计愿景。
 
 **生物原型**：章鱼每条腕根部的神经节，是腕的"小脑"，能独立完成抓取动作。
 
