@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import playwright.sync_api as _sp
+import pytest
 
-from runtime.execution.suckers.browser_session_worker import _default_page_factory
+_sp = pytest.importorskip("playwright.sync_api")
+
+from runtime.execution.suckers.browser_session_worker import _default_page_factory  # noqa: E402
 
 
 class _FakeBrowserOrCtx:
