@@ -79,6 +79,27 @@ def _agentic_stream_event_to_react_event(
     return None
 
 
+def _apply_orchestration_grant(session_metadata: dict[str, Any]) -> None:
+    """Scrub then (maybe) grant the per-turn orchestration token budget.
+
+    ``run_orchestration`` treats ``session.metadata["orchestration_token_budget"]``
+    as a TRUSTED spawn-ceiling source, but this metadata dict starts life as the
+    client-supplied ``user_context`` — so any client-sent value is a spawn-budget
+    escalation and is dropped unconditionally. When the turn carries the
+    ``audit.ultracode`` workflow preset, the SERVER grants the budget
+    (``ultracode_token_budget()``: preset env → operator env → default), which is
+    what lets the preset actually widen the fan-out without the client ever
+    choosing the number.
+    """
+    session_metadata.pop("orchestration_token_budget", None)
+    preset = str(session_metadata.get("workflow_preset") or "").strip().lower()
+    if preset != "audit.ultracode":
+        return
+    from runtime.execution.suckers.delegation_budget import ultracode_token_budget
+
+    session_metadata["orchestration_token_budget"] = ultracode_token_budget()
+
+
 def _should_use_native_tool_loop(
     stack: Any,
     intent: ParsedIntent,
@@ -446,6 +467,7 @@ async def _drive_react(
         from runtime.platform.process.session import Session, session_scope
 
         session_metadata = dict(intent.user_context or {})
+        _apply_orchestration_grant(session_metadata)
         if runtime._workspaces is not None:
             session_metadata["_artifact_output_root"] = str(
                 runtime._workspaces.layout(turn.thread_id).final,
@@ -465,6 +487,13 @@ async def _drive_react(
         # it every journal/trace row lands with thread_id=None.
         # session_scope alone does not feed it.
         _journal_agent_id = getattr(session_agent, "agent_id", None)
+        from runtime.execution.suckers.delegation_skills import (
+            orchestration_progress_scope,
+        )
+
+        def _orchestration_progress(line: str) -> None:
+            _safe_put({"type": "thinking_delta", "delta": line + "\n"})
+
         with (
             session_scope(turn_session),
             journal_context(
@@ -472,6 +501,7 @@ async def _drive_react(
                 agent_id=_journal_agent_id,
             ),
             scoped_cancellation(cancel_source.token),
+            orchestration_progress_scope(_orchestration_progress),
         ):
             try:
                 _planning_mode = bool(

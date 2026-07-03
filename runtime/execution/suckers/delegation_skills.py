@@ -4,6 +4,16 @@ import contextlib
 import json
 import re
 from collections import OrderedDict
+from collections.abc import Callable as _Callable
+
+# ── Orchestration progress fan-out ────────────────────────
+# The realtime gateway installs a callback here for the duration of a
+# turn so ``run_orchestration``'s phase transitions (round collected /
+# verified / synthesized) stream to the client as thinking deltas
+# instead of arriving as one opaque blob at the end. ContextVar so
+# concurrent turns cannot cross wires; emission is best-effort and must
+# never break the run.
+from contextvars import ContextVar as _ContextVar
 from typing import Any
 
 from .delegation_budget import (
@@ -26,6 +36,30 @@ from .delegation_budget import (
 )
 from .registry import Skill, SkillRegistry
 from .testing import SkillExpect, SkillTestCase
+
+_ORCH_PROGRESS: _ContextVar[_Callable[[str], None] | None] = _ContextVar(
+    "orchestration_progress_emitter",
+    default=None,
+)
+
+
+@contextlib.contextmanager
+def orchestration_progress_scope(callback: _Callable[[str], None]):
+    """Install a progress callback for orchestrations run inside the scope."""
+    token = _ORCH_PROGRESS.set(callback)
+    try:
+        yield
+    finally:
+        _ORCH_PROGRESS.reset(token)
+
+
+def _emit_orchestration_progress(line: str) -> None:
+    callback = _ORCH_PROGRESS.get()
+    if callback is None:
+        return
+    with contextlib.suppress(Exception):
+        callback(line)
+
 
 # ── Role visibility policy ────────────────────────────────
 # ``arbiter`` is internal (used by team-vote dispatcher).
@@ -1992,6 +2026,10 @@ def _run_orchestration(
         with contextlib.suppress(Exception):
             board.write(bb_key, list(findings), writer="run_orchestration")
 
+    _emit_orchestration_progress(
+        f"[orchestration] start · roles={roles} n={n} rounds={rounds} "
+        f"max_spawns={max_spawns} verify={verify} synthesize={synthesize}"
+    )
     with _orchestration_budget_scope(int(max_spawns)) as budget:
         for _ in range(int(rounds)):
             if not budget.has_room():
@@ -2015,6 +2053,10 @@ def _run_orchestration(
                 items.extend(_findings_from_success(s))
             fresh = _dedupe_findings(items, seen_norms)
             per_round.append(len(fresh))
+            _emit_orchestration_progress(
+                f"[orchestration] round {len(per_round)}/{rounds}: "
+                f"+{len(fresh)} fresh (total {len(collected) + len(fresh)})"
+            )
             if not fresh:
                 dry += 1
                 if dry > patience:
@@ -2082,6 +2124,10 @@ def _run_orchestration(
             # Drop only on an explicit majority "drop"; ties/no-verdict keep.
             kept = [f for f, v in zip(to_verify, verdicts, strict=True) if v != ballot[-1]]
             confirmed = kept + collected[len(to_verify) :]
+            _emit_orchestration_progress(
+                f"[orchestration] verify: kept {len(kept)}/{len(to_verify)} "
+                f"voted · {unverified} unverified"
+            )
 
         # Closing synthesis: one spawn folds the confirmed findings into a
         # single coherent answer (the stage that makes the harness return a
@@ -2102,10 +2148,15 @@ def _run_orchestration(
             synth_succ = synth_env.get("successes", [])
             if synth_succ:
                 synthesis = str(synth_succ[0].get("output") or "").strip()
+        if synthesize and synthesis:
+            _emit_orchestration_progress(f"[orchestration] synthesis: {len(synthesis)} chars")
         # Publish the verified set so the shared pool reflects confirmed (not
         # just collected) findings for the rest of the turn.
         _publish(confirmed)
         budget_used = budget.used
+        _emit_orchestration_progress(
+            f"[orchestration] done · {len(confirmed)} confirmed · spawns {budget_used}/{max_spawns}"
+        )
 
     return {
         "ok": True,

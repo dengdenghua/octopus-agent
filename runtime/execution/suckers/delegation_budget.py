@@ -174,6 +174,35 @@ def operator_orchestration_token_budget() -> int | None:
     return value if value > 0 else None
 
 
+_ULTRACODE_TOKEN_BUDGET_ENV = "OCTOPUS_ULTRACODE_TOKEN_BUDGET"
+ULTRACODE_TOKEN_BUDGET_DEFAULT = 200_000
+
+
+def ultracode_token_budget() -> int:
+    """Server-side token grant for one ``audit.ultracode`` turn.
+
+    Resolution order: ``OCTOPUS_ULTRACODE_TOKEN_BUDGET`` (preset-specific
+    operator override) → ``OCTOPUS_ORCH_TOKEN_BUDGET`` (deployment-wide) →
+    ``ULTRACODE_TOKEN_BUDGET_DEFAULT``. Always positive: picking the preset
+    is the opt-in, so the bus must actually widen the spawn ceiling instead
+    of silently keeping the conservative default. The value is granted by
+    the GATEWAY into ``session.metadata`` — clients and models never set it
+    (the gateway scrubs any client-supplied copy first).
+    """
+    raw = os.environ.get(_ULTRACODE_TOKEN_BUDGET_ENV, "").strip()
+    if raw:
+        try:
+            value = int(raw)
+            if value > 0:
+                return value
+        except (TypeError, ValueError):
+            pass
+    operator = operator_orchestration_token_budget()
+    if operator is not None:
+        return operator
+    return ULTRACODE_TOKEN_BUDGET_DEFAULT
+
+
 def compute_fingerprint(agent_id: str, prompt: str) -> str:
     """Normalize and hash a delegation spec so repeated identical
     attempts (modulo whitespace / case) share the same fingerprint.
