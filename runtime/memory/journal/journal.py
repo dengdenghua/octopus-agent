@@ -1172,7 +1172,7 @@ class JSONLJournal(Journal):
                         import fcntl as _fcntl
 
                         _fcntl.flock(fd, _fcntl.LOCK_UN)
-                except OSError:
+                except OSError:  # best-effort · lock_file.close() below releases it anyway
                     pass
             with contextlib.suppress(OSError):
                 lock_file.close()
@@ -1186,7 +1186,24 @@ class JSONLJournal(Journal):
         # broken redactor must not block journaling.
         if self._redactor is not None:
             with contextlib.suppress(Exception):
-                line = self._redactor.redact(line)
+                redacted = self._redactor.redact(line)
+                # The redactor's loose patterns (e.g. "phone" matches any
+                # run of ~9-15 digits) can hit a digit run inside a JSON
+                # *numeric* literal — a float timestamp/latency field —
+                # and splice replacement text in there, corrupting the
+                # line's JSON syntax (every subsequent read then fails to
+                # parse the whole file, silently dropping every event).
+                # A real phone number is never a bare JSON number in our
+                # schemas — it would be a quoted string — so any match
+                # that breaks JSON validity is by definition a false
+                # positive; keep the unredacted line rather than persist
+                # invalid JSON.
+                if redacted != line:
+                    try:
+                        json.loads(redacted)
+                    except (json.JSONDecodeError, ValueError):
+                        redacted = line
+                line = redacted
         line = line + "\n"
         with self._lock, self._interprocess_lock():
             # Cross-process lock. ``self._lock`` only serialises writers

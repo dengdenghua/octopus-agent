@@ -359,3 +359,40 @@ class TestJournalRedactor:
         report = chain.verify()
         assert report.ok is True
         assert report.entries_checked == 1
+
+    def test_redaction_never_corrupts_json_numeric_literal(self, tmp_path: Path):
+        """The "phone" pattern matches any run of ~9-15 consecutive
+        digits with no separators required. Redacting the raw
+        serialised line (not per-field) can hit a digit run inside a
+        JSON *numeric* literal — e.g. a float latency/timestamp field —
+        and splice ``[REDACTED:phone]`` text in there, corrupting the
+        line's JSON syntax. Every subsequent ``read_all()`` then fails
+        to parse the whole file and silently returns zero events.
+
+        A phone number is never legitimately a bare JSON number in our
+        schemas (it would be a quoted string), so this reproduces with
+        a plain float that happens to have a long digit run — no
+        secret content involved at all."""
+        from runtime.memory.journal import JSONLJournal, ReflexHitEvent
+        from runtime.platform.observability.redactor import Redactor
+
+        j = JSONLJournal(tmp_path / "j.jsonl", redactor=Redactor())
+        j.write(
+            ReflexHitEvent(
+                rule_id="r1",
+                kind="regex",
+                # A float whose fractional digits form a long
+                # unseparated run — exactly the shape the loose phone
+                # regex false-positives on.
+                latency_ms=0.123893231,
+                intent_goal="ping",
+                response={"reply": "pong"},
+            )
+        )
+        content = (tmp_path / "j.jsonl").read_text(encoding="utf-8")
+        assert "[REDACTED:phone]" not in content
+        for line in content.splitlines():
+            json.loads(line)  # must never raise
+        events = j.read_all()
+        assert len(events) == 1
+        assert events[0].event_type == "reflex_hit"
