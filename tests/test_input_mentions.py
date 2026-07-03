@@ -22,6 +22,27 @@ def test_parse_input_mentions_extracts_all_three_types() -> None:
     assert len(result.raw_mentions) == 3
 
 
+def test_parse_input_mentions_extracts_codex_plugin_uri() -> None:
+    text = (
+        "Use [@product-design](plugin://product-design@openai-curated-remote) "
+        "and [@remotion](plugin://remotion@openai-curated-remote)."
+    )
+    result = parse_input_mentions(text)
+
+    assert result.plugins == ("product-design", "remotion")
+    assert result.has_any
+    assert result.raw_mentions[0].type == "plugin"
+    assert result.raw_mentions[0].raw == "plugin://product-design@openai-curated-remote"
+
+
+def test_parse_input_mentions_dedupes_codex_plugin_uri_with_typed_plugin() -> None:
+    result = parse_input_mentions(
+        "@plugin:product-design and plugin://product-design@openai-curated-remote"
+    )
+
+    assert result.plugins == ("product-design",)
+
+
 def test_parse_input_mentions_dedupes_within_bucket() -> None:
     text = "@skill:deep-research and again @skill:deep-research and @skill:web_search"
     result = parse_input_mentions(text)

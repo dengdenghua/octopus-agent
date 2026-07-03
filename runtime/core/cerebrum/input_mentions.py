@@ -32,6 +32,15 @@ _MENTION_RE = re.compile(
     r"@(?P<type>plugin|skill|agent|pack):(?P<id>[A-Za-z0-9][A-Za-z0-9._/\-]*)",
 )
 
+# Codex / connector mentions can arrive as Markdown links such as
+# ``[@product-design](plugin://product-design@openai-curated-remote)``.
+# Treat the URI as the same strong routing signal as ``@plugin:...``.
+_PLUGIN_URI_RE = re.compile(
+    r"plugin://(?P<id>[A-Za-z0-9][A-Za-z0-9._/\-]*?)"
+    r"(?:@[A-Za-z0-9][A-Za-z0-9._/\-]*)?"
+    r"(?=$|[\s)\]}>.,;:!?\"'])",
+)
+
 _SURFACE_RE = re.compile(
     r"@(?P<id>browser|chrome|computer)\b",
     re.IGNORECASE,
@@ -156,20 +165,18 @@ def parse_input_mentions(text: str) -> InputMentions:
         "pack": set(),
     }
 
-    for match in _MENTION_RE.finditer(text):
-        kind = match.group("type")
-        ident = match.group("id")
+    def record(kind: str, ident: str, raw_text: str, span: tuple[int, int]) -> bool:
         if kind not in _VALID_TYPES:
-            continue
+            return False
         if not ident or ident in seen_per_bucket[kind]:
-            continue
+            return False
         seen_per_bucket[kind].add(ident)
         raw.append(
             InputMention(
                 type=kind,
                 id=ident,
-                raw=match.group(0),
-                span=(match.start(), match.end()),
+                raw=raw_text,
+                span=span,
             ),
         )
         if kind == "plugin":
@@ -180,6 +187,20 @@ def parse_input_mentions(text: str) -> InputMentions:
             packs.append(ident)
         else:
             agents.append(ident)
+        return True
+
+    for match in _MENTION_RE.finditer(text):
+        kind = match.group("type")
+        ident = match.group("id")
+        record(kind, ident, match.group(0), (match.start(), match.end()))
+
+    for match in _PLUGIN_URI_RE.finditer(text):
+        record(
+            "plugin",
+            match.group("id"),
+            match.group(0),
+            (match.start(), match.end()),
+        )
 
     seen_surfaces: set[str] = set()
     occupied_spans = [mention.span for mention in raw]

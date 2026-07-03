@@ -170,6 +170,15 @@ frontend/.next/
 # Local agent runtime artifacts (Phase B cleanup)
 .codex-runlogs/
 .octopus/
+# Bundled Codex plugin ports that should live with this project.
+!.octopus/
+!.octopus/plugins/
+!.octopus/plugins/codex/
+.octopus/plugins/codex/*
+!.octopus/plugins/codex/product-design/
+!.octopus/plugins/codex/product-design/**
+!.octopus/plugins/codex/remotion/
+!.octopus/plugins/codex/remotion/**
 # Third-party plugin source (use as reference, not as committed deps)
 _external/
 # Local reverse-engineering captures
