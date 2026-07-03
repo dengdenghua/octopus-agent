@@ -48,11 +48,31 @@ def _reset_module_state():
     _idf.set_runtime_lock(None)
     _reset_injection_taint()
     _reset_delegation_budget()
+    _reset_subagent_runners()
     yield
     _idf.set_runtime_lock(None)
     _reset_injection_taint()
     _reset_delegation_budget()
+    _reset_subagent_runners()
     _reset_singletons()
+
+
+def _reset_subagent_runners() -> None:
+    """Clear the process-wide subagent dispatch globals.
+
+    App wiring (serve startup, or any test that builds the FastAPI app)
+    installs the persistent and ephemeral runners via
+    ``set_sub_agent_runner`` / ``set_ephemeral_role_runner``. Without a
+    reset they leak into later tests — cowork's runner-availability
+    probe then reports "runner configured" and
+    ``test_runtime_does_not_enable_runner_without_subagent_executor``
+    only failed when the full suite ran in one process.
+    """
+    from runtime.execution.subagents import set_sub_agent_runner
+    from runtime.execution.suckers.ephemeral_agents import set_ephemeral_role_runner
+
+    set_sub_agent_runner(None)
+    set_ephemeral_role_runner(None)
 
 
 @pytest.fixture(autouse=True)
