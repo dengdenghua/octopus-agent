@@ -836,7 +836,9 @@ class TestAgentCompetitorScorecard:
             "scorecard_octopus": 97,
             "scorecard_best_external": 87,
             "scorecard_evidence_adjusted_octopus": 97,
-            "automation_octopus": 95,
+            # Pinned to the current radar value — keep in sync with the
+            # pins in test_production_readiness_gate (96 = 2026-07-03).
+            "automation_octopus": 96,
             "automation_codex": 93,
             "coverage_ready": 7,
             "coverage_total": 7,

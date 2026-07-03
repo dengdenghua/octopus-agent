@@ -340,7 +340,10 @@ class TestStepIntroducesSecret:
 
 
 class TestSecretInPayloadGuard:
-    def test_non_code_mode_silent(self) -> None:
+    def test_non_code_mode_still_fires(self) -> None:
+        # Unlike the other trajectory guards this one deliberately
+        # ignores is_code_mode — a write that embeds a credential is a
+        # leak in any mode ("the guard always fires when a hit lands").
         sk = "sk-abcdefghijklmnopqrstuvwxyz1234567890"
         steps = [
             _step(
@@ -352,9 +355,9 @@ class TestSecretInPayloadGuard:
                 ),
             ),
         ]
-        assert _secret_in_payload_guard(
-            steps, "done", is_code_mode=False,
-        ) is None
+        msg = _secret_in_payload_guard(steps, "done", is_code_mode=False)
+        assert msg is not None
+        assert "credential-shaped" in msg
 
     def test_no_secret_silent(self) -> None:
         steps = [_step(1, action='edit_file({"path": "runtime/foo.py", "old_string": "x", "new_string": "y"})')]

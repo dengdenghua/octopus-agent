@@ -1015,8 +1015,14 @@ def test_cowork_project_mode_accepts_task_control_command(
     assert task.assigned_agent == "build-agent"
     assert task.status == "done"
     events = project_store.events_for_project(project_id)
-    assert events[-1]["kind"] == "task.intervention"
-    assert events[-1]["payload"]["action"] == "reassign"
+    kinds = [event["kind"] for event in events]
+    # "reassign … run" audits chronologically: the intervention first,
+    # then the trailing run requested by the same command.
+    intervention_idx = max(
+        i for i, kind in enumerate(kinds) if kind == "task.intervention"
+    )
+    assert events[intervention_idx]["payload"]["action"] == "reassign"
+    assert "project.run" in kinds[intervention_idx + 1:]
 
     turn = out["response"].result["turn"]
     agent_text = "\n".join(item["text"] for item in turn["items"] if item["type"] == "agentMessage")
@@ -1032,7 +1038,7 @@ def test_cowork_project_mode_accepts_task_control_command(
     assert trace["control"]["action"] == "reassign"
     assert trace["available_actions"] == ["inspect", "report"]
     assert trace["action_specs"][0]["action"] == "inspect"
-    assert trace["audit_events"][-1]["kind"] == "task.intervention"
+    assert "task.intervention" in [e["kind"] for e in trace["audit_events"]]
 
 
 def test_cowork_project_mode_reports_failed_task_control_command(
