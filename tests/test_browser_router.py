@@ -210,7 +210,9 @@ def test_browser_system_info_detects_macos_chrome_path(
     monkeypatch.setattr("shutil.which", lambda _candidate: None)
 
     def fake_exists(path: Path) -> bool:
-        return str(path) == chrome_path or original_exists(path)
+        # as_posix: on Windows str() yields backslashes and would never
+        # match the posix literal above.
+        return path.as_posix() == chrome_path or original_exists(path)
 
     monkeypatch.setattr(Path, "exists", fake_exists)
 

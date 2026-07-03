@@ -82,6 +82,18 @@ _READ_TOOL_NAMES: frozenset[str] = frozenset(
 )
 
 
+def _runtime_tmp_root() -> str:
+    # The process temp dir in posix form — on Windows the static posix
+    # roots above never match, which used to leave the download-then-read
+    # boundary entirely unenforced there.
+    try:
+        import tempfile
+
+        return os.path.normpath(tempfile.gettempdir()).replace("\\", "/").rstrip("/") + "/"
+    except (OSError, ValueError):  # pragma: no cover — gettempdir is total in practice
+        return ""
+
+
 def _path_in_untrusted_root(value: str) -> bool:
     if not value or ("/" not in value and "\\" not in value):
         return False
@@ -89,15 +101,21 @@ def _path_in_untrusted_root(value: str) -> bool:
         p = os.path.normpath(os.path.expanduser(value.strip()))
     except (ValueError, TypeError):
         return False
-    p_slash = p if p.endswith("/") else p + "/"
-    if any(p_slash.startswith(root) for root in _UNTRUSTED_READ_ROOTS):
-        return True
+    p_slash = p.replace("\\", "/")
+    if not p_slash.endswith("/"):
+        p_slash += "/"
+    roots = list(_UNTRUSTED_READ_ROOTS)
+    tmp_root = _runtime_tmp_root()
+    if tmp_root:
+        roots.append(tmp_root)
     home = os.path.expanduser("~")
     if home and home != "~":
-        downloads = os.path.join(home, "Downloads") + "/"
-        if p_slash.startswith(downloads):
-            return True
-    return False
+        roots.append(os.path.normpath(os.path.join(home, "Downloads")).replace("\\", "/") + "/")
+    if os.name == "nt":
+        # Windows paths are case-insensitive.
+        p_slash = p_slash.lower()
+        roots = [root.lower() for root in roots]
+    return any(p_slash.startswith(root) for root in roots)
 
 
 def _reads_from_untrusted_location(
