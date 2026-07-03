@@ -113,6 +113,138 @@ def _call_handler_with_transient_retry(
         return handler(**args), [retry_tag]
 
 
+def _prepare_scoped_args(
+    skill: Skill,
+    sucker_id: SkillId,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Opt-in Session injection + mode-gated workspace scope handling.
+
+    * A handler that declares ``session`` gets the current Session
+      injected (old handlers without the param keep working).
+    * Directory-base params (``root``/``cwd``/…) and path params
+      (``path``/``file_path``/…) default to — or are resolved against —
+      the scope's primary root, so "analyze this folder" scans the
+      workspace the user picked instead of the process CWD.
+    * ``sandbox_dir`` participates in the permission domain: omitted →
+      filled with the scope primary; supplied → PermissionError when it
+      escapes the scope's allowed roots; plan mode (no write scope) →
+      every write call rejected until ``exit_plan_mode``.
+
+    Scope is only enforced when a Session is bound — direct callers
+    (tests, programmatic use) keep the old "LLM chooses sandbox_dir"
+    contract. Raises PermissionError; callers keep it inside the
+    dispatch ``try`` so denials map to the standard except branch.
+    """
+    import inspect as _inspect
+
+    handler_params: dict[str, Any] = {}
+    try:
+        sig = _inspect.signature(skill.handler)
+        handler_params = dict(sig.parameters)
+    except (TypeError, ValueError):
+        handler_params = {}
+
+    if "session" in handler_params and "session" not in args:
+        from runtime.platform.process.session import current_session
+
+        args = {**args, "session": current_session()}
+
+    _root_params = (
+        "root",
+        "cwd",
+        "working_dir",
+        "directory",
+        "base_dir",
+        "repo_dir",
+    )
+    _path_params = ("path", "filepath", "file_path", "filename")
+    has_sandbox = "sandbox_dir" in handler_params
+    has_root_param = any(p in handler_params for p in _root_params)
+    has_path_param = any(p in handler_params for p in _path_params)
+    if not (has_sandbox or has_root_param or has_path_param):
+        return args
+
+    from runtime.platform.process.session import current_session
+
+    _sess = current_session()
+    if _sess is None:
+        return args
+
+    from runtime.platform.process.scope import resolve_execution_scope
+
+    scope = resolve_execution_scope(_sess)
+    read_primary = scope.primary_read
+    _mutates_files = bool(set(skill.affinity or []) & {"write", "edit", "exec", "dangerous"})
+    arg_primary = scope.primary_write if _mutates_files else read_primary
+
+    # Read-side root injection — if the LLM didn't supply the root (or
+    # supplied the meaningless "."), inject the scope primary so the
+    # read scans the user's selected folder.
+    if has_root_param and arg_primary is not None:
+        for _rp in _root_params:
+            if _rp not in handler_params:
+                continue
+            _supplied = args.get(_rp)
+            if _supplied in (None, "", ".", "./"):
+                args = {**args, _rp: str(arg_primary)}
+                break
+
+    # Path-param injection — relative paths resolve against the scope
+    # primary instead of the process CWD.
+    if has_path_param and arg_primary is not None:
+        for _pp in _path_params:
+            if _pp not in handler_params:
+                continue
+            _supplied = args.get(_pp)
+            if _supplied is None or _supplied == "":
+                continue
+            if _supplied == "." or _supplied == "./":
+                args = {**args, _pp: str(arg_primary)}
+                break
+            _supplied_str = str(_supplied)
+            if not Path(_supplied_str).is_absolute():
+                args = {**args, _pp: str(arg_primary / _supplied_str)}
+                break
+
+    if has_sandbox:
+        if scope.primary_write is None:
+            raise PermissionError(
+                f"write skill {sucker_id!r} blocked: "
+                f"thread is in '{scope.mode}' mode "
+                "(no write scope). Call "
+                "'exit_plan_mode' first with a confirmed "
+                "plan summary to transition to chat / "
+                "team / code mode."
+            )
+        supplied = args.get("sandbox_dir")
+        default_sandbox = scope.primary_write if _mutates_files else read_primary
+        if not supplied:
+            # Lazily create the primary root so the skill can open
+            # files there without having to mkdir itself.
+            if _mutates_files:
+                with contextlib.suppress(OSError):
+                    scope.primary_write.mkdir(parents=True, exist_ok=True)
+            args = {**args, "sandbox_dir": str(default_sandbox)}
+        elif not (scope.allows_write(supplied) if _mutates_files else scope.allows_read(supplied)):
+            raise PermissionError(
+                f"sandbox_dir {supplied!r} escapes "
+                f"write scope (mode={scope.mode}, "
+                f"requested_mode={scope.requested_mode}, "
+                f"writable_roots="
+                f"{[str(r) for r in scope.writable_roots]}, "
+                f"readable_roots="
+                f"{[str(r) for r in scope.readable_roots]}, "
+                f"workspace_path="
+                f"{(_sess.metadata or {}).get('workspace_path', 'NOT SET')}"
+                "). If workspace_path is NOT SET, "
+                "the session lost its code-mode context. "
+                "Try opening a new code thread "
+                "with the correct workspace selected."
+            )
+    return args
+
+
 class StepExecutionError(RuntimeError):
     pass
 
@@ -125,7 +257,7 @@ class ToolExecutor:
     """Skill-step executor with read-before-write + diff/rollback wiring.
 
     ╔════════════════════════════════════════════════════════════════════╗
-    ║ executor.py · navigation map (1348 lines).                         ║
+    ║ executor.py · navigation map.                                      ║
     ║                                                                    ║
     ║   §1 helpers (_validate_output, retry classifier)  ~L54            ║
     ║   §2 ToolExecutor (the main class, ~775 lines)     ~L105           ║
@@ -234,105 +366,99 @@ class ToolExecutor:
             )
             sig = antigen_for(skill)
 
+            def _reject_step(
+                status: str,
+                reason: str | None,
+                *,
+                immune_reason: str | None = None,
+                span_attrs: dict[str, Any] | None = None,
+                waiting: tuple[str, dict[str, Any]] | None = None,
+            ) -> Step:
+                """Shared deny epilogue for the pre-dispatch gates.
+
+                Order is part of the contract: task metadata first (the
+                approval panel reads it), then the immune journal line,
+                then span attributes, then the persisted reject step.
+                ``immune_reason=None`` skips the immune write for gates
+                that are not immunity verdicts (e.g. injection taint).
+                """
+                if waiting is not None:
+                    _mark_task_waiting_approval(
+                        str(sucker_id),
+                        waiting[0],
+                        metadata_patch=waiting[1],
+                    )
+                if immune_reason is not None:
+                    self.journal.write_immune(
+                        verdict="reject",
+                        signature=sig,
+                        task_id=task_id,
+                        arm_id=arm_id,
+                        actor=actor,
+                        reason=immune_reason,
+                    )
+                    span.set_attribute("octopus.immunity.verdict", "reject")
+                for attr_key, attr_value in (span_attrs or {}).items():
+                    span.set_attribute(attr_key, attr_value)
+                step = _make_reject_step(step_id, node_id, call, status, reason)
+                self.journal.write_step(task_id, arm_id, step, actor=actor)
+                return step
+
             allowed_by_task_capability, task_capability_reason = _check_task_capability_permission(
                 sucker_id
             )
             if not allowed_by_task_capability:
                 deny_reason = task_capability_reason or "task capability disabled"
-                _mark_task_waiting_approval(
-                    str(sucker_id),
-                    deny_reason,
-                    metadata_patch={
-                        "approval_required": False,
-                        "approval_denied": True,
-                        "approval_action": "capability_denied",
-                        "capability_denied": True,
-                        "capability_denial_reason": deny_reason,
-                    },
-                )
-                self.journal.write_immune(
-                    verdict="reject",
-                    signature=sig,
-                    task_id=task_id,
-                    arm_id=arm_id,
-                    actor=actor,
-                    reason=deny_reason,
-                )
-                span.set_attribute("octopus.immunity.verdict", "reject")
-                span.set_attribute("octopus.task_capability.blocked", deny_reason)
-                step = _make_reject_step(
-                    step_id,
-                    node_id,
-                    call,
+                return _reject_step(
                     "immune_reject",
                     deny_reason,
+                    immune_reason=deny_reason,
+                    span_attrs={"octopus.task_capability.blocked": deny_reason},
+                    waiting=(
+                        deny_reason,
+                        {
+                            "approval_required": False,
+                            "approval_denied": True,
+                            "approval_action": "capability_denied",
+                            "capability_denied": True,
+                            "capability_denial_reason": deny_reason,
+                        },
+                    ),
                 )
-                self.journal.write_step(task_id, arm_id, step, actor=actor)
-                return step
 
             approval_block = _executor_approval_block(str(sucker_id), args)
             if approval_block is not None:
-                _mark_task_waiting_approval(
-                    str(sucker_id),
-                    approval_block["reason"],
-                    metadata_patch={
-                        "approval_required": approval_block["approval_action"]
-                        in {"ask", "confirm"},
-                        "approval_denied": approval_block["approval_action"] == "deny",
-                        "approval_action": approval_block["approval_action"],
-                        "executor_approval": approval_block,
-                    },
-                )
-                self.journal.write_immune(
-                    verdict="reject",
-                    signature=sig,
-                    task_id=task_id,
-                    arm_id=arm_id,
-                    actor=actor,
-                    reason=approval_block["reason"],
-                )
-                span.set_attribute("octopus.immunity.verdict", "reject")
-                span.set_attribute("octopus.executor_approval.blocked", True)
-                span.set_attribute(
-                    "octopus.executor_approval.action",
-                    str(approval_block["approval_action"]),
-                )
-                step = _make_reject_step(
-                    step_id,
-                    node_id,
-                    call,
+                return _reject_step(
                     "immune_reject",
                     approval_block["reason"],
+                    immune_reason=approval_block["reason"],
+                    span_attrs={
+                        "octopus.executor_approval.blocked": True,
+                        "octopus.executor_approval.action": str(approval_block["approval_action"]),
+                    },
+                    waiting=(
+                        approval_block["reason"],
+                        {
+                            "approval_required": approval_block["approval_action"]
+                            in {"ask", "confirm"},
+                            "approval_denied": approval_block["approval_action"] == "deny",
+                            "approval_action": approval_block["approval_action"],
+                            "executor_approval": approval_block,
+                        },
+                    ),
                 )
-                self.journal.write_step(task_id, arm_id, step, actor=actor)
-                return step
 
             allowed_by_capability, capability_reason = _check_capability_permission(
                 sucker_id,
             )
             if not allowed_by_capability:
-                self.journal.write_immune(
-                    verdict="reject",
-                    signature=sig,
-                    task_id=task_id,
-                    arm_id=arm_id,
-                    actor=actor,
-                    reason=capability_reason or "capability disabled",
-                )
-                span.set_attribute("octopus.immunity.verdict", "reject")
-                span.set_attribute(
-                    "octopus.capability.blocked",
-                    capability_reason or "capability disabled",
-                )
-                step = _make_reject_step(
-                    step_id,
-                    node_id,
-                    call,
+                deny_reason = capability_reason or "capability disabled"
+                return _reject_step(
                     "immune_reject",
-                    capability_reason or "capability disabled",
+                    deny_reason,
+                    immune_reason=deny_reason,
+                    span_attrs={"octopus.capability.blocked": deny_reason},
                 )
-                self.journal.write_step(task_id, arm_id, step, actor=actor)
-                return step
 
             # Indirect prompt-injection taint gate (chokepoint). Every
             # execution path crosses execute_step, so enforcing here closes
@@ -342,16 +468,11 @@ class ToolExecutor:
             # turn, unless an approval-capable loop already reviewed it.
             _inj_block = injection_taint_block(str(sucker_id), str(args)[:500])
             if _inj_block is not None:
-                span.set_attribute("octopus.injection.blocked", _inj_block)
-                step = _make_reject_step(
-                    step_id,
-                    node_id,
-                    call,
+                return _reject_step(
                     "immune_reject",
                     f"injection_taint_block: {_inj_block}",
+                    span_attrs={"octopus.injection.blocked": _inj_block},
                 )
-                self.journal.write_step(task_id, arm_id, step, actor=actor)
-                return step
 
             report = self.immunity.check(call, sig)
             self.journal.write_immune(
@@ -521,185 +642,11 @@ class ToolExecutor:
                 stderr_tags = list(pre_result.stderr_tags) + ["pre_hook_replaced"]
             else:
                 try:
-                    # Opt-in Session injection · if a skill handler
-                    # declares a `session` parameter, pass the current
-                    # Session to it (spares the handler an inline
-                    # `current_session()` lookup). Old handlers without
-                    # the param keep working — we detect via inspect.
-                    import inspect as _inspect
-
-                    handler_params: dict[str, Any] = {}
-                    try:
-                        sig = _inspect.signature(skill.handler)
-                        handler_params = dict(sig.parameters)
-                    except (TypeError, ValueError):
-                        handler_params = {}
-
-                    if "session" in handler_params and "session" not in args:
-                        from runtime.platform.process.session import current_session
-
-                        args = {**args, "session": current_session()}
-
-                    # Mode-gated sandbox injection / enforcement.
-                    # Any skill whose handler declares ``sandbox_dir``
-                    # participates in the permission domain: if the LLM
-                    # didn't pass one, fill in the scope's primary root
-                    # (per-agent/per-thread workspace) · if it DID pass
-                    # one, reject the call when the path escapes the
-                    # scope's allowed roots.
-                    # Same gate covers chat/team/code — the scope
-                    # resolver itself encodes which tier the turn has
-                    # · so this block stays mode-agnostic.
-                    # Directory-base parameter names that mean "where
-                    # to start scanning / listing / globbing". When the
-                    # LLM omits them (or passes ``"."``), we want them
-                    # to default to the user's selected workspace, not
-                    # to whatever cwd uvicorn happened to start from.
-                    # This is what makes "analyze the code in this
-                    # folder" actually scan the folder the user picked
-                    # in the WorkDirSelector, instead of hitting the
-                    # project root by accident.
-                    _root_params = (
-                        "root",
-                        "cwd",
-                        "working_dir",
-                        "directory",
-                        "base_dir",
-                        "repo_dir",
-                    )
-                    # Parameters that carry a file/directory path (not a
-                    # directory-base). When the LLM passes a relative path
-                    # like "src/main.py" or just ".", we resolve it against
-                    # scope.primary so it lands in the user's workspace
-                    # instead of the process CWD (which is typically the
-                    # octopus-agent project root — the exact bug where
-                    # "analyze this project" scanned octopus-agent itself).
-                    _path_params = ("path", "filepath", "file_path", "filename")
-                    has_sandbox = "sandbox_dir" in handler_params
-                    has_root_param = any(p in handler_params for p in _root_params)
-                    has_path_param = any(p in handler_params for p in _path_params)
-
-                    if has_sandbox or has_root_param or has_path_param:
-                        from runtime.platform.process.session import (
-                            current_session,
-                        )
-
-                        _sess = current_session()
-                        # Scope is only enforced when a Session is
-                        # bound. Direct callers (tests, programmatic
-                        # runtime use without the compat router)
-                        # bypass the mode ladder — the Session is what
-                        # carries mode/agent/team_id/extras, and
-                        # without it we have no tier to gate against.
-                        # The old "LLM chooses sandbox_dir" contract
-                        # still applies on that path.
-                        if _sess is not None:
-                            from runtime.platform.process.scope import (
-                                resolve_execution_scope,
-                            )
-
-                            scope = resolve_execution_scope(_sess)
-                            read_primary = scope.primary_read
-                            _mutates_files = bool(
-                                set(skill.affinity or []) & {"write", "edit", "exec", "dangerous"}
-                            )
-                            arg_primary = scope.primary_write if _mutates_files else read_primary
-                            # Read-side root injection · only fires
-                            # for skills that accept a directory-base
-                            # parameter. Symmetric with the write-side
-                            # ``sandbox_dir`` defaulting below: if the
-                            # LLM didn't supply the root (or supplied
-                            # the meaningless ``"."``), inject
-                            # ``scope.primary`` so the read scans the
-                            # user's selected folder.
-                            if has_root_param and arg_primary is not None:
-                                for _rp in _root_params:
-                                    if _rp not in handler_params:
-                                        continue
-                                    _supplied = args.get(_rp)
-                                    if _supplied in (None, "", ".", "./"):
-                                        args = {
-                                            **args,
-                                            _rp: str(arg_primary),
-                                        }
-                                        break
-
-                            # Path-param injection · for skills where
-                            # the param name is "path" (not "root").
-                            # When the LLM passes a relative path, resolve
-                            # it against scope.primary so the skill reads
-                            # from the user's workspace, not the process CWD.
-                            if has_path_param and arg_primary is not None:
-                                for _pp in _path_params:
-                                    if _pp not in handler_params:
-                                        continue
-                                    _supplied = args.get(_pp)
-                                    if _supplied is None or _supplied == "":
-                                        continue
-                                    if _supplied == "." or _supplied == "./":
-                                        args = {**args, _pp: str(arg_primary)}
-                                        break
-                                    _supplied_str = str(_supplied)
-                                    if not Path(_supplied_str).is_absolute():
-                                        args = {
-                                            **args,
-                                            _pp: str(arg_primary / _supplied_str),
-                                        }
-                                        break
-
-                            # Write-side · only relevant for skills
-                            # whose handler accepts ``sandbox_dir``.
-                            if has_sandbox:
-                                # Plan mode · empty roots · EVERY write
-                                # call rejected. Caller must transition
-                                # out via ``exit_plan_mode`` skill.
-                                if scope.primary_write is None:
-                                    raise PermissionError(
-                                        f"write skill {sucker_id!r} blocked: "
-                                        f"thread is in '{scope.mode}' mode "
-                                        "(no write scope). Call "
-                                        "'exit_plan_mode' first with a confirmed "
-                                        "plan summary to transition to chat / "
-                                        "team / code mode."
-                                    )
-                                supplied = args.get("sandbox_dir")
-                                default_sandbox = (
-                                    scope.primary_write if _mutates_files else read_primary
-                                )
-                                if not supplied:
-                                    # Lazily create the primary root so
-                                    # the skill can open files there
-                                    # without having to mkdir itself.
-                                    if _mutates_files:
-                                        with contextlib.suppress(OSError):
-                                            scope.primary_write.mkdir(
-                                                parents=True,
-                                                exist_ok=True,
-                                            )
-                                    args = {
-                                        **args,
-                                        "sandbox_dir": str(default_sandbox),
-                                    }
-                                elif not (
-                                    scope.allows_write(supplied)
-                                    if _mutates_files
-                                    else scope.allows_read(supplied)
-                                ):
-                                    raise PermissionError(
-                                        f"sandbox_dir {supplied!r} escapes "
-                                        f"write scope (mode={scope.mode}, "
-                                        f"requested_mode={scope.requested_mode}, "
-                                        f"writable_roots="
-                                        f"{[str(r) for r in scope.writable_roots]}, "
-                                        f"readable_roots="
-                                        f"{[str(r) for r in scope.readable_roots]}, "
-                                        f"workspace_path="
-                                        f"{(_sess.metadata or {}).get('workspace_path', 'NOT SET')}"
-                                        "). If workspace_path is NOT SET, "
-                                        "the session lost its code-mode context. "
-                                        "Try opening a new code thread "
-                                        "with the correct workspace selected."
-                                    )
+                    # Session injection + workspace-scope defaulting and
+                    # enforcement. Raises PermissionError inside this try
+                    # so scope escapes map to the same except branch as
+                    # every other file-safety denial.
+                    args = _prepare_scoped_args(skill, sucker_id, args)
                     _read_guard_reason = _read_before_write_violation(
                         str(sucker_id),
                         args,
