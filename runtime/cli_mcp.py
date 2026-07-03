@@ -292,7 +292,7 @@ async def _run_sse_server(host: str, port: int) -> None:
     try:
         while True:
             await asyncio.sleep(3600)
-    except (KeyboardInterrupt, asyncio.CancelledError):
+    except (KeyboardInterrupt, asyncio.CancelledError):  # expected · normal shutdown signal
         pass
     finally:
         await coordinator.stop()

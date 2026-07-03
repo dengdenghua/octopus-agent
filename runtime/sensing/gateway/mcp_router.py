@@ -138,6 +138,14 @@ def create_mcp_router(
         # Router-level auth keeps MCP config/trust self-contained: if
         # this router is mounted without app.py's legacy middleware, it
         # still refuses anonymous callers in auth-on deployments.
+        #
+        # The OAuth callback is exempt: it is reached by the *provider*
+        # redirecting the user's browser, which carries no Authorization
+        # header — gating it would deadlock the flow in auth-on
+        # deployments. Its credential is the single-use, TTL-bounded
+        # ``state`` parameter checked in the handler itself.
+        if request.url.path.endswith("/api/mcp/oauth/callback"):
+            return
         from runtime.adapters.web_auth import _resolve_actor
 
         _resolve_actor(
@@ -415,6 +423,148 @@ def create_mcp_router(
                 "note": entry.note,
             },
         }
+
+    # ─── OAuth (remote MCP servers that require it) ────────
+    #
+    # runtime/adapters/mcp_client/oauth.py (PKCE authorize/token/store) and
+    # oauth_discovery.py (RFC 9728/8414/7591 endpoint discovery + dynamic
+    # client registration) existed with full test coverage on the core
+    # module but were never wired to a route — a server needing OAuth had
+    # no way to get authorized. These three endpoints close that gap:
+    #   1. POST   /api/mcp/oauth/authorize  · discover + kick off PKCE
+    #   2. GET    /api/mcp/oauth/callback   · provider redirects here
+    #   3. GET    /api/mcp/oauth/status     · UI polls "authorized?"
+    # HttpMCPClient._transport() (client.py) reads the resulting token via
+    # ``bearer_for_server(config.name)`` on every connect.
+
+    def _oauth_redirect_uri(request: Request) -> str:
+        return str(request.base_url).rstrip("/") + "/api/mcp/oauth/callback"
+
+    @router.post("/api/mcp/oauth/authorize")
+    def api_mcp_oauth_authorize(
+        body: dict[str, Any], request: Request,
+    ) -> dict[str, Any]:
+        server = str(body.get("server") or "").strip()
+        url = str(body.get("url") or "").strip()
+        if not server:
+            raise HTTPException(400, "server required")
+        if not url:
+            raise HTTPException(400, "url required")
+
+        from runtime.adapters.mcp_client import oauth, oauth_discovery
+
+        endpoints = oauth_discovery.discover(url)
+        if endpoints is None:
+            raise HTTPException(
+                400,
+                "OAuth discovery failed — the server may not support OAuth, "
+                "or the well-known metadata endpoints are unreachable.",
+            )
+
+        redirect_uri = _oauth_redirect_uri(request)
+        store = oauth.get_oauth_store()
+        client_id = store.get_client(endpoints.issuer)
+        if not client_id and endpoints.registration_url:
+            client_id = oauth_discovery.register_client(
+                endpoints.registration_url, redirect_uri=redirect_uri,
+            )
+            if client_id:
+                store.save_client(endpoints.issuer, client_id)
+        if not client_id:
+            raise HTTPException(
+                400,
+                "no client_id available for this server — it doesn't "
+                "support dynamic client registration; configure headers "
+                "with a manually-issued token instead.",
+            )
+
+        verifier, challenge = oauth.new_pkce()
+        state = store.start_pending(
+            server=server,
+            code_verifier=verifier,
+            redirect_uri=redirect_uri,
+            token_url=endpoints.token_url,
+            client_id=client_id,
+        )
+        authorize_url = oauth.build_authorize_url(
+            authorize_url=endpoints.authorize_url,
+            client_id=client_id,
+            redirect_uri=redirect_uri,
+            scopes=list(endpoints.scopes) or None,
+            state=state,
+            code_challenge=challenge,
+        )
+        return {"ok": True, "authorize_url": authorize_url}
+
+    @router.get("/api/mcp/oauth/callback")
+    def api_mcp_oauth_callback(
+        code: str | None = None,
+        state: str | None = None,
+        error: str | None = None,
+    ) -> Any:
+        from fastapi.responses import HTMLResponse
+
+        def _page(message: str, *, ok: bool) -> HTMLResponse:
+            # Standard OAuth-popup pattern: the frontend opens
+            # authorize_url in a popup; this page is the redirect
+            # target, so it posts the result to the opener and closes
+            # itself rather than leaving a dead tab open.
+            safe = message.replace("<", "&lt;").replace(">", "&gt;")
+            status = "ok" if ok else "error"
+            return HTMLResponse(f"""<!doctype html><html><body>
+<p>{safe}</p>
+<script>
+try {{
+  window.opener && window.opener.postMessage(
+    {{ source: "octopus-mcp-oauth", status: "{status}" }}, "*"
+  );
+}} catch (e) {{}}
+window.close();
+</script>
+</body></html>""")
+
+        if error:
+            return _page(f"Authorization failed: {error}", ok=False)
+        if not code or not state:
+            return _page("Missing code/state in callback.", ok=False)
+
+        from runtime.adapters.mcp_client import oauth
+
+        store = oauth.get_oauth_store()
+        pending = store.pop_pending(state)
+        if pending is None:
+            return _page(
+                "Invalid or expired authorization request — please retry.",
+                ok=False,
+            )
+        try:
+            token_response = oauth.exchange_code(
+                token_url=pending.token_url,
+                code=code,
+                code_verifier=pending.code_verifier,
+                client_id=pending.client_id,
+                redirect_uri=pending.redirect_uri,
+            )
+        except Exception as exc:  # noqa: BLE001 — surface to the popup, not a 500
+            return _page(f"Token exchange failed: {exc}", ok=False)
+
+        store.save_tokens(
+            pending.server, token_response,
+            token_url=pending.token_url, client_id=pending.client_id,
+        )
+        return _page(f"Authorized {pending.server}. You can close this tab.", ok=True)
+
+    @router.get("/api/mcp/oauth/status")
+    def api_mcp_oauth_status(server: str) -> dict[str, Any]:
+        from runtime.adapters.mcp_client import oauth
+
+        return {"server": server, "authorized": oauth.get_oauth_store().has_tokens(server)}
+
+    @router.delete("/api/mcp/oauth/{server_name}")
+    def api_mcp_oauth_forget(server_name: str) -> dict[str, Any]:
+        from runtime.adapters.mcp_client import oauth
+
+        return {"ok": oauth.get_oauth_store().forget(server_name)}
 
     @router.delete("/api/mcp/trust/{server_name}")
     def api_mcp_trust_revoke(server_name: str) -> dict[str, Any]:

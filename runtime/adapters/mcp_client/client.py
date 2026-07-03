@@ -316,7 +316,20 @@ class HttpMCPClient(MCPClient):
         ``sse`` a 2-tuple ``(read, write)``; callers index ``[0]``/``[1]``
         so both shapes work uniformly.
         """
-        headers = dict(self.config.headers) if self.config.headers else None
+        headers = dict(self.config.headers) if self.config.headers else {}
+        # OAuth-authorized servers (see mcp_router.py's /api/mcp/oauth/*
+        # endpoints) get their bearer token injected here rather than
+        # baked into ``config.headers`` — tokens refresh/expire and are
+        # looked up fresh on every connect. An explicit Authorization
+        # header the user pasted into the server config always wins
+        # (manual token beats auto-OAuth).
+        if "Authorization" not in headers and "authorization" not in headers:
+            from .oauth import bearer_for_server
+
+            token = bearer_for_server(self.config.name)
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+        headers = headers or None
         timeout = max(1.0, self.config.timeout_ms / 1000.0)
         if self.config.transport == "sse":
             from mcp.client.sse import sse_client
