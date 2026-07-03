@@ -144,6 +144,38 @@ def test_stub_router_can_be_disabled_by_env(monkeypatch: pytest.MonkeyPatch) -> 
     assert r.status_code == 404
 
 
+def test_stub_router_is_disabled_when_auth_is_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # MAT-1: auth-on is the deploy signal — simulated account/billing data
+    # must be opt-in there, never the silent default.
+    monkeypatch.delenv("OCTOPUS_ALLOW_STUB_API", raising=False)
+    app = FastAPI()
+    app.include_router(create_stub_router(require_auth=True))
+    client = TestClient(app)
+
+    assert client.get("/api/account/profile").status_code == 404
+
+
+def test_allow_env_overrides_auth_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OCTOPUS_ALLOW_STUB_API", "1")
+    app = FastAPI()
+    app.include_router(create_stub_router(require_auth=True))
+    client = TestClient(app)
+
+    assert client.get("/api/account/profile").status_code == 200
+
+
+def test_disable_env_wins_over_allow_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OCTOPUS_ALLOW_STUB_API", "1")
+    monkeypatch.setenv("OCTOPUS_DISABLE_STUB_API", "1")
+    app = FastAPI()
+    app.include_router(create_stub_router())
+    client = TestClient(app)
+
+    assert client.get("/api/account/profile").status_code == 404
+
+
 def test_stub_router_is_disabled_in_production_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

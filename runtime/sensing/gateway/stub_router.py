@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, Request, Response
 from fastapi.routing import APIRoute
+
+_LOG = logging.getLogger(__name__)
 
 _STUB_HEADER = "X-Octopus-Stub"
 _STUB_REASON_HEADER = "X-Octopus-Stub-Reason"
@@ -30,13 +33,18 @@ def _env_truthy(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in _TRUTHY
 
 
-def _stub_api_enabled(enabled: bool | None) -> bool:
+def _stub_api_enabled(enabled: bool | None, *, require_auth: bool = False) -> bool:
     if enabled is not None:
         return enabled
     if _env_truthy(_DISABLE_ENV) or _env_truthy(_REAL_API_REQUIRED_ENV):
         return False
     if _env_truthy(_ALLOW_ENV):
         return True
+    # Auth-on is the product's deploy signal: fake account/billing/usage
+    # data must never be the silent default on a surface someone actually
+    # exposed — opt back in with OCTOPUS_ALLOW_STUB_API if truly wanted.
+    if require_auth:
+        return False
     env_name = os.environ.get(_ENV_ENV, "").strip().lower()
     return env_name not in _PRODUCTION_ENVS
 
@@ -84,11 +92,17 @@ class _StubRoute(APIRoute):
 def create_stub_router(
     *,
     enabled: bool | None = None,
+    require_auth: bool = False,
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
 ) -> APIRouter:
-    if not _stub_api_enabled(enabled):
+    if not _stub_api_enabled(enabled, require_auth=require_auth):
+        _LOG.info(
+            "stub API disabled (auth=%s, %s to force-enable)",
+            "on" if require_auth else "off",
+            _ALLOW_ENV,
+        )
         return APIRouter(tags=["stub-disabled"])
 
     router = APIRouter(tags=["stub"], route_class=_StubRoute)
@@ -657,4 +671,11 @@ def create_stub_router(
     def _swarm_tasks_create() -> dict[str, Any]:
         return {"id": "stub", "status": "pending"}
 
+    _LOG.info(
+        "stub API mounted: %d compatibility routes returning simulated "
+        "account/billing/usage data (responses carry %s; disable with %s)",
+        len(router.routes),
+        _STUB_HEADER,
+        _DISABLE_ENV,
+    )
     return router

@@ -2475,6 +2475,7 @@ def create_app(
 
     app.include_router(
         create_stub_router(
+            require_auth=cocoloop_require_auth,
             jwt_secret=cocoloop_jwt_secret,
             jwt_issuer=cocoloop_jwt_issuer,
             jwt_audience=cocoloop_jwt_audience,
