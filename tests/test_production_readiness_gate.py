@@ -29,7 +29,7 @@ def test_production_readiness_gate_passes_current_release_signals(
     assert result.e2e_verdict == "surpassed"
     assert result.e2e_summary["scorecard_octopus"] == 97
     assert result.e2e_summary["scorecard_best_external"] == 87
-    assert result.e2e_summary["automation_octopus"] == 95
+    assert result.e2e_summary["automation_octopus"] == 96
     assert result.e2e_summary["coverage_ready"] == 7
     assert result.e2e_summary["coverage_total"] == 7
     assert result.e2e_summary["coverage_gap_domains"] == 0
@@ -39,7 +39,7 @@ def test_production_readiness_gate_passes_current_release_signals(
     assert result.e2e_failed_checks == []
     assert result.e2e_summary_text == (
         "e2e_scorecard=97, e2e_best_external=87, "
-        "e2e_automation=95, e2e_coverage=7/7, e2e_quality=6/6"
+        "e2e_automation=96, e2e_coverage=7/7, e2e_quality=6/6"
     )
     assert "octopus.repo_context_quality.v1" in result.quality_summary
     assert "octopus.product_experience_quality.v1" in result.quality_summary
@@ -59,7 +59,7 @@ def test_production_readiness_gate_prints_e2e_summary(
     assert "e2e=surpassed" in captured.out
     assert "e2e_scorecard=97" in captured.out
     assert "e2e_best_external=87" in captured.out
-    assert "e2e_automation=95" in captured.out
+    assert "e2e_automation=96" in captured.out
     assert "e2e_coverage=7/7" in captured.out
     assert "e2e_quality=6/6" in captured.out
 
@@ -84,7 +84,7 @@ def test_production_readiness_gate_can_emit_json_summary(
     assert data["ready"] is True
     assert data["failures"] == []
     assert data["scorecard_score"] == 97
-    assert data["automation_score"] == 95
+    assert data["automation_score"] == 96
     assert data["e2e"]["ready"] is True
     assert data["e2e"]["verdict"] == "surpassed"
     assert data["e2e"]["summary"]["scorecard_best_external"] == 87
@@ -257,7 +257,7 @@ def test_production_readiness_gate_blocks_e2e_summary_drift(
     result = gate.run_gate(min_score=95, review_queue_path=review_queue_path)
 
     assert any(
-        "e2e summary mismatch: automation_octopus=94, expected 95" in item
+        "e2e summary mismatch: automation_octopus=94, expected 96" in item
         for item in result.failures
     )
 
