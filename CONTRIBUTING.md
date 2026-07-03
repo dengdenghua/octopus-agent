@@ -106,7 +106,7 @@ PR 描述和 commit message 里**用工程名**（"fix planner fallback"而非"f
   - 需求：`handle_webhook()` + `send()` + 签名验证
 
 - **Skin 环境感知模块**（新目录）
-  - 切入：`runtime/skin/` 建模块，定义 `EnvSensor` 协议
+  - 切入：`runtime/sensing/normalize/sensors/`（已有 `file_watcher.py`），扩展 `EnvSensor` 协议
   - 把 FS watcher / git hook / dir change 翻译成 `TypedEventBus` 事件
   - 零耦合 · 不动核心
 
