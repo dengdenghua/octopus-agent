@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import shutil
 import sqlite3
+import sys
+
+import pytest
 
 from runtime.memory.cowork import service
 from runtime.memory.cowork.async_runner import AsyncWorkRunner
@@ -149,6 +152,10 @@ def test_tick_once_records_failure_health(tmp_path, monkeypatch) -> None:
     assert status["last_failure_at"]
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows cannot delete an open sqlite file; removed-under-live-store is a POSIX-only scenario",
+)
 def test_tick_once_self_heals_missing_async_work_directory(tmp_path) -> None:
     base_dir = tmp_path / "cowork"
     gs = GroupStore(base_dir=base_dir)

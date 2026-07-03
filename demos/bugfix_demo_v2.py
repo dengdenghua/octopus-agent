@@ -209,18 +209,20 @@ def run_demo_v2(*, workdir: Path | None = None, color: bool = True) -> dict[str,
         root = Path(workdir)
         root.mkdir(parents=True, exist_ok=True)
 
-    soul_backup: str | None = None
+    soul_backup: bytes | None = None
     try:
         # ── backup SOUL.md so repeated runs don't accumulate ──
+        # Bytes, not text: text-mode round-trips rewrite \n as \r\n on
+        # Windows and the restore is contractually byte-identical.
         if SOUL_PATH.exists():
-            soul_backup = SOUL_PATH.read_text(encoding="utf-8")
+            soul_backup = SOUL_PATH.read_bytes()
 
         print(c.bold("╭─────────────────────────────────────────────────╮"))
         print(c.bold("│ octopus-agent · Bug Fix Demo v2 (evolution)     │"))
         print(c.bold("╰─────────────────────────────────────────────────╯"))
         print()
         print(c.dim(f"  workdir: {root}"))
-        print(c.dim(f"  SOUL.md backup: {len(soul_backup) if soul_backup else 0} chars"))
+        print(c.dim(f"  SOUL.md backup: {len(soul_backup) if soul_backup else 0} bytes"))
         print()
 
         # ── Round 1 · fix first bug + record lesson ──
@@ -302,13 +304,13 @@ def run_demo_v2(*, workdir: Path | None = None, color: bool = True) -> dict[str,
             "round1_commits": commits1,
             "round2_commits": commits2,
             "lesson_persisted": LESSON_TAG in soul_now,
-            "soul_chars_before": len(soul_backup or ""),
+            "soul_chars_before": len(soul_backup or b""),
             "soul_chars_after": len(soul_now),
         }
     finally:
         # Always restore SOUL.md so demo is idempotent
         if soul_backup is not None:
-            SOUL_PATH.write_text(soul_backup, encoding="utf-8")
+            SOUL_PATH.write_bytes(soul_backup)
         if tmp_ctx is not None:
             tmp_ctx.cleanup()
 
