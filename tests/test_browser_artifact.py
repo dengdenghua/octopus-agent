@@ -190,6 +190,10 @@ def test_screenshot_artifact_includes_previous_pixel_comparison(
         bas._ACTIVE_ARTIFACT_EMITTER.reset(emitter_token)
 
     assert len(events) == 2
+    # Two emits must land in two distinct files — on Windows/Py3.11 the
+    # coarse clock used to collide the timestamped names, so the second
+    # write clobbered the first and the comparison ran against itself.
+    assert len(list((tmp_path / "artifacts").glob("screenshot-*.png"))) == 2
     assert "pixel_comparison" not in events[0]
     assert events[1]["pixel_comparison"]["schema"] == "octopus.browser_pixel_comparison.v1"
     assert events[1]["pixel_comparison"]["ok"] is True

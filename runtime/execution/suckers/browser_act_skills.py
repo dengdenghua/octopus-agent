@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 from urllib import error as urllib_error
 from urllib import request as urllib_request
+from uuid import uuid4
 
 from .registry import Skill, SkillRegistry
 
@@ -303,10 +304,14 @@ def _emit_screenshot_artifact(bridge_response: dict[str, Any]) -> None:
             raw_b64 = raw_b64.split(",", 1)[1]
         img_bytes = base64.b64decode(raw_b64)
 
+        # uuid suffix: on Windows/Py3.11 datetime.now() ticks at ~15.6ms,
+        # so back-to-back screenshots got the SAME name — the second write
+        # overwrote the first and the previous-pixel comparison compared
+        # the file with itself.
         ts = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
         root = _artifacts_root()
         root.mkdir(parents=True, exist_ok=True)
-        fname = f"screenshot-{ts}.png"
+        fname = f"screenshot-{ts}-{uuid4().hex[:6]}.png"
         fpath = root / fname
         previous_path = _LAST_SCREENSHOT_ARTIFACT.get()
         fpath.write_bytes(img_bytes)
