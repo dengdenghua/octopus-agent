@@ -8,7 +8,12 @@ level control across all ``runtime.*`` loggers.
 Environment variables
 ---------------------
 OCTOPUS_LOG_LEVEL   default INFO · one of DEBUG/INFO/WARNING/ERROR
-OCTOPUS_LOG_FORMAT  default ``%(asctime)s [%(levelname)s] %(name)s: %(message)s``
+OCTOPUS_LOG_FORMAT  default ``%(asctime)s [%(levelname)s] %(name)s: %(message)s``.
+                    Set to ``json`` (or ``structured``) to emit one JSON
+                    object per line via ``StructuredFormatter`` — correlation
+                    IDs + secret redaction, suited to log-aggregation
+                    pipelines (ELK / Loki / Datadog). Any other value is used
+                    as a printf format string (the historical default).
 """
 
 from __future__ import annotations
@@ -47,9 +52,31 @@ def configure_logging() -> None:
         return
 
     handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(logging.Formatter(fmt))
+    handler.setFormatter(_build_formatter(fmt))
     root.addHandler(handler)
     root.setLevel(level)
 
     for name in _NOISY_LOGGERS:
         logging.getLogger(name).setLevel(logging.WARNING)
+
+
+def _build_formatter(fmt: str) -> logging.Formatter:
+    """Select the log formatter.
+
+    ``OCTOPUS_LOG_FORMAT=json`` (or ``structured``) installs the JSON
+    ``StructuredFormatter`` — one JSON object per line with correlation
+    IDs and secret redaction, suited to log-aggregation pipelines. Any
+    other value is treated as a printf format string (the historical
+    default). Falling back to plain text on any import/construction
+    failure keeps process startup from ever dying on logging setup.
+    """
+    if fmt.strip().lower() in {"json", "structured"}:
+        try:
+            from runtime.platform.observability.structured_logging import (
+                StructuredFormatter,
+            )
+
+            return StructuredFormatter(redact=True)
+        except Exception:  # pragma: no cover - defensive: never fail logging setup
+            return logging.Formatter(_DEFAULT_FORMAT)
+    return logging.Formatter(fmt)
