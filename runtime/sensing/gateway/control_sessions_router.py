@@ -89,10 +89,10 @@ def create_control_sessions_router(
     """
     session_store = store or ControlSessionStore(base_dir=base_dir)
 
-    def _auth_dep(request: Request) -> None:
+    def _auth_dep(request: Request) -> str | None:
         from runtime.adapters.web_auth import _resolve_actor
 
-        _resolve_actor(
+        return _resolve_actor(
             request,
             identity_store,
             require_auth,
@@ -110,19 +110,54 @@ def create_control_sessions_router(
     def _bad_request(exc: ValueError) -> HTTPException:
         return HTTPException(400, str(exc))
 
+    def _owned_or_404(session: dict[str, Any] | None, actor: str | None) -> dict[str, Any]:
+        # Object-level ownership gate. A control session drives a real
+        # browser/desktop and stores replay screenshots, so it may only be
+        # read or driven by the authenticated principal that created it. We
+        # raise 404 (not 403) so a non-owner can't even confirm the id exists.
+        # Single-user/dev mode (require_auth off → actor is None) and legacy
+        # sessions with no recorded creator skip the gate.
+        if session is None:
+            raise HTTPException(404, "control session not found")
+        creator = session.get("creator_actor")
+        if actor is not None and creator is not None and creator != actor:
+            raise HTTPException(404, "control session not found")
+        return session
+
+    def _require_owned(session_id: str, actor: str | None) -> dict[str, Any]:
+        try:
+            session = session_store.get_session(session_id)
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
+        return _owned_or_404(session, actor)
+
     @router.get("")
     def list_sessions(
         surface: str | None = None,
         limit: int = Query(default=50, ge=1, le=500),
+        actor: str | None = Depends(_auth_dep),
     ) -> dict[str, Any]:
         try:
-            sessions = session_store.list_sessions(surface=surface, limit=limit)
+            sessions = session_store.list_sessions(
+                surface=surface, limit=limit, creator_actor=actor
+            )
         except ValueError as exc:
             raise _bad_request(exc) from exc
         return {"sessions": sessions, "count": len(sessions)}
 
     @router.post("")
-    def create_or_takeover_session(body: ControlSessionBody) -> dict[str, Any]:
+    def create_or_takeover_session(
+        body: ControlSessionBody, actor: str | None = Depends(_auth_dep)
+    ) -> dict[str, Any]:
+        # An existing session may only be re-driven / taken over by its owner;
+        # a fresh one records the caller as creator_actor (preserved on update).
+        if body.session_id:
+            try:
+                existing = session_store.get_session(body.session_id)
+            except ValueError as exc:
+                raise _bad_request(exc) from exc
+            if existing is not None:
+                _owned_or_404(existing, actor)
         try:
             session = session_store.upsert_session(
                 session_id=body.session_id,
@@ -134,23 +169,22 @@ def create_control_sessions_router(
                 metadata=body.metadata,
                 ttl_seconds=body.ttl_seconds,
                 takeover=body.takeover,
+                creator_actor=actor,
             )
         except ValueError as exc:
             raise _bad_request(exc) from exc
         return {"ok": True, "session": session}
 
     @router.get("/{session_id}")
-    def get_session(session_id: str) -> dict[str, Any]:
-        try:
-            session = session_store.get_session(session_id)
-        except ValueError as exc:
-            raise _bad_request(exc) from exc
-        if session is None:
-            raise HTTPException(404, "control session not found")
+    def get_session(session_id: str, actor: str | None = Depends(_auth_dep)) -> dict[str, Any]:
+        session = _require_owned(session_id, actor)
         return {"session": session}
 
     @router.post("/{session_id}/actions")
-    def append_action(session_id: str, body: ControlActionBody) -> dict[str, Any]:
+    def append_action(
+        session_id: str, body: ControlActionBody, actor: str | None = Depends(_auth_dep)
+    ) -> dict[str, Any]:
+        _require_owned(session_id, actor)
         try:
             action = session_store.append_action(
                 session_id,
@@ -173,7 +207,9 @@ def create_control_sessions_router(
         session_id: str,
         action_id: str,
         body: ControlActionUpdateBody,
+        actor: str | None = Depends(_auth_dep),
     ) -> dict[str, Any]:
+        _require_owned(session_id, actor)
         try:
             action = session_store.update_action(
                 session_id,
@@ -189,7 +225,10 @@ def create_control_sessions_router(
         return {"ok": True, "action": action}
 
     @router.post("/{session_id}/evidence")
-    def append_evidence(session_id: str, body: ControlEvidenceBody) -> dict[str, Any]:
+    def append_evidence(
+        session_id: str, body: ControlEvidenceBody, actor: str | None = Depends(_auth_dep)
+    ) -> dict[str, Any]:
+        _require_owned(session_id, actor)
         try:
             evidence = session_store.append_evidence(
                 session_id,
@@ -209,7 +248,10 @@ def create_control_sessions_router(
         return {"ok": True, "evidence": evidence}
 
     @router.get("/{session_id}/evidence/{evidence_id}/detail")
-    def evidence_detail(session_id: str, evidence_id: str) -> dict[str, Any]:
+    def evidence_detail(
+        session_id: str, evidence_id: str, actor: str | None = Depends(_auth_dep)
+    ) -> dict[str, Any]:
+        _require_owned(session_id, actor)
         try:
             return session_store.evidence_detail(session_id, evidence_id)
         except KeyError as exc:
@@ -222,8 +264,10 @@ def create_control_sessions_router(
         *,
         status: str,
         body: ControlSessionStateBody,
+        actor: str | None,
         takeover: bool = False,
     ) -> dict[str, Any]:
+        _require_owned(session_id, actor)
         try:
             session = session_store.set_session_state(
                 session_id,
@@ -242,31 +286,45 @@ def create_control_sessions_router(
 
     @router.post("/{session_id}/pause")
     def pause_session(
-        session_id: str, body: ControlSessionStateBody | None = None
+        session_id: str,
+        body: ControlSessionStateBody | None = None,
+        actor: str | None = Depends(_auth_dep),
     ) -> dict[str, Any]:
-        return _set_state(session_id, status="paused", body=body or ControlSessionStateBody())
+        return _set_state(
+            session_id, status="paused", body=body or ControlSessionStateBody(), actor=actor
+        )
 
     @router.post("/{session_id}/resume")
     def resume_session(
-        session_id: str, body: ControlSessionStateBody | None = None
+        session_id: str,
+        body: ControlSessionStateBody | None = None,
+        actor: str | None = Depends(_auth_dep),
     ) -> dict[str, Any]:
-        return _set_state(session_id, status="idle", body=body or ControlSessionStateBody())
+        return _set_state(
+            session_id, status="idle", body=body or ControlSessionStateBody(), actor=actor
+        )
 
     @router.post("/{session_id}/stop")
     def stop_session(
-        session_id: str, body: ControlSessionStateBody | None = None
+        session_id: str,
+        body: ControlSessionStateBody | None = None,
+        actor: str | None = Depends(_auth_dep),
     ) -> dict[str, Any]:
-        return _set_state(session_id, status="stopped", body=body or ControlSessionStateBody())
+        return _set_state(
+            session_id, status="stopped", body=body or ControlSessionStateBody(), actor=actor
+        )
 
     @router.post("/{session_id}/takeover")
     def takeover_session(
         session_id: str,
         body: ControlSessionStateBody | None = None,
+        actor: str | None = Depends(_auth_dep),
     ) -> dict[str, Any]:
         return _set_state(
             session_id,
             status="paused",
             body=body or ControlSessionStateBody(reason="user takeover"),
+            actor=actor,
             takeover=True,
         )
 
@@ -274,7 +332,9 @@ def create_control_sessions_router(
     def replay_session(
         session_id: str,
         limit: int = Query(default=500, ge=1, le=5000),
+        actor: str | None = Depends(_auth_dep),
     ) -> dict[str, Any]:
+        _require_owned(session_id, actor)
         try:
             return session_store.replay(session_id, limit=limit)
         except KeyError as exc:
@@ -288,7 +348,9 @@ def create_control_sessions_router(
         limit: int = Query(default=500, ge=1, le=5000),
         after: float = Query(default=0.0, ge=0.0),
         after_cursor: str = "",
+        actor: str | None = Depends(_auth_dep),
     ) -> dict[str, Any]:
+        _require_owned(session_id, actor)
         try:
             return session_store.timeline(
                 session_id,
@@ -306,7 +368,12 @@ def create_control_sessions_router(
         session_id: str,
         request: Request,
         after: int = Query(default=0, ge=0),
+        actor: str | None = Depends(_auth_dep),
     ) -> StreamingResponse:
+        # Gate before the stream opens so a non-owner gets a clean 404 rather
+        # than an SSE error frame that would confirm the session exists.
+        _require_owned(session_id, actor)
+
         async def _gen():
             last = after
             try:

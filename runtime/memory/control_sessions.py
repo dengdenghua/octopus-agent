@@ -47,7 +47,12 @@ CREATE TABLE IF NOT EXISTS control_sessions (
     metadata_json  TEXT NOT NULL,
     created_at     REAL NOT NULL,
     updated_at     REAL NOT NULL,
-    expires_at     REAL
+    expires_at     REAL,
+    -- Authenticated principal that first created the session. NULL in
+    -- single-user/dev mode (require_auth off). The router's ownership gate
+    -- compares this against the caller's resolved actor so one authenticated
+    -- user cannot read or drive another user's control session.
+    creator_actor  TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_control_sessions_surface
     ON control_sessions(surface, updated_at);
@@ -195,6 +200,7 @@ def _row_to_session(row: sqlite3.Row | tuple[Any, ...]) -> dict[str, Any]:
         "created_at": float(row[9]),
         "updated_at": float(row[10]),
         "expires_at": float(row[11]) if row[11] is not None else None,
+        "creator_actor": row[12] if len(row) > 12 else None,
     }
 
 
@@ -242,6 +248,16 @@ class ControlSessionStore:
         self._lock = threading.RLock()
         with self._lock, self._connect() as conn:
             conn.executescript(_SCHEMA)
+            self._migrate_locked(conn)
+
+    @staticmethod
+    def _migrate_locked(conn: sqlite3.Connection) -> None:
+        # Idempotent column additions for DBs created before a column existed.
+        # CREATE TABLE IF NOT EXISTS never alters an existing table, so add
+        # newer columns here guarded by a table_info probe.
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(control_sessions)")}
+        if "creator_actor" not in cols:
+            conn.execute("ALTER TABLE control_sessions ADD COLUMN creator_actor TEXT")
 
     @property
     def base_dir(self) -> Path:
@@ -266,6 +282,7 @@ class ControlSessionStore:
         metadata: dict[str, Any] | None = None,
         ttl_seconds: float | None = None,
         takeover: bool = False,
+        creator_actor: str | None = None,
     ) -> dict[str, Any]:
         sid = _require_id(session_id or f"control-{uuid4().hex[:16]}", label="session_id")
         surf = _surface(surface)
@@ -286,11 +303,14 @@ class ControlSessionStore:
             takeover_count = (int(existing[0] or 0) if existing else 0) + (
                 1 if takeover and existing else 0
             )
+            # creator_actor is set once at creation and preserved on update:
+            # it is absent from the DO UPDATE SET clause, so a later upsert
+            # (e.g. takeover) never rewrites the original owning principal.
             conn.execute(
                 "INSERT INTO control_sessions("
                 "session_id, owner_id, owner_label, surface, target_id, status, paused, "
-                "takeover_count, metadata_json, created_at, updated_at, expires_at"
-                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "takeover_count, metadata_json, created_at, updated_at, expires_at, creator_actor"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(session_id) DO UPDATE SET "
                 "owner_id=excluded.owner_id, owner_label=excluded.owner_label, "
                 "surface=excluded.surface, target_id=excluded.target_id, "
@@ -310,6 +330,7 @@ class ControlSessionStore:
                     created_at,
                     now,
                     expires_at,
+                    _optional_text(creator_actor, max_len=256) or None,
                 ),
             )
             session = self._session_locked(conn, sid)
@@ -328,18 +349,26 @@ class ControlSessionStore:
         *,
         surface: str | None = None,
         limit: int = 50,
+        creator_actor: str | None = None,
     ) -> list[dict[str, Any]]:
+        # When creator_actor is provided (auth-on multi-tenant), the listing is
+        # scoped to that principal so callers cannot enumerate other users'
+        # sessions. None (single-user/dev) returns all rows, unchanged.
         limit = max(1, min(500, int(limit)))
+        clauses: list[str] = []
         params: list[Any] = []
-        where = ""
         if surface:
-            where = "WHERE surface=?"
+            clauses.append("surface=?")
             params.append(_surface(surface))
+        if creator_actor is not None:
+            clauses.append("creator_actor=?")
+            params.append(_optional_text(creator_actor, max_len=256) or "")
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         with self._lock, self._connect() as conn:
             self._expire_all_locked(conn)
             rows = conn.execute(
                 "SELECT session_id, owner_id, owner_label, surface, target_id, status, paused, "
-                "takeover_count, metadata_json, created_at, updated_at, expires_at "
+                "takeover_count, metadata_json, created_at, updated_at, expires_at, creator_actor "
                 f"FROM control_sessions {where} ORDER BY updated_at DESC LIMIT ?",
                 (*params, limit),
             ).fetchall()
@@ -740,7 +769,7 @@ class ControlSessionStore:
     def _session_locked(self, conn: sqlite3.Connection, session_id: str) -> dict[str, Any] | None:
         row = conn.execute(
             "SELECT session_id, owner_id, owner_label, surface, target_id, status, paused, "
-            "takeover_count, metadata_json, created_at, updated_at, expires_at "
+            "takeover_count, metadata_json, created_at, updated_at, expires_at, creator_actor "
             "FROM control_sessions WHERE session_id=?",
             (session_id,),
         ).fetchone()
