@@ -40,23 +40,26 @@ make test        # 或 python -m pytest tests/ -q
 | 你想改的东西 | 去哪里 | 章鱼名（助记） |
 |---|---|---|
 | 任务规划 / 路由 | `runtime/core/cerebrum/` | 中枢脑 |
-| 快路径反射 / 缓存命中 | `runtime/core/spinal_cord/` | 脊髓 |
-| DAG 执行 / 任务图 | `runtime/core/ganglia/` | 神经节 |
+| 快路径反射 / 缓存命中 | `runtime/core/nerves/reflex/` | 脊髓（reflex） |
+| DAG 执行 / 任务图 | `runtime/core/graph_runtime/` | 神经节（ganglia） |
 | Worker agent 实例 | `runtime/execution/arms/` | 腕足 |
 | 技能注册 / 调用 | `runtime/execution/suckers/` | 吸盘 |
-| 工具执行引擎 | `runtime/execution/beak/` | 角质喙 |
-| 沙箱 / 安全边界 | `runtime/sensing/mantle/` | 外套膜 |
-| I/O 流水线 / SSE | `runtime/sensing/siphon/` | 漏斗 |
-| 输入解析 / 模型适配 | `runtime/sensing/eyes/` | 眼睛 |
-| 环境感知 / 文件监听 | `runtime/sensing/skin/` | 皮肤 |
+| 工具执行引擎 | `runtime/execution/tool_engine/` | 角质喙（beak） |
+| 沙箱 / 安全边界 | `runtime/safety/sandboxing/` | 外套膜（mantle） |
+| I/O 流水线 / SSE | `runtime/sensing/gateway/` | 漏斗（siphon） |
+| 输入解析 / 模型适配 | `runtime/sensing/model_router/` | 眼睛（eyes） |
+| 环境感知 / 文件监听 | `runtime/sensing/normalize/` | 皮肤（skin） |
 | 状态广播 / pub-sub | `runtime/safety/chromatophores/` | 色素细胞 |
-| 熔断 / 预算上限 | `runtime/safety/ink/` | 墨囊 |
-| 身份识别 / 风控 | `runtime/safety/immunity/` | 免疫 |
+| 熔断 / 预算上限 | `runtime/safety/budget_breaker/` | 墨囊（ink） |
+| 身份识别 / 风控 | `runtime/safety/auth/` | 免疫（immunity） |
 | HA 调度 / 心跳 | `runtime/core/hearts/` | 心脏 |
-| 长时记忆 / checkpoint | `runtime/memory/genome/` | 基因组 |
+| 长时记忆 / checkpoint | `runtime/memory/journal/` | 基因组（genome） |
 | 每轮上下文流 | `runtime/memory/hemolymph/` | 血淋巴 |
-| 策略 A/B / 灰度 | `runtime/safety/camouflage/` | 拟态 |
-| 反思 / 自进化 | `runtime/safety/regeneration/` | 再生 |
+| 策略 A/B / 灰度 | `runtime/safety/experiments/` | 拟态（camouflage） |
+| 反思 / 自进化 | `runtime/safety/recovery/` | 再生（regeneration） |
+
+> 部分早期章鱼名已改为功能名（括号内为历史助记名）。权威的器官名 ↔ 包路径
+> 映射见 [docs/architecture/module-map.md](docs/architecture/module-map.md)。
 
 PR 描述和 commit message 里**用工程名**（"fix planner fallback"而非"fix cerebrum fallback"），
 代码里的包名保持章鱼命名不变。这样 git log 对不熟悉隐喻的人也可读。
@@ -71,7 +74,7 @@ PR 描述和 commit message 里**用工程名**（"fix planner fallback"而非"f
 ## 贡献方向
 
 - 🟢 低门槛：加 Skill（见 [`suckers/builtins.py`](runtime/execution/suckers/builtins.py)）、加 skill tests、修文档
-- 🟡 中门槛：新 ModelRouter provider（[`eyes/`](runtime/sensing/eyes/)）、新 reflection producer（[`regeneration/`](runtime/safety/regeneration/)）
+- 🟡 中门槛：新 ModelRouter provider（[`model_router/`](runtime/sensing/model_router/)）、新 reflection producer（[`recovery/`](runtime/safety/recovery/)）
 - 🔴 高门槛：改 ToolExecutor / GraphRuntime / 不变量系统 —— 请先开 issue 讨论
 
 ## 明确"想要你做"的题目（good first / help wanted）
