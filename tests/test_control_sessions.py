@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from runtime.memory.control_sessions import ControlSessionStore
+from runtime.safety.auth import Identity, IdentityStore
 from runtime.sensing.gateway.control_sessions_router import create_control_sessions_router
 
 
@@ -432,3 +433,30 @@ def test_control_session_stores_large_swarm_replay_evidence_as_blob_ref(tmp_path
     assert other_session.status_code == 200
     blocked = client.get("/api/control-sessions/ctrl-other-1/evidence/evidence-swarm-replay/detail")
     assert blocked.status_code == 404
+
+
+def test_control_sessions_require_auth_when_enabled(tmp_path) -> None:
+    store_id = IdentityStore()
+    store_id.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_control_sessions_router(
+            store=ControlSessionStore(base_dir=tmp_path),
+            identity_store=store_id,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+
+    assert client.get("/api/control-sessions").status_code == 401
+    assert client.post(
+        "/api/control-sessions",
+        json={"session_id": "ctrl-auth-1", "surface": "browser", "target_id": "tab"},
+    ).status_code == 401
+    assert client.post("/api/control-sessions/ctrl-auth-1/takeover").status_code == 401
+
+    ok = client.get(
+        "/api/control-sessions",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert ok.status_code == 200

@@ -371,6 +371,28 @@ def run_serve(
     print(c.dim("\u2500" * 60))
     print(f"  config={config_path} \u00b7 planner={cfg.planner.type}")
 
+    # Security: warn loudly when the control plane is bound to a
+    # non-loopback interface with authentication disabled. With
+    # ``cocoloop_require_auth`` off, /api/config, /api/mcp,
+    # /api/remote-backends, /api/gene-locks, /api/permissions \u2026 answer
+    # any caller \u2014 fine on localhost, a real exposure the moment the
+    # bind host is reachable from the network. We warn rather than
+    # refuse so existing local dev workflows are unchanged.
+    _loopback_hosts = {"127.0.0.1", "localhost", "::1", "::ffff:127.0.0.1"}
+    if not uds and not require_ui_auth and host not in _loopback_hosts:
+        import sys as _sys
+
+        print(
+            c.bold(
+                f"\u26a0  SECURITY: control-plane auth is OFF and the server is "
+                f"bound to {host} (non-loopback). /api/* is reachable "
+                f"UNAUTHENTICATED by anyone who can route to this host. Enable "
+                f"'oct' or 'local_auth' in {config_path}, or bind 127.0.0.1, "
+                f"before exposing this."
+            ),
+            file=_sys.stderr,
+        )
+
     _p = cfg.planner
     if _p.type == "llm" and (
         _p.model.startswith("mock/") or _p.mock_response is not None

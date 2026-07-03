@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -70,9 +70,42 @@ def create_control_sessions_router(
     *,
     store: ControlSessionStore | None = None,
     base_dir: Path | str | None = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> APIRouter:
+    """Create the unified ``/api/control-sessions/*`` router.
+
+    This is the control plane for browser / Chrome / webview / computer
+    automation sessions — replay, takeover, pause/stop, and evidence for
+    every recorded operator session. It previously had NO auth at all,
+    unlike the sibling ``browser_router``/``computer_router`` it now
+    fronts. The dependency below closes that gap the same way
+    ``browser_router.create_browser_router`` does: a no-op when
+    ``require_auth`` is off (default / single-user dev), enforced 401
+    across every endpoint when auth is enabled.
+    """
     session_store = store or ControlSessionStore(base_dir=base_dir)
-    router = APIRouter(prefix="/api/control-sessions", tags=["control-sessions"])
+
+    def _auth_dep(request: Request) -> None:
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(
+        prefix="/api/control-sessions",
+        tags=["control-sessions"],
+        dependencies=[Depends(_auth_dep)],
+    )
 
     def _bad_request(exc: ValueError) -> HTTPException:
         return HTTPException(400, str(exc))

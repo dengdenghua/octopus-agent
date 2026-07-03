@@ -86,6 +86,14 @@ def _is_public_plugin_asset_request(method: str, path: str) -> bool:
     )
 
 
+def _is_oauth_callback_request(method: str, path: str) -> bool:
+    # The MCP OAuth callback is reached by the *provider* redirecting the
+    # user's browser, which carries no Authorization header — gating it
+    # here would deadlock the flow in auth-on deployments. Its credential
+    # is the single-use, TTL-bounded ``state`` checked in the handler.
+    return method.upper() in {"GET", "HEAD"} and path == "/api/mcp/oauth/callback"
+
+
 def _install_legacy_control_plane_auth(
     app: Any,
     *,
@@ -105,6 +113,8 @@ def _install_legacy_control_plane_auth(
             return await call_next(request)
         path = str(getattr(getattr(request, "url", None), "path", "") or "")
         if _is_public_plugin_asset_request(request.method, path):
+            return await call_next(request)
+        if _is_oauth_callback_request(request.method, path):
             return await call_next(request)
         if not any(
             _path_matches_prefix(path, prefix)
@@ -380,7 +390,7 @@ def create_app(
                     "pause_control: %d stale task(s) recovered from journal",
                     _recovered,
                 )
-        except (ImportError, AttributeError, TypeError):
+        except (ImportError, AttributeError, TypeError):  # best-effort · stale-task recovery is optional, startup proceeds either way
             pass
 
         # Wire the feature-flag registry to the on-disk override
@@ -473,8 +483,8 @@ def create_app(
                             router,
                             default_model=default_model,
                         )
-                    except (ImportError, AttributeError, TypeError):
-                        pass  # deep_reflect / deep_evolve will return clean error
+                    except (ImportError, AttributeError, TypeError):  # best-effort · deep_reflect / deep_evolve will return clean error
+                        pass
                     # ─── Evolution auto-trigger · fitness-driven self-evolution ──
                     try:
                         from runtime.safety.evolution.auto_trigger import (
@@ -507,8 +517,8 @@ def create_app(
                             router,
                             default_model=default_model,
                         )
-                    except (ImportError, AttributeError, TypeError):
-                        pass  # skills will return clean "router not wired" error
+                    except (ImportError, AttributeError, TypeError):  # best-effort · skills will return clean "router not wired" error
+                        pass
                     # ─── Computer-use vision loop · autonomous desktop ───
                     # register_computer_use_loop needs a VisionPlanner built
                     # from the router, so it can't go through the _CATALOG
@@ -663,7 +673,7 @@ def create_app(
         from runtime.execution.subagents import set_subagent_registry
 
         set_subagent_registry(subagent_registry)
-    except (ImportError, AttributeError, TypeError):
+    except (ImportError, AttributeError, TypeError):  # best-effort · subagent dispatch is optional
         pass
 
     try:
@@ -735,7 +745,7 @@ def create_app(
         from runtime.sensing.gateway.metrics_router import create_metrics_router
 
         app.include_router(create_metrics_router())
-    except (ImportError, AttributeError, TypeError):
+    except (ImportError, AttributeError, TypeError):  # best-effort · optional, proceed without /metrics
         # Metrics module is optional · proceed without /metrics rather
         # than refuse to boot.
         pass
@@ -770,7 +780,7 @@ def create_app(
         # programmatically and so other routers can register their
         # own checks (e.g. redis_check at startup).
         app.state.health_registry = _hreg
-    except (ImportError, AttributeError, TypeError, OSError):
+    except (ImportError, AttributeError, TypeError, OSError):  # best-effort · liveness/readiness probes are optional
         pass
 
     if cocoloop_install_dir is not None:  # noqa: F841 — parameter kept for back-compat
@@ -1459,7 +1469,7 @@ def create_app(
     )
     app.include_router(_config_bundle.router)
 
-    # ``/api/llm-models`` (merged molili presets + custom models)
+    # ``/api/llm-models`` (Octopus-native presets + custom models)
     # moved into config_router.py · it's registered via the
     # ``_config_bundle.router`` include above · FastAPI picks it
     # before the openai_gateway's /api/llm-models because the
@@ -1490,7 +1500,15 @@ def create_app(
     # Unified control plane for browser / Chrome / webview / computer sessions.
     from runtime.sensing.gateway.control_sessions_router import create_control_sessions_router
 
-    app.include_router(create_control_sessions_router())
+    app.include_router(
+        create_control_sessions_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
 
     # Browser session and relay APIs.
     from runtime.platform.ui.browser_router import create_browser_router
