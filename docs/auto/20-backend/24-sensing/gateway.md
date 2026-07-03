@@ -43,7 +43,15 @@ tier: "standard"
 | `channels_router.py` | — |
 | `cli_team_router.py` | CLI-team router · ``/api/cli-team/*``. |
 | `completion_router.py` | Inline code completion endpoint — Tab-complete skeleton. |
+| `computer_actions.py` | Action normalization/execution/preview-contract + UIA goal-planning for the computer-automation router. |
+| `computer_control_session.py` | Control-session bookkeeping and activity/replay logging for the computer-automation router. |
+| `computer_diagnostics.py` | Diagnostic / capability payload builders for the computer-automation router family. |
+| `computer_lease.py` | Exclusive-operator lease management for the computer-automation router. |
+| `computer_replay_evidence.py` | Replay-evidence summary for the computer-automation router family. |
 | `computer_router.py` | Computer automation API. |
+| `computer_router_state.py` | Shared mutable state for the computer-automation router family. |
+| `computer_runtime_readiness.py` | Runtime-readiness aggregation for the computer-automation router. |
+| `computer_vision.py` | Vision-model config resolution + OpenAI-compatible vision call for the computer-automation router. |
 | `config_router.py` | Config router · identity-lock + providers + custom-models. |
 | `control_sessions_router.py` | Unified control-session API. |
 | `cowork_group_router.py` | Thread-group API: WeChat-style membership + mode + shared blackboard. |
