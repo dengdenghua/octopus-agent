@@ -1,0 +1,37 @@
+"""Shared mutable state for the computer-automation router family.
+
+Split out of the former ~1994-line computer_router.py, which held this as
+five separate local variables closed over by ~50 nested functions inside
+one create_computer_router() factory. Bundling them into one dataclass
+lets every sibling module (computer_lease.py, computer_control_session.py,
+computer_replay_evidence.py, computer_runtime_readiness.py) take a single
+explicit `state` parameter instead of relying on closure capture — the
+same behavior, but each helper is now a plain, independently testable
+module-level function.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from runtime.memory.control_sessions import ControlSessionStore
+
+# Shared with computer_control_session.py's _cleanup_pending — lives here
+# (not in computer_router.py) so both can import it without a circular
+# dependency between the main router module and its sibling.
+_PENDING_TTL_SECONDS = 90
+
+
+@dataclass
+class ComputerRouterState:
+    pending: dict[str, dict[str, Any]] = field(default_factory=dict)
+    lease: dict[str, Any] = field(default_factory=dict)
+    activity: list[dict[str, Any]] = field(default_factory=list)
+    screenshot_root: Path = field(
+        default_factory=lambda: Path("data/computer_automation/screenshots").resolve()
+    )
+    control_sessions: ControlSessionStore = field(default_factory=ControlSessionStore)
+
+
+__all__ = ["ComputerRouterState", "_PENDING_TTL_SECONDS"]
