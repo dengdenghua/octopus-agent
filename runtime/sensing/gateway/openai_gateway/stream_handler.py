@@ -88,6 +88,7 @@ def _commit_direct_llm_cost(
 def _direct_llm_fallback_with_usage(
     stack: Any, intent: ParsedIntent, agent: Any,
     *, model: str | None = None, reasoning_effort: Any = None,
+    max_tokens_cap: int | None = None,
 ) -> tuple[str | None, dict[str, int]]:
     reply, usage = _direct_llm_fallback_impl(
         stack,
@@ -95,6 +96,7 @@ def _direct_llm_fallback_with_usage(
         agent,
         model=model,
         reasoning_effort=reasoning_effort,
+        max_tokens_cap=max_tokens_cap,
     )
     return reply, usage
 
@@ -116,6 +118,7 @@ def _direct_llm_fallback(
 def _direct_llm_fallback_impl(
     stack: Any, intent: ParsedIntent, agent: Any,
     *, model: str | None = None, reasoning_effort: Any = None,
+    max_tokens_cap: int | None = None,
 ) -> tuple[str | None, dict[str, int]]:
     router = getattr(stack.planner, "router", None)
     if router is None:
@@ -148,6 +151,8 @@ def _direct_llm_fallback_impl(
         except (AttributeError, TypeError):  # noqa: BLE001 — subrouter doesn't expose default_model; fall back to effective_model
             pass
     wants_thinking, max_tokens = _model_runtime_options(effective_model, resolved_model)
+    if max_tokens_cap is not None and (max_tokens is None or max_tokens > max_tokens_cap):
+        max_tokens = max_tokens_cap
     normalized_effort = normalize_reasoning_effort(
         reasoning_effort or (intent.user_context or {}).get("reasoning_effort"),
     )
@@ -430,6 +435,7 @@ def _stream_chat_wrapped(
             stack, intent, model, default_arm,
             actor=actor, agent=agent,
             stream_mode=stream_mode,
+            conversation_id=conversation_id,
         )
     finally:
         try:  # noqa: SIM105
@@ -457,6 +463,7 @@ def _stream_chat(
     agent: Any = None,
     keepalive_interval_s: float = 15.0,
     stream_mode: str = "full",
+    conversation_id: str | None = None,
 ):
     import json
 
@@ -542,11 +549,28 @@ def _stream_chat(
 
     def _worker() -> None:
         try:
-            traj = stack.runtime.run(
-                graph, budget=budget,
-                caller=f"arms/{arm_id_str}", arm_id=ArmId(arm_id_str),
-                actor=actor,
-            )
+            # Runs on its own thread (below) — a plain contextvar
+            # ``session_scope`` set on the generator's thread would NOT
+            # be visible here, so the Session must be bound inside the
+            # worker itself. Without it, the executor's scope/sandbox/
+            # plan-mode-write-block and approval gates (keyed on
+            # ``current_session() is not None``) are silent no-ops on
+            # this streaming path — see the non-streaming ``_run_chat``
+            # for the same fix.
+            from runtime.platform.process.session import Session, session_scope
+
+            with session_scope(
+                Session(
+                    actor=actor,
+                    thread_id=conversation_id,
+                    metadata={"enforce_executor_approval": True},
+                )
+            ):
+                traj = stack.runtime.run(
+                    graph, budget=budget,
+                    caller=f"arms/{arm_id_str}", arm_id=ArmId(arm_id_str),
+                    actor=actor,
+                )
             result_holder["trajectory"] = traj
         except Exception as exc:  # noqa: BLE001
             result_holder["error"] = exc

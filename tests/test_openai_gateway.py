@@ -563,3 +563,64 @@ class TestOpenAISDKCompat:
         choice = data["choices"][0]
         assert set(choice.keys()) >= {"index", "message", "finish_reason"}
         assert set(choice["message"].keys()) >= {"role", "content"}
+
+
+class TestCompatPathBindsSession:
+    """The compat gateway used to run the tool-execution graph with no
+    Session bound at all, so the executor's scope/sandbox/plan-mode
+    write-block and approval gates (all keyed on
+    ``current_session() is not None``) were silent no-ops on this path.
+    These pin that ``stack.runtime.run`` now always sees an active
+    Session, on both the sync and the streaming code paths."""
+
+    def test_run_chat_binds_session_scope(self, stack, client, monkeypatch):
+        from runtime.platform.process.session import current_session
+
+        captured: list[object] = []
+        real_run = stack.runtime.run
+
+        def _spy_run(*args, **kwargs):
+            captured.append(current_session())
+            return real_run(*args, **kwargs)
+
+        monkeypatch.setattr(stack.runtime, "run", _spy_run)
+
+        r = client.post("/v1/chat/completions", json={
+            "messages": [{"role": "user", "content": "list"}],
+            "conversation_id": "convo-sync-1",
+        })
+        assert r.status_code == 200
+        assert len(captured) == 1
+        session = captured[0]
+        assert session is not None
+        assert session.thread_id == "convo-sync-1"
+        assert session.metadata.get("enforce_executor_approval") is True
+        # Session must not leak past the call.
+        assert current_session() is None
+
+    def test_stream_chat_binds_session_scope(self, stack, client, monkeypatch):
+        from runtime.platform.process.session import current_session
+
+        captured: list[object] = []
+        real_run = stack.runtime.run
+
+        def _spy_run(*args, **kwargs):
+            captured.append(current_session())
+            return real_run(*args, **kwargs)
+
+        monkeypatch.setattr(stack.runtime, "run", _spy_run)
+
+        with client.stream("POST", "/v1/chat/completions", json={
+            "messages": [{"role": "user", "content": "list"}],
+            "conversation_id": "convo-stream-1",
+            "stream": True,
+        }) as r:
+            assert r.status_code == 200
+            for _ in r.iter_lines():
+                pass
+
+        assert len(captured) == 1
+        session = captured[0]
+        assert session is not None
+        assert session.thread_id == "convo-stream-1"
+        assert session.metadata.get("enforce_executor_approval") is True

@@ -306,25 +306,6 @@ def create_openai_router(
         from .openai_gateway.mix import save_mix_config
         return save_mix_config(body if isinstance(body, dict) else {})
 
-    # "molili" is a PROVIDER, not a selectable model — don't include an
-    # auto-routing entry here; the UI groups these under the "Official
-    # (Molili)" tab and the provider itself is implicit.
-    _known_llms: list[tuple[str, str, str]] = [
-        # (id, display_name, provider)
-        ("minimax-m2.5", "MiniMax M2.5", "molili"),
-        ("glm-4.7", "GLM-4.7", "molili"),
-        ("kimi-k2.5", "Kimi K2.5", "molili"),
-        ("deepseek-v3.2", "DeepSeek-V3.2", "molili"),
-        ("qwen3-max", "Qwen3-Max", "molili"),
-    ]
-
-    # NOTE: /api/llm-models moved into ui/app.py so it can merge custom
-    # user-registered models with the Molili presets below. Keeping the
-    # catalog here caused the custom-models tab to stay empty even after
-    # PUT /api/config/custom-models/{id} added entries.
-    # (Presets retained in `_known_llms` above — app.py re-declares them.)
-    _ = _known_llms  # silence unused warning; kept for reference
-
     @router.post("/v1/chat/completions")
     def chat_completions(body: dict[str, Any], request: Request) -> Any:
         messages = body.get("messages") or []
@@ -573,7 +554,7 @@ def create_openai_router(
                 response = _run_chat(
                     stack, intent, requested_model, default_arm,
                     optimizer=prompt_optimizer, actor=actor, agent=selected_agent,
-                    force_deep=force_deep,
+                    force_deep=force_deep, conversation_id=conversation_id,
                 )
         finally:
             _molili_actor_ctx.reset(_molili_token)
@@ -593,6 +574,7 @@ def _run_chat(
     actor: str | None = None,
     agent: Any = None,
     force_deep: bool = False,
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
     task_id = uuid4()
     variant_name: str | None = None
@@ -655,11 +637,28 @@ def _run_chat(
         task_id=graph.task_id,
         limits=BudgetLimits(tokens=50_000, usd=0.50),
     )
-    traj = stack.runtime.run(
-        graph, budget=budget,
-        caller=f"arms/{arm_id_str}", arm_id=ArmId(arm_id_str),
-        actor=actor,
-    )
+    # The compat gateway never binds a Session for native-thread callers,
+    # so without this the executor's scope/sandbox/plan-mode-write-block,
+    # task-capability manifest, and approval gates (all keyed on
+    # ``current_session() is not None``) are silent no-ops here — a
+    # write/exec skill run through this path had no workspace
+    # confinement at all. ``mode`` defaults to "chat", which confines
+    # writes to this turn's own thread-artifact root instead of the
+    # unconfined legacy contract.
+    from runtime.platform.process.session import Session, session_scope
+
+    with session_scope(
+        Session(
+            actor=actor,
+            thread_id=conversation_id,
+            metadata={"enforce_executor_approval": True},
+        )
+    ):
+        traj = stack.runtime.run(
+            graph, budget=budget,
+            caller=f"arms/{arm_id_str}", arm_id=ArmId(arm_id_str),
+            actor=actor,
+        )
 
     if optimizer is not None:
         try:

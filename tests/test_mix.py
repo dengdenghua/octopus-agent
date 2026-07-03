@@ -63,7 +63,7 @@ def test_run_mix_chat_injects_drafts_and_annotates(monkeypatch) -> None:
     monkeypatch.delenv("OCTOPUS_MIX_PROPOSERS", raising=False)
     monkeypatch.delenv("OCTOPUS_MIX_N", raising=False)
 
-    def fake_proposer(stack, intent, agent, model=None):  # noqa: ANN001
+    def fake_proposer(stack, intent, agent, model=None, **_kwargs):  # noqa: ANN001
         # echo the injected lens so the three drafts are distinct + non-empty
         lens = intent.user_context["conversation_messages"][0]["content"]
         return (f"draft::{lens[:18]}", {})
@@ -150,3 +150,61 @@ def test_mix_config_missing_falls_back_to_env(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(mix, "_config_path", lambda: tmp_path / "absent.json")
     monkeypatch.setenv("OCTOPUS_MIX_PROPOSERS", "x,y")
     assert mix._proposer_pool() == ["x", "y"]
+
+
+def test_proposer_calls_pass_max_tokens_cap(monkeypatch) -> None:
+    """Proposers are draft-only advisors with no tool access — they must
+    not get the ~131K-token ceiling a full agentic turn gets."""
+    monkeypatch.delenv("OCTOPUS_MIX_PROPOSERS", raising=False)
+    monkeypatch.delenv("OCTOPUS_MIX_N", raising=False)
+
+    seen_caps: list[Any] = []
+
+    def fake_proposer(stack, intent, agent, model=None, max_tokens_cap=None, **_kw):  # noqa: ANN001
+        seen_caps.append(max_tokens_cap)
+        return ("draft", {})
+
+    monkeypatch.setattr(mix, "_direct_llm_fallback_with_usage", fake_proposer)
+
+    mix.run_mix_chat(
+        object(), _intent(), "octopus-mix", "code_arm",
+        actor="u1", agent=None,
+        run_chat=lambda *a, **k: _envelope("final"),  # noqa: ARG005
+    )
+
+    assert len(seen_caps) == 3
+    assert all(cap == mix._PROPOSER_MAX_TOKENS for cap in seen_caps)
+    assert mix._PROPOSER_MAX_TOKENS < 131072  # meaningfully smaller than a full-turn budget
+
+
+def test_run_mix_chat_bounds_total_wait_on_a_hung_proposer(monkeypatch) -> None:
+    """A single hung proposer must not block the whole mix request for the
+    model SDK's own (much longer) default timeout — the total stage-1 wait
+    is capped, and the hung proposer's draft is simply dropped."""
+    import time as _time
+
+    monkeypatch.delenv("OCTOPUS_MIX_PROPOSERS", raising=False)
+    monkeypatch.delenv("OCTOPUS_MIX_N", raising=False)
+    monkeypatch.setattr(mix, "_PROPOSER_TIMEOUT_SECONDS", 0.2)
+
+    def fake_proposer(stack, intent, agent, model=None, **_kw):  # noqa: ANN001
+        lens = intent.user_context["conversation_messages"][0]["content"]
+        if "correctness" in lens:  # the first lens — make exactly one hang
+            _time.sleep(5.0)
+            return ("late-draft", {})
+        return (f"draft::{lens[:10]}", {})
+
+    monkeypatch.setattr(mix, "_direct_llm_fallback_with_usage", fake_proposer)
+
+    started = _time.monotonic()
+    out = mix.run_mix_chat(
+        object(), _intent(), "octopus-mix", "code_arm",
+        actor="u1", agent=None,
+        run_chat=lambda *a, **k: _envelope("final"),  # noqa: ARG005
+    )
+    elapsed = _time.monotonic() - started
+
+    assert elapsed < 2.0  # bounded by the 0.2s timeout, not the 5s sleep
+    meta = out["octopus"]["mix"]
+    assert meta["drafts_used"] == 2  # the hung proposer's draft was dropped
+    assert meta["proposers"] == 3

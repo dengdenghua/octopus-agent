@@ -38,7 +38,7 @@ import json
 import logging
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -66,6 +66,17 @@ _LENSES: tuple[str, ...] = (
 
 _DEFAULT_N = 3
 _MAX_PROPOSERS = 6
+
+# Proposers are draft-only advisors with no tool access (see module
+# docstring) — they don't need the ~131K-token ceiling a full agentic
+# turn gets. Left uncapped, up to _MAX_PROPOSERS concurrent calls each
+# had no token ceiling at all, and ``fut.result()`` had no timeout, so
+# one slow/hung proposer stalled the whole mix request for as long as
+# the model SDK's own default (~10 min) while holding the caller's
+# rate-limit slot. Both are configurable so a deployment with slower
+# models isn't forced into these defaults.
+_PROPOSER_MAX_TOKENS = int(os.environ.get("OCTOPUS_MIX_PROPOSER_MAX_TOKENS") or 4096)
+_PROPOSER_TIMEOUT_SECONDS = float(os.environ.get("OCTOPUS_MIX_PROPOSER_TIMEOUT_SECONDS") or 45.0)
 
 
 def is_mix_model(model: Any) -> bool:
@@ -231,6 +242,7 @@ def run_mix_chat(
         try:
             reply, _usage = _direct_llm_fallback_with_usage(
                 stack, _proposer_intent(intent, lens), agent, model=(model or None),
+                max_tokens_cap=_PROPOSER_MAX_TOKENS,
             )
             return reply
         except Exception as exc:  # noqa: BLE001 — one proposer failing must not sink the turn
@@ -239,18 +251,41 @@ def run_mix_chat(
 
     drafts: list[str] = []
     workers = max(1, min(len(specs), _MAX_PROPOSERS))
-    with ThreadPoolExecutor(max_workers=workers) as pool:
+    pool = ThreadPoolExecutor(max_workers=workers)
+    try:
         # copy_context() per task so ContextVars (actor, session) propagate
         # into the worker threads — one fresh copy each (a context can be
         # entered only once).
         futures = [pool.submit(contextvars.copy_context().run, _one, spec) for spec in specs]
+        # ``wait(..., timeout=N)`` bounds the TOTAL time stage 1 can hold
+        # up the request, unlike a per-future ``fut.result(timeout=N)``
+        # loop — that would still sum to N * len(futures) in the worst
+        # case (each iteration re-waiting up to N seconds even though
+        # every proposer is running concurrently in the background).
+        done, not_done = wait(futures, timeout=_PROPOSER_TIMEOUT_SECONDS)
+        if not_done:
+            _log.warning(
+                "mix: %d/%d proposer(s) still running after %.0fs, dropping their drafts",
+                len(not_done), len(futures), _PROPOSER_TIMEOUT_SECONDS,
+            )
+        # Iterate ``futures`` (lens order) rather than the ``done`` set —
+        # set iteration order varies run-to-run and would shuffle the
+        # drafts the aggregator sees, making Mix output nondeterministic.
         for fut in futures:
+            if fut not in done:
+                continue
             try:
                 reply = fut.result()
             except Exception:  # noqa: BLE001 — defensive; _one already guards
                 reply = None
             if reply and reply.strip():
                 drafts.append(reply.strip())
+    finally:
+        # A timed-out proposer's thread can't be cancelled (Python
+        # threads aren't preemptible) — shut down without blocking on
+        # it so the timeout above actually bounds request latency; the
+        # thread finishes on its own and its result is simply unused.
+        pool.shutdown(wait=False)
 
     aggregator_model = _aggregator_model()
 
