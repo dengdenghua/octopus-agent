@@ -27,6 +27,19 @@ def test_capabilities_store_defaults_to_app_data_dir(monkeypatch, tmp_path: Path
     assert capabilities._store_path() == app_paths().data_dir / "capabilities.json"
 
 
+def test_gene_locks_store_defaults_to_app_data_dir(monkeypatch, tmp_path: Path) -> None:
+    from runtime.safety.gene_locks import simple_gate
+
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "runtime-data"))
+    monkeypatch.delenv("OCTOPUS_HOME", raising=False)
+    # The autouse isolation fixture patches _store_path for every test;
+    # undo it here — this contract asserts the REAL resolver.
+    monkeypatch.undo()
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "runtime-data"))
+
+    assert simple_gate._store_path() == app_paths().data_dir / "gene_locks.json"
+
+
 def test_memory_hub_uses_project_root_when_repo_root_missing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

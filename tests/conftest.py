@@ -55,6 +55,31 @@ def _reset_module_state():
     _reset_singletons()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_gene_locks(tmp_path, monkeypatch):
+    """Give every test a private gene-locks store.
+
+    The store path resolves under the app data dir, so the suite would
+    otherwise read — and on first boot even WRITE — the live
+    ``data/gene_locks.json`` of this checkout. Whatever mode/maturity a
+    serve run last persisted there then decides whether planner-rewrite
+    and promotion tests pass (production+low level → "gene_locks
+    blocked"), which is exactly the flappy cluster we kept chasing.
+    Fresh per-test state = dev mode, no cooldowns, deterministic.
+    """
+    from runtime.safety.gene_locks import simple_gate as _sg
+
+    monkeypatch.setattr(_sg, "_store_path", lambda: tmp_path / "gene_locks.json")
+    monkeypatch.setattr(_sg, "_CACHED", None)
+    monkeypatch.setattr(_sg, "_INTEGRITY_FAILED", None)
+    monkeypatch.delenv("OCTOPUS_GENE_LOCKS_MODE", raising=False)
+    yield
+    # Drop state minted against the tmp path so the next test (whose
+    # fixture re-nulls anyway) can never see a Path that no longer exists.
+    _sg._CACHED = None
+    _sg._INTEGRITY_FAILED = None
+
+
 def _reset_injection_taint() -> None:
     """Clear the per-thread prompt-injection taint + gate-handled contextvars.
 

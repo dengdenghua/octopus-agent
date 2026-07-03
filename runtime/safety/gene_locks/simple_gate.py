@@ -203,7 +203,12 @@ class LockViolation(Exception):
 
 
 def _store_path() -> Path:
-    return Path("data") / "gene_locks.json"
+    # app_paths honours OCTOPUS_DATA_DIR/OCTOPUS_HOME and anchors on the
+    # project root — a bare Path("data") silently re-minted state when the
+    # process ran from any other cwd.
+    from runtime.platform.process.paths import app_paths
+
+    return app_paths().data_dir / "gene_locks.json"
 
 
 @dataclass
