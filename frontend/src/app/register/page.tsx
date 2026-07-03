@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRightIcon, SparklesIcon } from "lucide-react";
 
+import { OctopusBrandMark } from "@/components/brand/octopus-brand-mark";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,8 +16,6 @@ import { Label } from "@/components/ui/label";
 import { useI18n } from "@/core/i18n/hooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "sonner";
-
-const octopusLogoUrl = `${import.meta.env.BASE_URL}images/octopus.svg`;
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -89,9 +88,7 @@ export default function RegisterPage() {
       <div className="relative z-10 grid w-full max-w-6xl items-center gap-12 px-6 py-12 md:grid-cols-2 lg:gap-16">
         <div className="hidden flex-col justify-center space-y-8 md:flex">
           <div className="inline-flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-lg border border-border bg-card shadow-sm">
-              <img src={octopusLogoUrl} alt="" className="size-6" />
-            </div>
+            <OctopusBrandMark />
             <span className="text-base font-semibold tracking-tight text-foreground">
               Octopus Agent OS
             </span>
@@ -116,9 +113,7 @@ export default function RegisterPage() {
 
         <div className="mx-auto w-full max-w-sm">
           <div className="mb-6 flex items-center justify-center gap-2 md:hidden">
-            <div className="flex size-9 items-center justify-center rounded-lg border border-border bg-card shadow-sm">
-              <img src={octopusLogoUrl} alt="" className="size-6" />
-            </div>
+            <OctopusBrandMark />
             <span className="text-sm font-semibold tracking-tight text-foreground">
               Octopus Agent OS
             </span>
@@ -127,9 +122,7 @@ export default function RegisterPage() {
           <Card>
             <CardHeader className="space-y-1.5 pb-4 text-center">
               <div className="mb-2 flex items-center justify-center">
-                <div className="flex size-11 items-center justify-center rounded-xl border border-border bg-muted shadow-sm">
-                  <img src={octopusLogoUrl} alt="" className="size-7" />
-                </div>
+                <OctopusBrandMark size="lg" />
               </div>
               <CardTitle className="text-xl font-semibold tracking-tight text-foreground">
                 {t.registerPage.cardTitle}

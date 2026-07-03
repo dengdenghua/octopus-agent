@@ -29,14 +29,14 @@ def get_or_create_tentacle_token() -> str:
         existing = path.read_text(encoding="utf-8").strip()
         if existing:
             return existing
-    except (FileNotFoundError, OSError):
+    except (FileNotFoundError, OSError):  # best-effort · no token on disk yet, fall through to mint one
         pass
     token = secrets.token_urlsafe(18)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(token, encoding="utf-8")
-    except OSError:
-        pass  # non-persistent fallback — token still usable this run
+    except OSError:  # best-effort · non-persistent fallback, token still usable this run
+        pass
     return token
 
 

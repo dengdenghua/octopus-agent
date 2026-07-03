@@ -77,7 +77,7 @@ def _signal_posix_group(proc: subprocess.Popen[Any], sig: int) -> None:
         if pgid == proc.pid and pgid != os.getpgrp():
             os.killpg(pgid, sig)
             return
-    except OSError:
+    except OSError:  # best-effort · falls through to the direct proc.terminate/kill below
         pass
     with contextlib.suppress(OSError):
         if sig == signal.SIGTERM:
@@ -92,7 +92,7 @@ def _signal_posix_pid_group(pid: int, sig: int) -> None:
         if pgid == pid and pgid != os.getpgrp():
             os.killpg(pgid, sig)
             return
-    except OSError:
+    except OSError:  # best-effort · falls through to the direct os.kill below
         pass
     with contextlib.suppress(OSError):
         os.kill(pid, sig)

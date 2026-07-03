@@ -957,8 +957,9 @@ export function AgentWorkbenchPanel({
                       type="button"
                       role="tab"
                       aria-selected={active}
+                      title={tab.label}
                       onClick={() => handleOpenTab(tab.id)}
-                      className="flex min-w-0 items-center gap-1.5 pl-2.5"
+                      className="flex h-full min-w-0 items-center gap-1.5 pl-2.5"
                     >
                       <Icon className="size-4 shrink-0" />
                       <span className="truncate">{tab.label}</span>
@@ -966,9 +967,10 @@ export function AgentWorkbenchPanel({
                     <button
                       type="button"
                       aria-label={`Close ${tab.label}`}
+                      title={`Close ${tab.label}`}
                       onClick={() => handleCloseTab(tab.id)}
                       className={cn(
-                        "mr-1 flex size-4 shrink-0 items-center justify-center rounded transition-colors",
+                        "mr-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-colors",
                         active
                           ? "text-muted-foreground/70 hover:bg-muted hover:text-foreground"
                           : "text-muted-foreground/0 group-hover:text-muted-foreground/70 hover:!bg-muted hover:!text-foreground",
@@ -1251,8 +1253,9 @@ export function AgentWorkbenchPanel({
                     type="button"
                     role="tab"
                     aria-selected={active}
+                    title={label}
                     onClick={() => onSelectTab?.(id)}
-                    className="flex min-w-0 items-center gap-1.5 pl-2.5"
+                    className="flex h-full min-w-0 items-center gap-1.5 pl-2.5"
                   >
                     <Icon className="size-4 shrink-0" />
                     <span className="truncate">{label}</span>
@@ -1264,12 +1267,13 @@ export function AgentWorkbenchPanel({
                       handleCloseTab(id);
                     }}
                     className={cn(
-                      "mr-1 flex size-4 shrink-0 items-center justify-center rounded transition-colors",
+                      "mr-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-colors",
                       active
                         ? "text-muted-foreground/70 hover:bg-muted hover:text-foreground"
                         : "text-muted-foreground/0 group-hover:text-muted-foreground/70 hover:!bg-muted hover:!text-foreground",
                     )}
                     aria-label={`Close ${label}`}
+                    title={`Close ${label}`}
                   >
                     <XIcon className="size-3" />
                   </button>
@@ -1583,7 +1587,6 @@ function MachineScopeRail({
       className="flex min-w-0 shrink-0 items-center gap-2 border-t border-border/45 bg-background/80 px-3 py-1.5"
       data-testid="workstation-bottom-rail"
     >
-      <MonitorIcon className="size-3.5 shrink-0 text-muted-foreground" />
       <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <WorkstationSeat
           name={leaderSeat?.name ?? t.agentWorkbenchPanel.mainController}

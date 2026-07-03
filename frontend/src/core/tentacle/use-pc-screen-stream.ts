@@ -98,6 +98,13 @@ export function usePcScreenStream(
   const objectUrlRef = useRef<string | null>(null);
   const fpsFramesRef = useRef<number[]>([]);
   const shouldReconnectRef = useRef(false);
+  // Raw per-frame counter, always accurate — the `frameCount`/`fps`
+  // STATE below is only a display readout, so it's throttled to ~1Hz
+  // (see handleMessage) rather than triggering a re-render on every
+  // incoming stream frame (up to 10x/sec by default).
+  const rawFrameCountRef = useRef(0);
+  const lastStatsFlushRef = useRef(0);
+  const STATS_FLUSH_INTERVAL_MS = 1000;
 
   // ── Render JPEG / WebP frame ────────────────────────
 
@@ -148,12 +155,22 @@ export function usePcScreenStream(
         renderImageFrame(payload, frameType);
       }
 
-      setFrameCount((c) => c + 1);
+      const isFirstFrame = rawFrameCountRef.current === 0;
+      rawFrameCountRef.current += 1;
 
       const now = performance.now();
       fpsFramesRef.current.push(now);
       fpsFramesRef.current = fpsFramesRef.current.filter((t) => now - t < 1000);
-      setFps(fpsFramesRef.current.length);
+
+      // Flush immediately on the very first frame — the UI gates a
+      // "waiting for signal" overlay on `frameCount === 0`, and
+      // throttling that transition would leave the overlay covering
+      // an already-rendered frame for up to a second.
+      if (isFirstFrame || now - lastStatsFlushRef.current >= STATS_FLUSH_INTERVAL_MS) {
+        lastStatsFlushRef.current = now;
+        setFrameCount(rawFrameCountRef.current);
+        setFps(fpsFramesRef.current.length);
+      }
     },
     [renderImageFrame],
   );
@@ -198,6 +215,8 @@ export function usePcScreenStream(
       objectUrlRef.current = null;
     }
     fpsFramesRef.current = [];
+    rawFrameCountRef.current = 0;
+    lastStatsFlushRef.current = 0;
     setIsConnected(false);
     setFrameCount(0);
     setFps(0);

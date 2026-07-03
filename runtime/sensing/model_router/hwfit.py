@@ -165,7 +165,7 @@ def _ram_gb() -> float:
             for line in f:
                 if line.startswith("MemTotal:"):
                     return int(line.split()[1]) / (1024**2)
-    except OSError:
+    except OSError:  # expected · non-Linux or unreadable, falls through to the unknown-size default
         pass
     return 0.0
 

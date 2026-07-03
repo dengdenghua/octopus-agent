@@ -679,8 +679,12 @@ export default function StoragePage() {
                 <SourcesView
                   sources={sources}
                   stats={stats}
+                  manifest={manifest}
+                  serviceError={serviceError}
                   isPickingFolder={isPickingFolder}
+                  isReconnecting={isReconnecting}
                   onPickFolder={pickFolder}
+                  onReconnect={() => void reconnectNAS()}
                   onRemoveSource={removeSource}
                   folderInputRef={folderInputRef}
                   onFolderInputChange={onFolderInputChange}
@@ -1630,16 +1634,24 @@ function LocalDiskEntryRow({ item }: { item: DiskItem }) {
 function SourcesView({
   sources,
   stats,
+  manifest,
+  serviceError,
   isPickingFolder,
+  isReconnecting,
   onPickFolder,
+  onReconnect,
   onRemoveSource,
   folderInputRef,
   onFolderInputChange,
 }: {
   sources: NASSource[];
   stats: { files: number; chunks: number; sources: number };
+  manifest: NASManifest | null;
+  serviceError: string | null;
   isPickingFolder: boolean;
+  isReconnecting: boolean;
   onPickFolder: () => void;
+  onReconnect: () => void;
   onRemoveSource: (id: string) => Promise<void>;
   folderInputRef: React.RefObject<HTMLInputElement | null>;
   onFolderInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -1688,6 +1700,29 @@ function SourcesView({
         <Metric label="索引片段" value={String(stats.chunks)} />
       </div>
 
+      {!manifest && (
+        <div className="flex shrink-0 flex-col gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="font-medium">下一步：重新连接本地知识库服务</div>
+            <div className="mt-0.5 truncate text-amber-900/80">
+              {serviceError || `当前未连接 ${getNASBaseURL()}`}
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 shrink-0 rounded-md border-amber-300 bg-white px-3 text-amber-950 hover:bg-amber-100"
+            onClick={onReconnect}
+            disabled={isReconnecting}
+          >
+            <RefreshCwIcon
+              className={cn("size-3.5", isReconnecting && "animate-spin")}
+            />
+            {isReconnecting ? "连接中" : "重新连接"}
+          </Button>
+        </div>
+      )}
+
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-black/5 px-3 py-2">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {["Documents", "Pictures", "Downloads", "Public/octopus"].map(
@@ -1731,20 +1766,36 @@ function SourcesView({
               <FolderPlusIcon className="size-7" />
             </div>
             <div className="mt-4 text-base font-semibold">
-              选择一个本机文件夹开始建索引
+              {manifest
+                ? "选择一个本机文件夹开始建索引"
+                : "先恢复本地服务，再添加文件夹"}
             </div>
             <div className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              本地数据库会在本机解析文件、OCR 图片并生成向量索引。
-              原文件不上传；只有你确认引用的片段会进入任务上下文。
+              {manifest
+                ? "本地数据库会在本机解析文件、OCR 图片并生成向量索引。原文件不上传；只有你确认引用的片段会进入任务上下文。"
+                : "离线时可以浏览常用位置，但无法扫描新目录。重新连接后再添加文件夹，索引会在本机生成。"}
             </div>
             <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
               <Button
                 className="rounded-md bg-black text-white hover:bg-black/85"
-                onClick={onPickFolder}
-                disabled={isPickingFolder}
+                onClick={manifest ? onPickFolder : onReconnect}
+                disabled={manifest ? isPickingFolder : isReconnecting}
               >
-                <FolderPlusIcon className="size-4" />
-                添加文件夹
+                {manifest ? (
+                  <FolderPlusIcon className="size-4" />
+                ) : (
+                  <RefreshCwIcon
+                    className={cn(
+                      "size-4",
+                      isReconnecting && "animate-spin",
+                    )}
+                  />
+                )}
+                {manifest
+                  ? "添加文件夹"
+                  : isReconnecting
+                    ? "连接中"
+                    : "重新连接"}
               </Button>
               <Button
                 variant="secondary"

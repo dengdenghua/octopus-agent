@@ -738,10 +738,7 @@ def _citation_coverage(row: dict[str, Any]) -> float:
 
 def _recall_score(row: dict[str, Any], *, query_terms: set[str]) -> float:
     record_terms = _token_set(_record_search_text(row))
-    if not query_terms:
-        overlap = 0.0
-    else:
-        overlap = len(query_terms & record_terms) / max(1, len(query_terms))
+    overlap = 0.0 if not query_terms else len(query_terms & record_terms) / max(1, len(query_terms))
     quality = row.get("memory_quality") if isinstance(row.get("memory_quality"), dict) else {}
     reliability = float(quality.get("reliability") or 0.0)
     priority = {"P0": 1.0, "P1": 0.86, "P2": 0.72}.get(
@@ -855,7 +852,7 @@ def _week_start(value: str | date | None, *, now: datetime | None) -> date:
     if isinstance(value, str) and value.strip():
         try:
             return date.fromisoformat(value.strip())
-        except ValueError:
+        except ValueError:  # expected · malformed value falls through to the current week
             pass
     today = (now or datetime.now(UTC)).date()
     return today - timedelta(days=today.weekday())

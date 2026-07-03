@@ -62,14 +62,19 @@ spec:
               memory: 1Gi
           readinessProbe:
             httpGet:
-              path: /api/health
+              # /readyz reflects real readiness (drain → 503); /api/health
+              # is always 200 and would keep routing traffic to a draining
+              # or not-yet-ready pod.
+              path: /readyz
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /api/health
+              # /livez reflects process liveness; restart only when the
+              # process is actually wedged, not merely draining.
+              path: /livez
               port: 8000
             initialDelaySeconds: 30
             periodSeconds: 30

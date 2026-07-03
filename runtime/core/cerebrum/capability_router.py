@@ -278,7 +278,7 @@ def activate_capabilities(
         pinned_agents = mentions.agents
         pinned_packs = mentions.packs
         pinned_surfaces = mentions.surfaces
-    except (ImportError, AttributeError):
+    except (ImportError, AttributeError):  # best-effort · no @mentions pinned this turn
         pass
 
     # Expand @pack mentions into their constituent skills using the
@@ -294,7 +294,7 @@ def activate_capabilities(
                     pack_name.strip().lower(), (),
                 )
                 pack_expanded_skills.extend(pack_skills)
-        except (ImportError, AttributeError):
+        except (ImportError, AttributeError):  # best-effort · unknown pack names already handled above
             pass
 
     for rule in _RULES:

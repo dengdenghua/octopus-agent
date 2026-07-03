@@ -75,7 +75,9 @@ ROOT_ALLOWLIST: set[str] = {
     "packaging",
     # ── Configuration files ─────────────────────────────────
     "config.example.yaml",
+    "config.e2e.yaml",
     "permissions.example.json",
+    "skills.lock.json",
     ".env.example",
     "pyproject.toml",
     "uv.lock",
@@ -89,6 +91,7 @@ ROOT_ALLOWLIST: set[str] = {
     "QUICKSTART.md",
     "CONTRIBUTING.md",
     "CHANGELOG.md",
+    "CLAUDE.md",
     "LICENSE",
     "NOTICE",
     # ── Container / build ───────────────────────────────────

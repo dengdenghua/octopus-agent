@@ -70,7 +70,7 @@ class UsagePricing:
                     v = float(raw)
                     if v > 0:
                         budget = v
-                except ValueError:
+                except ValueError:  # expected · malformed env value leaves budget unset (no cap)
                     pass
             cls._instance = cls(UsageConfig(budget_usd=budget))
         return cls._instance

@@ -1129,7 +1129,7 @@ def parse_tool_call_arguments(value: Any) -> dict[str, Any]:
         if isinstance(parsed, str):
             parsed = json.loads(parsed)
         return parsed if isinstance(parsed, dict) else {}
-    except (TypeError, ValueError, json.JSONDecodeError):
+    except (TypeError, ValueError, json.JSONDecodeError):  # expected · falls through to the ast.literal_eval fallback below
         pass
 
     try:

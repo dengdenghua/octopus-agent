@@ -51,7 +51,7 @@ def test_run_argv_binds_loopback_only_and_is_shell_free() -> None:
         docker="/usr/bin/docker",
         name="octopus-searxng",
         port="8888",
-        settings_file="/home/u/.octopus/searxng/settings.yml",
+        settings_file="/var/lib/octopus/searxng/settings.yml",
         image="searxng/searxng:pin",
     )
     assert isinstance(argv, list) and all(isinstance(a, str) for a in argv)

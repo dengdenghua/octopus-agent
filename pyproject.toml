@@ -203,6 +203,13 @@ ignore = [
     "N818",  # exception naming (InvariantViolation 不加 Error 后缀)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# realtime_cerebrum.py re-imports split-module helpers at the bottom
+# under their original names for backward compat. They can't move to
+# the top: realtime_react_stream.py imports FROM realtime_cerebrum,
+# so a top-of-file import here would be circular.
+"runtime/sensing/gateway/realtime_cerebrum.py" = ["E402"]
+
 [tool.ruff.format]
 quote-style = "double"
 

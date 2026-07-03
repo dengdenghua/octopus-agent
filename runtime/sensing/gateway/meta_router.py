@@ -929,7 +929,7 @@ def create_meta_router(
                 store = get_mention_history_store()
                 for stat in store.top_for_actor(actor, limit=50):
                     history_boost[(stat.type, stat.identifier)] = stat.count
-            except (ImportError, AttributeError, OSError):
+            except (ImportError, AttributeError, OSError):  # best-effort · autocomplete still works without history
                 pass
 
         items: list[dict[str, Any]] = []

@@ -1221,8 +1221,7 @@ class CerebrumRuntime:
         max_ticks = max(1, min(max_ticks, 200))
 
         control = _parse_project_os_control(text)
-        from runtime.projectos.cowork_bridge import run_project_from_group
-        from runtime.projectos.cowork_bridge import full_project_state
+        from runtime.projectos.cowork_bridge import full_project_state, run_project_from_group
 
         def _run() -> dict[str, Any]:
             if control is not None:

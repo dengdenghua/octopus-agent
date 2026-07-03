@@ -384,9 +384,10 @@ export function AgentFooter() {
       <button
         type="button"
         title={t.sidebar.settingsTooltip}
+        aria-label={t.sidebar.settingsTooltip}
         onClick={() => emitOpenSettings()}
         className={cn(
-          "flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground",
+          "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground",
           "opacity-70 transition-[opacity,background-color,color] duration-150",
           "hover:bg-muted hover:text-foreground hover:opacity-100",
           "group-data-[collapsible=icon]:hidden",

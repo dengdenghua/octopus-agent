@@ -861,6 +861,259 @@
         "title": "ConstitutionProfileResponse",
         "type": "object"
       },
+      "ControlActionBody": {
+        "properties": {
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
+          "action_type": {
+            "default": "action",
+            "title": "Action Type",
+            "type": "string"
+          },
+          "descriptor": {
+            "additionalProperties": true,
+            "title": "Descriptor",
+            "type": "object"
+          },
+          "status": {
+            "default": "queued",
+            "title": "Status",
+            "type": "string"
+          },
+          "surface": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Surface"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "ttl_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl Seconds"
+          }
+        },
+        "title": "ControlActionBody",
+        "type": "object"
+      },
+      "ControlActionUpdateBody": {
+        "properties": {
+          "error": {
+            "default": "",
+            "title": "Error",
+            "type": "string"
+          },
+          "result": {
+            "additionalProperties": true,
+            "title": "Result",
+            "type": "object"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ControlActionUpdateBody",
+        "type": "object"
+      },
+      "ControlEvidenceBody": {
+        "properties": {
+          "action": {
+            "default": "",
+            "title": "Action",
+            "type": "string"
+          },
+          "action_id": {
+            "default": "",
+            "title": "Action Id",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "kind": {
+            "default": "log",
+            "title": "Kind",
+            "type": "string"
+          },
+          "ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ok"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "title": "ControlEvidenceBody",
+        "type": "object"
+      },
+      "ControlSessionBody": {
+        "properties": {
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "owner_id": {
+            "default": "agent",
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "owner_label": {
+            "default": "Agent",
+            "title": "Owner Label",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "status": {
+            "default": "idle",
+            "title": "Status",
+            "type": "string"
+          },
+          "surface": {
+            "default": "browser",
+            "title": "Surface",
+            "type": "string"
+          },
+          "takeover": {
+            "default": false,
+            "title": "Takeover",
+            "type": "boolean"
+          },
+          "target_id": {
+            "default": "default",
+            "title": "Target Id",
+            "type": "string"
+          },
+          "ttl_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl Seconds"
+          }
+        },
+        "title": "ControlSessionBody",
+        "type": "object"
+      },
+      "ControlSessionStateBody": {
+        "properties": {
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "owner_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Label"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "ControlSessionStateBody",
+        "type": "object"
+      },
       "CreateAgentRequest": {
         "properties": {
           "description": {
@@ -2388,6 +2641,130 @@
           }
         },
         "title": "JoinInviteRequest",
+        "type": "object"
+      },
+      "KimiSwarmLoadTestBody": {
+        "properties": {
+          "agent_count": {
+            "default": 300,
+            "maximum": 512.0,
+            "minimum": 1.0,
+            "title": "Agent Count",
+            "type": "integer"
+          },
+          "confirm_real_provider": {
+            "default": false,
+            "title": "Confirm Real Provider",
+            "type": "boolean"
+          },
+          "estimated_max_tokens": {
+            "default": 0,
+            "maximum": 20000000.0,
+            "minimum": 0.0,
+            "title": "Estimated Max Tokens",
+            "type": "integer"
+          },
+          "max_concurrency": {
+            "default": 32,
+            "maximum": 256.0,
+            "minimum": 1.0,
+            "title": "Max Concurrency",
+            "type": "integer"
+          },
+          "max_provider_calls": {
+            "default": 0,
+            "maximum": 20000.0,
+            "minimum": 0.0,
+            "title": "Max Provider Calls",
+            "type": "integer"
+          },
+          "model": {
+            "default": "dry-run-swarm",
+            "title": "Model",
+            "type": "string"
+          },
+          "provider_id": {
+            "default": "dry_run",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "real_provider": {
+            "default": false,
+            "title": "Real Provider",
+            "type": "boolean"
+          },
+          "record_every_step": {
+            "default": true,
+            "title": "Record Every Step",
+            "type": "boolean"
+          },
+          "resume_from_session_id": {
+            "default": "",
+            "title": "Resume From Session Id",
+            "type": "string"
+          },
+          "resume_step_ranges": {
+            "items": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Resume Step Ranges",
+            "type": "array"
+          },
+          "session_id": {
+            "default": "kimi-swarm-load-test",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "stage_id": {
+            "default": "auto",
+            "title": "Stage Id",
+            "type": "string"
+          },
+          "step_count": {
+            "default": 4000,
+            "maximum": 20000.0,
+            "minimum": 1.0,
+            "title": "Step Count",
+            "type": "integer"
+          }
+        },
+        "title": "KimiSwarmLoadTestBody",
+        "type": "object"
+      },
+      "KimiSwarmQuotaProbeBody": {
+        "properties": {
+          "confirm_real_provider": {
+            "default": false,
+            "title": "Confirm Real Provider",
+            "type": "boolean"
+          },
+          "max_tokens": {
+            "default": 16,
+            "maximum": 512.0,
+            "minimum": 1.0,
+            "title": "Max Tokens",
+            "type": "integer"
+          },
+          "model": {
+            "default": "kimi-for-coding",
+            "title": "Model",
+            "type": "string"
+          },
+          "provider_id": {
+            "default": "kimi_coding",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "session_id": {
+            "default": "kimi-swarm-quota-probe",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "title": "KimiSwarmQuotaProbeBody",
         "type": "object"
       },
       "LinkRoomBody": {
@@ -12602,6 +12979,51 @@
         ]
       }
     },
+    "/api/browser/relay/control": {
+      "post": {
+        "operationId": "api_browser_relay_control_api_browser_relay_control_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Browser Relay Control Api Browser Relay Control Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Browser Relay Control",
+        "tags": [
+          "browser"
+        ]
+      }
+    },
     "/api/browser/relay/heartbeat": {
       "post": {
         "operationId": "api_browser_relay_heartbeat_api_browser_relay_heartbeat_post",
@@ -15461,6 +15883,806 @@
         ]
       }
     },
+    "/api/control-sessions": {
+      "get": {
+        "operationId": "list_sessions_api_control_sessions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "surface",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Surface"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Sessions Api Control Sessions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Sessions",
+        "tags": [
+          "control-sessions"
+        ]
+      },
+      "post": {
+        "operationId": "create_or_takeover_session_api_control_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlSessionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Or Takeover Session Api Control Sessions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Or Takeover Session",
+        "tags": [
+          "control-sessions"
+        ]
+      }
+    },
+    "/api/control-sessions/{session_id}": {
+      "get": {
+        "operationId": "get_session_api_control_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Session Api Control Sessions  Session Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Session",
+        "tags": [
+          "control-sessions"
+        ]
+      }
+    },
+    "/api/control-sessions/{session_id}/actions": {
+      "post": {
+        "operationId": "append_action_api_control_sessions__session_id__actions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlActionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Append Action Api Control Sessions  Session Id  Actions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Append Action",
+        "tags": [
+          "control-sessions"
+        ]
+      }
+    },
+    "/api/control-sessions/{session_id}/actions/{action_id}": {
+      "patch": {
+        "operationId": "update_action_api_control_sessions__session_id__actions__action_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "action_id",
+            "required": true,
+            "schema": {
+              "title": "Action Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlActionUpdateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Action Api Control Sessions  Session Id  Actions  Action Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Action",
+        "tags": [
+          "control-sessions"
+        ]
+      }
+    },
+    "/api/control-sessions/{session_id}/events": {
+      "get": {
+        "operationId": "session_events_api_control_sessions__session_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Events",
+        "tags": [
+          "control-sessions"
+        ]
+      }
+    },
+    "/api/control-sessions/{session_id}/evidence": {
+      "post": {
+        "operationId": "append_evidence_api_control_sessions__session_id__evidence_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlEvidenceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Append Evidence Api Control Sessions  Session Id  Evidence Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Append Evidence",
+        "tags": [
+          "control-sessions"
+        ]
+      }
+    },
+    "/api/control-sessions/{session_id}/evidence/{evidence_id}/detail": {
+      "get": {
+        "operationId": "evidence_detail_api_control_sessions__session_id__evidence__evidence_id__detail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Evidence Detail Api Control Sessions  Session Id  Evidence  Evidence Id  Detail Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evidence Detail",
+        "tags": [
+          "control-sessions"
+        ]
+      }
+    },
+    "/api/control-sessions/{session_id}/pause": {
+      "post": {
+        "operationId": "pause_session_api_control_sessions__session_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ControlSessionStateBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Pause Session Api Control Sessions  Session Id  Pause Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause Session",
+        "tags": [
+          "control-sessions"
+        ]
+      }
+    },
+    "/api/control-sessions/{session_id}/replay": {
+      "get": {
+        "operationId": "replay_session_api_control_sessions__session_id__replay_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Replay Session Api Control Sessions  Session Id  Replay Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replay Session",
+        "tags": [
+          "control-sessions"
+        ]
+      }
+    },
+    "/api/control-sessions/{session_id}/resume": {
+      "post": {
+        "operationId": "resume_session_api_control_sessions__session_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ControlSessionStateBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Resume Session Api Control Sessions  Session Id  Resume Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Session",
+        "tags": [
+          "control-sessions"
+        ]
+      }
+    },
+    "/api/control-sessions/{session_id}/stop": {
+      "post": {
+        "operationId": "stop_session_api_control_sessions__session_id__stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ControlSessionStateBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Stop Session Api Control Sessions  Session Id  Stop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop Session",
+        "tags": [
+          "control-sessions"
+        ]
+      }
+    },
+    "/api/control-sessions/{session_id}/takeover": {
+      "post": {
+        "operationId": "takeover_session_api_control_sessions__session_id__takeover_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ControlSessionStateBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Takeover Session Api Control Sessions  Session Id  Takeover Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Takeover Session",
+        "tags": [
+          "control-sessions"
+        ]
+      }
+    },
+    "/api/control-sessions/{session_id}/timeline": {
+      "get": {
+        "operationId": "replay_timeline_api_control_sessions__session_id__timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0.0,
+              "minimum": 0.0,
+              "title": "After",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_cursor",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "After Cursor",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Replay Timeline Api Control Sessions  Session Id  Timeline Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replay Timeline",
+        "tags": [
+          "control-sessions"
+        ]
+      }
+    },
     "/api/conversations": {
       "get": {
         "operationId": "list_conversations_api_conversations_get",
@@ -17270,6 +18492,29 @@
         "summary": "Deployment File",
         "tags": [
           "deployments"
+        ]
+      }
+    },
+    "/api/evolution/agent-benchmark": {
+      "get": {
+        "operationId": "get_agent_benchmark_api_evolution_agent_benchmark_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Agent Benchmark Api Evolution Agent Benchmark Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Agent Benchmark",
+        "tags": [
+          "evolution"
         ]
       }
     },
@@ -19528,6 +20773,384 @@
         "summary": "Forge Delete Variant",
         "tags": [
           "evolution-ops"
+        ]
+      }
+    },
+    "/api/evolution/kimi-swarm-certification": {
+      "get": {
+        "operationId": "get_kimi_swarm_certification_api_evolution_kimi_swarm_certification_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Kimi Swarm Certification Api Evolution Kimi Swarm Certification Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Kimi Swarm Certification",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/kimi-swarm-certification/load-test": {
+      "post": {
+        "operationId": "run_kimi_swarm_certification_load_test_api_evolution_kimi_swarm_certification_load_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/KimiSwarmLoadTestBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Kimi Swarm Certification Load Test Api Evolution Kimi Swarm Certification Load Test Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Kimi Swarm Certification Load Test",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/kimi-swarm-certification/load-test/preflight": {
+      "post": {
+        "operationId": "preflight_kimi_swarm_certification_load_test_api_evolution_kimi_swarm_certification_load_test_preflight_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/KimiSwarmLoadTestBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preflight Kimi Swarm Certification Load Test Api Evolution Kimi Swarm Certification Load Test Preflight Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preflight Kimi Swarm Certification Load Test",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/kimi-swarm-certification/next-stage": {
+      "get": {
+        "operationId": "get_kimi_swarm_certification_next_stage_api_evolution_kimi_swarm_certification_next_stage_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider_id",
+            "required": false,
+            "schema": {
+              "default": "kimi_coding",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "default": "kimi-for-coding",
+              "title": "Model",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_count",
+            "required": false,
+            "schema": {
+              "default": 300,
+              "maximum": 512,
+              "minimum": 1,
+              "title": "Agent Count",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "step_count",
+            "required": false,
+            "schema": {
+              "default": 4000,
+              "maximum": 20000,
+              "minimum": 1,
+              "title": "Step Count",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_concurrency",
+            "required": false,
+            "schema": {
+              "default": 32,
+              "maximum": 256,
+              "minimum": 1,
+              "title": "Max Concurrency",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Kimi Swarm Certification Next Stage Api Evolution Kimi Swarm Certification Next Stage Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Kimi Swarm Certification Next Stage",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/kimi-swarm-certification/proof-bundle": {
+      "get": {
+        "operationId": "get_kimi_swarm_certification_proof_bundle_api_evolution_kimi_swarm_certification_proof_bundle_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Kimi Swarm Certification Proof Bundle Api Evolution Kimi Swarm Certification Proof Bundle Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Kimi Swarm Certification Proof Bundle",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/kimi-swarm-certification/quota-probe": {
+      "post": {
+        "operationId": "run_kimi_swarm_certification_quota_probe_api_evolution_kimi_swarm_certification_quota_probe_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/KimiSwarmQuotaProbeBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Kimi Swarm Certification Quota Probe Api Evolution Kimi Swarm Certification Quota Probe Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Kimi Swarm Certification Quota Probe",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/kimi-swarm-certification/resume-plan": {
+      "get": {
+        "operationId": "get_kimi_swarm_certification_resume_plan_api_evolution_kimi_swarm_certification_resume_plan_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider_id",
+            "required": false,
+            "schema": {
+              "default": "kimi_coding",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "default": "kimi-for-coding",
+              "title": "Model",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_count",
+            "required": false,
+            "schema": {
+              "default": 300,
+              "maximum": 512,
+              "minimum": 1,
+              "title": "Agent Count",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "step_count",
+            "required": false,
+            "schema": {
+              "default": 4000,
+              "maximum": 20000,
+              "minimum": 1,
+              "title": "Step Count",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_concurrency",
+            "required": false,
+            "schema": {
+              "default": 32,
+              "maximum": 256,
+              "minimum": 1,
+              "title": "Max Concurrency",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Kimi Swarm Certification Resume Plan Api Evolution Kimi Swarm Certification Resume Plan Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Kimi Swarm Certification Resume Plan",
+        "tags": [
+          "evolution"
         ]
       }
     },
@@ -24156,6 +25779,220 @@
           }
         },
         "summary": "Api Mcp Config Update",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/mcp/oauth/authorize": {
+      "post": {
+        "operationId": "api_mcp_oauth_authorize_api_mcp_oauth_authorize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Mcp Oauth Authorize Api Mcp Oauth Authorize Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Mcp Oauth Authorize",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/mcp/oauth/callback": {
+      "get": {
+        "operationId": "api_mcp_oauth_callback_api_mcp_oauth_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Api Mcp Oauth Callback Api Mcp Oauth Callback Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Mcp Oauth Callback",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/mcp/oauth/status": {
+      "get": {
+        "operationId": "api_mcp_oauth_status_api_mcp_oauth_status_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "server",
+            "required": true,
+            "schema": {
+              "title": "Server",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Mcp Oauth Status Api Mcp Oauth Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Mcp Oauth Status",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/mcp/oauth/{server_name}": {
+      "delete": {
+        "operationId": "api_mcp_oauth_forget_api_mcp_oauth__server_name__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_name",
+            "required": true,
+            "schema": {
+              "title": "Server Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Mcp Oauth Forget Api Mcp Oauth  Server Name  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Mcp Oauth Forget",
         "tags": [
           "mcp"
         ]

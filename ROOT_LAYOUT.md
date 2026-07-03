@@ -49,9 +49,12 @@ as a repository-root child.
 | Path | Rule |
 |---|---|
 | `config.example.yaml` | Commit-safe example config |
+| `config.e2e.yaml` | Commit-safe config used by the e2e/release-proof scripts |
 | `config.yaml` / `config.local.yaml` | Local-only config |
 | `.env.example` | Commit-safe environment template |
 | `.env` | Local-only secret file |
+| `skills.lock.json` | Locked skill-package manifest (parallel to `uv.lock`) |
+| `CLAUDE.md` | Agent operating instructions read by Claude Code / agents |
 
 ## Local State
 

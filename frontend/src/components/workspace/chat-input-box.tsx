@@ -1167,7 +1167,7 @@ export function ChatInputBox({
             if (e.dataTransfer?.types?.includes("Files")) e.preventDefault();
           }}
           rows={2}
-          className="w-full resize-none bg-transparent px-3 py-1.5 text-[13px] leading-snug outline-none placeholder:text-muted-foreground/50 disabled:opacity-60"
+          className="min-h-[52px] w-full resize-none bg-transparent px-3 py-2.5 text-[13px] leading-snug outline-none placeholder:text-muted-foreground/50 disabled:opacity-60 sm:min-h-0 sm:py-1.5"
         />
         {isDeepResearchMode && researchConfigOpen && (
           <div className="absolute bottom-11 left-2 right-2 z-30 max-h-[min(70vh,560px)] overflow-y-auto rounded-lg border border-border/70 bg-popover px-3 py-3 shadow-md">
@@ -1393,7 +1393,7 @@ export function ChatInputBox({
                   type="button"
                   data-testid="chat-tools-trigger"
                   disabled={isBusy || status === "streaming"}
-                  className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+                  className="flex size-[42px] items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 sm:size-8"
                   title={t.chatInputBox.composerInsertions}
                   aria-label={t.chatInputBox.composerInsertions}
                 >
@@ -1515,7 +1515,7 @@ export function ChatInputBox({
                   onModeChange?.(mode === "chat" ? "react" : "chat", draft)
                 }
                 className={cn(
-                  "flex size-7 items-center justify-center rounded-lg border text-[11px] font-medium transition-colors",
+                  "flex size-[42px] items-center justify-center rounded-lg border text-[11px] font-medium transition-colors sm:size-8",
                   mode === "chat"
                     ? "border-primary/40 bg-primary/10 text-primary"
                     : "border-border/60 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
@@ -1563,7 +1563,7 @@ export function ChatInputBox({
               <button
                 type="button"
                 onClick={onStop}
-                className="flex size-7 items-center justify-center rounded-lg bg-foreground text-background hover:opacity-80 transition-opacity"
+                className="flex size-[42px] items-center justify-center rounded-lg bg-foreground text-background transition-opacity hover:opacity-80 sm:size-8"
                 title={stopLabel}
                 aria-label={stopLabel}
               >
@@ -1581,7 +1581,7 @@ export function ChatInputBox({
                   isBusy
                 }
                 className={cn(
-                  "flex size-7 items-center justify-center rounded-lg transition-[background-color,transform] duration-150",
+                  "flex size-[42px] items-center justify-center rounded-lg transition-[background-color,transform] duration-150 sm:size-8",
                   isDeepResearchMode
                     ? "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95"
                     : "bg-foreground text-background hover:bg-foreground/90 active:scale-95",

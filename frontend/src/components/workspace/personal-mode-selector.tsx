@@ -196,7 +196,7 @@ export function PersonalModeSelector({
         className={cn(
           "group flex items-center gap-1.5 text-[11px] font-medium text-foreground shadow-none transition-colors duration-150",
           chromeless
-            ? "h-6 rounded-md px-0.5 hover:text-foreground"
+            ? "h-8 rounded-md px-1.5 hover:bg-muted/55 hover:text-foreground"
             : "h-8 rounded-full border border-transparent bg-transparent px-2 hover:border-border/50 hover:bg-muted/55",
         )}
         title={activeLabels.desc}

@@ -22,7 +22,7 @@ export function ChatHeaderMenuButton({
       aria-label={t.common.openSidebarMenu}
       title={t.common.openSidebarMenu}
       className={cn(
-        "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground",
+        "flex size-[42px] shrink-0 items-center justify-center rounded-md text-muted-foreground sm:size-8",
         "transition-colors hover:bg-muted hover:text-foreground active:scale-95",
         "outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
         className,

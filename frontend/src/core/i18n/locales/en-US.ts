@@ -1618,6 +1618,8 @@ export const enUS: Translations = {
     noChatsYet: "No chats yet",
     collapseSidebar: "Collapse sidebar (⌘B)",
     expandSidebar: "Expand sidebar (⌘B)",
+    collapseSection: (label: string) => `Collapse ${label}`,
+    expandSection: (label: string) => `Expand ${label}`,
     projectNamePlaceholder: "Project name",
     backToProjectList: "Back to projects",
     openThreadFilesTooltip: "Open project files",
@@ -3088,6 +3090,13 @@ export const enUS: Translations = {
       save: "Save",
       saveDescription:
         "Restart the backend afterwards — the new skill registry reads this file at boot.",
+      nextStepSaveTitle: "Next: save your changes",
+      nextStepVerifyTitle: "Next: verify automation works",
+      nextStepSaveHint:
+        "Save, then restart when prompted so the new browser/desktop automation toggles take effect.",
+      nextStepVerifyHint:
+        "Toggles are in sync. Open the computer automation page to watch the screen, generate a plan, and confirm local capabilities run.",
+      openComputerTool: "Open computer automation",
       loading: "Loading automation capabilities...",
       loadFailed: "Load failed",
       restartConfirmTitle: "Restart backend to apply",
@@ -3627,6 +3636,7 @@ export const enUS: Translations = {
       dragToResize: "Drag to resize",
       searchPlaceholder: "Search settings",
       clearSearch: "Clear search",
+      quickAccess: "Frequently used",
       sectionsLabel: "Sections",
       resultsCount: (count) => `${count} result${count === 1 ? "" : "s"}`,
       noSearchResultsTitle: "No matching settings",

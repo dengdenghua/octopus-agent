@@ -5,8 +5,6 @@ from __future__ import annotations
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from runtime.execution.arms.enterprise_cache import EnterpriseDecisionCache
 
 # ─── lifecycle ──────────────────────────────────────────────

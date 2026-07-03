@@ -413,7 +413,7 @@ export function ModelPicker({
       type="button"
       data-testid="model-picker-trigger"
       className={cn(
-        "inline-flex min-w-0 items-center gap-1 rounded-lg border border-transparent",
+        "inline-flex h-8 min-w-0 items-center gap-1 rounded-lg border border-transparent",
         "bg-transparent px-2 py-1 text-xs text-muted-foreground transition outline-none",
         "hover:border-border/60 hover:bg-muted/60 hover:text-foreground",
         "data-[state=open]:bg-muted data-[state=open]:text-foreground",

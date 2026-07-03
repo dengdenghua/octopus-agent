@@ -2,13 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   BoxesIcon,
-  CheckCircle,
   ChevronLeft,
   Plus,
   Puzzle,
   Search,
   Settings2,
-  XCircle,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -228,6 +226,11 @@ function PluginListItem({
       ? "已启用"
       : "未启用";
   const surfaceBadges = pluginSurfaceBadges(entry);
+  const visibleBadges = surfaceBadges.slice(0, 2);
+  const hiddenBadgeCount = Math.max(
+    0,
+    surfaceBadges.length - visibleBadges.length,
+  );
 
   return (
     <Card className="group flex flex-row items-center gap-3 border border-border bg-card p-3 shadow-none transition-colors hover:bg-accent/30">
@@ -258,21 +261,42 @@ function PluginListItem({
           <h3 className="truncate text-sm font-semibold leading-5">
             {plugin.name}
           </h3>
+          <span
+            title={statusTitle}
+            className={cn(
+              "shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
+              plugin.error
+                ? "border-destructive/20 bg-destructive/10 text-destructive"
+                : plugin.enabled
+                  ? "border-primary/20 bg-primary/10 text-primary"
+                  : "border-border/60 bg-muted/35 text-muted-foreground",
+            )}
+          >
+            {plugin.enabled ? "已启用" : plugin.error ? "异常" : "未启用"}
+          </span>
         </div>
         <p className="mt-0.5 line-clamp-1 text-sm leading-5 text-muted-foreground">
           {plugin.description}
         </p>
         {surfaceBadges.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {surfaceBadges.map((badge) => (
+            {visibleBadges.map((badge) => (
               <Badge
                 key={badge}
                 variant="outline"
-                className="text-xs font-normal"
+                className="h-5 rounded-md px-1.5 text-[10px] font-normal"
               >
                 {badge}
               </Badge>
             ))}
+            {hiddenBadgeCount > 0 && (
+              <Badge
+                variant="outline"
+                className="h-5 rounded-md px-1.5 text-[10px] font-normal text-muted-foreground"
+              >
+                +{hiddenBadgeCount}
+              </Badge>
+            )}
           </div>
         )}
       </CardContent>
@@ -280,34 +304,16 @@ function PluginListItem({
         {hasConfig && hubPlugin && (
           <Button
             type="button"
-            variant="ghost"
-            size="icon"
+            variant="outline"
+            size="sm"
             aria-label={`配置 ${plugin.name}`}
-            className="size-8"
+            className="h-8 rounded-md px-2.5 text-xs"
             onClick={() => onConfigure(hubPlugin)}
           >
-            <Settings2 className="size-4" />
+            <Settings2 className="mr-1.5 size-3.5" />
+            配置
           </Button>
         )}
-        <span
-          title={statusTitle}
-          className={cn(
-            "flex size-8 items-center justify-center rounded-lg transition-colors",
-            plugin.error
-              ? "bg-destructive/10 text-destructive"
-              : plugin.enabled
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-muted",
-          )}
-        >
-          {plugin.error ? (
-            <XCircle className="size-5" />
-          ) : plugin.enabled ? (
-            <CheckCircle className="size-5" />
-          ) : (
-            <Plus className="size-5" />
-          )}
-        </span>
       </div>
     </Card>
   );

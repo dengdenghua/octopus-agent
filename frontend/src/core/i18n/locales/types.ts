@@ -1407,6 +1407,8 @@ export interface Translations {
     noChatsYet: string;
     collapseSidebar: string;
     expandSidebar: string;
+    collapseSection: (label: string) => string;
+    expandSection: (label: string) => string;
     projectNamePlaceholder: string;
     backToProjectList: string;
     openThreadFilesTooltip: string;
@@ -2485,6 +2487,11 @@ export interface Translations {
       reset: string;
       save: string;
       saveDescription: string;
+      nextStepSaveTitle: string;
+      nextStepVerifyTitle: string;
+      nextStepSaveHint: string;
+      nextStepVerifyHint: string;
+      openComputerTool: string;
       loading: string;
       loadFailed: string;
       restartConfirmTitle: string;
@@ -2972,6 +2979,7 @@ export interface Translations {
       dragToResize: string;
       searchPlaceholder: string;
       clearSearch: string;
+      quickAccess: string;
       sectionsLabel: string;
       resultsCount: (count: number) => string;
       noSearchResultsTitle: string;

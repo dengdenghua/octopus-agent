@@ -45,6 +45,7 @@ tier: "standard"
 | `completion_router.py` | Inline code completion endpoint — Tab-complete skeleton. |
 | `computer_router.py` | Computer automation API. |
 | `config_router.py` | Config router · identity-lock + providers + custom-models. |
+| `control_sessions_router.py` | Unified control-session API. |
 | `cowork_group_router.py` | Thread-group API: WeChat-style membership + mode + shared blackboard. |
 | `cron_router.py` | Cron settings compatibility router. |
 | `dag_debugger_router.py` | — |

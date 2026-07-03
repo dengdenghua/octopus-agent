@@ -351,7 +351,7 @@ def _read_or_create_secret(path: Path) -> bytes:
         text = path.read_text(encoding="utf-8").strip()
         if text:
             return _secret_text_to_bytes(text)
-    except FileNotFoundError:
+    except FileNotFoundError:  # expected · no secret on disk yet, fall through to mint one
         pass
     generated = secrets.token_hex(32)
     path.parent.mkdir(parents=True, exist_ok=True)

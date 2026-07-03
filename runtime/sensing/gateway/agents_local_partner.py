@@ -220,7 +220,7 @@ def partner_model(partner_id: str) -> dict[str, Any]:
                     data = json.loads(cfg.read_text(encoding="utf-8"))
                     model = str(data.get("model") or "")
                     source = "~/.claude/settings.json" if model else ""
-    except (OSError, ValueError, KeyError):
+    except (OSError, ValueError, KeyError):  # best-effort · falls through with model/source left at their defaults
         pass
     return {"partner_id": partner_id, "model": model, "source": source}
 

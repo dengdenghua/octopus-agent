@@ -65,7 +65,7 @@ export function PermissionIndicator({
           className={cn(
             "flex items-center gap-1.5 text-[11px] font-medium transition-colors",
             compact
-              ? "h-6 rounded-md px-0.5 text-muted-foreground hover:text-foreground"
+              ? "h-8 rounded-md px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
               : cn("h-8 rounded-full px-2.5", PERMISSION_TRIGGER_TONE),
             className,
           )}

@@ -545,7 +545,7 @@ class VlmClient:
         # 尝试直接解析
         try:
             return json.loads(text)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError:  # expected · falls through to the code-block/brace extraction below
             pass
 
         # 尝试提取 ```json ... ``` 代码块
@@ -554,7 +554,7 @@ class VlmClient:
         if json_block:
             try:
                 return json.loads(json_block.group(1).strip())
-            except json.JSONDecodeError:
+            except json.JSONDecodeError:  # expected · falls through to the brace extraction below
                 pass
 
         # 尝试提取第一个 { ... } 块
@@ -563,7 +563,7 @@ class VlmClient:
         if brace_start != -1 and brace_end > brace_start:
             try:
                 return json.loads(text[brace_start:brace_end + 1])
-            except json.JSONDecodeError:
+            except json.JSONDecodeError:  # expected · falls through to the logged safe-default below
                 pass
 
         logger.warning("VLM 返回内容无法解析为 JSON: %s", text[:200])

@@ -1,11 +1,9 @@
-import { Code2Icon } from "lucide-react";
+import { BriefcaseIcon } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { useMemo } from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
-
-import { AuroraText } from "../ui/aurora-text";
 
 export function Welcome({
   className,
@@ -16,18 +14,8 @@ export function Welcome({
 }) {
   const { t } = useI18n();
   const [searchParams] = useSearchParams();
-  const isDeep = useMemo(() => mode === "deep", [mode]);
   const isCode = useMemo(() => mode === "code", [mode]);
   const isSkillSeed = searchParams.get("mode") === "skill";
-  const colors = useMemo(() => {
-    if (isDeep) {
-      return ["#efefbb", "#e9c665", "#e3a812"];
-    }
-    if (isCode) {
-      return ["#d1fae5", "#34d399", "#0f766e"];
-    }
-    return ["var(--color-foreground)"];
-  }, [isCode, isDeep]);
   return (
     <div
       className={cn(
@@ -40,13 +28,13 @@ export function Welcome({
           t.welcome.createYourOwnSkill
         ) : isCode ? (
           <div className="flex items-center gap-2.5">
-            <Code2Icon className="size-7 text-teal-600 dark:text-teal-400" />
-            <AuroraText colors={colors}>Code with Octopus</AuroraText>
+            <BriefcaseIcon className="size-7 text-teal-600 dark:text-teal-400" />
+            <span className="text-foreground">Work with Octopus</span>
           </div>
         ) : (
           <div className="flex items-center gap-2">
             <span className="inline-block size-2 rounded-full bg-primary/80" />
-            <AuroraText colors={colors}>{t.welcome.greeting}</AuroraText>
+            <span className="text-foreground">{t.welcome.greeting}</span>
           </div>
         )}
       </div>

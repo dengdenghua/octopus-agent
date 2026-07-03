@@ -27,7 +27,7 @@ tier: "core"
 | `checkpoint_integrity.py` | — |
 | `checkpoint_mirror.py` | Distributed checkpoint mirror — P3 fourth slice. |
 | `completion_receipt.py` | — |
-| `input_mentions.py` | Parse @plugin/@skill/@agent mention tokens from user prompts. |
+| `input_mentions.py` | Parse @plugin/@skill/@agent and runtime surface mentions from prompts. |
 | `llm_planner.py` | — |
 | `output_styles.py` | Per-turn output style overlays for the ReAct system prompt. |
 | `pause_control.py` | — |

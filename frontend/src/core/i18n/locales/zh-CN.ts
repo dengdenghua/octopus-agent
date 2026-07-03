@@ -1562,6 +1562,8 @@ export const zhCN: Translations = {
     noChatsYet: "暂无对话",
     collapseSidebar: "收起侧栏 (⌘B)",
     expandSidebar: "展开侧栏 (⌘B)",
+    collapseSection: (label: string) => `收起${label}`,
+    expandSection: (label: string) => `展开${label}`,
     projectNamePlaceholder: "项目名称",
     backToProjectList: "返回项目列表",
     openThreadFilesTooltip: "打开项目文件",
@@ -2878,6 +2880,13 @@ export const zhCN: Translations = {
       save: "保存",
       saveDescription:
         "重启后端后新配置才会生效 — 新启动的 skill registry 会读这份文件。",
+      nextStepSaveTitle: "下一步：保存变更",
+      nextStepVerifyTitle: "下一步：验证自动化是否可用",
+      nextStepSaveHint:
+        "保存后按提示重启，让新的浏览器/电脑自动化开关在下一轮生效。",
+      nextStepVerifyHint:
+        "开关已同步。进入电脑自动化页观察屏幕、生成计划，确认本机能力可执行。",
+      openComputerTool: "打开电脑自动化",
       loading: "加载自动化能力配置...",
       loadFailed: "加载失败",
       restartConfirmTitle: "重启后端以生效",
@@ -3399,6 +3408,7 @@ export const zhCN: Translations = {
       dragToResize: "拖动调整大小",
       searchPlaceholder: "搜索设置",
       clearSearch: "清空搜索",
+      quickAccess: "常用",
       sectionsLabel: "设置项",
       resultsCount: (count) => `${count} 项`,
       noSearchResultsTitle: "没有找到匹配设置",

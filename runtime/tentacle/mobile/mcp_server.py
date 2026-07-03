@@ -1071,7 +1071,7 @@ class SseSession:
                 if data is None:
                     break
                 yield f"data: {data}\n\n"
-        except asyncio.CancelledError:
+        except asyncio.CancelledError:  # expected · client disconnected, SSE stream torn down
             pass
 
     async def handle_message(self, request: dict[str, Any]) -> None:

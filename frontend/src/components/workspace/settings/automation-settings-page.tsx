@@ -76,6 +76,7 @@ function useSaveCapabilities() {
 
 export default function AutomationSettingsPage() {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const { data, isLoading, error } = useCapabilities();
   const save = useSaveCapabilities();
 
@@ -95,6 +96,11 @@ export default function AutomationSettingsPage() {
     !!data &&
     (data.browser_automation !== browserOn ||
       data.desktop_automation !== desktopOn);
+
+  const openComputerTool = () => {
+    window.dispatchEvent(new Event("octopus:close-settings"));
+    navigate("/workspace/computer");
+  };
 
   async function onSave() {
     try {
@@ -158,6 +164,40 @@ export default function AutomationSettingsPage() {
         <p className="text-sm text-muted-foreground mt-1">
           {t.settings.automation.description}
         </p>
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-card/35 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="text-sm font-medium">
+            {dirty
+              ? t.settings.automation.nextStepSaveTitle
+              : t.settings.automation.nextStepVerifyTitle}
+          </div>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {dirty
+              ? t.settings.automation.nextStepSaveHint
+              : t.settings.automation.nextStepVerifyHint}
+          </p>
+        </div>
+        <Button
+          type="button"
+          className="h-10 shrink-0 rounded-md px-3"
+          onClick={dirty ? onSave : openComputerTool}
+          disabled={dirty ? save.isPending : false}
+        >
+          {dirty ? (
+            save.isPending ? (
+              <Loader2Icon className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <SaveIcon className="mr-1.5 h-3.5 w-3.5" />
+            )
+          ) : (
+            <ExternalLinkIcon className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          {dirty
+            ? t.settings.automation.save
+            : t.settings.automation.openComputerTool}
+        </Button>
       </div>
 
       <Alert>

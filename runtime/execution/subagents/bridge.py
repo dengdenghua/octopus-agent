@@ -58,7 +58,7 @@ def _default_max_active_subagents() -> int:
             v = int(raw)
             if v > 0:
                 return v
-        except ValueError:
+        except ValueError:  # expected · malformed env value falls through to the default
             pass
     return 64
 

@@ -574,6 +574,46 @@ export function SettingsDialog(props: SettingsDialogProps) {
                 </Button>
               ) : null}
             </div>
+            {!normalizedSettingsQuery && (
+              <div className="mb-2 rounded-md border border-border/55 bg-background/55 p-1.5">
+                <div className="px-1 pb-1 text-[10px] font-medium uppercase text-muted-foreground">
+                  {t.settings.dialog.quickAccess}
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  {[
+                    {
+                      id: "models" as SettingsSection,
+                      label: t.settings.model.title,
+                      icon: CpuIcon,
+                    },
+                    {
+                      id: "automation" as SettingsSection,
+                      label: t.settings.sections.automation,
+                      icon: ZapIcon,
+                    },
+                    {
+                      id: "privacy" as SettingsSection,
+                      label: t.settings.sections.privacy,
+                      icon: ShieldIcon,
+                    },
+                  ].map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      title={label}
+                      aria-label={label}
+                      onClick={() => setActiveSection(id)}
+                      className={cn(
+                        "flex h-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
+                        activeSection === id && "bg-muted text-foreground",
+                      )}
+                    >
+                      <Icon className="size-4" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="text-muted-foreground mb-1 flex items-center justify-between px-1.5 text-[10px] font-medium uppercase">
               <span>{t.settings.dialog.sectionsLabel}</span>
               {normalizedSettingsQuery ? (

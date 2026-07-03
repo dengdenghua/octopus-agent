@@ -47,6 +47,7 @@ interface ChatPageLayoutProps {
   sidebar?: ReactNode;
   secondaryPanel?: ReactNode;
   isNewThread?: boolean;
+  pageTitle?: string;
   messageListClassName?: string;
   headerClassName?: string;
   showSidebar?: boolean;
@@ -61,6 +62,7 @@ export function ChatPageLayout({
   sidebar,
   secondaryPanel,
   isNewThread = false,
+  pageTitle,
   messageListClassName,
   headerClassName,
   showSidebar = false,
@@ -180,6 +182,7 @@ export function ChatPageLayout({
           }}
         >
           <main className="relative flex min-h-0 max-w-full grow flex-col overflow-hidden overscroll-none">
+            {pageTitle && <h1 className="sr-only">{pageTitle}</h1>}
             {modeSwitcher && (
               <div className="pointer-events-auto absolute top-2 left-1/2 z-50 -translate-x-1/2">
                 {modeSwitcher}

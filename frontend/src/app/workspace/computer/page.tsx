@@ -238,6 +238,18 @@ export default function ComputerAutomationPage() {
   const computerUnavailable = runtimeState.blocksActions;
   const computerActionDisabled = busy !== null || computerUnavailable;
 
+  // computerControlSession is captured once per action by
+  // runComputerControlAction and held for that action's whole
+  // duration. If getStopped() closed over `leaseBlocked` by value, an
+  // in-flight action would keep evaluating the lease state from
+  // whenever the memo was last recomputed — a lease lost mid-action
+  // wouldn't be observed until the NEXT action starts. Track it via a
+  // ref so getStopped() always reads the current value.
+  const leaseBlockedRef = useRef(leaseBlocked);
+  useEffect(() => {
+    leaseBlockedRef.current = leaseBlocked;
+  }, [leaseBlocked]);
+
   const computerControlSession = useMemo<ControlSessionOptions>(
     () => ({
       sessionId: leaseOwner?.owner_id,
@@ -245,7 +257,7 @@ export default function ComputerAutomationPage() {
       ownerLabel: leaseOwner?.owner_label ?? "本地电脑自动化页",
       surface: "computer",
       targetId: "local-pc",
-      getStopped: () => (leaseBlocked ? "lease_lost" : false),
+      getStopped: () => (leaseBlockedRef.current ? "lease_lost" : false),
       setIndicator: (mode, detail) => {
         setControlIndicator({
           mode,
@@ -270,7 +282,7 @@ export default function ComputerAutomationPage() {
         );
       },
     }),
-    [leaseBlocked, leaseOwner],
+    [leaseOwner],
   );
 
   const runComputerControlAction = useCallback(
@@ -430,14 +442,29 @@ export default function ComputerAutomationPage() {
 
     const frameRect = frame.getBoundingClientRect();
     const canvasRect = canvas.getBoundingClientRect();
-    setLiveCanvasBox({
+    const next: ScreenshotImageBox = {
       left: canvasRect.left - frameRect.left,
       top: canvasRect.top - frameRect.top,
       width: canvasRect.width,
       height: canvasRect.height,
       naturalWidth: canvas.width,
       naturalHeight: canvas.height,
-    });
+    };
+    // Re-runs on every incoming stream frame (up to 10x/sec) via the
+    // effect below, but the canvas's on-screen position/size only
+    // actually changes on resize/layout events. Skip the setState
+    // (and the full-page re-render it triggers) when nothing moved.
+    setLiveCanvasBox((current) =>
+      current &&
+      current.left === next.left &&
+      current.top === next.top &&
+      current.width === next.width &&
+      current.height === next.height &&
+      current.naturalWidth === next.naturalWidth &&
+      current.naturalHeight === next.naturalHeight
+        ? current
+        : next,
+    );
   }, []);
 
   useEffect(() => {

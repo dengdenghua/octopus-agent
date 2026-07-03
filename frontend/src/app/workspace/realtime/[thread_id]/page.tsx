@@ -18,6 +18,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
+  ArtifactPanel,
   ArtifactsProvider,
   useArtifacts,
 } from "@/components/workspace/artifacts";
@@ -85,6 +86,7 @@ import {
   workflowPresetForMode,
 } from "@/core/agent-modes/presets";
 import { TodoPanel } from "@/components/workspace/todo-panel";
+import { PlanPanel } from "@/components/workspace/plan-panel";
 import { Welcome } from "@/components/workspace/welcome";
 import {
   latestPersistedTodoEventsFromMessages,
@@ -102,6 +104,7 @@ import { threadCollaborationLink } from "@/core/collaboration/thread-collaborati
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { useThreadSettings } from "@/core/settings";
 import { useThreadStream } from "@/core/threads/hooks";
+import { useIsMobile } from "@/hooks/use-mobile";
 import type { ReasoningEffort } from "@/core/threads";
 import {
   normalizePermissionMode,
@@ -360,10 +363,10 @@ function RightPanelMenu({
       title={panelToggleLabel}
       onClick={handleTogglePanel}
       className={cn(
-        "flex size-8 items-center justify-center rounded-md border transition-colors shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
+        "flex size-[42px] items-center justify-center rounded-md border shadow-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 sm:size-8",
         activePage
-          ? "border-border/55 bg-muted/45 text-foreground"
-          : "border-transparent bg-transparent hover:border-border/45 hover:bg-muted/45 hover:text-foreground",
+          ? "border-transparent bg-transparent text-foreground/82 hover:border-border/55 hover:bg-muted/55 hover:text-foreground"
+          : "border-transparent bg-transparent text-muted-foreground hover:border-border/55 hover:bg-muted/55 hover:text-foreground",
       )}
     >
       <PanelRightIcon className="size-4" />
@@ -521,12 +524,13 @@ function ChatHeaderRecButton({
       onClick={onOpen}
       disabled={!threadId || threadId === "new"}
       title={recordingTitle}
+      aria-label={recordingTitle}
       className={cn(
-        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-[11px] font-semibold transition-colors",
+        "inline-flex h-[42px] shrink-0 items-center gap-1.5 rounded-md border px-3 text-[11px] font-semibold shadow-none transition-colors sm:h-8 sm:px-2.5",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
         recording
-          ? "bg-red-500/12 text-red-600 hover:bg-red-500/18 dark:text-red-400"
-          : "bg-muted/45 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+          ? "border-red-500/25 bg-red-500/10 text-red-600 hover:bg-red-500/16 dark:text-red-400"
+          : "border-transparent bg-transparent text-muted-foreground hover:border-border/50 hover:bg-muted/55 hover:text-foreground",
       )}
     >
       <CircleDotIcon className={cn("size-3.5", recording && "animate-pulse")} />
@@ -653,7 +657,7 @@ function TaskCollaboratorControl({
         <button
           type="button"
           className={cn(
-            "inline-flex h-8 max-w-[11rem] items-center gap-1.5 rounded-md border px-2 text-[12px] font-medium transition-colors",
+            "group inline-flex h-[42px] max-w-[11rem] items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium shadow-none transition-colors sm:h-8 sm:px-2",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
             isTeamDraft
               ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
@@ -698,10 +702,10 @@ function TaskCollaboratorControl({
           </span>
           <span
             className={cn(
-              "shrink-0 rounded-sm px-1.5 py-0.5 text-[10px]",
+              "shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] transition-colors",
               isTeamDraft
                 ? "bg-primary/12 text-primary"
-                : "bg-muted/65 text-muted-foreground",
+                : "bg-transparent text-muted-foreground group-hover:bg-background/75 group-hover:text-foreground",
             )}
           >
             {countLabel}
@@ -917,6 +921,7 @@ function RealtimePageContent({
 }) {
   const { t } = useI18n();
   const { threadId, isNewThread, setIsNewThread } = chatState;
+  const isMobile = useIsMobile();
   const {
     artifacts,
     open: artifactsOpen,
@@ -2090,13 +2095,19 @@ function RealtimePageContent({
     collaborationEnabled ||
     hasRenderableAgentWorkbench ||
     !!previewBlocks ||
-    // Coding workspace keeps the workbench available from the first turn, but
-    // the file tree now lives in the left project pane until the user opens
-    // the right workbench explicitly.
-    isCodingWorkspaceMode;
+    // Realtime keeps the right workbench available from the first turn. The
+    // actual file tree still lives in the left project pane; this panel is the
+    // live agent workstation and replay surface.
+    isCodingWorkspaceMode ||
+    isRealtimeRoute;
   const showAgentWorkbench =
     canOpenAgentWorkbench &&
     (agentWorkbenchManuallyOpened ||
+      (isNewThread &&
+        !isMobile &&
+        !agentWorkbenchDismissed &&
+        !artifactsOpen &&
+        !showAgentPlan) ||
       (collaborationEnabled && !agentWorkbenchDismissed) ||
       (hasRenderableAgentWorkbench &&
         (!agentWorkbenchDismissed || artifactsOpen || showAgentPlan))) &&
@@ -2113,10 +2124,12 @@ function RealtimePageContent({
       setAgentWorkbenchManuallyOpened(false);
     }
     if (!hasRenderableAgentWorkbench) {
-      setAgentWorkbenchDismissed(false);
+      if (!isNewThread) {
+        setAgentWorkbenchDismissed(false);
+      }
       setAgentWorkbenchTabTouched(false);
     }
-  }, [canOpenAgentWorkbench, hasRenderableAgentWorkbench]);
+  }, [canOpenAgentWorkbench, hasRenderableAgentWorkbench, isNewThread]);
 
   useEffect(() => {
     if (
@@ -2382,16 +2395,16 @@ function RealtimePageContent({
   }, [thread, threadId, tasks.data, pauseTask, t.chatPage.stopNote]);
 
   const hasResearchPanel = showResearch && (!!researchJob || !!researchError);
-  const activeRightPanel: RightPanelPage | null = showAgentWorkbench
-    ? "agent"
-    : artifactsOpen
-      ? "artifacts"
-      : showAgentPlan
-        ? "plan"
-        : showResearchHistory
-          ? "history"
-          : hasResearchPanel
-            ? "research"
+  const activeRightPanel: RightPanelPage | null = showResearchHistory
+    ? "history"
+    : hasResearchPanel
+      ? "research"
+      : artifactsOpen
+        ? "artifacts"
+        : showAgentPlan
+          ? "plan"
+          : showAgentWorkbench
+            ? "agent"
             : null;
 
   const openAgentPanel = useCallback(() => {
@@ -2520,6 +2533,11 @@ function RealtimePageContent({
         <ChatBox artifactPanelMode="external" threadId={threadId}>
           <ChatPageLayout
             isNewThread={isNewThread}
+            pageTitle={
+              thread?.values?.title ||
+              initialPrompt ||
+              (isNewThread ? t.sidebar.actionNewTask : "Octopus")
+            }
             header={
               <>
                 <ChatHeaderMenuButton
@@ -2809,6 +2827,15 @@ function RealtimePageContent({
                     {researchError}
                   </div>
                 </div>
+              ) : artifactsOpen ? (
+                <ArtifactPanel className="size-full" threadId={threadId} />
+              ) : showAgentPlan ? (
+                <PlanPanel
+                  className="size-full rounded-none border-0 shadow-none"
+                  messages={thread.messages}
+                  open
+                  onClose={() => setShowAgentPlan(false)}
+                />
               ) : showAgentWorkbench ? (
                 <AgentWorkbenchPanel
                   activeTab={agentWorkbenchTab}
@@ -2829,6 +2856,7 @@ function RealtimePageContent({
             }
             showSidebar={
               artifactsOpen ||
+              showAgentPlan ||
               showResearchHistory ||
               (showResearch && (!!researchJob || !!researchError)) ||
               showAgentWorkbench

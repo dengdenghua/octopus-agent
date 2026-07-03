@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from runtime.safety.evolution.agent_benchmark import compute_agent_benchmark
 from runtime.platform.process.paths import project_root as default_project_root
+from runtime.safety.evolution.agent_benchmark import compute_agent_benchmark
 from runtime.safety.evolution.codex_gap import compute_codex_gap_report
 from runtime.safety.evolution.ecosystem_readiness import compute_ecosystem_readiness
 from runtime.safety.evolution.parity_certification import compute_parity_certification
