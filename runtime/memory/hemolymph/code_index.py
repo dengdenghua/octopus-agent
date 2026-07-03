@@ -177,10 +177,12 @@ def _build_index(root: Path) -> dict[str, Any]:
     df: Counter[str] = Counter()
     total_len = 0
     for path in _iter_source_files(root):
+        # Posix-style everywhere: retrieved-source headers feed prompts and
+        # tests compare them literally, so Windows separators must not leak.
         try:
-            rel = str(path.relative_to(root))
+            rel = path.relative_to(root).as_posix()
         except ValueError:
-            rel = str(path)
+            rel = path.as_posix()
         for rel_path, line, body in _chunk_file(path, rel):
             # The path joins the tokens so a filename hit counts toward the chunk.
             tf = Counter(_tokenize(f"{rel_path} {body}"))
