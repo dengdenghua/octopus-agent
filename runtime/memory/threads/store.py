@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import json
+import logging
 import re
 import threading
 from datetime import UTC, datetime
@@ -13,6 +14,8 @@ from typing import Any
 from uuid import uuid4
 
 from .session_index import SessionIndex, entry_from_thread
+
+logger = logging.getLogger(__name__)
 
 _PATH_SEGMENT_RE = re.compile(r'[<>:"/\\|?*\x00-\x1F]')
 
@@ -489,15 +492,109 @@ class ThreadStateStore:
         target = self._per_thread_path(thread) if self._per_agent_base is not None else self._path
         if target is None:
             return None
-        is_new = not target.exists()
         target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("a", encoding="utf-8") as handle:
-            # Write session_meta header on brand-new files.
-            if is_new:
-                meta = self._session_meta(thread)
-                handle.write(json.dumps(meta, ensure_ascii=False) + "\n")
-            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+        # The ``session_meta`` header goes on the first line of a
+        # brand-new file. The "is it new?" decision is made *under the
+        # lock* in ``_append_locked`` (by testing for an empty file), so
+        # two workers racing to create the same per-thread JSONL can't
+        # both emit a header.
+        header_line = json.dumps(self._session_meta(thread), ensure_ascii=False) + "\n"
+        record_line = json.dumps(record, ensure_ascii=False) + "\n"
+        self._append_locked(target, record_line, header_line=header_line)
         return target
+
+    def _append_locked(
+        self,
+        target: Path,
+        line: str,
+        *,
+        header_line: str | None = None,
+    ) -> None:
+        """Append ``line`` to ``target`` durably under a cross-process
+        file lock, writing ``header_line`` first iff the file is still
+        empty when the lock is taken.
+
+        ``self._lock`` only serialises writers inside *this* Python
+        process. Under ``uvicorn --workers N`` two processes appending
+        the same per-thread ``<thread_id>.jsonl`` can interleave their
+        ``write``/``flush`` cycles and lose or corrupt records — POSIX
+        ``O_APPEND`` is atomic only for writes ≤ PIPE_BUF (~4 KB), and
+        thread records routinely exceed that. Wrap the write in an
+        OS-level ``flock`` (``msvcrt`` on Windows) plus an ``fsync``,
+        mirroring ``JSONLJournal.write``. Falls back to a plain append
+        when ``fcntl``/``msvcrt`` aren't importable (e.g. WASM build).
+        """
+        import os as _os
+
+        with self._lock, target.open("a", encoding="utf-8") as handle:
+            fd = handle.fileno()
+            locked = False
+            try:
+                try:
+                    if _os.name == "nt":
+                        import msvcrt as _msvcrt
+
+                        # ``msvcrt.locking`` locks 1 byte at the CURRENT
+                        # file position, and mode "a" positions the fd
+                        # at EOF-at-open — a size that differs per
+                        # writer. Two writers opening at different sizes
+                        # would each lock a different byte and never
+                        # actually contend. Seek to a fixed offset (0)
+                        # first so every writer locks the *same* byte;
+                        # the append-position seek below then restores
+                        # the correct write cursor.
+                        handle.seek(0, 0)
+                        _msvcrt.locking(fd, _msvcrt.LK_LOCK, 1)
+                        locked = True
+                    else:
+                        import fcntl as _fcntl
+
+                        _fcntl.flock(fd, _fcntl.LOCK_EX)
+                        locked = True
+                except (OSError, ImportError) as lock_exc:
+                    locked = False
+                    # Degrading to an unlocked append re-opens the very
+                    # interleaving window this helper exists to close —
+                    # say so, or field corruption is undiagnosable.
+                    logger.warning(
+                        "thread-store: file lock unavailable for %s (%s); "
+                        "appending without cross-process lock",
+                        target.name,
+                        lock_exc,
+                    )
+                # Seek to end: another process may have extended the file
+                # since our ``open("a")`` computed the cursor. ``tell()``
+                # then reports the current size — zero means we are the
+                # writer that gets to lay down the ``session_meta`` header.
+                try:  # noqa: SIM105
+                    handle.seek(0, 2)
+                except OSError:  # best-effort · handle already at append position on most platforms
+                    pass
+                if header_line is not None and handle.tell() == 0:
+                    handle.write(header_line)
+                handle.write(line)
+                handle.flush()
+                try:  # noqa: SIM105
+                    _os.fsync(fd)
+                except OSError:  # best-effort · data already flushed to the OS buffer above
+                    pass
+            finally:
+                if locked:
+                    try:
+                        if _os.name == "nt":
+                            import msvcrt as _msvcrt
+
+                            try:  # noqa: SIM105
+                                handle.seek(0, 0)
+                            except OSError:  # best-effort · unlock below still targets the intended byte
+                                pass
+                            _msvcrt.locking(fd, _msvcrt.LK_UNLCK, 1)
+                        else:
+                            import fcntl as _fcntl
+
+                            _fcntl.flock(fd, _fcntl.LOCK_UN)
+                    except OSError:  # best-effort · closing the handle below releases the OS lock anyway
+                        pass
 
     def _session_meta(self, thread: dict[str, Any]) -> dict[str, Any]:
         """Build a ``session_meta`` header. The first line of each

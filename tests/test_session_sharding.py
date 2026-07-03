@@ -283,3 +283,57 @@ def test_legacy_single_file_mode_still_supported(tmp_path: Path) -> None:
     thread = reloaded.get("solo")
     assert thread is not None
     assert thread["values"]["title"] == "Hi there"
+
+
+# ─── _append_locked · cross-process lock offsets ────────────
+
+
+def test_append_locked_windows_lock_and_unlock_use_same_byte_offset(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """``msvcrt.locking`` locks 1 byte at the CURRENT file position, not
+    a fixed byte — mode "a" starts a writer at EOF-at-open, a size that
+    differs per writer. Locking and unlocking must target the same
+    offset (else the unlock raises and the lock byte stays held, and
+    two writers that opened at different sizes never actually
+    contend). Fake the ``nt``/``msvcrt`` branch to pin the exact
+    offsets used for LK_LOCK vs LK_UNLCK without needing real Windows.
+
+    Builds the store/target path on the real (Posix) filesystem first,
+    then only fakes ``os.name``/``msvcrt`` around the raw
+    ``_append_locked`` calls — ``pathlib.Path`` dispatches to
+    ``WindowsPath`` off ``os.name`` at construction time, so patching
+    it globally before any Path is built would crash on this OS.
+    """
+    import sys
+    import types
+
+    store = ThreadStateStore(per_agent_base=tmp_path)
+    target = tmp_path / "events.jsonl"
+
+    positions: list[tuple[str, int]] = []
+
+    fake_msvcrt = types.SimpleNamespace(LK_LOCK=1, LK_UNLCK=0)
+
+    def _fake_locking(fd, mode, nbytes):
+        # Record the file position at the moment locking/unlocking is
+        # requested — this is the byte msvcrt would actually target.
+        import os as _os
+
+        pos = _os.lseek(fd, 0, 1)  # SEEK_CUR, no-op seek to read position
+        positions.append(("lock" if mode == fake_msvcrt.LK_LOCK else "unlock", pos))
+
+    fake_msvcrt.locking = _fake_locking
+    monkeypatch.setitem(sys.modules, "msvcrt", fake_msvcrt)
+    monkeypatch.setattr("os.name", "nt")
+
+    store._append_locked(target, "first\n", header_line="header\n")
+    store._append_locked(target, "second\n")
+
+    assert len(positions) == 4
+    lock_positions = [p for kind, p in positions if kind == "lock"]
+    unlock_positions = [p for kind, p in positions if kind == "unlock"]
+    assert len(lock_positions) == len(unlock_positions) == 2
+    for lock_pos, unlock_pos in zip(lock_positions, unlock_positions, strict=True):
+        assert lock_pos == unlock_pos == 0
+    assert target.read_text(encoding="utf-8") == "header\nfirst\nsecond\n"
