@@ -126,6 +126,25 @@ def test_research_mode_tool_specs_keep_deep_task_chain():
     assert "docx" in names
 
 
+def test_allowlist_filter_failure_denies_all_skills(monkeypatch):
+    """``filter_allowed_names`` is the agent's tool allow-list gate. If it
+    raises, the agent must get NO tools, not the full unfiltered list —
+    a broken/unexpected allow-list computation must fail closed."""
+    import runtime.execution.misc.skill_policy as skill_policy
+
+    def _boom(names, *, policy=None, agent=None):
+        raise TypeError("boom")
+
+    monkeypatch.setattr(skill_policy, "filter_allowed_names", _boom)
+
+    specs = build_anthropic_tool_specs(
+        _registry_with_task_chain(),
+        agent=SimpleNamespace(agent_id="broken-agent"),
+        user_context={"mode": "swarm"},
+    )
+    assert specs == []
+
+
 def test_goal_activation_preserves_relevant_tools_after_cap():
     registry = SkillRegistry()
     for idx in range(20):

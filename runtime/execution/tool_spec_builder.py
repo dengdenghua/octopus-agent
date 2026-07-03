@@ -191,8 +191,20 @@ def build_anthropic_tool_specs(
         try:
             from runtime.execution.misc.skill_policy import filter_allowed_names
             all_names = filter_allowed_names(all_names, agent=agent)
-        except (ImportError, AttributeError, TypeError, ValueError):
-            pass
+        except (AttributeError, TypeError, ValueError):
+            # ``filter_allowed_names`` is the agent's tool allow-list gate —
+            # swallowing this and leaving ``all_names`` as-is used to fail
+            # OPEN (the agent got the FULL unrestricted skill list on any
+            # unexpected error, e.g. a malformed ``agent`` object). Fail
+            # CLOSED instead: an agent whose allow-list can't be computed
+            # gets no tools, not every tool.
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "filter_allowed_names failed for agent=%r; denying all skills",
+                getattr(agent, "agent_id", agent), exc_info=True,
+            )
+            all_names = []
 
     activation = activate_capabilities(
         goal,
