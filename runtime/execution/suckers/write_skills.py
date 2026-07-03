@@ -342,9 +342,9 @@ def _probe_process(pid: int | None) -> tuple[bool, int | None]:
         waited_pid, status = os.waitpid(pid, os.WNOHANG)
         if waited_pid == pid:
             return False, os.waitstatus_to_exitcode(status)
-    except ChildProcessError:
+    except ChildProcessError:  # expected · already reaped elsewhere, falls through to the liveness probe
         pass
-    except OSError:
+    except OSError:  # expected · falls through to the liveness probe below
         pass
     try:
         os.kill(pid, 0)
@@ -757,6 +757,70 @@ def _multi_edit_file(
 # ═══════════════════════════════════════════════════════════
 
 
+# ── Unconfined-exec environment scrubbing ────────────────────
+# When a shell/exec skill runs WITHOUT a sandbox (``sandbox_dir`` is
+# None — e.g. the OpenAI-compat gateway path that never binds a Session,
+# or a direct CLI run), the child would otherwise inherit the runtime's
+# full ``os.environ`` and a model-driven command could read secrets
+# straight out of it. Full confinement is ``sandbox_dir`` + the sandbox
+# backend; this closes the secret-leak half on the unconfined path by
+# handing the child a credential-scrubbed copy of the environment.
+
+# Env-var names whose value is almost always a credential. Matched
+# case-insensitively as a substring, so ANTHROPIC_API_KEY, GH_TOKEN,
+# DB_PASSWORD, AWS_SECRET_ACCESS_KEY, ``*_APIKEY`` … all match.
+_SENSITIVE_ENV_NAME_HINTS = (
+    "KEY",
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "PASSPHRASE",
+    "CREDENTIAL",
+    "APIKEY",
+    "PRIVATE",
+    "COOKIE",
+    "SESSION",
+)
+# Benign names that contain a hint substring but are needed by real
+# commands and carry no secret — keep them.
+_SENSITIVE_ENV_NAME_KEEP = frozenset({"SSH_AUTH_SOCK"})
+
+_ENV_SECRET_DETECTOR: Any = None
+
+
+def _scrub_unconfined_env(overlay: dict[str, str] | None) -> dict[str, str]:
+    """Return the environment for an UNCONFINED subprocess: ``os.environ``
+    minus any entry whose *name* looks like a credential or whose *value*
+    is detected as a secret by the shared ``Redactor``, with the explicit
+    caller-supplied ``overlay`` applied verbatim on top.
+
+    Benign vars (PATH, HOME, LANG, …) are preserved so commands still
+    run. A caller that deliberately passes ``env={"X": "y"}`` still gets
+    ``X`` — explicit intent wins over the name/value heuristics.
+    """
+    global _ENV_SECRET_DETECTOR
+    if _ENV_SECRET_DETECTOR is None:
+        from runtime.platform.observability.redactor import Redactor
+
+        _ENV_SECRET_DETECTOR = Redactor(
+            enabled_categories={"api_key", "aws_secret", "private_key", "jwt"}
+        )
+    safe: dict[str, str] = {}
+    for name, value in os.environ.items():
+        upper = name.upper()
+        if upper not in _SENSITIVE_ENV_NAME_KEEP:
+            if any(hint in upper for hint in _SENSITIVE_ENV_NAME_HINTS):
+                continue
+            sval = str(value)
+            if sval and _ENV_SECRET_DETECTOR.redact(sval) != sval:
+                continue
+        safe[name] = value
+    if overlay:
+        safe.update({str(k): str(v) for k, v in overlay.items()})
+    return safe
+
+
 def _exec_shell(
     command: str | list[str] = "",
     *,
@@ -797,11 +861,20 @@ def _exec_shell(
         cwd_str = None
 
     run_env = None
-    if env is not None:
-        if sandbox_dir is not None:
+    if sandbox_dir is not None:
+        # Confined exec: the sandbox backend (in ``stream_run``) owns the
+        # environment. When the caller supplies an explicit env we pass
+        # only that; otherwise leave ``run_env`` None so the backend
+        # builds its allowlisted env.
+        if env is not None:
             run_env = {str(k): str(v) for k, v in env.items()}
-        else:
-            run_env = {**os.environ, **{str(k): str(v) for k, v in env.items()}}
+    else:
+        # UNCONFINED exec (no sandbox_dir): never hand the child our full
+        # os.environ — a model-driven shell on the compat-gateway path
+        # (no bound Session) could echo $ANTHROPIC_API_KEY & friends.
+        # Start from a credential-scrubbed copy and lay any explicit
+        # caller env on top.
+        run_env = _scrub_unconfined_env(env)
 
     from runtime.platform.process.streaming import stream_run
 
@@ -902,8 +975,12 @@ def _background_exec(
         cwd_str = str(transformed_cwd)
         sandbox_backend = choice.name
         sandbox_hard = choice.hard
-    elif env is not None:
-        run_env = {**os.environ, **{str(k): str(v) for k, v in env.items()}}
+    else:
+        # UNCONFINED background exec: scrub credential vars from the
+        # inherited environment (see ``_exec_shell``), applied whether or
+        # not the caller passed an explicit env.
+        run_env = _scrub_unconfined_env(env)
+        env_mode = "scrubbed"
 
     execution_policy = _background_execution_policy(
         sandbox_requested=sandbox_dir is not None,
