@@ -16,6 +16,7 @@ The router takes a callable returning the storage path so tests can
 isolate against ``tmp_path`` without touching the user's real
 ``OCTOPUS_HOME`` directory.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -88,7 +89,7 @@ def create_permissions_router(
         # anonymous callers at the router boundary.
         from runtime.adapters.web_auth import _resolve_actor
 
-        _resolve_actor(
+        _resolve_actor(  # AUTH-OK: actor-agnostic
             request,
             identity_store,
             require_auth,

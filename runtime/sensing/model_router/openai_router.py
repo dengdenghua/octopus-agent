@@ -9,6 +9,18 @@ from typing import Any
 from runtime.adapters.instrumentation import record_gen_ai_cost, trace_stage
 from runtime.platform.models import CostEntry
 
+from .custom_model_flags import (
+    custom_model_entry_for,
+    custom_model_supports_thinking,
+    model_omits_sampling_parameters,
+    model_supports_tool_use,
+)
+from .custom_model_flags import (
+    entry_matches_model as _entry_matches_model,
+)
+from .custom_model_flags import (
+    read_custom_models as _read_custom_models,
+)
 from .models import (
     LLMResponseFormatError,
     Message,
@@ -76,13 +88,12 @@ from .provider import Provider, ProviderCapabilities
 
 
 class OpenAIModelRouter(Provider, ModelRouter):
-
     provider_name = "openai"
     capabilities = ProviderCapabilities(
         supports_vision=True,
         supports_tool_use=True,
         supports_streaming=True,
-        supports_prompt_cache=True,   # OpenAI honors `prompt_cache_key`
+        supports_prompt_cache=True,  # OpenAI honors `prompt_cache_key`
         supports_structured_output=True,
         default_model="gpt-4o-mini",
         pricing_hint="mid",
@@ -113,10 +124,10 @@ class OpenAIModelRouter(Provider, ModelRouter):
         self._client = client  # Implementation note.
         self._owns_client = client is None
         self._provider_profile = resolve_openai_compat_profile(
-            self.base_url, self.default_model,
+            self.base_url,
+            self.default_model,
         )
         self.last_compatibility_events: list[dict[str, Any]] = []
-
 
     def call(self, request: ModelRequest) -> ModelResponse:
         model = request.model or self.default_model
@@ -129,8 +140,12 @@ class OpenAIModelRouter(Provider, ModelRouter):
             profile = self._profile_for_model(model)
             span.set_attribute("octopus.openai_compat.profile", profile.id)
             payload = self._build_payload(request, model)
-            client = self._client if self._client is not None else httpx.Client(
-                timeout=self.timeout_seconds,
+            client = (
+                self._client
+                if self._client is not None
+                else httpx.Client(
+                    timeout=self.timeout_seconds,
+                )
             )
             try:
                 resp = client.post(
@@ -148,9 +163,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
                 )
                 attempt = 0
                 while (
-                    resp.status_code >= 400
-                    and retry_queue
-                    and attempt < _MAX_COMPAT_RETRY_ATTEMPTS
+                    resp.status_code >= 400 and retry_queue and attempt < _MAX_COMPAT_RETRY_ATTEMPTS
                 ):
                     retry = retry_queue.pop(0)
                     attempt += 1
@@ -248,32 +261,41 @@ class OpenAIModelRouter(Provider, ModelRouter):
             payload = self._build_payload(request, model)
             payload["stream"] = True
 
-            client = self._client if self._client is not None else httpx.Client(
-                # Streaming-tuned timeouts: ``connect`` for the initial
-                # handshake, ``read`` is the gap between successive bytes
-                # — must be tight or a hung upstream (mimo / smaller
-                # OpenAI-compat proxies sometimes finish the model
-                # output but never send ``data: [DONE]``) leaves the
-                # request blocked indefinitely. Without a read cap the
-                # ReAct loop's interrupt watcher can't break us out
-                # because the producer thread is stuck inside
-                # ``response.iter_lines()``.
-                timeout=httpx.Timeout(
-                    connect=30.0,
-                    read=45.0,
-                    write=30.0,
-                    pool=10.0,
-                ),
+            client = (
+                self._client
+                if self._client is not None
+                else httpx.Client(
+                    # Streaming-tuned timeouts: ``connect`` for the initial
+                    # handshake, ``read`` is the gap between successive bytes
+                    # — must be tight or a hung upstream (mimo / smaller
+                    # OpenAI-compat proxies sometimes finish the model
+                    # output but never send ``data: [DONE]``) leaves the
+                    # request blocked indefinitely. Without a read cap the
+                    # ReAct loop's interrupt watcher can't break us out
+                    # because the producer thread is stuck inside
+                    # ``response.iter_lines()``.
+                    timeout=httpx.Timeout(
+                        connect=30.0,
+                        read=45.0,
+                        write=30.0,
+                        pool=10.0,
+                    ),
+                )
             )
             close_after = self._client is None
             url = f"{self.base_url}/chat/completions"
             try:
                 with client.stream(
-                    "POST", url, json=payload, headers=self._build_headers(),
+                    "POST",
+                    url,
+                    json=payload,
+                    headers=self._build_headers(),
                 ) as r:
                     if r.status_code < 400:
                         yield from iter_openai_sse(
-                            r, model=model, provider="openai_compat",
+                            r,
+                            model=model,
+                            provider="openai_compat",
                         )
                         return
                     r.read()
@@ -294,13 +316,16 @@ class OpenAIModelRouter(Provider, ModelRouter):
                     attempt += 1
                     self._record_compat_retry(span, model, profile, attempt, retry)
                     with client.stream(
-                        "POST", url,
+                        "POST",
+                        url,
                         json=retry.payload,
                         headers=self._build_headers(),
                     ) as r:
                         if r.status_code < 400:
                             yield from iter_openai_sse(
-                                r, model=model, provider="openai_compat",
+                                r,
+                                model=model,
+                                provider="openai_compat",
                             )
                             return
                         r.read()
@@ -327,7 +352,6 @@ class OpenAIModelRouter(Provider, ModelRouter):
                 if close_after:
                     client.close()
 
-
     def _build_payload(self, request: ModelRequest, model: str) -> dict[str, Any]:
         # Message shape · caller may hand us Anthropic-style
         # block lists (tool_use / tool_result) that we need to
@@ -344,14 +368,11 @@ class OpenAIModelRouter(Provider, ModelRouter):
             "model": model,
             "messages": msgs,
         }
-        if not self._model_omits_sampling_parameters(model):
+        if not model_omits_sampling_parameters(model):
             payload["temperature"] = request.temperature
         max_tokens = request.max_tokens
         if (
-            (
-                request.enable_thinking
-                or self._custom_model_supports_thinking(model)
-            )
+            (request.enable_thinking or custom_model_supports_thinking(model))
             and max_tokens is not None
             and max_tokens < _MIN_THINKING_OUTPUT_TOKENS
         ):
@@ -371,7 +392,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
         # model id, so the LLM doesn't get a tools spec it can't act
         # on. The caller (ReAct loop / ephemeral runner) will see
         # the lack of tool_calls and fall back to text-only synthesis.
-        if request.tools and self._model_supports_tool_use(model):
+        if request.tools and model_supports_tool_use(model):
             payload["tools"] = [
                 {
                     "type": "function",
@@ -400,7 +421,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
         if profile.id == "openai_compat":
             profile = self._provider_profile
         return apply_custom_openai_compat_profile(
-            self._custom_model_entry_for(model),
+            custom_model_entry_for(model),
             base_profile=profile,
         )
 
@@ -465,65 +486,6 @@ class OpenAIModelRouter(Provider, ModelRouter):
                 list(retry.added_fields),
             )
 
-    @staticmethod
-    def _custom_model_entry_for(model: str) -> dict[str, Any] | None:
-        data = _read_custom_models()
-        if not isinstance(data, dict):
-            return None
-        for entry in data.values():
-            if _entry_matches_model(entry, model):
-                return entry
-        return None
-
-    @staticmethod
-    def _model_supports_tool_use(model: str) -> bool:
-        """Return False when ``custom_models.json`` (or per-model env
-        overrides) marks this model id as not supporting native
-        function calling.
-
-        Default is True — most OpenAI-compatible endpoints honor
-        ``tools``. We only flip to False when the operator has
-        explicitly declared incompatibility, so we don't accidentally
-        disable working providers.
-        """
-        data = _read_custom_models()
-        if not isinstance(data, dict):
-            return True
-        for entry in data.values():
-            if (
-                _entry_matches_model(entry, model)
-                and entry.get("supports_tool_use") is False
-            ):
-                return False
-        return True
-
-    @staticmethod
-    def _model_omits_sampling_parameters(model: str) -> bool:
-        """Return True for strict OpenAI-compatible coding endpoints.
-
-        Some coding-model gateways reject sampling knobs entirely (or
-        require their undocumented defaults). Operators can declare
-        ``omit_sampling_parameters=true`` in ``custom_models.json`` so
-        Octopus sends only model/messages/max_tokens/tool fields.
-        """
-        data = _read_custom_models()
-        if not isinstance(data, dict):
-            return False
-        for entry in data.values():
-            if _entry_matches_model(entry, model):
-                return bool(entry.get("omit_sampling_parameters"))
-        return False
-
-    @staticmethod
-    def _custom_model_supports_thinking(model: str) -> bool:
-        data = _read_custom_models()
-        if not isinstance(data, dict):
-            return False
-        for entry in data.values():
-            if _entry_matches_model(entry, model):
-                return bool(entry.get("supports_thinking"))
-        return False
-
     def _build_headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
@@ -534,9 +496,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
     def _extract_text(self, data: dict[str, Any]) -> tuple[str, str, str]:
         choices = data.get("choices") or []
         if not choices:
-            raise OpenAIRouterError(
-                f"no choices in response · keys={list(data.keys())}"
-            )
+            raise OpenAIRouterError(f"no choices in response · keys={list(data.keys())}")
         first = choices[0]
         if not isinstance(first, dict):
             raise OpenAIRouterError("choice[0] not a dict")
@@ -577,6 +537,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
         empty dict rather than raising, so the agentic loop can
         surface the error back to the model instead of 500-ing."""
         from .models import ToolCall
+
         choices = data.get("choices") or []
         if not choices:
             return []
@@ -593,26 +554,28 @@ class OpenAIModelRouter(Provider, ModelRouter):
             name = fn.get("name") or ""
             args_raw = fn.get("arguments") or ""
             args = parse_tool_call_arguments(args_raw)
-            out.append(ToolCall(
-                id=str(call.get("id") or ""),
-                name=str(name),
-                input=args if isinstance(args, dict) else {},
-            ))
+            out.append(
+                ToolCall(
+                    id=str(call.get("id") or ""),
+                    name=str(name),
+                    input=args if isinstance(args, dict) else {},
+                )
+            )
         legacy_call = msg.get("function_call")
         if isinstance(legacy_call, dict):
             name = legacy_call.get("name") or ""
             args_raw = legacy_call.get("arguments") or ""
             args = parse_tool_call_arguments(args_raw)
-            out.append(ToolCall(
-                id=str(legacy_call.get("id") or "function_call_0"),
-                name=str(name),
-                input=args if isinstance(args, dict) else {},
-            ))
+            out.append(
+                ToolCall(
+                    id=str(legacy_call.get("id") or "function_call_0"),
+                    name=str(name),
+                    input=args if isinstance(args, dict) else {},
+                )
+            )
         return out
 
-    def _estimate_cost(
-        self, model: str, input_tokens: int, output_tokens: int
-    ) -> float:
+    def _estimate_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
         pricing = self.pricing_per_1k.get(model)
         if pricing is not None:
             in_usd, out_usd = pricing
@@ -626,45 +589,6 @@ class OpenAIModelRouter(Provider, ModelRouter):
 # ═══════════════════════════════════════════════════════════
 # helpers
 # ═══════════════════════════════════════════════════════════
-
-
-def _read_custom_models() -> dict[str, Any] | None:
-    try:
-        from runtime.platform.process.paths import app_paths
-
-        path = app_paths().custom_models_path
-        if not path.exists():
-            return None
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else None
-    except (OSError, ValueError, ImportError, TypeError):
-        return None
-
-
-def _entry_matches_model(entry: Any, model: str) -> bool:
-    if not isinstance(entry, dict):
-        return False
-    target = (model or "").strip()
-    if not target:
-        return False
-    candidates = {
-        str(value).strip()
-        for value in (
-            entry.get("id"),
-            entry.get("name"),
-            entry.get("model"),
-            entry.get("display_name"),
-        )
-        if isinstance(value, str) and value.strip()
-    }
-    raw_models = entry.get("models")
-    if isinstance(raw_models, list):
-        candidates.update(
-            str(value).strip()
-            for value in raw_models
-            if isinstance(value, str) and value.strip()
-        )
-    return target in candidates
 
 
 def build_fallback_router_from_custom_models(prefer: str | None = None) -> Any:
@@ -706,9 +630,7 @@ def build_fallback_router_from_custom_models(prefer: str | None = None) -> Any:
         else []
     )
     primary = (
-        upstreams[0]
-        if upstreams
-        else str(entry.get("model") or entry.get("id") or "").strip()
+        upstreams[0] if upstreams else str(entry.get("model") or entry.get("id") or "").strip()
     )
     if not primary:
         return None
@@ -909,16 +831,19 @@ def _messages_to_openai(messages: list[Message]) -> list[dict[str, Any]]:
                     text_parts.append(str(b.get("text", "")))
                 elif btype == "tool_use":
                     args = b.get("input") or {}
-                    tool_calls.append({
-                        "id": b.get("id") or "",
-                        "type": "function",
-                        "function": {
-                            "name": b.get("name") or "",
-                            "arguments": json.dumps(
-                                args, ensure_ascii=False,
-                            ),
-                        },
-                    })
+                    tool_calls.append(
+                        {
+                            "id": b.get("id") or "",
+                            "type": "function",
+                            "function": {
+                                "name": b.get("name") or "",
+                                "arguments": json.dumps(
+                                    args,
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    )
             msg: dict[str, Any] = {
                 "role": "assistant",
                 "content": "".join(text_parts),
@@ -941,20 +866,26 @@ def _messages_to_openai(messages: list[Message]) -> list[dict[str, Any]]:
                     content = b.get("content") or ""
                     if not isinstance(content, str):
                         content = json.dumps(
-                            content, ensure_ascii=False, default=str,
+                            content,
+                            ensure_ascii=False,
+                            default=str,
                         )
-                    out.append({
-                        "role": "tool",
-                        "tool_call_id": b.get("tool_use_id") or "",
-                        "content": content,
-                    })
+                    out.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": b.get("tool_use_id") or "",
+                            "content": content,
+                        }
+                    )
                 elif btype == "text":
                     text_parts.append(str(b.get("text", "")))
             if text_parts:
-                out.append({
-                    "role": "user",
-                    "content": "".join(text_parts),
-                })
+                out.append(
+                    {
+                        "role": "user",
+                        "content": "".join(text_parts),
+                    }
+                )
             continue
 
         # System (or unknown role) · stringify best-effort.
@@ -968,17 +899,20 @@ def _messages_to_openai(messages: list[Message]) -> list[dict[str, Any]]:
 
 
 def _attach_images_to_last_user_openai(
-    msgs: list[dict[str, Any]], images_b64: list[str],
+    msgs: list[dict[str, Any]],
+    images_b64: list[str],
 ) -> None:
     for i in range(len(msgs) - 1, -1, -1):
         if msgs[i].get("role") == "user":
             text = msgs[i].get("content", "")
             blocks: list[dict[str, Any]] = []
             for b64 in images_b64:
-                blocks.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{b64}"},
-                })
+                blocks.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{b64}"},
+                    }
+                )
             if text:
                 blocks.append({"type": "text", "text": text})
             msgs[i]["content"] = blocks

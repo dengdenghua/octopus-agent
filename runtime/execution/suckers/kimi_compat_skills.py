@@ -10,8 +10,15 @@ import shutil
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
 
+# Image-search provider adapters live in image_search_backends; the skill
+# registration below keeps the private aliases as its handler names.
+from .image_search_backends import (
+    search_image_by_image as _search_image_by_image,
+)
+from .image_search_backends import (
+    search_image_by_text as _search_image_by_text,
+)
 from .registry import Skill, SkillRegistry
 from .testing import SkillExpect, SkillTestCase
 
@@ -57,198 +64,6 @@ def _safe_output_dir(path: str | None, default_name: str) -> Path:
     from runtime.platform.process.paths import app_paths
 
     return app_paths().data_dir / default_name
-
-
-def _unwrap_ddg_url(url: str) -> str:
-    parsed = urlparse(url)
-    if "duckduckgo.com" not in parsed.netloc:
-        return url
-    match = re.search(r"[?&]uddg=([^&]+)", url)
-    return unquote(match.group(1)) if match else url
-
-
-def _search_image_by_text(
-    query: str = "",
-    *,
-    max_results: int = 10,
-    backend: str | None = None,
-    **_: Any,
-) -> dict[str, Any]:
-    if not query.strip():
-        return {"error": "missing query", "results": []}
-    if not HTTPX_AVAILABLE:
-        return {"error": "httpx not installed", "results": []}
-    max_results = max(1, min(int(max_results), _MAX_IMAGE_RESULTS))
-    chosen = (backend or os.environ.get("IMAGE_SEARCH_BACKEND") or "").lower()
-
-    with _client() as client:
-        if chosen == "brave" or (not chosen and os.environ.get("BRAVE_API_KEY")):
-            result = _brave_image_search(client, query, max_results)
-            if "error" not in result:
-                return result
-        if chosen == "serper" or (not chosen and os.environ.get("SERPER_API_KEY")):
-            result = _serper_image_search(client, query, max_results)
-            if "error" not in result:
-                return result
-        if chosen == "searxng" or (not chosen and os.environ.get("SEARXNG_URL")):
-            result = _searxng_image_search(client, query, max_results)
-            if "error" not in result:
-                return result
-        return _ddg_image_search(client, query, max_results)
-
-
-def _brave_image_search(client: Any, query: str, max_results: int) -> dict[str, Any]:
-    key = os.environ.get("BRAVE_API_KEY", "")
-    if not key:
-        return {"error": "brave_missing_key", "results": []}
-    try:
-        r = client.get(
-            "https://api.search.brave.com/res/v1/images/search",
-            params={"q": query, "count": max_results},
-            headers={"X-Subscription-Token": key, "Accept": "application/json"},
-        )
-        r.raise_for_status()
-        data = r.json()
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"brave_error: {type(exc).__name__}: {exc}", "results": []}
-    items = data.get("results") or []
-    results = []
-    for item in items[:max_results]:
-        props = item.get("properties") or {}
-        thumb = item.get("thumbnail") or {}
-        results.append({
-            "title": item.get("title") or "",
-            "image_url": props.get("url") or item.get("url") or "",
-            "thumbnail_url": thumb.get("src") or "",
-            "source_url": item.get("url") or "",
-            "width": props.get("width"),
-            "height": props.get("height"),
-        })
-    return {"query": query, "backend": "brave", "results": results}
-
-
-def _serper_image_search(client: Any, query: str, max_results: int) -> dict[str, Any]:
-    key = os.environ.get("SERPER_API_KEY", "")
-    if not key:
-        return {"error": "serper_missing_key", "results": []}
-    try:
-        r = client.post(
-            "https://google.serper.dev/images",
-            json={"q": query, "num": max_results},
-            headers={"X-API-KEY": key, "Content-Type": "application/json"},
-        )
-        r.raise_for_status()
-        data = r.json()
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"serper_error: {type(exc).__name__}: {exc}", "results": []}
-    results = [
-        {
-            "title": item.get("title") or "",
-            "image_url": item.get("imageUrl") or "",
-            "thumbnail_url": item.get("thumbnailUrl") or "",
-            "source_url": item.get("link") or "",
-            "width": item.get("imageWidth"),
-            "height": item.get("imageHeight"),
-        }
-        for item in (data.get("images") or [])[:max_results]
-    ]
-    return {"query": query, "backend": "serper", "results": results}
-
-
-def _searxng_image_search(client: Any, query: str, max_results: int) -> dict[str, Any]:
-    base = os.environ.get("SEARXNG_URL", "")
-    if not base:
-        return {"error": "searxng_missing_url", "results": []}
-    try:
-        r = client.get(
-            base.rstrip("/") + "/search",
-            params={"q": query, "format": "json", "categories": "images"},
-        )
-        r.raise_for_status()
-        data = r.json()
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"searxng_error: {type(exc).__name__}: {exc}", "results": []}
-    results = []
-    for item in (data.get("results") or [])[:max_results]:
-        results.append({
-            "title": item.get("title") or "",
-            "image_url": item.get("img_src") or item.get("url") or "",
-            "thumbnail_url": item.get("thumbnail") or "",
-            "source_url": item.get("url") or "",
-        })
-    return {"query": query, "backend": "searxng", "results": results}
-
-
-def _ddg_image_search(client: Any, query: str, max_results: int) -> dict[str, Any]:
-    try:
-        page = client.get(
-            "https://duckduckgo.com/",
-            params={"q": query},
-            headers={"User-Agent": "octopus-agent/0.2"},
-        )
-        vqd_match = re.search(r"vqd=['\"]?([^'\"&]+)", page.text)
-        if not vqd_match:
-            return _ddg_html_image_fallback(client, query, max_results)
-        r = client.get(
-            "https://duckduckgo.com/i.js",
-            params={"q": query, "vqd": vqd_match.group(1), "o": "json"},
-            headers={"User-Agent": "octopus-agent/0.2", "Referer": str(page.url)},
-        )
-        r.raise_for_status()
-        data = r.json()
-    except Exception:
-        return _ddg_html_image_fallback(client, query, max_results)
-    results = []
-    for item in (data.get("results") or [])[:max_results]:
-        results.append({
-            "title": html.unescape(item.get("title") or ""),
-            "image_url": item.get("image") or "",
-            "thumbnail_url": item.get("thumbnail") or "",
-            "source_url": item.get("url") or "",
-            "width": item.get("width"),
-            "height": item.get("height"),
-        })
-    return {"query": query, "backend": "ddg", "results": results}
-
-
-def _ddg_html_image_fallback(client: Any, query: str, max_results: int) -> dict[str, Any]:
-    try:
-        r = client.post(
-            "https://html.duckduckgo.com/html/",
-            data={"q": f"{query} image"},
-            headers={"User-Agent": "octopus-agent/0.2"},
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"ddg_error: {type(exc).__name__}: {exc}", "results": []}
-    links = re.findall(
-        r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
-        r.text,
-        flags=re.DOTALL,
-    )
-    results = []
-    for url, title in links[:max_results]:
-        clean_title = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", title)).strip()
-        results.append({
-            "title": html.unescape(clean_title),
-            "image_url": "",
-            "thumbnail_url": "",
-            "source_url": _unwrap_ddg_url(url),
-        })
-    return {"query": query, "backend": "ddg-html", "results": results}
-
-
-def _search_image_by_image(image_url: str = "", image_path: str = "", **_: Any) -> dict[str, Any]:
-    if not image_url and not image_path:
-        return {"error": "missing image_url or image_path", "results": []}
-    return {
-        "error": (
-            "reverse_image_search_not_configured: configure a provider adapter "
-            "(for example SerpAPI/Bing Visual Search) before using this tool"
-        ),
-        "image_url": image_url,
-        "image_path": image_path,
-        "results": [],
-    }
 
 
 def _get_available_voices(**_: Any) -> dict[str, Any]:
@@ -454,7 +269,10 @@ def _get_data_source(
             return _openalex_search(client, query, max_results)
         if key == "crossref":
             return _crossref_search(client, query, max_results)
-    return {"error": f"unknown data source: {source}", "available": ["yahoo_finance", "arxiv", "openalex", "crossref"]}
+    return {
+        "error": f"unknown data source: {source}",
+        "available": ["yahoo_finance", "arxiv", "openalex", "crossref"],
+    }
 
 
 def _yahoo_finance(client: Any, symbol: str, range_: str, interval: str) -> dict[str, Any]:
@@ -477,15 +295,23 @@ def _yahoo_finance(client: Any, symbol: str, range_: str, interval: str) -> dict
     timestamps = payload.get("timestamp") or []
     rows = []
     for i, ts in enumerate(timestamps):
-        rows.append({
-            "timestamp": ts,
-            "open": (quote.get("open") or [None])[i],
-            "high": (quote.get("high") or [None])[i],
-            "low": (quote.get("low") or [None])[i],
-            "close": (quote.get("close") or [None])[i],
-            "volume": (quote.get("volume") or [None])[i],
-        })
-    return {"source": "yahoo_finance", "symbol": symbol, "range": range_, "interval": interval, "rows": rows}
+        rows.append(
+            {
+                "timestamp": ts,
+                "open": (quote.get("open") or [None])[i],
+                "high": (quote.get("high") or [None])[i],
+                "low": (quote.get("low") or [None])[i],
+                "close": (quote.get("close") or [None])[i],
+                "volume": (quote.get("volume") or [None])[i],
+            }
+        )
+    return {
+        "source": "yahoo_finance",
+        "symbol": symbol,
+        "range": range_,
+        "interval": interval,
+        "rows": rows,
+    }
 
 
 def _arxiv_search(client: Any, query: str, max_results: int) -> dict[str, Any]:
@@ -505,11 +331,17 @@ def _arxiv_search(client: Any, query: str, max_results: int) -> dict[str, Any]:
         title = re.search(r"<title>(.*?)</title>", entry, flags=re.DOTALL)
         link = re.search(r'<link[^>]+href="([^"]+)"', entry)
         summary = re.search(r"<summary>(.*?)</summary>", entry, flags=re.DOTALL)
-        results.append({
-            "title": html.unescape(re.sub(r"\s+", " ", title.group(1)).strip()) if title else "",
-            "url": link.group(1) if link else "",
-            "summary": html.unescape(re.sub(r"\s+", " ", summary.group(1)).strip())[:800] if summary else "",
-        })
+        results.append(
+            {
+                "title": html.unescape(re.sub(r"\s+", " ", title.group(1)).strip())
+                if title
+                else "",
+                "url": link.group(1) if link else "",
+                "summary": html.unescape(re.sub(r"\s+", " ", summary.group(1)).strip())[:800]
+                if summary
+                else "",
+            }
+        )
     return {"source": "arxiv", "query": query, "results": results}
 
 
@@ -517,19 +349,23 @@ def _openalex_search(client: Any, query: str, max_results: int) -> dict[str, Any
     if not query:
         return {"error": "missing query", "results": []}
     try:
-        r = client.get("https://api.openalex.org/works", params={"search": query, "per-page": max_results})
+        r = client.get(
+            "https://api.openalex.org/works", params={"search": query, "per-page": max_results}
+        )
         r.raise_for_status()
         data = r.json()
     except Exception as exc:  # noqa: BLE001
         return {"error": f"openalex_error: {type(exc).__name__}: {exc}", "results": []}
     results = []
     for item in (data.get("results") or [])[:max_results]:
-        results.append({
-            "title": item.get("title") or "",
-            "url": item.get("doi") or item.get("id") or "",
-            "year": item.get("publication_year"),
-            "cited_by_count": item.get("cited_by_count"),
-        })
+        results.append(
+            {
+                "title": item.get("title") or "",
+                "url": item.get("doi") or item.get("id") or "",
+                "year": item.get("publication_year"),
+                "cited_by_count": item.get("cited_by_count"),
+            }
+        )
     return {"source": "openalex", "query": query, "results": results}
 
 
@@ -537,7 +373,9 @@ def _crossref_search(client: Any, query: str, max_results: int) -> dict[str, Any
     if not query:
         return {"error": "missing query", "results": []}
     try:
-        r = client.get("https://api.crossref.org/works", params={"query": query, "rows": max_results})
+        r = client.get(
+            "https://api.crossref.org/works", params={"query": query, "rows": max_results}
+        )
         r.raise_for_status()
         data = r.json()
     except Exception as exc:  # noqa: BLE001
@@ -545,12 +383,14 @@ def _crossref_search(client: Any, query: str, max_results: int) -> dict[str, Any
     results = []
     for item in ((data.get("message") or {}).get("items") or [])[:max_results]:
         title = item.get("title") or [""]
-        results.append({
-            "title": title[0] if title else "",
-            "url": item.get("URL") or "",
-            "doi": item.get("DOI") or "",
-            "published": item.get("published-print") or item.get("published-online"),
-        })
+        results.append(
+            {
+                "title": title[0] if title else "",
+                "url": item.get("URL") or "",
+                "doi": item.get("DOI") or "",
+                "published": item.get("published-print") or item.get("published-online"),
+            }
+        )
     return {"source": "crossref", "query": query, "results": results}
 
 
@@ -603,7 +443,11 @@ def _website_version_manager(
     root.mkdir(parents=True, exist_ok=True)
     manifest_path = root / "manifest.json"
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {"versions": []}
+        manifest = (
+            json.loads(manifest_path.read_text(encoding="utf-8"))
+            if manifest_path.exists()
+            else {"versions": []}
+        )
     except (OSError, json.JSONDecodeError):
         manifest = {"versions": []}
 
@@ -616,7 +460,9 @@ def _website_version_manager(
         shutil.copytree(project, dest, ignore=ignore)
         record = {"id": vid, "label": label or vid, "created_at": time.time(), "path": str(dest)}
         manifest.setdefault("versions", []).insert(0, record)
-        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         return {"ok": True, "version": record}
     if action == "restore":
         if not version_id:
@@ -642,8 +488,12 @@ def _website_version_manager(
         if not version_id:
             return {"error": "missing version_id"}
         shutil.rmtree(root / version_id, ignore_errors=True)
-        manifest["versions"] = [v for v in manifest.get("versions", []) if v.get("id") != version_id]
-        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        manifest["versions"] = [
+            v for v in manifest.get("versions", []) if v.get("id") != version_id
+        ]
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         return {"ok": True, "deleted": version_id}
     return {"error": f"unknown action: {action}"}
 
@@ -680,7 +530,11 @@ def _deploy_website(
 
     manifest_path = root / "manifest.json"
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {"deployments": []}
+        manifest = (
+            json.loads(manifest_path.read_text(encoding="utf-8"))
+            if manifest_path.exists()
+            else {"deployments": []}
+        )
     except (OSError, json.JSONDecodeError):
         manifest = {"deployments": []}
     base_url = (os.environ.get("OCTOPUS_PUBLIC_BASE_URL") or "http://127.0.0.1:8000").rstrip("/")
@@ -752,12 +606,25 @@ def _find_asset_bbox(
                 min_x, max_x = min(min_x, cx), max(max_x, cx)
                 min_y, max_y = min(min_y, cy), max(max_y, cy)
                 for nx, ny in ((cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)):
-                    if 0 <= nx < width and 0 <= ny < height and (nx, ny) not in visited and is_fg(nx, ny):
+                    if (
+                        0 <= nx < width
+                        and 0 <= ny < height
+                        and (nx, ny) not in visited
+                        and is_fg(nx, ny)
+                    ):
                         visited.add((nx, ny))
                         stack.append((nx, ny))
             area = (max_x - min_x + 1) * (max_y - min_y + 1)
             if area >= min_area and count >= min_area:
-                boxes.append({"x": min_x, "y": min_y, "width": max_x - min_x + 1, "height": max_y - min_y + 1, "area": area})
+                boxes.append(
+                    {
+                        "x": min_x,
+                        "y": min_y,
+                        "width": max_x - min_x + 1,
+                        "height": max_y - min_y + 1,
+                        "area": area,
+                    }
+                )
     boxes.sort(key=lambda item: item["area"], reverse=True)
     return {"ok": True, "image_path": str(p), "width": width, "height": height, "boxes": boxes}
 
@@ -817,20 +684,188 @@ KIMI_COMPAT_SKILL_NAMES = [
 
 def register_kimi_compat_skills(registry: SkillRegistry) -> int:
     specs: list[tuple[str, str, list[str], Any, list[SkillTestCase]]] = [
-        ("generate_image", "Generate an image via a configured image provider.", ["media", "image", "generate"], _generate_image, [SkillTestCase(name="missing_prompt", tier="golden", args={"prompt": ""}, expect=SkillExpect(schema_keys=["error"]))]),
-        ("generate_video", "Generate a video via a configured video provider.", ["media", "video", "generate"], _generate_video, [SkillTestCase(name="missing_prompt", tier="golden", args={"prompt": ""}, expect=SkillExpect(schema_keys=["error"]))]),
-        ("generate_speech", "Generate speech via a configured TTS provider.", ["media", "audio", "speech"], _generate_speech, [SkillTestCase(name="missing_text", tier="golden", args={"text": ""}, expect=SkillExpect(schema_keys=["error"]))]),
-        ("get_available_voices", "List voice ids supported by the configured TTS provider.", ["media", "audio", "speech"], _get_available_voices, []),
-        ("generate_sound_effects", "Generate sound effects via a configured audio provider.", ["media", "audio", "generate"], _generate_sound_effects, [SkillTestCase(name="missing_prompt", tier="golden", args={"prompt": ""}, expect=SkillExpect(schema_keys=["error"]))]),
-        ("search_image_by_text", "Search the web for image candidates by text query.", ["web", "image", "search"], _search_image_by_text, [SkillTestCase(name="missing_query", tier="golden", args={"query": ""}, expect=SkillExpect(schema_keys=["error", "results"]))]),
-        ("search_image_by_image", "Reverse image search through a configured provider.", ["web", "image", "search"], _search_image_by_image, [SkillTestCase(name="missing_image", tier="golden", args={}, expect=SkillExpect(schema_keys=["error", "results"]))]),
-        ("get_data_source_desc", "Describe available public data-source adapters.", ["data", "api"], _get_data_source_desc, []),
-        ("get_data_source", "Fetch data from public adapters: yahoo_finance, arxiv, openalex, crossref.", ["data", "api"], _get_data_source, [SkillTestCase(name="unknown_source", tier="golden", args={"source": "nope"}, expect=SkillExpect(schema_keys=["error"]))]),
-        ("deploy_website", "Publish a local static website directory to Octopus' local deployments area.", ["deploy", "website", "file"], _deploy_website, [SkillTestCase(name="missing_local_dir", tier="golden", args={}, expect=SkillExpect(schema_keys=["error"]))]),
-        ("screenshot_web_full_page", "Capture a full-page screenshot of a URL.", ["web", "browser", "capture"], _screenshot_web_full_page, [SkillTestCase(name="missing_url", tier="golden", args={"url": "", "path": "x.png"}, expect=SkillExpect(schema_keys=["error"]))]),
-        ("website_version_manager", "Snapshot/list/restore/delete local website project versions.", ["web", "version", "file"], _website_version_manager, [SkillTestCase(name="missing_project", tier="golden", args={"action": "list"}, expect=SkillExpect(schema_keys=["error"]))]),
-        ("find_asset_bbox", "Detect non-background asset bounding boxes in an image.", ["image", "vision", "asset"], _find_asset_bbox, [SkillTestCase(name="missing_image", tier="golden", args={}, expect=SkillExpect(schema_keys=["error", "boxes"]))]),
-        ("crop_and_replicate_assets_in_image", "Crop detected or provided image asset boxes into PNG files.", ["image", "asset", "file"], _crop_and_replicate_assets_in_image, [SkillTestCase(name="missing_image", tier="golden", args={}, expect=SkillExpect(schema_keys=["error", "assets"]))]),
+        (
+            "generate_image",
+            "Generate an image via a configured image provider.",
+            ["media", "image", "generate"],
+            _generate_image,
+            [
+                SkillTestCase(
+                    name="missing_prompt",
+                    tier="golden",
+                    args={"prompt": ""},
+                    expect=SkillExpect(schema_keys=["error"]),
+                )
+            ],
+        ),
+        (
+            "generate_video",
+            "Generate a video via a configured video provider.",
+            ["media", "video", "generate"],
+            _generate_video,
+            [
+                SkillTestCase(
+                    name="missing_prompt",
+                    tier="golden",
+                    args={"prompt": ""},
+                    expect=SkillExpect(schema_keys=["error"]),
+                )
+            ],
+        ),
+        (
+            "generate_speech",
+            "Generate speech via a configured TTS provider.",
+            ["media", "audio", "speech"],
+            _generate_speech,
+            [
+                SkillTestCase(
+                    name="missing_text",
+                    tier="golden",
+                    args={"text": ""},
+                    expect=SkillExpect(schema_keys=["error"]),
+                )
+            ],
+        ),
+        (
+            "get_available_voices",
+            "List voice ids supported by the configured TTS provider.",
+            ["media", "audio", "speech"],
+            _get_available_voices,
+            [],
+        ),
+        (
+            "generate_sound_effects",
+            "Generate sound effects via a configured audio provider.",
+            ["media", "audio", "generate"],
+            _generate_sound_effects,
+            [
+                SkillTestCase(
+                    name="missing_prompt",
+                    tier="golden",
+                    args={"prompt": ""},
+                    expect=SkillExpect(schema_keys=["error"]),
+                )
+            ],
+        ),
+        (
+            "search_image_by_text",
+            "Search the web for image candidates by text query.",
+            ["web", "image", "search"],
+            _search_image_by_text,
+            [
+                SkillTestCase(
+                    name="missing_query",
+                    tier="golden",
+                    args={"query": ""},
+                    expect=SkillExpect(schema_keys=["error", "results"]),
+                )
+            ],
+        ),
+        (
+            "search_image_by_image",
+            "Reverse image search through a configured provider.",
+            ["web", "image", "search"],
+            _search_image_by_image,
+            [
+                SkillTestCase(
+                    name="missing_image",
+                    tier="golden",
+                    args={},
+                    expect=SkillExpect(schema_keys=["error", "results"]),
+                )
+            ],
+        ),
+        (
+            "get_data_source_desc",
+            "Describe available public data-source adapters.",
+            ["data", "api"],
+            _get_data_source_desc,
+            [],
+        ),
+        (
+            "get_data_source",
+            "Fetch data from public adapters: yahoo_finance, arxiv, openalex, crossref.",
+            ["data", "api"],
+            _get_data_source,
+            [
+                SkillTestCase(
+                    name="unknown_source",
+                    tier="golden",
+                    args={"source": "nope"},
+                    expect=SkillExpect(schema_keys=["error"]),
+                )
+            ],
+        ),
+        (
+            "deploy_website",
+            "Publish a local static website directory to Octopus' local deployments area.",
+            ["deploy", "website", "file"],
+            _deploy_website,
+            [
+                SkillTestCase(
+                    name="missing_local_dir",
+                    tier="golden",
+                    args={},
+                    expect=SkillExpect(schema_keys=["error"]),
+                )
+            ],
+        ),
+        (
+            "screenshot_web_full_page",
+            "Capture a full-page screenshot of a URL.",
+            ["web", "browser", "capture"],
+            _screenshot_web_full_page,
+            [
+                SkillTestCase(
+                    name="missing_url",
+                    tier="golden",
+                    args={"url": "", "path": "x.png"},
+                    expect=SkillExpect(schema_keys=["error"]),
+                )
+            ],
+        ),
+        (
+            "website_version_manager",
+            "Snapshot/list/restore/delete local website project versions.",
+            ["web", "version", "file"],
+            _website_version_manager,
+            [
+                SkillTestCase(
+                    name="missing_project",
+                    tier="golden",
+                    args={"action": "list"},
+                    expect=SkillExpect(schema_keys=["error"]),
+                )
+            ],
+        ),
+        (
+            "find_asset_bbox",
+            "Detect non-background asset bounding boxes in an image.",
+            ["image", "vision", "asset"],
+            _find_asset_bbox,
+            [
+                SkillTestCase(
+                    name="missing_image",
+                    tier="golden",
+                    args={},
+                    expect=SkillExpect(schema_keys=["error", "boxes"]),
+                )
+            ],
+        ),
+        (
+            "crop_and_replicate_assets_in_image",
+            "Crop detected or provided image asset boxes into PNG files.",
+            ["image", "asset", "file"],
+            _crop_and_replicate_assets_in_image,
+            [
+                SkillTestCase(
+                    name="missing_image",
+                    tier="golden",
+                    args={},
+                    expect=SkillExpect(schema_keys=["error", "assets"]),
+                )
+            ],
+        ),
     ]
     for name, description, affinity, handler, tests in specs:
         registry.register(

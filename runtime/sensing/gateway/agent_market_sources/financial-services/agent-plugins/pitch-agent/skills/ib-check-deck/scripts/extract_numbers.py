@@ -22,19 +22,20 @@ from pathlib import Path
 @dataclass
 class NumberInstance:
     """A numerical value found in the presentation."""
-    value: str           # Original string representation
-    normalized: float    # Normalized numeric value
-    unit: str           # Detected unit (M, B, K, %, bps, x, etc.)
-    slide: int          # Slide number (0 if unknown)
-    context: str        # Surrounding text for context
-    line_number: int    # Line number in source file
-    category: str       # Detected category (revenue, margin, multiple, etc.)
+
+    value: str  # Original string representation
+    normalized: float  # Normalized numeric value
+    unit: str  # Detected unit (M, B, K, %, bps, x, etc.)
+    slide: int  # Slide number (0 if unknown)
+    context: str  # Surrounding text for context
+    line_number: int  # Line number in source file
+    category: str  # Detected category (revenue, margin, multiple, etc.)
 
 
 def normalize_number(value_str: str, unit: str) -> float:
     """Convert a number string with unit to a normalized float value."""
     # Remove commas and spaces
-    clean = re.sub(r'[,\s]', '', value_str)
+    clean = re.sub(r"[,\s]", "", value_str)
 
     try:
         base_value = float(clean)
@@ -43,17 +44,17 @@ def normalize_number(value_str: str, unit: str) -> float:
 
     # Apply unit multipliers
     multipliers = {
-        'T': 1e12,
-        'B': 1e9,
-        'bn': 1e9,
-        'billion': 1e9,
-        'M': 1e6,
-        'mm': 1e6,
-        'mn': 1e6,
-        'million': 1e6,
-        'K': 1e3,
-        'k': 1e3,
-        'thousand': 1e3,
+        "T": 1e12,
+        "B": 1e9,
+        "bn": 1e9,
+        "billion": 1e9,
+        "M": 1e6,
+        "mm": 1e6,
+        "mn": 1e6,
+        "million": 1e6,
+        "K": 1e3,
+        "k": 1e3,
+        "thousand": 1e3,
     }
 
     for unit_key in sorted(multipliers.keys(), key=len, reverse=True):
@@ -68,40 +69,40 @@ def detect_category(context: str, unit: str) -> str:
     context_lower = context.lower()
 
     # Revenue-related
-    if any(term in context_lower for term in ['revenue', 'sales', 'top line', 'topline']):
-        return 'revenue'
+    if any(term in context_lower for term in ["revenue", "sales", "top line", "topline"]):
+        return "revenue"
 
     # EBITDA-related
-    if 'ebitda' in context_lower:
-        if any(term in context_lower for term in ['margin', '%', 'percent']):
-            return 'ebitda_margin'
-        return 'ebitda'
+    if "ebitda" in context_lower:
+        if any(term in context_lower for term in ["margin", "%", "percent"]):
+            return "ebitda_margin"
+        return "ebitda"
 
     # Margin-related
-    if any(term in context_lower for term in ['margin', 'profit']):
-        return 'margin'
+    if any(term in context_lower for term in ["margin", "profit"]):
+        return "margin"
 
     # Growth-related
-    if any(term in context_lower for term in ['growth', 'cagr', 'yoy', 'y/y']):
-        return 'growth'
+    if any(term in context_lower for term in ["growth", "cagr", "yoy", "y/y"]):
+        return "growth"
 
     # Valuation multiples
-    if any(term in context_lower for term in ['multiple', 'ev/', 'p/e', 'ev/ebitda', 'ev/revenue']):
-        return 'multiple'
+    if any(term in context_lower for term in ["multiple", "ev/", "p/e", "ev/ebitda", "ev/revenue"]):
+        return "multiple"
 
     # Enterprise value / market cap
-    if any(term in context_lower for term in ['enterprise value', 'ev ', 'market cap']):
-        return 'valuation'
+    if any(term in context_lower for term in ["enterprise value", "ev ", "market cap"]):
+        return "valuation"
 
     # Percentage (generic)
-    if unit in ['%', 'bps', 'percent']:
-        return 'percentage'
+    if unit in ["%", "bps", "percent"]:
+        return "percentage"
 
     # Multiple indicator
-    if unit == 'x':
-        return 'multiple'
+    if unit == "x":
+        return "multiple"
 
-    return 'other'
+    return "other"
 
 
 def extract_numbers(content: str) -> list[NumberInstance]:
@@ -110,21 +111,21 @@ def extract_numbers(content: str) -> list[NumberInstance]:
     current_slide = 0
 
     # Pattern for slide markers (from markitdown format)
-    slide_pattern = re.compile(r'^#+\s*Slide\s*(\d+)|^<!-- Slide (\d+)')
+    slide_pattern = re.compile(r"^#+\s*Slide\s*(\d+)|^<!-- Slide (\d+)")
 
     # Pattern for numbers with various formats
     # Matches: $500M, 500M, $500 million, 25%, 25.5%, 2.5x, 150bps, $1,234.56, etc.
     number_pattern = re.compile(
-        r'(?P<currency>[$€£¥])?'  # Optional currency symbol
-        r'(?P<number>[\d,]+(?:\.\d+)?)'  # The number itself
-        r'\s*'
-        r'(?P<unit>%|bps|x|'  # Common units
-        r'[Tt]rillion|[Bb]illion|[Mm]illion|[Tt]housand|'  # Full words
-        r'[TBMKtbmk]n?|mm|MM)?'  # Abbreviations
-        r'(?!\d)'  # Negative lookahead to avoid partial matches
+        r"(?P<currency>[$€£¥])?"  # Optional currency symbol
+        r"(?P<number>[\d,]+(?:\.\d+)?)"  # The number itself
+        r"\s*"
+        r"(?P<unit>%|bps|x|"  # Common units
+        r"[Tt]rillion|[Bb]illion|[Mm]illion|[Tt]housand|"  # Full words
+        r"[TBMKtbmk]n?|mm|MM)?"  # Abbreviations
+        r"(?!\d)"  # Negative lookahead to avoid partial matches
     )
 
-    lines = content.split('\n')
+    lines = content.split("\n")
 
     for line_num, line in enumerate(lines, 1):
         # Check for slide marker
@@ -135,20 +136,20 @@ def extract_numbers(content: str) -> list[NumberInstance]:
 
         # Find all numbers in the line
         for match in number_pattern.finditer(line):
-            value_str = match.group('number')
-            currency = match.group('currency') or ''
-            unit = match.group('unit') or ''
+            value_str = match.group("number")
+            currency = match.group("currency") or ""
+            unit = match.group("unit") or ""
 
             # Skip very short numbers without context (likely not financial)
-            if len(value_str.replace(',', '').replace('.', '')) < 2 and not unit:
+            if len(value_str.replace(",", "").replace(".", "")) < 2 and not unit:
                 continue
 
             # Skip year-like numbers (1900-2099) unless they have units
             try:
-                num_val = float(value_str.replace(',', ''))
+                num_val = float(value_str.replace(",", ""))
                 if 1900 <= num_val <= 2099 and not unit and not currency:
                     continue
-            except ValueError:
+            except ValueError:  # noqa: BLE001 — non-numeric token; keep it as a candidate value
                 pass
 
             # Build full value string
@@ -161,20 +162,22 @@ def extract_numbers(content: str) -> list[NumberInstance]:
 
             # Normalize unit
             if currency:
-                unit = 'USD' if not unit else f"USD_{unit}"  # Assume USD for $ without unit
+                unit = "USD" if not unit else f"USD_{unit}"  # Assume USD for $ without unit
 
             normalized = normalize_number(value_str, unit)
             category = detect_category(context, unit)
 
-            numbers.append(NumberInstance(
-                value=full_value,
-                normalized=normalized,
-                unit=unit or 'none',
-                slide=current_slide,
-                context=context,
-                line_number=line_num,
-                category=category
-            ))
+            numbers.append(
+                NumberInstance(
+                    value=full_value,
+                    normalized=normalized,
+                    unit=unit or "none",
+                    slide=current_slide,
+                    context=context,
+                    line_number=line_num,
+                    category=category,
+                )
+            )
 
     return numbers
 
@@ -186,7 +189,7 @@ def find_inconsistencies(numbers: list[NumberInstance]) -> list[dict]:
     # Group numbers by category
     by_category = defaultdict(list)
     for num in numbers:
-        if num.category != 'other':
+        if num.category != "other":
             by_category[num.category].append(num)
 
     # Check each category for mismatches
@@ -217,32 +220,37 @@ def find_inconsistencies(numbers: list[NumberInstance]) -> list[dict]:
             # The largest group is likely "correct", others are potential issues
             main_group = value_groups[0]
             for other_group in value_groups[1:]:
-                inconsistencies.append({
-                    'category': category,
-                    'expected': {
-                        'value': main_group[0].value,
-                        'slides': sorted(set(n.slide for n in main_group)),
-                        'count': len(main_group)
-                    },
-                    'found': {
-                        'value': other_group[0].value,
-                        'slides': sorted(set(n.slide for n in other_group)),
-                        'count': len(other_group)
-                    },
-                    'severity': 'high' if category in ['revenue', 'ebitda', 'valuation'] else 'medium'
-                })
+                inconsistencies.append(
+                    {
+                        "category": category,
+                        "expected": {
+                            "value": main_group[0].value,
+                            "slides": sorted(set(n.slide for n in main_group)),
+                            "count": len(main_group),
+                        },
+                        "found": {
+                            "value": other_group[0].value,
+                            "slides": sorted(set(n.slide for n in other_group)),
+                            "count": len(other_group),
+                        },
+                        "severity": "high"
+                        if category in ["revenue", "ebitda", "valuation"]
+                        else "medium",
+                    }
+                )
 
     return inconsistencies
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Extract numbers from presentation content for consistency checking'
+        description="Extract numbers from presentation content for consistency checking"
     )
-    parser.add_argument('input_file', help='Markdown file with presentation content')
-    parser.add_argument('--output', '-o', help='Output JSON file (default: stdout)')
-    parser.add_argument('--check', '-c', action='store_true',
-                       help='Check for inconsistencies and report')
+    parser.add_argument("input_file", help="Markdown file with presentation content")
+    parser.add_argument("--output", "-o", help="Output JSON file (default: stdout)")
+    parser.add_argument(
+        "--check", "-c", action="store_true", help="Check for inconsistencies and report"
+    )
 
     args = parser.parse_args()
 
@@ -259,31 +267,35 @@ def main():
 
     # Prepare output
     output = {
-        'total_numbers': len(numbers),
-        'by_category': defaultdict(list),
-        'numbers': [asdict(n) for n in numbers]
+        "total_numbers": len(numbers),
+        "by_category": defaultdict(list),
+        "numbers": [asdict(n) for n in numbers],
     }
 
     for num in numbers:
-        output['by_category'][num.category].append({
-            'value': num.value,
-            'slide': num.slide,
-            'context': num.context[:100]
-        })
+        output["by_category"][num.category].append(
+            {"value": num.value, "slide": num.slide, "context": num.context[:100]}
+        )
 
-    output['by_category'] = dict(output['by_category'])
+    output["by_category"] = dict(output["by_category"])
 
     # Check for inconsistencies if requested
     if args.check:
         inconsistencies = find_inconsistencies(numbers)
-        output['inconsistencies'] = inconsistencies
+        output["inconsistencies"] = inconsistencies
 
         if inconsistencies:
             print("\n=== POTENTIAL INCONSISTENCIES DETECTED ===\n", file=sys.stderr)
             for inc in inconsistencies:
                 print(f"Category: {inc['category'].upper()}", file=sys.stderr)
-                print(f"  Expected: {inc['expected']['value']} (Slides: {inc['expected']['slides']}, Count: {inc['expected']['count']})", file=sys.stderr)
-                print(f"  Found:    {inc['found']['value']} (Slides: {inc['found']['slides']}, Count: {inc['found']['count']})", file=sys.stderr)
+                print(
+                    f"  Expected: {inc['expected']['value']} (Slides: {inc['expected']['slides']}, Count: {inc['expected']['count']})",
+                    file=sys.stderr,
+                )
+                print(
+                    f"  Found:    {inc['found']['value']} (Slides: {inc['found']['slides']}, Count: {inc['found']['count']})",
+                    file=sys.stderr,
+                )
                 print(f"  Severity: {inc['severity']}", file=sys.stderr)
                 print(file=sys.stderr)
 
@@ -297,5 +309,5 @@ def main():
         print(json_output)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

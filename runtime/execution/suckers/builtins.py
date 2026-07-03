@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import base64
@@ -126,12 +125,14 @@ def _read_file_pdf(
     total_pages = 0
     try:
         import pdfplumber  # type: ignore[import-not-found]
+
         backend = "pdfplumber"
     except ImportError:
         pdfplumber = None  # type: ignore[assignment]
     if pdfplumber is None:
         try:
             import pypdf  # type: ignore[import-not-found]
+
             backend = "pypdf"
         except ImportError:
             return {
@@ -152,9 +153,7 @@ def _read_file_pdf(
                             "error_type": "invalid_argument",
                             "path": str(p.resolve()),
                             "total_pages": total_pages,
-                            "hint": (
-                                f"Pass pages='1-{max_pages_without_range}' to read a slice."
-                            ),
+                            "hint": (f"Pass pages='1-{max_pages_without_range}' to read a slice."),
                         }
                     wanted = list(range(1, total_pages + 1))
                 else:
@@ -172,6 +171,7 @@ def _read_file_pdf(
                     page_texts.append((n, page.extract_text() or ""))
         else:  # pypdf
             import pypdf  # type: ignore[import-not-found]
+
             reader = pypdf.PdfReader(str(p))
             total_pages = len(reader.pages)
             if pages is None:
@@ -181,9 +181,7 @@ def _read_file_pdf(
                         "error_type": "invalid_argument",
                         "path": str(p.resolve()),
                         "total_pages": total_pages,
-                        "hint": (
-                            f"Pass pages='1-{max_pages_without_range}' to read a slice."
-                        ),
+                        "hint": (f"Pass pages='1-{max_pages_without_range}' to read a slice."),
                     }
                 wanted = list(range(1, total_pages + 1))
             else:
@@ -207,9 +205,7 @@ def _read_file_pdf(
             "backend": backend,
         }
 
-    joined = "\n\n".join(
-        f"--- page {n} ---\n{txt}" for n, txt in page_texts
-    )
+    joined = "\n\n".join(f"--- page {n} ---\n{txt}" for n, txt in page_texts)
     return {
         "ok": True,
         "kind": "pdf",
@@ -235,8 +231,6 @@ def _read_file_notebook(
         sandbox_dir=sandbox_dir,
         allow_sensitive=allow_sensitive,
     )
-
-
 
 
 def _list_cwd(path: str = ".", cwd: str | None = None, **_kw: Any) -> dict[str, Any]:
@@ -319,7 +313,7 @@ def _read_file_text(
                         }
         except UnicodeDecodeError:
             return {"error": "non-utf8 content", "size": size}
-        except OSError:
+        except OSError:  # noqa: BLE001 — best-effort line-count probe; the byte-read path below surfaces real I/O errors
             pass
 
     to_read = min(size, max_bytes)
@@ -361,7 +355,9 @@ def _read_file(
     from runtime.safety.auth.path_guard import check_path
 
     verdict = check_path(
-        path, sandbox_dir=sandbox_dir, allow_sensitive=allow_sensitive,
+        path,
+        sandbox_dir=sandbox_dir,
+        allow_sensitive=allow_sensitive,
     )
     if not verdict.allow:
         return {"error": f"path_blocked: {verdict.reason}", "path": path}
@@ -379,7 +375,9 @@ def _read_file(
         return _read_file_pdf(p, pages=pages)
     if suffix == ".ipynb":
         return _read_file_notebook(
-            p, sandbox_dir=sandbox_dir, allow_sensitive=allow_sensitive,
+            p,
+            sandbox_dir=sandbox_dir,
+            allow_sensitive=allow_sensitive,
         )
     return _read_file_text(p, max_bytes=max_bytes, offset=offset, limit=limit)
 
@@ -416,7 +414,9 @@ def _file_stats(
     from runtime.safety.auth.path_guard import check_path
 
     verdict = check_path(
-        path, sandbox_dir=sandbox_dir, allow_sensitive=allow_sensitive,
+        path,
+        sandbox_dir=sandbox_dir,
+        allow_sensitive=allow_sensitive,
     )
     if not verdict.allow:
         return {"error": f"path_blocked: {verdict.reason}", "path": path}
@@ -433,8 +433,6 @@ def _file_stats(
     }
 
 
-
-
 def register_builtins(registry: SkillRegistry) -> SkillRegistry:
     registry.register(
         Skill(
@@ -442,8 +440,8 @@ def register_builtins(registry: SkillRegistry) -> SkillRegistry:
             description=(
                 "用途: 非递归列出一个目录的直接子项（隐藏项已过滤）；快速浏览结构。\n"
                 "何时不用: 需要多层深度用 tree；按 glob 过滤用 glob_files；要文件元数据用 file_stats；按内容找用 grep_text。\n"
-                "关键参数: path (默认 \".\"); cwd (相对路径基准, 可选)。\n"
-                "示例: list_cwd({\"path\": \"runtime/execution/suckers\"})"
+                '关键参数: path (默认 "."); cwd (相对路径基准, 可选)。\n'
+                '示例: list_cwd({"path": "runtime/execution/suckers"})'
             ),
             affinity=["file", "io"],
             cost_profile="low",
@@ -471,8 +469,8 @@ def register_builtins(registry: SkillRegistry) -> SkillRegistry:
             description=(
                 "用途: 读取单个文件，按扩展名自动分发: 文本 (UTF-8, 默认 100KB / 2000 行硬上限) / 图片 (.png/.jpg/.jpeg/.webp/.gif → base64) / PDF (.pdf, 需要 pages 切片当 >10 页) / Notebook (.ipynb → 委托给 notebook_read)。\n"
                 "何时不用: 想找某段内容用 grep_text；只看前 N 行或某个范围用 read_file_range；按 pattern 找文件用 glob_files；其他二进制 / 非 UTF-8 内容会拒读。\n"
-                "关键参数: path (必填); offset/limit (文本按行切片); max_bytes (文本默认 102400); pages (PDF 切片 \"1-5\" / \"3\" / \"1-3,7,10-12\")。\n"
-                "示例: read_file({\"path\": \"runtime/execution/suckers/builtins.py\", \"offset\": 0, \"limit\": 100}) · read_file({\"path\": \"doc.pdf\", \"pages\": \"1-5\"}) · read_file({\"path\": \"shot.png\"})"
+                '关键参数: path (必填); offset/limit (文本按行切片); max_bytes (文本默认 102400); pages (PDF 切片 "1-5" / "3" / "1-3,7,10-12")。\n'
+                '示例: read_file({"path": "runtime/execution/suckers/builtins.py", "offset": 0, "limit": 100}) · read_file({"path": "doc.pdf", "pages": "1-5"}) · read_file({"path": "shot.png"})'
             ),
             affinity=["file", "io"],
             cost_profile="low",
@@ -495,7 +493,7 @@ def register_builtins(registry: SkillRegistry) -> SkillRegistry:
                 "用途: 对一段已经在手上的文本计算 chars / words / lines 三项；常用于 demo / 兜底统计。\n"
                 "何时不用: 要统计文件用 read_file 取出后再传入；要分词或自然语言分析用 ipython 跑专用库；只是想核对文件大小用 file_stats。\n"
                 "关键参数: text (必填, 直接传字符串)。\n"
-                "示例: count_words({\"text\": \"hello world\"})"
+                '示例: count_words({"text": "hello world"})'
             ),
             affinity=["text", "demo"],
             cost_profile="low",
@@ -506,17 +504,13 @@ def register_builtins(registry: SkillRegistry) -> SkillRegistry:
                     name="empty_text_all_zeros",
                     tier="golden",
                     args={"text": ""},
-                    expect=SkillExpect(
-                        output_equals={"chars": 0, "words": 0, "lines": 0}
-                    ),
+                    expect=SkillExpect(output_equals={"chars": 0, "words": 0, "lines": 0}),
                 ),
                 SkillTestCase(
                     name="two_words_one_line",
                     tier="golden",
                     args={"text": "hello world"},
-                    expect=SkillExpect(
-                        output_equals={"chars": 11, "words": 2, "lines": 1}
-                    ),
+                    expect=SkillExpect(output_equals={"chars": 11, "words": 2, "lines": 1}),
                 ),
                 SkillTestCase(
                     name="multiline_words",
@@ -534,8 +528,8 @@ def register_builtins(registry: SkillRegistry) -> SkillRegistry:
             description=(
                 "用途: 对一段文本计算 blake2b (16 字节) 或 sha256 摘要；用于校验、去重 key、签名前缀等。\n"
                 "何时不用: 要校验文件内容用 read_file 取出后再哈希；需要 HMAC / 密钥派生用 ipython 跑 hashlib/hmac；想加密 (而非摘要) 不要用本工具。\n"
-                "关键参数: text (必填); algorithm (\"blake2b\" 默认 / \"sha256\")。\n"
-                "示例: hash_text({\"text\": \"abc\", \"algorithm\": \"sha256\"})"
+                '关键参数: text (必填); algorithm ("blake2b" 默认 / "sha256")。\n'
+                '示例: hash_text({"text": "abc", "algorithm": "sha256"})'
             ),
             affinity=["crypto", "demo"],
             cost_profile="low",
@@ -578,7 +572,7 @@ def register_builtins(registry: SkillRegistry) -> SkillRegistry:
                 "用途: 不读内容，只取一个文件/目录的元数据 (size, mtime, is_file, is_dir)；判断存在性、大小、最近修改时间。\n"
                 "何时不用: 要看内容用 read_file；要看目录里有什么用 list_cwd 或 tree；要批量按 pattern 找用 glob_files。\n"
                 "关键参数: path (必填); cwd (相对路径基准, 可选)。\n"
-                "示例: file_stats({\"path\": \"README.md\"})"
+                '示例: file_stats({"path": "README.md"})'
             ),
             affinity=["file", "io"],
             cost_profile="low",
@@ -636,9 +630,11 @@ def register_all(registry: SkillRegistry) -> int:
     market_count = register_market_skills(registry, all_skills_dir=_market_skills_dir)
     # AST-aware code editing · tree-sitter powered · 2026-04-26
     from .code_edit_skills import register_code_edit_skills
+
     code_edit_count = register_code_edit_skills(registry)
     # LSP-based code intelligence · 2026-04-26
     from .lsp_skills import register_lsp_skills
+
     lsp_count = register_lsp_skills(registry)
     # Code quality · lint / test / format
     quality_count = register_code_quality_skills(registry)

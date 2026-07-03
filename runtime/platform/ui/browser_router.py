@@ -88,7 +88,7 @@ def create_browser_router(
     def _auth_dep(request: Request) -> None:
         from runtime.adapters.web_auth import _resolve_actor
 
-        _resolve_actor(
+        _resolve_actor(  # AUTH-OK: actor-agnostic
             request,
             identity_store,
             require_auth,
