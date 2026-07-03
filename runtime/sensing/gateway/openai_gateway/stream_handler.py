@@ -541,8 +541,24 @@ def _stream_chat(
     def _matches(event: Any) -> bool:
         return getattr(event, "task_id", None) == graph.task_id
 
+    def _has_live_subscribe(journal: Any) -> bool:
+        # The base Journal.subscribe is a documented no-op that still
+        # returns an unsubscribe callable — hasattr() therefore says yes
+        # for EVERY journal, which used to switch off the polling
+        # fallback and silently drop all step frames unless the journal
+        # was wrapped in StreamingJournal. Only trust subscribe when the
+        # class actually overrides the base no-op.
+        subscribe = getattr(type(journal), "subscribe", None)
+        if subscribe is None:
+            return False
+        try:
+            from runtime.memory.journal.journal import Journal as _JournalBase
+        except ImportError:  # pragma: no cover — journal package always ships
+            return True
+        return subscribe is not _JournalBase.subscribe
+
     unsubscribe = None
-    if hasattr(stack.journal, "subscribe"):
+    if _has_live_subscribe(stack.journal):
         unsubscribe = stack.journal.subscribe(
             lambda event: _enqueue_event(event) if _matches(event) else None,
         )
