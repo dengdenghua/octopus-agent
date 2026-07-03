@@ -402,7 +402,9 @@ def _normalize_result_item(
     if not title and not snippet:
         return None
     return {
-        "id": sha1(f"{url}|{title}|{snippet}".encode("utf-8", errors="ignore")).hexdigest()[:16],
+        "id": sha1(
+            f"{url}|{title}|{snippet}".encode("utf-8", errors="ignore"), usedforsecurity=False
+        ).hexdigest()[:16],
         "title": title or url or "Untitled source",
         "url": url,
         "snippet": snippet,

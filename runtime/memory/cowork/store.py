@@ -221,7 +221,7 @@ def _now_iso() -> str:
 
 
 def _session_hash(session_id: str) -> str:
-    return hashlib.sha1(session_id.encode("utf-8")).hexdigest()
+    return hashlib.sha1(session_id.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 # ─── Per-path lock registry ─────────────────────────────────

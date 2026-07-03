@@ -109,7 +109,7 @@ def _slugify(prompt: str) -> str:
     raw = re.sub(r"[^\w\u4e00-\u9fff]+", "_", prompt.strip())
     rid = raw[:24].strip("_").lower()
     if not rid or rid.isdigit():
-        rid = "auto_" + hashlib.sha1(prompt.encode("utf-8")).hexdigest()[:8]
+        rid = "auto_" + hashlib.sha1(prompt.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]
     return f"forged_{rid}"
 
 

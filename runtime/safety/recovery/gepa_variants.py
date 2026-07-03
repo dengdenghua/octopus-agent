@@ -369,7 +369,7 @@ def list_variants(recipe_id: str) -> dict[str, Any]:
 def _bucket(key: str) -> int:
     """Stable cross-process hash · same as gating._bucket."""
     return int.from_bytes(
-        hashlib.sha1(key.encode("utf-8")).digest()[:4],
+        hashlib.sha1(key.encode("utf-8"), usedforsecurity=False).digest()[:4],
         "big",
     )
 

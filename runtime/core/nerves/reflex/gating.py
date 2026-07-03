@@ -154,7 +154,7 @@ def _bucket(key: str) -> int:
     """Return ``hash(key) % 100`` using a stable hash · same key always
     in same bucket. Plain Python ``hash()`` is process-randomized;
     use sha1 for cross-process stability."""
-    h = hashlib.sha1(key.encode("utf-8")).digest()
+    h = hashlib.sha1(key.encode("utf-8"), usedforsecurity=False).digest()
     return h[0] % 100
 
 

@@ -105,7 +105,7 @@ def _soul_hash(agent_id: str) -> str:
     if not soul.exists():
         return ""
     try:
-        return hashlib.md5(soul.read_bytes()).hexdigest()[:8]
+        return hashlib.md5(soul.read_bytes(), usedforsecurity=False).hexdigest()[:8]
     except Exception:  # noqa: BLE001
         return ""
 

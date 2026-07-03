@@ -272,17 +272,24 @@ class WeComChannel(Channel):
         encrypt: str,
     ) -> None:
         sort_list = sorted([self._token, timestamp, nonce, encrypt])
-        sha1 = hashlib.sha1("".join(sort_list).encode("utf-8")).hexdigest()
+        # WeCom's callback protocol mandates SHA1 for this signature.
+        sha1 = hashlib.sha1("".join(sort_list).encode("utf-8")).hexdigest()  # nosec B324
         if sha1 != msg_signature:
             raise WeComSignatureError("msg_signature verification failed")
 
     def _decrypt_message(self, encrypt: str) -> str:
         aes_key = base64.b64decode(self._encoding_aes_key + "=")
         ciphertext = base64.b64decode(encrypt)
-        from Crypto.Cipher import AES  # type: ignore[import-untyped]
+        # AES-256-CBC per the WeCom callback spec, via the maintained
+        # `cryptography` package (the old `Crypto` import was pyCrypto's
+        # namespace and the package was never even declared or installed).
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-        cipher = AES.new(aes_key, AES.MODE_CBC, aes_key[:16])
-        plaintext = cipher.decrypt(ciphertext)
+        decryptor = Cipher(
+            algorithms.AES(aes_key),
+            modes.CBC(aes_key[:16]),
+        ).decryptor()
+        plaintext = decryptor.update(ciphertext) + decryptor.finalize()
         pad_len = plaintext[-1]
         plaintext = plaintext[:-pad_len]
         xml_len = struct.unpack("!I", plaintext[16:20])[0]

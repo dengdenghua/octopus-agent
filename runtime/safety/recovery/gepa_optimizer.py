@@ -89,7 +89,7 @@ class PromptCandidate:
         # so logs reading "v3a8c2 dominated v9d40f" stay short.
         import hashlib
 
-        return hashlib.sha1(self.prompt.encode("utf-8")).hexdigest()[:6]
+        return hashlib.sha1(self.prompt.encode("utf-8"), usedforsecurity=False).hexdigest()[:6]
 
 
 def dominates(a: PromptCandidate, b: PromptCandidate) -> bool:

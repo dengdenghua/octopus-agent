@@ -417,7 +417,9 @@ def _screenshot_web_full_page(
 
 
 def _version_root(project_dir: str | Path) -> Path:
-    digest = hashlib.sha1(str(Path(project_dir).resolve()).encode("utf-8")).hexdigest()[:12]
+    digest = hashlib.sha1(
+        str(Path(project_dir).resolve()).encode("utf-8"), usedforsecurity=False
+    ).hexdigest()[:12]
     from runtime.platform.process.paths import app_paths
 
     return app_paths().data_dir / "website_versions" / digest
@@ -454,7 +456,11 @@ def _website_version_manager(
     if action == "list":
         return {"ok": True, "project_dir": str(project), "versions": manifest.get("versions", [])}
     if action == "snapshot":
-        vid = time.strftime("%Y%m%d-%H%M%S") + "-" + hashlib.sha1(os.urandom(8)).hexdigest()[:6]
+        vid = (
+            time.strftime("%Y%m%d-%H%M%S")
+            + "-"
+            + hashlib.sha1(os.urandom(8), usedforsecurity=False).hexdigest()[:6]
+        )
         dest = root / vid
         ignore = shutil.ignore_patterns("node_modules", ".git", "dist", "build", ".next", ".vite")
         shutil.copytree(project, dest, ignore=ignore)

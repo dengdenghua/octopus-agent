@@ -118,7 +118,7 @@ def _run_exec(rule_id: str, cfg: dict[str, Any]) -> ActionResult:
             args: Any = cmd
         else:
             args = shlex.split(cmd, posix=True)
-        proc = subprocess.run(
+        proc = subprocess.run(  # nosec B602 — shell is per-action opt-in from the operator's reflex config, not model input
             args,
             shell=use_shell,
             capture_output=True,

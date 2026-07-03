@@ -690,7 +690,7 @@ def _generate_with_command(
     }
     command = Template(command_template).safe_substitute(variables)
     timeout = int(os.getenv("OCTOPUS_IMAGE_GEN_TIMEOUT_SECONDS") or "180")
-    completed = subprocess.run(
+    completed = subprocess.run(  # nosec B602 — operator-configured template; every interpolated variable is shlex-quoted above
         command,
         cwd=str(output_dir),
         shell=True,

@@ -155,8 +155,11 @@ def lookup_events(
                             )
                             if script_dir:
                                 subprocess.run(
-                                    f'{script_dir}/delete_tracked_event.sh --event-id "{event_id}"',
-                                    shell=True,
+                                    [
+                                        f"{script_dir}/delete_tracked_event.sh",
+                                        "--event-id",
+                                        str(event_id),
+                                    ],
                                     capture_output=True,
                                 )
                     else:

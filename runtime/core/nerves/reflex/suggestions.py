@@ -235,6 +235,7 @@ def _build_clustered_yaml(rep: str, members: list[str]) -> str:
             "auto_"
             + hashlib.sha1(
                 rep.encode("utf-8"),
+                usedforsecurity=False,
             ).hexdigest()[:8]
         )
     alts = "|".join(re.escape(m.strip()) for m in members)
@@ -273,6 +274,7 @@ def _build_suggested_yaml(prompt: str) -> str:
             "auto_"
             + hashlib.sha1(
                 prompt.encode("utf-8"),
+                usedforsecurity=False,
             ).hexdigest()[:8]
         )
     pattern = re.escape(prompt.strip())

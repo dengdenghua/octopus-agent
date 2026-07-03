@@ -379,6 +379,7 @@ def _tool_fingerprint(tc: ToolCall) -> str:
     key_part = tc.name
     arg_keys = ",".join(sorted(tc.arguments.keys()))
     args_hash = hashlib.md5(
-        json.dumps(tc.arguments, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        json.dumps(tc.arguments, sort_keys=True, ensure_ascii=False).encode("utf-8"),
+        usedforsecurity=False,
     ).hexdigest()[:8]
     return f"{key_part}|{arg_keys}|{args_hash}"

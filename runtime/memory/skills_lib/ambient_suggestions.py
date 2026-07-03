@@ -160,7 +160,7 @@ def _now_iso() -> str:
 
 def _project_hash(project_root: str | Path) -> str:
     norm = str(Path(project_root).resolve())
-    return hashlib.sha1(norm.encode("utf-8")).hexdigest()
+    return hashlib.sha1(norm.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 def _bucket_path(base_dir: Path, project_root: str | Path) -> Path:

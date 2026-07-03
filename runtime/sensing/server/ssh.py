@@ -261,7 +261,7 @@ class SshSandbox(Sandbox):
                 )
                 if m.known_hosts_file is not None:
                     client.load_host_keys(str(m.known_hosts_file))
-                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # nosec B507 — reached only when the operator explicitly disabled strict host key checking; warning logged above
             connect_kwargs: dict[str, Any] = {
                 "hostname": m.host,
                 "port": m.port,

@@ -663,7 +663,7 @@ def _resolve_output_path(
 def _default_output_path(start_url: str) -> Path:
     parsed = urlparse(start_url)
     host = (parsed.hostname or "crawl").replace(".", "_")
-    digest = hashlib.sha1(start_url.encode("utf-8")).hexdigest()[:10]
+    digest = hashlib.sha1(start_url.encode("utf-8"), usedforsecurity=False).hexdigest()[:10]
     return app_paths().data_dir / "crawls" / f"{host}-{digest}.jsonl"
 
 

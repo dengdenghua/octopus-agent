@@ -112,7 +112,9 @@ class DriftMonitor:
             return None
 
         try:
-            current_hash = hashlib.md5(soul_path.read_bytes()).hexdigest()[:8]
+            current_hash = hashlib.md5(soul_path.read_bytes(), usedforsecurity=False).hexdigest()[
+                :8
+            ]
         except Exception as _exc:
             _LOG.debug("drift check failed: %s", _exc)
             return None
