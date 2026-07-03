@@ -220,27 +220,26 @@ class TestReload(unittest.TestCase):
 
 
 class TestDetectLang(unittest.TestCase):
+    # detect_lang checks OCTOPUS_LANG > LANGUAGE > LC_ALL > LC_MESSAGES >
+    # LANG — CI runners export the higher-priority ones (LC_ALL=C.UTF-8,
+    # LANGUAGE=en_US…), so setting LANG alone never wins there. Clear the
+    # whole chain before pinning the variable under test.
+    _LANG_VARS = ("OCTOPUS_LANG", "LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG")
+
+    def _with_only(self, var: str, value: str):
+        from unittest import mock
+
+        env = {name: v for name, v in os.environ.items() if name not in self._LANG_VARS}
+        env[var] = value
+        return mock.patch.dict(os.environ, env, clear=True)
+
     def test_explicit_env(self) -> None:
-        saved = os.environ.get("LANG")
-        try:
-            os.environ["LANG"] = "ja_JP.UTF-8"
+        with self._with_only("LANG", "ja_JP.UTF-8"):
             self.assertEqual(detect_lang(), "ja")
-        finally:
-            if saved is None:
-                os.environ.pop("LANG", None)
-            else:
-                os.environ["LANG"] = saved
 
     def test_zh_prefix(self) -> None:
-        saved = os.environ.get("LANG")
-        try:
-            os.environ["LANG"] = "zh_TW.UTF-8"
+        with self._with_only("LANG", "zh_TW.UTF-8"):
             self.assertEqual(detect_lang(), "zh-CN")
-        finally:
-            if saved is None:
-                os.environ.pop("LANG", None)
-            else:
-                os.environ["LANG"] = saved
 
 
 class TestLocaleParity(unittest.TestCase):

@@ -719,6 +719,7 @@ class TestAgentDetail:
         assert "labels for name" not in view_prompt.lower()
 
     def test_postprocess_agent_visual_removes_chroma_and_makes_avatar(self, tmp_path: Path):
+        pytest.importorskip("PIL")
         from PIL import Image, ImageDraw
 
         from runtime.execution.misc.image_generation import (
@@ -804,6 +805,7 @@ class TestAgentDetail:
     ):
         import base64
 
+        pytest.importorskip("PIL")
         from PIL import Image
 
         from runtime.execution.misc import image_generation

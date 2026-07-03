@@ -263,6 +263,12 @@ class TestOAuthStatusAndForget:
 
 
 class TestHttpMCPClientBearerInjection:
+    @pytest.fixture(autouse=True)
+    def _needs_mcp_sdk(self) -> None:
+        # HttpMCPClient imports the mcp package; the cross-platform CI
+        # matrix installs only [dev,web,serve].
+        pytest.importorskip("mcp")
+
     def test_injects_bearer_token_from_oauth_store(
         self,
         monkeypatch: pytest.MonkeyPatch,

@@ -760,6 +760,7 @@ class TestCredentials:
         self,
         tmp_path: Path,
     ):
+        pytest.importorskip("cryptography")
         app, _ = self._build_empty(tmp_path, tmp_path / "s.json")
         # Implementation note.
         r = TestClient(app).post(
@@ -909,6 +910,7 @@ class TestCredentialEncryption:
 
     def test_file_on_disk_is_encrypted_envelope(self, tmp_path: Path):
         """Implementation note."""
+        pytest.importorskip("cryptography")
         from runtime.adapters.channels import ChannelManager
         from runtime.execution.agents import (
             AgentRegistry,
@@ -1054,6 +1056,7 @@ class TestCredentialEncryption:
         monkeypatch: pytest.MonkeyPatch,
     ):
         """Implementation note."""
+        pytest.importorskip("cryptography")
         import base64
         import secrets as _secrets
 

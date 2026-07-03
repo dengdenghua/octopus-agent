@@ -610,7 +610,18 @@ class TestFileStreamEndpoints:
     """Implementation note."""
 
     def test_files_stream_route_registered(self, client: TestClient) -> None:
-        routes = {r.path for r in client.app.routes}
+        # starlette >=1.3 wraps included routers in objects without a
+        # .path attribute; walk one level of nested routes instead of
+        # assuming every entry is a Route.
+        routes: set[str] = set()
+        for r in client.app.routes:
+            path = getattr(r, "path", None)
+            if path:
+                routes.add(path)
+            for sub in getattr(r, "routes", []) or []:
+                sub_path = getattr(sub, "path", None)
+                if sub_path:
+                    routes.add(sub_path)
         assert "/api/files/stream" in routes
         assert "/api/stream" in routes
 
