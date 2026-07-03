@@ -1,8 +1,9 @@
 # CLAUDE.md
 
-Guidance for Claude Code / agents working in this repo. For a deep architectural
-tour see [CODE_WIKI.md](CODE_WIKI.md) (77KB, comprehensive); this file is the
-short operational cheat-sheet.
+Guidance for Claude Code / agents working in this repo. For the architecture,
+see [docs/architecture/module-map.md](docs/architecture/module-map.md) (the
+organ-name ↔ package map) and the [docs/](docs/) tree; this file is the short
+operational cheat-sheet.
 
 ## What this is
 
