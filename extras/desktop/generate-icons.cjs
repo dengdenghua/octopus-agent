@@ -8,8 +8,11 @@ const fs = require("fs");
 const path = require("path");
 const sharp = require("sharp");
 
-const SVG_INPUT = path.join(__dirname, "..", "public", "images", "octopus.svg");
-const BUILD_DIR = path.join(__dirname, "..", "build");
+// The desktop shell lives in extras/desktop/ — the logo ships with the
+// frontend two levels up, and electron-builder's buildResources ("build")
+// resolves relative to THIS package root, not its parent.
+const SVG_INPUT = path.join(__dirname, "..", "..", "frontend", "public", "images", "octopus.svg");
+const BUILD_DIR = path.join(__dirname, "build");
 
 async function generateIcons() {
   if (!fs.existsSync(SVG_INPUT)) {

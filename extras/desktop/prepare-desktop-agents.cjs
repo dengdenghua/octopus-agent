@@ -1,10 +1,12 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const frontendRoot = path.resolve(__dirname, "..");
-const repoRoot = path.resolve(frontendRoot, "..");
+// This script lives in extras/desktop/ — repo root is two levels up, and
+// electron-builder resolves "build/agents" relative to THIS package root.
+const desktopRoot = __dirname;
+const repoRoot = path.resolve(desktopRoot, "..", "..");
 const sourceRoot = path.join(repoRoot, "agents");
-const targetRoot = path.join(frontendRoot, "build", "agents");
+const targetRoot = path.join(desktopRoot, "build", "agents");
 
 const allowedRootFiles = new Set(["profile.jsonc"]);
 const allowedCoreFiles = new Set([
@@ -111,7 +113,7 @@ if (!fs.existsSync(sourceRoot)) {
   throw new Error(`agents source not found: ${sourceRoot}`);
 }
 
-assertInside(path.join(frontendRoot, "build"), targetRoot);
+assertInside(path.join(desktopRoot, "build"), targetRoot);
 fs.rmSync(targetRoot, { recursive: true, force: true });
 
 let copied = 0;
