@@ -34,7 +34,6 @@ runtime/safety/recovery/gepa_bridge.py	1281
 runtime/sensing/gateway/agent_world_router.py	1048
 runtime/sensing/gateway/agents_router.py	1797
 runtime/sensing/gateway/channels_router.py	1653
-runtime/sensing/gateway/computer_router.py	1994
 runtime/sensing/gateway/config_router.py	1662
 runtime/sensing/gateway/evolution_router.py	1310
 runtime/sensing/gateway/meta_router.py	1717
