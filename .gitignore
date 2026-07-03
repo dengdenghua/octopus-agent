@@ -179,6 +179,8 @@ frontend/.next/
 !.octopus/plugins/codex/product-design/**
 !.octopus/plugins/codex/remotion/
 !.octopus/plugins/codex/remotion/**
+!.octopus/plugins/codex/permission-review-fixture/
+!.octopus/plugins/codex/permission-review-fixture/**
 # Third-party plugin source (use as reference, not as committed deps)
 _external/
 # Local reverse-engineering captures

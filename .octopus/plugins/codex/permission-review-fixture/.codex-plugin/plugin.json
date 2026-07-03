@@ -1,0 +1,11 @@
+{
+  "name": "permission-review-fixture",
+  "version": "0.1.0",
+  "description": "Committed fixture plugin: declares an MCP server without explicit permissions so discovery infers mcp:execute:review_required and the permission-review draft pipeline stays demonstrable (and the readiness certification reproducible) in any fresh checkout. The server command is inert and never auto-started.",
+  "mcpServers": {
+    "fixture-noop": {
+      "command": "true",
+      "args": []
+    }
+  }
+}
