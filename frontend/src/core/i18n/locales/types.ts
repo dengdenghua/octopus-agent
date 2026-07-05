@@ -187,6 +187,8 @@ export interface Translations {
     agent: string;
     noTaskDescription: string;
     processRecords: (n: number) => string;
+    showMoreAgents: (n: number) => string;
+    collapseAgents: string;
     latestTool: string;
     execution: string;
     verification: string;
@@ -203,7 +205,24 @@ export interface Translations {
     revertFailed: string;
     reviewAssigned: (label: string) => string;
     taskCompleted: string;
+    taskFailed: string;
     taskOutputs: string;
+    viewProcess: string;
+    makeSimilar: string;
+    makeSimilarHint: string;
+    retryTask: string;
+    retryTaskHint: string;
+    taskFailedReason: string;
+    resultUrl: string;
+    openResult: string;
+    verificationRan: string;
+    verificationPassed: string;
+    verificationFailed: string;
+    testsPassed: string;
+    lintClean: string;
+    buildSucceeded: string;
+    completedChanges: string;
+    viewComputer: string;
     artifactsSummary: string;
     changesSummary: string;
     auditActions: string;
@@ -1036,6 +1055,8 @@ export interface Translations {
     agentStatusDone: string;
     agentStatusPending: string;
     mainComputer: string;
+    filterByAgent: string;
+    filterChipMain: string;
     mainController: string;
     subComputer: string;
     currentConversation: string;
@@ -1064,6 +1085,10 @@ export interface Translations {
     processReplay: string;
     processRecords: (count: number) => string;
     iterationRounds: (count: number) => string;
+    computerViewSubtitle: string;
+    computerViewSelectHint: string;
+    computerViewEmpty: string;
+    computerViewEmptyDesc: string;
   };
 
   // Diagnostics page
@@ -1427,6 +1452,10 @@ export interface Translations {
     ariaCollapseLocalDatabase: string;
     ariaExpandLocalDatabase: string;
     ariaResizeSidebar: string;
+    ariaResizeWorkbench: string;
+    ariaChatWorkspace: string;
+    ariaUtilityPanel: string;
+    ariaAgentWorkbench: string;
     // Storage library labels
     libraryApps: string;
     libraryDocs: string;
