@@ -1,9 +1,15 @@
-import type { AIMessage, Message, ToolCall } from "@/core/api/types";
+import type {
+  AIMessage,
+  Message,
+  ToolCall,
+  ToolMessage,
+} from "@/core/api/types";
 import type { FileHunk } from "@/core/realtime";
 import { singleHunkDiff } from "@/components/realtime/item-views/file-change-view";
 import { artifactDisplayPath } from "@/core/artifacts/utils";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
+import { stripUploadedFilesTag } from "@/core/messages/utils";
 import { swallow } from "@/core/utils/log";
 import {
   getFileExtensionDisplayName,
@@ -12,15 +18,20 @@ import {
 } from "@/core/utils/files";
 import { cn } from "@/lib/utils";
 import {
+  AlertTriangleIcon,
   CheckCircle2Icon,
   ChevronDownIcon,
   DownloadIcon,
   ExternalLinkIcon,
   FileCheck2Icon,
   FilePlus2Icon,
+  LinkIcon,
   Loader2Icon,
+  PlayCircleIcon,
   RotateCcwIcon,
   UserCheckIcon,
+  WandSparklesIcon,
+  XCircleIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -32,6 +43,7 @@ import {
 } from "@/components/ui/collapsible";
 
 import { useArtifacts } from "../artifacts";
+import { emitOpenAgentWorkbench } from "../agent-workbench-events";
 
 type OutputArtifact = {
   path: string;
@@ -50,9 +62,17 @@ type OutputChange = {
   hunks: FileHunk[];
 };
 
+type VerificationEntry = {
+  id: string;
+  toolName: string;
+  passed: boolean;
+  detail?: string;
+};
+
 type OutputSummary = {
   artifacts: OutputArtifact[];
   changes: OutputChange[];
+  verifications: VerificationEntry[];
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -168,13 +188,76 @@ function changesFromToolCall(toolCall: ToolCall): OutputChange[] {
   return out;
 }
 
+const VERIFICATION_TOOL_NAMES = new Set([
+  "run_tests",
+  "lint_check",
+  "test",
+  "verify",
+  "build",
+  "format_code",
+]);
+
+function verificationFromToolMessage(
+  toolMessage: ToolMessage,
+  toolCallMap: Map<string, ToolCall>,
+): VerificationEntry | null {
+  const toolCall = toolCallMap.get(toolMessage.tool_call_id);
+  if (!toolCall || !VERIFICATION_TOOL_NAMES.has(toolCall.name)) return null;
+
+  // Try to parse structured result from content
+  const content =
+    typeof toolMessage.content === "string"
+      ? toolMessage.content
+      : Array.isArray(toolMessage.content)
+        ? toolMessage.content
+            .map((c) => (typeof c === "string" ? c : ""))
+            .join("")
+        : "";
+
+  let result: Record<string, unknown> | null = null;
+  try {
+    const trimmed = content.trim();
+    if (trimmed.startsWith("{")) {
+      result = JSON.parse(trimmed);
+    } else {
+      const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
+      if (jsonMatch) result = JSON.parse(jsonMatch[0]);
+    }
+  } catch {
+    // Not JSON; fall back to status field
+  }
+
+  const passed =
+    toolMessage.status === "success" ||
+    result?.success === true ||
+    result?.exit_code === 0;
+
+  const detail =
+    typeof result?.error === "string"
+      ? result.error
+      : typeof result?.stdout === "string"
+        ? result.stdout.slice(0, 200)
+        : undefined;
+
+  return {
+    id: toolMessage.tool_call_id,
+    toolName: toolCall.name,
+    passed,
+    detail,
+  };
+}
+
 function summarizeOutputs(messages: Message[]): OutputSummary {
   const artifacts = new Map<string, OutputArtifact>();
   const changes = new Map<string, OutputChange>();
+  const verifications = new Map<string, VerificationEntry>();
+  const toolCallMap = new Map<string, ToolCall>();
 
+  // First pass: collect tool calls by id so we can join with ToolMessage results
   for (const message of messages) {
     if (message.type !== "ai") continue;
     for (const toolCall of (message as AIMessage).tool_calls ?? []) {
+      if (toolCall.id) toolCallMap.set(toolCall.id, toolCall);
       const artifact = artifactFromToolCall(toolCall);
       if (artifact) {
         artifacts.set(artifact.path, artifact);
@@ -197,31 +280,103 @@ function summarizeOutputs(messages: Message[]): OutputSummary {
     }
   }
 
+  // Second pass: collect verification results from tool messages
+  for (const message of messages) {
+    if (message.type !== "tool") continue;
+    const entry = verificationFromToolMessage(
+      message as ToolMessage,
+      toolCallMap,
+    );
+    if (entry) verifications.set(entry.id, entry);
+  }
+
   return {
     artifacts: [...artifacts.values()],
     changes: [...changes.values()],
+    verifications: [...verifications.values()],
   };
 }
 
 export function hasMessageOutputSummary(messages: Message[]): boolean {
   const summary = summarizeOutputs(messages);
-  return summary.artifacts.length > 0 || summary.changes.length > 0;
+  return (
+    summary.artifacts.length > 0 ||
+    summary.changes.length > 0 ||
+    summary.verifications.length > 0
+  );
+}
+
+function messageText(content: Message["content"]): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join("");
+  }
+  return "";
+}
+
+/**
+ * First human message text — used as the prompt to carry into "做同款"
+ * (start a new task with the same request). Backend-injected
+ * <uploaded_files> blocks are internal markup and must not leak into the
+ * new prompt.
+ */
+function extractOriginalPrompt(messages: Message[]): string | null {
+  for (const message of messages) {
+    if (message.type !== "human") continue;
+    const text = stripUploadedFilesTag(messageText(message.content)).trim();
+    if (text) return text;
+  }
+  return null;
+}
+
+// Cloudflare Pages deploys to <project>.pages.dev (no "cloudflare." label).
+const DEPLOY_URL_PATTERN =
+  /\bhttps?:\/\/(?:localhost:\d+|127\.0\.0\.1:\d+|(?:[a-z0-9-]+\.)+(?:vercel\.app|netlify\.app|onrender\.com|herokuapp\.com|pages\.dev|gitpod\.io|github\.io|preview\.app))\b[^\s)\]]*/i;
+
+/**
+ * Scans AI messages (latest first) for a URL that looks like a deployed
+ * preview — used to surface a "结果链接" direct link in the receipt.
+ */
+export function extractResultUrl(messages: Message[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (!message || message.type !== "ai") continue;
+    const match = messageText(message.content).match(DEPLOY_URL_PATTERN);
+    if (match) return match[0];
+  }
+  return null;
 }
 
 export function MessageOutputSummary({
   auditNotice,
   messages,
+  turnMessages,
   threadId,
+  failure,
   className,
 }: {
   auditNotice?: string | null;
   messages: Message[];
+  /** Full message slice of the turn this receipt belongs to. The plain
+   *  assistant group never contains human or tool messages, so verification
+   *  results, the original prompt and deploy URLs can only be found here.
+   *  Falls back to `messages` when absent. */
+  turnMessages?: Message[];
   threadId?: string;
+  failure?: { message: string; kind?: "error" | "network" | "verification" } | null;
   className?: string;
 }) {
   const { t } = useI18n();
   const { select, setOpen } = useArtifacts();
-  const summary = useMemo(() => summarizeOutputs(messages), [messages]);
+  const scanMessages = turnMessages ?? messages;
+  const summary = useMemo(() => summarizeOutputs(scanMessages), [scanMessages]);
+  const resultUrl = useMemo(() => extractResultUrl(scanMessages), [scanMessages]);
+  const originalPrompt = useMemo(
+    () => extractOriginalPrompt(scanMessages),
+    [scanMessages],
+  );
   const [changesOpen, setChangesOpen] = useState(summary.changes.length <= 3);
   const reviewAssignees = useMemo(
     () => [
@@ -236,9 +391,38 @@ export function MessageOutputSummary({
   );
   const [reverting, setReverting] = useState(false);
 
-  if (summary.artifacts.length === 0 && summary.changes.length === 0) {
+  if (
+    !failure &&
+    summary.artifacts.length === 0 &&
+    summary.changes.length === 0 &&
+    summary.verifications.length === 0
+  ) {
     return null;
   }
+
+  const isFailure = Boolean(failure);
+  const isNetworkFailure = failure?.kind === "network";
+
+  const friendlyVerificationName = (toolName: string): string => {
+    switch (toolName) {
+      case "run_tests":
+      case "test":
+        return t.message.testsPassed;
+      case "lint_check":
+        return t.message.lintClean;
+      case "build":
+        return t.message.buildSucceeded;
+      default:
+        return toolName;
+    }
+  };
+
+  const handleMakeSimilar = () => {
+    if (!originalPrompt) return;
+    window.location.hash = `/workspace/realtime/new?prompt=${encodeURIComponent(
+      originalPrompt,
+    )}`;
+  };
 
   const openArtifact = (path: string) => {
     select(path);
@@ -315,18 +499,46 @@ export function MessageOutputSummary({
 
   return (
     <div className={cn("mt-4 flex w-full flex-col gap-2", className)}>
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.055] px-3 py-2 text-xs">
-        <CheckCircle2Icon className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-xs",
+          isFailure
+            ? isNetworkFailure
+              ? "border-amber-500/25 bg-amber-500/[0.06]"
+              : "border-destructive/25 bg-destructive/[0.06]"
+            : "border-emerald-500/20 bg-emerald-500/[0.055]",
+        )}
+      >
+        {isFailure ? (
+          isNetworkFailure ? (
+            <AlertTriangleIcon className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          ) : (
+            <XCircleIcon className="size-4 shrink-0 text-destructive" />
+          )
+        ) : (
+          <CheckCircle2Icon className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        )}
         <div className="min-w-0 flex-1">
           <div className="font-semibold text-foreground">
-            {t.message.taskOutputs}
+            {isFailure ? t.message.taskFailed : t.message.taskOutputs}
           </div>
           <div className="truncate text-[11px] text-muted-foreground">
-            {t.message.taskCompleted}
-            {summary.changes.length > 0 ? ` · ${changeSummaryLabel}` : ""}
-            {summary.artifacts.length > 0
-              ? ` · ${t.message.artifactsCreated(summary.artifacts.length)}`
-              : ""}
+            {isFailure && failure?.message ? (
+              <>
+                <span className="text-muted-foreground/80">
+                  {t.message.taskFailedReason}:
+                </span>{" "}
+                <span className="text-foreground/80">{failure.message}</span>
+              </>
+            ) : (
+              <>
+                {t.message.taskCompleted}
+                {summary.changes.length > 0 ? ` · ${changeSummaryLabel}` : ""}
+                {summary.artifacts.length > 0
+                  ? ` · ${t.message.artifactsCreated(summary.artifacts.length)}`
+                  : ""}
+              </>
+            )}
           </div>
         </div>
         {summary.changes.length > 0 && (
@@ -339,6 +551,42 @@ export function MessageOutputSummary({
               -{totalRemoved}
             </span>
           </div>
+        )}
+        <button
+          type="button"
+          onClick={() => emitOpenAgentWorkbench({ tab: "agent" })}
+          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border/60 bg-background/70 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
+        >
+          <PlayCircleIcon className="size-3" />
+          {t.message.viewProcess}
+        </button>
+        {resultUrl && (
+          <a
+            href={resultUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border/60 bg-background/70 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
+            title={t.message.resultUrl}
+          >
+            <LinkIcon className="size-3" />
+            {t.message.openResult}
+          </a>
+        )}
+        {originalPrompt && (
+          <button
+            type="button"
+            onClick={handleMakeSimilar}
+            title={isFailure ? t.message.retryTaskHint : t.message.makeSimilarHint}
+            className={cn(
+              "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-[11px] font-medium transition-colors",
+              isFailure
+                ? "border-destructive/30 bg-destructive/[0.08] text-destructive hover:border-destructive/50 hover:bg-destructive/15"
+                : "border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-700 transition-colors hover:border-emerald-500/50 hover:bg-emerald-500/15 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200",
+            )}
+          >
+            <WandSparklesIcon className="size-3" />
+            {isFailure ? t.message.retryTask : t.message.makeSimilar}
+          </button>
         )}
       </div>
       {summary.artifacts.length > 0 && (
@@ -376,6 +624,64 @@ export function MessageOutputSummary({
               </button>
             ))}
           </div>
+        </section>
+      )}
+
+      {summary.verifications.length > 0 && (
+        <section
+          aria-label={t.message.verificationRan}
+          className="space-y-2"
+        >
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <CheckCircle2Icon className="size-4 shrink-0 text-muted-foreground/60" />
+            {t.message.verificationRan}
+            <span className="rounded-full bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
+              {summary.verifications.filter((v) => v.passed).length}/
+              {summary.verifications.length}
+            </span>
+          </div>
+          <ul className="overflow-hidden rounded-lg border border-border/70 bg-muted/25 divide-y divide-border/50">
+            {summary.verifications.map((entry) => {
+              const passed = entry.passed;
+              const label = friendlyVerificationName(entry.toolName);
+              return (
+                <li
+                  key={entry.id}
+                  className="flex items-start gap-2 px-3 py-2 text-xs"
+                >
+                  {passed ? (
+                    <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <XCircleIcon className="mt-0.5 size-3.5 shrink-0 text-red-600 dark:text-red-400" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-medium text-foreground">
+                        {label}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded px-1 py-0.5 text-[9px] font-mono font-medium",
+                          passed
+                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                            : "bg-red-500/10 text-red-700 dark:text-red-300",
+                        )}
+                      >
+                        {passed
+                          ? t.message.verificationPassed
+                          : t.message.verificationFailed}
+                      </span>
+                    </div>
+                    {entry.detail && (
+                      <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-all rounded bg-muted/60 p-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                        {entry.detail}
+                      </pre>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       )}
 

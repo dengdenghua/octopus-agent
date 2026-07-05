@@ -17,7 +17,7 @@ import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { ShineBorder } from "@/components/ui/shine-border";
 import { DotProgress } from "@/components/workspace/swarm/dot-progress";
-import { useOptionalSwarm } from "@/components/workspace/swarm/swarm-context";
+import { emitAgentWorkbenchFocus } from "@/components/workspace/agent-workbench-events";
 import { useI18n } from "@/core/i18n/hooks";
 import { hasToolCalls } from "@/core/messages/utils";
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
@@ -90,7 +90,6 @@ export function SubtaskCard({
   isLoading: boolean;
 }) {
   const { t } = useI18n();
-  const swarm = useOptionalSwarm();
   const [collapsed, setCollapsed] = useState(false);
   const rehypePlugins = useRehypeSplitWordsIntoSpans(isLoading);
   const streamdownPluginsWithWordAnimation =
@@ -111,11 +110,10 @@ export function SubtaskCard({
   // render." useCallback still guards against missing task inside.
   const handleHeaderClick = useCallback(() => {
     setCollapsed((c) => !c);
-    if (swarm && task) {
-      swarm.setSelectedAgentId(task.id);
-      swarm.openPanel();
+    if (task) {
+      emitAgentWorkbenchFocus({ agentId: task.id });
     }
-  }, [swarm, task]);
+  }, [task]);
 
   if (!task) {
     return (

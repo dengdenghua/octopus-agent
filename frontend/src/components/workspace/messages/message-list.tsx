@@ -5,6 +5,8 @@ import {
   AlertTriangleIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  PlayCircleIcon,
+  XCircleIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 
@@ -33,6 +35,7 @@ import type { AgentThreadState } from "@/core/threads";
 import { cn } from "@/lib/utils";
 
 import { ArtifactFileList } from "../artifacts/artifact-file-list";
+import { emitOpenAgentWorkbench } from "../agent-workbench-events";
 import type { LiveToolEvent } from "../live-tool-timeline";
 import {
   type AgentRunState,
@@ -69,6 +72,17 @@ interface TurnMarker {
   kind: "dot" | "phase";
   label: string;
   number: number;
+}
+function sameTurnMarker(a: TurnMarker, b: TurnMarker): boolean {
+  return (
+    a.key === b.key &&
+    a.kind === b.kind &&
+    a.label === b.label &&
+    a.number === b.number &&
+    a.agentName === b.agentName &&
+    a.agentAvatar === b.agentAvatar &&
+    a.agentIcon === b.agentIcon
+  );
 }
 type TurnLocatorRunState = AgentRunState;
 type MessageListAgentRole = "tl" | "member" | string;
@@ -283,6 +297,75 @@ export function turnMarkerKindFromMessages(
 }
 
 /**
+ * Group objects are rebuilt from scratch on every upstream state flush, so
+ * comparing `prev.group === next.group` would never hold during streaming.
+ * Compare the contained message references instead: once the adapter keeps
+ * message identities stable, completed groups become deep-equal by
+ * reference and stay frozen.
+ */
+function sameGroupContent(a: CoreMessageGroup, b: CoreMessageGroup): boolean {
+  if (a === b) return true;
+  if (a.type !== b.type || a.id !== b.id) return false;
+  if (a.messages.length !== b.messages.length) return false;
+  for (let index = 0; index < a.messages.length; index += 1) {
+    if (a.messages[index] !== b.messages[index]) return false;
+  }
+  return true;
+}
+
+// Full message slice of the turn a group belongs to: from the nearest
+// preceding human group through the last group before the next human one.
+// Grouping never puts human/tool messages into a plain "assistant" group,
+// so per-turn scans (verifications, original prompt, result URL) must look
+// at the whole turn, not just the group's own messages. Groups can share
+// message objects (a long final answer is pushed to both the processing
+// and the assistant group), hence the identity dedupe.
+function turnMessagesForGroup(
+  groupedMessages: CoreMessageGroup[],
+  group: CoreMessageGroup,
+): Message[] {
+  const index = groupedMessages.indexOf(group);
+  if (index === -1) return group.messages;
+  let start = index;
+  while (start > 0 && groupedMessages[start]!.type !== "human") start -= 1;
+  let end = index;
+  while (
+    end + 1 < groupedMessages.length &&
+    groupedMessages[end + 1]!.type !== "human"
+  ) {
+    end += 1;
+  }
+  const seen = new Set<Message>();
+  const slice: Message[] = [];
+  for (const turnGroup of groupedMessages.slice(start, end + 1)) {
+    for (const message of turnGroup.messages) {
+      if (seen.has(message)) continue;
+      seen.add(message);
+      slice.push(message);
+    }
+  }
+  return slice;
+}
+
+// A turn can contain several plain assistant groups (a long final answer
+// is dual-mounted after a processing group, consecutive text replies,
+// ...). Only the last one gets the turn-wide receipt scan — otherwise
+// every group would render an identical full receipt for the same turn.
+function isLastAssistantGroupOfTurn(
+  groupedMessages: CoreMessageGroup[],
+  group: CoreMessageGroup,
+): boolean {
+  const index = groupedMessages.indexOf(group);
+  if (index === -1) return true;
+  for (let i = index + 1; i < groupedMessages.length; i++) {
+    const later = groupedMessages[i]!;
+    if (later.type === "human") break;
+    if (later.type === "assistant") return false;
+  }
+  return true;
+}
+
+/**
  * Memoized wrapper around a single message group. Only the group that
  * contains the currently-streaming message (or the latest group while
  * loading) will re-render on every token chunk; all completed groups
@@ -299,6 +382,7 @@ const MemoizedGroup = memo(
     enableClarificationActions,
     deferGroupOutputs,
     groupAuditNotice,
+    groupFailure,
     renderGroupContent,
   }: {
     group: CoreMessageGroup;
@@ -310,6 +394,7 @@ const MemoizedGroup = memo(
     enableClarificationActions: boolean;
     deferGroupOutputs: boolean;
     groupAuditNotice: string | null;
+    groupFailure?: { message: string; kind?: "error" | "network" | "verification" } | null;
     renderGroupContent: (
       group: CoreMessageGroup,
       beforeAssistantContent?: ReactNode,
@@ -317,6 +402,7 @@ const MemoizedGroup = memo(
       keepOpen?: boolean,
       deferOutputs?: boolean,
       auditNotice?: string | null,
+      failure?: { message: string; kind?: "error" | "network" | "verification" } | null,
     ) => ReactNode;
   }) {
     return (
@@ -334,21 +420,23 @@ const MemoizedGroup = memo(
           keepGroupOpen,
           deferGroupOutputs,
           groupAuditNotice,
+          groupFailure,
         )}
       </div>
     );
   },
   (prev, next) =>
-    // Only re-render if the group itself changed or it is the active streaming group.
-    // For non-streaming groups, shallow-equal the stable props.
+    // Only re-render if the group content changed or it is the active
+    // streaming group. For non-streaming groups, shallow-equal the stable props.
     prev.groupKey === next.groupKey &&
-    prev.group === next.group &&
+    sameGroupContent(prev.group, next.group) &&
     prev.isLatestGroup === next.isLatestGroup &&
     prev.groupHasStreamingMessage === next.groupHasStreamingMessage &&
     prev.keepGroupOpen === next.keepGroupOpen &&
     prev.enableClarificationActions === next.enableClarificationActions &&
     prev.deferGroupOutputs === next.deferGroupOutputs &&
-    prev.groupAuditNotice === next.groupAuditNotice,
+    prev.groupAuditNotice === next.groupAuditNotice &&
+    prev.groupFailure === next.groupFailure,
 );
 
 /**
@@ -377,7 +465,6 @@ export function MessageList({
   paddingBottom = MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
   header,
   footer,
-  compact = false,
   lastTurnToolEvents,
   liveToolEvents,
   currentAgent,
@@ -395,7 +482,6 @@ export function MessageList({
   mode?: string;
   /** Label each agent message with its name (group-chat / team room). */
   showSenderName?: boolean;
-  compact?: boolean;
   /** Rendered above the first message — e.g. a "load older turns"
    * banner when the thread resumed with a paginated window. */
   header?: ReactNode;
@@ -526,10 +612,20 @@ export function MessageList({
     thread.isLoading &&
     loadingAgeMs >= MESSAGE_LIST_TIMEOUT_WARNING_MS &&
     !hasActiveTool;
-  const threadErrorMessage = thread.error?.message ?? "";
-  const isNetworkError = /network|fetch|abort|timeout|ECONNREFUSED/i.test(
-    threadErrorMessage,
-  );
+  // The realtime hook wraps send failures in Error now, but other BaseStream
+  // implementations may still surface raw strings — keep accepting both
+  // shapes when extracting the message text.
+  const rawThreadError = thread.error as Error | string | undefined;
+  const threadErrorMessage =
+    typeof rawThreadError === "string"
+      ? rawThreadError
+      : (rawThreadError?.message ?? "");
+  // "websocket closed (1006 ...)" is the realtime hook's send-failure text —
+  // a connectivity problem, so it must get the amber network styling.
+  const isNetworkError =
+    /network|fetch|abort|timeout|ECONNREFUSED|websocket/i.test(
+      threadErrorMessage,
+    );
   const isVerificationRequiredError =
     /verification required|no verification step|Code changes were produced/i.test(
       threadErrorMessage,
@@ -547,6 +643,16 @@ export function MessageList({
   const verificationAuditNotice =
     isVerificationRequiredError && errorBannerText ? errorBannerText : null;
 
+  const failureReceipt = useMemo(() => {
+    if (!errorBannerText) return null;
+    const kind: "error" | "network" | "verification" = isNetworkError
+      ? "network"
+      : isVerificationRequiredError
+        ? "verification"
+        : "error";
+    return { message: errorBannerText, kind };
+  }, [errorBannerText, isNetworkError, isVerificationRequiredError]);
+
   // Aggregation layer (fold continuous tool-call runs into collapsible
   // bubbles) is currently disabled because it was eating streaming AI messages
   // in Code mode. Restore direct group rendering so every AI response
@@ -556,17 +662,34 @@ export function MessageList({
     () => groupMessages(messages, (group) => group),
     [messages],
   );
+  // Must mirror the exact mount predicate of `groupFailure` below (latest
+  // group is a plain assistant group and the thread is idle). Anything looser
+  // suppresses the fallback banner while the receipt has no group to mount
+  // on, leaving the error text with no visible rendering at all.
+  const failureReceiptAttachedToGroup = useMemo(
+    () =>
+      Boolean(
+        failureReceipt &&
+          !thread.isLoading &&
+          groupedMessages[groupedMessages.length - 1]?.type === "assistant",
+      ),
+    [failureReceipt, groupedMessages, thread.isLoading],
+  );
+  // Mirror the receipt mount rule: the audit actions attach to the last
+  // plain assistant group of the latest turn, and receipt content is judged
+  // on the whole turn slice — file changes usually live in the processing
+  // group's messages, never in the plain assistant group's own.
   const auditNoticeGroupKey = useMemo(() => {
     if (!verificationAuditNotice) return null;
     for (let index = groupedMessages.length - 1; index >= 0; index -= 1) {
       const group = groupedMessages[index]!;
-      if (
-        group.type === "assistant" &&
-        hasMessageOutputSummary(group.messages)
-      ) {
-        return `${group.type}:${group.id ?? `idx-${index}`}`;
-      }
       if (group.type === "human") break;
+      if (group.type !== "assistant") continue;
+      return hasMessageOutputSummary(
+        turnMessagesForGroup(groupedMessages, group),
+      )
+        ? `${group.type}:${group.id ?? `idx-${index}`}`
+        : null;
     }
     return null;
   }, [groupedMessages, verificationAuditNotice]);
@@ -576,6 +699,25 @@ export function MessageList({
     }
     return -1;
   }, [groupedMessages]);
+  // "Completed changes" badge on the failure banner: count only files
+  // delivered in the failed turn, not the whole thread history.
+  const failedCompletedFileCount = useMemo(() => {
+    if (!thread.error || thread.isLoading) return 0;
+    const turnGroups =
+      latestHumanGroupIndex >= 0
+        ? groupedMessages.slice(latestHumanGroupIndex)
+        : groupedMessages;
+    let count = 0;
+    for (const group of turnGroups) {
+      for (const msg of group.messages) {
+        if (hasPresentFiles(msg)) {
+          const files = extractPresentFilesFromMessage(msg);
+          count += Array.isArray(files) ? files.length : 0;
+        }
+      }
+    }
+    return count;
+  }, [groupedMessages, latestHumanGroupIndex, thread.error, thread.isLoading]);
   const groupRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const resolveAgentIdentity = useCallback(
     (msg?: (typeof messages)[number]): AgentIdentity => {
@@ -642,6 +784,11 @@ export function MessageList({
       thread.values,
     ],
   );
+  // Recomputed on every streamed frame (groupedMessages is rebuilt each
+  // flush), but the scroll-spy effect and the locator rail key off array
+  // identity — return the previous array whenever the content is unchanged
+  // so listeners are not torn down and re-attached per frame.
+  const turnMarkersRef = useRef<TurnMarker[]>([]);
   const turnMarkers = useMemo<TurnMarker[]>(() => {
     const markers: TurnMarker[] = [];
     for (let index = 0; index < groupedMessages.length; index += 1) {
@@ -678,6 +825,14 @@ export function MessageList({
         number: markers.length + 1,
       });
     }
+    const previous = turnMarkersRef.current;
+    if (
+      previous.length === markers.length &&
+      markers.every((marker, index) => sameTurnMarker(previous[index]!, marker))
+    ) {
+      return previous;
+    }
+    turnMarkersRef.current = markers;
     return markers;
   }, [groupedMessages, resolveAgentIdentity, t.message]);
   const [activeTurnKey, setActiveTurnKey] = useState<string | null>(null);
@@ -778,13 +933,15 @@ export function MessageList({
             if (toolCall.name !== "task" || !toolCall.id) {
               continue;
             }
+            // No `progress` here: this reduction replays on every message
+            // change and updateSubtask merges shallowly, so a hardcoded 0
+            // would clobber any real progress written by a live source.
             updates.push({
               id: toolCall.id,
               subagent_type: toolCall.args.subagent_type as string,
               description: toolCall.args.description as string,
               prompt: toolCall.args.prompt as string,
               status: "in_progress",
-              progress: 0,
             });
           }
           continue;
@@ -962,6 +1119,7 @@ export function MessageList({
     keepOpen = false,
     deferOutputs = false,
     auditNotice: string | null = null,
+    failure: { message: string; kind?: "error" | "network" | "verification" } | null = null,
   ) => {
     if (group.type === "human" || group.type === "assistant") {
       let injectedBeforeContent = false;
@@ -981,7 +1139,13 @@ export function MessageList({
             <MessageOutputSummary
               auditNotice={auditNotice}
               messages={group.messages}
+              turnMessages={
+                isLastAssistantGroupOfTurn(groupedMessages, group)
+                  ? turnMessagesForGroup(groupedMessages, group)
+                  : undefined
+              }
               threadId={threadId}
+              failure={failure}
               className="ml-11 w-auto"
             />
           )}
@@ -1121,10 +1285,7 @@ export function MessageList({
     >
       <ConversationContent
         scrollClassName={TURN_SCROLL_VIEWPORT_CLASS}
-        className={cn(
-          "mx-auto w-full pt-2 gap-4",
-          compact ? "max-w-none px-2" : "max-w-(--container-width-md) px-4",
-        )}
+        className="mx-auto w-full max-w-(--container-width-md) gap-4 px-4 pt-2"
       >
         {header}
         {groupedMessages.map((group, index) => {
@@ -1146,6 +1307,12 @@ export function MessageList({
             index > latestHumanGroupIndex;
           const groupAuditNotice =
             groupKey === auditNoticeGroupKey ? verificationAuditNotice : null;
+          // Attach failure receipt only to the latest assistant group when
+          // thread has errored and is not loading. Earlier groups keep null.
+          const groupFailure =
+            failureReceipt && isLatestGroup && group.type === "assistant" && !thread.isLoading
+              ? failureReceipt
+              : null;
 
           return (
             <div
@@ -1168,6 +1335,7 @@ export function MessageList({
                 keepGroupOpen={keepGroupOpen}
                 enableClarificationActions={enableGroupClarificationActions}
                 deferGroupOutputs={deferGroupOutputs}
+                groupFailure={groupFailure}
                 groupAuditNotice={groupAuditNotice}
                 renderGroupContent={renderGroupContent}
               />
@@ -1178,13 +1346,52 @@ export function MessageList({
         {footer}
 
         {errorBannerText &&
+          !failureReceiptAttachedToGroup &&
           !(verificationAuditNotice && auditNoticeGroupKey) && (
             <div
               role="alert"
-              className="flex items-start gap-3 rounded-lg border border-amber-200/70 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 shadow-sm dark:border-amber-800/50 dark:bg-amber-950/75 dark:text-amber-100"
+              className={cn(
+                "flex items-start gap-3 rounded-lg border px-4 py-3 text-sm shadow-sm",
+                isNetworkError
+                  ? "border-amber-200/70 bg-amber-50/90 text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/75 dark:text-amber-100"
+                  : "border-destructive/25 bg-destructive/8 text-destructive dark:border-destructive/35 dark:bg-destructive/12",
+              )}
             >
-              <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-300" />
-              <span className="min-w-0 leading-6">{errorBannerText}</span>
+              {isNetworkError ? (
+                <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-300" />
+              ) : (
+                <XCircleIcon className="mt-0.5 size-4 shrink-0" />
+              )}
+              <div className="min-w-0 flex-1 leading-6">
+                <div className="mb-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
+                  <span>
+                    {isNetworkError
+                      ? t.streaming.networkLost
+                      : t.message.taskFailed}
+                  </span>
+                  {!isNetworkError && failedCompletedFileCount > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-background/60 px-2 py-0.5 text-[11px] font-normal text-foreground/70">
+                      {t.message.completedChanges} · {failedCompletedFileCount}
+                    </span>
+                  )}
+                </div>
+                {!isNetworkError && (
+                  <div className="text-[13px] opacity-80">{errorBannerText}</div>
+                )}
+                {isNetworkError && <span>{errorBannerText}</span>}
+                {!isNetworkError && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => emitOpenAgentWorkbench({ tab: "agent" })}
+                      className="inline-flex h-7 items-center gap-1 rounded-md border border-border/60 bg-background/60 px-2.5 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-background/90"
+                    >
+                      <PlayCircleIcon className="size-3" />
+                      {t.message.viewProcess}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
