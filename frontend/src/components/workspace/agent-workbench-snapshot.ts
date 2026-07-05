@@ -1,6 +1,5 @@
 import { useMemo, useRef } from "react";
 
-import type { FileTreeEvent } from "@/components/workspace/file-tree";
 import type { WorkbenchSnapshotV2 } from "@/core/realtime/items";
 import { deriveAgentPhases, type AgentPhase } from "./agent-phases";
 import type { LiveToolEvent } from "./live-tool-timeline";
@@ -15,7 +14,6 @@ import {
   type DiffEntry,
   agentEventGroupId,
   diffEntriesFromBlocks,
-  fileEventsFromBlocks,
   inferWorkbenchCwd,
   workspaceFocusTabFromEvents,
 } from "./agent-workbench-utils";
@@ -42,7 +40,6 @@ export type AgentWorkbenchSnapshot = {
   hasContent: boolean;
   inferredWorkDir?: string;
   phases: AgentPhase[];
-  recentFileEvents: FileTreeEvent[];
   version: number;
   visibleDiffEntries: DiffEntry[];
 };
@@ -148,7 +145,6 @@ export function buildAgentWorkbenchSnapshot(
     hasContent: Boolean(currentPhase && phases.length > 0 && blocks.length > 0),
     inferredWorkDir: inferWorkbenchCwd(blocks, options.workDir),
     phases,
-    recentFileEvents: fileEventsFromBlocks(blocks),
     version: 0,
     visibleDiffEntries,
   };
@@ -311,7 +307,7 @@ function tabFromServerWorkbenchSnapshot(
   if (view === "browser") return null;
   if (view === "terminal") return "terminal";
   if (view === "diff") return "diff";
-  if (view === "file") return "files";
+  if (view === "file") return "agent";
   if (view === "artifact" || view === "image") return "agent";
   if (view === "subagent") return "subagents";
   return "agent";
@@ -457,11 +453,27 @@ function fingerprintWorkbenchSnapshot(
   });
 }
 
+// Object payload identities are stable across streaming frames (the realtime
+// adapter memoizes LiveToolEvent input/output), so cache their compact
+// fingerprint per identity instead of re-running the full stableStringify on
+// every delta frame. Strings keep the cheap slice fast path below.
+const compactObjectCache = new WeakMap<object, string>();
+
 function compactUnknown(value: unknown): string {
   if (value === undefined || value === null) return "";
+  if (typeof value === "string") {
+    return value.length <= 500 ? value : value.slice(0, 500);
+  }
+  const cacheKey = typeof value === "object" ? (value as object) : null;
+  if (cacheKey) {
+    const cached = compactObjectCache.get(cacheKey);
+    if (cached !== undefined) return cached;
+  }
   try {
-    const text = typeof value === "string" ? value : stableStringify(value);
-    return text.length <= 500 ? text : text.slice(0, 500);
+    const text = stableStringify(value);
+    const compact = text.length <= 500 ? text : text.slice(0, 500);
+    if (cacheKey) compactObjectCache.set(cacheKey, compact);
+    return compact;
   } catch {
     return String(value).slice(0, 500);
   }

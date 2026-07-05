@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 
 import type { Translations } from "@/core/i18n/locales/types";
-import { type FileTreeEvent } from "@/components/workspace/file-tree";
 import { deriveAgentPhases, type AgentPhaseStatus } from "./agent-phases";
 import type { LiveToolEvent } from "./live-tool-timeline";
 import {
@@ -66,7 +65,6 @@ export type AgentWorkbenchTabId =
   | "subagents"
   | "artifacts"
   | "plan"
-  | "files"
   | "diff"
   | "terminal"
   | "browser";
@@ -104,8 +102,6 @@ export interface DiffEntry {
 
 // ── Constants ─────────────────────────────────────────────────────────
 
-export const FILES_TAB_LABEL = "文件";
-export const SUBAGENTS_TAB_LABEL = "子智能体";
 export const DIFF_TAB_LABEL = "Diff";
 export const TERMINAL_TAB_LABEL = "终端";
 export const BROWSER_TAB_LABEL = "浏览器";
@@ -444,7 +440,7 @@ export function workspaceFocusTabFromEvents(
   if (focus.view === "browser") return null;
   if (focus.view === "terminal") return "terminal";
   if (focus.view === "diff") return "diff";
-  if (focus.view === "file") return "files";
+  if (focus.view === "file") return "agent";
   if (focus.view === "artifact" || focus.view === "image") return "agent";
   if (focus.view === "subagent") return "subagents";
   return "agent";
@@ -550,22 +546,6 @@ export function pathsForBlock(block: WorkBlock): string[] {
     if (path.trim()) paths.add(path.trim());
   }
   return Array.from(paths);
-}
-
-export function fileEventsFromBlocks(blocks: WorkBlock[]): FileTreeEvent[] {
-  return blocks
-    .filter((block) => block.kind === "file")
-    .flatMap((block) => {
-      const kind: FileTreeEvent["kind"] = /write|create/i.test(block.event.name)
-        ? "write"
-        : "edit";
-      return pathsForBlock(block).map((path) => ({
-        path,
-        kind,
-        at: block.event.finishedAt ?? block.startedAt,
-      }));
-    })
-    .slice(-24);
 }
 
 export function inferWorkbenchCwd(

@@ -72,9 +72,7 @@ function BrowserPageBody() {
             <Icon
               className={cn(
                 "size-3.5",
-                mode === preset
-                  ? "text-foreground"
-                  : "text-muted-foreground",
+                mode === preset ? "text-foreground" : "text-muted-foreground",
               )}
             />
           </ToggleGroupItem>

@@ -63,6 +63,28 @@ describe("agent workbench snapshot", () => {
     expect(result.current.version).toBe(2);
   });
 
+  test("caches object payload fingerprints by identity without changing output", () => {
+    const input = { path: "src/app.tsx", nested: { b: 2, a: 1 } };
+    const output = { ok: true, detail: "x".repeat(600) };
+    const build = (
+      payloadInput: Record<string, unknown>,
+      payloadOutput: unknown,
+    ) =>
+      buildAgentWorkbenchSnapshot(
+        [event({ id: "read-1", input: payloadInput, output: payloadOutput })],
+        { deriveAgentTiles },
+      ).fingerprint;
+
+    const first = build(input, output);
+    // Same identity (WeakMap cache hit) reproduces the fingerprint.
+    expect(build(input, output)).toBe(first);
+    // Equal-by-value clones (cache miss) must produce the same fingerprint:
+    // the cache is an optimization, not part of the output.
+    expect(build(structuredClone(input), structuredClone(output))).toBe(first);
+    // Different payload content still changes the fingerprint.
+    expect(build({ path: "src/other.tsx" }, output)).not.toBe(first);
+  });
+
   test("selects one current screen frame instead of replaying historical blocks", () => {
     const snapshot = buildAgentWorkbenchSnapshot(
       [

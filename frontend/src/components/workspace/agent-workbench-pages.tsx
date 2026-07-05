@@ -13,12 +13,10 @@ import {
   ListChecksIcon,
   Loader2Icon,
   MoreHorizontalIcon,
-  UsersIcon,
   type LucideIcon,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 
-import { FileTree, type FileTreeEvent } from "@/components/workspace/file-tree";
 import {
   phaseStatusText,
   type AgentPhase,
@@ -37,13 +35,7 @@ import {
   type DiffEntry,
   type AgentWorkbenchTabId,
   statusIcon,
-  compactDetail,
-  agentProgressPercent,
-  durationLabel,
-  timeLabel,
   agentEventGroupId,
-  FILES_TAB_LABEL,
-  SUBAGENTS_TAB_LABEL,
   DIFF_TAB_LABEL,
 } from "./agent-workbench-utils";
 
@@ -73,60 +65,6 @@ export function StatusGlyph({
   );
 }
 
-export function WorkBlockDetailSection({
-  content,
-  empty,
-  title,
-}: {
-  content: string;
-  empty?: ReactNode;
-  title: string;
-}) {
-  const { t } = useI18n();
-  const isLong = content.length > 360 || content.split(/\r?\n/).length > 6;
-  const [open, setOpen] = useState(!isLong);
-  const preview = compactDetail(content, 240);
-
-  return (
-    <div>
-      <div className="flex items-center gap-2 border-b border-border/45 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
-        <span>{title}</span>
-        {isLong && (
-          <button
-            type="button"
-            onClick={() => setOpen((value) => !value)}
-            className="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] transition-colors hover:bg-muted hover:text-foreground"
-            aria-expanded={open}
-          >
-            <ChevronDownIcon
-              className={cn(
-                "size-3 transition-transform",
-                open && "rotate-180",
-              )}
-            />
-            {open
-              ? t.agentWorkbenchPages.collapse
-              : t.agentWorkbenchPages.expandDetails}
-          </button>
-        )}
-      </div>
-      {content ? (
-        open ? (
-          <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words px-3 py-2.5 font-mono text-[11px] leading-5 text-foreground/80">
-            {content}
-          </pre>
-        ) : (
-          <div className="px-3 py-2.5 text-sm leading-6 text-foreground/75">
-            {preview}
-          </div>
-        )
-      ) : (
-        empty
-      )}
-    </div>
-  );
-}
-
 export function WorkbenchEmptyPage({
   description,
   title,
@@ -141,23 +79,6 @@ export function WorkbenchEmptyPage({
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
           {description}
         </p>
-      </div>
-    </div>
-  );
-}
-
-export function AgentMetric({
-  label,
-  value,
-}: {
-  label: string;
-  value: ReactNode;
-}) {
-  return (
-    <div className="rounded-md border border-border/45 bg-background/70 px-3 py-2">
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className="mt-1 min-h-5 text-sm font-medium text-foreground">
-        {value}
       </div>
     </div>
   );
@@ -779,12 +700,14 @@ export function AgentSummaryPage({
   agentTiles,
   blocks,
   onSelectTab,
+  onOpenArtifact,
 }: {
   phases: AgentPhase[];
   diffEntries: DiffEntry[];
   agentTiles: AgentTile[];
   blocks: WorkBlock[];
   onSelectTab?: (tabId: AgentWorkbenchTabId) => void;
+  onOpenArtifact?: (path: string) => void;
 }) {
   const { t } = useI18n();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
@@ -799,8 +722,19 @@ export function AgentSummaryPage({
     () => diffEntries.filter((entry) => !entry.created),
     [diffEntries],
   );
-  const openDiffEntry = (_entry: DiffEntry, kind: "artifact" | "change") => {
-    onSelectTab?.(kind === "artifact" ? "files" : "diff");
+  const openDiffEntry = (entry: DiffEntry, kind: "artifact" | "change") => {
+    if (kind === "artifact") {
+      // Generated artifacts open in the artifacts side panel (with the entry
+      // selected when the host wires onOpenArtifact); the summary page itself
+      // has no artifact viewer.
+      if (onOpenArtifact) {
+        onOpenArtifact(entry.path);
+      } else {
+        onSelectTab?.("artifacts");
+      }
+      return;
+    }
+    onSelectTab?.("diff");
   };
   const donePhaseCount = phases.filter(
     (phase) => phase.status === "done",
@@ -1440,219 +1374,6 @@ export function AgentSummaryPage({
   );
 }
 
-export function AgentSubagentsPage({
-  agentStatusClass,
-  agentStatusLabel,
-  agents,
-  onSelectAgent,
-  selectedAgent,
-}: {
-  agentStatusClass: (status: AgentTile["status"]) => string;
-  agentStatusLabel: (status: AgentTile["status"]) => string;
-  agents: AgentTile[];
-  onSelectAgent: (agentId: string) => void;
-  selectedAgent?: AgentTile;
-}) {
-  const { t } = useI18n();
-  if (agents.length === 0) {
-    return (
-      <WorkbenchEmptyPage
-        title={SUBAGENTS_TAB_LABEL}
-        description={t.agentWorkbenchPages.noSubagentsObservedDescription}
-      />
-    );
-  }
-
-  const active = selectedAgent ?? agents[0];
-  const running = agents.filter((agent) => agent.status === "running").length;
-  const waiting = agents.filter(
-    (agent) => agent.status === "waiting_approval",
-  ).length;
-  const done = agents.filter((agent) => agent.status === "done").length;
-  const errors = agents.filter((agent) => agent.status === "error").length;
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/70 p-3">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
-        <section className="grid grid-cols-3 gap-2">
-          <AgentMetric
-            label={t.agentWorkbenchPages.metricRunning}
-            value={waiting > 0 ? `${running} / ${waiting}` : running}
-          />
-          <AgentMetric
-            label={t.agentWorkbenchPages.metricCompleted}
-            value={done}
-          />
-          <AgentMetric
-            label={t.agentWorkbenchPages.metricError}
-            value={errors}
-          />
-        </section>
-
-        <section className="grid gap-2 md:grid-cols-2">
-          {agents.map((agent) => {
-            const selected = active?.id === agent.id;
-            const percent = agentProgressPercent(agent.status);
-            return (
-              <button
-                key={agent.id}
-                type="button"
-                onClick={() => onSelectAgent(agent.id)}
-                className={cn(
-                  "rounded-lg border bg-background/85 p-3 text-left shadow-sm transition-colors",
-                  selected
-                    ? "border-foreground/45 ring-1 ring-foreground/10"
-                    : "border-border/55 hover:bg-muted/40",
-                )}
-              >
-                <div className="flex items-start gap-2.5">
-                  {agent.avatar ? (
-                    <span
-                      className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border/45 bg-background text-base"
-                      aria-hidden="true"
-                    >
-                      {agent.avatar}
-                    </span>
-                  ) : (
-                    <BotIcon className="size-8 shrink-0 rounded-md border border-border/45 bg-background p-1.5 text-foreground" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-foreground">
-                        {agent.name}
-                      </span>
-                      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                        {agent.label}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {agent.role ?? "subagent"}
-                    </div>
-                  </div>
-                  <StatusGlyph status={agent.status} />
-                </div>
-                <div
-                  className={cn(
-                    "mt-2 text-xs font-medium",
-                    agentStatusClass(agent.status),
-                  )}
-                >
-                  {agentStatusLabel(agent.status)}
-                </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={cn(
-                      "h-full rounded-full transition-all",
-                      agent.status === "error"
-                        ? "bg-destructive"
-                        : agent.status === "waiting_approval"
-                          ? "bg-amber-500"
-                          : agent.status === "pending"
-                            ? "bg-muted-foreground/45"
-                            : "bg-emerald-500",
-                    )}
-                    style={{ width: `${percent}%` }}
-                  />
-                </div>
-                <div className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                  {agent.lastThought ??
-                    agent.currentTool ??
-                    t.agentWorkbenchPages.waitingForTaskEvents}
-                </div>
-              </button>
-            );
-          })}
-        </section>
-
-        {active && (
-          <details className="group rounded-lg border border-border/55 bg-background/90 shadow-sm">
-            <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2">
-              <UsersIcon className="size-4 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
-                {t.agentWorkbenchPages.subagentRuntimeDetails}
-              </span>
-              <span
-                className={cn(
-                  "shrink-0 text-xs font-medium",
-                  agentStatusClass(active.status),
-                )}
-              >
-                {agentStatusLabel(active.status)}
-              </span>
-              <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="border-t border-border/45 p-3">
-              <div className="grid gap-2 md:grid-cols-2">
-                <AgentMetric
-                  label={t.agentWorkbenchPages.roleLabel}
-                  value={active.role ?? "subagent"}
-                />
-                <AgentMetric
-                  label={t.agentWorkbenchPages.currentToolLabel}
-                  value={active.currentTool ?? t.agentWorkbenchPages.noneYet}
-                />
-                <AgentMetric
-                  label={t.agentWorkbenchPages.startTimeLabel}
-                  value={timeLabel(active.startedAt)}
-                />
-                <AgentMetric
-                  label={t.agentWorkbenchPages.durationLabel}
-                  value={durationLabel(active.durationMs)}
-                />
-                <AgentMetric
-                  label={t.agentWorkbenchPages.eventCountLabel}
-                  value={t.agentWorkbenchPages.eventsCount(active.eventCount)}
-                />
-                <AgentMetric
-                  label={t.agentWorkbenchPages.parentTaskLabel}
-                  value={
-                    active.parentToolUseId ?? t.agentWorkbenchPages.noneYet
-                  }
-                />
-              </div>
-
-              <div className="mt-3 grid gap-2">
-                <AgentMetric
-                  label={t.agentWorkbenchPages.latestThoughtLabel}
-                  value={active.lastThought ?? t.agentWorkbenchPages.noneYet}
-                />
-                <AgentMetric
-                  label={t.agentWorkbenchPages.resultSummaryLabel}
-                  value={active.resultSummary ?? t.agentWorkbenchPages.noneYet}
-                />
-                <AgentMetric
-                  label={t.agentWorkbenchPages.blackboardWritesLabel}
-                  value={
-                    active.blackboardWrites.length > 0
-                      ? active.blackboardWrites.join(" / ")
-                      : t.agentWorkbenchPages.noneYet
-                  }
-                />
-                <AgentMetric
-                  label={t.agentWorkbenchPages.filesTouchedLabel}
-                  value={
-                    active.filesTouched.length > 0
-                      ? active.filesTouched.join(" / ")
-                      : t.agentWorkbenchPages.noneYet
-                  }
-                />
-                {active.error && (
-                  <AgentMetric
-                    label={t.agentWorkbenchPages.errorLabel}
-                    value={
-                      <span className="text-destructive">{active.error}</span>
-                    }
-                  />
-                )}
-              </div>
-            </div>
-          </details>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function AgentCreationCard({
   agent,
   agentStatusClass,
@@ -1871,53 +1592,6 @@ export function friendlyRoleName(role: string | undefined | null): string {
     writer: "Writer",
   };
   return map[lower] ?? value.replace(/[_-]+/g, " ");
-}
-
-export function AgentFilesPage({
-  onBackToSummary,
-  recentFileEvents,
-  threadId,
-  workDir,
-}: {
-  onBackToSummary?: () => void;
-  recentFileEvents: FileTreeEvent[];
-  threadId?: string | null;
-  workDir?: string;
-}) {
-  const { t } = useI18n();
-  if (!workDir) {
-    return (
-      <WorkbenchEmptyPage
-        title={FILES_TAB_LABEL}
-        description={t.agentWorkbenchPages.noWorkDirDescription}
-      />
-    );
-  }
-  return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background/70 p-2">
-      {onBackToSummary && (
-        <div className="mb-2 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onBackToSummary}
-            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-          >
-            <ArrowLeftIcon className="size-3.5" />
-            {t.agentWorkbenchPages.dashboardOverview}
-          </button>
-          <span className="min-w-0 truncate text-[11px] text-muted-foreground">
-            {FILES_TAB_LABEL}
-          </span>
-        </div>
-      )}
-      <FileTree
-        workDir={workDir}
-        threadId={threadId}
-        recentFileEvents={recentFileEvents}
-        className="min-h-0 flex-1 overflow-auto rounded-md border border-border/55 bg-background/80"
-      />
-    </div>
-  );
 }
 
 export function DiffText({ text }: { text: string }) {

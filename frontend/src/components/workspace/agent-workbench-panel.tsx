@@ -1,19 +1,15 @@
 import {
   BotIcon,
   CheckIcon,
-  ChevronDownIcon,
   ChevronRightIcon,
   CircleIcon,
-  CopyIcon,
-  FolderIcon,
   GlobeIcon,
   LayoutGridIcon,
   MonitorIcon,
   TerminalIcon,
-  UsersIcon,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
@@ -47,25 +43,16 @@ import {
   type AgentTile,
   type AgentWorkbenchTabId,
   blockIcon,
-  statusIcon,
-  kindLabel,
-  eventTime,
-  copyText,
   compactDetail,
   agentProgressPercent,
-  stringFromKeys,
-  textFromUnknown,
-  commandForBlock,
   repairMojibakeText,
   __testing,
 } from "./agent-workbench-utils";
 import { useAgentWorkbenchI18n } from "./use-agent-workbench-i18n";
 import {
   StatusGlyph,
-  WorkBlockDetailSection,
   AgentSummaryPage,
   AgentCreationCard,
-  AgentFilesPage,
   AgentDiffPage,
   WorkbenchEmptyPage,
   isAgentCreationBlock,
@@ -75,7 +62,6 @@ import {
 import {
   currentScreenFrame,
   screenBlocksForAgent,
-  type ScreenFrameSnapshot,
   useAgentWorkbenchSnapshot,
 } from "./agent-workbench-snapshot";
 import type { AgentPhase } from "./agent-phases";
@@ -86,7 +72,6 @@ import {
   agentRunDotClass,
   agentRunHue,
   agentRunIconClass,
-  agentRunProgressBarClass,
   agentRunRobotButtonClass,
   agentRunStatusLightClass,
   agentRunStatusLightPulseClass,
@@ -97,14 +82,6 @@ import {
 export { hasAgentWorkbenchContent, __testing } from "./agent-workbench-utils";
 export type { AgentWorkbenchTabId } from "./agent-workbench-utils";
 export { workspaceFocusTabFromEvents } from "./agent-workbench-utils";
-
-type ScreenPhaseGroup = {
-  id: string;
-  title: string;
-  detail?: string;
-  status: AgentPhase["status"];
-  blocks: WorkBlock[];
-};
 
 export type WorkbenchRosterSeat = {
   id: string;
@@ -128,158 +105,6 @@ function mainPhaseStatusLabel(phases: AgentPhase[], t: Translations) {
     return t.agentWorkbenchPanel.agentStatusPending;
   }
   return t.agentWorkbenchPanel.agentStatusDone;
-}
-
-function MainProcessPhaseTimeline({
-  phases,
-  screenBlocks,
-  screenFrame,
-  currentPhaseId,
-  selectedBlockId,
-  onSelectBlock,
-}: {
-  phases: AgentPhase[];
-  screenBlocks: WorkBlock[];
-  screenFrame: ScreenFrameSnapshot;
-  currentPhaseId: string | null;
-  selectedBlockId: string | null;
-  onSelectBlock: (blockId: string, phaseId: string | null) => void;
-}) {
-  const { t } = useI18n();
-  const groups = useMemo(
-    () => buildScreenPhaseGroups(phases, screenBlocks, currentPhaseId, t),
-    [currentPhaseId, phases, screenBlocks, t],
-  );
-  const currentBlockId = screenFrame.block?.id ?? null;
-  const currentGroupId = useMemo(() => {
-    if (currentBlockId) {
-      const group = groups.find((candidate) =>
-        candidate.blocks.some((block) => block.id === currentBlockId),
-      );
-      if (group) return group.id;
-    }
-    return currentPhaseId ?? groups[0]?.id ?? null;
-  }, [currentBlockId, currentPhaseId, groups]);
-  const [openPhaseIds, setOpenPhaseIds] = useState<Set<string>>(
-    () => new Set(currentGroupId ? [currentGroupId] : []),
-  );
-
-  useEffect(() => {
-    if (!currentGroupId) return;
-    setOpenPhaseIds(new Set([currentGroupId]));
-  }, [currentGroupId]);
-
-  if (screenBlocks.length === 0) {
-    return (
-      <div className="flex min-h-32 items-center justify-center px-4 text-xs text-muted-foreground">
-        {t.agentWorkbenchPanel.noOperationRecords}
-      </div>
-    );
-  }
-
-  if (!screenFrame.block) {
-    return (
-      <div className="flex min-h-32 items-center justify-center px-4 text-xs text-muted-foreground">
-        {t.agentWorkbenchPanel.noCurrentOperation}
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-0">
-      {groups.map((group) => {
-        const open = openPhaseIds.has(group.id);
-        const groupIsCurrent = group.id === currentGroupId;
-        const recoveredCount = group.blocks.filter(
-          (block) => block.status === "warning",
-        ).length;
-        const displayStatus =
-          recoveredCount > 0 && group.status === "done"
-            ? "warning"
-            : group.status;
-        const groupStatusMeta =
-          group.blocks.length > 0
-            ? [
-                t.agentWorkbenchPanel.frameCount(group.blocks.length),
-                recoveredCount > 0 ? statusText("warning") : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")
-            : phaseStatusLabel(group.status, t);
-        return (
-          <section key={group.id} className="border-b border-border/25 py-2.5">
-            <button
-              type="button"
-              onClick={() =>
-                setOpenPhaseIds((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(group.id)) next.delete(group.id);
-                  else next.add(group.id);
-                  return next;
-                })
-              }
-              className="flex w-full items-center gap-2 text-left transition-colors hover:text-foreground"
-            >
-              <ChevronDownIcon
-                className={cn(
-                  "size-3.5 shrink-0 text-muted-foreground transition-transform",
-                  open ? "rotate-0" : "-rotate-90",
-                )}
-              />
-              <StatusGlyph status={displayStatus} />
-              <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
-                {group.title}
-              </span>
-              {group.detail && (
-                <span className="hidden max-w-[35%] truncate text-[10px] text-muted-foreground sm:inline">
-                  {group.detail}
-                </span>
-              )}
-              <span
-                className={cn(
-                  "shrink-0 text-[10px] font-medium",
-                  groupIsCurrent ? "text-foreground" : "text-muted-foreground",
-                )}
-              >
-                {groupStatusMeta}
-              </span>
-            </button>
-            {open && (
-              <div className="mt-2">
-                {group.blocks.length === 0 ? (
-                  <div className="py-1 text-[11px] text-muted-foreground">
-                    {phaseStatusLabel(group.status, t)}
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {group.blocks.map((block) => {
-                      const frameIndex = Math.max(
-                        0,
-                        screenBlocks.findIndex((item) => item.id === block.id),
-                      );
-                      const expanded =
-                        block.id === (selectedBlockId ?? currentBlockId);
-                      return (
-                        <ScreenFrameRow
-                          key={block.id}
-                          block={block}
-                          expanded={expanded}
-                          frameIndex={frameIndex}
-                          isCurrent={block.id === currentBlockId}
-                          onSelect={() => onSelectBlock(block.id, group.id)}
-                          total={screenFrame.total}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-        );
-      })}
-    </div>
-  );
 }
 
 function MainComputerStatusButton({
@@ -342,174 +167,6 @@ function MainComputerStatusButton({
   );
 }
 
-function ScreenFrameRow({
-  block,
-  expanded,
-  frameIndex,
-  isCurrent,
-  onSelect,
-  total,
-}: {
-  block: WorkBlock;
-  expanded: boolean;
-  frameIndex: number;
-  isCurrent: boolean;
-  onSelect: () => void;
-  total: number;
-}) {
-  const { t } = useI18n();
-  const Icon = blockIcon(block.kind);
-  const cmd = block.kind === "terminal" ? commandForBlock(block) : null;
-  const cwd =
-    block.kind === "terminal"
-      ? stringFromKeys(block.event.input, ["cwd", "work_dir"])
-      : null;
-  const output =
-    block.kind === "terminal"
-      ? block.outputText || textFromUnknown(block.event.output) || ""
-      : null;
-  const statusLabel =
-    block.status === "done" || block.status === "running"
-      ? null
-      : statusText(block.status);
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={onSelect}
-        className={cn(
-          "flex w-full items-center gap-2 py-1.5 text-left transition-colors hover:text-foreground",
-          expanded && "text-foreground",
-        )}
-      >
-        <span className="w-10 shrink-0 font-mono text-[10px] text-muted-foreground/75">
-          {isCurrent
-            ? t.agentWorkbenchPanel.currentFrameLabel(frameIndex + 1, total)
-            : t.agentWorkbenchPanel.frameLabel(frameIndex + 1, total)}
-        </span>
-        <StatusGlyph status={block.status} />
-        <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
-          {block.title}
-        </span>
-        {block.subtitle && (
-          <span className="max-w-[40%] shrink-0 truncate text-[10px] text-muted-foreground">
-            {block.subtitle}
-          </span>
-        )}
-        {statusLabel && (
-          <span
-            className={cn(
-              "shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-medium",
-              block.status === "warning" &&
-                "bg-amber-500/10 text-amber-700 dark:text-amber-300",
-              block.status === "waiting_approval" &&
-                "bg-amber-500/10 text-amber-700 dark:text-amber-300",
-              block.status === "error" && "bg-destructive/10 text-destructive",
-            )}
-          >
-            {statusLabel}
-          </span>
-        )}
-        <ChevronDownIcon
-          className={cn(
-            "size-3.5 shrink-0 text-muted-foreground transition-transform",
-            expanded ? "rotate-0" : "-rotate-90",
-          )}
-        />
-      </button>
-      {expanded && (cmd || cwd || output) && (
-        <div className="ml-12 border-l border-border/25 pl-3">
-          {cmd && (
-            <div className="flex items-start gap-1.5 py-1.5">
-              <span className="mt-0.5 shrink-0 font-mono text-[10px] text-emerald-600">
-                $
-              </span>
-              <pre className="min-w-0 flex-1 whitespace-pre-wrap break-all font-mono text-[11px] leading-4 text-foreground">
-                {cmd}
-              </pre>
-            </div>
-          )}
-          {cwd && (
-            <div className="pb-1 font-mono text-[10px] text-muted-foreground">
-              {cwd}
-            </div>
-          )}
-          {output && (
-            <pre className="max-h-32 overflow-auto border-t border-border/25 py-1.5 font-mono text-[10px] leading-4 text-foreground/70">
-              {output}
-            </pre>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function buildScreenPhaseGroups(
-  phases: AgentPhase[],
-  screenBlocks: WorkBlock[],
-  currentPhaseId: string | null,
-  t: Translations,
-): ScreenPhaseGroup[] {
-  if (phases.length === 0) {
-    return [
-      {
-        id: "screen:all",
-        title: t.agentWorkbenchPanel.processFrames,
-        status: statusFromBlocks(screenBlocks),
-        blocks: screenBlocks,
-      },
-    ];
-  }
-
-  const screenOrder = new Map(
-    screenBlocks.map((block, index) => [block.id, index]),
-  );
-  const blockById = new Map(screenBlocks.map((block) => [block.id, block]));
-  const assigned = new Set<string>();
-  const groups = phases.map((phase) => {
-    const phaseBlocks = phase.blockIds
-      .map((blockId) => blockById.get(blockId))
-      .filter((block): block is WorkBlock => Boolean(block))
-      .sort(
-        (left, right) =>
-          (screenOrder.get(left.id) ?? 0) - (screenOrder.get(right.id) ?? 0),
-      );
-    for (const block of phaseBlocks) assigned.add(block.id);
-    return {
-      id: phase.id,
-      title: phase.title,
-      detail: phase.detail,
-      status: phase.status,
-      blocks: phaseBlocks,
-    };
-  });
-
-  const orphanBlocks = screenBlocks.filter((block) => !assigned.has(block.id));
-  if (orphanBlocks.length > 0) {
-    const target =
-      groups.find((group) => group.id === currentPhaseId) ??
-      groups.find((group) => group.status === "running") ??
-      groups.find((group) => group.status !== "pending") ??
-      groups[0];
-    if (target) {
-      const merged = new Map(target.blocks.map((block) => [block.id, block]));
-      for (const block of orphanBlocks) {
-        if (!merged.has(block.id)) merged.set(block.id, block);
-      }
-      target.blocks = Array.from(merged.values());
-      target.blocks.sort(
-        (left, right) =>
-          (screenOrder.get(left.id) ?? 0) - (screenOrder.get(right.id) ?? 0),
-      );
-    }
-  }
-
-  return groups;
-}
-
 function statusFromBlocks(blocks: WorkBlock[]): AgentPhase["status"] {
   if (blocks.some((block) => block.status === "waiting_approval")) {
     return "waiting_approval";
@@ -521,21 +178,15 @@ function statusFromBlocks(blocks: WorkBlock[]): AgentPhase["status"] {
   return blocks.length > 0 ? "done" : "pending";
 }
 
-function phaseStatusLabel(status: AgentPhase["status"], t: Translations) {
-  if (status === "running") return t.agentWorkbenchPanel.phaseStatusRunning;
-  if (status === "waiting_approval")
-    return t.agentWorkbenchPages.statusWaitingApproval;
-  if (status === "error") return t.agentWorkbenchPanel.phaseStatusError;
-  if (status === "done") return t.agentWorkbenchPanel.phaseStatusDone;
-  return t.agentWorkbenchPanel.phaseStatusPending;
-}
-
 export function AgentWorkbenchPanel({
   activeTab,
   events,
   focusedAgentId,
+  focusedAgentView,
+  focusedAgentNonce,
   hasAnswer,
   onSelectTab,
+  onOpenArtifact,
   runSettled,
   runFailed,
   paused,
@@ -543,13 +194,25 @@ export function AgentWorkbenchPanel({
   threadId,
   workDir,
   browserPreviewBlocks,
+  resultPreviewUrl,
   rosterSeats = [],
+  onClose,
 }: {
   activeTab?: AgentWorkbenchTabId;
   events: LiveToolEvent[];
   focusedAgentId?: string | null;
+  /** Which activity view a focusedAgentId intent lands on; defaults to the
+   * live computer screen when the caller doesn't say. */
+  focusedAgentView?: "summary" | "screen" | null;
+  /** Bumped by the parent on every focus emission. Without it, a second
+   * intent for the same agent (e.g. 查看过程 then 查看电脑 on one row) would be
+   * swallowed by the consume-once guard below. */
+  focusedAgentNonce?: number;
   hasAnswer?: boolean;
   onSelectTab?: (tab: AgentWorkbenchTabId) => void;
+  /** Opens a generated artifact in the artifacts side panel (path comes from
+   * the summary page's artifact rows). */
+  onOpenArtifact?: (path: string) => void;
   runSettled?: boolean;
   runFailed?: boolean;
   threadId?: string | null;
@@ -558,12 +221,15 @@ export function AgentWorkbenchPanel({
   className?: string;
   onClose?: () => void;
   browserPreviewBlocks?: ExtractedCodeBlocks | null;
+  /** Deployed preview URL (vercel/netlify/localhost). When set, the browser
+   * tab renders the live deployed site via BrowserPreviewPanel instead of
+   * falling back to inline srcDoc. */
+  resultPreviewUrl?: string | null;
   rosterSeats?: WorkbenchRosterSeat[];
 }) {
   const { t } = useI18n();
   const {
     deriveAgentTiles,
-    phaseBlockSummary,
     agentStatusLabel,
     agentStatusClass,
     workbenchStatus,
@@ -584,13 +250,8 @@ export function AgentWorkbenchPanel({
     focusedTab,
     inferredWorkDir,
     phases,
-    recentFileEvents,
     visibleDiffEntries,
   } = workbenchSnapshot;
-  const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(
-    currentPhase?.id ?? null,
-  );
-  const [manualPhaseSelection, setManualPhaseSelection] = useState(false);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [manualBlockSelection, setManualBlockSelection] = useState(false);
   const [activityView, setActivityView] = useState<"summary" | "screen">(
@@ -605,15 +266,19 @@ export function AgentWorkbenchPanel({
   const [closedTabs, setClosedTabs] = useState<Set<AgentWorkbenchTabId>>(
     () => new Set<AgentWorkbenchTabId>(["diff", "terminal", "browser"]),
   );
+  // Browser tab source: while the run streams, the inline srcDoc blocks are
+  // the freshest view; once the run settles a deployed URL wins. The override
+  // lets the user flip between the two when both exist.
+  const [browserSourceOverride, setBrowserSourceOverride] = useState<
+    "deployed" | "inline" | null
+  >(null);
 
-  const selectedPhase =
-    phases.find((phase) => phase.id === selectedPhaseId) ?? currentPhase;
   const phaseBlocks = useMemo(
     () =>
-      selectedPhase
-        ? blocks.filter((block) => selectedPhase.blockIds.includes(block.id))
+      currentPhase
+        ? blocks.filter((block) => currentPhase.blockIds.includes(block.id))
         : blocks,
-    [blocks, selectedPhase],
+    [blocks, currentPhase],
   );
   const defaultBlock = useMemo(
     () => pickCurrentWorkBlock(phaseBlocks) ?? phaseBlocks[0] ?? null,
@@ -672,38 +337,30 @@ export function AgentWorkbenchPanel({
     return progressForWorkBlocks(screenBlocks, screenFrame.block);
   }, [screenBlocks, screenFrame.block]);
   useEffect(() => {
-    if (!currentPhase) {
-      setSelectedPhaseId(null);
-      setManualPhaseSelection(false);
-      return;
-    }
-    setSelectedPhaseId((current) => {
-      const currentStillExists = Boolean(
-        current && phases.some((phase) => phase.id === current),
+    if (manualBlockSelection) {
+      // A manual pick is made against what the active view actually shows:
+      // the process replay lists screenBlocks (per-agent history, including
+      // done blocks that no phase references anymore), the phase card lists
+      // phaseBlocks. Only drop the pick once the block left both sets —
+      // judging by phaseBlocks alone evicts every historical frame.
+      const stillVisible = Boolean(
+        selectedBlockId &&
+          (screenBlocks.some((block) => block.id === selectedBlockId) ||
+            phaseBlocks.some((block) => block.id === selectedBlockId)),
       );
-      if (!manualPhaseSelection || !currentStillExists) {
-        return currentPhase.id;
-      }
-      return current;
-    });
-  }, [currentPhase, phases, manualPhaseSelection]);
-
-  useEffect(() => {
-    if (!defaultBlock) {
-      setSelectedBlockId(null);
+      if (stillVisible) return;
       setManualBlockSelection(false);
+      setSelectedBlockId(defaultBlock?.id ?? null);
       return;
     }
-    setSelectedBlockId((current) => {
-      const currentStillExists = Boolean(
-        current && phaseBlocks.some((block) => block.id === current),
-      );
-      if (!manualBlockSelection || !currentStillExists) {
-        return defaultBlock.id;
-      }
-      return current;
-    });
-  }, [defaultBlock, phaseBlocks, manualBlockSelection]);
+    setSelectedBlockId(defaultBlock?.id ?? null);
+  }, [
+    defaultBlock,
+    manualBlockSelection,
+    phaseBlocks,
+    screenBlocks,
+    selectedBlockId,
+  ]);
 
   useEffect(() => {
     setSelectedAgentId((current) =>
@@ -730,14 +387,30 @@ export function AgentWorkbenchPanel({
     [onSelectTab],
   );
 
+  // Focus is a one-shot navigation intent, not a persistent pin: consume each
+  // focusedAgentId value once, so snapshot churn re-running this effect (new
+  // agentTiles identity every streaming frame) cannot yank the user back after
+  // they navigated away.
+  const consumedFocusedAgentIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!focusedAgentId || agentTiles.length === 0) return;
+    if (!focusedAgentId) {
+      // Parent cleared the intent; a later re-focus of the same agent counts
+      // as a new intent.
+      consumedFocusedAgentIdRef.current = null;
+      return;
+    }
+    // The nonce distinguishes successive intents for the same agent (view
+    // switches); it must be part of the consumed key, not the plain id.
+    const intentKey = `${focusedAgentNonce ?? 0}:${focusedAgentId}`;
+    if (consumedFocusedAgentIdRef.current === intentKey) return;
+    if (agentTiles.length === 0) return;
     const target = findAgentTileByFocusId(focusedAgentId, agentTiles);
     if (!target) return;
+    consumedFocusedAgentIdRef.current = intentKey;
     setSelectedAgentId(target.id);
     setSelectedRosterSeatId(null);
-    setActivityView("screen");
-  }, [focusedAgentId, agentTiles]);
+    setActivityView(focusedAgentView ?? "screen");
+  }, [focusedAgentId, focusedAgentView, focusedAgentNonce, agentTiles]);
 
   const visibleRosterSeats = useMemo(() => {
     const runningAgentIds = new Set(
@@ -799,27 +472,23 @@ export function AgentWorkbenchPanel({
       onSelectRoster={openRosterProcess}
     />
   );
-  const SelectedIcon = selectedBlock
-    ? blockIcon(selectedBlock.kind)
-    : MonitorIcon;
-  const SelectedStatusIcon = selectedBlock
-    ? statusIcon(selectedBlock.status)
-    : CircleIcon;
   const requestedActiveTab: AgentWorkbenchTabId =
     activeTab ?? (focusedAgentId ? "agent" : focusedTab) ?? "agent";
-  const effectiveActiveTab: AgentWorkbenchTabId =
-    requestedActiveTab === "subagents" ? "agent" : requestedActiveTab;
+  // page.tsx still emits "subagents" / "artifacts" / "plan" intents
+  // (openArtifactsPanel / openAgentPlanPanel); the workbench renders all of
+  // them on the agent page, so every tab id maps onto a real embedded page.
+  const effectiveActiveTab: "agent" | "diff" | "terminal" | "browser" =
+    requestedActiveTab === "subagents" ||
+    requestedActiveTab === "artifacts" ||
+    requestedActiveTab === "plan"
+      ? "agent"
+      : requestedActiveTab;
   const workbenchTabs: Array<{
     id: AgentWorkbenchTabId;
     label: string;
     Icon: typeof MonitorIcon;
   }> = [
     // Sort by expected usage frequency and priority.
-    {
-      id: "files",
-      label: t.agentWorkbenchPages.filesTab,
-      Icon: FolderIcon,
-    },
     {
       id: "diff",
       label: t.agentWorkbenchPages.diffTab,
@@ -876,17 +545,94 @@ export function AgentWorkbenchPanel({
 
   const visibleTabs = workbenchTabs.filter((tab) => !closedTabs.has(tab.id));
 
+  // Header close affordance — on mobile the panel covers the whole chat
+  // column, so the panel itself must offer a way out.
+  const closeButton = onClose ? (
+    <button
+      type="button"
+      onClick={onClose}
+      className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border/45 hover:bg-muted/45 hover:text-foreground"
+      aria-label={t.common.close}
+      title={t.common.close}
+    >
+      <XIcon className="size-3.5" />
+    </button>
+  ) : null;
+
+  // Browser tab content, shared by the empty shell and the main render path.
+  // While the run is live the inline srcDoc blocks track the agent's latest
+  // output; once it settles the deployed site is the "real" preview. A
+  // deployed URL without inline blocks always wins over the generic session
+  // panel.
+  const canShowDeployedPreview = Boolean(resultPreviewUrl);
+  const canShowInlinePreview = Boolean(browserPreviewBlocks);
+  const autoBrowserSource: "deployed" | "inline" | "session" =
+    canShowDeployedPreview && (runSettled || !canShowInlinePreview)
+      ? "deployed"
+      : canShowInlinePreview
+        ? "inline"
+        : canShowDeployedPreview
+          ? "deployed"
+          : "session";
+  const browserPreviewSource =
+    (browserSourceOverride === "deployed" && canShowDeployedPreview) ||
+    (browserSourceOverride === "inline" && canShowInlinePreview)
+      ? browserSourceOverride
+      : autoBrowserSource;
+  const browserTabPage = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {canShowDeployedPreview && canShowInlinePreview && (
+        <div className="flex shrink-0 items-center gap-1 border-b border-border/30 px-3 py-1.5">
+          {(
+            [
+              { id: "inline", label: t.livePreview.title },
+              { id: "deployed", label: t.codeStatus.deployed },
+            ] as const
+          ).map((source) => (
+            <button
+              key={source.id}
+              type="button"
+              onClick={() => setBrowserSourceOverride(source.id)}
+              className={cn(
+                "rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors",
+                browserPreviewSource === source.id
+                  ? "bg-muted/70 text-foreground"
+                  : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+              )}
+            >
+              {source.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {browserPreviewSource === "deployed" ? (
+        <LivePreviewPanel
+          previewUrl={resultPreviewUrl}
+          threadId={threadId ?? "default"}
+          workspacePath={inferredWorkDir}
+          className="min-h-0 flex-1"
+        />
+      ) : browserPreviewSource === "inline" ? (
+        <LivePreviewPanel
+          htmlContent={browserPreviewBlocks?.html}
+          cssContent={browserPreviewBlocks?.css}
+          jsContent={browserPreviewBlocks?.js}
+          className="min-h-0 flex-1"
+        />
+      ) : (
+        <BrowserPreviewPanel
+          threadId={threadId ?? "default"}
+          workspacePath={inferredWorkDir}
+          className="min-h-0 flex-1"
+        />
+      )}
+    </div>
+  );
+
   // Workbench view: summary / computer view.
   if (emptyShell) {
     const emptyEmbeddedPage =
-      effectiveActiveTab === "files" ? (
-        <AgentFilesPage
-          workDir={inferredWorkDir}
-          threadId={threadId}
-          recentFileEvents={recentFileEvents}
-          onBackToSummary={() => handleOpenTab("agent")}
-        />
-      ) : effectiveActiveTab === "diff" ? (
+      effectiveActiveTab === "diff" ? (
         <AgentDiffPage
           entries={visibleDiffEntries}
           onBackToSummary={() => handleOpenTab("agent")}
@@ -898,20 +644,7 @@ export function AgentWorkbenchPanel({
           className="min-h-0 flex-1"
         />
       ) : effectiveActiveTab === "browser" ? (
-        browserPreviewBlocks ? (
-          <LivePreviewPanel
-            htmlContent={browserPreviewBlocks.html}
-            cssContent={browserPreviewBlocks.css}
-            jsContent={browserPreviewBlocks.js}
-            className="min-h-0 flex-1"
-          />
-        ) : (
-          <BrowserPreviewPanel
-            threadId={threadId ?? "default"}
-            workspacePath={inferredWorkDir}
-            className="min-h-0 flex-1"
-          />
-        )
+        browserTabPage
       ) : (
         <WorkbenchEmptyPage
           title={t.agentWorkbenchPanel.robot}
@@ -972,8 +705,8 @@ export function AgentWorkbenchPanel({
                       className={cn(
                         "mr-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-colors",
                         active
-                          ? "text-muted-foreground/70 hover:bg-muted hover:text-foreground"
-                          : "text-muted-foreground/0 group-hover:text-muted-foreground/70 hover:!bg-muted hover:!text-foreground",
+                          ? "text-muted-foreground/70 hover:bg-muted hover:text-foreground focus-visible:bg-muted"
+                          : "text-muted-foreground/0 group-hover:text-muted-foreground/70 hover:!bg-muted hover:!text-foreground focus-visible:text-muted-foreground/70 focus-visible:bg-muted",
                       )}
                     >
                       <XIcon className="size-3" />
@@ -1014,11 +747,15 @@ export function AgentWorkbenchPanel({
                 })}
               </DropdownMenuContent>
             </DropdownMenu>
+            {closeButton}
           </div>
         </header>
-        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background/70">
+        <section
+          aria-label={t.sidebar.ariaAgentWorkbench}
+          className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background/70"
+        >
           {emptyEmbeddedPage}
-        </main>
+        </section>
         {machineRail}
       </div>
     );
@@ -1072,6 +809,7 @@ export function AgentWorkbenchPanel({
             agentTiles={agentTiles}
             blocks={blocks}
             onSelectTab={onSelectTab}
+            onOpenArtifact={onOpenArtifact}
           />
         )
       ) : (
@@ -1128,6 +866,63 @@ export function AgentWorkbenchPanel({
             </span>
           </div>
 
+          {/* Agent filter chip row — quick switch between main process and sub-agents */}
+          {!selectedRosterSeat && agentTiles.length > 0 && (
+            <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border/30 px-5 py-2">
+              <span className="shrink-0 text-[10px] font-medium text-muted-foreground/70">
+                {t.agentWorkbenchPanel.filterByAgent}
+              </span>
+              <button
+                type="button"
+                onClick={openMainProcess}
+                className={cn(
+                  "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-[11px] font-medium transition-colors",
+                  !selectedAgent
+                    ? "border-foreground/40 bg-foreground/10 text-foreground"
+                    : "border-border/50 bg-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+                )}
+              >
+                <MonitorIcon className="size-3" />
+                {t.agentWorkbenchPanel.filterChipMain}
+              </button>
+              {agentTiles.map((agent) => {
+                const isActive = selectedAgent?.id === agent.id;
+                const agentLabel = repairMojibakeText(
+                  agent.codename ?? agent.name ?? agent.label,
+                );
+                return (
+                  <button
+                    key={agent.id}
+                    type="button"
+                    onClick={() => openSubagentProcess(agent.id)}
+                    className={cn(
+                      "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-[11px] font-medium transition-colors",
+                      isActive
+                        ? "border-foreground/40 bg-foreground/10 text-foreground"
+                        : "border-border/50 bg-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+                    )}
+                  >
+                    {agent.avatar ? (
+                      <span aria-hidden="true" className="text-[11px]">
+                        {agent.avatar}
+                      </span>
+                    ) : null}
+                    <span className="font-mono">{agent.label}</span>
+                    <span
+                      className={cn(
+                        "inline-block size-1.5 shrink-0 rounded-full",
+                        agentRunDotClass(agent.status),
+                      )}
+                    />
+                    <span className="max-w-[100px] truncate text-[10px] font-normal opacity-70">
+                      {agent.role ? repairMojibakeText(agent.role) : agentLabel}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* Tool call timeline */}
           {selectedRosterSeat ? (
             <RosterComputerPlaceholder
@@ -1145,30 +940,82 @@ export function AgentWorkbenchPanel({
                 setManualBlockSelection(true);
               }}
             />
-          ) : (
-            <>
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-                <div className="mx-auto w-full max-w-2xl px-5 py-3">
-                  <MainProcessPhaseTimeline
-                    currentPhaseId={currentPhase?.id ?? null}
-                    onSelectBlock={(blockId, phaseId) => {
-                      if (phaseId) {
-                        setSelectedPhaseId(phaseId);
-                        setManualPhaseSelection(true);
-                      }
-                      setSelectedBlockId(blockId);
-                      setManualBlockSelection(true);
-                    }}
-                    phases={phases}
-                    screenBlocks={screenBlocks}
-                    screenFrame={screenFrame}
-                    selectedBlockId={selectedBlockId}
-                  />
+          ) : agentTiles.length > 0 ? (
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
+              <div className="mx-auto w-full max-w-2xl px-5 py-4">
+                <div className="mb-3 text-center">
+                  <MonitorIcon className="mx-auto mb-2 size-8 text-muted-foreground/50" />
+                  <p className="text-sm font-medium text-foreground">
+                    {t.agentWorkbenchPanel.computerViewSubtitle}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t.agentWorkbenchPanel.computerViewSelectHint}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {agentTiles.map((agent) => {
+                    const agentLabel = repairMojibakeText(
+                      agent.codename ?? agent.name ?? agent.label,
+                    );
+                    return (
+                      <button
+                        key={agent.id}
+                        type="button"
+                        onClick={() => openSubagentProcess(agent.id)}
+                        className={cn(
+                          "group flex w-full items-center gap-3 rounded-lg border border-border/55 bg-background/80 px-4 py-3 text-left transition-colors hover:border-border hover:bg-muted/30",
+                        )}
+                      >
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/30 text-xl">
+                          {agent.avatar ? (
+                            <span aria-hidden="true">{agent.avatar}</span>
+                          ) : (
+                            <BotIcon className="size-5 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-semibold text-foreground">
+                              {agent.label}
+                            </span>
+                            <span
+                              className={cn(
+                                "inline-flex size-1.5 shrink-0 rounded-full",
+                                agentRunDotClass(agent.status),
+                              )}
+                            />
+                            <span className="text-[10px] text-muted-foreground">
+                              {dockAgentStatusLabel(agent.status, t)}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {agent.role
+                              ? repairMojibakeText(agent.role)
+                              : agentLabel}
+                          </div>
+                          {agent.task && (
+                            <div className="mt-1 truncate text-[11px] text-muted-foreground/70">
+                              {repairMojibakeText(agent.task)}
+                            </div>
+                          )}
+                        </div>
+                        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-foreground" />
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-
-              {/* Bottom agent switcher */}
-            </>
+            </div>
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center bg-background/35 px-6 text-center">
+              <MonitorIcon className="mb-3 size-10 text-muted-foreground/30" />
+              <p className="text-sm font-medium text-muted-foreground">
+                {t.agentWorkbenchPanel.computerViewEmpty}
+              </p>
+              <p className="mt-1 max-w-xs text-xs text-muted-foreground/70">
+                {t.agentWorkbenchPanel.computerViewEmptyDesc}
+              </p>
+            </div>
           )}
         </div>
       )}
@@ -1176,16 +1023,7 @@ export function AgentWorkbenchPanel({
   );
 
   const effectiveEmbeddedPage =
-    effectiveActiveTab === "agent" ? (
-      agentKanbanPage
-    ) : effectiveActiveTab === "files" ? (
-      <AgentFilesPage
-        workDir={inferredWorkDir}
-        threadId={threadId}
-        recentFileEvents={recentFileEvents}
-        onBackToSummary={() => handleOpenTab("agent")}
-      />
-    ) : effectiveActiveTab === "diff" ? (
+    effectiveActiveTab === "diff" ? (
       <AgentDiffPage
         entries={visibleDiffEntries}
         onBackToSummary={() => handleOpenTab("agent")}
@@ -1197,20 +1035,10 @@ export function AgentWorkbenchPanel({
         className="min-h-0 flex-1"
       />
     ) : effectiveActiveTab === "browser" ? (
-      browserPreviewBlocks ? (
-        <LivePreviewPanel
-          htmlContent={browserPreviewBlocks.html}
-          cssContent={browserPreviewBlocks.css}
-          jsContent={browserPreviewBlocks.js}
-          className="min-h-0 flex-1"
-        />
-      ) : (
-        <BrowserPreviewPanel
-          threadId={threadId ?? "default"}
-          workspacePath={inferredWorkDir}
-        />
-      )
-    ) : undefined;
+      browserTabPage
+    ) : (
+      agentKanbanPage
+    );
 
   return (
     <div
@@ -1269,8 +1097,8 @@ export function AgentWorkbenchPanel({
                     className={cn(
                       "mr-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-colors",
                       active
-                        ? "text-muted-foreground/70 hover:bg-muted hover:text-foreground"
-                        : "text-muted-foreground/0 group-hover:text-muted-foreground/70 hover:!bg-muted hover:!text-foreground",
+                        ? "text-muted-foreground/70 hover:bg-muted hover:text-foreground focus-visible:bg-muted"
+                        : "text-muted-foreground/0 group-hover:text-muted-foreground/70 hover:!bg-muted hover:!text-foreground focus-visible:text-muted-foreground/70 focus-visible:bg-muted",
                     )}
                     aria-label={`Close ${label}`}
                     title={`Close ${label}`}
@@ -1311,6 +1139,7 @@ export function AgentWorkbenchPanel({
               })}
             </DropdownMenuContent>
           </DropdownMenu>
+          {closeButton}
         </div>
       </header>
 
@@ -1323,231 +1152,12 @@ export function AgentWorkbenchPanel({
         </>
       ) : null}
 
-      {effectiveEmbeddedPage ? (
-        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background/70">
-          {effectiveEmbeddedPage}
-        </main>
-      ) : (
-        <main className="flex min-h-0 flex-1 flex-col">
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/70">
-            <div className="flex items-center border-b border-border/45 px-4 py-1 text-[11px]">
-              <span className="mx-auto font-mono text-foreground">
-                {selectedAgent
-                  ? `${t.agentWorkbench.kindAgent} ${selectedAgent.label}`
-                  : `${t.agentWorkbench.kindAgent} 01`}
-              </span>
-              <button
-                type="button"
-                onClick={() =>
-                  setActivityView((value) =>
-                    value === "summary" ? "screen" : "summary",
-                  )
-                }
-                className="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-              >
-                <UsersIcon className="size-3.5" />
-                {activityView === "summary"
-                  ? t.agentWorkbench.computerViewLabel
-                  : t.agentWorkbench.activityTrace}
-              </button>
-            </div>
-
-            <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-3 py-3">
-              {activityView === "screen" ? (
-                <div className="flex min-h-48 flex-1 items-center justify-center rounded-lg border border-border/55 bg-background/80 px-4 text-sm text-muted-foreground shadow-sm">
-                  {t.agentWorkbench.computerViewHint}
-                </div>
-              ) : selectedPhase ? (
-                <section className="rounded-lg border border-border/55 bg-background/85 px-3 py-3 shadow-sm">
-                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    <StatusGlyph status={selectedPhase.status} />
-                    <span>{selectedPhase.title}</span>
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      {phaseBlockSummary(selectedPhase, blocks)}
-                    </span>
-                  </div>
-                  <div className="mt-3 space-y-1.5">
-                    {phaseBlocks.length === 0 ? (
-                      <div className="py-4 text-center text-sm text-muted-foreground">
-                        {selectedPhase.status === "done"
-                          ? t.agentWorkbench.phaseCompleted
-                          : selectedPhase.status === "error"
-                            ? t.agentWorkbench.statusError
-                            : t.agentWorkbench.waitingForPhase}
-                      </div>
-                    ) : (
-                      phaseBlocks.map((block) => {
-                        const Icon = blockIcon(block.kind);
-                        const active = selectedBlock?.id === block.id;
-                        return (
-                          <button
-                            key={block.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedBlockId(block.id);
-                              setManualBlockSelection(true);
-                            }}
-                            className={cn(
-                              "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors",
-                              active
-                                ? "bg-muted/70 text-foreground"
-                                : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
-                            )}
-                          >
-                            <StatusGlyph status={block.status} />
-                            <Icon className="size-4 shrink-0" />
-                            <span className="min-w-0 flex-1 truncate">
-                              {block.title}
-                            </span>
-                            <span className="max-w-[45%] truncate text-xs text-muted-foreground">
-                              {block.subtitle}
-                            </span>
-                            <ChevronDownIcon className="size-3.5 -rotate-90 opacity-50" />
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-                </section>
-              ) : (
-                <WorkbenchEmptyPage
-                  title={t.agentWorkbenchPanel.robot}
-                  description={t.agentWorkbenchPanel.noRunningRobotProcess}
-                />
-              )}
-
-              {selectedBlock && (
-                <section className="mt-3 overflow-hidden rounded-lg border border-border/55 bg-background/85 shadow-sm">
-                  <div className="flex items-center justify-between border-b border-border/45 px-3 py-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <SelectedIcon className="size-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate text-xs font-semibold text-foreground">
-                        {selectedBlock.title}
-                      </span>
-                      <span className="shrink-0 text-xs font-normal text-muted-foreground">
-                        {kindLabel(selectedBlock.kind, t.agentWorkbench)} ·{" "}
-                        {eventTime(selectedBlock)}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      onClick={() =>
-                        copyText(
-                          selectedBlock.outputText ||
-                            selectedBlock.inputText ||
-                            selectedBlock.subtitle,
-                        )
-                      }
-                      title={t.agentWorkbench.copyDetails}
-                    >
-                      <CopyIcon className="size-3.5" />
-                    </button>
-                  </div>
-                  <div className="grid divide-y divide-border/45">
-                    <WorkBlockDetailSection
-                      key={`${selectedBlock.id}:request`}
-                      title={t.agentWorkbench.request}
-                      content={
-                        selectedBlock.inputText || selectedBlock.subtitle
-                      }
-                    />
-                    <WorkBlockDetailSection
-                      key={`${selectedBlock.id}:response`}
-                      title={t.agentWorkbench.response}
-                      content={selectedBlock.outputText}
-                      empty={
-                        <div className="flex min-h-16 items-center gap-2 px-3 py-2.5 text-sm text-muted-foreground">
-                          {selectedBlock.status === "running" ? (
-                            <>
-                              <CircleIcon className="size-3 animate-pulse" />
-                              {t.agentWorkbench.waitingForToolResult}
-                            </>
-                          ) : (
-                            <>
-                              <SelectedStatusIcon className="size-3.5" />
-                              {statusText(selectedBlock.status)}
-                            </>
-                          )}
-                        </div>
-                      }
-                    />
-                  </div>
-                </section>
-              )}
-            </div>
-          </div>
-
-          {agentTiles.length > 0 && (
-            <div className="shrink-0 border-t border-border/55 bg-background/90 px-4 py-2">
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {agentTiles.map((agent) => {
-                  const active = selectedAgent?.id === agent.id;
-                  const percent = agentProgressPercent(agent.status);
-                  return (
-                    <button
-                      key={agent.id}
-                      type="button"
-                      onClick={() => setSelectedAgentId(agent.id)}
-                      title={`${repairMojibakeText(agent.name)}: ${repairMojibakeText(agent.task)}`}
-                      className={cn(
-                        "flex min-w-32 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors",
-                        active
-                          ? "border-foreground/70 bg-background"
-                          : "border-transparent bg-muted/45 hover:bg-muted/70",
-                      )}
-                    >
-                      {agent.avatar ? (
-                        <span
-                          className="flex size-7 shrink-0 items-center justify-center rounded-full bg-background text-base"
-                          aria-hidden="true"
-                          title={agent.role ?? "subagent"}
-                        >
-                          {agent.avatar}
-                        </span>
-                      ) : (
-                        <BotIcon className="size-7 shrink-0 rounded-full bg-background p-1 text-foreground" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2 font-mono text-xs text-foreground">
-                          <span>{repairMojibakeText(agent.name)}</span>
-                          <span>{repairMojibakeText(agent.label)}</span>
-                        </div>
-                        <div className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">
-                          {compactDetail(agent.task, 56)}
-                        </div>
-                        <div
-                          className={cn(
-                            "mt-1 truncate text-[11px]",
-                            agentStatusClass(agent.status),
-                          )}
-                        >
-                          {dockAgentStatusLabel(agent.status, t)}
-                        </div>
-                        <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className={cn(
-                              "h-full rounded-full transition-all",
-                              agentRunProgressBarClass(agent.status),
-                            )}
-                            style={{ width: `${percent}%` }}
-                          />
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              {selectedAgent && (
-                <div className="mt-0.5 truncate px-1 text-[11px] text-muted-foreground">
-                  {repairMojibakeText(selectedAgent.name)} ·{" "}
-                  {compactDetail(selectedAgent.task)}
-                </div>
-              )}
-            </div>
-          )}
-        </main>
-      )}
+      <section
+        aria-label={t.sidebar.ariaAgentWorkbench}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background/70"
+      >
+        {effectiveEmbeddedPage}
+      </section>
       {machineRail}
     </div>
   );

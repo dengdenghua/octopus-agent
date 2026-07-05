@@ -18,7 +18,14 @@ import {
   HammerIcon,
   SparklesIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { createPortal } from "react-dom";
 
 import { useI18n } from "@/core/i18n/hooks";
@@ -63,7 +70,10 @@ const PERSONAL_MODES: [ModeMeta, ModeMeta, ModeMeta] = [
   },
 ];
 
-const LABELS: Record<PersonalMode, Record<"zh" | "en" | "ja" | "ko", Labels>> = {
+const LABELS: Record<
+  PersonalMode,
+  Record<"zh" | "en" | "ja" | "ko", Labels>
+> = {
   general: {
     zh: { label: "通用", desc: "日常对话与任务" },
     en: { label: "General", desc: "Everyday chat and tasks" },
@@ -115,6 +125,11 @@ export function PersonalModeSelector({
   const [expanded, setExpanded] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listboxRef = useRef<HTMLDivElement>(null);
+  const baseId = useId();
+  const triggerId = `${baseId}-trigger`;
+  const listboxId = `${baseId}-listbox`;
   const [panelRect, setPanelRect] = useState<PanelRect | null>(null);
 
   const activeOption =
@@ -131,6 +146,11 @@ export function PersonalModeSelector({
         !panelRef.current.contains(target) &&
         !menuRef.current?.contains(target)
       ) {
+        // Keyboard path leaves focus inside the popup; hand it back to
+        // the trigger instead of stranding it on <body>.
+        if (menuRef.current?.contains(document.activeElement)) {
+          triggerRef.current?.focus();
+        }
         setExpanded(false);
       }
     };
@@ -184,15 +204,102 @@ export function PersonalModeSelector({
     (next: PersonalMode) => {
       onModeChange(next);
       setExpanded(false);
+      triggerRef.current?.focus();
     },
     [onModeChange],
+  );
+
+  const closeAndRefocusTrigger = useCallback(() => {
+    setExpanded(false);
+    triggerRef.current?.focus();
+  }, []);
+
+  // The popup is portaled to the end of <body>, so DOM tab order never reaches
+  // it from the trigger. Move focus onto the selected option as soon as the
+  // listbox mounts; closing paths hand focus back to the trigger.
+  const setListboxNode = useCallback((node: HTMLDivElement | null) => {
+    listboxRef.current = node;
+    if (!node) return;
+    const selected = node.querySelector<HTMLButtonElement>(
+      '[role="option"][aria-selected="true"]',
+    );
+    (
+      selected ?? node.querySelector<HTMLButtonElement>('[role="option"]')
+    )?.focus();
+  }, []);
+
+  const handlePopupKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        closeAndRefocusTrigger();
+        return;
+      }
+      if (e.key === "Tab") {
+        // Portaled popup: walk its own focusables so future non-option
+        // controls stay keyboard-reachable; close when tabbing past an
+        // end (mirrors mode-selector.tsx).
+        const focusables = Array.from(
+          menuRef.current?.querySelectorAll<HTMLButtonElement>(
+            "button:not([disabled])",
+          ) ?? [],
+        );
+        const current = focusables.indexOf(
+          document.activeElement as HTMLButtonElement,
+        );
+        const next = current + (e.shiftKey ? -1 : 1);
+        e.preventDefault();
+        e.stopPropagation();
+        if (current >= 0 && next >= 0 && next < focusables.length) {
+          focusables[next]?.focus();
+          return;
+        }
+        closeAndRefocusTrigger();
+        return;
+      }
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+      const options = Array.from(
+        listboxRef.current?.querySelectorAll<HTMLButtonElement>(
+          '[role="option"]',
+        ) ?? [],
+      );
+      if (options.length === 0) return;
+      e.preventDefault();
+      const current = options.indexOf(
+        document.activeElement as HTMLButtonElement,
+      );
+      let next: number;
+      if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = options.length - 1;
+      else if (e.key === "ArrowDown")
+        next = current < 0 ? 0 : Math.min(current + 1, options.length - 1);
+      else next = current < 0 ? options.length - 1 : Math.max(current - 1, 0);
+      options[next]?.focus();
+    },
+    [closeAndRefocusTrigger],
   );
 
   return (
     <div ref={panelRef} className={cn("relative", className)}>
       <button
+        ref={triggerRef}
+        id={triggerId}
         type="button"
+        aria-expanded={expanded}
+        aria-haspopup="listbox"
+        aria-controls={expanded ? listboxId : undefined}
         onClick={() => setExpanded(!expanded)}
+        onKeyDown={(e) => {
+          if (!expanded && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+            e.preventDefault();
+            setExpanded(true);
+          } else if (expanded && e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            setExpanded(false);
+          }
+        }}
         className={cn(
           "group flex items-center gap-1.5 text-[11px] font-medium text-foreground shadow-none transition-colors duration-150",
           chromeless
@@ -202,7 +309,12 @@ export function PersonalModeSelector({
         title={activeLabels.desc}
       >
         <ActiveIcon className="size-3" />
-        <span className={cn("truncate", chromeless ? "max-w-[42px]" : "max-w-[72px]")}>
+        <span
+          className={cn(
+            "truncate",
+            chromeless ? "max-w-[42px]" : "max-w-[72px]",
+          )}
+        >
           {activeLabels.label}
         </span>
         <ChevronDownIcon className="size-3 opacity-35 transition-opacity group-hover:opacity-60" />
@@ -217,14 +329,27 @@ export function PersonalModeSelector({
                 left: `${panelRect.left}px`,
                 width: `${panelRect.width}px`,
                 maxHeight: `${panelRect.maxHeight}px`,
-                top: panelRect.top !== undefined ? `${panelRect.top}px` : undefined,
-                bottom: panelRect.bottom !== undefined ? `${panelRect.bottom}px` : undefined,
+                top:
+                  panelRect.top !== undefined
+                    ? `${panelRect.top}px`
+                    : undefined,
+                bottom:
+                  panelRect.bottom !== undefined
+                    ? `${panelRect.bottom}px`
+                    : undefined,
               }}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
+              onKeyDown={handlePopupKeyDown}
             >
               <div className="max-h-[inherit] overflow-y-auto">
-                <div className="space-y-1 p-2">
+                <div
+                  ref={setListboxNode}
+                  id={listboxId}
+                  role="listbox"
+                  aria-labelledby={triggerId}
+                  className="space-y-1 p-2"
+                >
                   {PERSONAL_MODES.map((option) => {
                     const Icon = option.icon;
                     const labels = labelsFor(option.name, locale);
@@ -232,6 +357,8 @@ export function PersonalModeSelector({
                       <button
                         key={option.name}
                         type="button"
+                        role="option"
+                        aria-selected={mode === option.name}
                         onClick={() => handlePick(option.name)}
                         className={cn(
                           "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs transition-all duration-200",

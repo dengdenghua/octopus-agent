@@ -31,7 +31,7 @@ import {
   WebviewTab,
   type WebviewTabHandle,
 } from "@/components/browser/webview-tab";
-import { WorkspaceSurfaceSwitch } from "@/components/workspace/workspace-sidebar";
+import { WorkspaceSurfaceHeader } from "@/components/workspace/workspace-surface-header";
 
 const isWindows = (): boolean =>
   typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
@@ -379,7 +379,7 @@ function BrowserShell() {
         <div className="relative z-[80] shrink-0">
           <LiquidGlass
             material="dock"
-            className="flex h-9 shrink-0 items-center gap-0.5 rounded-none border-x-0 border-t-0 border-border/35 px-1.5"
+            className="flex h-11 shrink-0 items-center gap-0.5 rounded-none border-x-0 border-t-0 border-border/35 px-1.5"
             style={
               {
                 paddingLeft: 10,
@@ -389,23 +389,29 @@ function BrowserShell() {
             }
           >
             <div
-              className="flex h-7 w-[112px] shrink-0 items-center justify-start"
+              className="flex h-8 shrink-0 items-center justify-start gap-2"
               style={
                 {
                   WebkitAppRegion: "no-drag",
                 } as React.CSSProperties
               }
             >
-              <WorkspaceSurfaceSwitch active="browser" placement="topbar" />
+              <WorkspaceSurfaceHeader active="browser" />
             </div>
-            <div className="flex h-7 min-w-0 flex-1 items-center">
+            <div className="flex h-8 min-w-0 flex-1 items-center">
               <TabBar />
             </div>
             <button
               type="button"
-              title={sidePanelPinned ? t.browser.sidePanel.unpin : t.browser.sidePanel.expand}
+              title={
+                sidePanelPinned
+                  ? t.browser.sidePanel.unpin
+                  : t.browser.sidePanel.expand
+              }
               aria-label={
-                sidePanelPinned ? t.browser.sidePanel.unpin : t.browser.sidePanel.expand
+                sidePanelPinned
+                  ? t.browser.sidePanel.unpin
+                  : t.browser.sidePanel.expand
               }
               onMouseEnter={showSidePanel}
               onMouseLeave={scheduleSidePanelClose}
@@ -579,7 +585,8 @@ function BrowserSidePanel({
         : panelMode === "history"
           ? t.browser.empty.noRecent
           : t.browser.empty.noFavorites;
-  const activeTabLabel = activeTab?.title || activeTab?.url || t.browser.defaultTabTitle;
+  const activeTabLabel =
+    activeTab?.title || activeTab?.url || t.browser.defaultTabTitle;
   const activeTabUrl = activeTab?.url ?? "";
   const canCopyActiveUrl =
     activeTabUrl.length > 0 && !activeTabUrl.startsWith("octopus:");
@@ -628,11 +635,11 @@ function BrowserSidePanel({
           <MenuIcon className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold">{t.browser.pageTitle}</div>
-            <div className="text-[11px] text-muted-foreground">
-              {t.browser.pageSubtitle(pinned)}
-            </div>
+          <div className="text-sm font-semibold">{t.browser.pageTitle}</div>
+          <div className="text-[11px] text-muted-foreground">
+            {t.browser.pageSubtitle(pinned)}
           </div>
+        </div>
       </div>
 
       <div className="octo-liquid-glass octo-liquid-glass--input mt-4 flex h-9 items-center gap-2 rounded-full px-3 text-xs text-muted-foreground">
@@ -677,7 +684,9 @@ function BrowserSidePanel({
               className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-muted/60 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
             >
               <CopyIcon className="size-3.5" />
-              {copiedField === "url" ? t.browser.copy.copied : t.browser.copy.link}
+              {copiedField === "url"
+                ? t.browser.copy.copied
+                : t.browser.copy.link}
             </button>
             <button
               type="button"
@@ -685,7 +694,9 @@ function BrowserSidePanel({
               className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-muted/60 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <CopyIcon className="size-3.5" />
-              {copiedField === "title" ? t.browser.copy.copied : t.browser.copy.title}
+              {copiedField === "title"
+                ? t.browser.copy.copied
+                : t.browser.copy.title}
             </button>
             <button
               type="button"

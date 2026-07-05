@@ -32,7 +32,10 @@ import {
 } from "@/components/workspace/agent-workbench-panel";
 import {
   AGENT_WORKBENCH_FOCUS_EVENT,
+  AGENT_WORKBENCH_OPEN_EVENT,
   type AgentWorkbenchFocusDetail,
+  type AgentWorkbenchFocusView,
+  type AgentWorkbenchOpenDetail,
 } from "@/components/workspace/agent-workbench-events";
 import { ChatBox, useThreadChat } from "@/components/workspace/chats";
 import { ChatsDrawer } from "@/components/workspace/chats-drawer";
@@ -65,6 +68,7 @@ import {
   MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
   MessageList,
 } from "@/components/workspace/messages";
+import { extractResultUrl } from "@/components/workspace/messages/message-output-summary";
 import { LoadOlderTurnsBanner } from "@/components/workspace/messages/load-older-turns-banner";
 import { ThreadProviders } from "@/components/workspace/messages/context";
 import { ThreadTitle } from "@/components/workspace/thread-title";
@@ -142,7 +146,7 @@ import {
   useSetCoworkMode,
 } from "@/core/cowork";
 import { usePauseTask, useTasks } from "@/core/tasks/hooks";
-import { isAIMessage, type Message } from "@/core/api/types";
+import { isAIMessage, isHumanMessage, type Message } from "@/core/api/types";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   extractContentFromMessage,
@@ -224,6 +228,11 @@ type CompactableThread = {
 };
 
 const URL_PATTERN = /https?:\/\/[^\s，,]+/gi;
+
+// Tool names / payloads that imply the run must end with a report-style
+// deliverable before it can be considered settled.
+const REPORT_DELIVERABLE_PATTERN =
+  /deep-research|report|docx|pptx|pdf|research|swarm/i;
 
 const CHAT_STARTER_ICONS: LucideIcon[] = [
   SearchIcon,
@@ -947,6 +956,14 @@ function RealtimePageContent({
   const [focusedWorkbenchAgentId, setFocusedWorkbenchAgentId] = useState<
     string | null
   >(null);
+  // Which sub-view the focus event asked for; lives and dies with
+  // focusedWorkbenchAgentId (set together, cleared together).
+  const [focusedWorkbenchAgentView, setFocusedWorkbenchAgentView] =
+    useState<AgentWorkbenchFocusView | null>(null);
+  // Bumped on every focus emission so the panel treats a repeat focus of the
+  // same agent (e.g. a view switch) as a fresh intent.
+  const [focusedWorkbenchAgentNonce, setFocusedWorkbenchAgentNonce] =
+    useState(0);
   const settledWorkbenchAutoDismissedRef = useRef<string | null>(null);
   const [discussionOnly, setDiscussionOnly] = useState(false);
   const [chatsDrawerOpen, setChatsDrawerOpen] = useState(false);
@@ -1074,6 +1091,7 @@ function RealtimePageContent({
 
   useEffect(() => {
     setFocusedWorkbenchAgentId(null);
+    setFocusedWorkbenchAgentView(null);
     setAgentWorkbenchManuallyOpened(false);
   }, [threadId]);
 
@@ -1884,6 +1902,10 @@ function RealtimePageContent({
   const previewBlocks = useMemo(() => {
     for (let i = thread.messages.length - 1; i >= 0; i--) {
       const msg = thread.messages[i];
+      // Current turn only: an inline-preview block from an earlier turn
+      // must not hijack every later completion (same scoping as
+      // resultPreviewUrl below).
+      if (msg && isHumanMessage(msg)) break;
       if (!msg || !isAIMessage(msg)) continue;
       const text =
         typeof msg.content === "string"
@@ -1898,6 +1920,25 @@ function RealtimePageContent({
       if (hasPreviewableBlocks(blocks)) return blocks;
     }
     return null;
+  }, [thread.messages]);
+
+  // Deployed preview URL (vercel/netlify/localhost/etc.) — when present and
+  // no inline html blocks exist, we still treat the task as a "frontend
+  // task" and auto-switch the workbench to the browser preview tab on
+  // completion. The URL is also forwarded to LivePreviewPanel so it can
+  // render the deployed site instead of falling back to srcDoc.
+  // Only the current turn is scanned (messages after the last human message):
+  // a deploy URL from an earlier turn must not hijack every later completion.
+  const resultPreviewUrl = useMemo(() => {
+    let turnStart = 0;
+    for (let i = thread.messages.length - 1; i >= 0; i--) {
+      const message = thread.messages[i];
+      if (message && isHumanMessage(message)) {
+        turnStart = i + 1;
+        break;
+      }
+    }
+    return extractResultUrl(thread.messages.slice(turnStart));
   }, [thread.messages]);
 
   const latestPersistedTodoEvents = useMemo(
@@ -1966,34 +2007,58 @@ function RealtimePageContent({
   );
   const hasPausedOrPendingBackgroundTask =
     hasPausedBackgroundTask || hasPendingBackgroundTask;
-  const requiresReportDeliverable = agentDisplayEvents.some((event) =>
-    /deep-research|report|docx|pptx|pdf|research|swarm/i.test(
-      [
-        event.name,
-        JSON.stringify(event.input ?? {}),
-        JSON.stringify(event.output ?? {}),
-      ].join(" "),
-    ),
+  const requiresReportDeliverable = useMemo(
+    () =>
+      agentDisplayEvents.some((event) => {
+        // The stream mapping layer precomputes this flag once per event —
+        // consuming it avoids re-stringifying payloads on every render.
+        // undefined means the event bypassed that layer (e.g. restored
+        // todo events), so fall back to matching here.
+        if (event.isReportLike !== undefined) return event.isReportLike;
+        // Structured name check first — serializing payloads is the expensive
+        // fallback (command outputs accumulate without bound while streaming).
+        if (REPORT_DELIVERABLE_PATTERN.test(event.name)) return true;
+        if (
+          event.input != null &&
+          REPORT_DELIVERABLE_PATTERN.test(JSON.stringify(event.input))
+        ) {
+          return true;
+        }
+        return (
+          event.output != null &&
+          REPORT_DELIVERABLE_PATTERN.test(JSON.stringify(event.output))
+        );
+      }),
+    [agentDisplayEvents],
   );
-  const hasReportArtifact = thread.messages.some(
-    (message) =>
-      isAIMessage(message) &&
-      FINAL_DELIVERABLE_PATTERN.test(
-        extractTextFromMessage(message) || extractContentFromMessage(message),
+  const hasReportArtifact = useMemo(
+    () =>
+      thread.messages.some(
+        (message) =>
+          isAIMessage(message) &&
+          FINAL_DELIVERABLE_PATTERN.test(
+            extractTextFromMessage(message) ||
+              extractContentFromMessage(message),
+          ),
       ),
+    [thread.messages],
   );
   const finalArtifactEntries = useMemo(
     () => finalOutputArtifactEntries(agentDisplayEvents),
     [agentDisplayEvents],
   );
   const hasFinalArtifact = finalArtifactEntries.length > 0;
-  const hasAgentAnswer = thread.messages.some((message) => {
-    if (hasFinalArtifact) return true;
-    if (!isAIMessage(message)) return false;
-    const text =
-      extractTextFromMessage(message) || extractContentFromMessage(message);
-    return text.trim().length >= 80;
-  });
+  const hasAgentAnswer = useMemo(
+    () =>
+      thread.messages.some((message) => {
+        if (hasFinalArtifact) return true;
+        if (!isAIMessage(message)) return false;
+        const text =
+          extractTextFromMessage(message) || extractContentFromMessage(message);
+        return text.trim().length >= 80;
+      }),
+    [hasFinalArtifact, thread.messages],
+  );
   const canSettleStaleLiveEvents =
     !thread.isLoading &&
     (!thread.error || hasFinalArtifact) &&
@@ -2197,24 +2262,79 @@ function RealtimePageContent({
   ]);
 
   useEffect(() => {
+    if (
+      // Mirrors the isNewThread auto-expand path: on mobile the panel takes
+      // over the whole chat column, so never auto-open it there.
+      isMobile ||
+      (!previewBlocks && !resultPreviewUrl) ||
+      agentWorkbenchTabTouched ||
+      thread.isLoading ||
+      !hasCompletedAgentOutput
+    ) {
+      return;
+    }
+    setAgentWorkbenchTab("browser");
+    setAgentWorkbenchDismissed(false);
+    setAgentWorkbenchManuallyOpened(true);
+    setArtifactsOpen(false);
+    setShowAgentPlan(false);
+    setShowResearchHistory(false);
+    setShowResearch(false);
+    setShowPreview(false);
+  }, [
+    isMobile,
+    previewBlocks,
+    resultPreviewUrl,
+    agentWorkbenchTabTouched,
+    thread.isLoading,
+    hasCompletedAgentOutput,
+    setArtifactsOpen,
+  ]);
+
+  useEffect(() => {
     const handleAgentFocus = (event: Event) => {
       const detail = (event as CustomEvent<AgentWorkbenchFocusDetail>).detail;
       const agentId =
         typeof detail?.agentId === "string" ? detail.agentId.trim() : "";
       if (!agentId) return;
       setFocusedWorkbenchAgentId(agentId);
+      setFocusedWorkbenchAgentView(detail?.view ?? null);
+      setFocusedWorkbenchAgentNonce((n) => n + 1);
       setArtifactsOpen(false);
       setShowAgentPlan(false);
       setAgentWorkbenchDismissed(false);
+      setAgentWorkbenchManuallyOpened(true);
       setShowResearchHistory(false);
       setShowResearch(false);
       setShowPreview(false);
-      setAgentWorkbenchTab("agent");
+      setAgentWorkbenchTab(detail?.tab ?? "agent");
       setAgentWorkbenchTabTouched(true);
     };
     window.addEventListener(AGENT_WORKBENCH_FOCUS_EVENT, handleAgentFocus);
     return () =>
       window.removeEventListener(AGENT_WORKBENCH_FOCUS_EVENT, handleAgentFocus);
+  }, [setArtifactsOpen]);
+
+  useEffect(() => {
+    const handleOpenWorkbench = (event: Event) => {
+      const detail = (event as CustomEvent<AgentWorkbenchOpenDetail>).detail;
+      setFocusedWorkbenchAgentId(null);
+      setFocusedWorkbenchAgentView(null);
+      setArtifactsOpen(false);
+      setShowAgentPlan(false);
+      setAgentWorkbenchDismissed(false);
+      setAgentWorkbenchManuallyOpened(true);
+      setShowResearchHistory(false);
+      setShowResearch(false);
+      setShowPreview(false);
+      if (detail?.tab) {
+        setAgentWorkbenchTab(detail.tab);
+      }
+      setAgentWorkbenchTabTouched(true);
+    };
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpenWorkbench);
+    return () =>
+      window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpenWorkbench);
   }, [setArtifactsOpen]);
 
   const handleSubmit = useCallback(
@@ -2431,6 +2551,26 @@ function RealtimePageContent({
     setAgentWorkbenchTabTouched(true);
   }, [setArtifactsOpen]);
 
+  const openWorkbenchArtifact = useCallback(
+    (path: string) => {
+      // Same guard as the workspace-focus auto-follow effect: only select
+      // paths the artifacts context actually knows about.
+      if (path && artifacts.includes(path)) {
+        selectArtifact(path, true);
+      }
+      // Open the artifacts side panel without retargeting the workbench
+      // tab: "artifacts" has no embedded workbench page, so switching
+      // would strand an open workbench on the legacy fallback view.
+      setArtifactsOpen(true);
+      setShowAgentPlan(false);
+      setShowResearchHistory(false);
+      setShowResearch(false);
+      setShowPreview(false);
+      setAgentWorkbenchTabTouched(true);
+    },
+    [artifacts, selectArtifact, setArtifactsOpen],
+  );
+
   const openFinalArtifactPanel = useCallback(() => {
     setArtifactsOpen(false);
     setShowAgentPlan(false);
@@ -2439,7 +2579,7 @@ function RealtimePageContent({
     setShowResearchHistory(false);
     setShowResearch(false);
     setShowPreview(false);
-    setAgentWorkbenchTab("files");
+    setAgentWorkbenchTab("agent");
     setAgentWorkbenchTabTouched(true);
   }, [setArtifactsOpen]);
 
@@ -2836,11 +2976,16 @@ function RealtimePageContent({
                   open
                   onClose={() => setShowAgentPlan(false)}
                 />
-              ) : showAgentWorkbench ? (
+              ) : undefined
+            }
+            secondaryPanel={
+              showAgentWorkbench ? (
                 <AgentWorkbenchPanel
                   activeTab={agentWorkbenchTab}
                   events={agentDisplayEvents}
                   focusedAgentId={focusedWorkbenchAgentId}
+                  focusedAgentView={focusedWorkbenchAgentView}
+                  focusedAgentNonce={focusedWorkbenchAgentNonce}
                   hasAnswer={hasCompletedAgentOutput}
                   runSettled={agentRunSettled}
                   runFailed={agentRunFailed}
@@ -2848,22 +2993,23 @@ function RealtimePageContent({
                   threadId={threadId}
                   workDir={workDir}
                   browserPreviewBlocks={previewBlocks}
+                  resultPreviewUrl={resultPreviewUrl}
                   rosterSeats={collaborationRosterSeats}
                   onClose={closeAgentWorkbenchPanel}
                   onSelectTab={selectAgentWorkbenchTab}
+                  onOpenArtifact={openWorkbenchArtifact}
                 />
               ) : undefined
             }
+            onSecondaryClose={closeAgentWorkbenchPanel}
             showSidebar={
               artifactsOpen ||
               showAgentPlan ||
               showResearchHistory ||
-              (showResearch && (!!researchJob || !!researchError)) ||
-              showAgentWorkbench
+              (showResearch && (!!researchJob || !!researchError))
             }
-            sidebarWidth={
-              showAgentWorkbench ? "min(600px, 42vw)" : "min(420px, 40vw)"
-            }
+            sidebarWidth="min(420px, 40vw)"
+            secondaryPanelWidth="min(600px, 42vw)"
           />
         </ChatBox>
         <ChatsDrawer open={chatsDrawerOpen} onOpenChange={setChatsDrawerOpen} />

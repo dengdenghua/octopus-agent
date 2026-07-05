@@ -1167,7 +1167,7 @@ export function ChatInputBox({
             if (e.dataTransfer?.types?.includes("Files")) e.preventDefault();
           }}
           rows={2}
-          className="min-h-[52px] w-full resize-none bg-transparent px-3 py-2.5 text-[13px] leading-snug outline-none placeholder:text-muted-foreground/50 disabled:opacity-60 sm:min-h-0 sm:py-1.5"
+          className="min-h-[52px] w-full resize-none bg-transparent px-3 py-2.5 text-[13px] leading-snug outline-none placeholder:text-muted-foreground/75 disabled:opacity-60 sm:min-h-0 sm:py-1.5"
         />
         {isDeepResearchMode && researchConfigOpen && (
           <div className="absolute bottom-11 left-2 right-2 z-30 max-h-[min(70vh,560px)] overflow-y-auto rounded-lg border border-border/70 bg-popover px-3 py-3 shadow-md">
@@ -1198,7 +1198,7 @@ export function ChatInputBox({
                   onChange={(event) => setResearchUrlText(event.target.value)}
                   disabled={isBusy || status === "streaming"}
                   placeholder="https://example.com, https://..."
-                  className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/45 disabled:opacity-60"
+                  className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/75 disabled:opacity-60"
                 />
               </label>
               <div className="flex items-center gap-2">
@@ -1228,7 +1228,7 @@ export function ChatInputBox({
                 onChange={(event) => setResearchNote(event.target.value)}
                 disabled={isBusy || status === "streaming"}
                 placeholder={t.chatInputBox.materialNote}
-                className="h-8 min-w-0 rounded-lg border border-border/50 bg-background/40 px-2 text-[12px] outline-none placeholder:text-muted-foreground/45 disabled:opacity-60"
+                className="h-8 min-w-0 rounded-lg border border-border/50 bg-background/40 px-2 text-[12px] outline-none placeholder:text-muted-foreground/75 disabled:opacity-60"
               />
               <div className="flex items-center gap-1">
                 <button
@@ -1265,14 +1265,14 @@ export function ChatInputBox({
                 onChange={(event) => setResearchTextTitle(event.target.value)}
                 disabled={isBusy || status === "streaming"}
                 placeholder={t.chatInputBox.textTitle}
-                className="h-8 min-w-0 rounded-lg border border-border/50 bg-background/40 px-2 text-[12px] outline-none placeholder:text-muted-foreground/45 disabled:opacity-60"
+                className="h-8 min-w-0 rounded-lg border border-border/50 bg-background/40 px-2 text-[12px] outline-none placeholder:text-muted-foreground/75 disabled:opacity-60"
               />
               <input
                 value={researchTextBody}
                 onChange={(event) => setResearchTextBody(event.target.value)}
                 disabled={isBusy || status === "streaming"}
                 placeholder={t.chatInputBox.pasteTextMaterial}
-                className="h-8 min-w-0 rounded-lg border border-border/50 bg-background/40 px-2 text-[12px] outline-none placeholder:text-muted-foreground/45 disabled:opacity-60"
+                className="h-8 min-w-0 rounded-lg border border-border/50 bg-background/40 px-2 text-[12px] outline-none placeholder:text-muted-foreground/75 disabled:opacity-60"
               />
               <button
                 type="button"
@@ -1360,6 +1360,8 @@ export function ChatInputBox({
           type="file"
           multiple
           className="hidden"
+          tabIndex={-1}
+          aria-hidden="true"
           onChange={(event) => void handleUploadMaterials(event.target.files)}
         />
         <input
@@ -1368,6 +1370,8 @@ export function ChatInputBox({
           multiple
           accept="image/*"
           className="hidden"
+          tabIndex={-1}
+          aria-hidden="true"
           onChange={(event) => {
             addPendingImages(event.target.files);
             if (imageInputRef.current) imageInputRef.current.value = "";
@@ -1378,6 +1382,8 @@ export function ChatInputBox({
           type="file"
           multiple
           className="hidden"
+          tabIndex={-1}
+          aria-hidden="true"
           onChange={(event) => {
             addPendingUploadFiles(event.target.files);
             if (contextFileInputRef.current) {

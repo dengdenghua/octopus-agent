@@ -87,6 +87,7 @@ import { formatRelativeTimestamp } from "@/core/utils/datetime";
 import { useAppearance } from "@/hooks/use-appearance";
 import { basename, isAbsolutePath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
+import { WorkspaceSurfaceHeader } from "@/components/workspace/workspace-surface-header";
 
 // Surface modes in the left sidebar. Chat and Company are handled by a
 // dedicated two-panel switch so they feel like peer work surfaces instead
@@ -1125,14 +1126,12 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       {...props}
     >
       {/* Implementation note. */}
-      <SidebarHeader className="h-11 shrink-0 border-b border-white/40 bg-transparent px-2 py-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:px-0 dark:border-white/10">
-        <div className="grid h-full w-full grid-cols-[48px_minmax(0,1fr)_48px] items-center group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
-          <MacWindowControls className="group-data-[collapsible=icon]:hidden" />
-          <div className="min-w-0 justify-self-center">
-            <WorkspaceSurfaceSwitch
-              active={browserSurfaceActive ? "browser" : "agent"}
-            />
-          </div>
+      <SidebarHeader className="h-11 shrink-0 border-b border-white/40 bg-transparent p-0 pl-[10px] pr-2 py-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:px-0 dark:border-white/10">
+        <div className="grid h-full w-full grid-cols-[auto_minmax(0,1fr)] items-center group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+          <WorkspaceSurfaceHeader
+            active={browserSurfaceActive ? "browser" : "agent"}
+            className="group-data-[collapsible=icon]:hidden"
+          />
           <div className="flex shrink-0 items-center justify-self-end">
             <CollapseToggle compact />
           </div>
@@ -1197,6 +1196,8 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
           directory=""
           multiple
           hidden
+          tabIndex={-1}
+          aria-hidden="true"
           onChange={onFolderInputChange}
         />
       </SidebarContent>
@@ -1609,28 +1610,10 @@ export const __testing = {
 
 type WorkspaceSurfaceMode = "agent" | "browser";
 
-function MacWindowControls({ className }: { className?: string }) {
-  return (
-    <div
-      aria-hidden="true"
-      className={cn(
-        "flex h-8 w-12 shrink-0 items-center justify-center gap-1.5",
-        className,
-      )}
-    >
-      <span className="block h-3 w-3 shrink-0 rounded-full border border-red-500/45 bg-red-400 shadow-[inset_0_0.5px_0_rgba(255,255,255,0.55)]" />
-      <span className="block h-3 w-3 shrink-0 rounded-full border border-amber-500/45 bg-amber-400 shadow-[inset_0_0.5px_0_rgba(255,255,255,0.55)]" />
-      <span className="block h-3 w-3 shrink-0 rounded-full border border-emerald-500/45 bg-emerald-400 shadow-[inset_0_0.5px_0_rgba(255,255,255,0.55)]" />
-    </div>
-  );
-}
-
 export function WorkspaceSurfaceSwitch({
   active,
-  placement = "sidebar",
 }: {
   active: WorkspaceSurfaceMode;
-  placement?: "sidebar" | "topbar";
 }) {
   const { t } = useI18n();
   const { materialTheme } = useAppearance();
@@ -1654,9 +1637,8 @@ export function WorkspaceSurfaceSwitch({
   return (
     <div
       className={cn(
-        "grid min-w-0 items-center gap-0.5 rounded-[var(--appearance-radius-control)] p-px",
-        placement === "sidebar" && "w-[96px] grid-cols-[minmax(0,1fr)_28px]",
-        placement === "topbar" && "w-[100px] grid-cols-[minmax(0,1fr)_28px]",
+        "grid min-w-0 items-center gap-0.5 rounded-[var(--appearance-radius-control)]",
+        "h-8 w-[96px] grid-cols-[minmax(0,1fr)_28px] p-0",
         materialTheme === "liquid"
           ? "octo-liquid-glass octo-liquid-glass--thin"
           : "border border-transparent bg-transparent shadow-none",
@@ -1673,18 +1655,13 @@ export function WorkspaceSurfaceSwitch({
             aria-label={item.label}
             className={cn(
               "min-w-0 rounded-[calc(var(--appearance-radius-control)-2px)] transition-[background-color,color,box-shadow,opacity] duration-150",
-              placement === "topbar"
-                ? "flex h-8 items-center justify-center"
-                : "flex h-8 items-center justify-center",
+              "flex h-8 items-center justify-center",
               item.active
                 ? "text-foreground hover:bg-muted/55"
                 : "text-muted-foreground hover:bg-muted/55 hover:text-foreground",
               item.kind === "brand"
-                ? cn(
-                    "px-0.5 font-semibold tracking-[0.005em]",
-                    placement === "topbar" ? "text-[11px]" : "text-[11px]",
-                  )
-                : "px-0",
+                ? cn("px-0.5 font-semibold tracking-[0.005em] text-[11px]")
+                : "px-0 text-[11px]",
               "group-data-[collapsible=icon]:grid group-data-[collapsible=icon]:size-7 group-data-[collapsible=icon]:place-items-center group-data-[collapsible=icon]:px-0",
               item.active
                 ? "group-data-[collapsible=icon]:flex"
@@ -2123,6 +2100,7 @@ function ProjectGroup({
                     }}
                     onMouseDown={() => syncThreadAgentSelection(thread.agents)}
                     aria-current={active ? "page" : undefined}
+                    title={thread.title}
                     className={cn(
                       "flex min-h-8 w-full items-center gap-2 rounded-md py-1 pl-3 pr-12 text-[13px] text-foreground/78 transition-[background-color,color] duration-150",
                       "hover:bg-muted/40 hover:text-foreground",
@@ -2168,7 +2146,7 @@ function ProjectGroup({
                       "hover:border-border/65 hover:bg-background hover:text-foreground",
                       active
                         ? "opacity-100"
-                        : "opacity-0 group-hover/thread:opacity-100",
+                        : "opacity-0 group-hover/thread:opacity-100 focus-visible:opacity-100",
                     )}
                   >
                     <ListTodoIcon className="size-3.5" />
@@ -2183,7 +2161,7 @@ function ProjectGroup({
                       e.stopPropagation();
                       setThreadToDelete(thread);
                     }}
-                    className="absolute right-8 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity duration-150 hover:bg-destructive/10 hover:text-destructive group-hover/thread:opacity-100"
+                    className="absolute right-8 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity duration-150 hover:bg-destructive/10 hover:text-destructive group-hover/thread:opacity-100 focus-visible:opacity-100"
                   >
                     <Trash2Icon className="size-3" />
                   </button>
@@ -2630,6 +2608,7 @@ function ChatsSection({
                       }}
                       onMouseDown={() => syncThreadAgentSelection(t.agents)}
                       aria-current={active ? "page" : undefined}
+                      title={t.title}
                       className={cn(
                         "flex min-h-8 items-center gap-2 rounded-md pl-2 pr-8 py-1 text-xs text-foreground/78 transition-[background-color,color] duration-150",
                         "hover:bg-muted/40 hover:text-foreground",
@@ -2660,7 +2639,7 @@ function ChatsSection({
                         e.stopPropagation();
                         setThreadToDelete(t);
                       }}
-                      className="absolute right-0.5 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity duration-150 group-hover/thread:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+                      className="absolute right-0.5 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity duration-150 group-hover/thread:opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100"
                     >
                       <Trash2Icon className="size-3" />
                     </button>

@@ -550,7 +550,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
             </div>
           ) : null}
         </DialogHeader>
-        <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[220px_1fr]">
+        <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[220px_1fr] md:grid-rows-[1fr]">
           <nav className="bg-sidebar flex min-h-0 flex-col overflow-hidden rounded-lg border p-2">
             <div className="relative mb-2">
               <SearchIcon className="text-muted-foreground pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2" />
@@ -671,7 +671,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
               ) : null}
             </div>
           </nav>
-          <ScrollArea className="h-full min-h-0 rounded-lg border">
+          <ScrollArea className="h-full min-h-0 min-w-0 rounded-lg border">
             <div className="space-y-8 p-6">
               {/* Each tab gets its own Suspense boundary so switching
                   to an uncached tab doesn't blank out the currently

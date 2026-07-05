@@ -18,6 +18,26 @@ vi.mock("@/components/workspace/terminal-panel", () => ({
   ),
 }));
 
+vi.mock("./live-preview-panel", () => ({
+  LivePreviewPanel: ({
+    previewUrl,
+    htmlContent,
+  }: {
+    previewUrl?: string | null;
+    htmlContent?: string;
+  }) => (
+    <div
+      data-testid="mock-live-preview"
+      data-preview-url={previewUrl ?? ""}
+      data-has-srcdoc={htmlContent ? "true" : "false"}
+    />
+  ),
+}));
+
+vi.mock("./browser-preview-panel", () => ({
+  BrowserPreviewPanel: () => <div data-testid="mock-browser-preview" />,
+}));
+
 function event(partial: Partial<LiveToolEvent>): LiveToolEvent {
   return {
     id: "event-1",
@@ -85,8 +105,9 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(
       screen.getByRole("button", { name: "主电脑 · 等待中" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /文件/ })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Diff/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /终端/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /浏览器/ })).not.toBeInTheDocument();
     expect(
       screen.getByText("当前没有活跃中的主控执行过程。"),
     ).toBeInTheDocument();
@@ -179,7 +200,7 @@ describe("<AgentWorkbenchPanel />", () => {
     fireEvent.click(mainComputerButton);
 
     expect(screen.queryByText("子电脑待命")).not.toBeInTheDocument();
-    expect(screen.getByText("暂无操作记录")).toBeInTheDocument();
+    expect(screen.getByText("暂无子智能体")).toBeInTheDocument();
 
     fireEvent.click(codexSeat);
 
@@ -390,15 +411,9 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(
       screen.getAllByText("Phase 2: 执行与收集证据").length,
     ).toBeGreaterThan(0);
-    // 操作记录在电脑视图中，切换过去查看
+    // 电脑视图现在仅显示子智能体，主agent的操作记录在概要页中
     fireEvent.click(screen.getByText("电脑视图"));
-    expect(
-      screen.getAllByText("运行 npm run typecheck").length,
-    ).toBeGreaterThan(0);
-    expect(screen.getByText(/当前帧\s+2\/2/)).toBeInTheDocument();
-    expect(screen.queryByText("src/app.tsx")).not.toBeInTheDocument();
-    expect(screen.queryByText("stream connection")).not.toBeInTheDocument();
-    expect(screen.queryByText("搜索 Agent Workspace")).not.toBeInTheDocument();
+    expect(screen.getByText("暂无子智能体")).toBeInTheDocument();
     expect(screen.getByTitle("主电脑 · 执行任务中...")).toBeInTheDocument();
   });
 
@@ -486,22 +501,14 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
+    expandSummarySection(/进展/);
+
+    expect(screen.getByText(/Phase 1: Read context/)).toBeInTheDocument();
+    expect(screen.getByText(/Phase 2: Run tests/)).toBeInTheDocument();
+
     fireEvent.click(screen.getByText("电脑视图"));
 
-    expect(
-      screen.getByRole("button", { name: /Phase 1: Read context/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /Phase 2: Run tests/ }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/src\/context\.ts/)).not.toBeInTheDocument();
-    expect(screen.getByText(/当前帧\s+3\/4/)).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: /Phase 1: Read context/ }),
-    );
-
-    expect(screen.getByText(/src\/context\.ts/)).toBeInTheDocument();
+    expect(screen.getByText("暂无子智能体")).toBeInTheDocument();
   });
 
   test("shows verification-required audit as waiting instead of many failed reads", () => {
@@ -536,21 +543,19 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("电脑视图"));
+    expandSummarySection(/进展/);
 
     expect(
-      screen.getByRole("button", {
-        name: /Phase 1: 理解任务与准备上下文\s*2 帧/,
-      }),
+      screen.getByText(/Phase 1: 理解任务与准备上下文/),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", {
-        name: /Phase 2: 整理结果与交付\s*1 帧/,
-      }),
+      screen.getByText(/Phase 2: 整理结果与交付/),
     ).toBeInTheDocument();
-    expect(screen.getByText("等待验证")).toBeInTheDocument();
     expect(screen.getByTitle("主电脑 · 待确认")).toBeInTheDocument();
     expect(screen.queryByTitle("主电脑 · 遇到问题")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("电脑视图"));
+    expect(screen.getByText("暂无子智能体")).toBeInTheDocument();
   });
 
   test("shows recovered tool failures as warnings instead of failing the phase", () => {
@@ -586,18 +591,16 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("电脑视图"));
+    expandSummarySection(/进展/);
 
-    expect(screen.getByText(/已恢复/)).toBeInTheDocument();
     expect(
-      screen
-        .getByRole("button", {
-          name: /Phase 1: 理解任务与准备上下文\s*2 帧 · 已恢复/,
-        })
-        .querySelector(".text-amber-500"),
-    ).toBeTruthy();
+      screen.getByText(/Phase 1: 理解任务与准备上下文/),
+    ).toBeInTheDocument();
     expect(screen.getByTitle("主电脑 · 已完成")).toBeInTheDocument();
     expect(screen.queryByTitle("主电脑 · 遇到问题")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("电脑视图"));
+    expect(screen.getByText("暂无子智能体")).toBeInTheDocument();
   });
 
   test("shows only observed context categories in the summary", () => {
@@ -815,9 +818,9 @@ describe("<AgentWorkbenchPanel />", () => {
         screen.queryByText("Agent 集群 - 创建助手"),
       ).not.toBeInTheDocument();
     });
-    expect(
-      screen.getByRole("tab", { name: /\u6587\u4ef6/ }),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Diff/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /终端/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /浏览器/ })).not.toBeInTheDocument();
   });
 
   test("opens the focused sub-agent independent process view", async () => {
@@ -867,6 +870,323 @@ describe("<AgentWorkbenchPanel />", () => {
       expect(screen.getByText("writer.md")).toBeInTheDocument();
     });
     expect(screen.queryByText("research.md")).not.toBeInTheDocument();
+  });
+
+  test("keeps the summary view when the focus intent asks for it", async () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        focusedAgentId="agent-2"
+        focusedAgentView="summary"
+        events={[
+          event({
+            id: "agent-2-spawn",
+            name: "subagent_spawned",
+            agentId: "agent-2",
+            agentName: "Writer",
+            subAgentRole: "writer",
+            subagentCodename: "Spark-02",
+            status: "running",
+          }),
+          event({
+            id: "agent-2-read",
+            name: "read_file",
+            agentId: "agent-2",
+            subAgentRole: "writer",
+            input: { path: "writer.md" },
+            startedAt: 2000,
+          }),
+        ]}
+      />,
+    );
+
+    // The intent must not force the computer screen open.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "概要" })).toHaveClass(
+        "border-foreground/70",
+      );
+    });
+    expect(
+      screen.queryByText("Agent 集群 - 独立进程"),
+    ).not.toBeInTheDocument();
+
+    // The sub-agent was still selected: switching to the computer view lands
+    // straight on its independent process.
+    fireEvent.click(screen.getByRole("button", { name: "电脑视图" }));
+    await waitFor(() => {
+      expect(screen.getByText("Agent 集群 - 独立进程")).toBeInTheDocument();
+    });
+    expect(screen.getByText("writer.md")).toBeInTheDocument();
+  });
+
+  test("consumes the focus intent once and stays on the main computer after snapshot churn", async () => {
+    const focusEvents = [
+      event({
+        id: "agent-2-spawn",
+        name: "subagent_spawned",
+        agentId: "agent-2",
+        agentName: "Writer",
+        subAgentRole: "writer",
+        subagentCodename: "Spark-02",
+        status: "running",
+      }),
+      event({
+        id: "agent-2-read",
+        name: "read_file",
+        agentId: "agent-2",
+        subAgentRole: "writer",
+        input: { path: "writer.md" },
+        startedAt: 2000,
+      }),
+    ];
+    const { rerender } = renderWorkbench(
+      <AgentWorkbenchPanel focusedAgentId="agent-2" events={focusEvents} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Agent 集群 - 独立进程")).toBeInTheDocument();
+    });
+
+    // User navigates back to the main computer while the run streams.
+    fireEvent.click(screen.getByTitle("切回主电脑"));
+    await waitFor(() => {
+      expect(
+        screen.queryByText("Agent 集群 - 独立进程"),
+      ).not.toBeInTheDocument();
+    });
+
+    // Streaming churn rebuilds agentTiles with a fresh identity; the stale
+    // focus intent must not yank the user back to the sub-agent view.
+    rerender(
+      <AgentWorkbenchPanel
+        focusedAgentId="agent-2"
+        events={[
+          ...focusEvents,
+          event({
+            id: "agent-2-read-2",
+            name: "read_file",
+            agentId: "agent-2",
+            subAgentRole: "writer",
+            status: "running",
+            input: { path: "writer-2.md" },
+            startedAt: 2200,
+          }),
+        ]}
+      />,
+    );
+    expect(
+      screen.queryByText("Agent 集群 - 独立进程"),
+    ).not.toBeInTheDocument();
+  });
+
+  test("a bumped nonce re-applies a repeat focus intent for the same agent", async () => {
+    const focusEvents = [
+      event({
+        id: "agent-2-spawn",
+        name: "subagent_spawned",
+        agentId: "agent-2",
+        agentName: "Writer",
+        subAgentRole: "writer",
+        subagentCodename: "Spark-02",
+        status: "running",
+      }),
+      event({
+        id: "agent-2-read",
+        name: "read_file",
+        agentId: "agent-2",
+        subAgentRole: "writer",
+        input: { path: "writer.md" },
+        startedAt: 2000,
+      }),
+    ];
+    const { rerender } = renderWorkbench(
+      <AgentWorkbenchPanel
+        focusedAgentId="agent-2"
+        focusedAgentView="summary"
+        focusedAgentNonce={1}
+        events={focusEvents}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "概要" })).toHaveClass(
+        "border-foreground/70",
+      );
+    });
+    expect(
+      screen.queryByText("Agent 集群 - 独立进程"),
+    ).not.toBeInTheDocument();
+
+    // Same agent, second emission (查看电脑 right after 查看过程 on one row): the
+    // nonce bump makes it a fresh intent instead of being swallowed by the
+    // consume-once guard.
+    rerender(
+      <AgentWorkbenchPanel
+        focusedAgentId="agent-2"
+        focusedAgentView="screen"
+        focusedAgentNonce={2}
+        events={focusEvents}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Agent 集群 - 独立进程")).toBeInTheDocument();
+    });
+    expect(screen.getByText("writer.md")).toBeInTheDocument();
+  });
+
+  test("keeps a manually selected replay frame while the snapshot updates", async () => {
+    const baseEvents = [
+      event({
+        id: "server-phases:turn-1",
+        name: "todo_write",
+        status: "running",
+        input: {
+          items: [
+            { content: "Phase 1: Research", status: "in_progress" },
+            { content: "Phase 2: Write up", status: "pending" },
+          ],
+        },
+      }),
+      event({
+        id: "agent-2-spawn",
+        name: "subagent_spawned",
+        agentId: "agent-2",
+        agentName: "Writer",
+        subAgentRole: "writer",
+        subagentCodename: "Spark-02",
+        status: "running",
+      }),
+      event({
+        id: "agent-2-step-1",
+        name: "read_file",
+        agentId: "agent-2",
+        subAgentRole: "writer",
+        status: "done",
+        input: { path: "history.md" },
+        startedAt: 2000,
+      }),
+      event({
+        id: "agent-2-step-2",
+        name: "read_file",
+        agentId: "agent-2",
+        subAgentRole: "writer",
+        status: "running",
+        input: { path: "current.md" },
+        startedAt: 2100,
+      }),
+    ];
+    const { rerender } = renderWorkbench(
+      <AgentWorkbenchPanel focusedAgentId="agent-2" events={baseEvents} />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /history\.md/ }),
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /history\.md/ }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /history\.md/ })).toHaveClass(
+        "border-l-primary",
+      );
+    });
+
+    // A streaming delta rebuilds every snapshot object; the manual pick only
+    // resets when the block actually leaves the sub-agent's block list.
+    rerender(
+      <AgentWorkbenchPanel
+        focusedAgentId="agent-2"
+        events={[
+          ...baseEvents,
+          event({
+            id: "agent-2-step-3",
+            name: "read_file",
+            agentId: "agent-2",
+            subAgentRole: "writer",
+            status: "running",
+            input: { path: "next.md" },
+            startedAt: 2200,
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /history\.md/ })).toHaveClass(
+      "border-l-primary",
+    );
+  });
+
+  test("renders a header close button that invokes onClose", () => {
+    const onClose = vi.fn();
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        onClose={onClose}
+        events={[
+          event({
+            id: "read-1",
+            name: "read_file",
+            input: { path: "src/app.tsx" },
+          }),
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test("renders the deployed site in the browser tab once the run settles", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="browser"
+        hasAnswer
+        runSettled
+        resultPreviewUrl="https://demo.vercel.app"
+        events={[
+          event({
+            id: "read-1",
+            name: "read_file",
+            input: { path: "src/app.tsx" },
+            output: "const value = 1;",
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId("mock-live-preview")).toHaveAttribute(
+      "data-preview-url",
+      "https://demo.vercel.app",
+    );
+    expect(
+      screen.queryByTestId("mock-browser-preview"),
+    ).not.toBeInTheDocument();
+  });
+
+  test("prefers the live inline preview while streaming and can switch to the deployed site", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="browser"
+        resultPreviewUrl="https://demo.vercel.app"
+        browserPreviewBlocks={{ html: "<div>hi</div>", css: "", js: "" }}
+        events={[
+          event({
+            id: "read-1",
+            name: "read_file",
+            status: "running",
+            input: { path: "src/app.tsx" },
+          }),
+        ]}
+      />,
+    );
+
+    const preview = screen.getByTestId("mock-live-preview");
+    expect(preview).toHaveAttribute("data-preview-url", "");
+    expect(preview).toHaveAttribute("data-has-srcdoc", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "已部署" }));
+    expect(screen.getByTestId("mock-live-preview")).toHaveAttribute(
+      "data-preview-url",
+      "https://demo.vercel.app",
+    );
   });
 
   test("uses server workspace focus as the default workbench tab", () => {
@@ -1234,12 +1554,58 @@ describe("<AgentWorkbenchPanel />", () => {
         name: /reports\/nas_market_research_plan\.md/,
       }),
     );
-    expect(onSelectTab).toHaveBeenCalledWith("files");
+    expect(onSelectTab).toHaveBeenCalledWith("artifacts");
 
     fireEvent.click(
       within(changedList).getByRole("button", { name: /src\/app\.tsx/ }),
     );
     expect(onSelectTab).toHaveBeenCalledWith("diff");
+  });
+
+  test("opens artifact rows through onOpenArtifact with the entry path", () => {
+    const onSelectTab = vi.fn();
+    const onOpenArtifact = vi.fn();
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        hasAnswer
+        runSettled
+        onSelectTab={onSelectTab}
+        onOpenArtifact={onOpenArtifact}
+        events={[
+          event({
+            id: "create-1",
+            name: "write_file",
+            input: {
+              changes: [
+                {
+                  path: "reports/nas_market_research_plan.md",
+                  op: "create",
+                  diff: [
+                    "--- /dev/null",
+                    "+++ b/reports/nas_market_research_plan.md",
+                    "@@ -0,0 +1,2 @@",
+                    "+# Plan",
+                    "+body",
+                  ].join("\n"),
+                },
+              ],
+            },
+          }),
+        ]}
+      />,
+    );
+
+    const generatedLabel = "生成产物";
+    const generatedList = listAfterSummaryLabel(generatedLabel);
+    fireEvent.click(
+      within(generatedList).getByRole("button", {
+        name: /reports\/nas_market_research_plan\.md/,
+      }),
+    );
+    expect(onOpenArtifact).toHaveBeenCalledWith(
+      "reports/nas_market_research_plan.md",
+    );
+    expect(onSelectTab).not.toHaveBeenCalled();
   });
 
   test("treats final output writes as generated artifacts without a diff", () => {

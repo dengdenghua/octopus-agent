@@ -2,10 +2,25 @@
 
 素材来源：`/Users/dangbei/Public/octopus/octopus-agent/kimi_replay_capture/`
 
+> 勘误 / 修正说明
+>
+> 本文档早期版本对素材来源的边界说明不够醒目，可能让人误以为底部状态栏属于 Kimi 常规实时对话流式界面。已按用户提示重新核对 Kimi 官方文档：
+>
+> - 官方文档站点 `https://platform.kimi.com/docs`（canonical `https://platform.moonshot.cn/docs`）的导航仅包含「欢迎 / 使用手册 / 模型列表 / 快速上手 / 下一步」等 API、模型与开发指南，**没有**客户端聊天 UI、底部状态栏、回放/分享页控件等界面描述。
+> - 本走查中观察到的「Kimi Agent 正在回放 / 回放完成 / 做同款 / 看回放」等**底部持久控制条**，仅出现在**已分享的 Agent 回放/分享页**（如「做同款」分享链接），**不属于** Kimi 常规 K2.6 Agent / Agent Swarm 实时对话流式界面（live chat）。常规 live chat 底部应保持输入区域。
+> - 因此，Octopus 在普通 agent 流式对话中**不应引入**持久底部状态栏，仅在后续构建回放/分享页时，才需要在 `ChatPageLayout` 中新增 `bottomBar` 插槽作为回放控制条。当前 `ChatPageLayout` 组件**并未实现** `bottomBar` prop，普通 live chat 的底部区域仍是 `inputArea`。
+>
+> **2026-07-05 实现勘误**：本文部分建议中的 tabs 描述（如"预览、代码、终端、文件、变更"）与实际实现有出入，已按当前代码修正：
+>
+> - 右侧工作台顶级 tabs 为：概要（含"活动轨迹/电脑视图"子切换）、计划、产物、变更(Diff)、终端、浏览器预览；没有独立的"文件"tab（文件浏览统一由左侧文件树承担）和"代码"tab。
+> - "电脑视图"是概要页内的子视图（summary/screen 切换），不是独立顶级 tab。电脑视图的层级规则：主 agent 未选中子 agent 时展示子 agent 选择列表或空状态；选中子 agent 后展示 SubagentProcessView（子 agent 独立操作轨迹）；选中协作成员时展示协作成员占位。
+
 - 录制方式：网页回放，60 秒，每秒 2 帧，共 120 帧。
 - 关键总览：`contact_sheet_5s.jpg`
 - 重点帧：15.0s agent 弹层、37.0s 预览接管、40.0s 修复执行、43.0s 思考空状态、51.5s 规格与预览并行、最终完成态。
 - 补充截图：`notes/subagent-computer-activity-view.png`、`notes/subagent-computer-terminal-view.png`、`notes/subagent-role-card.png`、`notes/subagent-role-description.png`
+- 重要区分：本素材是对一次 **已分享的 Agent 回放/分享案例** 的网页录屏。Kimi 在**回放/分享页**（如分享链接打开的页面）才会出现“Kimi Agent 正在回放 / 回放完成 / 做同款 / 看回放”等**底部持久控制条**；Kimi 常规 K2.6 Agent / Agent Swarm 的实时对话流式界面（live chat）底部没有这种持久状态/控制条，仍然保持输入区域。
+- 官方文档范围：已核对 Kimi 开放平台官方文档索引（`https://platform.moonshot.cn/docs`，canonical URL `https://platform.kimi.com/docs`）。2026-07-04 再次抓取 `https://platform.kimi.com/docs/overview`，页面导航仅包含「欢迎 / 使用手册 / 模型列表 / 快速上手 / 下一步」等 API、模型与开发指南；**未包含**客户端聊天 UI、实时对话流式界面、底部状态栏或回放/分享页控件的相关描述。搜索页面可见文本亦未命中任何 UI/底部状态栏关键词。因此，本文关于“底部状态栏为回放/分享页专属、常规 live chat 不存在”的结论来自对网页录屏（分享页）与正常对话页交互形态的对照，并非来自官方 UI 设计文档。
 
 ## 一句话结论
 
@@ -76,22 +91,22 @@ Kimi 左侧宽度约为主阅读列，右侧为固定机器面板。右侧容器
 
 对 Octopus 的映射：
 
-- `ChatPageLayout` 已支持 `secondaryPanel` 和 `bottomBar`，适合承接这个结构。
-- `agent-workbench-panel` 已有阶段、终端、预览、文件、diff 的基础能力，可以作为右侧“Octopus Computer”。
+- `ChatPageLayout` 已支持 `secondaryPanel`；当前底部固定区域是 `inputArea`，**没有** `bottomBar` prop。若后续需要回放/分享页，可在 `ChatPageLayout` 新增 `bottomBar` 插槽。
+- `agent-workbench-panel` 已有阶段、终端、浏览器预览、变更(diff)、产物(artifacts)、计划(plan)的基础能力；文件浏览统一由左侧文件树承担，右侧面板不再单独提供文件tab，可以作为右侧“Octopus Computer”。
 - 需要减少右侧作为“抽屉”的感觉，让它在执行态成为一等主面板。
 
 建议：
 
 - 新增或强化 `AgentRunWorkbench` 级别壳层，固定标题区、phase 区、内容 tabs。
 - 左侧 message list 保持叙事，右侧不要跟随左侧滚动。
-- 桌面端优先双栏，移动端切为底部/顶部 tabs：对话、机器、预览、文件。
+- 桌面端优先双栏，移动端切为底部/顶部 tabs：对话、概要、电脑、变更、终端、预览。
 
 ### 2. Phase 进度模型
 
-Kimi 同时用了两层进度：
+Kimi 同时用了两层进度（本素材来自分享/回放页，底部执行卡阶段在该场景下出现）：
 
-- 右侧大任务阶段：`当前进度 7/7 / Phase 7: Merge, build & deploy`
-- 底部执行卡阶段：`当前进度 1/4 / Phase 2: Hall VI 银信局 ...`
+- 右侧大任务阶段：`当前进度 7/7 / Phase 7: Merge, build & deploy`（在常规 live chat 中仍然存在）
+- 底部执行卡阶段：`当前进度 1/4 / Phase 2: Hall VI 银信局 ...`（仅在回放/分享页可见，常规 live chat 不引入）
 
 这让用户知道“总任务在哪里”和“当前修复在哪里”。
 
@@ -149,19 +164,13 @@ Octopus 可以保留这个形式，但升级成红黄绿状态语义：
 
 这个设计的本质是“总控台 + 分机房”。用户既能看总任务，也能钻进某个 agent 的执行现场。这样多 agent 不会被压扁成一条混合日志。
 
-对 Octopus 的映射：
+对 Octopus 的映射（当前实现状态）：
 
-- `agent-workbench-panel` 可以作为父级 `Octopus Computer`。
-- `parallel-agents-panel` 或 `messages/parallel-subtasks-grid` 的单个 agent 选中后，应切换右侧为 `SubAgentComputerView`。
-- `live-tool-timeline` 需要支持 `scope = global | agent:{id}`，否则没法干净地区分总轨迹和子轨迹。
-
-建议：
-
-- 右侧工作台建立两层导航：`总电脑` 与 `Agent 01/02/...`。
-- 父级 phase 保持全局，子 agent 内显示该 agent 自己的 step/checklist/progress。
-- 点击左侧 agent 卡片时，不只打开 popover，也应把右侧 workbench 切到这个 agent 的电脑。
-- 子电脑顶部提供返回总电脑的 breadcrumb 或 segmented control。
-- 子电脑底部保留 agent 状态卡，告诉用户当前看的不是全局视角。
+- `agent-workbench-panel` 作为父级 `Octopus Computer`，顶级 tabs 为：概要（含"活动轨迹/电脑视图"子切换）、计划、产物、变更(Diff)、终端、浏览器预览。
+- **电脑视图的层级规则**（已实现）：父级电脑的"电脑视图"子页面中，未选中子 agent 时展示子 agent 选择列表卡片（点击可进入对应子 agent 电脑）；选中子 agent 后展示 `SubagentProcessView`（即该子 agent 的独立电脑操作轨迹）；选中协作成员时展示协作成员占位。
+- 子 agent 电脑视图顶部显示 agent 编号、状态灯、进度计数、角色信息和 dock 状态，底部提供"返回总电脑"入口。
+- 左侧 agent 摘要页(AgentSummaryPage)中点击子 agent 卡片会切换到该子 agent 的电脑视图。
+- 文件浏览统一由左侧文件树承担，右侧面板不单独提供文件 tab，避免功能重复。
 
 ### 5. Agent 集群卡片
 
@@ -216,9 +225,9 @@ Kimi 的右侧不是“日志”，而是一个可以切换证据类型的工作
 建议：
 
 - 右侧顶部固定：agent 名称、运行状态、phase、展开/关闭、刷新、复制、打开。
-- 中部使用 segmented tabs：预览、代码、终端、文件、变更。
-- 底部或空状态显示“返回最新”/“正在等待下一帧”等轻提示。
-- 子 agent 视图额外显示：`活动轨迹`、`电脑视图`、`返回总电脑`。
+- 顶级 tabs：概要（含活动轨迹/电脑视图子切换）、计划、产物、变更(diff)、终端、浏览器预览。文件浏览统一由左侧文件树承担，不在右侧重复提供文件tab。
+- 电脑视图的层级规则：主 agent（未选中子 agent）时，电脑视图显示子 agent 选择入口或空状态提示；选中子 agent 后，电脑视图显示该子 agent 的独立电脑操作轨迹（工具调用、终端命令等）；选中协作成员时显示协作成员占位。
+- 底部或空状态显示"返回最新"/"正在等待下一帧"等轻提示。
 
 ### 8. 流式文字行为
 
@@ -239,19 +248,20 @@ Kimi 左侧的流式不是纯 token 打字，而是“块级追加”：
 - 每个 block 的最小字段：`kind/icon/title/summary/status/detail/artifactRefs`。
 - 流式时优先追加完整语义块，减少半句话抖动。
 
-### 9. 持久底部控制
+### 9. 持久底部控制（回放/分享页专属）
+> 已核对 Kimi 开放平台官方文档索引（`https://platform.moonshot.cn/docs`，canonical URL `https://platform.kimi.com/docs`）：该文档集涵盖 API、模型、定价、开发指南与协议，**没有**关于客户端聊天 UI、底部状态栏或回放/分享页控件的描述。本节观察到的“底部控制条”仅出现在**回放/分享页**（例如“做同款”分享链接），不是 Kimi 常规 K2.6 Agent / Agent Swarm 实时对话流式界面（live chat）的必需结构；常规 live chat 底部应保持输入区域。
 
-Kimi 底部控制条非常稳定：左侧显示“Kimi Agent 正在回放/回放完成”，右侧给“看结果/看回放”和“做同款”。执行中还会出现一张“执行任务中...”的小卡，并带展开图标。
+Kimi 回放/分享页底部控制条非常稳定：左侧显示“Kimi Agent 正在回放/回放完成”，右侧给“看结果/看回放”和“做同款”。执行中还会出现一张“执行任务中...”的小卡，并带展开图标。
 
 对 Octopus 的映射：
 
-- `chat-streaming-footer.tsx` 已经接近，但现在更像消息流内部 footer。
-- `ChatPageLayout` 已有 `bottomBar`，可做真正持久的 run footer。
+- 常规 live chat 不需要复制这个底部控制条；应保留现有输入区域作为底部。
+- 若未来构建回放/分享页，可在 `ChatPageLayout` 新增 `bottomBar` 插槽，作为真正的回放控制条。
 
 建议：
 
-- 把执行状态从 message list 内移到持久底栏：`任务进行中 / 当前阶段 / 查看机器 / 停止 / 复制结果`。
-- 完成后 CTA 切换：`查看结果`、`复盘过程`、`复用此流程`。
+- 普通 agent 流式：把执行状态收敛到 workbench 标题区、phase pill、消息流中的 typed block 里，不额外占用底部。
+- 回放/分享页专用：再在 `ChatPageLayout` 新增 `bottomBar` 插槽，语义为“回放中 / 回放完成 / 查看结果 / 复盘过程 / 复用此流程”。
 - 底栏不要太高，默认 48-64px，展开后才显示 timeline。
 
 ### 10. 完成态与验收
@@ -286,7 +296,7 @@ Kimi 最终完成态由五件事组成：
 8. 子 agent 有身份卡和角色说明，用户知道它为什么存在。
 9. 预览一旦出现就成为主舞台。
 10. 完成态用表格和 artifact，而不是长段总结。
-11. 底部 CTA 持久存在，执行中和完成后语义切换。
+11. 回放/分享页底部 CTA 持久存在，执行中和完成后语义切换；常规 live chat 不适用。
 12. 回放不是录像，而是可点击的事件时间线。
 13. 修复过程把“问题判断、修复动作、验证结果”放在同一条叙事里。
 
@@ -302,17 +312,18 @@ Kimi 最终完成态由五件事组成：
 
 ### P0：把执行态骨架立住
 
-- `ChatPageLayout.bottomBar` 承载持久执行 footer。
-- `secondaryPanel` 固定为 Agent Workbench，而不是临时抽屉。
-- phase snapshot 贯通 header、workbench、footer。
-- workbench 需要支持父级总电脑和子 agent 电脑两个 scope。
+- ~~`secondaryPanel` 固定为 Agent Workbench，而不是临时抽屉。~~ ✅ 已实现。
+- ~~phase snapshot 贯通 header、workbench、消息流中的状态块。~~ ✅ 已实现。
+- ~~workbench 需要支持父级总电脑和子 agent 电脑两个 scope。~~ ✅ 已实现（通过 `selectedAgent`/`selectedRosterSeat` 切换；电脑视图含子 agent 选择列表、子 agent 操作轨迹、协作成员占位）。
+- 移除右侧面板"文件"tab（与左侧文件树功能重复），文件操作统一通过左侧文件树。 ✅ 已实现。
+- 只在回放/分享页考虑为 `ChatPageLayout` 新增 `bottomBar` 插槽作为持久回放控制条；常规 live chat 不引入底部执行 footer。
 
 ### P1：让 agent 集群可理解
 
 - 在消息流中加入紧凑 `AgentClusterCard`。
 - 每个子 agent 支持 hover/click detail。
 - 支持按 agent 过滤右侧 timeline。
-- 点击子 agent 后，右侧切换到该 agent 的独立电脑。
+- 点击子 agent 后，右侧切换到该 agent 的独立电脑（电脑视图中的 SubagentProcessView）。 ✅ 已实现。
 
 ### P1：子 Agent 身份与角色说明
 
@@ -338,9 +349,10 @@ Kimi 最终完成态由五件事组成：
 
 ## 可以转成组件任务的清单
 
-- `PersistentRunFooter`
+- `PersistentRunFooter`（回放/分享页专用）
   - 状态：idle/running/replaying/completed/error。
   - CTA：查看机器、查看结果、复盘过程、复用流程、停止。
+  - 注意：常规 live chat 不使用持久底部状态栏。
 
 - `RunStatusLamp`
   - 绿色：正常运行/完成。
@@ -351,14 +363,15 @@ Kimi 最终完成态由五件事组成：
 
 - `AgentComputerPanel`
   - Header：名称、状态、phase、进度、操作按钮。
-  - Tabs：Preview / Code / Terminal / Files / Changes。
+  - 顶级 Tabs：概要(含"活动轨迹/电脑视图"子切换)、计划、产物、变更(Diff)、终端、浏览器预览。文件浏览不在右侧重复提供。
   - Body：绑定当前 selected event。
-  - Scope：global computer / sub-agent computer。
+  - Scope：global computer / sub-agent computer / roster seat computer。
+  - 电脑视图子视图规则：主 agent 无选中子 agent 时展示子 agent 选择列表或空状态；选中子 agent 后展示其独立操作轨迹（SubagentProcessView）。
 
-- `SubAgentComputerView`
-  - 顶部：`Agent 01 | Octopus Computer` 切换。
-  - 主区：活动轨迹、终端、文件、产物。
-  - 底部：agent 状态卡，显示头像、编号、运行/完成/失败。
+- `SubAgentComputerView`（即 `SubagentProcessView`，已实现）
+  - 顶部：agent 编号、状态灯、进度计数(如 3/7)、角色信息、dock 状态。
+  - 主区：该子 agent 的工具调用时间线（编辑文件、运行终端、浏览器操作等块级记录），支持展开查看命令详情和输出。
+  - 底部：提供"返回总电脑"入口。
 
 - `AgentClusterInlineCard`
   - 紧凑展示并发 agent。
@@ -388,11 +401,12 @@ Kimi 最终完成态由五件事组成：
 
 ## 最小落地路径
 
-1. 先用现有 `ChatPageLayout.secondaryPanel` 固定右侧 `agent-workbench-panel`。
-2. 将 `chat-streaming-footer` 提升为 `bottomBar` 的持久执行条。
-3. 从 `liveToolEvents` 派生统一 `phaseSnapshot`。
-4. 给 workbench 增加 `scope`：全局电脑或指定子 agent 电脑。
-5. 在消息流里把 tool/agent 事件渲染成 typed blocks。
-6. 完成时追加 `CompletionReceipt`，并让右侧自动切到 Preview 或 Changes。
+1. ~~先用现有 `ChatPageLayout.secondaryPanel` 固定右侧 `agent-workbench-panel`。~~ ✅ 已实现。
+2. ~~从 `liveToolEvents` 派生统一 `phaseSnapshot`。~~ ✅ 已实现（通过 `useAgentWorkbenchSnapshot`）。
+3. ~~给 workbench 增加 `scope`：全局电脑或指定子 agent 电脑。~~ ✅ 已实现（通过 `selectedAgent`/`selectedRosterSeat` 切换 scope；电脑视图支持子 agent 选择列表、子 agent 操作轨迹、协作成员占位三种状态）。
+4. 在消息流里把 tool/agent 事件渲染成 typed blocks。
+5. 完成时追加 `CompletionReceipt`，并让右侧自动切到 Preview 或 Changes。
+6. ~~移除右侧面板中与左侧文件树重复的“文件”tab，文件操作统一通过左侧文件树进行。~~ ✅ 已实现。
+7. （仅当构建回放/分享页时）将 `chat-streaming-footer` 提升为 `ChatPageLayout` 的 `bottomBar` 插槽，作为持久回放控制条。
 
-这五步做完，Octopus 的 agent 流式体验会从“日志在跑”变成“一个可审计、可接管、可复盘的工作现场”。
+完成以上步骤后，Octopus 的 agent 流式体验会从“日志在跑”变成“一个可审计、可接管、可复盘的工作现场”。
