@@ -78,6 +78,10 @@ const PONG_TIMEOUT_MS = 70_000;
 // completed too, a frame boundary between ``started`` and the deltas
 // reorders them: completed lands first, the reducer's status guard
 // then drops the deltas as "stale" and the user sees an empty bubble.
+// ``item/fileChange/hunkDelta`` rides the buffer for the same ordering
+// reason (the reducer drops hunk deltas for items it hasn't seen), but
+// stays out of DELTA_METHODS: hunks are structured payloads, not
+// appendable text, so they must never coalesce.
 const BATCHED_METHODS = new Set([
   "item/started",
   "item/completed",
@@ -85,6 +89,7 @@ const BATCHED_METHODS = new Set([
   "item/reasoning/textDelta",
   "item/plan/delta",
   "item/commandExecution/outputDelta",
+  "item/fileChange/hunkDelta",
 ]);
 
 export class RealtimeClient {
@@ -114,7 +119,23 @@ export class RealtimeClient {
     this.opts = opts;
     this.initialBackoff = opts.initialBackoffMs ?? DEFAULT_INITIAL_BACKOFF;
     this.maxBackoff = opts.maxBackoffMs ?? DEFAULT_MAX_BACKOFF;
+    // Flush the moment the tab goes hidden: a requestAnimationFrame
+    // scheduled while visible never fires in a background tab, so
+    // anything still buffered would sit there (and grow) until the tab
+    // is foregrounded — meanwhile non-batched methods (turn/interrupted,
+    // turn/completed, error) keep dispatching immediately and would
+    // overtake the buffered item events. ``typeof document`` guard keeps
+    // this SSR-safe.
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", this.onVisibilityChange);
+    }
   }
+
+  private onVisibilityChange = (): void => {
+    if (document.hidden) {
+      this.flushDeltaBuffer();
+    }
+  };
 
   // ── Lifecycle ──────────────────────────────────────────────
 
@@ -178,6 +199,9 @@ export class RealtimeClient {
   close(): void {
     this.closed = true;
     this.stopHeartbeat();
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.onVisibilityChange);
+    }
     this.flushDeltaBuffer();
     if (this.reconnectTimer != null) {
       clearTimeout(this.reconnectTimer);
@@ -292,13 +316,39 @@ export class RealtimeClient {
       }
       if (BATCHED_METHODS.has(env.method)) {
         this.deltaBuffer.push(env);
-        if (!this.deltaFlushPending) {
-          this.deltaFlushPending = true;
-          requestAnimationFrame(() => this.flushDeltaBuffer());
-        }
+        this.scheduleFlush();
       } else {
+        // Ordering invariant: a non-batched notification must never
+        // overtake events still sitting in the delta buffer. Within the
+        // buffering window (a frame in the foreground, a macrotask in a
+        // hidden tab) turn/completed, turn/interrupted, workbench
+        // snapshots or errors would otherwise reach the reducer before
+        // the buffered item/started they logically follow — e.g. an
+        // interrupt lands first, the reducer marks the turn done, then
+        // the late-flushed item spins forever. Flushing synchronously
+        // here keeps every cross-method sequence in WebSocket arrival
+        // order. Non-batched methods are low-frequency (a handful per
+        // turn), so this doesn't erode the coalescing win; the already
+        // scheduled rAF/setTimeout callback sees an empty buffer and
+        // returns without re-dispatching.
+        this.flushDeltaBuffer();
         this.opts.onNotification(env);
       }
+    }
+  }
+
+  // Foreground: coalesce on the next animation frame (caps React
+  // renders at the display rate during high-frequency streaming).
+  // Hidden tab: rAF callbacks are suspended, so fall back to a
+  // macrotask — otherwise the buffer grows unbounded and immediately-
+  // dispatched methods reorder past the buffered item events.
+  private scheduleFlush(): void {
+    if (this.deltaFlushPending) return;
+    this.deltaFlushPending = true;
+    if (typeof document !== "undefined" && document.hidden) {
+      setTimeout(() => this.flushDeltaBuffer(), 0);
+    } else {
+      requestAnimationFrame(() => this.flushDeltaBuffer());
     }
   }
 

@@ -5,7 +5,9 @@
  *
  * Workspace pages consume the ``AgentThreadState`` view via ``useThreadStream``.
  *
- * Pure function with no side effects; safe to memoize.
+ * Semantically pure (output depends only on input); internally memoized
+ * per Turn/Item identity so unchanged turns map to reference-equal
+ * ``Message`` objects across calls — treat the output as immutable.
  */
 
 import type {
@@ -25,6 +27,7 @@ import type {
   ErrorItem,
   FileChangeItem,
   GroundingSource,
+  Item,
   McpToolCallItem,
   PlanItem,
   ReasoningItem,
@@ -80,7 +83,12 @@ const REPEATED_NULL_PLACEHOLDER_RE = /^\s*(?:null\s*)+$/i;
  *   - ``error`` items become a final synthetic AIMessage with
  *     ``additional_kwargs.error``.
  *
- * The output is fresh on every call (callers can deep-compare safely).
+ * The top-level state object and ``messages`` array are fresh on every
+ * call, but ``Message`` objects are reused by reference while the
+ * underlying ``Turn``/``Item`` objects are unchanged (the realtime
+ * reducer rebuilds only what a delta touched). Downstream React.memo
+ * layers rely on that identity to skip unchanged content during
+ * streaming, so treat the returned messages as immutable.
  */
 export function conversationToAgentThreadState(
   conv: Conversation,
@@ -97,7 +105,7 @@ export function conversationToAgentThreadState(
     const turnTodos = turnTodosFrom(turn);
     if (turnTodos !== null) todos = turnTodos;
 
-    const turnMessages = turnToMessages(turn);
+    const turnMessages = turnToMessagesStable(turn);
     messages.push(...turnMessages);
   }
 
@@ -155,6 +163,82 @@ function turnTodosFrom(turn: Turn): Todo[] | null {
     content: entry.title,
     status: entry.status,
   }));
+}
+
+// Identity caches. The realtime reducer keeps object identity stable for
+// turns/items a delta didn't touch (replaceAt/replaceTurnItem rebuild only
+// the changed one), so an unchanged ``Turn`` reference can reuse its whole
+// mapping, and inside a changed turn an unchanged ``Item`` can reuse the
+// ``Message`` it anchored last time. WeakMaps: entries die together with
+// the reducer state that owns the keys.
+const turnMessagesCache = new WeakMap<Turn, Message[]>();
+const itemMessageCache = new WeakMap<Item, Message>();
+
+function turnToMessagesStable(turn: Turn): Message[] {
+  const cached = turnMessagesCache.get(turn);
+  if (cached) return cached;
+
+  const fresh = turnToMessages(turn);
+
+  // Reconcile per-message identity: a message anchored to an item id
+  // (user/steering/error messages, and AI messages carrying their
+  // agentMessage item id) is swapped for last call's object when its
+  // content is unchanged, keeping the reference strictly equal for
+  // React.memo consumers. Synthetic flush messages have no id → always
+  // fresh (they only exist on interrupted/streaming tails).
+  const itemsById = new Map<string, Item>();
+  for (const item of turn.items) itemsById.set(item.id, item);
+  for (let index = 0; index < fresh.length; index += 1) {
+    const message = fresh[index];
+    if (!message?.id) continue;
+    const anchor = itemsById.get(message.id);
+    if (!anchor) continue;
+    const previous = itemMessageCache.get(anchor);
+    if (previous && stableDeepEqual(previous, message)) {
+      fresh[index] = previous;
+    } else {
+      itemMessageCache.set(anchor, message);
+    }
+  }
+
+  turnMessagesCache.set(turn, fresh);
+  return fresh;
+}
+
+// Structural equality with a reference fast path. Messages rebuilt from
+// unchanged items carry reference-equal leaves (strings/arrays lifted off
+// the item), so the walk touches object shells without re-comparing large
+// payloads byte by byte.
+function stableDeepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (
+    typeof a !== "object" ||
+    typeof b !== "object" ||
+    a === null ||
+    b === null
+  ) {
+    return false;
+  }
+  const aIsArray = Array.isArray(a);
+  if (aIsArray !== Array.isArray(b)) return false;
+  if (aIsArray) {
+    const left = a as unknown[];
+    const right = b as unknown[];
+    if (left.length !== right.length) return false;
+    for (let index = 0; index < left.length; index += 1) {
+      if (!stableDeepEqual(left[index], right[index])) return false;
+    }
+    return true;
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = Object.keys(left);
+  if (keys.length !== Object.keys(right).length) return false;
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(right, key)) return false;
+    if (!stableDeepEqual(left[key], right[key])) return false;
+  }
+  return true;
 }
 
 function turnToMessages(turn: Turn): Message[] {
@@ -451,9 +535,15 @@ function attachGroundingToLastAi(
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (!message || message.type !== "ai") continue;
-    message.additional_kwargs = {
-      ...(message.additional_kwargs ?? {}),
-      grounding,
+    // Copy-on-write: the message object may be an identity-cached one
+    // shared with a previous mapping; mutating it in place would both
+    // corrupt that older snapshot and hide the change from React.memo.
+    messages[index] = {
+      ...message,
+      additional_kwargs: {
+        ...(message.additional_kwargs ?? {}),
+        grounding,
+      },
     };
     return;
   }
@@ -700,7 +790,9 @@ export function conversationStreamingMessage(
   if (!conversationIsLoading(conv)) return null;
   const last = conv.turns[conv.turns.length - 1];
   if (!last) return null;
-  const messages = turnToMessages(last);
+  // Shares the identity cache with conversationToAgentThreadState so the
+  // streaming message keeps the same reference as its list counterpart.
+  const messages = turnToMessagesStable(last);
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
     if (message?.type === "ai") return message;

@@ -30,6 +30,8 @@ import type {
   TodoListItem,
   Turn,
   VerificationItem,
+  WorkbenchSnapshotV2,
+  WorkspaceFocus,
 } from "@/core/realtime/items";
 
 import type { BaseStream } from "@/core/api/use-stream-types";
@@ -51,6 +53,7 @@ import {
   commandExecutionInput,
   commandExecutionToolName,
 } from "./realtime-tool-compat";
+import { liveEventIsReportLike } from "./report-deliverable";
 import {
   applyCodexComposerModeContext,
   parseCodexComposerModeMarker,
@@ -583,16 +586,150 @@ function itemToLiveEvent(
   return null;
 }
 
+// LiveToolEvent identity caches. The realtime reducer rebuilds only the
+// turn/item a delta touched, so an unchanged ``Item`` reference implies
+// unchanged event content except for the inputs that come from outside
+// the item: the owning turn's ``completedAt`` (feeds finishFields) and
+// the positional ``iteration``. Cache per item and validate those two so
+// unchanged items yield reference-equal events across calls (downstream
+// memo/snapshot layers key on identity). Conversation-scope and
+// last-turn-scope caches are separate because the same item receives a
+// different ``iteration`` in each. WeakMaps: entries die with the
+// reducer state that owns the keys.
+interface CachedItemEvent {
+  event: LiveToolEvent;
+  turnCompletedAt: Turn["completedAt"] | undefined;
+  iteration: number;
+}
+interface CachedPhaseEvent {
+  event: LiveToolEvent;
+  turnId: string;
+  turnStatus: Turn["status"];
+  startedAt: string;
+  completedAt: Turn["completedAt"] | undefined;
+  workspaceFocus: WorkspaceFocus | null | undefined;
+  workbenchSnapshot: WorkbenchSnapshotV2 | null | undefined;
+  iteration: number;
+}
+interface CachedApprovalEvent {
+  event: LiveToolEvent;
+  iteration: number;
+}
+interface LiveEventScopeCache {
+  items: WeakMap<Item, CachedItemEvent>;
+  phases: WeakMap<AgentPhaseSnapshot[], CachedPhaseEvent>;
+  approvals: WeakMap<PendingApproval, CachedApprovalEvent>;
+}
+const newLiveEventScopeCache = (): LiveEventScopeCache => ({
+  items: new WeakMap(),
+  phases: new WeakMap(),
+  approvals: new WeakMap(),
+});
+const conversationEventCache = newLiveEventScopeCache();
+const lastTurnEventCache = newLiveEventScopeCache();
+
+// Stamp the report-deliverable flag on every freshly constructed event
+// (cache-miss paths only). The page-level "requires report deliverable"
+// check reads the flag instead of stringifying input/output on every
+// render frame; the WeakMap caches above bound the stringify cost to
+// once per changed item.
+function withReportLikeFlag(event: LiveToolEvent): LiveToolEvent {
+  event.isReportLike = liveEventIsReportLike(event);
+  return event;
+}
+
+function cachedItemToLiveEvent(
+  cache: LiveEventScopeCache,
+  item: Item,
+  turn: Turn,
+  iteration: number,
+): LiveToolEvent | null {
+  const hit = cache.items.get(item);
+  if (
+    hit &&
+    hit.turnCompletedAt === turn.completedAt &&
+    hit.iteration === iteration
+  ) {
+    return hit.event;
+  }
+  const event = itemToLiveEvent(item, turn, iteration);
+  if (event) {
+    cache.items.set(item, {
+      event: withReportLikeFlag(event),
+      turnCompletedAt: turn.completedAt,
+      iteration,
+    });
+  }
+  return event;
+}
+
+// Keyed by the phases array (stable across item deltas; replaced by the
+// reducer on turn/plan/updated) because the turn object itself gets a
+// new identity on every delta while streaming.
+function cachedPhaseSnapshotsToLiveEvent(
+  cache: LiveEventScopeCache,
+  turn: Turn,
+  iteration: number,
+): LiveToolEvent | null {
+  const phases = turn.phases;
+  if (!phases || phases.length === 0) return null;
+  const hit = cache.phases.get(phases);
+  if (
+    hit &&
+    hit.turnId === turn.id &&
+    hit.turnStatus === turn.status &&
+    hit.startedAt === turn.startedAt &&
+    hit.completedAt === turn.completedAt &&
+    hit.workspaceFocus === turn.workspaceFocus &&
+    hit.workbenchSnapshot === turn.workbenchSnapshot &&
+    hit.iteration === iteration
+  ) {
+    return hit.event;
+  }
+  const event = phaseSnapshotsToLiveEvent(turn, iteration);
+  if (event) {
+    cache.phases.set(phases, {
+      event: withReportLikeFlag(event),
+      turnId: turn.id,
+      turnStatus: turn.status,
+      startedAt: turn.startedAt,
+      completedAt: turn.completedAt,
+      workspaceFocus: turn.workspaceFocus,
+      workbenchSnapshot: turn.workbenchSnapshot,
+      iteration,
+    });
+  }
+  return event;
+}
+
+function cachedApprovalToLiveEvent(
+  cache: LiveEventScopeCache,
+  approval: PendingApproval,
+  iteration: number,
+): LiveToolEvent {
+  const hit = cache.approvals.get(approval);
+  if (hit && hit.iteration === iteration) return hit.event;
+  const event = withReportLikeFlag(approvalToLiveEvent(approval, iteration));
+  cache.approvals.set(approval, { event, iteration });
+  return event;
+}
+
 export function liveToolEventsFromConversation(
   conv: Conversation,
 ): LiveToolEvent[] {
   const itemEvents = conv.turns.flatMap((turn, turnIndex) => {
     const events = turn.items
       .map((item, itemIndex) =>
-        itemToLiveEvent(item, turn, turnIndex + itemIndex + 1),
+        cachedItemToLiveEvent(
+          conversationEventCache,
+          item,
+          turn,
+          turnIndex + itemIndex + 1,
+        ),
       )
       .filter((event): event is LiveToolEvent => event !== null);
-    const phaseEvent = phaseSnapshotsToLiveEvent(
+    const phaseEvent = cachedPhaseSnapshotsToLiveEvent(
+      conversationEventCache,
       turn,
       turnIndex + turn.items.length + 1,
     );
@@ -601,7 +738,11 @@ export function liveToolEventsFromConversation(
   return [
     ...itemEvents,
     ...conv.pendingApprovals.map((approval, index) =>
-      approvalToLiveEvent(approval, conv.turns.length + index + 1),
+      cachedApprovalToLiveEvent(
+        conversationEventCache,
+        approval,
+        conv.turns.length + index + 1,
+      ),
     ),
   ];
 }
@@ -612,17 +753,27 @@ export function liveToolEventsFromLastTurn(
   const last = conv.turns[conv.turns.length - 1];
   const itemEvents = last
     ? last.items
-        .map((item, index) => itemToLiveEvent(item, last, index + 1))
+        .map((item, index) =>
+          cachedItemToLiveEvent(lastTurnEventCache, item, last, index + 1),
+        )
         .filter((event): event is LiveToolEvent => event !== null)
     : [];
   const phaseEvent = last
-    ? phaseSnapshotsToLiveEvent(last, itemEvents.length + 1)
+    ? cachedPhaseSnapshotsToLiveEvent(
+        lastTurnEventCache,
+        last,
+        itemEvents.length + 1,
+      )
     : null;
   const events = phaseEvent ? [...itemEvents, phaseEvent] : itemEvents;
   return [
     ...events,
     ...conv.pendingApprovals.map((approval, index) =>
-      approvalToLiveEvent(approval, events.length + index + 1),
+      cachedApprovalToLiveEvent(
+        lastTurnEventCache,
+        approval,
+        events.length + index + 1,
+      ),
     ),
   ];
 }
@@ -730,7 +881,15 @@ export function useThreadStreamRealtime(
 
   const isLoading = useMemo(() => conversationIsLoading(state), [state]);
   const realtimeError = useMemo(() => conversationLastError(state), [state]);
-  const error = sendError ?? realtimeError;
+  // Send failures are tracked as strings; wrap them so the exposed
+  // BaseStream.error honours its `Error | undefined` type. Consumers
+  // (message-list) key network-error detection off `.message`, which
+  // is unchanged by the wrapping. Memoised so `exposedThread` keeps a
+  // stable identity across unrelated re-renders.
+  const error = useMemo(
+    () => (sendError ? new Error(sendError) : realtimeError),
+    [sendError, realtimeError],
+  );
   const streamingMessage = useMemo(
     () => conversationStreamingMessage(state),
     [state],
@@ -751,6 +910,11 @@ export function useThreadStreamRealtime(
   useEffect(() => {
     // Edge: idle -> busy -> call onStart with the active thread id.
     if (!wasLoadingRef.current && isLoading) {
+      // A live turn supersedes any stale send-failure banner (the flag
+      // is otherwise only cleared by the next manual send): the turn
+      // either belongs to a delivered-after-all send or to a newer
+      // attempt, so keeping the old error up would be misleading.
+      setSendError(null);
       try {
         callbacksRef.current.onStart?.(activeThreadId || "");
       } catch (e) {
@@ -918,6 +1082,11 @@ export function useThreadStreamRealtime(
           setIsUploading(false);
         }
       })().catch((err) => {
+        // Reaching here means the turn was never delivered: startTurn
+        // resolves (not rejects) when a socket drop happens after the
+        // turn/started notification was observed, so mid-turn
+        // disconnects of an already-persisted message don't land in
+        // this catch.
         setSendError(
           err instanceof Error ? err.message : "Failed to send message",
         );

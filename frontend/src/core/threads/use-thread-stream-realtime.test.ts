@@ -420,6 +420,27 @@ describe("liveToolEventsFromConversation", () => {
     });
   });
 
+  it("precomputes isReportLike at mapping time", () => {
+    const conv = makeConversation([
+      makeTurn([
+        commandItem({ id: "plain" }),
+        commandItem({
+          id: "report-output",
+          aggregatedOutput: "wrote reports/out.docx",
+        }),
+        mcpItem({ id: "report-tool", tool: "report-writing" }),
+      ]),
+    ]);
+
+    const events = liveToolEventsFromConversation(conv);
+
+    expect(events.map((event) => [event.id, event.isReportLike])).toEqual([
+      ["plain", false],
+      ["report-output", true],
+      ["report-tool", true],
+    ]);
+  });
+
   it("preserves running and failed statuses", () => {
     const conv = makeConversation([
       makeTurn([
@@ -1079,6 +1100,30 @@ describe("useThreadStreamRealtime permissions", () => {
       }),
     );
     expect(payload).not.toHaveProperty("planningMode");
+  });
+
+  it("wraps send failures in an Error so BaseStream.error keeps its type", async () => {
+    const startTurn = vi
+      .fn()
+      .mockRejectedValue(new Error("websocket closed (1006)"));
+    mockRealtime(startTurn);
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({
+        threadId: "th-test",
+        context: { permission_mode: "default" },
+      }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", { text: "hello", files: [] });
+    });
+
+    await waitFor(() =>
+      expect(result.current[0].error).toBeInstanceOf(Error),
+    );
+    // message-list keys its network styling off `.message`; wrapping
+    // must keep the original text intact.
+    expect(result.current[0].error?.message).toBe("websocket closed (1006)");
   });
 
   it("sends plan permission mode as planningMode without auto approval", async () => {

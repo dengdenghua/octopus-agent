@@ -280,6 +280,159 @@ describe("useRealtimeThread reconnect reconciliation", () => {
   });
 });
 
+describe("useRealtimeThread turn/start delivery anchoring", () => {
+  // The server holds the turn/start response until the turn completes,
+  // so a mid-turn socket drop rejects the pending request. Once the
+  // turn/started notification was observed the send is known-delivered
+  // and startTurn must not surface the transport rejection.
+
+  interface DeliveryHandles {
+    emitNotification: (n: {
+      method: string;
+      params: Record<string, unknown>;
+    }) => void;
+    rejectTurnStart: (err: Error) => void;
+  }
+
+  function setupDelivery() {
+    const handles: Partial<DeliveryHandles> = {};
+    const factory = (deps: {
+      onIncomingRequest: IncomingRequestFn;
+      onNotification: (n: {
+        method: string;
+        params: Record<string, unknown>;
+      }) => void;
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      handles.emitNotification = (n) => deps.onNotification(n);
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string) => {
+          if (method === "turn/start") {
+            return new Promise((_resolve, reject) => {
+              handles.rejectTurnStart = reject;
+            });
+          }
+          return Promise.resolve({ thread: { id: "th" }, turns: [] });
+        },
+      };
+    };
+    const rendered = renderHook(() =>
+      useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
+    );
+    return { rendered, handles: handles as DeliveryHandles };
+  }
+
+  function watchSettlement(promise: Promise<void>) {
+    const outcome: { value: "resolved" | "rejected" | null } = { value: null };
+    promise.then(
+      () => {
+        outcome.value = "resolved";
+      },
+      () => {
+        outcome.value = "rejected";
+      },
+    );
+    return outcome;
+  }
+
+  it("resolves startTurn when turn/started arrived before the socket-drop rejection", async () => {
+    const { rendered, handles } = setupDelivery();
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+
+    let outcome!: ReturnType<typeof watchSettlement>;
+    act(() => {
+      outcome = watchSettlement(
+        rendered.result.current.startTurn({ input: "hello" }),
+      );
+    });
+
+    act(() => {
+      handles.emitNotification({
+        method: "turn/started",
+        params: {
+          threadId: "th",
+          turn: {
+            id: "t-live",
+            threadId: "th",
+            status: "inProgress",
+            items: [],
+            startedAt: "2026-01-01T00:00:00.000Z",
+            completedAt: null,
+            error: null,
+          },
+        },
+      });
+    });
+    act(() => {
+      handles.rejectTurnStart(new Error("websocket closed (1006 no reason)"));
+    });
+
+    await waitFor(() => expect(outcome.value).toBe("resolved"));
+  });
+
+  it("rejects startTurn when the socket drops before turn/started", async () => {
+    const { rendered, handles } = setupDelivery();
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+
+    let outcome!: ReturnType<typeof watchSettlement>;
+    act(() => {
+      outcome = watchSettlement(
+        rendered.result.current.startTurn({ input: "hello" }),
+      );
+    });
+    act(() => {
+      handles.rejectTurnStart(new Error("websocket closed (1006 no reason)"));
+    });
+
+    await waitFor(() => expect(outcome.value).toBe("rejected"));
+  });
+
+  it("ignores turn/started from other threads when anchoring delivery", async () => {
+    const { rendered, handles } = setupDelivery();
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+
+    let outcome!: ReturnType<typeof watchSettlement>;
+    act(() => {
+      outcome = watchSettlement(
+        rendered.result.current.startTurn({ input: "hello" }),
+      );
+    });
+
+    act(() => {
+      handles.emitNotification({
+        method: "turn/started",
+        params: {
+          threadId: "other-thread",
+          turn: {
+            id: "t-foreign",
+            threadId: "other-thread",
+            status: "inProgress",
+            items: [],
+            startedAt: "2026-01-01T00:00:00.000Z",
+            completedAt: null,
+            error: null,
+          },
+        },
+      });
+    });
+    act(() => {
+      handles.rejectTurnStart(new Error("websocket closed (1006 no reason)"));
+    });
+
+    await waitFor(() => expect(outcome.value).toBe("rejected"));
+  });
+});
+
 describe("useRealtimeThread backwards pagination", () => {
   function turn(id: string) {
     return {

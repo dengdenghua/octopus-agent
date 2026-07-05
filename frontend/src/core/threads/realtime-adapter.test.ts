@@ -23,6 +23,10 @@ import {
   conversationToAgentThreadState,
   splitReactTrace,
 } from "./realtime-adapter";
+import {
+  liveToolEventsFromConversation,
+  liveToolEventsFromLastTurn,
+} from "./use-thread-stream-realtime";
 
 // ───────────────────────────────────────────────────────────────
 // Builders
@@ -829,6 +833,152 @@ describe("conversationLastError", () => {
     );
 
     expect(err).toBeUndefined();
+  });
+});
+
+describe("conversationToAgentThreadState · identity stability", () => {
+  // The realtime reducer keeps Turn/Item identity stable for anything a
+  // delta didn't touch; the adapter must carry that stability through to
+  // Message objects so MemoizedGroup/MessageListItem memo layers hold
+  // during streaming.
+
+  it("reuses Message references for unchanged turns across calls", () => {
+    const turnA = makeTurn([userMsg("q1", "u1"), agentMsg("a1", "ai1")]);
+    const turnB: Turn = {
+      ...makeTurn([userMsg("q2", "u2"), agentMsg("a2", "ai2")]),
+      id: "t2",
+    };
+
+    const first = conversationToAgentThreadState(makeConv([turnA, turnB]));
+    const second = conversationToAgentThreadState(makeConv([turnA, turnB]));
+
+    // Top-level array is fresh, entries are identical references.
+    expect(second.messages).not.toBe(first.messages);
+    expect(second.messages).toHaveLength(4);
+    second.messages.forEach((message, index) => {
+      expect(message).toBe(first.messages[index]);
+    });
+  });
+
+  it("rebuilds only the changed turn and keeps untouched-item messages stable inside it", () => {
+    const sharedUser = userMsg("q", "u1");
+    const turnV1: Turn = {
+      ...makeTurn([sharedUser, agentMsg("partial", "ai1")], "inProgress"),
+    };
+    const first = conversationToAgentThreadState(makeConv([turnV1]));
+
+    // Simulate a streaming delta: the reducer rebuilds the turn and the
+    // streaming item but keeps the untouched user item reference.
+    const turnV2: Turn = {
+      ...turnV1,
+      items: [sharedUser, agentMsg("partial answer grown", "ai1")],
+    };
+    const second = conversationToAgentThreadState(makeConv([turnV2]));
+
+    expect(second.messages[0]).toBe(first.messages[0]);
+    expect(second.messages[1]).not.toBe(first.messages[1]);
+    expect(second.messages[1]?.content).toBe("partial answer grown");
+  });
+
+  it("keeps the streaming message reference aligned with the mapped list", () => {
+    const turn = makeTurn(
+      [
+        userMsg("q", "u1"),
+        { ...agentMsg("partial", "ai1"), status: "inProgress" as const },
+      ],
+      "inProgress",
+    );
+    const conv = makeConv([turn]);
+
+    const mapped = conversationToAgentThreadState(conv);
+    const streaming = conversationStreamingMessage(conv);
+
+    expect(streaming).toBe(mapped.messages[1]);
+  });
+
+  it("surfaces late-arriving grounding as a new message identity", () => {
+    const items: Turn["items"] = [userMsg("q", "u1"), agentMsg("ans", "ai1")];
+    const bare = makeTurn(items);
+    const first = conversationToAgentThreadState(makeConv([bare]));
+
+    const grounded: Turn = {
+      ...bare,
+      grounding: [{ kind: "doc", title: "Doc", path: "doc.md" }],
+    };
+    const second = conversationToAgentThreadState(makeConv([grounded]));
+
+    expect(second.messages[1]).not.toBe(first.messages[1]);
+    expect(second.messages[1]?.additional_kwargs?.grounding).toEqual(
+      grounded.grounding,
+    );
+    // The pre-grounding snapshot must not have been mutated in place.
+    expect(first.messages[1]?.additional_kwargs?.grounding).toBeUndefined();
+  });
+});
+
+describe("liveToolEvents identity stability", () => {
+  // Same contract as the message mapping: unchanged items must yield
+  // reference-equal LiveToolEvents across calls so downstream
+  // memo/snapshot layers keyed on identity keep working while streaming.
+
+  it("reuses LiveToolEvent references for unchanged items across calls", () => {
+    const conv = makeConv([makeTurn([userMsg("q"), cmd("echo hi", "c1")])]);
+
+    const first = liveToolEventsFromConversation(conv);
+    const second = liveToolEventsFromConversation(conv);
+
+    expect(second).not.toBe(first);
+    expect(second).toHaveLength(1);
+    expect(second[0]).toBe(first[0]);
+  });
+
+  it("keeps untouched-item events stable when a sibling item streams", () => {
+    const done = cmd("echo done", "c1");
+    const turnV1: Turn = makeTurn(
+      [
+        done,
+        {
+          ...cmd("sleep 100", "c2"),
+          status: "inProgress" as const,
+          aggregatedOutput: "",
+        },
+      ],
+      "inProgress",
+    );
+    const first = liveToolEventsFromLastTurn(makeConv([turnV1]));
+
+    const turnV2: Turn = {
+      ...turnV1,
+      items: [
+        done,
+        {
+          ...cmd("sleep 100", "c2"),
+          status: "inProgress" as const,
+          aggregatedOutput: "tick\n",
+        },
+      ],
+    };
+    const second = liveToolEventsFromLastTurn(makeConv([turnV2]));
+
+    expect(second[0]).toBe(first[0]);
+    expect(second[1]).not.toBe(first[1]);
+    expect(second[1]?.output).toBe("tick\n");
+  });
+
+  it("rebuilds events when the owning turn's completedAt lands", () => {
+    const item = cmd("echo hi", "c1");
+    const running: Turn = makeTurn([item], "inProgress");
+    const first = liveToolEventsFromLastTurn(makeConv([running]));
+
+    const finished: Turn = {
+      ...running,
+      status: "completed",
+      completedAt: "2026-05-09T00:00:09Z",
+    };
+    const second = liveToolEventsFromLastTurn(makeConv([finished]));
+
+    expect(second[0]).not.toBe(first[0]);
+    expect(second[0]?.finishedAt).toBe(Date.parse("2026-05-09T00:00:09Z"));
   });
 });
 

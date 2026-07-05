@@ -75,12 +75,25 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
+  // Drop any per-test own-property override so the jsdom prototype
+  // getter (always false) is back in charge.
+  Reflect.deleteProperty(document, "hidden");
   if (ORIG_WS === undefined) {
     delete (globalThis as { WebSocket?: unknown }).WebSocket;
   } else {
     (globalThis as { WebSocket?: unknown }).WebSocket = ORIG_WS;
   }
 });
+
+// jsdom's ``document.hidden`` is a prototype getter; shadow it with a
+// configurable own property so tests can simulate a backgrounded tab.
+function setDocumentHidden(hidden: boolean): void {
+  Object.defineProperty(document, "hidden", {
+    configurable: true,
+    get: () => hidden,
+  });
+}
 
 function makeClient(opts: {
   onIncomingRequest?: (req: any) => Promise<unknown>;
@@ -282,6 +295,246 @@ describe("RealtimeClient", () => {
       "item/started",
       "item/agentMessage/delta",
       "item/completed",
+    ]);
+    client.close();
+  });
+
+  it("flushes batched events via setTimeout, in order, while the tab is hidden", async () => {
+    // Regression guard: with the buffer pinned to requestAnimationFrame
+    // only, a hidden tab never flushed — the buffer grew without bound
+    // and immediately-dispatched methods (turn/interrupted) overtook
+    // the buffered item/started, so the reducer marked the turn
+    // interrupted before the item existed and the late-flushed item
+    // spun forever. Hidden tabs must fall back to a macrotask.
+    const rafSpy = vi
+      .spyOn(globalThis, "requestAnimationFrame")
+      .mockImplementation(() => 0);
+    setDocumentHidden(true);
+    const onNotification = vi.fn();
+    const client = makeClient({ onNotification });
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    ws.receive({
+      jsonrpc: "2.0",
+      method: "item/started",
+      params: {
+        threadId: "t",
+        turnId: "turn",
+        item: { id: "x", type: "agentMessage", text: "", status: "inProgress" },
+      },
+    });
+    ws.receive({
+      jsonrpc: "2.0",
+      method: "item/agentMessage/delta",
+      params: { threadId: "t", turnId: "turn", itemId: "x", delta: "hi" },
+    });
+    // Buffered, not dispatched synchronously.
+    expect(onNotification).not.toHaveBeenCalled();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(rafSpy).not.toHaveBeenCalled();
+    expect(onNotification.mock.calls.map((c) => c[0].method)).toEqual([
+      "item/started",
+      "item/agentMessage/delta",
+    ]);
+    client.close();
+  });
+
+  it("flushes the buffer synchronously the moment the tab goes hidden", () => {
+    // The rAF scheduled while the tab was visible will never fire once
+    // it is hidden. Mock rAF to never invoke its callback so only the
+    // visibilitychange path can deliver the buffered events.
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation(() => 0);
+    const onNotification = vi.fn();
+    const client = makeClient({ onNotification });
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    ws.receive({
+      jsonrpc: "2.0",
+      method: "item/started",
+      params: {
+        threadId: "t",
+        turnId: "turn",
+        item: { id: "x", type: "agentMessage", text: "", status: "inProgress" },
+      },
+    });
+    expect(onNotification).not.toHaveBeenCalled();
+
+    setDocumentHidden(true);
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    // Synchronous flush: the buffered item/started must land before any
+    // immediately-dispatched method that follows (turn/interrupted).
+    expect(onNotification).toHaveBeenCalledTimes(1);
+    ws.receive({
+      jsonrpc: "2.0",
+      method: "turn/interrupted",
+      params: { threadId: "t", turnId: "turn" },
+    });
+    expect(onNotification.mock.calls.map((c) => c[0].method)).toEqual([
+      "item/started",
+      "turn/interrupted",
+    ]);
+
+    const removeSpy = vi.spyOn(document, "removeEventListener");
+    client.close();
+    expect(removeSpy).toHaveBeenCalledWith(
+      "visibilitychange",
+      expect.any(Function),
+    );
+  });
+
+  it("keeps item/fileChange/hunkDelta ordered behind item/started without merging", async () => {
+    // hunkDelta used to bypass the buffer: in the same frame it raced
+    // ahead of the still-buffered item/started and the reducer dropped
+    // it (unknown item). It must ride the buffer for ordering, but the
+    // structured hunk payloads must never coalesce like text deltas.
+    const onNotification = vi.fn();
+    const client = makeClient({ onNotification });
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    ws.receive({
+      jsonrpc: "2.0",
+      method: "item/started",
+      params: {
+        threadId: "t",
+        turnId: "turn",
+        item: { id: "fc", type: "fileChange", status: "inProgress" },
+      },
+    });
+    ws.receive({
+      jsonrpc: "2.0",
+      method: "item/fileChange/hunkDelta",
+      params: {
+        threadId: "t",
+        turnId: "turn",
+        itemId: "fc",
+        path: "a.ts",
+        op: "update",
+        hunk: { header: "@@ -1 +1 @@" },
+      },
+    });
+    ws.receive({
+      jsonrpc: "2.0",
+      method: "item/fileChange/hunkDelta",
+      params: {
+        threadId: "t",
+        turnId: "turn",
+        itemId: "fc",
+        path: "a.ts",
+        op: "update",
+        hunk: { header: "@@ -5 +5 @@" },
+      },
+    });
+
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+    expect(onNotification).toHaveBeenCalledTimes(3);
+    expect(onNotification.mock.calls.map((c) => c[0].method)).toEqual([
+      "item/started",
+      "item/fileChange/hunkDelta",
+      "item/fileChange/hunkDelta",
+    ]);
+    // Each hunk arrives intact — no text-delta-style merge.
+    expect(onNotification.mock.calls[1]![0].params.hunk.header).toBe(
+      "@@ -1 +1 @@",
+    );
+    expect(onNotification.mock.calls[2]![0].params.hunk.header).toBe(
+      "@@ -5 +5 @@",
+    );
+    client.close();
+  });
+
+  it("flushes buffered items before a non-batched method in the same frame", () => {
+    // Ordering invariant: within the buffering window (one frame in the
+    // foreground) an immediately-dispatched method (turn/interrupted,
+    // turn/completed, error, workbench/snapshot) used to overtake the
+    // still-buffered item/started — the reducer marked the turn done
+    // before the item existed and the late-flushed item spun forever.
+    // The dispatch path must now flush the buffer synchronously before
+    // delivering any non-batched notification, so the reducer sees
+    // strict WebSocket arrival order. Mock rAF to never fire so only
+    // the synchronous flush can deliver the buffered event.
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation(() => 0);
+    const onNotification = vi.fn();
+    const client = makeClient({ onNotification });
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    ws.receive({
+      jsonrpc: "2.0",
+      method: "item/started",
+      params: {
+        threadId: "t",
+        turnId: "turn",
+        item: { id: "x", type: "agentMessage", text: "", status: "inProgress" },
+      },
+    });
+    expect(onNotification).not.toHaveBeenCalled();
+
+    ws.receive({
+      jsonrpc: "2.0",
+      method: "turn/interrupted",
+      params: { threadId: "t", turnId: "turn" },
+    });
+
+    expect(onNotification.mock.calls.map((c) => c[0].method)).toEqual([
+      "item/started",
+      "turn/interrupted",
+    ]);
+    client.close();
+  });
+
+  it("does not re-dispatch from the scheduled rAF after a synchronous flush", () => {
+    // The synchronous flush triggered by a non-batched method races the
+    // rAF callback that was scheduled when the batched event arrived.
+    // flushDeltaBuffer clears deltaFlushPending and drains the buffer,
+    // so the late rAF callback must see an empty buffer and return
+    // without duplicating anything.
+    const rafCallbacks: FrameRequestCallback[] = [];
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((cb) => {
+      rafCallbacks.push(cb);
+      return rafCallbacks.length;
+    });
+    const onNotification = vi.fn();
+    const client = makeClient({ onNotification });
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    ws.receive({
+      jsonrpc: "2.0",
+      method: "item/started",
+      params: {
+        threadId: "t",
+        turnId: "turn",
+        item: { id: "x", type: "agentMessage", text: "", status: "inProgress" },
+      },
+    });
+    expect(rafCallbacks.length).toBe(1);
+
+    // Non-batched method forces the synchronous flush.
+    ws.receive({
+      jsonrpc: "2.0",
+      method: "turn/interrupted",
+      params: { threadId: "t", turnId: "turn" },
+    });
+    expect(onNotification).toHaveBeenCalledTimes(2);
+
+    // Now the previously scheduled rAF fires — it must be a no-op.
+    for (const cb of rafCallbacks.splice(0)) cb(0);
+    expect(onNotification).toHaveBeenCalledTimes(2);
+    expect(onNotification.mock.calls.map((c) => c[0].method)).toEqual([
+      "item/started",
+      "turn/interrupted",
     ]);
     client.close();
   });

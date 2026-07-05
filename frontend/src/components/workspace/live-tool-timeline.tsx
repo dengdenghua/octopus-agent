@@ -149,6 +149,10 @@ export interface LiveToolEvent {
   filesTouched?: string[];
   thought?: string;
   observation?: string;
+  /** True when name/input/output mention a report-style deliverable
+   * (see core/threads/report-deliverable.ts). Precomputed at mapping
+   * time so per-frame render never stringifies payloads. */
+  isReportLike?: boolean;
 }
 
 function workflowEvents(events: LiveToolEvent[]): LiveToolEvent[] {

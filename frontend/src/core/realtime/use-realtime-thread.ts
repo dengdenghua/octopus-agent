@@ -7,7 +7,10 @@
 //   });
 //
 // State is a Conversation; ``startTurn`` returns when the server emits
-// turn/completed for that turn. Approvals show up as
+// turn/completed for that turn — or, if the socket drops mid-turn after
+// the turn was confirmed started (turn/started observed), it resolves
+// early and leaves turn-state recovery to reconnect + resume. It only
+// rejects when the turn was never delivered. Approvals show up as
 // ``state.pendingApprovals`` and are resolved via ``resolveApproval``.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -119,6 +122,14 @@ export function useRealtimeThread(
   // Latest reduced snapshot for callbacks that don't want React's stale
   // closure semantics. Updated synchronously alongside ``setState``.
   const stateRef = useRef<Conversation>(state);
+  // Delivery watches for in-flight turn/start requests. The server holds
+  // the turn/start RPC response until the whole turn has run to
+  // completion, so ANY mid-turn socket drop rejects the pending request
+  // even though the turn was accepted and the user message persisted.
+  // A turn/started notification observed after the request went out is
+  // the real delivery signal — ``startTurn`` uses it to swallow later
+  // transport rejections (reconnect + resume recover the turn state).
+  const turnDeliveryWatchesRef = useRef<Set<{ delivered: boolean }>>(new Set());
 
   const applyEvent = useCallback((evt: ConversationEvent) => {
     setState((prev) => {
@@ -251,6 +262,25 @@ export function useRealtimeThread(
       method: string;
       params: Record<string, unknown>;
     }): void => {
+      if (
+        note.method === "turn/started" &&
+        note.params?.threadId === args.threadId
+      ) {
+        // Historical turns replay through the thread/resume *response*,
+        // never through this notification path, so a turn/started seen
+        // here means a live turn actually began after the watched
+        // turn/start request went out on this connection. The server
+        // runs turns sequentially per thread, so starts pair FIFO with
+        // in-flight requests — mark only the oldest undelivered watch,
+        // not all of them (an overlapping second send must not inherit
+        // the first turn's start).
+        for (const watch of turnDeliveryWatchesRef.current) {
+          if (!watch.delivered) {
+            watch.delivered = true;
+            break;
+          }
+        }
+      }
       // ``ConversationEvent`` is a discriminated union over a closed
       // method set. Cast through ``unknown`` because the wire side is
       // open-ended; the reducer no-ops anything it doesn't recognize.
@@ -380,25 +410,43 @@ export function useRealtimeThread(
     async (input) => {
       const client = clientRef.current;
       if (!client) throw new Error("realtime client not ready");
-      await client.request("turn/start", {
-        threadId: args.threadId,
-        input: [
-          {
-            type: "text",
-            text: input.input,
-            ...(input.attachments && input.attachments.length > 0
-              ? { attachments: input.attachments }
-              : {}),
-            ...(input.metadata ? { metadata: input.metadata } : {}),
-          },
-        ],
-        approvalPolicy: input.approvalPolicy ?? "on-request",
-        ...(input.sandboxPolicy ? { sandboxPolicy: input.sandboxPolicy } : {}),
-        ...(input.planningMode ? { planningMode: input.planningMode } : {}),
-        ...(input.effort ? { effort: input.effort } : {}),
-        model: input.model,
-        ...(input.topologyId ? { topologyId: input.topologyId } : {}),
-      });
+      const watch = { delivered: false };
+      turnDeliveryWatchesRef.current.add(watch);
+      try {
+        await client.request("turn/start", {
+          threadId: args.threadId,
+          input: [
+            {
+              type: "text",
+              text: input.input,
+              ...(input.attachments && input.attachments.length > 0
+                ? { attachments: input.attachments }
+                : {}),
+              ...(input.metadata ? { metadata: input.metadata } : {}),
+            },
+          ],
+          approvalPolicy: input.approvalPolicy ?? "on-request",
+          ...(input.sandboxPolicy
+            ? { sandboxPolicy: input.sandboxPolicy }
+            : {}),
+          ...(input.planningMode ? { planningMode: input.planningMode } : {}),
+          ...(input.effort ? { effort: input.effort } : {}),
+          model: input.model,
+          ...(input.topologyId ? { topologyId: input.topologyId } : {}),
+        });
+      } catch (err) {
+        // The turn/start response only arrives once the whole turn has
+        // finished, so a disconnect at any point of a long turn rejects
+        // the pending request even though the message was delivered and
+        // persisted server-side. If turn/started was observed after this
+        // request went out, resolve normally: surfacing the rejection
+        // would make callers flag a successful send as failed (error
+        // banner + draft restore → duplicate sends). Turn state is
+        // recovered by the reconnect/resume path.
+        if (!watch.delivered) throw err;
+      } finally {
+        turnDeliveryWatchesRef.current.delete(watch);
+      }
     },
     [args.threadId],
   );
