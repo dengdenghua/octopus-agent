@@ -799,9 +799,11 @@ def test_turn_interrupt_stops_streaming_at_boundary(gateway_client: Any) -> None
     assert "agentMessage" not in types
 
 
-def test_turn_interrupt_unknown_turn_returns_success_but_noop(gateway_client: Any) -> None:
+def test_turn_interrupt_unknown_turn_acks_without_marking(gateway_client: Any) -> None:
     """Client races a stale turn id — the server acknowledges without
-    error (no state mutated, nothing to interrupt)."""
+    error, but honestly reports that no running turn was flagged
+    (``interrupted: False``). It used to claim True unconditionally,
+    letting clients render "stopped" for turns that kept running."""
     client, _ = gateway_client
     with client.websocket_connect("/api/realtime") as ws:
         _send(
@@ -814,7 +816,134 @@ def test_turn_interrupt_unknown_turn_returns_success_but_noop(gateway_client: An
         )
         msg = _recv(ws)
     assert isinstance(msg, JsonRpcResponse)
-    assert msg.result == {"turnId": "trn_nonexistent", "interrupted": True}
+    assert msg.result == {"turnId": "trn_nonexistent", "interrupted": False}
+
+
+class _SpinningRuntime:
+    """Turn spins until its interrupt flag lands (bounded, then completes).
+
+    Polls ``is_turn_interrupted`` like a real driver, so a flag raised
+    by a *different* connection must stop the turn. The spin is bounded
+    so a regression fails the test loudly (status ``completed``)
+    instead of hanging.
+    """
+
+    async def start_turn(self, params: dict[str, Any], emitter: Any) -> Any:
+        from runtime.protocol import ServerMethod, Turn, TurnStatus
+
+        thread_id = params["threadId"]
+        turn = Turn(threadId=thread_id)
+        emitter.register_turn(turn.id)
+        try:
+            await emitter.notify(
+                ServerMethod.TURN_STARTED,
+                {
+                    "threadId": thread_id,
+                    "turn": turn.model_dump(by_alias=True, mode="json"),
+                },
+            )
+            for _ in range(400):
+                if emitter.is_turn_interrupted(turn.id):
+                    turn.status = TurnStatus.INTERRUPTED
+                    break
+                await asyncio.sleep(0.02)
+            else:
+                turn.status = TurnStatus.COMPLETED
+            return turn
+        finally:
+            emitter.unregister_turn(turn.id)
+
+
+def test_turn_interrupt_from_second_connection_stops_running_turn() -> None:
+    """Regression: the interrupt flag used to be per-connection, so a
+    second tab (its own WS) interrupting a turn running on the first
+    connection marked only its own registry — the server kept running
+    while the interrupting client showed "stopped". The gateway now
+    keeps a shared registry that the running turn's emitter also polls.
+    """
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    runtime = _SpinningRuntime()
+    gateway = RealtimeGateway(runtime=runtime)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with (
+        TestClient(app) as client,
+        client.websocket_connect("/api/realtime") as ws_a,
+        client.websocket_connect("/api/realtime") as ws_b,
+    ):
+        _send(
+            ws_a,
+            JsonRpcRequest(
+                id=1,
+                method="turn/start",
+                params={"threadId": "th_xconn", "input": []},
+            ),
+        )
+        turn_id: str | None = None
+        while turn_id is None:
+            msg = _recv(ws_a)
+            if isinstance(msg, Notification) and msg.method == "turn/started":
+                turn_id = msg.params["turn"]["id"]
+
+        # B — a different connection — interrupts A's running turn.
+        _send(
+            ws_b,
+            JsonRpcRequest(
+                id=2,
+                method="turn/interrupt",
+                params={"threadId": "th_xconn", "turnId": turn_id},
+            ),
+        )
+        b_resp = _recv(ws_b)
+        assert isinstance(b_resp, JsonRpcResponse)
+        # Honest ack: a running turn really was flagged.
+        assert b_resp.result == {"turnId": turn_id, "interrupted": True}
+
+        final: JsonRpcResponse | None = None
+        while final is None:
+            msg = _recv(ws_a)
+            if isinstance(msg, JsonRpcResponse) and msg.id == 1:
+                final = msg
+
+    assert final.result is not None
+    assert final.result["turn"]["status"] == "interrupted"
+
+
+def test_turn_completed_fans_out_to_thread_watchers(gateway_client: Any) -> None:
+    """A second connection that resumed the thread receives the
+    terminal turn/completed even though the turn ran on the first
+    connection (previously it had to poll thread/resume again)."""
+    client, _ = gateway_client
+    with client.websocket_connect("/api/realtime") as ws_a:
+        _drive_turn(ws_a, thread_id="th_fanout", text="seed", approval_policy="never")
+        with client.websocket_connect("/api/realtime") as ws_b:
+            _send(
+                ws_b,
+                JsonRpcRequest(
+                    id=7,
+                    method="thread/resume",
+                    params={"threadId": "th_fanout"},
+                ),
+            )
+            while True:
+                msg = _recv(ws_b)
+                if isinstance(msg, JsonRpcResponse) and msg.id == 7:
+                    break
+            # The second turn runs on A; B must observe its terminal event.
+            outcome = _drive_turn(
+                ws_a,
+                thread_id="th_fanout",
+                text="second",
+                approval_policy="never",
+            )
+            assert outcome["response"].result["turn"]["status"] == "completed"
+            fanned = _recv(ws_b)
+            assert isinstance(fanned, Notification)
+            assert fanned.method == "turn/completed"
+            assert fanned.params["threadId"] == "th_fanout"
+            assert fanned.params["turn"]["status"] == "completed"
 
 
 def test_turn_interrupt_missing_turn_id_is_invalid_params(gateway_client: Any) -> None:

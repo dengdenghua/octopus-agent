@@ -18,6 +18,7 @@ import contextlib
 import logging
 from typing import TYPE_CHECKING, Any
 
+from runtime.platform.models.primitives import now_utc
 from runtime.protocol import (
     ErrorItem,
     ItemStatus,
@@ -328,6 +329,10 @@ async def _start_turn(
     )
 
     turn = Turn(threadId=thread_id, params=validated)
+    # Bound before the try so the escape handler at the bottom can
+    # attach the intent when the crash happens after PHASE 4 built it
+    # (and pass None for earlier failures — both recorders accept it).
+    intent = None
     # Register the turn id with the connection's interrupt
     # registry before emitting turn/started. This closes the race
     # where a client's turn/interrupt (matched by id, not sequence)
@@ -740,7 +745,77 @@ async def _start_turn(
         await runtime._maybe_compact(thread_id, log, emitter)
         runtime._snapshot_to_thread_store(thread_id, log, intent)
         return turn
+    except asyncio.CancelledError:
+        # Connection teardown cancels the turn task mid-flight
+        # (gateway ``_serve`` finally). CancelledError bypasses both
+        # the driver ``except Exception`` above and the gateway's
+        # error wrapping, so without this handler the journal keeps an
+        # IN_PROGRESS turn that only the next thread/resume can reap
+        # and the client never sees a terminal event. Finalize
+        # best-effort, then always re-raise — cancellation must
+        # propagate.
+        if turn.status == TurnStatus.IN_PROGRESS:
+            turn.status = TurnStatus.INTERRUPTED
+            with contextlib.suppress(Exception):
+                log.turn_completed(thread_id, turn.id, turn.status)
+        if turn.completed_at is None:
+            turn.completed_at = now_utc()
+        # The connection is usually already dead here; send failures
+        # must not mask the cancellation.
+        with contextlib.suppress(Exception):
+            await emitter.notify(
+                ServerMethod.TURN_COMPLETED,
+                {
+                    "threadId": thread_id,
+                    "turn": turn.model_dump(by_alias=True, mode="json"),
+                },
+            )
+        raise
+    except Exception as exc:
+        # Failures between turn/started and the driver try (intent
+        # build, policy wrap, agent resolve) — or in finalization —
+        # escape to the gateway, which only sends a turnId-less error
+        # notification: the client would keep this turn inProgress for
+        # the rest of the session. Emit the terminal snapshot first,
+        # then re-raise so the gateway error path runs unchanged.
+        if turn.status == TurnStatus.IN_PROGRESS:
+            turn.status = TurnStatus.FAILED
+            with contextlib.suppress(Exception):
+                log.turn_completed(
+                    thread_id,
+                    turn.id,
+                    turn.status,
+                    error={"message": str(exc) or exc.__class__.__name__},
+                )
+            # Mirror the driver-crash handler's bypass records: the
+            # evolution store learns the failure and the failed turn
+            # stays visible in the sidebar's legacy thread store.
+            with contextlib.suppress(Exception):
+                runtime._record_failed_turn_proposal(
+                    turn,
+                    intent=intent,
+                    failure_source="turn_lifecycle_exception",
+                )
+        if turn.completed_at is None:
+            turn.completed_at = now_utc()
+        with contextlib.suppress(Exception):
+            runtime._snapshot_to_thread_store(thread_id, log, intent)
+        with contextlib.suppress(Exception):
+            await emitter.notify(
+                ServerMethod.TURN_COMPLETED,
+                {
+                    "threadId": thread_id,
+                    "turn": turn.model_dump(by_alias=True, mode="json"),
+                },
+            )
+        raise
     finally:
+        # Journal replay stamps completedAt from the turn_completed
+        # event ts (event_log.py); mirror that on the live snapshot the
+        # gateway serializes right after this returns, or clients see
+        # completedAt=null until the next resume.
+        if turn.status != TurnStatus.IN_PROGRESS and turn.completed_at is None:
+            turn.completed_at = now_utc()
         runtime._record_task_run_finished(turn)
         runtime._active_turn_ids.discard(turn.id)
         emitter.unregister_turn(turn.id)

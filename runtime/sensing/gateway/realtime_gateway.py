@@ -41,6 +41,7 @@ except ImportError:  # pragma: no cover
         pass
 
 
+from runtime.platform.models.primitives import now_utc
 from runtime.protocol import (
     ClientMethod,
     Item,
@@ -192,6 +193,45 @@ class _ApprovalError(Exception):
         self.error = error
 
 
+class SharedTurnInterrupts:
+    """Gateway-wide interrupt registry, shared by every connection.
+
+    The per-connection ``_interrupted_turns`` set only works when the
+    ``turn/interrupt`` RPC arrives on the same connection that runs
+    the turn. A second tab (or a post-reconnect socket) on the same
+    thread is a *different* connection, so its interrupt must be
+    visible to the emitter the turn was registered on. Runtimes keep
+    polling ``emitter.is_turn_interrupted`` — that check consults this
+    registry too. Entries are keyed by turn id, flagged only while the
+    turn is known to be running, and cleared on unregister (the turn
+    lifecycle's ``finally``) so ids never leak.
+    """
+
+    def __init__(self) -> None:
+        self._active_turn_ids: set[str] = set()
+        self._interrupted_turn_ids: set[str] = set()
+
+    def register(self, turn_id: str) -> None:
+        self._active_turn_ids.add(turn_id)
+        # A stale interrupt that predates this registration must not
+        # poison the new turn (mirrors RpcConnection.register_turn).
+        self._interrupted_turn_ids.discard(turn_id)
+
+    def unregister(self, turn_id: str) -> None:
+        self._active_turn_ids.discard(turn_id)
+        self._interrupted_turn_ids.discard(turn_id)
+
+    def request_interrupt(self, turn_id: str) -> bool:
+        """Flag ``turn_id``; True only when a running turn was hit."""
+        if turn_id not in self._active_turn_ids:
+            return False
+        self._interrupted_turn_ids.add(turn_id)
+        return True
+
+    def is_interrupted(self, turn_id: str) -> bool:
+        return turn_id in self._interrupted_turn_ids
+
+
 # ── RpcConnection — per WebSocket ────────────────────────────
 
 
@@ -212,6 +252,7 @@ class RpcConnection:
         *,
         approval_timeout: float = _APPROVAL_TIMEOUT_DEFAULT,
         max_in_flight_requests: int = 32,
+        shared_interrupts: SharedTurnInterrupts | None = None,
     ) -> None:
         self.ws = ws
         self.approval = ApprovalManager()
@@ -224,11 +265,18 @@ class RpcConnection:
         # after the handshake gate runs. Runtime handlers consult this
         # for thread-ownership scoping.
         self.actor_id: str | None = None
+        # Last thread this connection successfully resumed. The gateway
+        # uses it to fan terminal turn events out to sibling
+        # connections watching the same thread.
+        self.last_resumed_thread_id: str | None = None
         # Per-turn interrupt flags. The runtime registers each turn id
         # before any awaitable that could be cancelled; the dispatcher
         # for ``turn/interrupt`` flips the flag; the runtime polls
-        # ``is_turn_interrupted`` between steps.
+        # ``is_turn_interrupted`` between steps. ``shared_interrupts``
+        # is the gateway-wide registry so interrupts issued on *other*
+        # connections reach turns running on this one.
         self._interrupted_turns: set[str] = set()
+        self._shared_interrupts = shared_interrupts
 
     async def send(self, message: JsonRpcRequest | JsonRpcResponse | Notification) -> None:
         if self._closed:
@@ -300,14 +348,22 @@ class RpcConnection:
         # but possible (client races); treat as a no-op rather than
         # leaving a poisoned flag for the next turn with the same id.
         self._interrupted_turns.discard(turn_id)
+        if self._shared_interrupts is not None:
+            self._shared_interrupts.register(turn_id)
 
     def unregister_turn(self, turn_id: str) -> None:
         self._interrupted_turns.discard(turn_id)
+        if self._shared_interrupts is not None:
+            self._shared_interrupts.unregister(turn_id)
 
     def is_turn_interrupted(self, turn_id: str) -> bool:
         if "*" in self._interrupted_turns:
             return True
-        return turn_id in self._interrupted_turns
+        if turn_id in self._interrupted_turns:
+            return True
+        return self._shared_interrupts is not None and self._shared_interrupts.is_interrupted(
+            turn_id
+        )
 
     def request_interrupt(self, turn_id: str) -> None:
         """Called by the dispatcher when a ``turn/interrupt`` arrives."""
@@ -368,6 +424,11 @@ class RealtimeGateway:
         )
         self._turn_locks: dict[str, asyncio.Lock] = {}
         self._turn_locks_guard = asyncio.Lock()
+        # Cross-connection state: the shared interrupt registry (see
+        # SharedTurnInterrupts) plus the live-connection set used to
+        # fan terminal turn events out to same-thread watchers.
+        self._shared_interrupts = SharedTurnInterrupts()
+        self._connections: set[RpcConnection] = set()
         self._router = APIRouter()
 
         @self._router.websocket(path)
@@ -468,8 +529,10 @@ class RealtimeGateway:
             ws,
             approval_timeout=self._approval_timeout,
             max_in_flight_requests=self._max_in_flight_requests_per_connection,
+            shared_interrupts=self._shared_interrupts,
         )
         conn.actor_id = actor_id
+        self._connections.add(conn)
         # Each inbound client Request becomes a background task so the
         # receive loop stays free to deliver the corresponding Responses
         # for any server-initiated approval requests the handler may
@@ -487,6 +550,7 @@ class RealtimeGateway:
                 in_flight.add(task)
                 task.add_done_callback(in_flight.discard)
         finally:
+            self._connections.discard(conn)
             for task in list(in_flight):
                 task.cancel()
             await conn.close()
@@ -579,7 +643,15 @@ class RealtimeGateway:
                     "turn/interrupt requires turnId",
                 )
             conn.request_interrupt(turn_id)
-            return {"turnId": turn_id, "interrupted": True}
+            # The turn may be running on a *different* connection
+            # (second tab on the same thread, post-reconnect socket),
+            # so flag the gateway-wide registry too. The response is
+            # honest: ``interrupted`` is True only when a currently
+            # running turn was actually flagged — a stale or unknown
+            # id is acknowledged but marks nothing, and the client
+            # must not render it as "stopped".
+            interrupted = self._shared_interrupts.request_interrupt(turn_id)
+            return {"turnId": turn_id, "interrupted": interrupted}
 
         # Anything else: defer to the runtime. Implementations that
         # don't override get a method-not-found.
@@ -587,9 +659,19 @@ class RealtimeGateway:
         if handler is None:
             raise _RpcError(JsonRpcErrorCode.METHOD_NOT_FOUND, f"no handler for {method}")
         try:
-            return await handler(method, params, conn)
+            result = await handler(method, params, conn)
         except NotImplementedError as exc:
             raise _RpcError(JsonRpcErrorCode.METHOD_NOT_FOUND, str(exc) or method) from exc
+        if method == ClientMethod.THREAD_RESUME.value:
+            # Remember which thread this connection watches so turn
+            # terminals reached on sibling connections can be fanned
+            # out (see _invoke_turn_start). Recorded only after the
+            # handler succeeded — a rejected resume (unknown thread,
+            # foreign actor) must not subscribe the connection.
+            resumed_thread = params.get("threadId")
+            if isinstance(resumed_thread, str) and resumed_thread:
+                conn.last_resumed_thread_id = resumed_thread
+        return result
 
     async def _invoke_turn_start(
         self,
@@ -641,13 +723,27 @@ class RealtimeGateway:
         with suppress(Exception):
             if turn.status == TurnStatus.IN_PROGRESS:
                 turn.status = TurnStatus.COMPLETED
-            await conn.notify(
-                ServerMethod.TURN_COMPLETED,
-                {
-                    "threadId": thread_id,
-                    "turn": turn.model_dump(by_alias=True, mode="json"),
-                },
-            )
+            # Terminal snapshots must carry completedAt: journal replay
+            # stamps it from the turn_completed event ts, so a null here
+            # makes the live view disagree with the post-refresh view
+            # (client duration math falls back to startedAt → 0ms).
+            if turn.completed_at is None:
+                turn.completed_at = now_utc()
+            completed_params = {
+                "threadId": thread_id,
+                "turn": turn.model_dump(by_alias=True, mode="json"),
+            }
+            await conn.notify(ServerMethod.TURN_COMPLETED, completed_params)
+            # Fan the terminal snapshot out to sibling connections that
+            # resumed this thread (second tab, reconnected socket).
+            # Without this they only learn the turn ended on their next
+            # thread/resume and keep spinning. Best-effort: one dead
+            # watcher must not starve the others or fail the caller.
+            for watcher in list(self._connections):
+                if watcher is conn or watcher.last_resumed_thread_id != thread_id:
+                    continue
+                with suppress(Exception):
+                    await watcher.notify(ServerMethod.TURN_COMPLETED, completed_params)
         return {"turn": turn.model_dump(by_alias=True, mode="json")}
 
     async def _lock_for_thread(self, thread_id: str) -> asyncio.Lock:
