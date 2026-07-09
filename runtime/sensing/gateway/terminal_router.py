@@ -41,12 +41,13 @@ import subprocess
 import time
 from typing import Any
 
-from fastapi import Request, WebSocket
+from fastapi import HTTPException, Request, WebSocket
 
 from runtime.execution.arms.output_buffer import ByteStreamBuffer, LineBuffer
 from runtime.execution.arms.safe_rm import SafeRmConfig, SafeRmProtector
 from runtime.execution.arms.shell_state import ShellEnvState
 from runtime.execution.arms.shell_state_manager import ShellStateManager
+from runtime.safety.env_scrub import scrub_credential_env
 
 _logger = logging.getLogger(__name__)
 
@@ -57,11 +58,14 @@ _sessions: dict[str, ShellSession] = {}
 
 # Idle terminal sessions are kept across ws reconnects (persistent shell), but a
 # client that drops and never returns would otherwise leak its shell + the
-# subprocess forever. reap_sessions() — called on each new connection — drops
-# dead shells, reaps sessions idle beyond _IDLE_TTL_SECONDS, and hard-caps the
-# live count at _MAX_SESSIONS (least-recently-active evicted first).
+# subprocess forever. reap_sessions() drops dead shells, reaps sessions idle
+# beyond _IDLE_TTL_SECONDS, and hard-caps the live count at _MAX_SESSIONS
+# (least-recently-active evicted first). It runs both on each new connection AND
+# on a background sweep (_reaper_loop) so an abandoned shell is freed on the TTL
+# even when nobody ever opens another terminal.
 _IDLE_TTL_SECONDS = 1800.0  # 30 min
 _MAX_SESSIONS = 64
+_REAP_SWEEP_SECONDS = 60.0  # background reaper cadence
 
 
 class ShellSession:
@@ -79,6 +83,11 @@ class ShellSession:
         max_output_lines: int = 1000,
     ):
         self.session_id = session_id
+        # actor_id of the first authenticated client to connect · later
+        # connects must present the same actor or they are refused (4403).
+        # Stays None when auth is disabled (single-user local), where
+        # ownership is not enforced. Bound via _bind_or_check_owner().
+        self.owner_actor: str | None = None
         self.process: asyncio.subprocess.Process | None = None
         self.cwd = cwd or os.getcwd()
         self._output_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=4096)
@@ -113,7 +122,12 @@ class ShellSession:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             cwd=self.cwd,
-            env={**os.environ, "TERM": "xterm-256color"},
+            # A persistent interactive shell must not inherit the server's
+            # full os.environ — any authenticated user could otherwise
+            # ``echo $ANTHROPIC_API_KEY`` straight out of it. Hand it a
+            # credential-scrubbed copy (same heuristics as the unconfined
+            # exec path) with TERM restored on top.
+            env=scrub_credential_env({"TERM": "xterm-256color"}),
             **_subprocess_platform_kwargs(),
         )
         self._alive = True
@@ -275,6 +289,28 @@ def get_session(session_id: str, cwd: str | None = None) -> ShellSession:
     return _sessions[session_id]
 
 
+def _bind_or_check_owner(session: ShellSession, actor_id: str | None) -> bool:
+    """Enforce per-session ownership on the terminal.
+
+    The ``session_id`` is a client-controlled URL path segment (the
+    frontend derives it from a thread id, which is enumerable and
+    shareable). Without an owner check any authenticated user who knows
+    another user's session_id could attach to their live shell — read its
+    output and inject commands. So the first authenticated connect binds
+    the session to that ``actor_id``; later connects must match.
+
+    ``actor_id is None`` means auth is disabled (single-user local) — no
+    ownership is enforced and every connect is allowed. Returns True when
+    the connection may proceed, False when it must be refused.
+    """
+    if actor_id is None:
+        return True
+    if session.owner_actor is None:
+        session.owner_actor = actor_id
+        return True
+    return session.owner_actor == actor_id
+
+
 async def kill_session(session_id: str) -> None:
     session = _sessions.pop(session_id, None)
     if session:
@@ -308,6 +344,39 @@ async def reap_sessions(*, exclude_id: str | None = None) -> None:
         _logger.info("terminal: reaped %d idle/dead session(s)", len(doomed))
 
 
+_reaper_task: asyncio.Task[None] | None = None
+
+
+async def _reaper_loop() -> None:
+    """Periodically reap idle/dead shells so the _IDLE_TTL_SECONDS TTL is
+    enforced even when no new terminal connection arrives to trigger it."""
+    while True:
+        await asyncio.sleep(_REAP_SWEEP_SECONDS)
+        try:
+            await reap_sessions()
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 — a sweep failure must not kill the loop
+            _logger.warning("terminal: background reaper sweep failed", exc_info=True)
+
+
+async def _start_reaper() -> None:
+    global _reaper_task
+    if _reaper_task is None or _reaper_task.done():
+        _reaper_task = asyncio.create_task(_reaper_loop())
+
+
+async def _stop_reaper() -> None:
+    global _reaper_task
+    task, _reaper_task = _reaper_task, None
+    if task is not None and not task.done():
+        from contextlib import suppress
+
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
 # ── FastAPI WebSocket route ────────────────────────────────────
 
 
@@ -332,6 +401,10 @@ def mount_terminal_routes(
     except ImportError:
         _logger.warning("fastapi not available, terminal WebSocket disabled")
         return
+
+    # Enforce the idle TTL on a cadence, not only when a new client connects.
+    app.router.add_event_handler("startup", _start_reaper)
+    app.router.add_event_handler("shutdown", _stop_reaper)
 
     def _resolve_ws_actor(ws: WebSocket) -> str | None:
         """Authenticate a terminal WS handshake. Returns actor_id, or
@@ -384,10 +457,10 @@ def mount_terminal_routes(
             raise PermissionError("invalid token")
         return None
 
-    def _auth_http(request: Request) -> None:
+    def _auth_http(request: Request) -> str | None:
         from .openai_gateway_router import _resolve_actor
 
-        _resolve_actor(
+        return _resolve_actor(
             request,
             identity_store,
             require_auth,
@@ -398,14 +471,25 @@ def mount_terminal_routes(
 
     @app.post("/api/terminal/kill/{session_id}")
     async def terminal_kill(session_id: str, request: Request) -> dict[str, bool]:
-        _auth_http(request)
+        actor_id = _auth_http(request)
+        # Owner check mirrors the WS path: a caller may only kill a shell
+        # they own. 404 (not 403) so a probe can't confirm another actor's
+        # session exists. No-op when auth is off (actor_id is None).
+        session = _sessions.get(session_id)
+        if (
+            session is not None
+            and actor_id is not None
+            and session.owner_actor is not None
+            and session.owner_actor != actor_id
+        ):
+            raise HTTPException(404, "terminal session not found")
         await kill_session(session_id)
         return {"ok": True}
 
     @app.websocket("/api/terminal/ws/{session_id}")
     async def terminal_ws(ws: WebSocket, session_id: str) -> None:
         try:
-            _resolve_ws_actor(ws)
+            actor_id = _resolve_ws_actor(ws)
         except PermissionError as exc:
             # Refuse before accept(): no shell is ever spawned. 4401
             # mirrors HTTP 401 in the WS application close-code range.
@@ -421,6 +505,14 @@ def mount_terminal_routes(
         await reap_sessions(exclude_id=session_id)
         cwd = ws.query_params.get("cwd")
         session = get_session(session_id, cwd=cwd)
+        # Per-session ownership: refuse a different actor attaching to a
+        # shell they don't own (4403 ≈ HTTP 403). No-op when auth is off.
+        if not _bind_or_check_owner(session, actor_id):
+            from contextlib import suppress
+
+            with suppress(Exception):
+                await ws.close(code=4403, reason="terminal session not owned by caller")
+            return
         try:
             await session.start()
         except Exception as exc:

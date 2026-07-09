@@ -35,6 +35,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from runtime.safety.env_scrub import scrub_credential_env as _scrub_unconfined_env
+
 from .registry import Skill, SkillRegistry
 from .testing import SkillExpect, SkillTestCase
 
@@ -767,60 +769,9 @@ def _multi_edit_file(
 # straight out of it. Full confinement is ``sandbox_dir`` + the sandbox
 # backend; this closes the secret-leak half on the unconfined path by
 # handing the child a credential-scrubbed copy of the environment.
-
-# Env-var names whose value is almost always a credential. Matched
-# case-insensitively as a substring, so ANTHROPIC_API_KEY, GH_TOKEN,
-# DB_PASSWORD, AWS_SECRET_ACCESS_KEY, ``*_APIKEY`` … all match.
-_SENSITIVE_ENV_NAME_HINTS = (
-    "KEY",
-    "TOKEN",
-    "SECRET",
-    "PASSWORD",
-    "PASSWD",
-    "PASSPHRASE",
-    "CREDENTIAL",
-    "APIKEY",
-    "PRIVATE",
-    "COOKIE",
-    "SESSION",
-)
-# Benign names that contain a hint substring but are needed by real
-# commands and carry no secret — keep them.
-_SENSITIVE_ENV_NAME_KEEP = frozenset({"SSH_AUTH_SOCK"})
-
-_ENV_SECRET_DETECTOR: Any = None
-
-
-def _scrub_unconfined_env(overlay: dict[str, str] | None) -> dict[str, str]:
-    """Return the environment for an UNCONFINED subprocess: ``os.environ``
-    minus any entry whose *name* looks like a credential or whose *value*
-    is detected as a secret by the shared ``Redactor``, with the explicit
-    caller-supplied ``overlay`` applied verbatim on top.
-
-    Benign vars (PATH, HOME, LANG, …) are preserved so commands still
-    run. A caller that deliberately passes ``env={"X": "y"}`` still gets
-    ``X`` — explicit intent wins over the name/value heuristics.
-    """
-    global _ENV_SECRET_DETECTOR
-    if _ENV_SECRET_DETECTOR is None:
-        from runtime.platform.observability.redactor import Redactor
-
-        _ENV_SECRET_DETECTOR = Redactor(
-            enabled_categories={"api_key", "aws_secret", "private_key", "jwt"}
-        )
-    safe: dict[str, str] = {}
-    for name, value in os.environ.items():
-        upper = name.upper()
-        if upper not in _SENSITIVE_ENV_NAME_KEEP:
-            if any(hint in upper for hint in _SENSITIVE_ENV_NAME_HINTS):
-                continue
-            sval = str(value)
-            if sval and _ENV_SECRET_DETECTOR.redact(sval) != sval:
-                continue
-        safe[name] = value
-    if overlay:
-        safe.update({str(k): str(v) for k, v in overlay.items()})
-    return safe
+# The scrubbing itself lives in ``runtime.safety.env_scrub`` (imported at
+# module top as ``_scrub_unconfined_env``) so the interactive terminal
+# WebSocket shares the same credential heuristics.
 
 
 def _exec_shell(

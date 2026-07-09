@@ -9,6 +9,7 @@ evicted first), while never touching the session being (re)connected to.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Iterator
 
@@ -73,3 +74,43 @@ async def test_hard_cap_evicts_least_recently_active() -> None:
     for i in range(overflow):
         assert f"s{i}" not in tr._sessions
     assert f"s{tr._MAX_SESSIONS + overflow - 1}" in tr._sessions  # freshest kept
+
+
+# ── Background reaper loop (enforces the TTL without a new connection) ──
+
+
+@pytest.fixture(autouse=True)
+def _stop_any_reaper() -> Iterator[None]:
+    yield
+    # Never leak a running reaper task across tests.
+    tr._reaper_task = None
+
+
+@pytest.mark.asyncio
+async def test_background_reaper_reaps_without_a_connection(monkeypatch) -> None:
+    # An abandoned shell must be freed on the TTL even when nobody opens
+    # another terminal — the background sweep is the only trigger here.
+    monkeypatch.setattr(tr, "_REAP_SWEEP_SECONDS", 0.01)
+    _session("abandoned", alive=True, idle_seconds=tr._IDLE_TTL_SECONDS + 60)
+    await tr._start_reaper()
+    try:
+        for _ in range(50):  # up to ~0.5s
+            await asyncio.sleep(0.02)
+            if "abandoned" not in tr._sessions:
+                break
+        assert "abandoned" not in tr._sessions
+    finally:
+        await tr._stop_reaper()
+
+
+@pytest.mark.asyncio
+async def test_start_reaper_is_idempotent_and_stop_cancels() -> None:
+    await tr._start_reaper()
+    first = tr._reaper_task
+    await tr._start_reaper()  # no-op while one is live
+    assert tr._reaper_task is first
+    await tr._stop_reaper()
+    assert tr._reaper_task is None
+    assert first is not None and first.cancelled()
+    # stop is safe to call again with nothing running.
+    await tr._stop_reaper()
