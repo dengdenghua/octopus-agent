@@ -850,6 +850,12 @@ export function AgentSummaryPage({
     };
   }, [blocks, t]);
 
+  const isCompletelyEmpty =
+    phases.length === 0 &&
+    diffEntries.length === 0 &&
+    agentTiles.length === 0 &&
+    totalReferenceItems === 0;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
       <div className="mx-auto w-full max-w-2xl px-5 py-4">
@@ -1208,6 +1214,7 @@ export function AgentSummaryPage({
         )}
 
         {/* 上下文（只展示本轮事件流里可确认的内容） */}
+        {!isCompletelyEmpty && (
         <section className="py-4">
           <button
             type="button"
@@ -1354,11 +1361,10 @@ export function AgentSummaryPage({
             </div>
           )}
         </section>
+        )}
 
         {/* 空状态 */}
-        {phases.length === 0 &&
-          diffEntries.length === 0 &&
-          agentTiles.length === 0 && (
+        {isCompletelyEmpty && (
             <div className="flex flex-col items-center justify-center px-4 py-8 text-center">
               <BotIcon className="mb-2 size-8 text-muted-foreground/50" />
               <p className="text-xs font-medium text-foreground">

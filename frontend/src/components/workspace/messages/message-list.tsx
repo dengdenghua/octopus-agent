@@ -365,6 +365,14 @@ function isLastAssistantGroupOfTurn(
   return true;
 }
 
+function hasVisibleAssistantText(group: CoreMessageGroup): boolean {
+  return group.messages.some(
+    (message) =>
+      message.type === "ai" &&
+      extractContentFromMessage(message).trim().length > 0,
+  );
+}
+
 /**
  * Memoized wrapper around a single message group. Only the group that
  * contains the currently-streaming message (or the latest group while
@@ -1307,10 +1315,22 @@ export function MessageList({
             index > latestHumanGroupIndex;
           const groupAuditNotice =
             groupKey === auditNoticeGroupKey ? verificationAuditNotice : null;
+          const groupTurnMessages =
+            group.type === "assistant"
+              ? turnMessagesForGroup(groupedMessages, group)
+              : group.messages;
+          const shouldShowFailureReceipt =
+            Boolean(failureReceipt) &&
+            isLatestGroup &&
+            group.type === "assistant" &&
+            !thread.isLoading &&
+            (!hasVisibleAssistantText(group) ||
+              hasMessageOutputSummary(groupTurnMessages));
           // Attach failure receipt only to the latest assistant group when
-          // thread has errored and is not loading. Earlier groups keep null.
+          // it adds information beyond an already-visible assistant error.
+          // Earlier groups keep null.
           const groupFailure =
-            failureReceipt && isLatestGroup && group.type === "assistant" && !thread.isLoading
+            failureReceipt && shouldShowFailureReceipt
               ? failureReceipt
               : null;
 

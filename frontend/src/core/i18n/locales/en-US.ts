@@ -1275,14 +1275,11 @@ export const enUS: Translations = {
     dockStatusPresent: "Present",
     collaboratorSeat: "Collaborator",
     leaderSeat: "Leader",
-    collaboratorComputerWaiting:
-      "Sub computer is present, waiting for its independent process.",
-    subComputerReady: "Sub computer ready",
-    subComputerReadyDescription:
-      "Joined the current task workspace and can take over work. Its activity trace will appear here once the independent process starts.",
-    collaboratorJoinedConversation: "Joined current conversation",
-    handoffReady: "Waiting for task handoff",
-    independentProcessPending: "Independent process has not started",
+    collaboratorPresentDescription: (role) =>
+      `Joined the current task workspace as ${role}; no independent process activity has started yet.`,
+    noIndependentProcessActivity: "No independent process activity yet",
+    noIndependentProcessActivityDescription:
+      "Process records will appear here after this member starts an independent process.",
     switchToMainComputer: "Switch back to main computer",
     viewAgentProcess: (label) => `View ${label} independent process`,
     agentClusterIndependentProcess: "Agent Cluster - Independent Process",

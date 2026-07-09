@@ -68,6 +68,34 @@ export function formatRelativeTimestamp(
   return formatDate(d, effectiveLocale);
 }
 
+export function formatCompactRelativeTimestamp(
+  date: Date | string | number,
+  locale?: Locale,
+): string {
+  const d = typeof date === "string" ? new Date(date) : new Date(date);
+  const effectiveLocale =
+    locale ?? (getLocaleFromCookie() as Locale | null) ?? detectLocale();
+
+  const deltaSec = Math.max(0, (Date.now() - d.getTime()) / 1000);
+  const isZh = effectiveLocale === "zh-CN";
+
+  if (deltaSec < 30) return isZh ? "刚刚" : "now";
+  if (deltaSec < 3600) {
+    const m = Math.floor(deltaSec / 60);
+    return `${m}m`;
+  }
+  if (deltaSec < 86400) {
+    const h = Math.floor(deltaSec / 3600);
+    return `${h}h`;
+  }
+  if (deltaSec < 7 * 86400) {
+    return format(d, "EEE", { locale: getDateFnsLocale(effectiveLocale) });
+  }
+  return format(d, "M/d", {
+    locale: getDateFnsLocale(effectiveLocale),
+  });
+}
+
 export function formatCurrency(
   amount: string | number,
   currency = "USD",

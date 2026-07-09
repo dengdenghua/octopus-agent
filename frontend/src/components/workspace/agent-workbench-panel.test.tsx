@@ -164,33 +164,30 @@ describe("<AgentWorkbenchPanel />", () => {
     const workbenchHeader = screen.getByRole("banner");
     expect(
       within(workbenchHeader).queryByRole("button", {
-        name: "Codex CLI · 子电脑 · 在场",
+        name: "Codex CLI · 协作 · 在场",
       }),
     ).not.toBeInTheDocument();
     const bottomRail = screen.getByTestId("workstation-bottom-rail");
     const codexSeat = within(bottomRail).getByRole("button", {
-      name: "Codex CLI · 子电脑 · 在场",
+      name: "Codex CLI · 协作 · 在场",
     });
-    expect(codexSeat).toHaveAttribute("title", "Codex CLI · 子电脑 · 在场");
+    expect(codexSeat).toHaveAttribute("title", "Codex CLI · 协作 · 在场");
     expect(
-      screen.getByRole("button", { name: "Claude Code · 子电脑 · 在场" }),
-    ).toHaveAttribute("title", "Claude Code · 子电脑 · 在场");
+      screen.getByRole("button", { name: "Claude Code · 协作 · 在场" }),
+    ).toHaveAttribute("title", "Claude Code · 协作 · 在场");
     expect(screen.queryByText("Codex CLI")).not.toBeInTheDocument();
     expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
     expect(screen.queryByText("协作")).not.toBeInTheDocument();
 
     fireEvent.click(codexSeat);
 
-    expect(screen.getAllByText("子电脑").length).toBeGreaterThan(0);
-    expect(screen.getByText("子电脑待命")).toBeInTheDocument();
-    expect(screen.getByText("活动轨迹")).toBeInTheDocument();
-    expect(screen.getByText("已加入当前对话")).toBeInTheDocument();
-    expect(screen.getByText("等待任务接管")).toBeInTheDocument();
-    expect(screen.getByText("独立进程尚未开始")).toBeInTheDocument();
     expect(screen.getAllByText("Codex CLI").length).toBeGreaterThan(0);
+    expect(screen.getByText("暂无独立进程活动")).toBeInTheDocument();
     expect(
-      screen.getAllByText("子电脑已就位，等待独立进程开始输出。").length,
-    ).toBeGreaterThan(0);
+      screen.queryByText("子电脑已就位，等待独立进程开始输出。"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("等待任务接管")).not.toBeInTheDocument();
+    expect(screen.queryByText("独立进程尚未开始")).not.toBeInTheDocument();
 
     const mainComputerButton = screen.getByRole("button", {
       name: "主电脑 · 等待中",
@@ -199,14 +196,14 @@ describe("<AgentWorkbenchPanel />", () => {
 
     fireEvent.click(mainComputerButton);
 
-    expect(screen.queryByText("子电脑待命")).not.toBeInTheDocument();
+    expect(screen.queryByText("暂无独立进程活动")).not.toBeInTheDocument();
     expect(screen.getByText("暂无子智能体")).toBeInTheDocument();
 
     fireEvent.click(codexSeat);
 
-    fireEvent.click(screen.getByRole("button", { name: "主电脑" }));
+    fireEvent.click(screen.getByRole("button", { name: "切回主电脑" }));
 
-    expect(screen.queryByText("子电脑待命")).not.toBeInTheDocument();
+    expect(screen.queryByText("暂无独立进程活动")).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Eve · 群主" }),
     ).toBeInTheDocument();
@@ -1113,25 +1110,6 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.getByRole("button", { name: /history\.md/ })).toHaveClass(
       "border-l-primary",
     );
-  });
-
-  test("renders a header close button that invokes onClose", () => {
-    const onClose = vi.fn();
-    renderWorkbench(
-      <AgentWorkbenchPanel
-        onClose={onClose}
-        events={[
-          event({
-            id: "read-1",
-            name: "read_file",
-            input: { path: "src/app.tsx" },
-          }),
-        ]}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
-    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   test("renders the deployed site in the browser tab once the run settles", () => {

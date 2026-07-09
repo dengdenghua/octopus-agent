@@ -21,7 +21,7 @@ import { emitAgentChanged, eventBus } from "@/core/events";
 import { useI18n } from "@/core/i18n/hooks";
 import { useDeleteThread, useThreads } from "@/core/threads/hooks";
 import type { AgentThread } from "@/core/threads/types";
-import { formatRelativeTimestamp } from "@/core/utils/datetime";
+import { formatCompactRelativeTimestamp } from "@/core/utils/datetime";
 import { uuid } from "@/core/utils/uuid";
 import { cn } from "@/lib/utils";
 
@@ -235,11 +235,11 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
                       </span>
                       <span
                         className={cn(
-                          "shrink-0 text-[10px] text-muted-foreground/65",
-                          "transition-opacity group-hover/thread:opacity-0",
+                          "w-10 shrink-0 overflow-hidden whitespace-nowrap text-right text-[10px] text-muted-foreground/65",
+                          "transition-[width,opacity] group-hover/thread:w-0 group-hover/thread:opacity-0",
                         )}
                       >
-                        {formatRelativeTimestamp(thread.updated_at)}
+                        {formatCompactRelativeTimestamp(thread.updated_at)}
                       </span>
                     </Link>
                     <button

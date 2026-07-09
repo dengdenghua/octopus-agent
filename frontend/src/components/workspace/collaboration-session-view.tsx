@@ -48,6 +48,12 @@ export function CollaborationSessionView({
   const modeMeta =
     teamModeMeta[session.mode as TeamMode] ?? teamModeMeta.chat;
   const ModeIcon = modeMeta.icon;
+  const hasTasks = session.tasks.length > 0;
+  const hasOnlinePresence = session.presence.some((m) => m.online);
+  const hasRoomActivity =
+    session.room_id &&
+    (session.room_messages.length > 0 || session.room_tasks.length > 0);
+  if (!hasTasks && !hasOnlinePresence && !hasRoomActivity) return null;
   return (
     <div
       className="flex flex-col gap-2 rounded-xl border border-border/60 bg-background/70 p-3"
@@ -73,9 +79,9 @@ export function CollaborationSessionView({
         />
       </div>
 
-      <PresenceDots members={session.presence} t={t} />
+      {hasOnlinePresence && <PresenceDots members={session.presence} t={t} />}
 
-      {session.room_id && (
+      {hasRoomActivity && (
         <div
           className="flex min-w-0 flex-wrap items-center gap-2 border-t border-border/45 pt-2"
           data-testid="collab-session-room"

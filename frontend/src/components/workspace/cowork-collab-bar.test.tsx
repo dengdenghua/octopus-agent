@@ -40,7 +40,7 @@ describe("PresenceDots", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("shows online count and a summed unread badge", () => {
+  it("shows online count without aggregating member unread counters", () => {
     render(
       <PresenceDots
         members={[
@@ -51,12 +51,11 @@ describe("PresenceDots", () => {
       />,
     );
     expect(screen.getByText("1 online")).toBeTruthy();
-    expect(screen.getByTestId("cowork-unread-total").textContent).toBe(
-      "5 unread",
-    );
+    expect(screen.queryByText("5 unread")).toBeNull();
+    expect(screen.queryByTestId("cowork-unread-total")).toBeNull();
   });
 
-  it("hides the unread badge when everything is read", () => {
+  it("keeps the presence strip quiet when everything is read", () => {
     render(<PresenceDots members={[member({ online: true })]} t={t} />);
     expect(screen.queryByTestId("cowork-unread-total")).toBeNull();
   });

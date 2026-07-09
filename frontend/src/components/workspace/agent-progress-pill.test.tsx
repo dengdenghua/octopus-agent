@@ -268,6 +268,64 @@ describe("<AgentProgressPill />", () => {
     ).toBeInTheDocument();
   });
 
+  test("surfaces the current tool action below the phase", () => {
+    renderWithProviders(
+      <AgentProgressPill
+        events={[
+          event({
+            id: "todo-1",
+            name: "todo_write",
+            status: "running",
+            startedAt: 1000,
+            input: {
+              items: [
+                { content: "inspect project", status: "completed" },
+                { content: "verify changes", status: "in_progress" },
+              ],
+            },
+          }),
+          event({
+            id: "shell-1",
+            name: "shell_command",
+            status: "running",
+            startedAt: 2000,
+            input: { command: "pnpm test" },
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByText(/pnpm test/).length).toBeGreaterThan(0);
+  });
+
+  test("expanded todo plans include upcoming phases", () => {
+    renderWithProviders(
+      <AgentProgressPill
+        events={[
+          event({
+            id: "todo-1",
+            name: "todo_write",
+            status: "running",
+            input: {
+              items: [
+                { content: "collect context", status: "completed" },
+                { content: "apply changes", status: "in_progress" },
+                { content: "verify locally", status: "pending" },
+                { content: "deliver final", status: "pending" },
+              ],
+            },
+          }),
+        ]}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Current Progress 2\/4/ }),
+    );
+
+    expect(screen.getByText("Phase 4: deliver final")).toBeInTheDocument();
+  });
+
   test("does not mark stale pending todo steps as failed after a settled answer", () => {
     const { container } = renderWithProviders(
       <AgentProgressPill

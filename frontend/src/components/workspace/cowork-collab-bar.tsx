@@ -34,7 +34,7 @@ function kindLabel(kind: CoworkSearchKind, t: T): string {
   return t.coworkCollab.kindEvent;
 }
 
-/** Compact presence row: online dots + a total-unread badge. Pure — data in. */
+/** Compact presence row: online dots. Pure — data in. */
 export function PresenceDots({
   members,
   seatNames = {},
@@ -46,7 +46,6 @@ export function PresenceDots({
 }) {
   if (members.length === 0) return null;
   const online = members.filter((m) => m.online).length;
-  const unread = members.reduce((sum, m) => sum + (m.unread || 0), 0);
   const shown = members.slice(0, 6);
   const extra = members.length - shown.length;
 
@@ -75,14 +74,6 @@ export function PresenceDots({
       <span className="shrink-0 text-[11px] text-muted-foreground">
         {online} {t.coworkCollab.online}
       </span>
-      {unread > 0 && (
-        <span
-          data-testid="cowork-unread-total"
-          className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
-        >
-          {t.coworkCollab.unread(unread)}
-        </span>
-      )}
     </div>
   );
 }
@@ -148,7 +139,10 @@ export function CoworkCollabBar({
 
   const collab = session.data;
   const members = collab?.presence ?? [];
+  const hasOnlineMembers = members.some((m) => m.online);
   const trimmed = query.trim();
+
+  if (!hasOnlineMembers && trimmed.length === 0) return null;
 
   return (
     <div

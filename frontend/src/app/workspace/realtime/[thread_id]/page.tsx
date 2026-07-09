@@ -599,10 +599,17 @@ function TaskCollaboratorControl({
   const ActiveIcon = activeMeta?.icon ?? UserPlusIcon;
   const displayRoster = roster.slice(0, 5);
   const extraRosterCount = Math.max(0, roster.length - displayRoster.length);
+  const totalCount = Math.max(teamSize, roster.length || 1);
   const countLabel = formatCollaboratorCount(
-    Math.max(teamSize, roster.length || 1),
+    totalCount,
     t.chatInputBox.collaboratorsCountUnit,
   );
+  const collabSession = useCollabSession(threadId);
+  const onlineCount = useMemo(() => {
+    const presence = collabSession.data?.presence ?? [];
+    return presence.filter((m) => m.online).length;
+  }, [collabSession.data]);
+  const hasOnlineMembers = onlineCount > 0;
   const q = query.trim().toLowerCase();
   const availableAgents = useMemo(
     () =>
@@ -711,13 +718,20 @@ function TaskCollaboratorControl({
           </span>
           <span
             className={cn(
-              "shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] transition-colors",
+              "inline-flex items-center gap-1 shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] transition-colors",
               isTeamDraft
                 ? "bg-primary/12 text-primary"
-                : "bg-transparent text-muted-foreground group-hover:bg-background/75 group-hover:text-foreground",
+                : hasOnlineMembers
+                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  : "bg-transparent text-muted-foreground group-hover:bg-background/75 group-hover:text-foreground",
             )}
           >
-            {countLabel}
+            {hasOnlineMembers && (
+              <span className="size-1.5 rounded-full bg-emerald-500" />
+            )}
+            {hasOnlineMembers
+              ? `${onlineCount}/${totalCount}`
+              : countLabel}
           </span>
         </button>
       </DropdownMenuTrigger>
@@ -1193,12 +1207,19 @@ function RealtimePageContent({
         currentTaskAgentName,
         coworkCollaborationProfiles,
       );
-      if (sessionRoster.length > 0) return sessionRoster;
-      return coworkGroupToCollaborationRoster(
+      const groupRoster = coworkGroupToCollaborationRoster(
         coworkGroupQuery.data,
         currentTaskAgentName,
         coworkCollaborationProfiles,
       );
+      if (sessionRoster.length === 0) return groupRoster;
+      if (groupRoster.length === 0) return sessionRoster;
+      const seen = new Map<string, ChatCollaborationRosterEntry>();
+      for (const entry of sessionRoster) seen.set(entry.agent_id, entry);
+      for (const entry of groupRoster) {
+        if (!seen.has(entry.agent_id)) seen.set(entry.agent_id, entry);
+      }
+      return Array.from(seen.values());
     },
     [
       collabSessionQuery.data,
@@ -1207,10 +1228,10 @@ function RealtimePageContent({
       currentTaskAgentName,
     ],
   );
-  const savedCollaborationRoster =
-    coworkCollaborationRoster.length > 0
-      ? coworkCollaborationRoster
-      : persistedCollaborationRoster;
+  const savedCollaborationRoster = useMemo(() => {
+    if (coworkCollaborationRoster.length > 0) return coworkCollaborationRoster;
+    return persistedCollaborationRoster;
+  }, [coworkCollaborationRoster, persistedCollaborationRoster]);
   const persistedCollaboratorIds = useMemo(
     () =>
       savedCollaborationRoster
@@ -1423,10 +1444,21 @@ function RealtimePageContent({
     return roster;
   }, [composerDisplayAgent, effectiveAgentId, selectedCollaborators]);
   const collaborationEnabled = selectedCollaborators.length > 0;
-  const visibleCollaborationRoster =
-    collaborationEnabled || savedCollaborationRoster.length === 0
-      ? collaborationRoster
-      : savedCollaborationRoster;
+  const visibleCollaborationRoster = useMemo(() => {
+    const primary =
+      collaborationEnabled || savedCollaborationRoster.length === 0
+        ? collaborationRoster
+        : savedCollaborationRoster;
+    const secondary =
+      primary === collaborationRoster ? savedCollaborationRoster : collaborationRoster;
+    if (secondary.length === 0) return primary;
+    const seen = new Map<string, ChatCollaborationRosterEntry>();
+    for (const entry of primary) seen.set(entry.agent_id, entry);
+    for (const entry of secondary) {
+      if (!seen.has(entry.agent_id)) seen.set(entry.agent_id, entry);
+    }
+    return Array.from(seen.values());
+  }, [collaborationEnabled, collaborationRoster, savedCollaborationRoster]);
   const visibleCollaborationEnabled = visibleCollaborationRoster.length > 1;
   const collaborationRosterSeats = useMemo<WorkbenchRosterSeat[]>(
     () =>
@@ -2152,9 +2184,7 @@ function RealtimePageContent({
     ],
   );
   const showAgentProgressPill =
-    hasRenderableAgentWorkbench &&
-    hasCurrentTodos &&
-    !shouldHideSettledProcessChrome;
+    hasRenderableAgentWorkbench && !shouldHideSettledProcessChrome;
   const canOpenAgentWorkbench =
     !isNewThread ||
     collaborationEnabled ||
@@ -2762,7 +2792,7 @@ function RealtimePageContent({
                 }
                 paddingBottom={
                   MESSAGE_LIST_DEFAULT_PADDING_BOTTOM +
-                  (hasCurrentTodos ? 64 : 0)
+                  (showAgentProgressPill ? 96 : hasCurrentTodos ? 64 : 0)
                 }
                 mode={effectiveMode}
                 liveToolEvents={lastTurnToolEvents}
@@ -2995,7 +3025,6 @@ function RealtimePageContent({
                   browserPreviewBlocks={previewBlocks}
                   resultPreviewUrl={resultPreviewUrl}
                   rosterSeats={collaborationRosterSeats}
-                  onClose={closeAgentWorkbenchPanel}
                   onSelectTab={selectAgentWorkbenchTab}
                   onOpenArtifact={openWorkbenchArtifact}
                 />

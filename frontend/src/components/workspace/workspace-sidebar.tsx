@@ -83,7 +83,7 @@ import type { TasksListResponse } from "@/core/tasks/api";
 import { useTeamTasks } from "@/core/team-tasks";
 import type { TeamTask } from "@/core/team-tasks";
 import { useActiveAgentId } from "@/core/agents/active";
-import { formatRelativeTimestamp } from "@/core/utils/datetime";
+import { formatCompactRelativeTimestamp } from "@/core/utils/datetime";
 import { useAppearance } from "@/hooks/use-appearance";
 import { basename, isAbsolutePath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
@@ -1202,7 +1202,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         />
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-border/40 p-1.5">
+      <SidebarFooter className="border-t border-border-subtle p-1.5">
         <AgentFooter />
       </SidebarFooter>
       <SidebarRail />
@@ -1273,11 +1273,11 @@ function LocalDatabaseSection({
             }
             onClick={() => setOpen((value) => !value)}
             className={cn(
-              "group/nav relative h-9 w-full rounded-lg opacity-76 transition-[opacity,background-color,border-color] duration-150 text-[13px]",
-              "border border-transparent hover:border-border/45 hover:bg-muted/32 hover:opacity-100",
+              "group/nav relative h-9 w-full opacity-76 transition-[opacity,background-color,border-color] text-[13px]",
+              "border border-transparent hover:border-border-subtle hover:bg-muted/32 hover:opacity-100",
               "data-[active=true]:opacity-100",
               "data-[active=true]:border-primary/14 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_76%,transparent)]",
-              "data-[active=true]:shadow-sm data-[active=true]:shadow-black/[0.025]",
+              "data-[active=true]:shadow-[var(--shadow-xs)]",
               "data-[active=true]:before:absolute data-[active=true]:before:left-0 data-[active=true]:before:top-1.5 data-[active=true]:before:bottom-1.5 data-[active=true]:before:w-[2px] data-[active=true]:before:rounded-r data-[active=true]:before:bg-primary/75",
               "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0",
             )}
@@ -1340,8 +1340,8 @@ function StorageLibraryRow({
         isActive={active}
         tooltip={item.label}
         className={cn(
-          "group/nav relative h-8 w-full rounded-lg opacity-72 transition-[opacity,background-color,border-color] duration-150 text-[12px]",
-          "border border-transparent hover:border-border/45 hover:bg-muted/32 hover:opacity-100",
+          "group/nav relative h-8 w-full opacity-72 transition-[opacity,background-color,border-color] text-[12px]",
+          "border border-transparent hover:border-border-subtle hover:bg-muted/32 hover:opacity-100",
           "data-[active=true]:opacity-100 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_58%,transparent)]",
         )}
       >
@@ -1622,52 +1622,71 @@ export function WorkspaceSurfaceSwitch({
       to: PRIMARY_WORKSPACE_ROUTE,
       label: "Octopus",
       icon: BotIcon,
-      active: active === "agent",
+      value: "agent" as const,
       kind: "brand" as const,
     },
     {
       to: "/browser",
       label: t.sidebar.navBrowserSurface,
       icon: GlobeIcon,
-      active: active === "browser",
+      value: "browser" as const,
       kind: "icon" as const,
     },
   ];
+  const activeIndex = items.findIndex((item) => item.value === active);
+  const radiusVar = "var(--appearance-radius-control)";
 
   return (
     <div
       className={cn(
-        "grid min-w-0 items-center gap-0.5 rounded-[var(--appearance-radius-control)]",
-        "h-8 w-[96px] grid-cols-[minmax(0,1fr)_28px] p-0",
+        "relative grid h-8 items-center gap-0 p-0.5",
+        "w-[96px] grid-cols-[minmax(0,1fr)_28px]",
         materialTheme === "liquid"
           ? "octo-liquid-glass octo-liquid-glass--thin"
-          : "border border-transparent bg-transparent shadow-none",
+          : "border border-border-default bg-muted/40",
         "group-data-[collapsible=icon]:hidden",
       )}
+      style={{ borderRadius: radiusVar }}
+      role="tablist"
+      aria-label="Workspace surface"
     >
-      {items.map((item) => {
+      <span
+        className={cn(
+          "absolute top-0.5 bottom-0.5 z-0",
+          "bg-background shadow-[var(--shadow-xs)] ring-1 ring-border-default",
+          "transition-[left,width]",
+          activeIndex === 0
+            ? "left-[2px] w-[calc(100%-32px)]"
+            : "left-[calc(100%-26px)] w-[24px]",
+        )}
+        style={{ borderRadius: `calc(${radiusVar} - 4px)` }}
+        aria-hidden="true"
+      />
+      {items.map((item, index) => {
         const Icon = item.icon;
+        const isActive = index === activeIndex;
         return (
           <Link
             key={item.to}
             to={item.to}
-            aria-current={item.active ? "page" : undefined}
+            aria-current={isActive ? "page" : undefined}
             aria-label={item.label}
+            role="tab"
+            aria-selected={isActive}
             className={cn(
-              "min-w-0 rounded-[calc(var(--appearance-radius-control)-2px)] transition-[background-color,color,box-shadow,opacity] duration-150",
-              "flex h-8 items-center justify-center",
-              item.active
-                ? "text-foreground hover:bg-muted/55"
-                : "text-muted-foreground hover:bg-muted/55 hover:text-foreground",
-              item.kind === "brand"
-                ? cn("px-0.5 font-semibold tracking-[0.005em] text-[11px]")
-                : "px-0 text-[11px]",
+              "relative z-10 flex h-7 items-center justify-center",
+              "text-[11px] font-medium",
+              "transition-colors duration-200",
+              isActive
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+              item.kind === "brand" ? "px-0.5" : "px-0",
               "group-data-[collapsible=icon]:grid group-data-[collapsible=icon]:size-7 group-data-[collapsible=icon]:place-items-center group-data-[collapsible=icon]:px-0",
-              item.active
+              isActive
                 ? "group-data-[collapsible=icon]:flex"
                 : "group-data-[collapsible=icon]:hidden",
-              item.active && "group-data-[collapsible=icon]:bg-sidebar-accent",
             )}
+            style={{ borderRadius: `calc(${radiusVar} - 4px)` }}
           >
             <Icon
               className={cn(
@@ -1677,11 +1696,7 @@ export function WorkspaceSurfaceSwitch({
               )}
             />
             {item.kind === "brand" && (
-              <span
-                className={cn(
-                  "min-w-0 truncate group-data-[collapsible=icon]:sr-only",
-                )}
-              >
+              <span className="min-w-0 truncate group-data-[collapsible=icon]:sr-only">
                 {item.label}
               </span>
             )}
@@ -1721,11 +1736,11 @@ function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
         isActive={active}
         tooltip={item.label}
         className={cn(
-          "group/nav relative h-9 w-full rounded-lg opacity-76 transition-[opacity,background-color,border-color] duration-150 text-[13px]",
-          "border border-transparent hover:border-border/45 hover:bg-muted/32 hover:opacity-100",
+          "group/nav relative h-9 w-full opacity-76 transition-[opacity,background-color,border-color] text-[13px]",
+          "border border-transparent hover:border-border-subtle hover:bg-muted/32 hover:opacity-100",
           "data-[active=true]:opacity-100",
           "data-[active=true]:border-primary/14 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_76%,transparent)]",
-          "data-[active=true]:shadow-sm data-[active=true]:shadow-black/[0.025]",
+          "data-[active=true]:shadow-[var(--shadow-xs)]",
           "data-[active=true]:before:absolute data-[active=true]:before:left-0 data-[active=true]:before:top-1.5 data-[active=true]:before:bottom-1.5 data-[active=true]:before:w-[2px] data-[active=true]:before:rounded-r data-[active=true]:before:bg-primary/75",
         )}
       >
@@ -2102,7 +2117,7 @@ function ProjectGroup({
                     aria-current={active ? "page" : undefined}
                     title={thread.title}
                     className={cn(
-                      "flex min-h-8 w-full items-center gap-2 rounded-md py-1 pl-3 pr-12 text-[13px] text-foreground/78 transition-[background-color,color] duration-150",
+                      "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-md py-1 pl-3 pr-3 text-[13px] text-foreground/78 transition-[padding,background-color,color] duration-150 group-hover/thread:pr-12 group-focus-within/thread:pr-12",
                       "hover:bg-muted/40 hover:text-foreground",
                       active &&
                         "text-foreground bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)]",
@@ -2126,10 +2141,10 @@ function ProjectGroup({
                         "overflow-hidden whitespace-nowrap text-xs text-muted-foreground transition-[width,opacity,color] duration-150 group-hover/thread:text-muted-foreground/90",
                         active
                           ? "w-0 opacity-0"
-                          : "w-[4.5rem] opacity-100 group-hover/thread:w-0 group-hover/thread:opacity-0",
+                          : "w-10 opacity-100 group-hover/thread:w-0 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0",
                       )}
                     >
-                      {formatRelativeTimestamp(thread.updatedAt)}
+                      {formatCompactRelativeTimestamp(thread.updatedAt)}
                     </span>
                   </Link>
                   <button
@@ -2610,7 +2625,7 @@ function ChatsSection({
                       aria-current={active ? "page" : undefined}
                       title={t.title}
                       className={cn(
-                        "flex min-h-8 items-center gap-2 rounded-md pl-2 pr-8 py-1 text-xs text-foreground/78 transition-[background-color,color] duration-150",
+                        "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-md py-1 pl-2 pr-2 text-xs text-foreground/78 transition-[padding,background-color,color] duration-150 group-hover/thread:pr-8 group-focus-within/thread:pr-8",
                         "hover:bg-muted/40 hover:text-foreground",
                         active &&
                           "text-foreground bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)]",
@@ -2625,8 +2640,8 @@ function ChatsSection({
                       <span className="min-w-0 flex-1 truncate leading-tight">
                         {t.title}
                       </span>
-                      <span className="shrink-0 text-[10px] text-muted-foreground group-hover/thread:text-muted-foreground/90 group-hover/thread:opacity-0 transition-[opacity,color]">
-                        {formatRelativeTimestamp(t.updatedAt)}
+                      <span className="w-10 shrink-0 overflow-hidden whitespace-nowrap text-right text-[10px] text-muted-foreground transition-[width,opacity,color] group-hover/thread:w-0 group-hover/thread:text-muted-foreground/90 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0">
+                        {formatCompactRelativeTimestamp(t.updatedAt)}
                       </span>
                     </Link>
                     <button

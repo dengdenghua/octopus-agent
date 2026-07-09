@@ -1070,12 +1070,9 @@ export interface Translations {
     dockStatusPresent: string;
     collaboratorSeat: string;
     leaderSeat: string;
-    collaboratorComputerWaiting: string;
-    subComputerReady: string;
-    subComputerReadyDescription: string;
-    collaboratorJoinedConversation: string;
-    handoffReady: string;
-    independentProcessPending: string;
+    collaboratorPresentDescription: (role: string) => string;
+    noIndependentProcessActivity: string;
+    noIndependentProcessActivityDescription: string;
     switchToMainComputer: string;
     viewAgentProcess: (label: string) => string;
     agentClusterIndependentProcess: string;

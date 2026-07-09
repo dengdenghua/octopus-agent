@@ -383,6 +383,31 @@ describe("MessageList receipt wiring", () => {
 });
 
 describe("MessageList failure visibility", () => {
+  it("does not duplicate a visible empty-output assistant error with a failure receipt", () => {
+    const messages: Message[] = [
+      { id: "user-1", type: "human", content: "你好" },
+      {
+        id: "assistant-1",
+        type: "ai",
+        content:
+          "出错了：模型执行结束但没有返回任何可见输出。请重试，或切换到其他可用模型后再试。",
+      },
+    ];
+    const thread = mockThread({
+      messages,
+      error: new Error(
+        "模型执行结束但没有返回任何可见输出。请重试，或切换到其他可用模型后再试。",
+      ),
+    });
+
+    renderMessageList(thread);
+
+    expect(screen.getByText(/模型执行结束但没有返回任何可见输出/)).toBeInTheDocument();
+    expect(screen.queryByText("任务未完成")).not.toBeInTheDocument();
+    expect(screen.queryByText("失败原因")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("falls back to the error banner when the failed turn ends in a processing group", () => {
     const messages: Message[] = [
       { id: "user-1", type: "human", content: "first request" },

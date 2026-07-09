@@ -1269,14 +1269,11 @@ export const koKR: Translations = {
     dockStatusPresent: "Present",
     collaboratorSeat: "Collaborator",
     leaderSeat: "Leader",
-    collaboratorComputerWaiting:
-      "서브 컴퓨터가 대기 중이며 독립 프로세스 시작을 기다리고 있습니다.",
-    subComputerReady: "서브 컴퓨터 대기 중",
-    subComputerReadyDescription:
-      "현재 작업 워크스페이스에 참여했으며 작업을 이어받을 수 있습니다. 독립 프로세스가 시작되면 활동 기록이 여기에 표시됩니다.",
-    collaboratorJoinedConversation: "현재 대화에 참여함",
-    handoffReady: "작업 인계 대기 중",
-    independentProcessPending: "독립 프로세스가 아직 시작되지 않음",
+    collaboratorPresentDescription: (role) =>
+      `현재 작업 워크스페이스에 ${role} 역할로 참여했으며, 아직 독립 프로세스 활동은 없습니다.`,
+    noIndependentProcessActivity: "아직 독립 프로세스 활동 없음",
+    noIndependentProcessActivityDescription:
+      "이 멤버가 독립 프로세스를 시작하면 과정 기록이 여기에 표시됩니다.",
     switchToMainComputer: "메인 컴퓨터로 돌아가기",
     viewAgentProcess: (label) => `View ${label} independent process`,
     agentClusterIndependentProcess: "Agent Cluster - Independent Process",

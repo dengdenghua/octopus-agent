@@ -2,7 +2,6 @@ import {
   BotIcon,
   CheckIcon,
   ChevronRightIcon,
-  CircleIcon,
   GlobeIcon,
   LayoutGridIcon,
   MonitorIcon,
@@ -90,6 +89,15 @@ export type WorkbenchRosterSeat = {
   icon?: string | null;
   role?: "tl" | "member" | string | null;
 };
+
+function rosterSeatRoleLabel(
+  seat: WorkbenchRosterSeat,
+  t: Translations,
+): string {
+  if (seat.role === "tl") return t.agentWorkbenchPanel.leaderSeat;
+  if (seat.role && seat.role !== "member") return seat.role;
+  return t.agentWorkbenchPanel.collaboratorSeat;
+}
 
 function mainPhaseStatusLabel(phases: AgentPhase[], t: Translations) {
   if (phases.some((p) => p.status === "error")) {
@@ -196,7 +204,6 @@ export function AgentWorkbenchPanel({
   browserPreviewBlocks,
   resultPreviewUrl,
   rosterSeats = [],
-  onClose,
 }: {
   activeTab?: AgentWorkbenchTabId;
   events: LiveToolEvent[];
@@ -219,7 +226,6 @@ export function AgentWorkbenchPanel({
   workDir?: string;
   paused?: boolean;
   className?: string;
-  onClose?: () => void;
   browserPreviewBlocks?: ExtractedCodeBlocks | null;
   /** Deployed preview URL (vercel/netlify/localhost). When set, the browser
    * tab renders the live deployed site via BrowserPreviewPanel instead of
@@ -431,15 +437,19 @@ export function AgentWorkbenchPanel({
     rosterSeats.find((seat) => seat.role === "tl") ?? null;
   const selectedRosterSeat = selectedRosterSeatId
     ? (visibleRosterSeats.find((seat) => seat.id === selectedRosterSeatId) ??
+      rosterSeats.find((seat) => seat.id === selectedRosterSeatId) ??
       null)
     : null;
+  const selectedRosterSeatRoleLabel = selectedRosterSeat
+    ? rosterSeatRoleLabel(selectedRosterSeat, t)
+    : "";
   useEffect(() => {
     setSelectedRosterSeatId((current) =>
-      current && visibleRosterSeats.some((seat) => seat.id === current)
+      current && rosterSeats.some((seat) => seat.id === current)
         ? current
         : null,
     );
-  }, [visibleRosterSeats]);
+  }, [rosterSeats]);
   const openRosterProcess = useCallback(
     (seatId: string) => {
       setSelectedAgentId(null);
@@ -545,20 +555,6 @@ export function AgentWorkbenchPanel({
 
   const visibleTabs = workbenchTabs.filter((tab) => !closedTabs.has(tab.id));
 
-  // Header close affordance — on mobile the panel covers the whole chat
-  // column, so the panel itself must offer a way out.
-  const closeButton = onClose ? (
-    <button
-      type="button"
-      onClick={onClose}
-      className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border/45 hover:bg-muted/45 hover:text-foreground"
-      aria-label={t.common.close}
-      title={t.common.close}
-    >
-      <XIcon className="size-3.5" />
-    </button>
-  ) : null;
-
   // Browser tab content, shared by the empty shell and the main render path.
   // While the run is live the inline srcDoc blocks track the agent's latest
   // output; once it settles the deployed site is the "real" preview. A
@@ -659,7 +655,7 @@ export function AgentWorkbenchPanel({
           className,
         )}
       >
-        <header className="relative shrink-0 border-b border-border/60 px-3 py-2.5">
+        <header className="relative shrink-0 border-b border-border-default px-3 py-2.5">
           <div className="flex items-center gap-2.5">
             <MainComputerStatusButton
               active={effectiveActiveTab === "agent"}
@@ -680,10 +676,10 @@ export function AgentWorkbenchPanel({
                   <div
                     key={tab.id}
                     className={cn(
-                      "group inline-flex h-8 max-w-[11rem] shrink-0 items-center gap-1.5 rounded-md border border-transparent text-sm font-medium shadow-none transition-colors",
+                      "group inline-flex h-8 max-w-[11rem] shrink-0 items-center gap-1.5 border border-transparent text-sm font-medium shadow-none transition-colors",
                       active
-                        ? "border-border/45 text-foreground"
-                        : "text-muted-foreground hover:border-border/35 hover:bg-background/45 hover:text-foreground",
+                        ? "border-border-subtle text-foreground"
+                        : "text-muted-foreground hover:border-border-subtle hover:bg-background/45 hover:text-foreground",
                     )}
                   >
                     <button
@@ -747,7 +743,6 @@ export function AgentWorkbenchPanel({
                 })}
               </DropdownMenuContent>
             </DropdownMenu>
-            {closeButton}
           </div>
         </header>
         <section
@@ -785,7 +780,7 @@ export function AgentWorkbenchPanel({
         ))}
         <span className="ml-auto text-[10px] text-muted-foreground font-mono">
           {selectedRosterSeat
-            ? t.agentWorkbenchPanel.subComputer
+            ? selectedRosterSeat.name
             : (selectedAgent?.label ?? "Agent 01")}
         </span>
       </div>
@@ -814,57 +809,47 @@ export function AgentWorkbenchPanel({
         )
       ) : (
         <div className="flex min-h-0 flex-1 flex-col bg-background/35">
-          {/* Header: agent identity + status */}
+          {/* Header: agent identity + progress (hidden for roster seats — the placeholder shows identity inline) */}
+          {!selectedRosterSeat && (
           <div className="flex shrink-0 items-center gap-2 border-b border-border/30 px-5 py-3">
             <MonitorIcon className="size-4 shrink-0 text-muted-foreground" />
             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
               <span
                 className={cn(
                   "inline-block size-1.5 rounded-full",
-                  selectedRosterSeat
-                    ? "bg-emerald-500"
-                    : selectedAgent
-                      ? agentRunDotClass(selectedAgent.status)
-                      : agentRunDotClass(mainRunState),
+                  selectedAgent
+                    ? agentRunDotClass(selectedAgent.status)
+                    : agentRunDotClass(mainRunState),
                 )}
               />
-              {selectedRosterSeat ? (
-                t.agentWorkbenchPanel.subComputer
-              ) : (
-                <>
-                  {t.agentWorkbench.currentProgress}{" "}
-                  {screenProgress.total > 0
-                    ? `${screenProgress.current}/${screenProgress.total}`
-                    : phases.length > 0
-                      ? `${Math.max(1, phases.findIndex((p) => p.id === currentPhase?.id) + 1)}/${phases.length}`
-                      : "0/0"}
-                </>
-              )}
+              {t.agentWorkbench.currentProgress}{" "}
+              {screenProgress.total > 0
+                ? `${screenProgress.current}/${screenProgress.total}`
+                : phases.length > 0
+                  ? `${Math.max(1, phases.findIndex((p) => p.id === currentPhase?.id) + 1)}/${phases.length}`
+                  : "0/0"}
             </span>
             <span className="h-4 w-px bg-border/45" />
             <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-              {selectedRosterSeat
-                ? `${t.agentWorkbenchPanel.subComputer} · ${selectedRosterSeat.name}`
-                : selectedAgent
-                  ? `${selectedAgent.label} · ${repairMojibakeText(
-                      selectedAgent.codename ?? selectedAgent.name,
-                    )}${
-                      selectedAgent.role
-                        ? ` · ${repairMojibakeText(selectedAgent.role)}`
-                        : ""
-                    }`
-                  : (currentPhase?.title ?? t.agentWorkbench.computerView)}
+              {selectedAgent
+                ? `${selectedAgent.label} · ${repairMojibakeText(
+                    selectedAgent.codename ?? selectedAgent.name,
+                  )}${
+                    selectedAgent.role
+                      ? ` · ${repairMojibakeText(selectedAgent.role)}`
+                      : ""
+                  }`
+                : (currentPhase?.title ?? t.agentWorkbench.computerView)}
             </span>
             <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
               <span>
-                {selectedRosterSeat
-                  ? t.agentWorkbenchPanel.dockStatusPresent
-                  : selectedAgent
-                    ? dockAgentStatusLabel(selectedAgent.status, t)
-                    : mainPhaseStatusLabel(mainPhases, t)}
+                {selectedAgent
+                  ? dockAgentStatusLabel(selectedAgent.status, t)
+                  : mainPhaseStatusLabel(mainPhases, t)}
               </span>
             </span>
           </div>
+          )}
 
           {/* Agent filter chip row — quick switch between main process and sub-agents */}
           {!selectedRosterSeat && agentTiles.length > 0 && (
@@ -1047,7 +1032,7 @@ export function AgentWorkbenchPanel({
         className,
       )}
     >
-      <header className="relative shrink-0 border-b border-border/60 px-3 py-2.5">
+      <header className="relative shrink-0 border-b border-border-default px-3 py-2.5">
         <div className="flex items-center gap-2.5">
           <MainComputerStatusButton
             active={
@@ -1071,10 +1056,10 @@ export function AgentWorkbenchPanel({
                 <div
                   key={id}
                   className={cn(
-                    "group inline-flex h-8 max-w-[11rem] shrink-0 items-center gap-1.5 rounded-md border border-transparent text-sm font-medium shadow-none transition-colors",
+                    "group inline-flex h-8 max-w-[11rem] shrink-0 items-center gap-1.5 border border-transparent text-sm font-medium shadow-none transition-colors",
                     active
-                      ? "border-border/45 text-foreground"
-                      : "text-muted-foreground hover:border-border/35 hover:bg-background/45 hover:text-foreground",
+                      ? "border-border-subtle text-foreground"
+                      : "text-muted-foreground hover:border-border-subtle hover:bg-background/45 hover:text-foreground",
                   )}
                 >
                   <button
@@ -1139,18 +1124,11 @@ export function AgentWorkbenchPanel({
               })}
             </DropdownMenuContent>
           </DropdownMenu>
-          {closeButton}
         </div>
       </header>
 
-      {threadId ? (
-        <>
-          <CoworkCollabBar threadId={threadId} rosterSeats={rosterSeats} />
-          <div className="px-3 pb-2">
-            <CollaborationSessionPanel threadId={threadId} onlyWhenRoomLinked />
-          </div>
-        </>
-      ) : null}
+      {threadId ? <CoworkCollabBar threadId={threadId} rosterSeats={rosterSeats} /> : null}
+      {threadId ? <CollaborationSessionPanel threadId={threadId} onlyWhenRoomLinked className="px-3 pb-2" /> : null}
 
       <section
         aria-label={t.sidebar.ariaAgentWorkbench}
@@ -1255,24 +1233,27 @@ function MachineScopeRail({
             />
           );
         })}
-        {rosterSeats.map((seat) => (
-          <WorkstationSeat
-            key={seat.id}
-            name={seat.name}
-            avatar={seat.icon ?? null}
-            avatarUrl={seat.avatarUrl ?? null}
-            showBotBadge
-            fallbackInitial={seat.name.charAt(0)}
-            dotClassName="bg-emerald-500"
-            dotLabel={t.agentWorkbenchPanel.dockStatusPresent}
-            title={`${seat.name} · ${t.agentWorkbenchPanel.subComputer} · ${t.agentWorkbenchPanel.dockStatusPresent}`}
-            ariaLabel={`${seat.name} · ${t.agentWorkbenchPanel.subComputer} · ${t.agentWorkbenchPanel.dockStatusPresent}`}
-            selected={selectedAgentId === seat.id}
-            onClick={() => onSelectRoster(seat.id)}
-            iconOnly
-            className="shrink-0"
-          />
-        ))}
+        {rosterSeats.map((seat) => {
+          const roleLabel = rosterSeatRoleLabel(seat, t);
+          return (
+            <WorkstationSeat
+              key={seat.id}
+              name={seat.name}
+              avatar={seat.icon ?? null}
+              avatarUrl={seat.avatarUrl ?? null}
+              showBotBadge
+              fallbackInitial={seat.name.charAt(0)}
+              dotClassName="bg-emerald-500"
+              dotLabel={t.agentWorkbenchPanel.dockStatusPresent}
+              title={`${seat.name} · ${roleLabel} · ${t.agentWorkbenchPanel.dockStatusPresent}`}
+              ariaLabel={`${seat.name} · ${roleLabel} · ${t.agentWorkbenchPanel.dockStatusPresent}`}
+              selected={selectedAgentId === seat.id}
+              onClick={() => onSelectRoster(seat.id)}
+              iconOnly
+              className="shrink-0"
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -1373,152 +1354,48 @@ function RosterComputerPlaceholder({
   onOpenMain: () => void;
 }) {
   const { t } = useI18n();
-  const rows = [
-    {
-      label: t.agentWorkbenchPanel.collaboratorJoinedConversation,
-      detail: `${seat.name} · ${t.agentWorkbenchPanel.dockStatusPresent}`,
-      status: "done" as const,
-    },
-    {
-      label: t.agentWorkbenchPanel.handoffReady,
-      detail: t.agentWorkbenchPanel.collaboratorComputerWaiting,
-      status: "running" as const,
-    },
-    {
-      label: t.agentWorkbenchPanel.independentProcessPending,
-      detail: t.agentWorkbenchPanel.waitingForSubagentOutput,
-      status: "pending" as const,
-    },
-  ];
+  const roleLabel = rosterSeatRoleLabel(seat, t);
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-2xl flex-col">
-        <ComputerScopeSwitch
-          subLabel={t.agentWorkbenchPanel.subComputer}
-          onOpenMain={onOpenMain}
-        />
-        <section className="border-b border-border/55 bg-background/85">
-          <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2">
-            <MonitorIcon className="size-4 text-muted-foreground" />
-            <div className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-              {t.agentWorkbenchPanel.subComputerReady}
-            </div>
-            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
-              <span className="size-2 rounded-full bg-emerald-500" />
-              {t.agentWorkbenchPanel.dockStatusPresent}
-            </span>
+      <div className="flex flex-1 flex-col items-center justify-center px-4 py-8">
+        <div className="flex flex-col items-center text-center">
+          <div className="flex size-14 items-center justify-center overflow-hidden rounded-full border border-border bg-muted/30 text-2xl">
+            {seat.avatarUrl ? (
+              <img
+                src={seat.avatarUrl}
+                alt={seat.name}
+                className="size-full object-cover"
+              />
+            ) : seat.icon?.trim() ? (
+              <span aria-hidden="true">{seat.icon}</span>
+            ) : (
+              <BotIcon className="size-7 text-muted-foreground" />
+            )}
           </div>
-          <div className="grid gap-4 p-4 sm:grid-cols-[8rem_1fr]">
-            <div className="border-b border-border/45 pb-3 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4">
-              <div className="border-b border-border/60 pb-1.5 font-mono text-sm font-semibold text-foreground">
-                {t.agentWorkbenchPanel.subComputer}
-              </div>
-              <div className="mt-7 flex size-20 items-center justify-center overflow-hidden rounded-sm border border-border bg-background text-4xl">
-                {seat.avatarUrl ? (
-                  <img
-                    src={seat.avatarUrl}
-                    alt={seat.name}
-                    className="size-full object-cover"
-                  />
-                ) : seat.icon?.trim() ? (
-                  <span aria-hidden="true">{seat.icon}</span>
-                ) : (
-                  <BotIcon className="size-10 text-foreground" />
-                )}
-              </div>
-              <div className="mt-4 truncate text-sm font-semibold text-foreground">
-                {seat.name}
-              </div>
-              <div className="mt-1 truncate text-xs text-muted-foreground">
-                {t.agentWorkbenchPanel.collaboratorSeat}
-              </div>
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-lg font-semibold text-foreground">
-                    {seat.name}
-                  </div>
-                  <div className="mt-1 truncate text-sm text-muted-foreground">
-                    {t.agentWorkbenchPanel.subComputerReadyDescription}
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 flex items-center gap-3">
-                <DotProgress progress={0.18} hue={118} cols={18} rows={3} />
-                <span className="text-xs text-muted-foreground">
-                  {t.agentWorkbenchPanel.waitingForSubagentOutput}
-                </span>
-              </div>
+          <div className="mt-3 text-sm font-semibold text-foreground">
+            {seat.name}
+          </div>
+          <div className="mt-0.5 text-[11px] text-muted-foreground">
+            {roleLabel}
+          </div>
+          <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+            <span className="size-1 rounded-full bg-emerald-500" />
+            {t.agentWorkbenchPanel.dockStatusPresent}
+          </span>
+          <div className="mt-4 max-w-[240px] rounded-lg border border-dashed border-border/60 bg-muted/10 px-4 py-3 text-center">
+            <MonitorIcon className="mx-auto size-4 text-muted-foreground/50" />
+            <div className="mt-1.5 text-[11px] font-medium text-foreground">
+              {t.agentWorkbenchPanel.noIndependentProcessActivity}
             </div>
           </div>
-        </section>
-        <section className="border-b border-border/45 bg-background/70">
-          <div className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground">
-            <MonitorIcon className="size-4" aria-hidden="true" />
-            {t.agentWorkbench.activityTrace}
-            <span className="ml-auto text-xs font-normal">
-              {t.agentWorkbenchPanel.processRecords(rows.length)}
-            </span>
-          </div>
-          <div className="divide-y divide-border/35">
-            {rows.map((row, index) => {
-              const active = row.status === "running";
-              const Icon = row.status === "done" ? CheckIcon : CircleIcon;
-              return (
-                <div
-                  key={row.label}
-                  className={cn(
-                    "flex items-start gap-2 border-l-2 px-3 py-2 text-left",
-                    active
-                      ? "border-l-primary bg-muted/30"
-                      : "border-l-transparent",
-                  )}
-                >
-                  <span className="mt-0.5 w-5 shrink-0 font-mono text-[10px] text-muted-foreground">
-                    {index + 1}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <Icon
-                        className={cn(
-                          "size-3.5 shrink-0",
-                          row.status === "done"
-                            ? "text-emerald-500"
-                            : active
-                              ? "animate-pulse text-primary"
-                              : "text-muted-foreground",
-                        )}
-                      />
-                      <span className="truncate text-xs font-semibold text-foreground">
-                        {row.label}
-                      </span>
-                    </div>
-                    <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground">
-                      {row.detail}
-                    </div>
-                  </div>
-                  <span className="shrink-0 text-[10px] text-muted-foreground/70">
-                    {row.status === "done"
-                      ? t.agentWorkbenchPanel.dockStatusDone
-                      : active
-                        ? t.agentWorkbenchPanel.dockStatusRunning
-                        : t.agentWorkbenchPanel.dockStatusPending}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-        <AgentComputerStatusCard
-          avatar={seat.icon}
-          avatarUrl={seat.avatarUrl}
-          fallbackInitial={seat.name.charAt(0)}
-          label={seat.name}
-          status={t.agentWorkbenchPanel.dockStatusPresent}
-          statusClassName="text-emerald-600 dark:text-emerald-300"
-          title={t.agentWorkbenchPanel.subComputer}
-        />
+          <button
+            type="button"
+            onClick={onOpenMain}
+            className="mt-3 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            {t.agentWorkbenchPanel.switchToMainComputer}
+          </button>
+        </div>
       </div>
     </div>
   );

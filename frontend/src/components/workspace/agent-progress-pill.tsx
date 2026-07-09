@@ -2,19 +2,24 @@ import {
   CheckCircle2Icon,
   ChevronDownIcon,
   CircleIcon,
+  FileTextIcon,
+  GlobeIcon,
   Loader2Icon,
   Minimize2Icon,
   MonitorIcon,
+  SearchIcon,
+  TerminalIcon,
   XCircleIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  deriveAgentPhases,
-  progressForPhases,
-} from "./agent-phases";
+import { deriveAgentPhases, progressForPhases } from "./agent-phases";
 import type { LiveToolEvent } from "./live-tool-timeline";
-import { normalizeEventsForSettledDisplay } from "./work-blocks";
+import {
+  normalizeEventsForSettledDisplay,
+  pickCurrentWorkBlock,
+  type WorkBlock,
+} from "./work-blocks";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import { agentRunBeadTone } from "./agent-run-status";
@@ -63,6 +68,35 @@ function StatusIcon({
   return <CheckCircle2Icon className="size-4 shrink-0 text-emerald-500" />;
 }
 
+function WorkBlockIcon({ block }: { block: WorkBlock }) {
+  const Icon =
+    block.kind === "terminal"
+      ? TerminalIcon
+      : block.kind === "browser"
+        ? GlobeIcon
+        : block.kind === "search"
+          ? SearchIcon
+          : block.kind === "file" || block.kind === "read"
+            ? FileTextIcon
+            : MonitorIcon;
+  return <Icon className="size-3.5 shrink-0 text-muted-foreground" />;
+}
+
+function phaseWindow<T>(
+  phases: T[],
+  currentIndex: number,
+  maxVisible: number,
+): T[] {
+  if (phases.length <= maxVisible) return phases;
+  const safeIndex = Math.max(0, currentIndex);
+  const before = Math.floor((maxVisible - 1) / 2);
+  const start = Math.min(
+    Math.max(0, safeIndex - before),
+    Math.max(0, phases.length - maxVisible),
+  );
+  return phases.slice(start, start + maxVisible);
+}
+
 export function AgentProgressPill({
   events,
   hasAnswer,
@@ -108,6 +142,10 @@ export function AgentProgressPill({
   const progress = displayPhase
     ? progressForPhases(phases, displayPhase)
     : { current: 0, total: 0 };
+  const displayPhaseIndex = displayPhase
+    ? phases.findIndex((phase) => phase.id === displayPhase.id)
+    : -1;
+  const currentBlock = useMemo(() => pickCurrentWorkBlock(blocks), [blocks]);
   const planFingerprint = useMemo(
     () => planFingerprintForPhases(phases),
     [phases],
@@ -160,16 +198,29 @@ export function AgentProgressPill({
   }
 
   const percent = Math.round((progress.current / progress.total) * 100);
-  const visiblePhases = phases.slice(
-    Math.max(0, progress.current - 4),
-    progress.current + 1,
-  );
+  const visiblePhases = phaseWindow(phases, displayPhaseIndex, 7);
   const beadTone = agentRunBeadTone({
     paused,
     runFailed,
     status: displayPhase.status,
     waiting,
   });
+  const progressLabel = `${t.agentWorkbench.currentProgress} ${progress.current}/${progress.total}`;
+  const activeStatus = currentBlock
+    ? currentBlock.status === "running"
+      ? t.agentWorkbench.statusProcessing
+      : currentBlock.status === "waiting_approval"
+        ? t.agentWorkbench.waitingToContinue
+        : currentBlock.status === "error"
+          ? t.agentWorkbench.statusError
+          : t.agentWorkbench.statusCompleted
+    : displayPhase.status === "running"
+      ? t.agentWorkbench.statusProcessing
+      : displayPhase.status === "waiting_approval"
+        ? t.agentWorkbench.waitingToContinue
+        : displayPhase.status === "error"
+          ? t.agentWorkbench.statusError
+          : t.agentWorkbench.statusCompleted;
 
   if (minimized) {
     return (
@@ -186,7 +237,7 @@ export function AgentProgressPill({
             setMinimized(false);
             setExpanded(true);
           }}
-          title={`${t.agentWorkbench.currentProgress} ${progress.current}/${progress.total}`}
+          title={progressLabel}
           aria-label={t.agentWorkbench.restoreProgress}
           className={cn(
             "relative isolate size-4 rounded-full shadow-sm transition-transform hover:scale-110",
@@ -210,7 +261,7 @@ export function AgentProgressPill({
   return (
     <div className={cn("relative z-20 flex w-full flex-col", className)}>
       {expanded ? (
-        <div className="rounded-t-xl border border-b-0 border-border/70 bg-background/95 p-2.5 shadow-lg shadow-black/5 backdrop-blur-xl">
+        <div className="rounded-t-lg border border-b-0 border-border/70 bg-background/95 p-2.5 shadow-lg shadow-black/5 backdrop-blur-xl">
           <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
             {visiblePhases.map((phase) => {
               const active = phase.id === displayPhase.id;
@@ -235,12 +286,39 @@ export function AgentProgressPill({
               );
             })}
           </div>
+          {currentBlock ? (
+            <div className="mt-2 flex min-w-0 items-start gap-2 border-t border-border/45 pt-2 text-xs">
+              <WorkBlockIcon block={currentBlock} />
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="shrink-0 font-medium text-foreground">
+                    {t.message.latestTool}
+                  </span>
+                  <span className="shrink-0 text-muted-foreground">·</span>
+                  <span className="min-w-0 truncate text-foreground/85">
+                    {currentBlock.title}
+                  </span>
+                </div>
+                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span className="shrink-0">{activeStatus}</span>
+                  {currentBlock.subtitle ? (
+                    <>
+                      <span className="shrink-0">·</span>
+                      <span className="min-w-0 truncate">
+                        {currentBlock.subtitle}
+                      </span>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
       <div
         className={cn(
           "group flex w-full items-center gap-1.5 border border-border/70 bg-background/95 px-3 py-1.5 text-left shadow-lg shadow-black/5 backdrop-blur-xl transition-colors hover:bg-muted/45",
-          expanded ? "border-b-0" : "rounded-t-xl border-b-0",
+          expanded ? "border-b-0" : "rounded-t-lg border-b-0",
         )}
       >
         <button
@@ -253,10 +331,12 @@ export function AgentProgressPill({
         >
           <MonitorIcon className="size-3.5 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
+            <div className="flex min-w-0 items-center gap-1.5 text-[13px] leading-5">
+              <span className="hidden shrink-0 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline">
+                {t.agentWorkbenchPanel.mainComputer}
+              </span>
               <span className="shrink-0 font-medium text-foreground">
-                {t.agentWorkbench.currentProgress} {progress.current}/
-                {progress.total}
+                {progressLabel}
               </span>
               <StatusIcon status={displayPhase.status} />
               <span
@@ -274,6 +354,14 @@ export function AgentProgressPill({
                 )}
               />
             </div>
+            {currentBlock ? (
+              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
+                <WorkBlockIcon block={currentBlock} />
+                <span className="shrink-0">{activeStatus}</span>
+                <span className="shrink-0">·</span>
+                <span className="min-w-0 truncate">{currentBlock.title}</span>
+              </div>
+            ) : null}
             <div className="mt-1 h-0.5 overflow-hidden rounded-full bg-muted">
               <div
                 className={cn(
