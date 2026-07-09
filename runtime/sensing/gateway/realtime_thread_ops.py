@@ -34,18 +34,8 @@ async def _maybe_compact(
     log: EventLog,
     emitter: EventEmitter,
 ) -> None:
-    lock = await runtime._compaction_lock_for(thread_id)
-    async with lock:
+    async with runtime._compaction_locks.hold(thread_id):
         await runtime._maybe_compact_locked(thread_id, log, emitter)
-
-
-async def _compaction_lock_for(runtime: CerebrumRuntime, thread_id: str) -> asyncio.Lock:
-    async with runtime._compaction_locks_guard:
-        lock = runtime._compaction_locks.get(thread_id)
-        if lock is None:
-            lock = asyncio.Lock()
-            runtime._compaction_locks[thread_id] = lock
-        return lock
 
 
 async def _maybe_compact_locked(
@@ -152,8 +142,7 @@ async def compact_thread(
     )
 
     log = runtime._log_for(thread_id)
-    lock = await runtime._compaction_lock_for(thread_id)
-    async with lock:
+    async with runtime._compaction_locks.hold(thread_id):
         turns = log.replay()
         policy: CompactionPolicy = runtime._compaction_policy
         if len(turns) <= policy.keep_recent:

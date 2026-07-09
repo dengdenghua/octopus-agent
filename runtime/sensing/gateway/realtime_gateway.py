@@ -42,6 +42,8 @@ except ImportError:  # pragma: no cover
 
 
 from runtime.platform.models.primitives import now_utc
+from runtime.platform.process.keyed_lock import KeyedLock
+from runtime.platform.process.sliding_window_limiter import SlidingWindowLimiter
 from runtime.protocol import (
     ClientMethod,
     Item,
@@ -407,6 +409,8 @@ class RealtimeGateway:
         trust_jwt_sub: bool = True,
         allow_client_approval_bypass: bool = False,
         max_in_flight_requests_per_connection: int = 32,
+        max_connections_per_actor: int = 64,
+        max_turns_per_minute_per_actor: int = 120,
     ) -> None:
         self._runtime = runtime
         self._approval_timeout = approval_timeout
@@ -422,8 +426,21 @@ class RealtimeGateway:
             1,
             max_in_flight_requests_per_connection,
         )
-        self._turn_locks: dict[str, asyncio.Lock] = {}
-        self._turn_locks_guard = asyncio.Lock()
+        # Lenient per-actor anti-abuse ceilings (auth-on only — a local
+        # single-user server with actor_id None is never limited). Sized
+        # so many tabs/devices and bursty use pass freely; only a runaway
+        # or hostile client trips them. Set to 0 to disable either.
+        self._max_connections_per_actor = max(0, int(max_connections_per_actor))
+        self._conn_counts: dict[str, int] = {}
+        self._turn_rate_limiter = (
+            SlidingWindowLimiter(int(max_turns_per_minute_per_actor), window_s=60.0)
+            if int(max_turns_per_minute_per_actor) > 0
+            else None
+        )
+        # Per-thread turn serialization. Reference-counted so the map is
+        # reclaimed when a thread goes idle instead of leaking one lock
+        # per thread_id for the process lifetime.
+        self._turn_locks = KeyedLock()
         # Cross-connection state: the shared interrupt registry (see
         # SharedTurnInterrupts) plus the live-connection set used to
         # fan terminal turn events out to same-thread watchers.
@@ -515,6 +532,29 @@ class RealtimeGateway:
             raise _RpcError(JsonRpcErrorCode.UNAUTHORIZED, "invalid token")
         return None
 
+    def _admit_connection(self, actor_id: str | None) -> bool:
+        """Reserve a connection slot for ``actor_id`` under the per-actor
+        cap. Returns False when the actor is already at the cap. A no-op
+        (always True) when auth is off (actor_id None) or the cap is 0."""
+        if actor_id is None or self._max_connections_per_actor <= 0:
+            return True
+        count = self._conn_counts.get(actor_id, 0)
+        if count >= self._max_connections_per_actor:
+            return False
+        self._conn_counts[actor_id] = count + 1
+        return True
+
+    def _release_connection(self, actor_id: str | None) -> None:
+        """Return a slot reserved by _admit_connection; drop the key at 0
+        so the counter map stays O(actors with a live connection)."""
+        if actor_id is None or self._max_connections_per_actor <= 0:
+            return
+        count = self._conn_counts.get(actor_id, 0) - 1
+        if count <= 0:
+            self._conn_counts.pop(actor_id, None)
+        else:
+            self._conn_counts[actor_id] = count
+
     async def _serve(self, ws: WebSocket) -> None:
         try:
             actor_id = self._resolve_ws_actor(ws)
@@ -523,6 +563,12 @@ class RealtimeGateway:
             # in WS close-code space (the 4000–4999 range is for app use).
             with suppress(Exception):
                 await ws.close(code=4401, reason=exc.message)
+            return
+        # Per-actor connection cap (4429 ≈ HTTP 429). Checked before
+        # accept so an over-limit actor never spawns connection state.
+        if not self._admit_connection(actor_id):
+            with suppress(Exception):
+                await ws.close(code=4429, reason="too many connections for this actor")
             return
         await ws.accept()
         conn = RpcConnection(
@@ -551,6 +597,7 @@ class RealtimeGateway:
                 task.add_done_callback(in_flight.discard)
         finally:
             self._connections.discard(conn)
+            self._release_connection(actor_id)
             for task in list(in_flight):
                 task.cancel()
             await conn.close()
@@ -685,6 +732,19 @@ class RealtimeGateway:
         notifications, so this return value is for callers that prefer
         a synchronous "wait for done" answer over watching the stream.
         """
+        # Lenient per-actor turn-rate ceiling (auth-on only). Bursts pass;
+        # only a sustained flood trips SERVER_BUSY, which clients treat as
+        # "back off and retry". Different threads still run concurrently —
+        # this caps how fast one actor may *start* turns, not how many run.
+        if (
+            self._turn_rate_limiter is not None
+            and conn.actor_id is not None
+            and not self._turn_rate_limiter.allow(conn.actor_id)
+        ):
+            raise _RpcError(
+                JsonRpcErrorCode.SERVER_BUSY,
+                "rate limit: too many turns started; slow down and retry",
+            )
         thread_id = params.get("threadId")
         if not isinstance(thread_id, str):
             raise _RpcError(
@@ -699,8 +759,7 @@ class RealtimeGateway:
             raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, str(exc)) from exc
         params = self._sanitize_turn_params(params, conn)
         try:
-            lock = await self._lock_for_thread(thread_id)
-            async with lock:
+            async with self._turn_locks.hold(thread_id):
                 turn = await self._runtime.start_turn(params, conn)
         except _RpcError:
             raise
@@ -745,14 +804,6 @@ class RealtimeGateway:
                 with suppress(Exception):
                     await watcher.notify(ServerMethod.TURN_COMPLETED, completed_params)
         return {"turn": turn.model_dump(by_alias=True, mode="json")}
-
-    async def _lock_for_thread(self, thread_id: str) -> asyncio.Lock:
-        async with self._turn_locks_guard:
-            lock = self._turn_locks.get(thread_id)
-            if lock is None:
-                lock = asyncio.Lock()
-                self._turn_locks[thread_id] = lock
-            return lock
 
     def _sanitize_turn_params(
         self,

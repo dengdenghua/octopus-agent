@@ -45,6 +45,8 @@ from typing import Any
 from runtime.memory.threads.event_log import EventLog
 from runtime.platform.models import ParsedIntent
 from runtime.platform.models.primitives import now_utc
+from runtime.platform.process.bounded_set import BoundedSet
+from runtime.platform.process.keyed_lock import KeyedLock
 from runtime.protocol import (
     AgentMessageItem,
     ItemStatus,
@@ -295,9 +297,6 @@ from runtime.sensing.gateway.realtime_thread_history import (
 )
 from runtime.sensing.gateway.realtime_thread_history import (
     _title_from_messages as _title_from_messages,
-)
-from runtime.sensing.gateway.realtime_thread_ops import (
-    _compaction_lock_for as _compaction_lock_for,
 )
 from runtime.sensing.gateway.realtime_thread_ops import (
     _handle_hunk_decide as _handle_hunk_decide,
@@ -576,11 +575,18 @@ class CerebrumRuntime:
             from runtime.platform.runtime_policy.workspaces import WorkspaceManager
 
             self._workspaces = WorkspaceManager(Path(workspace_root))
-        self._known_threads: set[str] = set()
+        # Dedup ledger for thread_started emission. Bounded so a server
+        # that handles a large number of distinct short-lived threads over
+        # its lifetime doesn't accumulate one entry forever — re-seeing an
+        # evicted thread at worst re-emits thread_started, which the
+        # persisted-log check in _ensure_thread already guards against.
+        self._known_threads = BoundedSet(maxsize=8192)
         self._lock = asyncio.Lock()
         self._active_turn_ids: set[str] = set()
-        self._compaction_locks: dict[str, asyncio.Lock] = {}
-        self._compaction_locks_guard = asyncio.Lock()
+        # Per-thread compaction serialization. Reference-counted so the
+        # map is reclaimed when a thread goes idle rather than leaking one
+        # lock per thread_id forever.
+        self._compaction_locks = KeyedLock()
         self._pending_resume_intents: dict[str, dict[str, Any]] = {}
         self._resume_intents_lock = asyncio.Lock()
         # Per-thread registry of background command watchers. Each
@@ -742,9 +748,6 @@ class CerebrumRuntime:
         emitter: EventEmitter,
     ) -> None:
         await _maybe_compact(self, thread_id, log, emitter)
-
-    async def _compaction_lock_for(self, thread_id: str) -> asyncio.Lock:
-        return await _compaction_lock_for(self, thread_id)
 
     async def _maybe_compact_locked(
         self,

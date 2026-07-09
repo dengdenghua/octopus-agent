@@ -102,6 +102,31 @@ def _deep_requested(body: dict[str, Any]) -> bool:
     return bool(isinstance(ctx, dict) and ctx.get("deep"))
 
 
+def _evict_idle_rate_buckets(
+    windows: dict[str, Any],
+    semaphores: dict[str, Any],
+    cutoff: float,
+) -> int:
+    """Drop per-actor rate-limit buckets whose sliding window has emptied
+    out — no call newer than ``cutoff`` (a monotonic timestamp). Mutates
+    both dicts in place and returns the number of buckets evicted.
+
+    Module-level and pure so the eviction invariant (empty windows go,
+    active ones stay, the paired semaphore is dropped alongside) is
+    unit-testable without standing up the whole gateway router.
+    """
+    stale: list[str] = []
+    for key, window in windows.items():
+        while window and window[0] < cutoff:
+            window.popleft()
+        if not window:
+            stale.append(key)
+    for key in stale:
+        windows.pop(key, None)
+        semaphores.pop(key, None)
+    return len(stale)
+
+
 def create_openai_router(
     stack: Any,
     *,
@@ -140,6 +165,34 @@ def create_openai_router(
     _rate_limit_lock = _threading.Lock()
     _CONCURRENT_LIMIT = max(1, int(max_concurrent_completions_per_actor))  # noqa: N806
     _PER_MIN_LIMIT = max(1, int(max_completions_per_minute_per_actor))  # noqa: N806
+    # Without this, one bucket per distinct anon:<ip> key accumulates
+    # forever — an attacker rotating source IPs would grow both dicts
+    # unbounded. Prune buckets whose sliding window has gone empty (no
+    # calls in the last 60s). Amortized: swept at most once per interval
+    # (or when we blow past a hard cap) so it never becomes O(buckets)
+    # per request under a rotating-IP flood.
+    _MAX_RATE_BUCKETS = 4096  # noqa: N806
+    _BUCKET_SWEEP_INTERVAL = 30.0  # noqa: N806
+    _last_bucket_sweep = [0.0]  # 1-elem box: mutable across closure calls
+
+    def _prune_rate_buckets_locked(now: float) -> None:
+        # Caller holds _rate_limit_lock. Cheap gate first: sweep on a
+        # cadence, or sooner if we've blown past the hard cap — but never
+        # more than ~once/sec, so a sustained flood of *active* IPs (where
+        # a sweep frees nothing) can't turn this into O(buckets)/request.
+        elapsed = now - _last_bucket_sweep[0]
+        if elapsed < 1.0:
+            return
+        over_cap = len(_completion_call_windows) > _MAX_RATE_BUCKETS
+        if not over_cap and elapsed < _BUCKET_SWEEP_INTERVAL:
+            return
+        _last_bucket_sweep[0] = now
+        # Only keys with an empty window (no call in 60s) are dropped, so
+        # in the normal case no slot is held. The one edge case — a single
+        # completion running >60s — would at worst reset that key's
+        # concurrency cap once; the later release() lands on an orphaned
+        # semaphore, which is harmless.
+        _evict_idle_rate_buckets(_completion_call_windows, _completion_semaphores, now - 60.0)
 
     def _actor_bucket_key(actor: str | None, request: Any) -> str:
         if actor:
@@ -177,6 +230,8 @@ def create_openai_router(
                     f"rate limit: max {_PER_MIN_LIMIT} completions/min per actor",
                 )
             window.append(now)
+            # Bound the bucket dicts against a rotating-IP flood.
+            _prune_rate_buckets_locked(now)
         # Acquire outside the lock so a saturated actor doesn't block
         # everyone else.
         if not sem.acquire(blocking=False):

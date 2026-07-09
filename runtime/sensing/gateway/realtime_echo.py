@@ -33,6 +33,7 @@ from runtime.memory.threads.event_log import (
     thread_log_path,
     validate_thread_id,
 )
+from runtime.platform.process.bounded_set import BoundedSet
 from runtime.protocol import (
     AgentMessageItem,
     CommandExecutionItem,
@@ -58,8 +59,11 @@ class EchoRuntime:
         self._logs_root = Path(logs_root)
         self._logs_root.mkdir(parents=True, exist_ok=True)
         # Tracks which threads have already had their thread_started
-        # event written, so resume + new turn don't double-log.
-        self._known_threads: set[str] = set()
+        # event written, so resume + new turn don't double-log. Bounded so
+        # the ledger can't grow without limit across many distinct threads;
+        # eviction at worst re-emits thread_started (the persisted-log
+        # check in _ensure_thread already prevents a real double-log).
+        self._known_threads = BoundedSet(maxsize=8192)
         self._lock = asyncio.Lock()
 
     def _log_for(self, thread_id: str) -> EventLog:
