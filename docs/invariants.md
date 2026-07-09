@@ -365,7 +365,11 @@ create_budget → reserve → execute → commit → (optional) refund_reserved
 
 以下是可以用 `ast` / regex / custom pyright plugin 直接落地的规则。每条给出名称、检测方法、违规样例。
 
-### LINT-01 · NO_BYPASS_IMMUNITY
+### LINT-01 · NO_BYPASS_IMMUNITY  ⚠️ 已退休（不再运行）
+
+> 目标包 `beak`/`immunity` 在 biological→neutral 改名中删除，LINT-03 又永久
+> 禁止这些名字重现，故此规则不可能再触发，已从 `tools/lint` 的 `ALL_RULES`
+> 移除。下方为历史设计意图，仅作参考。
 
 - **守护**：IMM-I1 + DIG-I3 + REF-I1 + CC-1
 - **检测**：AST 全局扫描。任何调用 `beak.bite(*)` 或 `ToolExecutor.execute(*)` 的函数，必须在调用方路径上能到达 `immunity.check(*)`。
@@ -443,7 +447,10 @@ create_budget → reserve → execute → commit → (optional) refund_reserved
 - **违规**：reflex 规则 handler 里 `return llm.generate(...)`
 - **正确**：reflex handler 必须是确定性 `response` 或 emit 事件
 
-### LINT-10 · CRDT_NOT_LWW
+### LINT-10 · CRDT_NOT_LWW  ⚠️ 已退休（不再运行）
+
+> 需要 `dna`+`genome` 包，二者在 biological→neutral 改名中删除，故已从
+> `tools/lint` 的 `ALL_RULES` 移除。下方为历史设计意图，仅作参考。
 
 - **守护**：GEN-I4 + CRDT 语义
 - **检测**：Genome field 操作禁止直接 `dict.update` / `list.append` / `=`；必须通过对应 CRDT 类型方法。

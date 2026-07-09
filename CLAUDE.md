@@ -27,7 +27,7 @@ make dev-full         # backend + frontend together
 make test             # pytest + coverage
 make test-fast        # pytest, no coverage
 make test-unit        # exclude slow + integration
-make lint             # invariant checks (LINT-01..10) + ruff
+make lint             # invariant checks (active: LINT-02/03/04/05/09) + ruff
 make fix              # ruff --fix + format
 make security         # bandit + pip-audit
 make frontend-build   # build frontend/dist for FastAPI /ui
@@ -49,8 +49,10 @@ Frontend (in `frontend/`): `pnpm dev` (port 3000), `pnpm build`, `pnpm test`
 - **ruff**: line-length 100, double quotes. `E501` is ignored (formatter owns
   wrapping). Custom exceptions like `InvariantViolation` intentionally skip the
   `Error` suffix (`N818` ignored).
-- **Invariant lint** (`make lint-invariants`, `octopus-lint`) enforces project
-  rules LINT-01..10 — run it, not just ruff, before assuming lint is green.
+- **Invariant lint** (`make lint-invariants`, `octopus-lint`) enforces the
+  active project rules (LINT-02/03/04/05/09; 01 and 10 retired with their
+  target packages, 06/07/08 unimplemented) — run it, not just ruff, before
+  assuming lint is green.
 - **pytest**: `testpaths=tests`, strict markers/config, 60s timeout. Markers:
   `slow`, `integration`.
 - Two generated artifacts drift easily — regenerate, don't hand-edit:

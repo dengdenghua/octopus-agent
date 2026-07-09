@@ -68,36 +68,11 @@ class Rule:
         )
 
 
-# ─── LINT-01 · NO_BYPASS_IMMUNITY ─────────────────────────
-
-
-class NoBypassImmunityRule(Rule):
-    """Implementation note."""
-
-    rule_id = "LINT-01"
-
-    BITE_PATTERNS = {"bite"}  # Beak.bite() / beak.bite()
-    CHECK_PATTERNS = {"check"}  # immunity.check()
-
-    def check(self, ctx: LintContext) -> Iterable[LintIssue]:
-        for func in _iter_functions(ctx.tree):
-            bites: list[ast.Call] = []
-            checks: list[ast.Call] = []
-            for node in ast.walk(func):
-                if isinstance(node, ast.Call):
-                    if _is_attr_call(node, "beak", "bite") or _is_method_call(node, "bite"):
-                        # Implementation note.
-                        if not ctx.in_package("beak"):
-                            bites.append(node)
-                    if _is_attr_call(node, "immunity", "check"):
-                        checks.append(node)
-            if bites and not checks:
-                for bite in bites:
-                    yield self.issue(
-                        ctx,
-                        bite,
-                        f"function '{func.name}' calls beak.bite() but no immunity.check() reaches it",
-                    )
+# LINT-01 (NO_BYPASS_IMMUNITY) retired: it matched ``beak.bite()`` /
+# ``immunity.check()``, but those packages were removed in the biological→
+# neutral rename, and LINT-03 permanently bans re-introducing such names,
+# so the rule could never fire again. Kept out of ALL_RULES rather than
+# shipped as a dead guard that inflates the effective rule count.
 
 
 # ─── LINT-02 · NO_MAGIC_ORGAN_COUNT ───────────────────────
@@ -313,42 +288,13 @@ class ReflexNoGenerateRule(Rule):
                     )
 
 
-# ─── LINT-10 · CRDT_NOT_LWW ───────────────────────────────
-
-
-class CrdtNotLwwRule(Rule):
-    """Implementation note."""
-
-    rule_id = "LINT-10"
-
-    def check(self, ctx: LintContext) -> Iterable[LintIssue]:
-        if not (ctx.in_package("dna") and ctx.in_package("genome")):
-            return
-        for node in ast.walk(ctx.tree):
-            if isinstance(node, ast.Assign):
-                for target in node.targets:
-                    if _is_dna_field_assignment(target):
-                        yield self.issue(
-                            ctx,
-                            node,
-                            "direct assignment on genome.dna.* field; use .set() / .merge() CRDT methods",
-                        )
-            elif isinstance(node, ast.AugAssign):
-                if _is_dna_field_assignment(node.target):
-                    yield self.issue(
-                        ctx,
-                        node,
-                        "aug-assignment on genome.dna.* field; use CRDT operators instead",
-                    )
+# LINT-10 (CRDT_NOT_LWW) retired: it required both the ``dna`` and
+# ``genome`` packages, which were removed in the biological→neutral rename
+# (and LINT-03 bans re-introducing those names). With no possible target
+# it is kept out of ALL_RULES rather than shipped as a dead guard.
 
 
 # Implementation note.
-
-
-def _iter_functions(tree: ast.AST):
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            yield node
 
 
 def _callable_name(node: ast.AST) -> str | None:
@@ -363,42 +309,14 @@ def _callable_name(node: ast.AST) -> str | None:
     return None
 
 
-def _is_attr_call(call: ast.Call, obj_name: str, method: str) -> bool:
-    """Implementation note."""
-    name = _callable_name(call.func)
-    if not name:
-        return False
-    return name.endswith(f".{obj_name}.{method}") or name == f"{obj_name}.{method}"
-
-
-def _is_method_call(call: ast.Call, method: str) -> bool:
-    """Implementation note."""
-    name = _callable_name(call.func)
-    if not name:
-        return False
-    return name.endswith(f".{method}")
-
-
-def _is_dna_field_assignment(target: ast.AST) -> bool:
-    """Implementation note."""
-    if isinstance(target, ast.Attribute):
-        name = _callable_name(target)
-        return name is not None and (
-            "genome.dna" in name or ".dna." in name or name.startswith("dna.")
-        )
-    return False
-
-
 # ─── Runner ─────────────────────────────────────────────────
 
 ALL_RULES: list[Rule] = [
-    NoBypassImmunityRule(),
     NoMagicOrganCountRule(),
     BioNameInCodeRule(),
     NoRawLLMCallRule(),
     TaskNeedsBudgetRule(),
     ReflexNoGenerateRule(),
-    CrdtNotLwwRule(),
 ]
 
 

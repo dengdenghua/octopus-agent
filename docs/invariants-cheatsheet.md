@@ -8,18 +8,18 @@
 
 ## 🔴 P0 · LINT 静态强制（10 条 · 违反=CI 红）
 
-| ID | 名字 | 一句话 |
-|---|---|---|
-| `LINT-01` | NO_BYPASS_IMMUNITY | 调 `ToolExecutor.execute` 前必须过 `immunity.check` |
-| `LINT-02` | NO_MAGIC_ORGAN_COUNT | 代码里别写 `range(8)` 凑章鱼 8 腕；全走 config |
-| `LINT-03` | BIO_NAME_IN_CODE | `class Cerebrum` ❌ / `class Planner` ✅（生物词只当 import 别名） |
-| `LINT-04` | NO_RAW_LLM_CALL | `eyes/` 以外不 import `anthropic` / `openai` / `google.genai` |
-| `LINT-05` | TASK_NEEDS_BUDGET | `Task(...)` 构造必须带 `max_tokens` + `max_cost_usd` |
-| `LINT-06` | PERSONAL_NO_EGRESS | `@privacy(personal)` 标注的函数不得调 cloud bus |
-| `LINT-07` | NO_GENESTUDIO_SHORTCUT | `registry.commit` 必经 schema/shadow/canary 三门 |
-| `LINT-08` | MUTATION_SINGLE_FIELD | `mutate()` 每次改 1 个字段（runtime assert） |
-| `LINT-09` | REGEX_REFLEX_NO_GENERATE | `reflex/` 里禁止 `llm.generate` |
-| `LINT-10` | CRDT_NOT_LWW | Genome 字段用 CRDT 方法 · 不用 `dict.update`/`list.append` |
+| ID | 名字 | 状态 | 一句话 |
+|---|---|---|---|
+| `LINT-01` | NO_BYPASS_IMMUNITY | ⚠️ 已退休 | 目标包 `beak`/`immunity` 已删；不再运行 |
+| `LINT-02` | NO_MAGIC_ORGAN_COUNT | ✅ 运行(warn) | 代码里别写 `range(8)` 凑章鱼 8 腕；全走 config |
+| `LINT-03` | BIO_NAME_IN_CODE | ✅ 运行 | `class Cerebrum` ❌ / `class Planner` ✅（生物词只当 import 别名） |
+| `LINT-04` | NO_RAW_LLM_CALL | ✅ 运行 | `eyes/` 以外不 import `anthropic` / `openai` / `google.genai` |
+| `LINT-05` | TASK_NEEDS_BUDGET | ✅ 运行 | `Task(...)` 构造必须带 `max_tokens` + `max_cost_usd` |
+| `LINT-06` | PERSONAL_NO_EGRESS | 未实现 | `@privacy(personal)` 标注的函数不得调 cloud bus |
+| `LINT-07` | NO_GENESTUDIO_SHORTCUT | 未实现 | `registry.commit` 必经 schema/shadow/canary 三门 |
+| `LINT-08` | MUTATION_SINGLE_FIELD | 未实现 | `mutate()` 每次改 1 个字段（runtime assert） |
+| `LINT-09` | REGEX_REFLEX_NO_GENERATE | ✅ 运行 | `reflex/` 里禁止 `llm.generate` |
+| `LINT-10` | CRDT_NOT_LWW | ⚠️ 已退休 | 目标包 `dna`/`genome` 已删；不再运行 |
 
 **本地跑**：`python -m tools.lint.invariant_check runtime/ tests/`
 

@@ -1,28 +1,28 @@
 # tools/lint · MVP 不变量静态检查
 
-> **14 条 MVP 不变量里能静态检测的 7 条落成代码 = 约 350 行 Python**。
+> **当前 5 条不变量落成为可运行的 AST/Regex 检查 = 约 300 行 Python**。
 > 直接回答"架构太复杂"的质疑：**MVP 层不复杂，可工程化**。
 
 ---
 
-## 实现清单
+## 实现清单（`ALL_RULES` — 实际运行的规则）
 
 | Rule | 守护不变量 | AST/Regex |
 |---|---|---|
-| LINT-01 | IMM-I1 + DIG-I3 + CC-1 · 反射不绕免疫 | AST |
-| LINT-02 | "数字是诗意不是契约" · 禁止硬编码 8 | Regex |
-| LINT-03 | NAMING.md · 生物名不入代码 | AST |
-| LINT-04 | EVO-I1 + CC-3 · 禁止直接 LLM SDK | AST (Import) |
-| LINT-05 | BDG-I2 · Task 必带预算 | AST (Call kwargs) |
-| LINT-09 | REF-I5 · 反射层禁止 LLM 生成 | AST |
-| LINT-10 | GEN-I4 · genome.dna CRDT 方法 | AST (Assign) |
+| LINT-02 | "数字是诗意不是契约" · 禁止硬编码 8（arms/cerebrum 作用域，severity=warning） | Regex |
+| LINT-03 | NAMING.md · 生物名不入代码（全局） | AST |
+| LINT-04 | EVO-I1 + CC-3 · 禁止直接 LLM SDK（全局） | AST (Import) |
+| LINT-05 | BDG-I2 · Task 必带预算（导入 platform.models.Task 的文件） | AST (Call kwargs) |
+| LINT-09 | REF-I5 · 反射层禁止 LLM 生成（reflex 作用域） | AST |
 
-**没实现的 3 条**（都需要更复杂的跨文件分析）：
+**已退休的 2 条**（目标子系统在 biological→neutral 改名中删除；LINT-03 又永久禁止这些名字重现，故不可能再触发，已从 `ALL_RULES` 移除，不作为空守护充数）：
+- LINT-01 NO_BYPASS_IMMUNITY（打 `beak.bite()`/`immunity.check()` — 包已删）
+- LINT-10 CRDT_NOT_LWW（要求 `dna`+`genome` 包 — 均已删）
+
+**从未实现的 3 条**（都需要更复杂的跨文件分析，Core 阶段再加，不在 MVP 硬守范围）：
 - LINT-06 PERSONAL_NO_EGRESS（需全程序调用图）
 - LINT-07 NO_GENESTUDIO_SHORTCUT（需数据流分析）
 - LINT-08 MUTATION_SINGLE_FIELD（runtime only）
-
-这三条不在 MVP 硬守范围内，Core 阶段再加。
 
 ---
 

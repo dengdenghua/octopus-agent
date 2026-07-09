@@ -653,9 +653,12 @@ def stream_react_loop(
     # ║       (pause / cancel / forced max-iter convergence)             ║
     # ║   PHASE 8 · finalization + react_completed yield ~L2993          ║
     # ║                                                                  ║
-    # ║ Why one big function: closure state (~25 vars) + interleaved     ║
-    # ║ yield points + checkpoint/resume coupling make extraction        ║
-    # ║ semantics-changing. See ADR-008 + feedback_runtime_behavior.     ║
+    # ║ Why one big function: ~25 closure vars shared across phases +    ║
+    # ║ interleaved yield points (this is a generator) + checkpoint/     ║
+    # ║ resume coupling make phase extraction semantics-changing. The    ║
+    # ║ side-effect-free pieces (guards, resume-state compute, final-    ║
+    # ║ answer checks) are ALREADY extracted as module-level helpers     ║
+    # ║ above; what remains is the coupled core, kept intact on purpose. ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
     # ── PHASE 1 · entry guards / router resolution ─────────────────────
