@@ -29,6 +29,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -242,42 +243,6 @@ def _compose_soul(
 # ═══════════════════════════════════════════════════════════
 
 
-def _memory_tier_paths(
-    agent_dir: Path,
-    core: Path,
-) -> list[tuple[str, Path]]:
-    """Return (label, path) pairs for the 3 memory tiers.
-
-    Tiers (order matters · earlier = lower priority for recency bias):
-
-        global  · ``~/.octopus/MEMORY.md``
-                  user-wide · shared across all projects · e.g.
-                  personal style preferences · languages spoken
-        project · ``<CWD>/.octopus/MEMORY.md``
-                  repo-scoped · e.g. this codebase's conventions ·
-                  which imports to prefer · deploy targets
-        agent   · ``agents/<id>/agent-core/MEMORY.md``
-                  per-agent · what this persona has learned from
-                  its own past turns
-
-    Missing files are OK · read_or_empty + is_template_only skip them.
-
-    The ``$OCTOPUS_HOME`` env var overrides the ``~/.octopus`` root
-    (useful for tests and for letting one user run multiple isolated
-    agent installs).
-    """
-    import os
-
-    octopus_home = os.environ.get("OCTOPUS_HOME")
-    global_root = Path(octopus_home).expanduser() if octopus_home else Path.home() / ".octopus"
-
-    return [
-        ("global", global_root / "MEMORY.md"),
-        ("project", _repo_root() / ".octopus" / "MEMORY.md"),
-        ("agent", core / "MEMORY.md"),
-    ]
-
-
 def _repo_root_for_agent_dir(agent_dir: Path) -> Path:
     if agent_dir.parent.name == "agents":
         return agent_dir.parent.parent
@@ -470,7 +435,64 @@ def _build_arms(
     return ArmPool(arms)
 
 
-def load_agent(agent_dir: Path, runtime: GraphRuntime, shared_dir: Path) -> Agent:
+def _resolve_profile_model(profile: dict[str, Any]) -> str | None:
+    """Resolve ``profile.jsonc::model`` to a concrete model-id string, or
+    None when the agent expresses no preference.
+
+    Two shapes exist in the wild: a bare string (``"claude-x"``) and a
+    ``{"provider": ..., "name": ...}`` object. Every shipped agent uses
+    the object form with ``"auto"``/``"auto"`` — i.e. "let the dispatch
+    router decide" — which resolves to None (unchanged behavior). Only a
+    concrete name yields a preference. Returning the raw object would be
+    wrong: ``Agent.model`` is a string, and downstream resolvers
+    (``resolve_turn_model``, ``stack_runner``) treat a non-string as a
+    literal model id — a dict there would poison the request.
+    """
+    raw = profile.get("model")
+    if isinstance(raw, str):
+        return raw.strip() or None
+    if isinstance(raw, dict):
+        name = str(raw.get("name") or "").strip()
+        if not name or name.lower() == "auto":
+            return None
+        provider = str(raw.get("provider") or "").strip()
+        if provider and provider.lower() != "auto":
+            return f"{provider}/{name}"
+        return name
+    return None
+
+
+@dataclass(frozen=True)
+class AgentTemplate:
+    """The runtime-independent result of parsing an ``agents/<id>/`` folder.
+
+    Holds everything ``load_agent`` needs *except* the live arms, which
+    require a ``GraphRuntime`` to build. Splitting parse from instantiate
+    lets tooling — a template registry, a validator, a multi-tenant
+    catalog — read and check an agent folder without standing up a
+    runtime. ``instantiate(template, runtime)`` turns one into an Agent.
+    """
+
+    agent_id: str
+    display_name: str
+    description: str
+    icon: str
+    soul: str
+    model: str | None
+    arm_ids: list[str]
+    affinity: list[str]
+    private_skills: list[str]
+    capabilities: dict[str, Any]
+    budget: dict[str, Any]
+
+
+def parse_template(agent_dir: Path, shared_dir: Path) -> AgentTemplate:
+    """Parse an ``agents/<id>/`` folder into a runtime-independent template.
+
+    Reads ``profile.jsonc`` + ``agent-core/tool-registry.jsonc`` and
+    composes the static soul. No ``GraphRuntime`` needed — arm instances
+    are built later by ``instantiate``.
+    """
     profile_path = agent_dir / "profile.jsonc"
     if not profile_path.exists():
         raise FileNotFoundError(f"missing {profile_path}")
@@ -484,44 +506,65 @@ def load_agent(agent_dir: Path, runtime: GraphRuntime, shared_dir: Path) -> Agen
     )
 
     agent_id = str(profile.get("id") or agent_dir.name)
-    display_name = str(profile.get("name") or agent_id)
-    description = str(profile.get("description") or "")
-    icon = str(profile.get("icon") or "")
-    arm_ids = list(tool_registry.get("arms") or [])
-    affinity = list(tool_registry.get("extra_affinity") or [])
-    private_skills = list(tool_registry.get("private_skills") or [])
 
     # Capability flags · read by scope resolver and feature gates.
     # Lives in profile.jsonc so it travels with the agent folder —
     # if someone clones an agent dir to spin up a new persona, the
     # capability set comes with it.
     caps_raw = profile.get("capabilities") or {}
-    capabilities = caps_raw if isinstance(caps_raw, dict) else {}
-
     # ``budget: { max_tokens: 100000, max_usd: 1.0, max_iterations: 30 }``,
     budget_raw = profile.get("budget") or {}
-    budget = budget_raw if isinstance(budget_raw, dict) else {}
 
-    soul = _compose_soul(agent_dir, shared_dir, profile=profile)
+    return AgentTemplate(
+        agent_id=agent_id,
+        display_name=str(profile.get("name") or agent_id),
+        description=str(profile.get("description") or ""),
+        icon=str(profile.get("icon") or ""),
+        soul=_compose_soul(agent_dir, shared_dir, profile=profile),
+        model=_resolve_profile_model(profile),
+        arm_ids=list(tool_registry.get("arms") or []),
+        affinity=list(tool_registry.get("extra_affinity") or []),
+        private_skills=list(tool_registry.get("private_skills") or []),
+        capabilities=caps_raw if isinstance(caps_raw, dict) else {},
+        budget=budget_raw if isinstance(budget_raw, dict) else {},
+    )
+
+
+def instantiate(template: AgentTemplate, runtime: GraphRuntime) -> Agent:
+    """Build a live ``Agent`` from a parsed template against ``runtime``.
+
+    This is the runtime-bound half of loading — it wires the arm
+    factories (which need the runtime) onto the already-parsed template.
+    """
     arms = _build_arms(
         runtime,
-        arm_ids,
-        agent_id,
-        private_skills=private_skills,
+        template.arm_ids,
+        template.agent_id,
+        private_skills=template.private_skills,
+    )
+    return Agent(
+        agent_id=template.agent_id,
+        display_name=template.display_name,
+        description=template.description,
+        soul=template.soul,
+        icon=template.icon,
+        arms=arms,
+        model=template.model,
+        extra_affinity=template.affinity,
+        extra_skills=template.private_skills,
+        capabilities=template.capabilities,
+        budget=template.budget,
     )
 
-    return Agent(
-        agent_id=agent_id,
-        display_name=display_name,
-        description=description,
-        soul=soul,
-        icon=icon,
-        arms=arms,
-        extra_affinity=affinity,
-        extra_skills=private_skills,
-        capabilities=capabilities,
-        budget=budget,
-    )
+
+def load_agent(agent_dir: Path, runtime: GraphRuntime, shared_dir: Path) -> Agent:
+    """Parse an agent folder and instantiate it against ``runtime``.
+
+    A thin composition of ``parse_template`` (pure) + ``instantiate``
+    (needs the runtime to build arms). Callers that only need metadata
+    should call ``parse_template`` directly and skip the runtime.
+    """
+    return instantiate(parse_template(agent_dir, shared_dir), runtime)
 
 
 _LOAD_ALL_SKIP_IDS = frozenset(
