@@ -37,6 +37,10 @@ dev = [
     # `make install` provides them instead of the gate silently no-opping.
     "bandit>=1.7",
     "pip-audit>=2.7",
+    # Pinned to the minor that generated tools/lint/mypy_baseline.txt — a
+    # newer mypy shifts messages/rules and drifts the ratchet red on
+    # unrelated PRs. Bump deliberately, then --write-baseline.
+    "mypy>=2.1,<2.2",
 ]
 tracing = [
     "opentelemetry-api>=1.25",
@@ -240,3 +244,19 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
 ]
+
+# ─── mypy ────────────────────────────────────────────
+# Incremental adoption via tools/lint/mypy_ratchet.py: existing errors on
+# the checked packages are frozen in mypy_baseline.txt; the gate only fails
+# on NEW ones. Settings are deliberately lenient (not --strict) — this is a
+# ratchet on an untyped-by-default codebase, not a full typing mandate.
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+follow_imports = "silent"
+# Bundled third-party agent-plugin scripts (market skills) carry duplicate
+# module names that abort mypy before it reaches real code — never our own.
+exclude = "(agent_market_sources|/fixtures/|/visuals/)"
+warn_unused_ignores = false
+warn_redundant_casts = false
+disable_error_code = ["import-untyped"]

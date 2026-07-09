@@ -1,4 +1,4 @@
-.PHONY: install install-all quickstart quickstart-serve test test-fast test-unit test-integration production-readiness verify-local verify-full-stack lint lint-invariants lint-ruff format fix clean tree \
+.PHONY: install install-all quickstart quickstart-serve test test-fast test-unit test-integration production-readiness verify-local verify-full-stack lint lint-invariants lint-mypy lint-ruff format fix clean tree \
         security \
         dev bootstrap-skills \
         up up-full down logs restart ps rebuild \
@@ -48,10 +48,13 @@ verify-full-stack:  ## Run the FastAPI + Vite localhost/127 smoke only
 	bash scripts/verify_local.sh --full-stack-only
 
 # ─── Lint ────────────────────────────────────────────
-lint: lint-invariants lint-ruff  ## Run all linters
+lint: lint-invariants lint-mypy lint-ruff  ## Run all linters
 
-lint-invariants:  ## Run Octopus invariant checks (LINT-01..10)
+lint-invariants:  ## Run Octopus invariant checks (active: LINT-02/03/04/05/09)
 	python -m tools.lint.invariant_check runtime/ tests/
+
+lint-mypy:  ## Run the mypy ratchet (no NEW type errors on hot packages)
+	python tools/lint/mypy_ratchet.py
 
 lint-ruff:  ## Run ruff
 	ruff check runtime/ tests/ tools/

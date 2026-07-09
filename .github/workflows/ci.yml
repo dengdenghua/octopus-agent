@@ -85,6 +85,9 @@ jobs:
       - name: Hardcoded user paths (block per-user absolute paths in source)
         run: python tools/lint/hardcoded_path_check.py --strict
 
+      - name: mypy ratchet (no NEW static-type errors on hot packages)
+        run: python tools/lint/mypy_ratchet.py
+
       - name: Ruff check
         run: ruff check runtime/ tests/ tools/
 
