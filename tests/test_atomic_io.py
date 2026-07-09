@@ -27,6 +27,31 @@ def test_write_bytes_creates_file(tmp_path: Path) -> None:
     assert target.read_bytes() == b"hello"
 
 
+@pytest.mark.skipif(
+    __import__("os").name == "nt", reason="POSIX file-mode bits not meaningful on Windows"
+)
+def test_mode_creates_restrictive_secret_file(tmp_path: Path) -> None:
+    # A secret file (token store) must be created 0600 from the start —
+    # no brief 0644 window that a chmod-after-write would leave.
+    import os
+    import stat
+
+    old = os.umask(0o022)
+    try:
+        target = tmp_path / "secret.json"
+        atomic_write_json(target, {"access_token": "sk-secret"}, mode=0o600)
+        assert stat.S_IMODE(target.stat().st_mode) == 0o600
+        # An overwrite keeps it locked down too.
+        atomic_write_json(target, {"access_token": "sk-secret-2"}, mode=0o600)
+        assert stat.S_IMODE(target.stat().st_mode) == 0o600
+        # Without mode, the default (0644 minus umask) is unchanged.
+        plain = tmp_path / "plain.json"
+        atomic_write_json(plain, {"x": 1})
+        assert stat.S_IMODE(plain.stat().st_mode) == 0o644
+    finally:
+        os.umask(old)
+
+
 def test_write_text_appends_trailing_newline(tmp_path: Path) -> None:
     target = tmp_path / "out.txt"
     atomic_write_text(target, "line")

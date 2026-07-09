@@ -20,7 +20,6 @@ a follow-up; for now file perms match how local CLIs store OAuth tokens.
 from __future__ import annotations
 
 import base64
-import contextlib
 import hashlib
 import json
 import os
@@ -223,9 +222,11 @@ class MCPOAuthStore:
             },
             "clients": dict(self._clients),
         }
-        atomic_write_json(self._path, payload)
-        with contextlib.suppress(OSError):
-            os.chmod(self._path, 0o600)
+        # 0o600 from creation — the token file holds access/refresh tokens
+        # and must never be even briefly group/world-readable, so we set
+        # the mode on the temp file before writing rather than chmod'ing
+        # after (which left a TOCTOU window at the default 0o644).
+        atomic_write_json(self._path, payload, mode=0o600)
 
     def start_pending(
         self,

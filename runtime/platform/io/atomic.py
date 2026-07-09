@@ -204,6 +204,7 @@ def atomic_write_bytes(
     *,
     keep_backup: bool = True,
     fsync: bool = True,
+    mode: int | None = None,
 ) -> None:
     """Write ``data`` to ``path`` atomically.
 
@@ -216,6 +217,13 @@ def atomic_write_bytes(
         fsync: If ``True``, fsync temp file and parent directory. Set
             to ``False`` for hot-path writes where durability is less
             important than throughput.
+        mode: If set (e.g. ``0o600``), the file is created with exactly
+            these permissions — applied to the temp file *before* any
+            bytes are written, so the final file is never briefly
+            world-readable. This closes the TOCTOU window a caller would
+            otherwise have doing ``atomic_write_json(...)`` then
+            ``os.chmod(..., 0o600)`` on a secret file. ``None`` keeps the
+            default (0o644 minus umask).
 
     Raises:
         AtomicWriteError: on any filesystem error after attempting
@@ -234,8 +242,14 @@ def atomic_write_bytes(
             fd = os.open(
                 str(tmp_path),
                 os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-                0o644,
+                mode if mode is not None else 0o644,
             )
+            # O_CREAT mode is masked by umask, so for a secret file force
+            # the exact bits before writing — the temp (and the target it
+            # is renamed onto) is thus never wider than requested.
+            if mode is not None:
+                with contextlib.suppress(OSError):
+                    os.fchmod(fd, mode)
             # fd ownership transfers to fdopen context; if the open
             # succeeded but a subsequent write failed, fdopen's
             # ``__exit__`` already closed fd, so a re-raise is enough
@@ -277,6 +291,7 @@ def atomic_write_text(
     newline: str | None = "\n",
     keep_backup: bool = True,
     fsync: bool = True,
+    mode: int | None = None,
 ) -> None:
     """Atomic text write. See ``atomic_write_bytes`` for semantics.
 
@@ -291,6 +306,7 @@ def atomic_write_text(
         data.encode(encoding),
         keep_backup=keep_backup,
         fsync=fsync,
+        mode=mode,
     )
 
 
@@ -304,12 +320,14 @@ def atomic_write_json(
     keep_backup: bool = True,
     fsync: bool = True,
     default: Callable[[Any], Any] | None = None,
+    mode: int | None = None,
 ) -> None:
     """Serialize ``obj`` to ``path`` as JSON atomically.
 
     Defaults mirror what the codebase was already doing in 40+ ad-hoc
     call sites: ``indent=2``, ``ensure_ascii=False``, trailing
-    newline.
+    newline. Pass ``mode=0o600`` for secret files (tokens, keys) so they
+    are created with restrictive permissions from the start.
     """
     payload = json.dumps(
         obj,
@@ -323,6 +341,7 @@ def atomic_write_json(
         payload,
         keep_backup=keep_backup,
         fsync=fsync,
+        mode=mode,
     )
 
 
