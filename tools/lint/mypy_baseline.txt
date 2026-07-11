@@ -7,9 +7,6 @@ runtime/core/cerebrum/llm_planner.py	assignment	Incompatible types in assignment
 runtime/core/cerebrum/pause_control.py	attr-defined	"object" has no attribute "read_by_type"
 runtime/core/cerebrum/pause_control.py	attr-defined	"object" has no attribute "read_by_type"
 runtime/core/cerebrum/pause_control.py	attr-defined	"object" has no attribute "read_by_type"
-runtime/core/cerebrum/react_context.py	arg-type	Argument "role" to "Message" has incompatible type "Any | str"; expected "Literal['system', 'user', 'assistant']"
-runtime/core/cerebrum/react_context.py	arg-type	Argument "role" to "Message" has incompatible type "Any | str"; expected "Literal['system', 'user', 'assistant']"
-runtime/core/cerebrum/react_context.py	arg-type	Argument "role" to "Message" has incompatible type "Any | str"; expected "Literal['system', 'user', 'assistant']"
 runtime/core/cerebrum/react_context.py	assignment	Incompatible types in assignment (expression has type "def skill_kind(_name: str) -> str", variable has type "def skill_kind(skill_id: str) -> str")
 runtime/core/cerebrum/react_context.py	no-redef	Name "parts" already defined on line 580
 runtime/core/cerebrum/react_guards.py	assignment	Incompatible types in assignment (expression has type "str | None", variable has type "str")
@@ -45,7 +42,6 @@ runtime/core/cerebrum/react_loop.py	union-attr	Item "None" of "Any | dict[Any, A
 runtime/core/cerebrum/react_parallel_dispatch.py	index	Value of type "tuple[str, dict[str, Any]] | None" is not indexable
 runtime/core/cerebrum/react_parallel_dispatch.py	return-value	No return value expected
 runtime/core/cerebrum/react_parsing.py	assignment	Incompatible types in assignment (expression has type "Any | None", variable has type "str")
-runtime/core/cerebrum/resume_cli.py	call-arg	Unexpected keyword argument "confidence" for "ParsedIntent"
 runtime/sensing/gateway/agent_trace_router.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
 runtime/sensing/gateway/agent_trace_router.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "items"
 runtime/sensing/gateway/agent_trace_router.py	union-attr	Item "None" of "Any | list[Any] | None" has no attribute "__iter__" (not iterable)
@@ -61,8 +57,6 @@ runtime/sensing/gateway/android_router.py	attr-defined	"ConnectedDevice" has no 
 runtime/sensing/gateway/android_router.py	attr-defined	"ConnectedDevice" has no attribute "android_version"
 runtime/sensing/gateway/android_router.py	attr-defined	"ConnectedDevice" has no attribute "model"
 runtime/sensing/gateway/android_router.py	attr-defined	"ConnectedDevice" has no attribute "model"
-runtime/sensing/gateway/channels_router.py	call-arg	Unexpected keyword argument "channel_id" for "QQBotChannel"; did you mean "channel_id_param"?
-runtime/sensing/gateway/completion_router.py	attr-defined	Module "runtime.platform.ui.app" has no attribute "get_app_state"
 runtime/sensing/gateway/computer_control_session.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
 runtime/sensing/gateway/computer_control_session.py	union-attr	Item "None" of "Any | list[Any] | None" has no attribute "__iter__" (not iterable)
 runtime/sensing/gateway/computer_router.py	arg-type	Argument "contract" to "_execution_proof" has incompatible type "Any | dict[str, Any] | None"; expected "dict[str, Any]"
@@ -84,16 +78,12 @@ runtime/sensing/gateway/loop_router.py	misc	Cannot infer type of lambda
 runtime/sensing/gateway/loop_router.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
 runtime/sensing/gateway/loop_router.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
 runtime/sensing/gateway/loop_router.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
-runtime/sensing/gateway/mcp_router.py	arg-type	Argument "transport" to "MCPServerConfig" has incompatible type "str"; expected "Literal['stdio', 'http', 'sse']"
 runtime/sensing/gateway/memory_router.py	arg-type	Argument 1 to "float" has incompatible type "Any | None"; expected "str | Buffer | SupportsFloat | SupportsIndex"
-runtime/sensing/gateway/meta_skill_router.py	attr-defined	"MetaEdge" has no attribute "dst"
-runtime/sensing/gateway/meta_skill_router.py	attr-defined	"MetaEdge" has no attribute "src"
 runtime/sensing/gateway/metrics_router.py	misc	Cannot assign to a type
 runtime/sensing/gateway/metrics_router.py	misc	Cannot assign to a type
 runtime/sensing/gateway/metrics_router.py	misc	Cannot assign to a type
 runtime/sensing/gateway/metrics_router.py	misc	Cannot assign to a type
 runtime/sensing/gateway/observability_router.py	assignment	Incompatible types in assignment (expression has type "KnowledgeGraph", variable has type "SqliteKnowledgeGraph")
-runtime/sensing/gateway/openai_gateway/context_manager.py	arg-type	Argument "role" to "Message" has incompatible type "str"; expected "Literal['system', 'user', 'assistant']"
 runtime/sensing/gateway/openai_gateway/request_parser.py	assignment	Incompatible types in assignment (expression has type "GeminiModelRouter", variable has type "AnthropicModelRouter")
 runtime/sensing/gateway/openai_gateway/request_parser.py	assignment	Incompatible types in assignment (expression has type "OpenAIModelRouter", variable has type "AnthropicModelRouter")
 runtime/sensing/gateway/openai_gateway/stream_handler.py	arg-type	Argument 1 to "_resolve_custom_model_router" has incompatible type "Any | str | None"; expected "str"
@@ -111,7 +101,6 @@ runtime/sensing/gateway/plugins_router.py	union-attr	Item "None" of "Any | dict[
 runtime/sensing/gateway/projects_router.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
 runtime/sensing/gateway/projects_router.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
 runtime/sensing/gateway/projects_router.py	union-attr	Item "None" of "Any | list[Any] | None" has no attribute "__iter__" (not iterable)
-runtime/sensing/gateway/realtime_cerebrum.py	arg-type	Argument "status" to "TodoEntry" has incompatible type "str"; expected "Literal['pending', 'in_progress', 'completed', 'blocked']"
 runtime/sensing/gateway/realtime_cerebrum.py	arg-type	Argument 1 to "len" has incompatible type "Any | list[Any] | None"; expected "Sized"
 runtime/sensing/gateway/realtime_cerebrum.py	arg-type	Argument 1 to "len" has incompatible type "Any | list[Any] | None"; expected "Sized"
 runtime/sensing/gateway/realtime_cerebrum.py	index	Value of type "Any | dict[Any, Any] | None" is not indexable
@@ -128,56 +117,18 @@ runtime/sensing/gateway/realtime_cerebrum.py	union-attr	Item "None" of "Any | di
 runtime/sensing/gateway/realtime_cerebrum.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
 runtime/sensing/gateway/realtime_cerebrum.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
 runtime/sensing/gateway/realtime_cerebrum.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
-runtime/sensing/gateway/realtime_event_bridge.py	arg-type	Argument "kind" to "VerificationItem" has incompatible type "str | Any"; expected "Literal['test', 'lint', 'typecheck', 'build', 'diagnostic', 'manual']"
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Missing named argument "command" for "CommandExecutionItem"
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "diff_truncated" for "FileChange"; did you mean "diffTruncated"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "exit_code" for "VerificationItem"; did you mean "exitCode"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "exit_code" for "VerificationItem"; did you mean "exitCode"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "grant_root" for "FileChangeItem"; did you mean "grantRoot"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "input_preview" for "CommandExecutionItem"; did you mean "inputPreview"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "new_lines" for "FileHunk"; did you mean "newLines"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "new_start" for "FileHunk"; did you mean "newStart"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "old_lines" for "FileHunk"; did you mean "oldLines"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "old_start" for "FileHunk"; did you mean "oldStart"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "related_change_item_ids" for "VerificationItem"; did you mean "relatedChangeItemIds"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "related_change_item_ids" for "VerificationItem"; did you mean "relatedChangeItemIds"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "related_files" for "VerificationItem"; did you mean "relatedFiles"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "related_files" for "VerificationItem"; did you mean "relatedFiles"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "stderr_tail" for "VerificationItem"; did you mean "stderrTail"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "stderr_tail" for "VerificationItem"; did you mean "stderrTail"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "stdout_tail" for "VerificationItem"; did you mean "stdoutTail"?
-runtime/sensing/gateway/realtime_event_bridge.py	call-arg	Unexpected keyword argument "stdout_tail" for "VerificationItem"; did you mean "stdoutTail"?
 runtime/sensing/gateway/realtime_event_bridge.py	union-attr	Item "None" of "AgentMessageItem | None" has no attribute "text"
 runtime/sensing/gateway/realtime_event_bridge.py	union-attr	Item "None" of "ReasoningItem | None" has no attribute "content"
-runtime/sensing/gateway/realtime_react_stream.py	call-arg	Unexpected keyword argument "will_retry" for "ErrorItem"; did you mean "willRetry"?
 runtime/sensing/gateway/realtime_team_stream.py	arg-type	Argument 1 to "int" has incompatible type "Any | None"; expected "str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc"
 runtime/sensing/gateway/realtime_team_stream.py	assignment	Incompatible types in assignment (expression has type "int | None", variable has type "int")
-runtime/sensing/gateway/realtime_team_stream.py	call-arg	Unexpected keyword argument "agent_avatar_url" for "AgentMessageItem"; did you mean "agentAvatarUrl"?
-runtime/sensing/gateway/realtime_team_stream.py	call-arg	Unexpected keyword argument "agent_display_name" for "AgentMessageItem"; did you mean "agentDisplayName"?
-runtime/sensing/gateway/realtime_team_stream.py	call-arg	Unexpected keyword argument "agent_icon" for "AgentMessageItem"; did you mean "agentIcon"?
-runtime/sensing/gateway/realtime_team_stream.py	call-arg	Unexpected keyword argument "parent_item_id" for "SubagentItem"; did you mean "parentItemId"?
-runtime/sensing/gateway/realtime_team_stream.py	call-arg	Unexpected keyword argument "subagent_id" for "SubagentItem"; did you mean "subagentId"?
-runtime/sensing/gateway/realtime_team_stream.py	call-arg	Unexpected keyword argument "subagent_id" for "SubagentItem"; did you mean "subagentId"?
-runtime/sensing/gateway/realtime_team_stream.py	call-arg	Unexpected keyword argument "will_retry" for "ErrorItem"; did you mean "willRetry"?
 runtime/sensing/gateway/realtime_turn_lifecycle.py	arg-type	Argument "conversation_messages" to "_should_use_reflection_fast_path" of "CerebrumRuntime" has incompatible type "list[dict[str, str]]"; expected "list[dict[str, object]] | None"
 runtime/sensing/gateway/realtime_turn_lifecycle.py	arg-type	Argument 1 to "_execution_resume_intent" has incompatible type "dict[str, Any] | Any | None"; expected "dict[str, Any]"
-runtime/sensing/gateway/realtime_turn_lifecycle.py	call-arg	Unexpected keyword argument "error_info" for "ErrorItem"; did you mean "errorInfo"?
-runtime/sensing/gateway/realtime_turn_lifecycle.py	call-arg	Unexpected keyword argument "error_info" for "ErrorItem"; did you mean "errorInfo"?
-runtime/sensing/gateway/realtime_turn_lifecycle.py	call-arg	Unexpected keyword argument "exit_code" for "VerificationItem"; did you mean "exitCode"?
-runtime/sensing/gateway/realtime_turn_lifecycle.py	call-arg	Unexpected keyword argument "related_change_item_ids" for "VerificationItem"; did you mean "relatedChangeItemIds"?
-runtime/sensing/gateway/realtime_turn_lifecycle.py	call-arg	Unexpected keyword argument "related_files" for "VerificationItem"; did you mean "relatedFiles"?
-runtime/sensing/gateway/realtime_turn_lifecycle.py	call-arg	Unexpected keyword argument "stderr_tail" for "VerificationItem"; did you mean "stderrTail"?
-runtime/sensing/gateway/realtime_turn_lifecycle.py	call-arg	Unexpected keyword argument "stdout_tail" for "VerificationItem"; did you mean "stdoutTail"?
 runtime/sensing/gateway/realtime_turn_outcome.py	arg-type	Argument 1 to "_agent_id_from_params" has incompatible type "TurnParams | None"; expected "TurnParams"
 runtime/sensing/gateway/realtime_turn_outcome.py	arg-type	Argument 1 to "_agent_id_from_params" has incompatible type "TurnParams | None"; expected "TurnParams"
 runtime/sensing/gateway/realtime_turn_outcome.py	arg-type	Argument 1 to "append" of "list" has incompatible type "Any | dict[Any, Any] | None"; expected "dict[str, Any]"
 runtime/sensing/gateway/realtime_turn_outcome.py	arg-type	Argument 1 to "normalize_tool_lifecycle_event" has incompatible type "str"; expected "Literal['tool_start', 'tool_end']"
 runtime/sensing/gateway/realtime_turn_outcome.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
 runtime/sensing/gateway/realtime_turn_outcome.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
-runtime/sensing/gateway/realtime_workbench.py	call-arg	Unexpected keyword argument "active_item_id" for "AgentPhaseSnapshot"; did you mean "activeItemId"?
-runtime/sensing/gateway/realtime_workbench.py	call-arg	Unexpected keyword argument "current_item_id" for "WorkbenchSnapshotV2"; did you mean "currentItemId"?
-runtime/sensing/gateway/realtime_workbench.py	call-arg	Unexpected keyword argument "current_phase_id" for "WorkbenchSnapshotV2"; did you mean "currentPhaseId"?
-runtime/sensing/gateway/realtime_workbench.py	call-arg	Unexpected keyword argument "workspace_focus" for "WorkbenchSnapshotV2"; did you mean "workspaceFocus"?
 runtime/sensing/gateway/skill_market_router.py	arg-type	Argument "key" to "sorted" has incompatible type "Callable[[dict[str, object]], object]"; expected "Callable[[dict[str, object]], SupportsDunderLT[Any] | SupportsDunderGT[Any]]"
 runtime/sensing/gateway/skill_market_router.py	return-value	Incompatible return value type (got "object", expected "SupportsDunderLT[Any] | SupportsDunderGT[Any]")
 runtime/sensing/gateway/streaming_journal.py	arg-type	Argument 1 to "len" has incompatible type "Journal"; expected "Sized"

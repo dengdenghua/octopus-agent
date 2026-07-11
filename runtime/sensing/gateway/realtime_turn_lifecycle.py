@@ -328,7 +328,7 @@ async def _start_turn(
         getattr(emitter, "actor_id", None),
     )
 
-    turn = Turn(threadId=thread_id, params=validated)
+    turn = Turn(thread_id=thread_id, params=validated)
     # Bound before the try so the escape handler at the bottom can
     # attach the intent when the crash happens after PHASE 4 built it
     # (and pass None for earlier failures — both recorders accept it).

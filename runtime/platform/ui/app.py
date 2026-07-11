@@ -1832,6 +1832,7 @@ def create_app(
 
     app.include_router(
         create_completion_router(
+            stack=stack,
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
             jwt_secret=cocoloop_jwt_secret,

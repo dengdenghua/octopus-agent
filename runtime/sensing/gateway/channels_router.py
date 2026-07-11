@@ -1343,7 +1343,7 @@ def _make_qqbot(body: dict[str, Any]) -> Any:
     return QQBotChannel(
         app_id=_require(body, "app_id"),
         app_secret=_require(body, "app_secret"),
-        channel_id=str(body.get("channel_id", "qqbot")),
+        channel_id_param=str(body.get("channel_id", "qqbot")),
     )
 
 

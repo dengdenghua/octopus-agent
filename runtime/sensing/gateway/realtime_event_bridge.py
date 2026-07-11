@@ -285,10 +285,13 @@ class _ReactBridgeState:
             while f"{call_id}#{suffix}" in self.tools:
                 suffix += 1
             call_id = f"{call_id}#{suffix}"
+        # Let the model's default_factory mint the id when there's no
+        # call_id — the old ``CommandExecutionItem().id`` built a throwaway
+        # with no ``command`` and raised ValidationError (command is required).
         item = CommandExecutionItem(
-            id=call_id or CommandExecutionItem().id,
             command=str(evt.get("tool_name", "tool")),
             input_preview=evt.get("input_preview"),
+            **({"id": call_id} if call_id else {}),
         )
         self.tools[call_id] = item
         turn.items.append(item)

@@ -223,7 +223,7 @@ def _workspace_focus_for_tool(item: CommandExecutionItem) -> WorkspaceFocus:
         view = "trace"
         title = name.replace("_", " ")
     return WorkspaceFocus(
-        itemId=item.id,
+        item_id=item.id,
         view=view,  # type: ignore[arg-type]
         title=title,
         subtitle=target or None,
@@ -234,7 +234,7 @@ def _workspace_focus_for_file_change(item: FileChangeItem) -> WorkspaceFocus:
     first_path = item.changes[0].path if item.changes else ""
     title = f"Editing {first_path}" if first_path else "File changes"
     return WorkspaceFocus(
-        itemId=item.id,
+        item_id=item.id,
         view="diff",
         title=title,
         subtitle=first_path or None,

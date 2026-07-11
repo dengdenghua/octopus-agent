@@ -43,6 +43,7 @@ def _build_prompt(prefix: str, suffix: str, language: str) -> str:
 
 def create_completion_router(
     *,
+    stack: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
     jwt_secret: str | None = None,
@@ -111,11 +112,14 @@ def create_completion_router(
         prompt = _build_prompt(prefix, suffix, language)
 
         try:
-            from runtime.platform.ui.app import get_app_state
             from runtime.sensing.model_router.models import Message, ModelRequest
 
-            state = get_app_state()
-            if not state or not state.model_router:
+            # The model router lives on the built stack's planner (a
+            # ModelDispatchRouter). The previous code reached for a
+            # ``get_app_state()`` helper that never existed, so the whole
+            # endpoint silently failed on ImportError.
+            model_router = getattr(getattr(stack, "planner", None), "router", None)
+            if model_router is None:
                 return {"completion": "", "error": "no model router"}
             req = ModelRequest(
                 model="auto",
@@ -126,7 +130,7 @@ def create_completion_router(
                 max_tokens=150,
                 temperature=0.0,
             )
-            resp = state.model_router.call(req)
+            resp = model_router.call(req)
             text = resp.text.strip() if resp.text else ""
             if text.startswith("```"):
                 text = text.split("\n", 1)[-1] if "\n" in text else ""

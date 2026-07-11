@@ -107,7 +107,7 @@ def create_meta_skill_router(
                 }
                 for s in meta.steps
             ],
-            "edges": [{"from": e.src, "to": e.dst, "kind": e.kind} for e in meta.edges],
+            "edges": [{"from": e.from_node, "to": e.to_node, "kind": e.kind} for e in meta.edges],
         }
 
     @router.get("/api/meta-skills/{name}/mermaid")

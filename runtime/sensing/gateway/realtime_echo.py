@@ -116,7 +116,7 @@ class EchoRuntime:
             log, actor_id_from_turn_params(validated) or getattr(emitter, "actor_id", None)
         )
 
-        turn = Turn(threadId=thread_id, params=validated)
+        turn = Turn(thread_id=thread_id, params=validated)
         # Register *before* emitting turn/started so a racing
         # turn/interrupt delivered between turn/started and the first
         # yield still lands on this turn's flag.

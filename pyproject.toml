@@ -254,6 +254,12 @@ exclude_lines = [
 python_version = "3.11"
 ignore_missing_imports = true
 follow_imports = "silent"
+# The codebase is pydantic-heavy and uses populate_by_name + camelCase
+# aliases; without this plugin mypy reports ~40 false "unexpected keyword
+# argument … did you mean <camelCase>?" errors on constructors that are
+# correct at runtime (and misses genuinely-missing required args). The
+# plugin resolves both.
+plugins = ["pydantic.mypy"]
 # Bundled third-party agent-plugin scripts (market skills) carry duplicate
 # module names that abort mypy before it reaches real code — never our own.
 exclude = "(agent_market_sources|/fixtures/|/visuals/)"
