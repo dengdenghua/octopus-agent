@@ -32,6 +32,15 @@ from runtime.platform.prompts import get_prompt
 
 from .planner import PlannerError
 
+# Output ceiling for the single plan-generation call. Reasoning models
+# (e.g. agnes-2.0-flash) spend most of the budget on hidden reasoning
+# tokens *before* emitting the plan JSON — at 1024 the reasoning alone
+# (~980–1024 tokens) consumed the whole budget and finish_reason=length
+# truncated the JSON to empty, so every plan came back with zero nodes.
+# This is a ceiling, not a target: non-reasoning models emit the JSON and
+# stop well under it, so raising it has no cost for them.
+_PLAN_MAX_TOKENS = 4096
+
 _PLANNER_SYSTEM_PROMPT: str = ""
 
 
@@ -836,7 +845,7 @@ class LLMPlanner:
             ModelRequest(
                 model=model or self.planner_model,
                 messages=messages,
-                max_tokens=1024,
+                max_tokens=_PLAN_MAX_TOKENS,
                 temperature=0.0,
                 system_provider="anthropic",
                 prefer_strength=prefer,  # type: ignore[arg-type]

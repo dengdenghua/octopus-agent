@@ -637,6 +637,15 @@ def build_fallback_router_from_custom_models(prefer: str | None = None) -> Any:
     provider = str(entry.get("provider") or "openai").lower()
     headers = entry.get("default_headers")
     headers = headers if isinstance(headers, dict) else {}
+    # Slow reasoning models (e.g. agnes-2.0-flash spends 60–120s on hidden
+    # reasoning before answering) blow past the 60s default and raise
+    # ReadTimeout. Let an entry declare its own ceiling via ``timeout`` /
+    # ``request_timeout``; fast models simply omit it and keep the default.
+    _raw_timeout = entry.get("timeout") or entry.get("request_timeout")
+    try:
+        timeout_seconds = float(_raw_timeout) if _raw_timeout else 60.0
+    except (TypeError, ValueError):
+        timeout_seconds = 60.0
     try:
         if provider in ("anthropic", "claude"):
             from runtime.sensing.model_router.anthropic_router import AnthropicModelRouter
@@ -660,6 +669,7 @@ def build_fallback_router_from_custom_models(prefer: str | None = None) -> Any:
             api_key=entry.get("api_key") or "dummy",
             default_model=primary,
             extra_headers=headers,
+            timeout_seconds=timeout_seconds,
         )
     except Exception:  # noqa: BLE001 — fall back to Molili if the entry is malformed
         return None
