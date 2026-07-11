@@ -5,7 +5,7 @@ import logging
 import re
 import time
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -632,7 +632,7 @@ def stream_react_loop(
     step_evaluator: Callable[[dict[str, Any]], float | None] | None = None,
     planning_mode: bool = False,
     reasoning_effort: str | None = None,
-) -> Iterator[dict[str, Any]]:
+) -> Generator[dict[str, Any], None, ReActResult | None]:
     # ╔══════════════════════════════════════════════════════════════════╗
     # ║ stream_react_loop · navigation map (comment-only; do not split). ║
     # ║                                                                  ║
@@ -3232,7 +3232,7 @@ def stream_react_loop(
         yield {"type": "react_cancelled", "iteration": i + 1}
         with contextlib.suppress(Exception):
             _pause.unregister_active(str(react_task_id))
-        return
+        return None
 
     if final_answer is None:
         try:

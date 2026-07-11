@@ -10,15 +10,7 @@ runtime/core/cerebrum/pause_control.py	attr-defined	"object" has no attribute "r
 runtime/core/cerebrum/react_context.py	assignment	Incompatible types in assignment (expression has type "def skill_kind(_name: str) -> str", variable has type "def skill_kind(skill_id: str) -> str")
 runtime/core/cerebrum/react_context.py	no-redef	Name "parts" already defined on line 580
 runtime/core/cerebrum/react_guards.py	assignment	Incompatible types in assignment (expression has type "str | None", variable has type "str")
-runtime/core/cerebrum/react_loop.py	func-returns-value	Function does not return a value (it only ever returns None)
-runtime/core/cerebrum/react_loop.py	has-type	Cannot determine type of "_parallel_obs"
-runtime/core/cerebrum/react_loop.py	has-type	Cannot determine type of "_parallel_obs"
-runtime/core/cerebrum/react_loop.py	has-type	Cannot determine type of "_parallel_obs"
-runtime/core/cerebrum/react_loop.py	has-type	Cannot determine type of "_parallel_results"
-runtime/core/cerebrum/react_loop.py	has-type	Cannot determine type of "_parallel_results"
 runtime/core/cerebrum/react_loop.py	index	Value of type "tuple[str, dict[str, Any]] | None" is not indexable
-runtime/core/cerebrum/react_loop.py	misc	"None" object is not iterable
-runtime/core/cerebrum/react_loop.py	return-value	No return value expected
 runtime/core/cerebrum/react_loop.py	union-attr	Item "None" of "Any | None" has no attribute "registry"
 runtime/core/cerebrum/react_loop.py	union-attr	Item "None" of "Any | None" has no attribute "registry"
 runtime/core/cerebrum/react_loop.py	union-attr	Item "None" of "Any | None" has no attribute "registry"
@@ -40,7 +32,6 @@ runtime/core/cerebrum/react_loop.py	union-attr	Item "None" of "Any | dict[Any, A
 runtime/core/cerebrum/react_loop.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
 runtime/core/cerebrum/react_loop.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
 runtime/core/cerebrum/react_parallel_dispatch.py	index	Value of type "tuple[str, dict[str, Any]] | None" is not indexable
-runtime/core/cerebrum/react_parallel_dispatch.py	return-value	No return value expected
 runtime/core/cerebrum/react_parsing.py	assignment	Incompatible types in assignment (expression has type "Any | None", variable has type "str")
 runtime/sensing/gateway/agent_trace_router.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
 runtime/sensing/gateway/agent_trace_router.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "items"

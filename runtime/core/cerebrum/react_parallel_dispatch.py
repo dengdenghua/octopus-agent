@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Generator
 from typing import Any
 
 from runtime.core.cerebrum.react_execution import (
@@ -67,7 +67,7 @@ def _dispatch_parallel_actions(
     react_task_id: Any,
     agent: Any,
     intent: ParsedIntent,
-) -> Iterator[Any]:
+) -> Generator[Any, None, tuple[str, list[dict[str, object]]]]:
     """Concurrent multi-action dispatcher (口子 2).
 
     Generator helper invoked via ``yield from`` from the main loop.
