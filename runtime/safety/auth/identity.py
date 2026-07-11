@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -101,6 +102,7 @@ class IdentityStore:
         if not trust_jwt_sub:
             return None
         roles_raw = claims.get("roles") or claims.get("role") or []
+        roles: tuple[str, ...]
         if isinstance(roles_raw, str):
             roles = (roles_raw,)
         elif isinstance(roles_raw, (list, tuple)):
@@ -243,7 +245,7 @@ def verify_jwt_hs256(
         header_raw = _b64url_decode(header_b)
         claims_raw = _b64url_decode(claims_b)
         sig = _b64url_decode(sig_b)
-    except (ValueError, base64.binascii.Error) as e:
+    except (ValueError, binascii.Error) as e:
         raise JWTError(f"base64 decode failed: {e}") from e
 
     try:

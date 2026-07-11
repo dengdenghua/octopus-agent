@@ -292,7 +292,10 @@ def _resolve_all(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Addres
     out = []
     seen: set[str] = set()
     for info in infos:
-        addr = info[4][0]
+        # sockaddr[0] is the host address; typed str | int because the
+        # sockaddr tuple shape differs for IPv4/IPv6, but element 0 is
+        # always the address string. Coerce so the set / _as_ip see str.
+        addr = str(info[4][0])
         if addr in seen:
             continue
         seen.add(addr)

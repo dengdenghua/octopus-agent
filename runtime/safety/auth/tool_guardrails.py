@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-_LOG = logging.getLogger
+_LOG = logging.getLogger("octopus.safety.tool_guardrails")
 
 
 def _publish_tool_blocked_event(tool_name: str, reason: str) -> None:
@@ -22,8 +22,6 @@ def _publish_tool_blocked_event(tool_name: str, reason: str) -> None:
         logger=_LOG,
     )
 
-
-_LOG = logging.getLogger("octopus.safety.tool_guardrails")
 
 IDEMPOTENT_TOOLS: frozenset[str] = frozenset(
     {

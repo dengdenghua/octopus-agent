@@ -46,13 +46,6 @@ runtime/core/cerebrum/react_parallel_dispatch.py	index	Value of type "tuple[str,
 runtime/core/cerebrum/react_parallel_dispatch.py	return-value	No return value expected
 runtime/core/cerebrum/react_parsing.py	assignment	Incompatible types in assignment (expression has type "Any | None", variable has type "str")
 runtime/core/cerebrum/resume_cli.py	call-arg	Unexpected keyword argument "confidence" for "ParsedIntent"
-runtime/safety/auth/identity.py	assignment	Incompatible types in assignment (expression has type "tuple[()]", variable has type "tuple[str]")
-runtime/safety/auth/identity.py	assignment	Incompatible types in assignment (expression has type "tuple[str, ...]", variable has type "tuple[str]")
-runtime/safety/auth/identity.py	attr-defined	Module has no attribute "binascii"
-runtime/safety/auth/tool_guardrails.py	arg-type	Argument "logger" to "publish_event" has incompatible type "Callable[[str | None], Logger]"; expected "Logger | None"
-runtime/safety/auth/tool_guardrails.py	assignment	Incompatible types in assignment (expression has type "Logger", variable has type "Callable[[str | None], Logger]")
-runtime/safety/auth/url_guard.py	arg-type	Argument 1 to "_as_ip" has incompatible type "str | int"; expected "str"
-runtime/safety/auth/url_guard.py	arg-type	Argument 1 to "add" of "set" has incompatible type "str | int"; expected "str"
 runtime/sensing/gateway/agent_trace_router.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
 runtime/sensing/gateway/agent_trace_router.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "items"
 runtime/sensing/gateway/agent_trace_router.py	union-attr	Item "None" of "Any | list[Any] | None" has no attribute "__iter__" (not iterable)
