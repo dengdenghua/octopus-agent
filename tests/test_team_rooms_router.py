@@ -151,6 +151,37 @@ def test_team_room_websocket_presence_and_events(tmp_path: Path) -> None:
             assert update["reason"] == "finished"
 
 
+def test_team_room_websocket_drops_oversized_frames(tmp_path: Path) -> None:
+    # A single client shouldn't be able to amplify a flood across the room.
+    # An oversized inbound frame is dropped before any broadcast: peers see
+    # nothing for it, and normal traffic right after still flows.
+    client = _client(tmp_path)
+    team = client.post("/api/teams", json=_team_body()).json()
+    url = f"/api/teams/{team['id']}/ws"
+
+    with client.websocket_connect(
+        f"{url}?participant_id=alice&display_name=Alice&thread_id=thread-a"
+    ) as alice:
+        assert alice.receive_json()["type"] == "ready"
+        assert alice.receive_json()["type"] == "presence"
+
+        with client.websocket_connect(
+            f"{url}?participant_id=bob&display_name=Bob&thread_id=thread-a"
+        ) as bob:
+            assert bob.receive_json()["type"] == "ready"
+            assert alice.receive_json()["type"] == "presence"
+            assert bob.receive_json()["type"] == "presence"
+
+            # 70 KB payload > the 64 KB cap → dropped, never broadcast.
+            bob.send_json({"type": "message", "text": "x" * 70_000})
+            # A normal cursor right after IS relayed. If the oversized frame
+            # had been broadcast, alice would receive it first.
+            bob.send_json({"type": "cursor", "position": {"x": 1, "y": 2}})
+            got = alice.receive_json()
+            assert got["type"] == "cursor"  # not the dropped "message"
+            assert got["position"] == {"x": 1, "y": 2}
+
+
 def test_team_room_websocket_respects_auth_and_actor_binding(tmp_path: Path) -> None:
     from runtime.safety.auth import Identity, IdentityStore
 

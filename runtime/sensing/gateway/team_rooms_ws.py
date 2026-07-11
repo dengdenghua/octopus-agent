@@ -20,6 +20,8 @@ from threading import Lock
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
+from runtime.platform.process.sliding_window_limiter import SlidingWindowLimiter
+
 from .team_speaker_policy import (
     _TURN_POLICIES,
     _authorized_to_speak_for,
@@ -52,6 +54,14 @@ if TYPE_CHECKING:
 # conversational context. The room is otherwise a pure relay (it doesn't
 # persist messages), so this is a small in-memory transcript window.
 _RING_SIZE = 20
+
+# Anti-flood ceilings on the inbound WS. cursor/ping/message frames are
+# relayed to every peer, so an unbounded client could amplify a flood
+# across the room. These are lenient — smooth cursor tracking (~10-30/s)
+# passes; only a runaway client trips them. Oversized frames and
+# over-rate frames are dropped before any broadcast (no error spam).
+_TEAM_WS_MAX_MSG_BYTES = 64 * 1024
+_TEAM_WS_MSG_PER_SEC = 30
 
 # Single background worker for durable message writes — keeps synchronous
 # sqlite I/O off the WS event loop and serializes appends (no write contention).
@@ -350,9 +360,19 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
     await ws.send_json(ready_payload)
     await _broadcast_presence(team_id)
 
+    # Per-connection anti-flood limiter. Local to the handler, so it's
+    # freed when the connection closes — no shared map to leak.
+    _msg_limiter = SlidingWindowLimiter(limit=_TEAM_WS_MSG_PER_SEC, window_s=1.0)
+
     try:
         while True:
             raw = await ws.receive_text()
+            # Drop oversized or over-rate frames before parsing/broadcast so
+            # one client can't amplify a flood across the whole room.
+            if len(raw) > _TEAM_WS_MAX_MSG_BYTES:
+                continue
+            if not _msg_limiter.allow(participant_id):
+                continue
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
