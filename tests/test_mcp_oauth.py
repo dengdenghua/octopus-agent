@@ -100,6 +100,60 @@ def test_save_and_bearer_and_forget(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     oauth.reset_oauth_store_for_tests()
 
 
+def test_tokens_encrypted_at_rest_when_key_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cryptography.fernet import Fernet
+
+    monkeypatch.setenv("OCTOPUS_MCP_TOKEN_KEY", Fernet.generate_key().decode())
+    path = tmp_path / "mcp_oauth.json"
+    store = oauth.MCPOAuthStore(path=path)
+    store.save_tokens(
+        "cf",
+        {"access_token": "AT-secret", "refresh_token": "RT", "expires_in": 3600},
+        token_url="https://p/token",
+        client_id="cid",
+    )
+    blob = path.read_bytes()
+    assert blob[:1] != b"{"  # encrypted, not plaintext JSON
+    assert b"AT-secret" not in blob  # token unreadable on disk
+    assert (path.stat().st_mode & 0o777) == 0o600
+    # A fresh store with the same key round-trips the tokens.
+    assert oauth.MCPOAuthStore(path=path).bearer("cf") == "AT-secret"
+
+
+def test_plaintext_store_still_readable_after_key_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A store written plaintext (no key) stays readable once a key is later
+    # configured — enabling encryption must not force a re-auth on upgrade.
+    from cryptography.fernet import Fernet
+
+    monkeypatch.delenv("OCTOPUS_MCP_TOKEN_KEY", raising=False)
+    path = tmp_path / "mcp_oauth.json"
+    oauth.MCPOAuthStore(path=path).save_tokens(
+        "cf", {"access_token": "AT", "expires_in": 3600}, token_url="u", client_id="c"
+    )
+    assert path.read_bytes()[:1] == b"{"  # plaintext
+    monkeypatch.setenv("OCTOPUS_MCP_TOKEN_KEY", Fernet.generate_key().decode())
+    assert oauth.MCPOAuthStore(path=path).bearer("cf") == "AT"
+
+
+def test_wrong_key_yields_empty_store_not_crash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cryptography.fernet import Fernet
+
+    monkeypatch.setenv("OCTOPUS_MCP_TOKEN_KEY", Fernet.generate_key().decode())
+    path = tmp_path / "mcp_oauth.json"
+    oauth.MCPOAuthStore(path=path).save_tokens(
+        "cf", {"access_token": "AT", "expires_in": 3600}, token_url="u", client_id="c"
+    )
+    # A different key can't decrypt the store → start empty (re-auth), no crash.
+    monkeypatch.setenv("OCTOPUS_MCP_TOKEN_KEY", Fernet.generate_key().decode())
+    assert not oauth.MCPOAuthStore(path=path).has_tokens("cf")
+
+
 def test_bearer_refreshes_near_expiry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OCTOPUS_HOME", str(tmp_path))
     oauth.reset_oauth_store_for_tests()

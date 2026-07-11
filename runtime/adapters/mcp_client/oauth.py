@@ -13,8 +13,10 @@ Step 1 covers **known** authorization endpoints (the caller supplies
    (refreshing via ``refresh_token`` near expiry), which the remote MCP client
    attaches as ``Authorization: Bearer``.
 
-Tokens live in ``~/.octopus/mcp_oauth.json`` (chmod 0600). Encryption-at-rest is
-a follow-up; for now file perms match how local CLIs store OAuth tokens.
+Tokens live in ``~/.octopus/mcp_oauth.json`` (created 0600). At rest they are
+plaintext by default (matching how local CLIs store OAuth tokens); set
+``OCTOPUS_MCP_TOKEN_KEY`` (a Fernet key kept in your secret store, not on the
+token disk) to encrypt them — see ``_token_cipher``.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import os
 import secrets
 import threading
@@ -32,7 +35,9 @@ from pathlib import Path
 from typing import Any
 from urllib import request as urllib_request
 
-from runtime.platform.io import atomic_write_json
+from runtime.platform.io import atomic_write_bytes, atomic_write_json
+
+_logger = logging.getLogger(__name__)
 
 _PENDING_TTL = 600.0  # authorize→callback round-trip window (10 min)
 _REFRESH_SKEW = 60.0  # refresh when within 60s of expiry
@@ -147,6 +152,32 @@ def _store_path() -> Path:
     return base / "mcp_oauth.json"
 
 
+def _token_cipher() -> Any:
+    """Fernet cipher for at-rest token encryption, or None when disabled.
+
+    Opt-in via ``OCTOPUS_MCP_TOKEN_KEY`` — a urlsafe-base64 32-byte key
+    (``cryptography.fernet.Fernet.generate_key()``). When set, access/
+    refresh tokens are encrypted on disk with a key that lives in the
+    deployment's secret store / env, *not* co-located on the token disk.
+    Unset (the default) keeps the plaintext 0600 file — no behavior change.
+    A malformed key or a missing ``cryptography`` install logs once and
+    falls back to plaintext rather than losing the ability to store tokens.
+    """
+    key = os.environ.get("OCTOPUS_MCP_TOKEN_KEY")
+    if not key:
+        return None
+    try:
+        from cryptography.fernet import Fernet
+
+        return Fernet(key.encode("utf-8") if isinstance(key, str) else key)
+    except Exception:  # noqa: BLE001 — bad key / missing dep → degrade to plaintext
+        _logger.warning(
+            "OCTOPUS_MCP_TOKEN_KEY is set but unusable (need a valid Fernet key "
+            "and the cryptography package); MCP OAuth tokens stored unencrypted."
+        )
+        return None
+
+
 class MCPOAuthStore:
     """Thread-safe, JSON-backed per-server OAuth token + pending-flow store."""
 
@@ -162,9 +193,28 @@ class MCPOAuthStore:
         if not self._path.exists():
             return
         try:
-            raw = json.loads(self._path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            blob = self._path.read_bytes()
+        except OSError:
             return
+        # Back-compat + opt-in encryption: a plaintext store parses as JSON
+        # directly; an encrypted store (Fernet ciphertext) does not, so we
+        # decrypt with the configured key. A store we can't read (encrypted
+        # but no/wrong key) is ignored, forcing a clean re-auth rather than
+        # a crash.
+        try:
+            raw = json.loads(blob.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            cipher = _token_cipher()
+            if cipher is None:
+                return
+            try:
+                raw = json.loads(cipher.decrypt(blob).decode("utf-8"))
+            except Exception:  # noqa: BLE001 — undecryptable store → start empty
+                _logger.warning(
+                    "MCP OAuth token store could not be decrypted "
+                    "(wrong OCTOPUS_MCP_TOKEN_KEY?); ignoring — re-auth required."
+                )
+                return
         for srv, tok in (raw.get("tokens") or {}).items():
             try:
                 self._tokens[str(srv)] = _Tokens(
@@ -225,8 +275,15 @@ class MCPOAuthStore:
         # 0o600 from creation — the token file holds access/refresh tokens
         # and must never be even briefly group/world-readable, so we set
         # the mode on the temp file before writing rather than chmod'ing
-        # after (which left a TOCTOU window at the default 0o644).
-        atomic_write_json(self._path, payload, mode=0o600)
+        # after (which left a TOCTOU window at the default 0o644). When a
+        # key is configured the payload is also encrypted at rest (defense
+        # in depth against backup/disk leaks); otherwise it's plaintext JSON.
+        cipher = _token_cipher()
+        if cipher is not None:
+            token = cipher.encrypt(json.dumps(payload).encode("utf-8"))
+            atomic_write_bytes(self._path, token, mode=0o600)
+        else:
+            atomic_write_json(self._path, payload, mode=0o600)
 
     def start_pending(
         self,
