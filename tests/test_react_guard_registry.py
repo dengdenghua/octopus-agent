@@ -55,7 +55,7 @@ class TestRegistryShape:
         assert GUARD_REGISTRY[-1].label == "code-mode guard"
 
     def test_every_spec_has_category(self) -> None:
-        valid = {"security", "protocol", "verification", "test-quality", "code-smell"}
+        valid = {"security", "protocol", "verification", "test-quality", "code-smell", "research"}
         for spec in GUARD_REGISTRY:
             assert spec.category in valid, f"{spec.label} has bad category {spec.category}"
 

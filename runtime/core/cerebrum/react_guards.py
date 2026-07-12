@@ -446,6 +446,76 @@ def _code_mode_false_tool_result_guard(
     )
 
 
+# ── Research / chat citation grounding ────────────────────────
+# Non-code turns otherwise reach Final Answer with only the security
+# cluster gating them. The check that pays off with the fewest false
+# positives is a fabricated citation: if the turn actually fetched
+# external content and the answer presents a markdown link ``[t](url)``
+# whose URL never appeared in any observation, the model is citing a
+# source it never consulted — a real, serious research failure.
+# Deliberately narrow: only markdown-link citations (not bare URL
+# mentions), only when a fetch/search/browser tool actually ran (so there
+# is ground truth), and the nudge offers a clean escape (drop the link) so
+# a rare false positive can't wedge the loop.
+_MD_CITATION_RE = re.compile(r"\[[^\]]*\]\((https?://[^)\s]+)\)")
+_FETCH_TOOL_HINTS = (
+    "search",
+    "fetch",
+    "browse",
+    "browser",
+    "web",
+    "retrieve",
+    "scrape",
+    "wiki",
+    "crawl",
+)
+
+
+def _turn_fetched_external_content(steps: list[ReActStep]) -> tuple[bool, str]:
+    """Return ``(a fetch/search/browser tool ran, all observation text)``."""
+    fetched = False
+    blobs: list[str] = []
+    for step in steps:
+        names = list(step.actions) if step.actions else ([step.action] if step.action else [])
+        for res in step.action_results:
+            tool = res.get("tool_name")
+            if isinstance(tool, str):
+                names.append(tool)
+            obs = res.get("observation")
+            if isinstance(obs, str):
+                blobs.append(obs)
+        for name in names:
+            if any(hint in str(name).lower() for hint in _FETCH_TOOL_HINTS):
+                fetched = True
+        if step.observation:
+            blobs.append(step.observation)
+    return fetched, "\n".join(blobs)
+
+
+def _fabricated_citation_guard(steps: list[ReActStep], final_answer: str) -> str | None:
+    """Reject a research/chat final that cites source links it never fetched."""
+    cited = _MD_CITATION_RE.findall(final_answer or "")
+    if not cited:
+        return None
+    fetched, observations = _turn_fetched_external_content(steps)
+    if not fetched:
+        # No research happened this turn — any links are the model's own
+        # knowledge, not sources claimed from this turn. Don't police them.
+        return None
+    seen = observations.lower()
+    fabricated = [u for u in cited if u.rstrip("/").lower() not in seen and u.lower() not in seen]
+    if not fabricated:
+        return None
+    return (
+        f"Your answer cites {len(fabricated)} source link(s) that never "
+        f"appeared in this turn's tool results (e.g. {fabricated[0]}). Do not "
+        "present a URL as a source unless you actually fetched it. Either "
+        "fetch/verify the link now, cite only URLs that appear in your "
+        "search/fetch observations, or drop the link and state the point as "
+        "your own reasoning."
+    )
+
+
 def _code_mode_completion_guard(steps: list[ReActStep], final_answer: str) -> str | None:
     """Reject premature code-mode Final Answer attempts."""
     if _final_answer_requests_user_help(final_answer):
@@ -2427,6 +2497,14 @@ def _invoke_code_mode_completion(ctx: GuardContext) -> str | None:
     return _code_mode_completion_guard(ctx.steps, ctx.final_answer)
 
 
+def _invoke_fabricated_citation(ctx: GuardContext) -> str | None:
+    # Research / chat only — code turns cite files, not URLs, and have
+    # their own verification cluster.
+    if ctx.is_code_mode:
+        return None
+    return _fabricated_citation_guard(ctx.steps, ctx.final_answer)
+
+
 def _preview_labels(labels: list[str], limit: int = 3) -> str:
     preview = ", ".join(labels[:limit])
     if len(labels) > limit:
@@ -2519,6 +2597,8 @@ GUARD_REGISTRY: list[GuardSpec] = [
     GuardSpec("tool-availability guard", "protocol", _invoke_false_no_tool),
     GuardSpec("tool-result guard", "protocol", _invoke_false_tool_result),
     GuardSpec("todo-protocol guard", "protocol", _invoke_todo_protocol),
+    # ── Research / chat quality (non-code turns) ──
+    GuardSpec("citation-grounding guard", "research", _invoke_fabricated_citation),
     # ── Verification completeness ──
     _spec_code_mode(
         "language-verification guard", "verification", _language_mismatched_verification_guard
