@@ -16,6 +16,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import time
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
@@ -41,6 +42,33 @@ if TYPE_CHECKING:
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
 
 _logger = logging.getLogger(__name__)
+
+# Cadence for the single-agent keepalive. Team turns get a heartbeat from
+# the team runner; a solo ReAct turn has no such signal, so a slow model or
+# a silently-running tool looks identical to a wedged connection from the
+# frontend. We emit a heartbeat only when the event queue has been idle for
+# this long (see the consumer loops), so a normally-streaming turn never
+# pays for it. Kept well under the frontend's ~10s stall threshold so a
+# live-but-quiet turn always gets a keepalive before it's flagged "slow".
+_SINGLE_AGENT_HEARTBEAT_INTERVAL_S = 5.0
+
+
+async def _emit_turn_heartbeat(emitter: EventEmitter, turn: Turn, started_at: float) -> None:
+    """Best-effort ``turn/heartbeat`` for a solo turn's idle stretches.
+
+    Mirrors the team runner's keepalive so the frontend's stream-vitals
+    can tell "model still working" from "connection stuck". Never allowed
+    to disturb the turn — a failed notify is swallowed.
+    """
+    with contextlib.suppress(Exception):
+        await emitter.notify(
+            ServerMethod.TURN_HEARTBEAT,
+            {
+                "threadId": turn.thread_id,
+                "turnId": turn.id,
+                "elapsedS": round(time.monotonic() - started_at, 1),
+            },
+        )
 
 
 def _agentic_stream_event_to_react_event(
@@ -329,8 +357,20 @@ async def _drive_reflection_fast_path(
 
     watcher = asyncio.create_task(_interrupt_watcher())
     try:
+        loop_started = time.monotonic()
         while True:
-            evt = await queue.get()
+            try:
+                evt = await asyncio.wait_for(
+                    queue.get(), timeout=_SINGLE_AGENT_HEARTBEAT_INTERVAL_S
+                )
+            except TimeoutError:
+                # No event for a while: the model is thinking or a tool is
+                # running silently. Emit a keepalive (unless the turn is
+                # already winding down) so the frontend reads "working",
+                # not "stuck", then keep waiting.
+                if not (cancel_source.is_cancelled or emitter.is_turn_interrupted(turn.id)):
+                    await _emit_turn_heartbeat(emitter, turn, loop_started)
+                continue
             if evt is None:
                 break
             if emitter.is_turn_interrupted(turn.id):
@@ -579,8 +619,20 @@ async def _drive_react(
 
     watcher = asyncio.create_task(_interrupt_watcher())
     try:
+        loop_started = time.monotonic()
         while True:
-            evt = await queue.get()
+            try:
+                evt = await asyncio.wait_for(
+                    queue.get(), timeout=_SINGLE_AGENT_HEARTBEAT_INTERVAL_S
+                )
+            except TimeoutError:
+                # No event for a while: the model is thinking or a tool is
+                # running silently. Emit a keepalive (unless the turn is
+                # already winding down) so the frontend reads "working",
+                # not "stuck", then keep waiting.
+                if not (cancel_source.is_cancelled or emitter.is_turn_interrupted(turn.id)):
+                    await _emit_turn_heartbeat(emitter, turn, loop_started)
+                continue
             if evt is None:
                 break
             if emitter.is_turn_interrupted(turn.id):
