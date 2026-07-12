@@ -361,7 +361,7 @@ def stream_run(
     t_err.start()
 
     if input_data is not None and proc.stdin is not None:
-        with contextlib.suppress((BrokenPipeError, OSError)):
+        with contextlib.suppress(BrokenPipeError, OSError):
             proc.stdin.write(input_data)
         with contextlib.suppress(Exception):
             proc.stdin.close()

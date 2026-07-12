@@ -301,7 +301,7 @@ class WatchSubscription:
     watch_id: int
     key_pattern: str
     namespace: str
-    handler: Callable[[StateEntry, StateEntry | None], None]
+    handler: Callable[[StateEntry | None, StateEntry | None], None]
 
 
 class StateStore:
@@ -411,7 +411,7 @@ class StateStore:
     def watch(
         self,
         key_pattern: str,
-        handler: Callable[[StateEntry, StateEntry | None], None],
+        handler: Callable[[StateEntry | None, StateEntry | None], None],
         namespace: str = "default",
     ) -> int:
         with self._watch_lock:

@@ -39,6 +39,7 @@ _CHECK_PATHS: tuple[str, ...] = (
     "runtime/safety/auth",
     "runtime/core/cerebrum",
     "runtime/sensing/gateway",
+    "runtime/platform/process",
 )
 
 # ``<path>:<line>: error: <message>  [<code>]`` — notes and summaries are

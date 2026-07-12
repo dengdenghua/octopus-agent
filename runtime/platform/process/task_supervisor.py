@@ -486,6 +486,14 @@ def _normalize_payload(raw: Any) -> dict[str, Any]:
     return payload
 
 
+# ``list`` is shadowed inside TaskSupervisorStore by its public ``list()``
+# method, so bare ``list[...]`` annotations in that class read as the method
+# and can't be resolved by mypy (which then can't type-check the file). These
+# aliases capture the builtin here at module scope, where it isn't shadowed.
+_TaskRecordList = list[TaskRunRecord]
+_TaskDictList = list[dict[str, Any]]
+
+
 class TaskSupervisorStore:
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
@@ -511,7 +519,7 @@ class TaskSupervisorStore:
             tasks = self._read_tasks_from_payload(payload)
             now = _now_iso()
             existing: TaskRunRecord | None = None
-            next_tasks: list[TaskRunRecord] = []
+            next_tasks: _TaskRecordList = []
             for task in tasks:
                 if task.task_id != task_id:
                     next_tasks.append(task)
@@ -555,7 +563,7 @@ class TaskSupervisorStore:
         thread_id: str | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[TaskRunRecord]:
+    ) -> _TaskRecordList:
         return self.list_page(
             status=status,
             kind=kind,
@@ -616,7 +624,7 @@ class TaskSupervisorStore:
         kind: str | None = None,
         owner_id: str | None = None,
         thread_id: str | None = None,
-    ) -> list[TaskRunRecord]:
+    ) -> _TaskRecordList:
         tasks = self._read_tasks()
         if status:
             tasks = [task for task in tasks if task.status.value == str(status)]
@@ -666,7 +674,7 @@ class TaskSupervisorStore:
             payload = self._read_payload()
             tasks = self._read_tasks_from_payload(payload)
             updated: TaskRunRecord | None = None
-            next_tasks: list[TaskRunRecord] = []
+            next_tasks: _TaskRecordList = []
             for task in tasks:
                 if task.task_id != task_id:
                     next_tasks.append(task)
@@ -700,12 +708,12 @@ class TaskSupervisorStore:
         target = self.path.parent / f"{self.path.name}.rw"
         return _StoreWriteLock(self._lock, target)
 
-    def _read_tasks(self) -> list[TaskRunRecord]:
+    def _read_tasks(self) -> _TaskRecordList:
         return self._read_tasks_from_payload(self._read_payload())
 
     @staticmethod
-    def _read_tasks_from_payload(payload: dict[str, Any]) -> list[TaskRunRecord]:
-        tasks: list[TaskRunRecord] = []
+    def _read_tasks_from_payload(payload: dict[str, Any]) -> _TaskRecordList:
+        tasks: _TaskRecordList = []
         for item in payload.get("tasks") or []:
             if not isinstance(item, dict):
                 continue
@@ -716,7 +724,7 @@ class TaskSupervisorStore:
         return tasks
 
     @staticmethod
-    def _dump_tasks(tasks: list[TaskRunRecord]) -> list[dict[str, Any]]:
+    def _dump_tasks(tasks: _TaskRecordList) -> _TaskDictList:
         return [cast(dict[str, Any], task.model_dump(mode="json")) for task in tasks]
 
 

@@ -33,6 +33,7 @@ runtime/core/cerebrum/react_loop.py	union-attr	Item "None" of "Any | dict[Any, A
 runtime/core/cerebrum/react_loop.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
 runtime/core/cerebrum/react_parallel_dispatch.py	index	Value of type "tuple[str, dict[str, Any]] | None" is not indexable
 runtime/core/cerebrum/react_parsing.py	assignment	Incompatible types in assignment (expression has type "Any | None", variable has type "str")
+runtime/platform/process/eventbus.py	assignment	Incompatible types in assignment (expression has type "RLock", variable has type "LockType")
 runtime/sensing/gateway/agent_trace_router.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
 runtime/sensing/gateway/agent_trace_router.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "items"
 runtime/sensing/gateway/agent_trace_router.py	union-attr	Item "None" of "Any | list[Any] | None" has no attribute "__iter__" (not iterable)

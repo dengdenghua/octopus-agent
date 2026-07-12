@@ -34,7 +34,10 @@ class ServiceProvider:
                 return instance
         return default
 
-    def require(self, key: str) -> T:
+    def require(self, key: str) -> Any:
+        # Services are stored untyped (``_instances: dict[str, Any]``), and
+        # nothing in the call binds the TypeVar, so the honest return type is
+        # Any — ``-> T`` was unbindable and mypy couldn't check callers.
         result = self.get(key)
         if result is None:
             raise KeyError(f"Service '{key}' not registered")
