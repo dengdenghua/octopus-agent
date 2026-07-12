@@ -20,7 +20,7 @@ except ImportError:  # pragma: no cover
 
 try:
     from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import padding
+    from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
     CRYPTO_AVAILABLE = True
 except ImportError:  # pragma: no cover
@@ -124,6 +124,10 @@ class GoogleChatChannel(Channel):
                 private_key_pem.encode(),
                 password=None,
             )
+            # Google service-account keys are RSA (the JWT header is RS256);
+            # narrow the load_pem_private_key union so the PKCS1v15 sign is
+            # type-checked against RSAPrivateKey rather than every key type.
+            assert isinstance(private_key, rsa.RSAPrivateKey)
             signature = private_key.sign(
                 sign_input,
                 padding.PKCS1v15(),

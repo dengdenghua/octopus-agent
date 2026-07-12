@@ -43,6 +43,9 @@ class ChannelMetadata(TypedDict, total=False):
     discord_channel_id: str
     slack_thread_ts: str
     telegram_message_id: str
+    teams_service_url: str
+    teams_conversation_id: str
+    teams_activity_id: str
     file_id: str
     mime_type: str
 
@@ -85,6 +88,13 @@ class OutboundMessage:
 class Channel(ABC):
     channel_id: str = ""  # Implementation note.
     _dispatcher: Callable[[InboundMessage], Any] | None = None
+    # Lazily-created httpx client shared by the HTTP-backed channels. Declared
+    # here so subclasses that only assign it inside ``stop()`` / lazy-init
+    # (not ``__init__``) still have a typed attribute — otherwise mypy infers
+    # its type from the first lexical ``= None`` and reads every guarded
+    # ``self._bare_client.post(...)`` as a call on None. ``Any`` because httpx
+    # is imported untyped.
+    _bare_client: Any = None
 
     def bind_dispatcher(
         self,
