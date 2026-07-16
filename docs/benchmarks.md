@@ -1,5 +1,69 @@
 # Benchmarks · 真实硬数字
 
+> [!IMPORTANT]
+> 下方 2026-04-24 数字是历史基线，不是当前“超越 Codex”证明。旧 SSE bench
+> 入口已退役；在同一题集、同一 rubric、隔离状态下分别重复运行 Octopus 与
+> Codex，并通过摘要和轨迹哈希校验之前，发布门禁会返回
+> `needs_behavioral_evidence`，不会把静态能力分当成真实胜出。
+
+## 当前同题行为认证口径
+
+正式认证要求七个域各至少 2 个 case，每个 case 至少独立运行 3 次（`k >= 3`）：
+
+- general runtime / coding
+- frontend product experience
+- browser / desktop automation
+- multi-agent digital employee
+- repo memory / knowledge
+- security / governance
+- extensions / ecosystem
+
+每条 case 必须使用结果判分器、隔离状态、规定的真实 provider/live runtime
+执行模式，并绑定相同 prompt/rubric 摘要、保存每次完整 trajectory 及 SHA-256。Octopus 的总体 `pass^k`
+必须至少为 95%，不低于 Codex，而且任何一个域都不能落后。证据默认 30 天过期。
+
+评测器现在会把完整 trajectory、verdict/rubric、prompt 摘要和 artifact digest
+写入证据片段：
+
+```python
+from benchmarks.eval_harness import (
+    run_suite,
+    write_behavioral_bundle,
+    write_behavioral_system_evidence,
+)
+
+report = run_suite(cases, runner=octopus_runner, k=3)
+octopus = write_behavioral_system_evidence(
+    report,
+    cases,
+    root=repo_root,
+    system_id="octopus",
+    version=octopus_version,
+)
+# 用完全相同的 cases/rubric 再运行 Codex，得到 codex 片段，然后组装 bundle。
+write_behavioral_bundle(
+    path="benchmarks/results/behavioral-surpass-latest.json",
+    suite_id="same-task-head-to-head-v1",
+    runner_version=runner_version,
+    source_revision=source_revision,
+    generated_at=generated_at,
+    systems={"octopus": octopus, "codex": codex},
+)
+```
+
+验证发布证据：
+
+```bash
+python -m scripts.production_readiness_gate \
+  --behavioral-bundle-path benchmarks/results/behavioral-surpass-latest.json \
+  --json
+```
+
+证据包和轨迹位于 `benchmarks/results/`，默认不入 Git；CI 应通过受控 artifact
+存储传入，并设置 `OCTOPUS_BEHAVIORAL_EXPECTED_REVISION` 绑定待发布 revision。
+
+## 2026-04-24 历史基线
+
 > 一次 11 个 run · 6 个 case · 全 PASS · 实际烧 token + 实际墙钟时间。
 >
 > **跑的是真实生产配置**(`claude-mirror` ~= claude-sonnet-4-6 经 mirror

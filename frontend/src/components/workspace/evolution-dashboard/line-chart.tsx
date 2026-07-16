@@ -353,7 +353,7 @@ export function LineChart({
       {/* Tooltip */}
       {hoverIdx !== null && tooltipPos && (
         <div
-          className="pointer-events-none absolute z-50 rounded-lg border bg-popover px-3 py-2 shadow-lg"
+          className="pointer-events-none absolute z-50 rounded-lg border bg-popover px-3 py-2 shadow-[var(--shadow-md)]"
           style={{
             left: Math.min(tooltipPos.x + 12, width - 180),
             top: Math.max(tooltipPos.y - 10, 0),
@@ -608,7 +608,7 @@ export function StackedAreaChart({
       {/* Tooltip */}
       {hoverIdx !== null && tooltipPos && (
         <div
-          className="pointer-events-none absolute z-50 rounded-lg border bg-popover px-3 py-2 shadow-lg"
+          className="pointer-events-none absolute z-50 rounded-lg border bg-popover px-3 py-2 shadow-[var(--shadow-md)]"
           style={{
             left: Math.min(tooltipPos.x + 12, width - 180),
             top: Math.max(tooltipPos.y - 10, 0),

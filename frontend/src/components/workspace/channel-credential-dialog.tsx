@@ -608,7 +608,7 @@ export function ChannelCredentialDialog({
         </DialogHeader>
 
         {!supported ? (
-          <div className="rounded-lg border border-dashed border-border/60 px-4 py-8 text-center text-[12px] text-muted-foreground">
+          <div className="rounded-lg border border-dashed border-border-default px-4 py-8 text-center text-[12px] text-muted-foreground">
             <div className="mb-2 font-medium">
               {t.channelCredential.comingSoon}
             </div>
@@ -631,7 +631,7 @@ export function ChannelCredentialDialog({
         ) : (
           <>
             {hasExisting && masked && (
-              <div className="rounded-lg border border-border/40 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground space-y-0.5">
+              <div className="rounded-lg border border-border-subtle bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground space-y-0.5">
                 <div className="mb-1 font-medium text-foreground">
                   {t.channelCredential.currentConfigured}
                 </div>
@@ -672,7 +672,7 @@ export function ChannelCredentialDialog({
                         autoComplete="off"
                         spellCheck={false}
                         className={cn(
-                          "w-full rounded-md border border-border/60 bg-background/70",
+                          "w-full rounded-md border border-border-default bg-background/70",
                           "px-2.5 py-1.5 text-[12px] font-mono outline-none",
                           "placeholder:text-muted-foreground/40",
                           "focus:border-primary/50 focus:ring-2 focus:ring-primary/10",
@@ -863,7 +863,7 @@ function WeChatQRForm({
 
   if (!qrCode) {
     return (
-      <div className="rounded-lg border border-dashed border-border/60 px-4 py-8 text-center">
+      <div className="rounded-lg border border-dashed border-border-default px-4 py-8 text-center">
         <p className="mb-3 text-[12px] text-muted-foreground">
           {t.channelCredential.wechatScanInstruction}
         </p>
@@ -896,7 +896,7 @@ function WeChatQRForm({
   return (
     <div className="flex flex-col items-center py-4">
       {qrImg && (
-        <div className="rounded-lg border border-border/40 bg-background p-2">
+        <div className="rounded-lg border border-border-subtle bg-background p-2">
           {qrImg.startsWith("http") ? (
             <QRCodeSVG value={qrImg} size={192} level="M" marginSize={2} />
           ) : (

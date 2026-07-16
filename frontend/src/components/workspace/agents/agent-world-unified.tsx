@@ -255,7 +255,7 @@ function AgentPackImportPanel({ onImported }: { onImported: () => void }) {
       )}
 
       {preview && (
-        <div className="space-y-3 rounded-lg border border-border/60 bg-background/70 p-3">
+        <div className="space-y-3 rounded-lg border border-border-default bg-background/70 p-3">
           <div className="flex flex-wrap gap-2">
             {counts.map(([label, count]) => (
               <Badge key={label} variant="secondary">

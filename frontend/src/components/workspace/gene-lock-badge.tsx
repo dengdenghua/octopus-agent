@@ -172,7 +172,7 @@ export function GeneLockBadge() {
       </button>
 
       {expanded && (
-        <div className="absolute right-0 top-full z-30 mt-1 w-72 rounded-lg border border-border/60 bg-background/95 p-3 text-xs shadow-xl backdrop-blur">
+        <div className="absolute right-0 top-full z-30 mt-1 w-72 rounded-lg border border-border-default bg-background/95 p-3 text-xs shadow-xl backdrop-blur">
           <div className="mb-2 flex items-center gap-2 font-medium">
             <ShieldIcon className="size-3.5" />
             {g.dropdownTitle}
@@ -250,7 +250,7 @@ export function GeneLockBadge() {
           {msg && (
             <div className="mt-2 text-xs text-muted-foreground">{msg}</div>
           )}
-          <div className="mt-2 border-t border-border/30 pt-2 text-[10px] text-muted-foreground">
+          <div className="mt-2 border-t border-border-subtle pt-2 text-[10px] text-muted-foreground">
             {g.levelSummary(
               0,
               g.levelNames[0] ?? "",
@@ -397,7 +397,7 @@ export function GeneLockControlCard({
     return (
       <div
         className={cn(
-          "rounded-lg border border-border/60 bg-background/75 px-3 py-2 shadow-sm",
+          "rounded-lg border border-border-default bg-background/75 px-3 py-2 shadow-[var(--shadow-xs)]",
           className,
         )}
       >
@@ -432,7 +432,7 @@ export function GeneLockControlCard({
                   className={cn(
                     "h-6 rounded-[5px] px-2 text-[11px] transition-colors",
                     selected
-                      ? "bg-background text-foreground shadow-sm"
+                      ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                       : "text-muted-foreground hover:text-foreground",
                     "disabled:cursor-not-allowed disabled:opacity-45",
                   )}
@@ -454,7 +454,7 @@ export function GeneLockControlCard({
                 className={cn(
                   "h-6 rounded-[5px] px-2 font-mono text-[11px] transition-colors",
                   index === lvl
-                    ? "bg-background text-foreground shadow-sm"
+                    ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                     : "text-muted-foreground hover:text-foreground",
                   "disabled:cursor-not-allowed disabled:opacity-45",
                 )}
@@ -501,7 +501,7 @@ export function GeneLockControlCard({
   }
 
   return (
-    <section className="workspace-panel rounded-[1.25rem] border border-border/70 px-4 py-4">
+    <section className="workspace-panel rounded-[1.25rem] border border-border-default px-4 py-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -528,7 +528,7 @@ export function GeneLockControlCard({
       </div>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1.4fr_1fr]">
-        <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+        <div className="rounded-lg border border-border-default bg-muted/20 p-3">
           <div className="text-xs font-medium">{g.openModeLabel}</div>
           <div className="mt-2 grid grid-cols-2 gap-1">
             <Button
@@ -557,7 +557,7 @@ export function GeneLockControlCard({
           </p>
         </div>
 
-        <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+        <div className="rounded-lg border border-border-default bg-muted/20 p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs font-medium">{g.levelLabel}</div>
             <span className="text-[11px] text-muted-foreground">
@@ -583,7 +583,7 @@ export function GeneLockControlCard({
           </div>
         </div>
 
-        <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+        <div className="rounded-lg border border-border-default bg-muted/20 p-3">
           <div className="text-xs font-medium">{g.masterSwitchLabel}</div>
           <Button
             type="button"

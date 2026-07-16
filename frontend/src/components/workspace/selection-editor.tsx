@@ -106,7 +106,7 @@ export function SelectionEditor({
         transform: "translateX(-50%)",
       }}
     >
-      <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-popover shadow-lg px-3 py-2 min-w-[280px]">
+      <div className="flex items-center gap-2 rounded-lg border border-border-default bg-popover shadow-[var(--shadow-md)] px-3 py-2 min-w-[280px]">
         <SparklesIcon className="size-4 text-violet-500 shrink-0" />
         <input
           ref={inputRef}
@@ -130,7 +130,7 @@ export function SelectionEditor({
         )}
       </div>
       {/* Arrow */}
-      <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-popover border-l border-t border-border/50 rotate-45" />
+      <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-popover border-l border-t border-border-default rotate-45" />
     </div>
   );
 }

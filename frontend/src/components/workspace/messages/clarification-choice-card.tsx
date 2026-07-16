@@ -163,7 +163,7 @@ export function ClarificationChoiceCard({
   return (
     <div
       className={cn(
-        "mt-3 rounded-lg border border-border/70 bg-muted/25 p-3",
+        "mt-3 rounded-lg border border-border-default bg-muted/25 p-3",
         className,
       )}
     >

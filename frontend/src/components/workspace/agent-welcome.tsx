@@ -33,7 +33,7 @@ export function AgentWelcome({
       )}
     >
       <div className="relative">
-        <div className="flex size-[72px] items-center justify-center overflow-hidden rounded-lg border border-border/70 bg-card shadow-sm">
+        <div className="flex size-[72px] items-center justify-center overflow-hidden rounded-lg border border-border-default bg-card shadow-[var(--shadow-xs)]">
           {agent?.avatar_url ? (
             <img
               src={`${getBackendBaseURL()}${withAgentAvatarVersion(agent.avatar_url)}`}
@@ -46,7 +46,7 @@ export function AgentWelcome({
             </span>
           )}
         </div>
-        <span className="absolute -right-1 -bottom-1 flex h-5 items-center rounded-md border border-border bg-background px-1.5 text-[10px] font-medium text-muted-foreground shadow-sm">
+        <span className="absolute -right-1 -bottom-1 flex h-5 items-center rounded-md border border-border bg-background px-1.5 text-[10px] font-medium text-muted-foreground shadow-[var(--shadow-xs)]">
           {typeBadge}
         </span>
       </div>

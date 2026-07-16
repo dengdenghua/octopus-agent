@@ -147,7 +147,7 @@ export default function AccountSettingsPage() {
             <div className="flex items-start gap-4">
               <div className="relative group flex-shrink-0">
                 <Avatar
-                  className="size-14 border border-border/70 bg-background ring-2 ring-transparent transition group-hover:ring-primary/20 cursor-pointer"
+                  className="size-14 border border-border-default bg-background ring-2 ring-transparent transition group-hover:ring-primary/20 cursor-pointer"
                   onClick={handleAvatarClick}
                 >
                   <AvatarImage src={profile?.avatar_url} />

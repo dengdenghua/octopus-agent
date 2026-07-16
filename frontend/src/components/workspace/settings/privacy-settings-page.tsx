@@ -398,7 +398,7 @@ export default function PrivacySettingsPage() {
   return (
     <div className="flex flex-col gap-6 text-sm">
       {/* ─── Identity Lock toggle ─── */}
-      <div className="rounded-lg border border-border/50 bg-card/50 p-5">
+      <div className="rounded-lg border border-border-default bg-card/50 p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <h3 className="text-base font-semibold text-foreground">
@@ -458,7 +458,7 @@ export default function PrivacySettingsPage() {
       </div>
 
       {/* ─── AI mode (efficiency / privacy) ─── */}
-      <div className="rounded-lg border border-border/50 bg-card/50 p-5">
+      <div className="rounded-lg border border-border-default bg-card/50 p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <h3 className="text-base font-semibold text-foreground">
@@ -505,7 +505,7 @@ export default function PrivacySettingsPage() {
                   "flex flex-col gap-2 rounded-lg border p-4 text-left transition",
                   active
                     ? "border-primary bg-primary/5 ring-1 ring-primary/40"
-                    : "border-border/50 hover:border-primary/40",
+                    : "border-border-default hover:border-primary/40",
                   aiModeBusy && "opacity-60 cursor-not-allowed",
                 )}
               >
@@ -539,7 +539,7 @@ export default function PrivacySettingsPage() {
       </div>
 
       {/* ─── Path denylist (folders the agent can't read) ─── */}
-      <div className="rounded-lg border border-border/50 bg-card/50 p-5">
+      <div className="rounded-lg border border-border-default bg-card/50 p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <h3 className="text-base font-semibold text-foreground">
@@ -563,7 +563,7 @@ export default function PrivacySettingsPage() {
           </Button>
         </div>
 
-        <div className="mt-4 rounded-lg border border-border/40 divide-y divide-border/40">
+        <div className="mt-4 rounded-lg border border-border-subtle divide-y divide-border/40">
           {(denylist?.paths ?? []).length === 0 ? (
             <div className="px-4 py-6 text-center text-xs text-muted-foreground">
               {t.privacySettings.pathDenyEmpty}
@@ -592,7 +592,7 @@ export default function PrivacySettingsPage() {
                   {denylistMenuOpen === p && (
                     <div
                       role="menu"
-                      className="absolute right-0 top-full z-10 mt-1 min-w-[120px] rounded-md border border-border bg-popover p-1 shadow-md"
+                      className="absolute right-0 top-full z-10 mt-1 min-w-[120px] rounded-md border border-border bg-popover p-1 shadow-[var(--shadow-sm)]"
                     >
                       <button
                         type="button"
@@ -614,7 +614,7 @@ export default function PrivacySettingsPage() {
       </div>
 
       {/* ─── Constitution profile ─── */}
-      <div className="rounded-lg border border-border/50 bg-card/50 p-5">
+      <div className="rounded-lg border border-border-default bg-card/50 p-5">
         <h3 className="text-base font-semibold text-foreground">
           {t.privacySettings.profileTitle}
         </h3>
@@ -643,7 +643,7 @@ export default function PrivacySettingsPage() {
                     "flex flex-col gap-1 rounded-lg border p-3 text-left transition",
                     active
                       ? "border-primary bg-primary/5 ring-1 ring-primary/40"
-                      : "border-border/50 hover:border-primary/40",
+                      : "border-border-default hover:border-primary/40",
                     profileBusy && "opacity-60 cursor-not-allowed",
                   )}
                 >
@@ -673,7 +673,7 @@ export default function PrivacySettingsPage() {
 
         {/* LLM 语义审查 judge —— 运行时开关(无需重启)。上面的 profile 决定
             judge 命中是硬拦截(strict)还是仅审计(normal/lax)。 */}
-        <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-border/50 p-3">
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-border-default p-3">
           <div className="min-w-0">
             <div className="text-sm font-medium">
               {t.privacySettings.judgeTitle}
@@ -695,7 +695,7 @@ export default function PrivacySettingsPage() {
       <SearxngControl />
 
       {/* ─── Alternative unlock paths ─── */}
-      <div className="rounded-lg border border-border/40 bg-muted/20 p-4">
+      <div className="rounded-lg border border-border-subtle bg-muted/20 p-4">
         <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {t.privacySettings.alternativeUnlockTitle}
         </h4>

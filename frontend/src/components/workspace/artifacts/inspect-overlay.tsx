@@ -90,14 +90,14 @@ export function InspectOverlay({
       {children}
       <div className="pointer-events-none absolute top-2 right-2 z-10 flex items-center gap-1.5">
         {active && (
-          <span className="pointer-events-none rounded-md bg-violet-600/90 px-2 py-1 text-[11px] text-white shadow-md">
+          <span className="pointer-events-none rounded-md bg-violet-600/90 px-2 py-1 text-[11px] text-white shadow-[var(--shadow-xs)]">
             Click an element · Esc to cancel
           </span>
         )}
         <Button
           aria-label={active ? "Cancel inspect" : "Inspect element"}
           className={cn(
-            "pointer-events-auto h-7 gap-1.5 px-2 text-xs shadow-md",
+            "pointer-events-auto h-7 gap-1.5 px-2 text-xs shadow-[var(--shadow-xs)]",
             active && "bg-violet-600 text-white hover:bg-violet-700",
           )}
           disabled={!iframeReady}

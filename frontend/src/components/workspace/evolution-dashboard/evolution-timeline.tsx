@@ -144,8 +144,8 @@ function TimelineNode({
       <div className="flex-1 min-w-0">
         <div
           className={cn(
-            "rounded-md border border-border/40 bg-muted/30 px-3 py-2",
-            "hover:border-border/80 transition-colors",
+            "rounded-md border border-border-subtle bg-muted/30 px-3 py-2",
+            "hover:border-border-strong transition-colors",
           )}
         >
           <div className="flex items-center gap-2 mb-1 flex-wrap">

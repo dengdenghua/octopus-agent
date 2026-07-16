@@ -219,7 +219,7 @@ export function ExecutionChecklistPanel({
   return (
     <div
       className={cn(
-        "workspace-panel-subtle my-3 rounded-lg border border-border/60 p-3",
+        "workspace-panel-subtle my-3 rounded-lg border border-border-default p-3",
         className,
       )}
     >

@@ -103,7 +103,7 @@ export function CodeStatusBar({
   return (
     <div
       className={cn(
-        "flex items-center justify-between border-t border-border/50 workspace-panel-subtle px-3 py-0.5 font-mono text-[10px] text-muted-foreground",
+        "flex items-center justify-between border-t border-border-default workspace-panel-subtle px-3 py-0.5 font-mono text-[10px] text-muted-foreground",
         className,
       )}
     >

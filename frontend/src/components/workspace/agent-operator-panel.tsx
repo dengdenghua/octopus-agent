@@ -363,6 +363,9 @@ const EMPTY_E2E_SURPASS_CERTIFICATION: E2ESurpassCertification = {
     all_dimensions_surpassed: false,
     scorecard_gap_dimensions: 0,
     automation_gap_dimensions: 0,
+    behavioral_ready: false,
+    behavioral_octopus_pass_pow_k: 0,
+    behavioral_codex_pass_pow_k: 0,
   },
   checks: [],
   next_actions: [],
@@ -1090,7 +1093,7 @@ export function AgentOperatorPanel() {
             title="Recent task runs"
             meta={`${taskRuns.length} loaded`}
           />
-          <div className="overflow-hidden rounded-lg border border-border/60">
+          <div className="overflow-hidden rounded-lg border border-border-default">
             {taskRuns.length === 0 ? (
               <EmptyPanel title="No task runs yet" />
             ) : (
@@ -1099,7 +1102,7 @@ export function AgentOperatorPanel() {
                   key={run.task_id}
                   type="button"
                   className={cn(
-                    "flex w-full items-center gap-3 border-b border-border/50 px-3 py-2 text-left last:border-b-0 hover:bg-muted/40",
+                    "flex w-full items-center gap-3 border-b border-border-default px-3 py-2 text-left last:border-b-0 hover:bg-muted/40",
                     selectedTaskId === run.task_id && "bg-primary/10",
                   )}
                   onClick={() => setSelectedTaskId(run.task_id)}
@@ -1127,7 +1130,7 @@ export function AgentOperatorPanel() {
             )}
           </div>
 
-          <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
+          <div className="rounded-lg border border-border-default bg-muted/15 p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium">
@@ -1435,8 +1438,9 @@ function CompetitorScorecardCard({
   const selectedGapCandidate =
     focusGaps.find((dimension) => dimension.id === selectedGapId) ?? topGap;
   const selectedGap = selectedGapCandidate
-    ? (belowTarget.find((dimension) => dimension.id === selectedGapCandidate.id) ??
-      selectedGapCandidate)
+    ? (belowTarget.find(
+        (dimension) => dimension.id === selectedGapCandidate.id,
+      ) ?? selectedGapCandidate)
     : undefined;
   const selectedGapChecklist = selectedGap?.octopus_evidence_checklist ?? [];
   const selectedGapQueueItem = selectedGap
@@ -1634,10 +1638,11 @@ function E2ESurpassCertificationCard({
   const failedChecks = certification.checks.filter((check) => !check.passed);
   const passedChecks = certification.checks.length - failedChecks.length;
   const ready = !error && certification.ready;
+  const behavioralReady = summary.behavioral_ready;
   const focusText = error
     ? error
     : ready
-      ? "scorecard, automation, and quality gates all clear the Codex bar"
+      ? "same-task repeated behavioral runs and static release gates clear the Codex bar"
       : failedChecks[0]?.title ||
         certification.next_actions[0] ||
         "waiting for E2E certification evidence";
@@ -1673,6 +1678,17 @@ function E2ESurpassCertificationCard({
             <Badge variant="outline" className="text-[10px]">
               quality {summary.quality_ready}/{summary.quality_total}
             </Badge>
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[10px]",
+                behavioralReady
+                  ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+              )}
+            >
+              behavior {behavioralReady ? "verified" : "missing"}
+            </Badge>
           </div>
           <div className="mt-1 truncate text-[11px] text-muted-foreground">
             {focusText}
@@ -1682,10 +1698,18 @@ function E2ESurpassCertificationCard({
               scorecard {summary.scorecard_octopus} vs best external{" "}
               {summary.scorecard_best_external} · automation{" "}
               {summary.automation_octopus} vs Codex {summary.automation_codex}
+              {behavioralReady && (
+                <>
+                  {" "}
+                  · pass^k{" "}
+                  {Math.round(summary.behavioral_octopus_pass_pow_k * 100)}% vs
+                  Codex {Math.round(summary.behavioral_codex_pass_pow_k * 100)}%
+                </>
+              )}
             </div>
           )}
         </div>
-        <div className="grid shrink-0 grid-cols-4 gap-2 text-right font-mono text-[11px]">
+        <div className="grid shrink-0 grid-cols-5 gap-2 text-right font-mono text-[11px]">
           <GateStat label="Scorecard" value={summary.scorecard_octopus} />
           <GateStat
             label="Evidence"
@@ -1693,6 +1717,14 @@ function E2ESurpassCertificationCard({
           />
           <GateStat label="Automation" value={summary.automation_octopus} />
           <GateStat label="Quality" value={summary.quality_ready} />
+          <GateStat
+            label="Behavior"
+            value={
+              behavioralReady
+                ? Math.round(summary.behavioral_octopus_pass_pow_k * 100)
+                : 0
+            }
+          />
         </div>
       </div>
 
@@ -1830,7 +1862,7 @@ function ScorecardGapDrilldown({
         </div>
       </div>
 
-      <div className="mt-2 flex flex-col gap-2 rounded-md border border-border/50 bg-muted/15 px-2 py-1.5 md:flex-row md:items-center md:justify-between">
+      <div className="mt-2 flex flex-col gap-2 rounded-md border border-border-default bg-muted/15 px-2 py-1.5 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <div className="text-[11px] font-medium text-muted-foreground">
             Remediation queue
@@ -1894,7 +1926,7 @@ function ScorecardGapDrilldown({
       {operatorDrilldown?.schema ===
         "octopus.scorecard_operator_drilldown.v1" &&
         drilldownLinks.length > 0 && (
-          <div className="mt-2 rounded-md border border-border/50 bg-muted/15 px-2 py-1.5">
+          <div className="mt-2 rounded-md border border-border-default bg-muted/15 px-2 py-1.5">
             <div className="mb-1 flex items-center justify-between gap-2">
               <div className="min-w-0 truncate text-[11px] font-medium text-muted-foreground">
                 Evidence sources
@@ -1907,7 +1939,7 @@ function ScorecardGapDrilldown({
               {drilldownLinks.slice(0, 4).map((link) => (
                 <div
                   key={`${link.id ?? link.label}-${link.href}`}
-                  className="min-w-0 rounded-md border border-border/50 bg-background/50 px-2 py-1.5"
+                  className="min-w-0 rounded-md border border-border-default bg-background/50 px-2 py-1.5"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0 truncate text-xs font-medium">
@@ -1944,7 +1976,7 @@ function ScorecardGapDrilldown({
             {checklist.slice(0, 2).map((item) => (
               <div
                 key={item.id ?? item.title}
-                className="rounded-md border border-border/50 bg-muted/15 px-2 py-1.5"
+                className="rounded-md border border-border-default bg-muted/15 px-2 py-1.5"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 truncate text-xs font-medium">
@@ -2003,7 +2035,7 @@ function AutomationRadarCard({
   const topDraft = drafts.drafts[0] ?? null;
   const topGaps = radar.octopus_gaps ?? [];
   return (
-    <div className="mt-3 rounded-lg border border-border/70 bg-background/60 px-3 py-2">
+    <div className="mt-3 rounded-lg border border-border-default bg-background/60 px-3 py-2">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
@@ -2054,7 +2086,7 @@ function AutomationRadarCard({
       </div>
 
       <div className="mt-2 grid gap-2 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="rounded-md border border-border/50 bg-muted/15 px-2 py-1.5">
+        <div className="rounded-md border border-border-default bg-muted/15 px-2 py-1.5">
           <div className="mb-1 text-[11px] font-medium text-muted-foreground">
             Remaining automation edges
           </div>
@@ -2072,7 +2104,7 @@ function AutomationRadarCard({
             )}
           </div>
         </div>
-        <div className="rounded-md border border-border/50 bg-muted/15 px-2 py-1.5">
+        <div className="rounded-md border border-border-default bg-muted/15 px-2 py-1.5">
           <div className="mb-1 flex items-center justify-between gap-2">
             <div className="min-w-0 truncate text-[11px] font-medium text-muted-foreground">
               Signed automation rule drafts
@@ -2206,7 +2238,7 @@ function PromotionAuditSummaryCard({
         "mt-3 rounded-lg border px-3 py-2",
         risky
           ? "border-amber-500/30 bg-amber-500/10"
-          : "border-border/60 bg-muted/15",
+          : "border-border-default bg-muted/15",
       )}
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -2256,7 +2288,7 @@ function MemoryQualityCard({
           ? "border-amber-500/30 bg-amber-500/10"
           : summary.total > 0
             ? "border-emerald-500/25 bg-emerald-500/10"
-            : "border-border/60 bg-muted/15",
+            : "border-border-default bg-muted/15",
       )}
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -2320,7 +2352,7 @@ function AutoVerifierCard({
             ? "border-amber-500/30 bg-amber-500/10"
             : hasSignal
               ? "border-emerald-500/25 bg-emerald-500/10"
-              : "border-border/60 bg-muted/15",
+              : "border-border-default bg-muted/15",
       )}
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -2440,7 +2472,7 @@ function PluginHealthCard({ summary }: { summary: PluginSmokeSummary }) {
           ? "border-destructive/30 bg-destructive/10"
           : risky
             ? "border-amber-500/30 bg-amber-500/10"
-            : "border-border/60 bg-muted/15",
+            : "border-border-default bg-muted/15",
       )}
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -2534,7 +2566,7 @@ function ToolSafetyCard({
         "mt-3 rounded-lg border px-3 py-2",
         summary.total > 0
           ? "border-amber-500/30 bg-amber-500/10"
-          : "border-border/60 bg-muted/15",
+          : "border-border-default bg-muted/15",
       )}
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -2621,7 +2653,7 @@ function PolicyReviewRuleDraftCard({
         "mt-3 rounded-lg border px-3 py-2",
         hasDrafts
           ? "border-emerald-500/25 bg-emerald-500/10"
-          : "border-border/60 bg-muted/15",
+          : "border-border-default bg-muted/15",
       )}
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -2715,7 +2747,7 @@ function SubagentRiskCard({
         "mt-3 rounded-lg border px-3 py-2",
         hasRisks
           ? "border-amber-500/30 bg-amber-500/10"
-          : "border-border/60 bg-muted/15",
+          : "border-border-default bg-muted/15",
       )}
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -2844,7 +2876,7 @@ function TopologyPolicyCard({
           ? "border-destructive/30 bg-destructive/10"
           : impacted.length > 0
             ? "border-amber-500/30 bg-amber-500/10"
-            : "border-border/60 bg-muted/15",
+            : "border-border-default bg-muted/15",
       )}
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -2941,7 +2973,7 @@ function TopologyPromotionCard({
           ? "border-destructive/30 bg-destructive/10"
           : hasSignal
             ? "border-emerald-500/25 bg-emerald-500/10"
-            : "border-border/60 bg-muted/15",
+            : "border-border-default bg-muted/15",
       )}
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -3018,7 +3050,7 @@ function ReviewQueueRow({
   onArchive: () => void;
 }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-background/65 p-3">
+    <div className="rounded-lg border border-border-default bg-background/65 p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -3144,7 +3176,7 @@ function Metric({
 
 function EmptyPanel({ title }: { title: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-border/70 px-3 py-8 text-center text-sm text-muted-foreground">
+    <div className="rounded-lg border border-dashed border-border-default px-3 py-8 text-center text-sm text-muted-foreground">
       {title}
     </div>
   );

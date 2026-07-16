@@ -568,7 +568,7 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
 
 function Metric({ label, value }: { label: string; value: unknown }) {
   return (
-    <div className="border-border/70 rounded-md border px-3 py-2">
+    <div className="border-border-default rounded-md border px-3 py-2">
       <div className="text-muted-foreground text-xs">{label}</div>
       <div className="mt-1 truncate text-sm font-medium">
         {formatValue(value)}
@@ -585,7 +585,7 @@ function InfoBlock({
   children: React.ReactNode;
 }) {
   return (
-    <section className="border-border/70 rounded-md border p-3">
+    <section className="border-border-default rounded-md border p-3">
       <h2 className="mb-3 text-sm font-semibold">{title}</h2>
       {children}
     </section>

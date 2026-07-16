@@ -130,7 +130,7 @@ export function UserMenu() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton>
-              <div className="flex size-6 items-center justify-center rounded-lg border border-border/70 bg-background text-muted-foreground shadow-sm">
+              <div className="flex size-6 items-center justify-center rounded-lg border border-border-default bg-background text-muted-foreground shadow-[var(--shadow-xs)]">
                 <User className="size-3" />
               </div>
               <span className="truncate">{accountName}</span>
@@ -223,7 +223,7 @@ export function UserMenu() {
                           ))}
                         {expired > 0 && (
                           <div
-                            className="mt-1 flex items-center justify-between border-t border-border/40 pt-1 text-[11px] text-muted-foreground"
+                            className="mt-1 flex items-center justify-between border-t border-border-subtle pt-1 text-[11px] text-muted-foreground"
                             title={t.accountSettings.expiredTooltip}
                           >
                             <span>{t.accountSettings.expired}</span>

@@ -368,7 +368,7 @@ function AgentCard({
         <button
           type="button"
           onClick={onClick}
-          className="bg-card flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all hover:shadow-sm"
+          className="bg-card flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all hover:shadow-[var(--shadow-xs)]"
         >
           {/* Status indicator */}
           <div

@@ -108,12 +108,12 @@ export function TeamModePicker({
   return (
     <div
       className={cn(
-        "relative flex items-center rounded-full bg-muted/50 p-[3px] ring-1 ring-border/20",
+        "relative flex items-center rounded-full bg-muted/50 p-[3px] ring-1 ring-border-subtle",
         className,
       )}
     >
       <div
-        className="absolute top-[3px] bottom-[3px] rounded-full bg-background shadow-sm ring-1 ring-border/40 transition-all duration-300 ease-out"
+        className="absolute top-[3px] bottom-[3px] rounded-full bg-background shadow-[var(--shadow-xs)] ring-1 ring-border-subtle transition-all duration-300 ease-out"
         style={{
           left: `calc(${activeIndex} * (100% - 4px) / ${count} + 2px)`,
           width: `calc((100% - 4px) / ${count})`,
@@ -129,7 +129,7 @@ export function TeamModePicker({
             type="button"
             onClick={() => onChange(mode)}
             className={cn(
-              "relative z-10 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors duration-200",
+              "relative z-10 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
               active
                 ? "text-foreground"
                 : "text-muted-foreground/60 hover:text-muted-foreground",

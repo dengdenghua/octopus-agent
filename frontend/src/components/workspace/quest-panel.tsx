@@ -344,7 +344,7 @@ function PhaseStepper({ currentPhase }: { currentPhase: QuestPhase }) {
   const currentIdx = getPhaseIndex(currentPhase);
 
   return (
-    <div className="flex items-center gap-1 border-b border-border/40 bg-muted/20 px-4 py-2.5">
+    <div className="flex items-center gap-1 border-b border-border-subtle bg-muted/20 px-4 py-2.5">
       {PHASES.map((phase, i) => {
         const Icon = phase.icon;
         const isActive = Math.floor(currentIdx) === i;
@@ -443,7 +443,7 @@ function PlanReview({
           return (
             <div
               key={step.step_id}
-              className="rounded-lg border border-border/60 bg-card text-card-foreground"
+              className="rounded-lg border border-border-default bg-card text-card-foreground"
             >
               <button
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-accent/40"
@@ -492,13 +492,13 @@ function PlanReview({
       <div className="flex justify-end gap-2 pt-1">
         <button
           onClick={onReject}
-          className="rounded-lg border border-border/60 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+          className="rounded-lg border border-border-default px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
         >
           {t.questMode.reject}
         </button>
         <button
           onClick={onApprove}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-3 py-1.5 text-xs font-medium shadow-sm shadow-primary/10 transition-colors"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-3 py-1.5 text-xs font-medium shadow-[var(--shadow-xs)] shadow-primary/10 transition-colors"
         >
           {t.questMode.approveExecute}
         </button>
@@ -547,7 +547,7 @@ function ExecutionProgress({
       {/* Progress bar */}
       <div className="bg-primary/10 h-1.5 w-full overflow-hidden rounded-lg">
         <div
-          className="bg-primary h-full rounded-lg transition-all duration-500 shadow-sm shadow-primary/20"
+          className="bg-primary h-full rounded-lg transition-all duration-500 shadow-[var(--shadow-xs)] shadow-primary/20"
           style={{ width: `${progress}%` }}
         />
       </div>
@@ -644,7 +644,7 @@ function VerificationResults({
 
       <div className="grid grid-cols-3 gap-2">
         {verification.tests_run > 0 && (
-          <div className="rounded-lg border border-border/60 bg-card p-2 text-center">
+          <div className="rounded-lg border border-border-default bg-card p-2 text-center">
             <div className="text-sm font-bold">
               {verification.tests_passed}/{verification.tests_run}
             </div>
@@ -742,7 +742,7 @@ function ReportCard({ report }: { report: QuestReport }) {
       <p className="text-sm">{report.summary}</p>
 
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-lg border border-border/60 bg-card p-2">
+        <div className="rounded-lg border border-border-default bg-card p-2">
           <div className="font-bold">
             {report.steps_completed}/{report.steps_total}
           </div>
@@ -750,7 +750,7 @@ function ReportCard({ report }: { report: QuestReport }) {
             {t.questMode.stepsCompleted}
           </div>
         </div>
-        <div className="rounded-lg border border-border/60 bg-card p-2">
+        <div className="rounded-lg border border-border-default bg-card p-2">
           <div className="font-bold">{report.files_changed.length}</div>
           <div className="text-muted-foreground">
             {t.questMode.filesChanged}
@@ -841,7 +841,7 @@ function QuestStartForm({
           }
         }}
         placeholder="e.g. Add a dark mode toggle to the settings page with persistent preference storage..."
-        className="bg-muted/30 text-foreground placeholder:text-muted-foreground/40 min-h-[80px] w-full resize-none rounded-lg border border-border/60 px-3 py-2 text-sm outline-none transition-colors focus:border-primary/40 focus:ring-1 focus:ring-primary/30"
+        className="bg-muted/30 text-foreground placeholder:text-muted-foreground/40 min-h-[80px] w-full resize-none rounded-lg border border-border-default px-3 py-2 text-sm outline-none transition-colors focus:border-primary/40 focus:ring-1 focus:ring-primary/30"
         rows={3}
       />
       <div className="flex items-center justify-between">
@@ -852,7 +852,7 @@ function QuestStartForm({
           onClick={handleSubmit}
           disabled={!requirement.trim()}
           className={cn(
-            "bg-primary text-primary-foreground flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-medium shadow-sm shadow-primary/10 transition-colors",
+            "bg-primary text-primary-foreground flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-medium shadow-[var(--shadow-xs)] shadow-primary/10 transition-colors",
             requirement.trim()
               ? "hover:bg-primary/90"
               : "cursor-not-allowed opacity-50",
@@ -945,12 +945,12 @@ export function QuestPanel({
   return (
     <div
       className={cn(
-        "bg-popover text-popover-foreground w-96 overflow-hidden rounded-lg border border-border/60 shadow-2xl shadow-black/5",
+        "bg-popover text-popover-foreground w-96 overflow-hidden rounded-lg border border-border-default shadow-2xl shadow-black/5",
         className,
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/60 px-4 py-2.5">
+      <div className="flex items-center justify-between border-b border-border-default px-4 py-2.5">
         <div className="flex items-center gap-2">
           <div className="flex size-6 items-center justify-center rounded-lg bg-primary/10">
             <RocketIcon className="text-primary size-3.5" />
@@ -1065,7 +1065,7 @@ export function QuestPanel({
                 <div className="flex justify-center px-4 pb-3 pt-1">
                   <button
                     onClick={handleNewQuest}
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-medium shadow-sm shadow-primary/10 transition-colors"
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-medium shadow-[var(--shadow-xs)] shadow-primary/10 transition-colors"
                   >
                     <RocketIcon className="size-3" />
                     {t.questMode.newQuest}
@@ -1084,7 +1084,7 @@ export function QuestPanel({
                 </p>
                 <button
                   onClick={handleNewQuest}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-4 py-1.5 text-xs font-medium shadow-sm shadow-primary/10 transition-colors"
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-4 py-1.5 text-xs font-medium shadow-[var(--shadow-xs)] shadow-primary/10 transition-colors"
                 >
                   {t.questMode.startNewQuest}
                 </button>
@@ -1117,10 +1117,10 @@ export function QuestButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium shadow-sm transition-colors transition-shadow duration-200",
+        "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium shadow-[var(--shadow-xs)] transition-colors transition-shadow duration-200",
         isActive
           ? "bg-primary text-primary-foreground border-primary/60 shadow-primary/10"
-          : "bg-background/80 text-muted-foreground hover:bg-muted/50 hover:text-foreground border-border/60",
+          : "bg-background/80 text-muted-foreground hover:bg-muted/50 hover:text-foreground border-border-default",
         className,
       )}
     >

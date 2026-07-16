@@ -131,7 +131,7 @@ function MainComputerStatusButton({
 }) {
   const { t } = useI18n();
   const buttonClassName = cn(
-    "relative flex size-9 shrink-0 items-center justify-center rounded-md border font-mono shadow-sm transition-colors",
+    "relative flex size-9 shrink-0 items-center justify-center rounded-md border font-mono shadow-[var(--shadow-xs)] transition-colors",
     active && "ring-1 ring-primary/30",
     agentRunRobotButtonClass(runState),
   );
@@ -583,7 +583,7 @@ export function AgentWorkbenchPanel({
   const browserTabPage = (
     <div className="flex min-h-0 flex-1 flex-col">
       {canShowDeployedPreview && canShowInlinePreview && (
-        <div className="flex shrink-0 items-center gap-1 border-b border-border/30 px-3 py-1.5">
+        <div className="flex shrink-0 items-center gap-1 border-b border-border-subtle px-3 py-1.5">
           {(
             [
               { id: "inline", label: t.livePreview.title },
@@ -732,7 +732,7 @@ export function AgentWorkbenchPanel({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border/45 hover:bg-muted/45 hover:text-foreground"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
                   title={t.agentWorkbenchPanel.tabList}
                   aria-label={t.agentWorkbenchPanel.tabList}
                 >
@@ -776,7 +776,7 @@ export function AgentWorkbenchPanel({
   const agentKanbanPage = (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* View switch tabs */}
-      <div className="flex items-center gap-4 border-b border-border/30 px-5 py-2">
+      <div className="flex items-center gap-4 border-b border-border-subtle px-5 py-2">
         {[
           { id: "summary" as const, label: t.agentWorkbenchPanel.summaryLabel },
           { id: "trace" as const, label: t.agentWorkbench.activityTrace },
@@ -868,7 +868,7 @@ export function AgentWorkbenchPanel({
         <div className="flex min-h-0 flex-1 flex-col bg-background/35">
           {/* Header: agent identity + progress (hidden for roster seats — the placeholder shows identity inline) */}
           {!selectedRosterSeat && (
-            <div className="flex shrink-0 items-center gap-2 border-b border-border/30 px-5 py-3">
+            <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-5 py-3">
               <MonitorIcon className="size-4 shrink-0 text-muted-foreground" />
               <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
                 <span
@@ -910,7 +910,7 @@ export function AgentWorkbenchPanel({
 
           {/* Agent filter chip row — quick switch between main process and sub-agents */}
           {!selectedRosterSeat && agentTiles.length > 0 && (
-            <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border/30 px-5 py-2">
+            <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border-subtle px-5 py-2">
               <span className="shrink-0 text-[10px] font-medium text-muted-foreground/70">
                 {t.agentWorkbenchPanel.filterByAgent}
               </span>
@@ -921,7 +921,7 @@ export function AgentWorkbenchPanel({
                   "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-[11px] font-medium transition-colors",
                   !selectedAgent
                     ? "border-foreground/40 bg-foreground/10 text-foreground"
-                    : "border-border/50 bg-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+                    : "border-border-default bg-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground",
                 )}
               >
                 <MonitorIcon className="size-3" />
@@ -941,7 +941,7 @@ export function AgentWorkbenchPanel({
                       "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-[11px] font-medium transition-colors",
                       isActive
                         ? "border-foreground/40 bg-foreground/10 text-foreground"
-                        : "border-border/50 bg-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+                        : "border-border-default bg-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground",
                     )}
                   >
                     {agent.avatar ? (
@@ -1005,10 +1005,10 @@ export function AgentWorkbenchPanel({
                         type="button"
                         onClick={() => openSubagentProcess(agent.id)}
                         className={cn(
-                          "group flex w-full items-center gap-3 rounded-lg border border-border/55 bg-background/80 px-4 py-3 text-left transition-colors hover:border-border hover:bg-muted/30",
+                          "group flex w-full items-center gap-3 rounded-lg border border-border-default bg-background/80 px-4 py-3 text-left transition-colors hover:border-border hover:bg-muted/30",
                         )}
                       >
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/30 text-xl">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border-default bg-muted/30 text-xl">
                           {agent.avatar ? (
                             <span aria-hidden="true">{agent.avatar}</span>
                           ) : (
@@ -1155,7 +1155,7 @@ export function AgentWorkbenchPanel({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border/45 hover:bg-muted/45 hover:text-foreground"
+                className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
                 title={t.agentWorkbenchPanel.tabList}
                 aria-label={t.agentWorkbenchPanel.tabList}
               >
@@ -1237,7 +1237,7 @@ function MachineScopeRail({
   const mainDockShowsPresence = Boolean(leaderSeat && hasCollaborators);
   return (
     <div
-      className="flex min-w-0 shrink-0 items-center gap-2 border-t border-border/45 bg-background/80 px-3 py-1.5"
+      className="flex min-w-0 shrink-0 items-center gap-2 border-t border-border-subtle bg-background/80 px-3 py-1.5"
       data-testid="workstation-bottom-rail"
     >
       <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1345,7 +1345,7 @@ function ComputerScopeSwitch({
 }) {
   const { t } = useI18n();
   return (
-    <div className="border-b border-border/45 px-3 pt-2">
+    <div className="border-b border-border-subtle px-3 pt-2">
       <div className="flex min-w-0 items-center gap-4 text-xs font-medium">
         <span className="min-w-0 truncate border-b-2 border-foreground pb-2 text-foreground">
           {subLabel}
@@ -1381,9 +1381,9 @@ function AgentComputerStatusCard({
   title: string;
 }) {
   return (
-    <div className="border-t border-border/45 px-3 py-2">
+    <div className="border-t border-border-subtle px-3 py-2">
       <div className="flex min-w-0 items-center gap-2">
-        <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-border/55 bg-muted/20 text-base font-semibold text-foreground">
+        <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-border-default bg-muted/20 text-base font-semibold text-foreground">
           {avatarUrl ? (
             <img
               src={avatarUrl}
@@ -1447,7 +1447,7 @@ function RosterComputerPlaceholder({
             <span className="size-1 rounded-full bg-emerald-500" />
             {t.agentWorkbenchPanel.dockStatusPresent}
           </span>
-          <div className="mt-4 max-w-[240px] rounded-lg border border-dashed border-border/60 bg-muted/10 px-4 py-3 text-center">
+          <div className="mt-4 max-w-[240px] rounded-lg border border-dashed border-border-default bg-muted/10 px-4 py-3 text-center">
             <MonitorIcon className="mx-auto size-4 text-muted-foreground/50" />
             <div className="mt-1.5 text-[11px] font-medium text-foreground">
               {t.agentWorkbenchPanel.noIndependentProcessActivity}
@@ -1485,7 +1485,7 @@ function ActivityTraceView({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
       <div className="mx-auto w-full max-w-2xl px-5 py-4">
-        <div className="mb-3 flex min-w-0 items-center gap-2 border-b border-border/30 pb-3">
+        <div className="mb-3 flex min-w-0 items-center gap-2 border-b border-border-subtle pb-3">
           <ListChecksIcon className="size-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
             <div className="truncate text-xs font-semibold text-foreground">
@@ -1592,13 +1592,13 @@ function SubagentProcessView({
           subLabel={`${t.agentWorkbench.kindAgent} ${agent.label}`}
           onOpenMain={onOpenMain}
         />
-        <section className="border-b border-border/55 bg-background/85">
-          <div className="flex items-center justify-center border-b border-border/40 px-3 py-2 text-sm font-medium text-muted-foreground">
+        <section className="border-b border-border-default bg-background/85">
+          <div className="flex items-center justify-center border-b border-border-subtle px-3 py-2 text-sm font-medium text-muted-foreground">
             {t.agentWorkbenchPanel.agentClusterIndependentProcess}
           </div>
           <div className="grid gap-4 p-4 sm:grid-cols-[8rem_1fr]">
-            <div className="border-b border-border/45 pb-3 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4">
-              <div className="border-b border-border/60 pb-1.5 font-mono text-sm font-semibold text-foreground">
+            <div className="border-b border-border-subtle pb-3 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4">
+              <div className="border-b border-border-default pb-1.5 font-mono text-sm font-semibold text-foreground">
                 {agent.label}
               </div>
               <div className="mt-7 flex size-20 items-center justify-center rounded-sm border border-border bg-background text-4xl">
@@ -1663,7 +1663,7 @@ function SubagentProcessView({
                   </span>
                 )}
               </div>
-              <div className="mt-4 max-h-36 overflow-y-auto whitespace-pre-wrap break-words border-l-2 border-border/60 bg-muted/20 px-3 py-2 text-sm leading-6 text-foreground">
+              <div className="mt-4 max-h-36 overflow-y-auto whitespace-pre-wrap break-words border-l-2 border-border-default bg-muted/20 px-3 py-2 text-sm leading-6 text-foreground">
                 {brief || t.agentWorkbenchPanel.noTaskDescription}
               </div>
             </div>
@@ -1671,11 +1671,11 @@ function SubagentProcessView({
         </section>
 
         {blocks.length === 0 ? (
-          <div className="flex min-h-32 items-center justify-center border-b border-border/45 bg-muted/15 px-4 text-sm text-muted-foreground">
+          <div className="flex min-h-32 items-center justify-center border-b border-border-subtle bg-muted/15 px-4 text-sm text-muted-foreground">
             {t.agentWorkbenchPanel.waitingForSubagentOutput}
           </div>
         ) : (
-          <section className="border-b border-border/45 bg-background/70">
+          <section className="border-b border-border-subtle bg-background/70">
             <div className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground">
               <MonitorIcon className="size-4" aria-hidden="true" />
               {t.agentWorkbenchPanel.processReplay}

@@ -1180,7 +1180,7 @@ export interface E2ESurpassCertification {
   schema: "octopus.e2e_surpass_certification.v1" | string;
   target_score: number;
   ready: boolean;
-  verdict: "surpassed" | "needs_work" | string;
+  verdict: "surpassed" | "needs_behavioral_evidence" | "needs_work" | string;
   summary: {
     scorecard_octopus: number;
     scorecard_best_external: number;
@@ -1192,6 +1192,9 @@ export interface E2ESurpassCertification {
     all_dimensions_surpassed: boolean;
     scorecard_gap_dimensions: number;
     automation_gap_dimensions: number;
+    behavioral_ready: boolean;
+    behavioral_octopus_pass_pow_k: number;
+    behavioral_codex_pass_pow_k: number;
   };
   checks: E2ESurpassCertificationCheck[];
   scorecard?: {
@@ -1220,6 +1223,22 @@ export interface E2ESurpassCertification {
     total?: number;
     next_actions?: string[];
   }>;
+  behavioral?: {
+    schema?: string;
+    ready: boolean;
+    verdict: string;
+    bundle_path?: string;
+    age_days?: number | null;
+    systems?: Record<
+      string,
+      {
+        aggregate_pass_pow_k?: number;
+        total_cases?: number;
+        valid_cases?: number;
+      }
+    >;
+    next_actions?: string[];
+  };
   next_actions: string[];
 }
 

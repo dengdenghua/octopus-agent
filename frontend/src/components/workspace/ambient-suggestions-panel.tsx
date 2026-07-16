@@ -134,7 +134,7 @@ export function AmbientSuggestionsPanel({
                       {accepted.map((s) => (
                         <li
                           key={s.id}
-                          className="border-border/50 rounded-md border px-3 py-2"
+                          className="border-border-default rounded-md border px-3 py-2"
                         >
                           <div className="text-sm font-medium">{s.title}</div>
                         </li>
@@ -152,7 +152,7 @@ export function AmbientSuggestionsPanel({
                       {dismissed.map((s) => (
                         <li
                           key={s.id}
-                          className="border-border/50 rounded-md border px-3 py-2"
+                          className="border-border-default rounded-md border px-3 py-2"
                         >
                           <div className="text-muted-foreground text-sm">
                             {s.title}

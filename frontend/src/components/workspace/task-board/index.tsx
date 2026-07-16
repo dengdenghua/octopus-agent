@@ -512,7 +512,7 @@ export function TaskBoard({
       )}
     >
       {/* Page header */}
-      <div className="ui-density-panel flex items-center justify-between rounded-lg border border-border/50 bg-card/60">
+      <div className="ui-density-panel flex items-center justify-between rounded-lg border border-border-default bg-card/60">
         <div>
           <h1 className="text-xl font-bold tracking-tight">
             {t.taskBoard.title}
@@ -539,7 +539,7 @@ export function TaskBoard({
       <StatsBar stats={stats} loading={statsLoading} />
 
       {/* Toolbar: view mode + filters */}
-      <div className="ui-density-panel flex items-center justify-between gap-4 rounded-lg border border-border/40 bg-card/40">
+      <div className="ui-density-panel flex items-center justify-between gap-4 rounded-lg border border-border-subtle bg-card/40">
         <TypeFilterPills
           value={typeFilter}
           onChange={setTypeFilter}
@@ -575,14 +575,14 @@ export function TaskBoard({
 
       {/* Loading state */}
       {tasksLoading && tasks.length === 0 && (
-        <div className="flex items-center justify-center rounded-lg border border-border/40 bg-card/40 py-20">
+        <div className="flex items-center justify-center rounded-lg border border-border-subtle bg-card/40 py-20">
           <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
         </div>
       )}
 
       {/* Empty state */}
       {!tasksLoading && tasks.length === 0 && !tasksError && (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border/50 bg-card/30 py-20 text-muted-foreground">
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border-default bg-card/30 py-20 text-muted-foreground">
           <KanbanIcon className="size-12 mb-3 opacity-30" />
           <p className="text-lg font-medium">{t.taskBoard.noTasks}</p>
           <p className="text-sm">{t.taskBoard.noTasksDescription}</p>

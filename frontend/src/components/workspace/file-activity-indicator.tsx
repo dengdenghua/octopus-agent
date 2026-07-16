@@ -90,7 +90,7 @@ function FileOpRow({ event }: { event: FileOpEvent }) {
   const hasDiff = !!event.diff && event.diff.length > 0;
 
   return (
-    <li className="rounded border border-border/30 bg-muted/20">
+    <li className="rounded border border-border-subtle bg-muted/20">
       <button
         type="button"
         onClick={() => hasDiff && setExpanded((v) => !v)}
@@ -131,7 +131,7 @@ function DiffBlock({ diff }: { diff: string }) {
   return (
     <pre
       className={cn(
-        "m-1 rounded border border-border/40 bg-background px-2 py-1.5",
+        "m-1 rounded border border-border-subtle bg-background px-2 py-1.5",
         "text-[10px] font-mono leading-snug whitespace-pre overflow-x-auto",
         "max-h-[320px] overflow-y-auto",
       )}

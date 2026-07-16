@@ -207,7 +207,7 @@ export function LocalAgentConnectDialog({
                   type="button"
                   onClick={() => togglePartner(partner)}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-lg border border-border/60 bg-background/75 p-3 text-left transition-colors",
+                    "flex w-full items-center gap-3 rounded-lg border border-border-default bg-background/75 p-3 text-left transition-colors",
                     !disabled && "hover:border-primary/25 hover:bg-muted/20",
                     checked && "border-primary/30 bg-primary/5",
                     disabled && "cursor-default opacity-75",
@@ -218,7 +218,7 @@ export function LocalAgentConnectDialog({
                       "grid size-8 shrink-0 place-items-center rounded-lg border",
                       checked || partner.registered
                         ? "border-primary/25 bg-primary/10 text-primary"
-                        : "border-border/60 bg-muted text-muted-foreground",
+                        : "border-border-default bg-muted text-muted-foreground",
                     )}
                   >
                     {checked || partner.registered ? (

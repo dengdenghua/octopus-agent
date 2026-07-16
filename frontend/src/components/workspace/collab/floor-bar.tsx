@@ -29,7 +29,7 @@ export function FloorBar() {
   const nameFor = (id: string) => users.find((u) => u.id === id)?.name ?? id;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border/30 px-3 py-1.5 text-[11px]">
+    <div className="flex flex-wrap items-center gap-2 border-b border-border-subtle px-3 py-1.5 text-[11px]">
       <MegaphoneIcon className="size-3.5 text-muted-foreground" />
       <span
         className={cn(

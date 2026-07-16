@@ -398,7 +398,7 @@ function AgentCard({
         type="button"
         onClick={onClick}
         className={cn(
-          "flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors transition-shadow hover:shadow-sm",
+          "flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors transition-shadow hover:shadow-[var(--shadow-xs)]",
           STATUS_BG[task.status] ?? "bg-card",
         )}
       >

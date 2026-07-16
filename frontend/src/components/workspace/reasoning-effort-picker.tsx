@@ -60,7 +60,7 @@ export function ReasoningEffortPicker({
           className={cn(
             "inline-flex h-7 min-w-0 items-center gap-1 rounded-lg border border-transparent",
             "bg-transparent px-2 text-xs text-muted-foreground outline-none transition",
-            "hover:border-border/60 hover:bg-muted/60 hover:text-foreground",
+            "hover:border-border-default hover:bg-muted/60 hover:text-foreground",
             "data-[state=open]:bg-muted data-[state=open]:text-foreground",
             "disabled:cursor-not-allowed disabled:opacity-45",
           )}

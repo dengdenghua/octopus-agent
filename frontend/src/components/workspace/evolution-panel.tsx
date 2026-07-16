@@ -106,7 +106,7 @@ export function EvolutionPanel({ status, trigger }: EvolutionPanelProps) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="flex h-[86vh] sm:!max-w-3xl flex-col overflow-hidden p-0">
-        <DialogHeader className="border-b border-border/50 px-5 py-4 pr-12">
+        <DialogHeader className="border-b border-border-default px-5 py-4 pr-12">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <DialogTitle className="flex items-center gap-2 text-lg">
@@ -265,7 +265,7 @@ export function EvolutionPanel({ status, trigger }: EvolutionPanelProps) {
           )}
           {(activeView === "history" || activeView === "react") &&
             variants.length > 0 && (
-              <details className="group rounded-lg border border-border/50 bg-muted/15">
+              <details className="group rounded-lg border border-border-default bg-muted/15">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium">
                   <span className="inline-flex items-center gap-2">
                     <SlidersHorizontalIcon className="size-4 text-muted-foreground" />
@@ -275,7 +275,7 @@ export function EvolutionPanel({ status, trigger }: EvolutionPanelProps) {
                     {t.evolutionPanel.linesSuffix(variants.length)}
                   </span>
                 </summary>
-                <div className="border-t border-border/40 p-4">
+                <div className="border-t border-border-subtle p-4">
                   <ReActVariantsTable variants={variants} />
                 </div>
               </details>
@@ -316,7 +316,7 @@ function StatTab({
         "transition-colors hover:border-border hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
           ? "border-primary/55 bg-primary/10 text-foreground"
-          : "border-border/50 bg-background",
+          : "border-border-default bg-background",
       )}
     >
       <Icon className="size-4 shrink-0 text-muted-foreground" />
@@ -362,7 +362,7 @@ function MetricDetail({
   value: string | number;
 }) {
   return (
-    <section className="rounded-lg border border-border/50 bg-muted/15 p-4">
+    <section className="rounded-lg border border-border-default bg-muted/15 p-4">
       <div className="flex items-start gap-3">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-background">
           <Icon className="size-4 text-muted-foreground" />
@@ -430,7 +430,7 @@ function LearningList({
         </span>
       </div>
       {lines.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-3 text-sm leading-6 text-muted-foreground">
+        <p className="rounded-lg border border-dashed border-border-default bg-muted/20 px-3 py-3 text-sm leading-6 text-muted-foreground">
           {emptyHint}
         </p>
       ) : (
@@ -439,8 +439,8 @@ function LearningList({
             <li
               key={`${i}-${line.slice(0, 32)}`}
               className={cn(
-                "group flex items-start gap-3 rounded-lg border border-border/50",
-                "bg-muted/15 px-3 py-2 transition-colors hover:border-border/90",
+                "group flex items-start gap-3 rounded-lg border border-border-default",
+                "bg-muted/15 px-3 py-2 transition-colors hover:border-border-strong",
                 isDeletingIndex === i && "opacity-40",
               )}
             >
@@ -481,7 +481,7 @@ function ReActVariantsTable({ variants }: { variants: ReActVariantStat[] }) {
       <div className="mb-2 text-sm font-medium">
         {t.evolutionPanel.reactVariantsTitle}
       </div>
-      <div className="overflow-hidden rounded-md border border-border/40">
+      <div className="overflow-hidden rounded-md border border-border-subtle">
         <table className="w-full text-xs">
           <thead className="bg-muted/50 text-muted-foreground">
             <tr>
@@ -501,7 +501,7 @@ function ReActVariantsTable({ variants }: { variants: ReActVariantStat[] }) {
           </thead>
           <tbody>
             {variants.map((v) => (
-              <tr key={v.name} className="border-t border-border/30">
+              <tr key={v.name} className="border-t border-border-subtle">
                 <td className="px-2 py-2 font-medium">
                   {friendlyVariantName(v.name)}
                 </td>

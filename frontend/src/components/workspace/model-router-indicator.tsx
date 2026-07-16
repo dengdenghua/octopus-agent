@@ -176,7 +176,7 @@ export function ModelRouterIndicator({
             className={cn(
               "text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1 rounded-lg px-1.5 py-0.5 text-xs transition-colors",
               "hover:bg-accent/50",
-              isAutoRouted && "border border-dashed border-border/60",
+              isAutoRouted && "border border-dashed border-border-default",
             )}
           >
             <RotateCcwIcon size={12} className="shrink-0 opacity-60" />
@@ -212,7 +212,7 @@ export function ModelRouterIndicator({
       {expanded && (
         <div
           className={cn(
-            "bg-popover text-popover-foreground absolute bottom-full left-0 z-50 mb-1 w-72 rounded-lg border p-3 shadow-lg",
+            "bg-popover text-popover-foreground absolute bottom-full left-0 z-50 mb-1 w-72 rounded-lg border p-3 shadow-[var(--shadow-md)]",
             "animate-in fade-in-0 slide-in-from-bottom-2 duration-200",
           )}
         >

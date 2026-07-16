@@ -200,7 +200,7 @@ export function TaskCard({
       <div
         className={cn(
           "ui-dense-row group relative cursor-pointer rounded-lg border bg-card transition-all duration-200",
-          "hover:shadow-md hover:border-border/80 hover:-translate-y-0.5",
+          "hover:shadow-[var(--shadow-sm)] hover:border-border-strong hover:-translate-y-0.5",
           isRunning && "border-amber-500/30 shadow-amber-500/5",
           task.status === "failed" && "border-red-500/20",
           task.status === "completed" && "border-emerald-500/20",

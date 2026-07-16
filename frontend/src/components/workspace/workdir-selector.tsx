@@ -543,8 +543,8 @@ export function WorkDirSelector({
   const menuContent = (
     <div
       className={cn(
-        "flex max-h-full flex-col overflow-hidden border border-border/60 bg-popover/95 backdrop-blur",
-        isMutedVariant ? "rounded-lg shadow-lg" : "rounded-xl shadow-2xl",
+        "flex max-h-full flex-col overflow-hidden border border-border-default bg-popover/95 backdrop-blur",
+        isMutedVariant ? "rounded-lg shadow-[var(--shadow-md)]" : "rounded-xl shadow-2xl",
       )}
     >
       {/* Primary entry point for adding a workspace. Only meaningful with a
@@ -557,7 +557,7 @@ export function WorkDirSelector({
             onClick={clearWorkDir}
             className={cn(
               "mt-1.5 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
-              !isMutedVariant && "border border-border/50",
+              !isMutedVariant && "border border-border-default",
             )}
           >
             <FolderIcon className="size-3.5 shrink-0" />
@@ -568,13 +568,13 @@ export function WorkDirSelector({
         )}
 
         {noBridgeHint && (
-          <div className="mt-2 rounded-md border border-border/50 bg-muted/40 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+          <div className="mt-2 rounded-md border border-border-default bg-muted/40 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
             {webPickerHint(locale)}
           </div>
         )}
         {(!isMutedVariant || noBridgeHint) && (
           <form
-            className="mt-2 flex items-center gap-1.5 rounded-lg border border-border/50 bg-background/70 p-1 shadow-inner"
+            className="mt-2 flex items-center gap-1.5 rounded-lg border border-border-default bg-background/70 p-1 shadow-inner"
             onSubmit={handleManualSubmit}
           >
             <input
@@ -607,7 +607,7 @@ export function WorkDirSelector({
       {(!isMutedVariant || recentWorkdirs.length > 0) && (
         <div
           className={cn(
-            "border-t border-border/50",
+            "border-t border-border-default",
             isMutedVariant ? "px-1.5 py-1.5" : "px-2.5 py-2",
           )}
         >
@@ -662,7 +662,7 @@ export function WorkDirSelector({
               })}
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-2 py-3 text-center text-[11px] text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border-default bg-muted/20 px-2 py-3 text-center text-[11px] text-muted-foreground">
               {t.codeMode.noRecentWorkspaces}
             </div>
           )}
@@ -674,7 +674,7 @@ export function WorkDirSelector({
           rarely open this. Collapsed by default so it doesn't dominate. */}
       {!isMutedVariant && (
         <details
-          className="group border-t border-border/50 px-2.5 py-2"
+          className="group border-t border-border-default px-2.5 py-2"
           open={isBrowserOpen}
           onToggle={(event) => setBrowserOpen(event.currentTarget.open)}
         >
@@ -759,10 +759,10 @@ export function WorkDirSelector({
     >
       <button
         className={cn(
-          "group flex items-center gap-1.5 text-[11px] font-medium shadow-none transition-colors duration-150",
+          "group flex items-center gap-1.5 text-[11px] font-medium shadow-none transition-colors",
           chromeless
             ? "h-8 rounded-md px-1.5 hover:bg-muted/55 hover:text-foreground"
-            : "h-8 rounded-full border border-transparent bg-transparent px-2 hover:border-border/50 hover:bg-muted/55",
+            : "h-8 rounded-full border border-transparent bg-transparent px-2 hover:border-border-default hover:bg-muted/55",
           isEmpty
             ? emptyTriggerClass
             : activeTriggerClass,

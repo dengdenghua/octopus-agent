@@ -883,7 +883,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                           </div>
                         ) : null}
                         {permission.skill_names.length > 0 ? (
-                          <div className="mt-2 flex max-h-16 flex-wrap gap-1 overflow-hidden border-t border-border/50 pt-2">
+                          <div className="mt-2 flex max-h-16 flex-wrap gap-1 overflow-hidden border-t border-border-default pt-2">
                             {shownPermissionSkills.map((skill) => (
                               <Badge
                                 key={skill}
@@ -931,7 +931,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                 setDirty(true);
               }}
               placeholder={t.armsEditor.extraAffinityPlaceholder}
-              className="mt-1 w-full rounded-sm border border-border bg-card/70 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              className="mt-1 w-full rounded-sm border border-border bg-card/70 px-3 py-2 text-sm shadow-[var(--shadow-xs)] focus:outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
 

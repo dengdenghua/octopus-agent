@@ -289,7 +289,7 @@ function SummaryTile({
   value: string;
 }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+    <div className="rounded-lg border border-border-default bg-muted/20 p-3">
       <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
         <Icon className="size-3.5" />
         {label}
@@ -499,7 +499,7 @@ export function RunReviewPanel() {
                       {run.files.map((file) => (
                         <div
                           key={file}
-                          className="truncate rounded-md border border-border/50 bg-muted/20 px-2 py-1 font-mono text-[11px]"
+                          className="truncate rounded-md border border-border-default bg-muted/20 px-2 py-1 font-mono text-[11px]"
                           title={file}
                         >
                           {file}

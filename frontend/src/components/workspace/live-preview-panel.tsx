@@ -301,7 +301,7 @@ ${jsContent || "// No JavaScript"}
   return (
     <div className={cn("flex flex-col h-full", className)}>
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border-default">
         <div className="flex items-center gap-2">
           <MonitorIcon className="size-4 text-primary" />
           <span className="text-sm font-medium">{t.livePreview.title}</span>
@@ -314,7 +314,7 @@ ${jsContent || "// No JavaScript"}
               className={cn(
                 "p-1.5 rounded-md transition-all",
                 device === "desktop"
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                   : "text-muted-foreground hover:text-foreground",
               )}
               title={t.livePreview.desktop}
@@ -326,7 +326,7 @@ ${jsContent || "// No JavaScript"}
               className={cn(
                 "p-1.5 rounded-md transition-all",
                 device === "tablet"
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                   : "text-muted-foreground hover:text-foreground",
               )}
               title={t.livePreview.tablet}
@@ -338,7 +338,7 @@ ${jsContent || "// No JavaScript"}
               className={cn(
                 "p-1.5 rounded-md transition-all",
                 device === "mobile"
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                   : "text-muted-foreground hover:text-foreground",
               )}
               title={t.livePreview.mobile}
@@ -449,7 +449,7 @@ ${jsContent || "// No JavaScript"}
             <div className="flex h-full min-h-0 justify-center overflow-auto">
               <div
                 className={cn(
-                  "flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border/50 bg-background shadow-sm transition-all duration-300",
+                  "flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border-default bg-background shadow-[var(--shadow-xs)] transition-all duration-300",
                   device === "mobile" && "max-w-[375px]",
                   device === "tablet" && "max-w-[768px]",
                 )}

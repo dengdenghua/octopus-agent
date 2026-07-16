@@ -112,7 +112,7 @@ export function QuickTemplates({ onSelect, className }: QuickTemplatesProps) {
   return (
     <div className={cn("flex flex-col h-full", className)}>
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border-default">
         <LayoutTemplateIcon className="size-4 text-primary" />
         <span className="text-sm font-medium">{t.quickTemplates.title}</span>
       </div>
@@ -125,7 +125,7 @@ export function QuickTemplates({ onSelect, className }: QuickTemplatesProps) {
               key={template.id}
               onClick={() => onSelect(template)}
               className={cn(
-                "group flex items-start gap-3 p-3 rounded-lg border border-border/50",
+                "group flex items-start gap-3 p-3 rounded-lg border border-border-default",
                 "hover:border-primary/30 hover:bg-primary/5 transition-all duration-200",
                 "text-left",
               )}
@@ -155,7 +155,7 @@ export function QuickTemplates({ onSelect, className }: QuickTemplatesProps) {
       </div>
 
       {/* Footer hint */}
-      <div className="px-3 py-2 border-t border-border/50">
+      <div className="px-3 py-2 border-t border-border-default">
         <p className="text-[10px] text-muted-foreground/60 text-center">
           {t.quickTemplates.hint}
         </p>

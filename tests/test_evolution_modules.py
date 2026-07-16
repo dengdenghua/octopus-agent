@@ -830,8 +830,8 @@ class TestAgentCompetitorScorecard:
         report = compute_e2e_surpass_certification(target_score=95)
 
         assert report["schema"] == "octopus.e2e_surpass_certification.v1"
-        assert report["ready"] is True
-        assert report["verdict"] == "surpassed"
+        assert report["ready"] is False
+        assert report["verdict"] == "needs_behavioral_evidence"
         assert report["summary"] == {
             "scorecard_octopus": 97,
             "scorecard_best_external": 87,
@@ -848,6 +848,9 @@ class TestAgentCompetitorScorecard:
             "all_dimensions_surpassed": True,
             "scorecard_gap_dimensions": 0,
             "automation_gap_dimensions": 0,
+            "behavioral_ready": False,
+            "behavioral_octopus_pass_pow_k": 0.0,
+            "behavioral_codex_pass_pow_k": 0.0,
         }
         assert report["coverage"]["schema"] == "octopus.e2e_coverage.v1"
         assert report["coverage"]["summary"] == {
@@ -879,7 +882,14 @@ class TestAgentCompetitorScorecard:
             "subagents_parallelism",
             "differentiated_agent_os",
         ]
-        assert all(check["passed"] for check in report["checks"])
+        static_checks = [
+            check for check in report["checks"] if not check["id"].startswith("behavioral:")
+        ]
+        assert all(check["passed"] for check in static_checks)
+        assert any(
+            check["id"] == "behavioral:bundle_present" and check["passed"] is False
+            for check in report["checks"]
+        )
         assert {
             "scorecard_target_aligned",
             "automation_target_aligned",
@@ -891,6 +901,47 @@ class TestAgentCompetitorScorecard:
         } <= {check["id"] for check in report["checks"]}
         assert report["scorecard"]["target_score"] == 95
         assert report["automation"]["target_score"] == 95
+        assert report["behavioral"]["verdict"] == "missing_behavioral_evidence"
+        assert report["next_actions"]
+
+    def test_e2e_surpass_certification_passes_with_verified_behavior(self):
+        from runtime.safety.evolution.e2e_surpass_certification import (
+            compute_e2e_surpass_certification,
+        )
+
+        behavioral = {
+            "schema": "octopus.behavioral_surpass_evidence.v1",
+            "ready": True,
+            "verdict": "surpassed",
+            "checks": [
+                {
+                    "id": "verified_bundle",
+                    "title": "Verified behavioral bundle",
+                    "passed": True,
+                    "score": 1,
+                    "target": 1,
+                    "next_action": "",
+                }
+            ],
+            "systems": {
+                "octopus": {"aggregate_pass_pow_k": 1.0},
+                "codex": {"aggregate_pass_pow_k": 0.96},
+            },
+            "next_actions": [],
+        }
+        with patch(
+            "runtime.safety.evolution.e2e_surpass_certification."
+            "compute_behavioral_surpass_evidence",
+            return_value=behavioral,
+        ):
+            report = compute_e2e_surpass_certification(target_score=95)
+
+        assert report["ready"] is True
+        assert report["verdict"] == "surpassed"
+        assert report["summary"]["behavioral_ready"] is True
+        assert report["summary"]["behavioral_octopus_pass_pow_k"] == 1.0
+        assert report["summary"]["behavioral_codex_pass_pow_k"] == 0.96
+        assert all(check["passed"] for check in report["checks"])
         assert report["next_actions"] == []
 
     def test_repo_context_quality_reports_release_evidence(self):

@@ -122,7 +122,7 @@ export function ProcessTrace({
         "border-l px-3 py-1.5",
         live
           ? "mb-3 border-primary/35"
-          : "mb-2 border-border/55 text-muted-foreground",
+          : "mb-2 border-border-default text-muted-foreground",
       )}
     >
       <button
@@ -200,7 +200,7 @@ export function ProcessTrace({
         </div>
       )}
       {open && visibleEvents.length > 0 && (
-        <div className="mt-2 border-t border-border/35 pt-2">
+        <div className="mt-2 border-t border-border-subtle pt-2">
           <button
             type="button"
             onClick={() => setRawDetailsOpen((value) => !value)}
@@ -238,7 +238,7 @@ function AgentClusterCard({
 }) {
   const { t } = useI18n();
   return (
-    <div className="rounded-xl border border-border/55 bg-background/85 px-3 py-2.5 shadow-sm">
+    <div className="rounded-xl border border-border-default bg-background/85 px-3 py-2.5 shadow-[var(--shadow-xs)]">
       <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
         <NetworkIcon className="size-4 shrink-0 text-sky-500" />
         <span className="font-medium text-foreground">
@@ -340,11 +340,11 @@ function AgentHoverPreview({
   const body = agent.prompt || agent.task || t.message.noTaskDescription;
   return (
     <div
-      className="pointer-events-none absolute left-8 top-[calc(100%+0.5rem)] z-40 hidden w-[min(42rem,calc(100vw-5rem))] rounded-xl border border-border/60 bg-background/95 p-4 text-left shadow-2xl shadow-black/15 backdrop-blur-xl group-hover/agent-row:block"
+      className="pointer-events-none absolute left-8 top-[calc(100%+0.5rem)] z-40 hidden w-[min(42rem,calc(100vw-5rem))] rounded-xl border border-border-default bg-background/95 p-4 text-left shadow-2xl shadow-black/15 backdrop-blur-xl group-hover/agent-row:block"
       role="tooltip"
     >
       <div className="flex items-start gap-3">
-        <span className="flex size-14 shrink-0 items-center justify-center rounded-full border border-border/55 bg-muted/35 text-2xl">
+        <span className="flex size-14 shrink-0 items-center justify-center rounded-full border border-border-default bg-muted/35 text-2xl">
           {agent.avatar || <BotIcon className="size-7 text-muted-foreground" />}
         </span>
         <div className="min-w-0 flex-1">
@@ -406,7 +406,7 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
         : "done";
 
   return (
-    <div className="rounded-xl border border-border/55 bg-background/85 px-3 py-2 shadow-sm">
+    <div className="rounded-xl border border-border-default bg-background/85 px-3 py-2 shadow-[var(--shadow-xs)]">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -449,7 +449,7 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
         />
       </button>
       {open && (
-        <div className="mt-3 space-y-1.5 border-l border-border/45 pl-3">
+        <div className="mt-3 space-y-1.5 border-l border-border-subtle pl-3">
           {section.events.map((event) => (
             <TraceEventLine key={event.id} event={event} />
           ))}

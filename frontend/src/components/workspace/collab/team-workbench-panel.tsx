@@ -68,9 +68,9 @@ export function TeamWorkbenchPanel({
         className,
       )}
     >
-      <header className="relative shrink-0 border-b border-border/60 bg-background/95 px-2 pt-2 sm:px-3">
+      <header className="relative shrink-0 border-b border-border-default bg-background/95 px-2 pt-2 sm:px-3">
         <div className="flex min-w-0 items-end gap-1.5 sm:gap-2">
-          <div className="mb-1.5 hidden h-8 shrink-0 items-center gap-2 rounded-lg border border-border/60 bg-background/85 px-2 text-xs font-medium text-muted-foreground shadow-sm min-[520px]:flex">
+          <div className="mb-1.5 hidden h-8 shrink-0 items-center gap-2 rounded-lg border border-border-default bg-background/85 px-2 text-xs font-medium text-muted-foreground shadow-[var(--shadow-xs)] min-[520px]:flex">
             <MonitorIcon className="size-4" />
             <span>{t.collab.workbench.title}</span>
           </div>
@@ -93,7 +93,7 @@ export function TeamWorkbenchPanel({
                   className={cn(
                     "inline-flex h-9 max-w-[9rem] shrink-0 items-center gap-1 rounded-lg border border-transparent px-2 text-xs font-medium transition-all sm:max-w-[11rem] sm:gap-1.5 sm:px-3 sm:text-sm",
                     active
-                      ? "-mb-px h-10 rounded-b-none border-border/70 border-b-background bg-background text-foreground shadow-sm"
+                      ? "-mb-px h-10 rounded-b-none border-border-default border-b-background bg-background text-foreground shadow-[var(--shadow-xs)]"
                       : "mb-1 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                   )}
                 >
@@ -112,7 +112,7 @@ export function TeamWorkbenchPanel({
             <Button
               variant="ghost"
               size="icon"
-              className="mb-1 size-8 shrink-0 rounded-lg border border-transparent text-muted-foreground hover:border-border/60 hover:bg-muted/60 hover:text-foreground"
+              className="mb-1 size-8 shrink-0 rounded-lg border border-transparent text-muted-foreground hover:border-border-default hover:bg-muted/60 hover:text-foreground"
               onClick={onClose}
               title={t.collab.workbench.closeTitle}
             >
@@ -174,7 +174,7 @@ function TeamMachineRail({
   if (agents.length === 0 && humans.length === 0) return null;
 
   return (
-    <div className="mt-1.5 flex min-w-0 items-center gap-2 border-t border-border/35 py-1.5">
+    <div className="mt-1.5 flex min-w-0 items-center gap-2 border-t border-border-subtle py-1.5">
       <UsersIcon className="size-3.5 shrink-0 text-muted-foreground" />
       <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {agents.map((agent) => {
@@ -257,8 +257,8 @@ function WorkspacePathBar({
 }) {
   const { t } = useI18n();
   return (
-    <div className="mt-2 flex items-center gap-2 border-t border-border/45 py-2">
-      <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border/60 bg-muted/25 px-2.5 py-1.5">
+    <div className="mt-2 flex items-center gap-2 border-t border-border-subtle py-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border-default bg-muted/25 px-2.5 py-1.5">
         <FolderIcon className="size-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
           <div className="text-[10px] font-medium text-muted-foreground">

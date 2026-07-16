@@ -37,7 +37,7 @@ export function ChangesPanel({ className, onFileClick }: ChangesPanelProps) {
 
   return (
     <div className={cn("flex h-full flex-col", className)}>
-      <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
+      <div className="flex items-center justify-between border-b border-border-default px-3 py-2">
         <div className="flex items-center gap-2">
           <FileEditIcon className="size-4 text-primary" />
           <span className="text-sm font-medium">{t.changesPanel.title}</span>
@@ -220,7 +220,7 @@ function ChangeRow({
         </button>
       </div>
       {expanded && event.diff && (
-        <div className="mx-3 mb-2 overflow-hidden rounded border border-border/40 bg-background">
+        <div className="mx-3 mb-2 overflow-hidden rounded border border-border-subtle bg-background">
           {hunks.length > 0 ? (
             <div className="max-h-[380px] overflow-y-auto">
               {hunks.map((hunk) => (
@@ -266,7 +266,7 @@ function HunkBlock({
   return (
     <div
       className={cn(
-        "border-t border-border/30 first:border-t-0",
+        "border-t border-border-subtle first:border-t-0",
         busy && "pointer-events-none opacity-60",
       )}
     >
@@ -287,10 +287,10 @@ function HunkBlock({
                   line.type === "remove" && "bg-rose-500/8",
                 )}
               >
-                <td className="w-10 select-none border-r border-border/20 px-2 py-0.5 text-right text-muted-foreground/60">
+                <td className="w-10 select-none border-r border-border-subtle px-2 py-0.5 text-right text-muted-foreground/60">
                   {line.oldLineNumber ?? ""}
                 </td>
-                <td className="w-10 select-none border-r border-border/20 px-2 py-0.5 text-right text-muted-foreground/60">
+                <td className="w-10 select-none border-r border-border-subtle px-2 py-0.5 text-right text-muted-foreground/60">
                   {line.newLineNumber ?? ""}
                 </td>
                 <td

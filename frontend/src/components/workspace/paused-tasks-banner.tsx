@@ -187,7 +187,7 @@ export function PausedTasksBanner({ className }: Props) {
       {activeVisible.map((t) => (
         <div
           key={t.task_id}
-          className="flex items-start gap-3 rounded-lg border border-blue-300/60 bg-blue-50 p-3 shadow-md dark:border-blue-700/40 dark:bg-blue-950/40"
+          className="flex items-start gap-3 rounded-lg border border-blue-300/60 bg-blue-50 p-3 shadow-[var(--shadow-sm)] dark:border-blue-700/40 dark:bg-blue-950/40"
         >
           <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-200/70 text-blue-900 dark:bg-blue-800/50 dark:text-blue-200">
             <LoaderIcon className="h-3.5 w-3.5 animate-spin" />
@@ -196,11 +196,11 @@ export function PausedTasksBanner({ className }: Props) {
             <div className="flex items-center gap-2 text-sm font-medium">
               {b.executing}
               {t.max_iterations > 0 && (
-                <span className="rounded-md border border-border/60 bg-background/60 px-1.5 py-0.5 text-[10px] font-mono font-normal text-muted-foreground">
+                <span className="rounded-md border border-border-default bg-background/60 px-1.5 py-0.5 text-[10px] font-mono font-normal text-muted-foreground">
                   {t.current_iteration}/{t.max_iterations}
                 </span>
               )}
-              <span className="rounded-md border border-border/60 bg-background/60 px-1.5 py-0.5 text-[10px] font-mono font-normal text-muted-foreground">
+              <span className="rounded-md border border-border-default bg-background/60 px-1.5 py-0.5 text-[10px] font-mono font-normal text-muted-foreground">
                 {t.task_id.slice(0, 10)}
               </span>
             </div>
@@ -265,7 +265,7 @@ export function PausedTasksBanner({ className }: Props) {
       {entries.map((req) => (
         <div
           key={req.task_id}
-          className="flex items-start gap-3 rounded-lg border border-amber-300/60 bg-amber-50 p-3 shadow-md dark:border-amber-700/40 dark:bg-amber-950/40"
+          className="flex items-start gap-3 rounded-lg border border-amber-300/60 bg-amber-50 p-3 shadow-[var(--shadow-sm)] dark:border-amber-700/40 dark:bg-amber-950/40"
         >
           <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-200/70 text-amber-900 dark:bg-amber-800/50 dark:text-amber-200">
             <PauseIcon className="h-3.5 w-3.5" />
@@ -273,7 +273,7 @@ export function PausedTasksBanner({ className }: Props) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-sm font-medium">
               {req.confirmed ? b.paused : b.pendingPause}
-              <span className="rounded-md border border-border/60 bg-background/60 px-1.5 py-0.5 text-[10px] font-mono font-normal text-muted-foreground">
+              <span className="rounded-md border border-border-default bg-background/60 px-1.5 py-0.5 text-[10px] font-mono font-normal text-muted-foreground">
                 {req.task_id.slice(0, 10)}
               </span>
             </div>
@@ -328,7 +328,7 @@ export function PausedTasksBanner({ className }: Props) {
           </DialogHeader>
           {budgetDialogTask ? (
             <div className="space-y-3">
-              <div className="rounded-md border border-border/70 bg-muted/35 px-3 py-2 text-xs text-muted-foreground">
+              <div className="rounded-md border border-border-default bg-muted/35 px-3 py-2 text-xs text-muted-foreground">
                 <div className="font-mono text-[11px]">
                   {budgetDialogTask.task_id.slice(0, 10)}
                 </div>

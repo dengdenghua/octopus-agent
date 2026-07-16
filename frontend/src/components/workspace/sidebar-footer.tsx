@@ -106,7 +106,7 @@ export function AgentAvatar({
   return (
     <span
       className={cn(
-        "flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/60 bg-muted text-[13px] leading-none",
+        "flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border-default bg-muted text-[13px] leading-none",
         !emoji && !avatar && "font-semibold text-muted-foreground text-[11px]",
         className,
       )}
@@ -314,7 +314,7 @@ export function AgentFooter() {
           side="top"
           align="start"
           sideOffset={6}
-          className="w-72 rounded-xl border-border/70 p-1.5 shadow-xl shadow-black/10"
+          className="w-72 rounded-xl border-border-default p-1.5 shadow-xl shadow-black/10"
         >
           <DropdownMenuLabel className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
             {t.sidebar.switchAgentMenuTitle}

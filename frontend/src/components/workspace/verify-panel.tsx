@@ -117,7 +117,7 @@ export function VerifyPanel({
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border-default">
         <div className="flex items-center gap-2">
           <ShieldCheckIcon className="size-4 text-primary" />
           <span className="text-sm font-medium">{t.codeMode.verify}</span>
@@ -233,7 +233,7 @@ export function VerifyPanel({
             {result.results.map((check) => (
               <div
                 key={check.name}
-                className="rounded-md border border-border/40"
+                className="rounded-md border border-border-subtle"
               >
                 <button
                   type="button"
@@ -259,7 +259,7 @@ export function VerifyPanel({
                   </span>
                 </button>
                 {expandedCheck === check.name && (
-                  <div className="border-t border-border/30 px-2.5 py-2">
+                  <div className="border-t border-border-subtle px-2.5 py-2">
                     <div className="flex items-center justify-between mb-1">
                       <div className="text-[10px] text-muted-foreground font-mono">
                         $ {check.command}

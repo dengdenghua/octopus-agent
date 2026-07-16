@@ -175,7 +175,7 @@ function PackCard({
         "transition-colors",
         compact
           ? "group rounded-xl px-3 py-3 hover:bg-muted/35"
-          : "rounded-2xl border border-border/60 bg-card/30 p-4 shadow-sm hover:border-border",
+          : "rounded-2xl border border-border-default bg-card/30 p-4 shadow-[var(--shadow-xs)] hover:border-border",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -267,7 +267,7 @@ function PackCard({
         </Button>
       </div>
       {expanded && (
-        <div className="mt-3 space-y-2 border-t border-border/40 pt-3">
+        <div className="mt-3 space-y-2 border-t border-border-subtle pt-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] text-muted-foreground">
               {t.metaSkills.directionLabel}:
@@ -281,7 +281,7 @@ function PackCard({
                   "rounded border px-2 py-0.5 text-[10px] font-medium transition-colors",
                   direction === d
                     ? "border-primary bg-primary/10 text-primary"
-                    : "border-border/60 text-muted-foreground hover:border-border hover:text-foreground",
+                    : "border-border-default text-muted-foreground hover:border-border hover:text-foreground",
                 )}
               >
                 {d}
@@ -305,7 +305,7 @@ function PackCard({
               )}
             </Button>
           </div>
-          <div className="min-h-[80px] rounded-md border border-dashed border-border/60 bg-muted/20 p-2">
+          <div className="min-h-[80px] rounded-md border border-dashed border-border-default bg-muted/20 p-2">
             {loading && (
               <div className="py-4 text-center text-[11px] text-muted-foreground">
                 {t.metaSkills.diagramLoading}
@@ -368,7 +368,7 @@ function MatchBox({ compact = false }: { compact?: boolean }) {
       className={cn(
         "space-y-2",
         compact
-          ? "rounded-xl border border-border/60 bg-background/60 p-3"
+          ? "rounded-xl border border-border-default bg-background/60 p-3"
           : "workspace-panel rounded-2xl p-4",
       )}
     >
@@ -401,7 +401,7 @@ function MatchBox({ compact = false }: { compact?: boolean }) {
             }}
             placeholder={t.metaSkills.matchPlaceholder}
             className={cn(
-              "w-full border border-border/60 bg-background/60 py-2 pl-9 pr-3",
+              "w-full border border-border-default bg-background/60 py-2 pl-9 pr-3",
               "text-sm placeholder:text-muted-foreground/60 outline-none",
               "focus:border-primary/50 focus:ring-2 focus:ring-primary/10",
               compact ? "h-9 rounded-full" : "rounded-lg",
@@ -546,7 +546,7 @@ export function SkillPacksTab({
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t.metaSkills.matchPlaceholder}
                 className={cn(
-                  "h-10 w-full rounded-2xl border border-border/60 bg-background py-1.5 pl-9 pr-3 shadow-sm",
+                  "h-10 w-full rounded-2xl border border-border-default bg-background py-1.5 pl-9 pr-3 shadow-[var(--shadow-xs)]",
                   "text-xs placeholder:text-muted-foreground/60 outline-none",
                   "focus:border-primary/50 focus:ring-2 focus:ring-primary/10",
                 )}
@@ -607,7 +607,7 @@ export function SkillPacksTab({
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t.metaSkills.matchPlaceholder}
               className={cn(
-                "w-full rounded-lg border border-border/60 bg-background/60 py-2 pl-9 pr-3",
+                "w-full rounded-lg border border-border-default bg-background/60 py-2 pl-9 pr-3",
                 "text-sm placeholder:text-muted-foreground/60 outline-none",
                 "focus:border-primary/50 focus:ring-2 focus:ring-primary/10",
               )}
@@ -624,13 +624,13 @@ export function SkillPacksTab({
       )}
 
       {!packs && !err && (
-        <div className="rounded-xl border border-dashed border-border/60 px-6 py-8 text-center text-sm text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-border-default px-6 py-8 text-center text-sm text-muted-foreground">
           {t.metaSkills.loading}
         </div>
       )}
 
       {packs && packs.length === 0 && !err && (
-        <div className="rounded-xl border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-border-default px-6 py-10 text-center text-sm text-muted-foreground">
           {t.metaSkills.empty}
         </div>
       )}
@@ -651,7 +651,7 @@ export function SkillPacksTab({
       )}
 
       {packs && filtered.length === 0 && query && (
-        <div className="rounded-xl border border-dashed border-border/60 px-6 py-8 text-center text-sm text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-border-default px-6 py-8 text-center text-sm text-muted-foreground">
           {t.metaSkills.matchNoResult(query)}
         </div>
       )}

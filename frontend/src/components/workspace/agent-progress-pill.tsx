@@ -289,7 +289,7 @@ export function AgentProgressPill({
         aria-live="polite"
         aria-atomic="true"
         className={cn(
-          "relative z-20 flex min-h-9 w-full items-center gap-2 rounded-t-lg border border-b-0 border-border/70 bg-background/95 px-3 py-1.5 text-[13px] shadow-lg shadow-black/5 backdrop-blur-xl",
+          "relative z-20 flex min-h-9 w-full items-center gap-2 rounded-t-lg border border-b-0 border-border-default bg-background/95 px-3 py-1.5 text-[13px] shadow-[var(--shadow-md)] shadow-black/5 backdrop-blur-xl",
           className,
         )}
       >
@@ -358,7 +358,7 @@ export function AgentProgressPill({
           title={progressLabel}
           aria-label={t.agentWorkbench.restoreProgress}
           className={cn(
-            "relative isolate size-4 rounded-full shadow-sm transition-transform hover:scale-110",
+            "relative isolate size-4 rounded-full shadow-[var(--shadow-xs)] transition-transform hover:scale-110",
             beadTone.bead,
           )}
         >
@@ -382,7 +382,7 @@ export function AgentProgressPill({
       className={cn("relative z-20 flex w-full flex-col", className)}
     >
       {expanded ? (
-        <div className="rounded-t-lg border border-b-0 border-border/70 bg-background/95 p-2.5 shadow-lg shadow-black/5 backdrop-blur-xl">
+        <div className="rounded-t-lg border border-b-0 border-border-default bg-background/95 p-2.5 shadow-[var(--shadow-md)] shadow-black/5 backdrop-blur-xl">
           <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
             {visiblePhases.map((phase) => {
               const active = phase.id === displayPhase.id;
@@ -408,7 +408,7 @@ export function AgentProgressPill({
             })}
           </div>
           {currentBlock ? (
-            <div className="mt-2 flex min-w-0 items-start gap-2 border-t border-border/45 pt-2 text-xs">
+            <div className="mt-2 flex min-w-0 items-start gap-2 border-t border-border-subtle pt-2 text-xs">
               <WorkBlockIcon block={currentBlock} />
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-center gap-1.5">
@@ -438,7 +438,7 @@ export function AgentProgressPill({
       ) : null}
       <div
         className={cn(
-          "group flex w-full items-center gap-1.5 border border-border/70 bg-background/95 px-3 py-1.5 text-left shadow-lg shadow-black/5 backdrop-blur-xl transition-colors hover:bg-muted/45",
+          "group flex w-full items-center gap-1.5 border border-border-default bg-background/95 px-3 py-1.5 text-left shadow-[var(--shadow-md)] shadow-black/5 backdrop-blur-xl transition-colors hover:bg-muted/45",
           expanded ? "border-b-0" : "rounded-t-lg border-b-0",
         )}
       >

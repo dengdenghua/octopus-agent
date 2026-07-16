@@ -34,7 +34,7 @@ export function GroundingChip({ message }: { message: Message }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border-default bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
         <BookOpenIcon className="size-3.5 shrink-0" />
         <span className="truncate">{label}</span>
@@ -46,7 +46,7 @@ export function GroundingChip({ message }: { message: Message }) {
         />
       </button>
       {open && (
-        <ul className="mt-1.5 flex max-w-md flex-col gap-1 rounded-md border border-border/50 bg-muted/20 p-2 text-xs">
+        <ul className="mt-1.5 flex max-w-md flex-col gap-1 rounded-md border border-border-default bg-muted/20 p-2 text-xs">
           {sources.map((source, index) => (
             <li
               key={`${source.path}-${index}`}

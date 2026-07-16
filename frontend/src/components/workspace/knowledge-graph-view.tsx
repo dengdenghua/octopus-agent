@@ -1187,7 +1187,7 @@ function KnowledgeGraph3DContent() {
         <div className="relative min-w-0 flex-1 sm:min-w-[260px]">
           <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/70" />
           <Input
-            className="h-9 border-border/70 bg-background/90 pl-9 text-xs text-foreground placeholder:text-muted-foreground/70 focus-visible:ring-primary/30"
+            className="h-9 border-border-default bg-background/90 pl-9 text-xs text-foreground placeholder:text-muted-foreground/70 focus-visible:ring-primary/30"
             placeholder={t.knowledgePanel.searchPlaceholder}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -1196,13 +1196,13 @@ function KnowledgeGraph3DContent() {
         <Button
           variant="outline"
           size="icon"
-          className="size-9 border-border/70 bg-background/90 text-foreground/90 hover:bg-muted hover:text-foreground"
+          className="size-9 border-border-default bg-background/90 text-foreground/90 hover:bg-muted hover:text-foreground"
           onClick={() => void loadGraph()}
           aria-label="Refresh"
         >
           <RefreshCwIcon className="size-4" />
         </Button>
-        <div className="rounded-md border border-border/70 bg-background/90 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+        <div className="rounded-md border border-border-default bg-background/90 px-2.5 py-1.5 text-[11px] text-muted-foreground">
           {t.knowledgePanel.nodeAndEdgeStats(
             renderedGraph.nodes.length,
             renderedGraph.edges.length,
@@ -1212,7 +1212,7 @@ function KnowledgeGraph3DContent() {
         </div>
       </div>
 
-      <aside className="absolute bottom-3 left-3 right-3 z-10 max-h-[42vh] space-y-3 overflow-y-auto rounded-lg border border-border/70 bg-background/90 p-3 text-foreground shadow-2xl backdrop-blur-md sm:bottom-auto sm:left-auto sm:right-4 sm:top-4 sm:max-h-[calc(100%-2rem)] sm:w-[270px]">
+      <aside className="absolute bottom-3 left-3 right-3 z-10 max-h-[42vh] space-y-3 overflow-y-auto rounded-lg border border-border-default bg-background/90 p-3 text-foreground shadow-2xl backdrop-blur-md sm:bottom-auto sm:left-auto sm:right-4 sm:top-4 sm:max-h-[calc(100%-2rem)] sm:w-[270px]">
         {focusNode && (
           <Section icon={InfoIcon} title={controls.focus}>
             <div className="space-y-2 rounded-md border border-white/10 bg-background/40 p-2">
@@ -1416,7 +1416,7 @@ function KnowledgeGraph3DContent() {
           type="button"
           variant="outline"
           size="sm"
-          className="h-8 w-full border-border/70 bg-transparent text-xs text-foreground/80 hover:bg-muted hover:text-foreground"
+          className="h-8 w-full border-border-default bg-transparent text-xs text-foreground/80 hover:bg-muted hover:text-foreground"
           onClick={resetCamera}
         >
           <SlidersHorizontalIcon className="mr-1.5 size-3.5" />

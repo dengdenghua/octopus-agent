@@ -114,7 +114,7 @@ export function ParallelTasksPanel({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && submit()}
           placeholder="New parallel task..."
-          className="flex-1 rounded-md border border-border/50 bg-muted/30 px-2 py-1 text-xs outline-none focus:border-primary/50"
+          className="flex-1 rounded-md border border-border-default bg-muted/30 px-2 py-1 text-xs outline-none focus:border-primary/50"
         />
         <Button
           size="sm"
@@ -136,7 +136,7 @@ export function ParallelTasksPanel({
           {tasks.map((task) => (
             <div
               key={task.id}
-              className="flex items-start gap-2 rounded-md border border-border/30 bg-muted/10 p-2"
+              className="flex items-start gap-2 rounded-md border border-border-subtle bg-muted/10 p-2"
             >
               {statusIcon(task.status)}
               <div className="flex-1 min-w-0">

@@ -9,6 +9,9 @@ from runtime.safety.evolution.agent_competitor_scorecard import (
 )
 from runtime.safety.evolution.agent_loop_quality import compute_agent_loop_quality
 from runtime.safety.evolution.automation_radar import compute_automation_radar
+from runtime.safety.evolution.behavioral_surpass_evidence import (
+    compute_behavioral_surpass_evidence,
+)
 from runtime.safety.evolution.browser_desktop_quality import (
     compute_browser_desktop_quality,
 )
@@ -111,6 +114,7 @@ def compute_e2e_surpass_certification(
     *,
     target_score: int = 95,
     review_queue_path: str | Path | None = None,
+    behavioral_bundle_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """One operator-facing proof that Octopus clears the E2E Codex bar.
 
@@ -122,6 +126,9 @@ def compute_e2e_surpass_certification(
     automation = compute_automation_radar(
         target_score=target_score,
         review_queue_path=review_queue_path,
+    )
+    behavioral = compute_behavioral_surpass_evidence(
+        bundle_path=behavioral_bundle_path,
     )
     quality_reports = [
         _quality_report(compute, review_queue_path=review_queue_path) for compute in QUALITY_REPORTS
@@ -223,12 +230,32 @@ def compute_e2e_surpass_certification(
         },
     ]
     checks.extend(_quality_checks(quality_reports))
+    checks.extend(
+        {
+            **check,
+            "id": f"behavioral:{check.get('id')}",
+            "title": f"Behavioral evidence: {check.get('title')}",
+        }
+        for check in behavioral.get("checks") or []
+        if isinstance(check, dict)
+    )
     ready = all(bool(check.get("passed")) for check in checks)
+    static_ready = all(
+        bool(check.get("passed"))
+        for check in checks
+        if not str(check.get("id") or "").startswith("behavioral:")
+    )
+    if ready:
+        verdict = "surpassed"
+    elif static_ready:
+        verdict = "needs_behavioral_evidence"
+    else:
+        verdict = "needs_work"
     return {
         "schema": "octopus.e2e_surpass_certification.v1",
         "target_score": target_score,
         "ready": ready,
-        "verdict": "surpassed" if ready else "needs_work",
+        "verdict": verdict,
         "summary": {
             "scorecard_octopus": scorecard_octopus,
             "scorecard_best_external": _best_external_score(scorecard),
@@ -247,6 +274,19 @@ def compute_e2e_surpass_certification(
                 scorecard_summary.get("gap_dimensions") or 0,
             ),
             "automation_gap_dimensions": len(automation.get("octopus_gaps") or []),
+            "behavioral_ready": bool(behavioral.get("ready")),
+            "behavioral_octopus_pass_pow_k": _nested_float(
+                behavioral,
+                "systems",
+                "octopus",
+                "aggregate_pass_pow_k",
+            ),
+            "behavioral_codex_pass_pow_k": _nested_float(
+                behavioral,
+                "systems",
+                "codex",
+                "aggregate_pass_pow_k",
+            ),
         },
         "checks": checks,
         "scorecard": {
@@ -287,6 +327,7 @@ def compute_e2e_surpass_certification(
             }
             for report in quality_reports
         ],
+        "behavioral": behavioral,
         "next_actions": [
             str(check.get("next_action"))
             for check in checks
@@ -489,6 +530,15 @@ def _nested_int(report: dict[str, Any], *keys: str) -> int:
             return 0
         value = value.get(key)
     return int(value or 0)
+
+
+def _nested_float(report: dict[str, Any], *keys: str) -> float:
+    value: Any = report
+    for key in keys:
+        if not isinstance(value, dict):
+            return 0.0
+        value = value.get(key)
+    return float(value or 0.0)
 
 
 __all__ = [

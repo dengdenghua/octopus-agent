@@ -97,7 +97,7 @@ export function TaskContextPanel({
   return (
     <div
       className={cn(
-        "workspace-panel-subtle rounded-lg border border-border/60 p-3 my-3",
+        "workspace-panel-subtle rounded-lg border border-border-default p-3 my-3",
         className,
       )}
     >

@@ -173,7 +173,7 @@ export function ChannelPairingsSheet({
                   {pending.map((p, i) => (
                     <li
                       key={i}
-                      className="rounded-md border border-border/40 bg-muted/30 px-3 py-2 text-[11px] font-mono break-all"
+                      className="rounded-md border border-border-subtle bg-muted/30 px-3 py-2 text-[11px] font-mono break-all"
                     >
                       {JSON.stringify(p)}
                     </li>
@@ -205,8 +205,8 @@ function IdList({ ids, emptyHint }: { ids: string[]; emptyHint: string }) {
         <li
           key={id}
           className={cn(
-            "group flex items-center gap-2 rounded-md border border-border/40",
-            "bg-muted/30 px-2 py-1.5 hover:border-border/80 transition-colors",
+            "group flex items-center gap-2 rounded-md border border-border-subtle",
+            "bg-muted/30 px-2 py-1.5 hover:border-border-strong transition-colors",
           )}
         >
           <div className="flex size-6 items-center justify-center rounded-md bg-muted text-[10px] font-medium text-muted-foreground">

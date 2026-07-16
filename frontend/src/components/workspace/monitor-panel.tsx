@@ -116,7 +116,7 @@ function StatCard({
   color?: string;
 }) {
   return (
-    <div className="flex items-start gap-2.5 rounded-lg border border-border/60 bg-card p-2.5 transition-shadow hover:shadow-sm">
+    <div className="flex items-start gap-2.5 rounded-lg border border-border-default bg-card p-2.5 transition-shadow hover:shadow-[var(--shadow-xs)]">
       <div
         className={cn(
           "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted/50",

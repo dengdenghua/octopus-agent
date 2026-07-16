@@ -165,7 +165,7 @@ export function RecRecorderOverlay({
     <div
       role="dialog"
       aria-label={t.recorder.title}
-      className="fixed bottom-5 right-5 z-[120] w-[260px] rounded-2xl border border-border/60 bg-background/95 p-4 shadow-2xl ring-1 ring-border/30 backdrop-blur"
+      className="fixed bottom-5 right-5 z-[120] w-[260px] rounded-2xl border border-border-default bg-background/95 p-4 shadow-2xl ring-1 ring-border-subtle backdrop-blur"
     >
       <div className="mb-2 flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground">

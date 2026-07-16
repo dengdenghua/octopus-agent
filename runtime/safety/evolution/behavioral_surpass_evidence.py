@@ -140,7 +140,7 @@ def compute_behavioral_surpass_evidence(
         same_cases,
         len(case_sets[0] & case_sets[1]) if len(case_sets) == 2 else 0,
         len(case_sets[0] | case_sets[1]) if len(case_sets) == 2 else 0,
-        "Use identical case IDs and rubrics for Octopus and Codex.",
+        "Use identical case IDs, prompts, and rubrics for Octopus and Codex.",
     )
 
     domain_rows = _compare_domains(system_rows, min_cases_per_domain=min_cases_per_domain)
@@ -200,14 +200,18 @@ def compute_behavioral_surpass_evidence(
         "Run comparable trials and close the measured Codex gap.",
     )
     no_domain_regressions = bool(domain_rows) and all(
-        row["octopus_pass_pow_k"] >= row["codex_pass_pow_k"] for row in domain_rows
+        row["ready"] and row["octopus_pass_pow_k"] >= row["codex_pass_pow_k"] for row in domain_rows
     )
     _add_check(
         checks,
         "no_domain_regressions",
         "Octopus is not behind Codex in any required domain",
         no_domain_regressions,
-        sum(1 for row in domain_rows if row["octopus_pass_pow_k"] >= row["codex_pass_pow_k"]),
+        sum(
+            1
+            for row in domain_rows
+            if row["ready"] and row["octopus_pass_pow_k"] >= row["codex_pass_pow_k"]
+        ),
         len(REQUIRED_DOMAINS),
         "Repair every domain where Octopus trails the Codex baseline.",
     )
@@ -301,6 +305,7 @@ def _validate_system(
     valid_cases = 0
     verified_artifacts = 0
     expected_artifacts = 0
+    all_case_artifacts_valid = bool(case_rows)
     case_ids: list[str] = []
     comparison_signatures: dict[str, str] = {}
     domain_scores: dict[str, list[float]] = {domain: [] for domain in REQUIRED_DOMAINS}
@@ -316,6 +321,7 @@ def _validate_system(
         passes = _safe_int(raw_case.get("passes"))
         trajectory_count = _safe_int(raw_case.get("trajectory_count"))
         rubric_digest = str(raw_case.get("rubric_digest") or "").strip().lower()
+        prompt_digest = str(raw_case.get("prompt_digest") or "").strip().lower()
         pass_pow_k = 1.0 if k >= min_k and passes == k else 0.0
         allowed_modes = ALLOWED_EXECUTION_MODES.get(domain, set())
         method_valid = bool(
@@ -329,17 +335,55 @@ def _validate_system(
             and str(raw_case.get("execution_mode") or "") in allowed_modes
             and len(rubric_digest) == 64
             and all(character in "0123456789abcdef" for character in rubric_digest)
+            and len(prompt_digest) == 64
+            and all(character in "0123456789abcdef" for character in prompt_digest)
         )
         if method_valid:
             valid_cases += 1
             domain_scores[domain].append(pass_pow_k)
-            comparison_signatures[case_id] = f"{domain}:{rubric_digest}"
+            comparison_signatures[case_id] = f"{domain}:{rubric_digest}:{prompt_digest}"
         artifacts = raw_case.get("artifacts")
         artifact_rows = artifacts if isinstance(artifacts, list) else []
         expected_artifacts += max(k, len(artifact_rows))
-        verified_artifacts += sum(
-            1 for artifact in artifact_rows if _verify_artifact(base, artifact, errors)
+        artifact_paths = [
+            str(artifact.get("path") or "")
+            for artifact in artifact_rows
+            if isinstance(artifact, dict)
+        ]
+        unique_artifacts = len(artifact_paths) == len(set(artifact_paths))
+        artifact_outcomes: list[bool] = []
+        case_verified = 0
+        for trial_index, artifact in enumerate(artifact_rows):
+            verified, artifact_passed = _verify_artifact(
+                base,
+                artifact,
+                errors,
+                system_id=system_id,
+                system_version=(
+                    str(raw_system.get("version") or "") if isinstance(raw_system, dict) else ""
+                ),
+                case_id=case_id,
+                prompt_digest=prompt_digest,
+                trial_index=trial_index,
+            )
+            if verified:
+                case_verified += 1
+            if artifact_passed is not None:
+                artifact_outcomes.append(artifact_passed)
+        verified_artifacts += case_verified
+        case_artifacts_valid = bool(
+            k >= min_k
+            and len(artifact_rows) == k
+            and unique_artifacts
+            and case_verified == k
+            and len(artifact_outcomes) == k
+            and sum(artifact_outcomes) == passes
         )
+        if not unique_artifacts:
+            errors.append(f"{system_id}.{case_id} reuses trajectory artifact paths")
+        if len(artifact_outcomes) == k and sum(artifact_outcomes) != passes:
+            errors.append(f"{system_id}.{case_id} pass count disagrees with trajectory verdicts")
+        all_case_artifacts_valid = all_case_artifacts_valid and case_artifacts_valid
     duplicate_case_ids = len(case_ids) != len(set(case_ids))
     if duplicate_case_ids:
         errors.append(f"{system_id} contains duplicate case IDs")
@@ -366,33 +410,68 @@ def _validate_system(
         ),
         "verified_artifacts": verified_artifacts,
         "expected_artifacts": expected_artifacts,
-        "artifacts_verified": bool(case_rows)
+        "artifacts_verified": all_case_artifacts_valid
         and expected_artifacts > 0
         and verified_artifacts == expected_artifacts,
     }
 
 
-def _verify_artifact(base: Path, raw_artifact: Any, errors: list[str]) -> bool:
+def _verify_artifact(
+    base: Path,
+    raw_artifact: Any,
+    errors: list[str],
+    *,
+    system_id: str,
+    system_version: str,
+    case_id: str,
+    prompt_digest: str,
+    trial_index: int,
+) -> tuple[bool, bool | None]:
     if not isinstance(raw_artifact, dict):
-        return False
+        return False, None
     relative = str(raw_artifact.get("path") or "").strip()
     expected = str(raw_artifact.get("sha256") or "").strip().lower()
     if not relative or len(expected) != 64:
-        return False
+        return False, None
     path = (base / relative).resolve()
     try:
         path.relative_to(base.resolve())
     except ValueError:
         errors.append(f"artifact escapes repository root: {relative}")
-        return False
+        return False, None
     try:
-        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        content = path.read_bytes()
     except OSError:
-        return False
+        return False, None
+    actual = hashlib.sha256(content).hexdigest()
     if actual != expected:
         errors.append(f"artifact digest mismatch: {relative}")
-        return False
-    return True
+        return False, None
+    try:
+        payload = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        errors.append(f"artifact is not trajectory JSON: {relative}")
+        return False, None
+    trajectory = payload.get("trajectory") if isinstance(payload, dict) else None
+    verdict = payload.get("verdict") if isinstance(payload, dict) else None
+    semantic_match = bool(
+        isinstance(payload, dict)
+        and payload.get("schema") == "octopus.behavioral_trajectory.v1"
+        and payload.get("system_id") == system_id
+        and payload.get("system_version") == system_version
+        and payload.get("case_id") == case_id
+        and payload.get("trial_index") == trial_index
+        and payload.get("prompt_sha256") == prompt_digest
+        and isinstance(trajectory, dict)
+        and trajectory.get("case_id") == case_id
+        and isinstance(trajectory.get("steps"), list)
+        and isinstance(verdict, dict)
+        and isinstance(verdict.get("passed"), bool)
+    )
+    if not semantic_match:
+        errors.append(f"artifact trajectory metadata mismatch: {relative}")
+        return False, None
+    return True, bool(verdict["passed"])
 
 
 def _compare_domains(

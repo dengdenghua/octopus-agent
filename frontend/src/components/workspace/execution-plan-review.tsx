@@ -117,7 +117,7 @@ function StepEditor({
   const { t } = useI18n();
   const toolsNeeded = Array.isArray(step.tools_needed) ? step.tools_needed : [];
   return (
-    <div className="group flex items-start gap-2 rounded-lg border border-border/50 bg-background p-2.5">
+    <div className="group flex items-start gap-2 rounded-lg border border-border-default bg-background p-2.5">
       <div className="mt-1 cursor-grab text-muted-foreground/40">
         <GripVerticalIcon className="size-3.5" />
       </div>
@@ -137,7 +137,7 @@ function StepEditor({
                 risk: e.target.value as ExecutionPlanStep["risk"],
               })
             }
-            className="h-5 rounded border border-border/50 bg-muted/30 px-1 text-[10px] outline-none"
+            className="h-5 rounded border border-border-default bg-muted/30 px-1 text-[10px] outline-none"
           >
             <option value="low">{t.executionPlan.lowRisk}</option>
             <option value="medium">{t.executionPlan.mediumRisk}</option>
@@ -151,7 +151,7 @@ function StepEditor({
                   .value as ExecutionPlanStep["estimated_duration"],
               })
             }
-            className="h-5 rounded border border-border/50 bg-muted/30 px-1 text-[10px] outline-none"
+            className="h-5 rounded border border-border-default bg-muted/30 px-1 text-[10px] outline-none"
           >
             <option value="fast">{t.executionPlan.fast}</option>
             <option value="medium">{t.executionPlan.medium}</option>
@@ -213,13 +213,13 @@ function PlanStepRow({
   return (
     <div
       className={cn(
-        "rounded-lg border px-3 py-2 transition-colors duration-200",
+        "rounded-lg border px-3 py-2 transition-colors",
         statusCfg.bgColor,
         step.status === "in_progress" &&
-          "border-primary/30 shadow-sm shadow-primary/5",
+          "border-primary/30 shadow-[var(--shadow-xs)] shadow-primary/5",
         step.status === "completed" && "border-green-500/20",
-        step.status === "skipped" && "border-border/30 opacity-60",
-        step.status === "pending" && "border-border/40",
+        step.status === "skipped" && "border-border-subtle opacity-60",
+        step.status === "pending" && "border-border-subtle",
       )}
     >
       <button
@@ -584,7 +584,7 @@ export function ExecutionPlanReview({
     <div
       className={cn(
         "w-full rounded-lg border transition-colors transition-shadow duration-300",
-        isReviewable && "border-yellow-500/30 bg-yellow-500/[0.02] shadow-sm",
+        isReviewable && "border-yellow-500/30 bg-yellow-500/[0.02] shadow-[var(--shadow-xs)]",
         (isExecuting || isApproved) && "border-primary/20 bg-primary/[0.02]",
         isCompleted && "border-green-500/20 bg-green-500/[0.02]",
         isRejected && "border-red-500/20 bg-red-500/[0.02] opacity-75",
@@ -682,7 +682,7 @@ export function ExecutionPlanReview({
                 ))}
                 <button
                   onClick={addEditableStep}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/50 py-2 text-xs text-muted-foreground hover:border-primary/30 hover:text-primary"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border-default py-2 text-xs text-muted-foreground hover:border-primary/30 hover:text-primary"
                 >
                   <PlusIcon className="size-3" />
                   {t.executionPlan.addStep}

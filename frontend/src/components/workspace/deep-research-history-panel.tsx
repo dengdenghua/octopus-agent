@@ -61,7 +61,7 @@ export function DeepResearchHistoryPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
+      <div className="flex items-center justify-between border-b border-border-default px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <HistoryIcon className="size-4 text-primary" />
           <div className="min-w-0">
@@ -102,7 +102,7 @@ export function DeepResearchHistoryPanel({
           </div>
         )}
         {!loading && sortedJobs.length === 0 ? (
-          <div className="rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
+          <div className="rounded-lg border border-border-default bg-muted/20 p-4 text-sm text-muted-foreground">
             No agent runs yet.
           </div>
         ) : (
@@ -116,7 +116,7 @@ export function DeepResearchHistoryPanel({
                   "w-full rounded-lg border p-3 text-left transition-colors",
                   activeJobId === job.job_id
                     ? "border-primary/30 bg-primary/10"
-                    : "border-border/60 bg-background/60 hover:bg-muted/40",
+                    : "border-border-default bg-background/60 hover:bg-muted/40",
                 )}
               >
                 <div className="flex items-start justify-between gap-2">

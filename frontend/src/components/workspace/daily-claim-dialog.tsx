@@ -121,7 +121,7 @@ export function DailyClaimDialog({
           {/* Gift illustration — lucide icon inside a soft disk */}
           <div className="absolute right-6 top-6 flex size-24 items-center justify-center">
             <div className="absolute inset-0 rounded-full bg-white/10 blur-sm" />
-            <div className="relative flex size-20 items-center justify-center rounded-full bg-gradient-to-br from-pink-200 to-rose-300 shadow-lg">
+            <div className="relative flex size-20 items-center justify-center rounded-full bg-gradient-to-br from-pink-200 to-rose-300 shadow-[var(--shadow-md)]">
               <Gift className="size-10 text-rose-600" strokeWidth={2.2} />
             </div>
             <Sparkles className="absolute -top-1 -left-1 size-4 text-yellow-200" />

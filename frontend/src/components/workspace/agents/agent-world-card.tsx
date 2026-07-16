@@ -178,7 +178,7 @@ export function AgentWorldCard({
   return (
     <Card
       className={cn(
-        "group relative flex cursor-pointer flex-col overflow-hidden rounded-lg border-border/70 bg-card/86 py-0 transition-all duration-200 ease-out",
+        "group relative flex cursor-pointer flex-col overflow-hidden rounded-lg border-border-default bg-card/86 py-0 transition-all ease-out",
         "hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_0_24px_hsl(var(--primary)/0.10)]",
         "before:pointer-events-none before:absolute before:left-0 before:top-0 before:h-3 before:w-3 before:border-l before:border-t before:border-primary/45",
         "after:pointer-events-none after:absolute after:bottom-0 after:right-0 after:h-3 after:w-3 after:border-b after:border-r after:border-primary/30",
@@ -186,7 +186,7 @@ export function AgentWorldCard({
       onClick={() => onSelect?.(agent)}
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-primary/35" />
-      <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 [background-image:linear-gradient(180deg,transparent_0,transparent_94%,hsl(var(--primary)/0.16)_95%,transparent_100%)] [background-size:100%_18px] group-hover:opacity-100" />
+      <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity [background-image:linear-gradient(180deg,transparent_0,transparent_94%,hsl(var(--primary)/0.16)_95%,transparent_100%)] [background-size:100%_18px] group-hover:opacity-100" />
       {/* Featured shimmer accent */}
       {agent.is_featured && (
         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-500/60 via-primary/40 to-violet-500/60" />
@@ -207,7 +207,7 @@ export function AgentWorldCard({
               iconFallback
             )}
             {agent.is_official && (
-              <div className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 shadow-sm">
+              <div className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 shadow-[var(--shadow-xs)]">
                 <BadgeCheckIcon className="h-2.5 w-2.5 text-white" />
               </div>
             )}
@@ -260,7 +260,7 @@ export function AgentWorldCard({
         )}
       </CardHeader>
 
-      <CardFooter className="relative mt-auto flex items-center justify-between gap-2 border-t border-border/65 bg-background/54 px-3 py-2">
+      <CardFooter className="relative mt-auto flex items-center justify-between gap-2 border-t border-border-default bg-background/54 px-3 py-2">
         {/* Download count */}
         <div className="text-muted-foreground flex items-center gap-1 text-xs">
           <DownloadIcon className="h-3 w-3" />
@@ -273,7 +273,7 @@ export function AgentWorldCard({
           variant={installed ? "outline" : "default"}
           className={cn(
             "h-7 rounded-sm px-3 text-xs transition-all",
-            !installed && "shadow-sm hover:shadow-md",
+            !installed && "shadow-[var(--shadow-xs)] hover:shadow-[var(--shadow-sm)]",
           )}
           disabled={installing}
           onClick={handleInstallToggle}

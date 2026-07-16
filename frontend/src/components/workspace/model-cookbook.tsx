@@ -128,7 +128,7 @@ export function ModelCookbook() {
   const ollamaDown = snapshot ? !snapshot.ollama_available : false;
 
   return (
-    <div className="rounded-lg border border-border/50 bg-card/50 p-5">
+    <div className="rounded-lg border border-border-default bg-card/50 p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h4 className="text-sm font-medium">{t.title}</h4>
@@ -150,7 +150,7 @@ export function ModelCookbook() {
               {t.noOllama}
             </div>
           )}
-          <div className="mt-3 divide-y divide-border/40 rounded-lg border border-border/40">
+          <div className="mt-3 divide-y divide-border/40 rounded-lg border border-border-subtle">
             {recs.map((rec) => (
               <RecRow
                 key={rec.tag}

@@ -95,7 +95,7 @@ export function SlashCommandPicker({
     <div
       className={cn(
         "absolute bottom-full left-0 right-0 mb-2 max-h-64 overflow-y-auto",
-        "rounded-lg border border-border/70 bg-popover shadow-lg",
+        "rounded-lg border border-border-default bg-popover shadow-[var(--shadow-md)]",
         "text-[12px] z-50",
         className,
       )}

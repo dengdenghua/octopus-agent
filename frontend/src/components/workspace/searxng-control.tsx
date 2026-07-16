@@ -59,7 +59,7 @@ export function SearxngControl() {
         : "bg-muted-foreground/50";
 
   return (
-    <div className="rounded-lg border border-border/50 bg-card/50 p-5">
+    <div className="rounded-lg border border-border-default bg-card/50 p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
           <div className="flex items-center gap-2">

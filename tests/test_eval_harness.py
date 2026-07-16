@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+
 from benchmarks.eval_harness import (
     EvalCase,
     Trajectory,
     Verdict,
     run_case,
     run_suite,
+    write_behavioral_bundle,
+    write_behavioral_system_evidence,
 )
 
 
@@ -130,6 +135,65 @@ def test_report_serialises_to_json(tmp_path) -> None:
     text = out.read_text(encoding="utf-8")
     assert '"pass_at_k"' in text
     assert '"aggregate_pass_at_k"' in text
+    data = json.loads(text)
+    assert data["cases"][0]["trajectories"][0]["steps"][0] == {
+        "kind": "text_delta",
+        "payload": {"delta": "hello"},
+        "ts": data["cases"][0]["trajectories"][0]["steps"][0]["ts"],
+    }
+
+
+def test_writes_digest_verified_behavioral_system_evidence(tmp_path) -> None:
+    rubric_digest = hashlib.sha256(b"exact output rubric").hexdigest()
+    case = EvalCase(
+        id="general.echo",
+        prompt="hello",
+        grader=lambda trajectory: Verdict(
+            passed=trajectory.last_text() == "hello",
+            score=1.0,
+            reason="exact output",
+            rubric={"expected": "hello"},
+        ),
+        metadata={
+            "domain": "general_runtime_and_coding",
+            "execution_mode": "real_provider",
+            "outcome_grader": True,
+            "isolated_state": True,
+            "rubric_digest": rubric_digest,
+        },
+    )
+    report = run_suite([case], runner=_mock_runner_echo, k=3)
+
+    system = write_behavioral_system_evidence(
+        report,
+        [case],
+        root=tmp_path,
+        system_id="octopus",
+        version="test-version",
+    )
+
+    assert system["version"] == "test-version"
+    assert system["cases"][0]["passes"] == 3
+    assert system["cases"][0]["trajectory_count"] == 3
+    assert system["cases"][0]["prompt_digest"] == hashlib.sha256(b"hello").hexdigest()
+    artifacts = system["cases"][0]["artifacts"]
+    assert len(artifacts) == 3
+    for artifact in artifacts:
+        content = (tmp_path / artifact["path"]).read_bytes()
+        assert hashlib.sha256(content).hexdigest() == artifact["sha256"]
+
+    bundle_path = tmp_path / "benchmarks" / "results" / "bundle.json"
+    write_behavioral_bundle(
+        path=bundle_path,
+        suite_id="same-task-v1",
+        runner_version="test-runner",
+        source_revision="abc123",
+        generated_at="2026-07-17T00:00:00+00:00",
+        systems={"octopus": system, "codex": system},
+    )
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    assert bundle["schema"] == "octopus.behavioral_surpass_bundle.v1"
+    assert bundle["systems"]["octopus"]["cases"][0]["rubric_digest"] == rubric_digest
 
 
 def test_trajectory_runtime_ms_positive() -> None:

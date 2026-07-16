@@ -653,12 +653,14 @@ def test_e2e_surpass_certification_endpoint() -> None:
     assert response.status_code == 200
     assert data["ok"] is True
     assert data["schema"] == "octopus.e2e_surpass_certification.v1"
-    assert data["ready"] is True
-    assert data["verdict"] == "surpassed"
+    assert data["ready"] is False
+    assert data["verdict"] == "needs_behavioral_evidence"
     assert data["summary"]["scorecard_octopus"] == 97
     assert data["summary"]["automation_octopus"] == 96
     assert data["summary"]["automation_octopus"] >= data["target_score"]
     assert data["summary"]["quality_ready"] == data["summary"]["quality_total"]
+    assert data["summary"]["behavioral_ready"] is False
+    assert data["behavioral"]["verdict"] == "missing_behavioral_evidence"
     assert any(
         check["id"] == "scorecard_all_dimensions_surpassed" and check["passed"] is True
         for check in data["checks"]

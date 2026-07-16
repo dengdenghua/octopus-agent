@@ -140,7 +140,7 @@ export function CreateTaskDialog({
       }}
     >
       <DialogContent className="overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHeader className="border-b border-border/60 px-5 py-4">
+        <DialogHeader className="border-b border-border-default px-5 py-4">
           <DialogTitle className="flex items-center gap-2">
             <ClipboardListIcon className="size-5" />
             {t.collab.createTask.title}
@@ -217,10 +217,10 @@ export function CreateTaskDialog({
                         "flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
                         selected
                           ? "border-primary/40 bg-primary/10 text-foreground"
-                          : "border-border/70 bg-muted/10 hover:bg-muted/40",
+                          : "border-border-default bg-muted/10 hover:bg-muted/40",
                       )}
                     >
-                      <span className="grid size-7 shrink-0 place-items-center rounded-lg border border-border/60 bg-background text-sm">
+                      <span className="grid size-7 shrink-0 place-items-center rounded-lg border border-border-default bg-background text-sm">
                         {agent.icon?.trim() || agent.label.charAt(0)}
                       </span>
                       <span className="min-w-0 flex-1">
@@ -239,7 +239,7 @@ export function CreateTaskDialog({
           )}
         </div>
 
-        <DialogFooter className="border-t border-border/60 px-5 py-3">
+        <DialogFooter className="border-t border-border-default px-5 py-3">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t.collab.createTask.cancel}
           </Button>

@@ -194,7 +194,7 @@ function GrowthStoryHero({
 
   return (
     <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-      <div className="rounded-xl border border-border/60 bg-gradient-to-br from-primary/10 via-background to-background p-5">
+      <div className="rounded-xl border border-border-default bg-gradient-to-br from-primary/10 via-background to-background p-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-sm font-semibold">
@@ -211,7 +211,7 @@ function GrowthStoryHero({
                 : t.evolutionDashboard.noEvidenceDescription}
             </p>
           </div>
-          <div className="shrink-0 rounded-lg border border-primary/20 bg-background/80 px-4 py-3 text-right shadow-sm">
+          <div className="shrink-0 rounded-lg border border-primary/20 bg-background/80 px-4 py-3 text-right shadow-[var(--shadow-xs)]">
             <div className="text-[11px] text-muted-foreground">
               {t.evolutionDashboard.overallImprovementLabel}
             </div>
@@ -298,7 +298,7 @@ function EvolutionStage({
         "relative rounded-lg border px-3 py-3",
         stage.done
           ? "border-primary/30 bg-primary/5"
-          : "border-border/50 bg-muted/25 text-muted-foreground",
+          : "border-border-default bg-muted/25 text-muted-foreground",
       )}
     >
       <div className="flex items-center justify-between gap-2">
@@ -342,7 +342,7 @@ function StoryMetric({
   sparkline?: number[];
 }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-card px-4 py-3">
+    <div className="rounded-xl border border-border-default bg-card px-4 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -371,7 +371,7 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
   const { t } = useI18n();
   if (data.length === 0) {
     return (
-      <section className="rounded-xl border border-border/60 bg-card p-4">
+      <section className="rounded-xl border border-border-default bg-card p-4">
         <SectionTitle
           icon={TrendingUpIcon}
           title={t.evolutionDashboard.capabilityTrend}
@@ -394,7 +394,7 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
     ) / compact.length;
 
   return (
-    <section className="rounded-xl border border-border/60 bg-card p-4">
+    <section className="rounded-xl border border-border-default bg-card p-4">
       <div className="flex items-start justify-between gap-4">
         <SectionTitle
           icon={TrendingUpIcon}
@@ -442,7 +442,7 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
         />
       </div>
 
-      <div className="mt-4 flex items-end gap-2 overflow-hidden rounded-lg border border-border/40 bg-muted/20 px-3 py-3">
+      <div className="mt-4 flex items-end gap-2 overflow-hidden rounded-lg border border-border-subtle bg-muted/20 px-3 py-3">
         {compact.map((point) => {
           const rate = numberOrZero(point.success_rate);
           return (
@@ -478,7 +478,7 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
   const { t } = useI18n();
   if (data.length === 0) {
     return (
-      <section className="rounded-xl border border-border/60 bg-card p-4">
+      <section className="rounded-xl border border-border-default bg-card p-4">
         <SectionTitle
           icon={BrainCircuitIcon}
           title={t.evolutionDashboard.strongerSkills}
@@ -489,7 +489,7 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
   }
 
   return (
-    <section className="rounded-xl border border-border/60 bg-card p-4">
+    <section className="rounded-xl border border-border-default bg-card p-4">
       <SectionTitle
         icon={BrainCircuitIcon}
         title={t.evolutionDashboard.strongerSkills}
@@ -545,7 +545,7 @@ function RecommendationsStory({ data }: { data: Recommendation[] }) {
   const { t } = useI18n();
   if (data.length === 0) {
     return (
-      <section className="rounded-xl border border-border/60 bg-card p-4">
+      <section className="rounded-xl border border-border-default bg-card p-4">
         <SectionTitle
           icon={LightbulbIcon}
           title={t.evolutionDashboard.howToImproveNext}
@@ -556,7 +556,7 @@ function RecommendationsStory({ data }: { data: Recommendation[] }) {
   }
 
   return (
-    <section className="rounded-xl border border-border/60 bg-card p-4">
+    <section className="rounded-xl border border-border-default bg-card p-4">
       <SectionTitle
         icon={LightbulbIcon}
         title={t.evolutionDashboard.howToImproveNext}
@@ -565,7 +565,7 @@ function RecommendationsStory({ data }: { data: Recommendation[] }) {
         {data.slice(0, 3).map((rec, index) => (
           <div
             key={`${rec.title}-${index}`}
-            className="rounded-lg border border-border/50 bg-muted/20 px-3 py-3"
+            className="rounded-lg border border-border-default bg-muted/20 px-3 py-3"
           >
             <div className="flex items-center gap-2">
               <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
@@ -602,7 +602,7 @@ function SectionTitle({
 
 function EmptyStory({ text }: { text: string }) {
   return (
-    <div className="mt-4 rounded-lg border border-dashed border-border/70 bg-muted/20 px-4 py-6 text-center text-xs leading-relaxed text-muted-foreground">
+    <div className="mt-4 rounded-lg border border-dashed border-border-default bg-muted/20 px-4 py-6 text-center text-xs leading-relaxed text-muted-foreground">
       {text}
     </div>
   );

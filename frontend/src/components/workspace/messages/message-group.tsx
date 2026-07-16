@@ -609,8 +609,8 @@ export function MessageGroup({
         // (faint panel) so it reads as its own region, not noise above the
         // answer. Other modes keep the lighter left-rule treatment.
         codeMode
-          ? "rounded-lg border border-border/50 bg-muted/20 px-3 py-2"
-          : "border-l border-border/60 pl-4",
+          ? "rounded-lg border border-border-default bg-muted/20 px-3 py-2"
+          : "border-l border-border-default pl-4",
         className,
       )}
       open={true}
@@ -629,7 +629,7 @@ export function MessageGroup({
           data-testid="live-process-strip"
           className={cn(
             "mb-2 min-w-0 rounded-xl border px-3 py-2 text-[11px]",
-            "bg-background/80 text-muted-foreground shadow-sm shadow-black/[0.025] backdrop-blur",
+            "bg-background/80 text-muted-foreground shadow-[var(--shadow-xs)] shadow-black/[0.025] backdrop-blur",
             liveProcessState === "running" &&
               "border-emerald-500/20 bg-emerald-500/[0.045]",
             liveProcessState === "waiting" &&
@@ -1027,7 +1027,7 @@ function NestedStepDisclosure({
         <ChevronDownIcon className="mt-1 size-3 shrink-0 -rotate-90 text-muted-foreground transition-transform group-data-[state=open]/nested-step:rotate-0" />
         <span className="min-w-0 flex-1 break-words">{summary}</span>
       </CollapsibleTrigger>
-      <CollapsibleContent className="mt-1 border-l border-border/60 pl-2 data-[state=closed]:animate-out data-[state=open]:animate-in">
+      <CollapsibleContent className="mt-1 border-l border-border-default pl-2 data-[state=closed]:animate-out data-[state=open]:animate-in">
         {children}
       </CollapsibleContent>
     </Collapsible>

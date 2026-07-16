@@ -98,7 +98,7 @@ export function EnterpriseAssetsTab({ query }: { query?: string }) {
         {items.map((a) => (
           <div
             key={a.id}
-            className="flex gap-3 rounded-lg border border-border/50 bg-muted/20 p-3"
+            className="flex gap-3 rounded-lg border border-border-default bg-muted/20 p-3"
           >
             <div className="shrink-0 text-2xl leading-none">
               {a.icon || "🤖"}

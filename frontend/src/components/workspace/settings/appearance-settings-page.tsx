@@ -449,7 +449,7 @@ function AppearanceStepSlider<TValue extends AppearanceStepValue>({
               </div>
             ) : null}
           </div>
-          <div className="rounded-full border bg-background/75 px-2.5 py-1 text-xs font-medium shadow-sm">
+          <div className="rounded-full border bg-background/75 px-2.5 py-1 text-xs font-medium shadow-[var(--shadow-xs)]">
             <span>{active.label}</span>
             {active.preview ? (
               <span className="ml-1 text-muted-foreground">
@@ -510,7 +510,7 @@ function AppearanceStepSlider<TValue extends AppearanceStepValue>({
             <span
               aria-hidden="true"
               className={cn(
-                "size-2.5 rounded-full border border-background shadow-sm",
+                "size-2.5 rounded-full border border-background shadow-[var(--shadow-xs)]",
                 index <= activeIndex ? "bg-primary" : "bg-muted-foreground/30",
               )}
               key={option.value}
@@ -563,14 +563,14 @@ function MaterialPreviewCard({
 }) {
   const liquidPreviewClass = {
     crystal:
-      "bg-[radial-gradient(circle_at_15%_10%,color-mix(in_oklch,var(--primary)_12%,transparent),transparent_42%),linear-gradient(135deg,color-mix(in_oklch,var(--card)_34%,transparent),color-mix(in_oklch,var(--background)_58%,transparent))] shadow-sm backdrop-blur-md",
+      "bg-[radial-gradient(circle_at_15%_10%,color-mix(in_oklch,var(--primary)_12%,transparent),transparent_42%),linear-gradient(135deg,color-mix(in_oklch,var(--card)_34%,transparent),color-mix(in_oklch,var(--background)_58%,transparent))] shadow-[var(--shadow-xs)] backdrop-blur-md",
     clear:
-      "bg-[radial-gradient(circle_at_15%_10%,color-mix(in_oklch,var(--primary)_16%,transparent),transparent_42%),linear-gradient(135deg,color-mix(in_oklch,var(--card)_46%,transparent),color-mix(in_oklch,var(--background)_68%,transparent))] shadow-sm backdrop-blur-lg",
+      "bg-[radial-gradient(circle_at_15%_10%,color-mix(in_oklch,var(--primary)_16%,transparent),transparent_42%),linear-gradient(135deg,color-mix(in_oklch,var(--card)_46%,transparent),color-mix(in_oklch,var(--background)_68%,transparent))] shadow-[var(--shadow-xs)] backdrop-blur-lg",
     balanced:
-      "bg-[radial-gradient(circle_at_15%_10%,color-mix(in_oklch,var(--primary)_22%,transparent),transparent_42%),linear-gradient(135deg,color-mix(in_oklch,var(--card)_52%,transparent),color-mix(in_oklch,var(--background)_72%,transparent))] shadow-sm backdrop-blur-xl",
-    deep: "bg-[radial-gradient(circle_at_15%_10%,color-mix(in_oklch,var(--primary)_28%,transparent),transparent_42%),linear-gradient(135deg,color-mix(in_oklch,var(--card)_62%,transparent),color-mix(in_oklch,var(--background)_78%,transparent))] shadow-md backdrop-blur-2xl",
+      "bg-[radial-gradient(circle_at_15%_10%,color-mix(in_oklch,var(--primary)_22%,transparent),transparent_42%),linear-gradient(135deg,color-mix(in_oklch,var(--card)_52%,transparent),color-mix(in_oklch,var(--background)_72%,transparent))] shadow-[var(--shadow-xs)] backdrop-blur-xl",
+    deep: "bg-[radial-gradient(circle_at_15%_10%,color-mix(in_oklch,var(--primary)_28%,transparent),transparent_42%),linear-gradient(135deg,color-mix(in_oklch,var(--card)_62%,transparent),color-mix(in_oklch,var(--background)_78%,transparent))] shadow-[var(--shadow-sm)] backdrop-blur-2xl",
     frosted:
-      "bg-[radial-gradient(circle_at_15%_10%,color-mix(in_oklch,var(--primary)_18%,transparent),transparent_42%),linear-gradient(135deg,color-mix(in_oklch,var(--card)_78%,transparent),color-mix(in_oklch,var(--background)_88%,transparent))] shadow-md backdrop-blur-3xl",
+      "bg-[radial-gradient(circle_at_15%_10%,color-mix(in_oklch,var(--primary)_18%,transparent),transparent_42%),linear-gradient(135deg,color-mix(in_oklch,var(--card)_78%,transparent),color-mix(in_oklch,var(--background)_88%,transparent))] shadow-[var(--shadow-sm)] backdrop-blur-3xl",
   } satisfies Record<MaterialIntensity, string>;
   const liquidTone = tone === "liquid" && liquidPreviewClass[intensity];
 
@@ -578,7 +578,7 @@ function MaterialPreviewCard({
     <div
       className={cn(
         "relative h-28 overflow-hidden rounded-lg border p-3 transition-all",
-        active ? "border-primary ring-primary/25 ring-2" : "border-border/60",
+        active ? "border-primary ring-primary/25 ring-2" : "border-border-default",
         liquidTone || "bg-card",
       )}
     >
@@ -595,7 +595,7 @@ function MaterialPreviewCard({
                 intensity === "frosted" &&
                   "bg-white/42 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_20px_42px_rgba(15,23,42,0.2)] backdrop-blur-3xl",
               )
-            : "border-border/60 bg-muted/60",
+            : "border-border-default bg-muted/60",
         )}
       />
       <div
@@ -609,7 +609,7 @@ function MaterialPreviewCard({
                 intensity === "deep" && "bg-white/24 backdrop-blur-2xl",
                 intensity === "frosted" && "bg-white/36 backdrop-blur-3xl",
               )
-            : "border-border/50 bg-muted/45",
+            : "border-border-default bg-muted/45",
         )}
       />
       <div
@@ -650,7 +650,7 @@ function ThemePreviewCard({
     previewMode === "dark"
       ? "border-neutral-800 bg-neutral-950 text-neutral-200"
       : previewMode === "apple"
-        ? "border-border/80 bg-[linear-gradient(145deg,#f8fbff_0%,#ffffff_42%,#f3f6fb_100%)] text-foreground shadow-sm"
+        ? "border-border-strong bg-[linear-gradient(145deg,#f8fbff_0%,#ffffff_42%,#f3f6fb_100%)] text-foreground shadow-[var(--shadow-xs)]"
         : "border-border bg-white text-foreground";
   const previewTopbarClass =
     previewMode === "dark"
@@ -683,8 +683,8 @@ function ThemePreviewCard({
       className={cn(
         "group flex h-full flex-col gap-3 rounded-lg border p-4 text-left transition-all",
         active
-          ? "border-primary ring-primary/30 shadow-sm ring-2"
-          : "hover:border-border hover:shadow-sm",
+          ? "border-primary ring-primary/30 shadow-[var(--shadow-xs)] ring-2"
+          : "hover:border-border hover:shadow-[var(--shadow-xs)]",
       )}
     >
       <div className="flex items-start gap-3">

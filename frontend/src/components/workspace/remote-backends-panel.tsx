@@ -84,7 +84,7 @@ export function RemoteBackendsPanel({ baseUrl }: RemoteBackendsPanelProps) {
 
         {enabled && (
           <form
-            className="border-border/50 flex flex-col gap-2 rounded-md border p-3"
+            className="border-border-default flex flex-col gap-2 rounded-md border p-3"
             onSubmit={onSubmit}
             aria-label={t.remoteBackendsPanel.addBackendAria}
           >

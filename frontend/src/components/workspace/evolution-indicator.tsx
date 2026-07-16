@@ -111,7 +111,7 @@ export function EvolutionIndicator({
             "pointer-events-none absolute -top-1 -right-1 rounded-full px-1.5 py-[1px]",
             "text-[9px] font-semibold leading-none tabular-nums",
             "bg-[color:var(--primary)] text-[color:var(--primary-foreground)]",
-            "shadow-sm",
+            "shadow-[var(--shadow-xs)]",
           )}
         >
           {rules + memories}
@@ -124,7 +124,7 @@ export function EvolutionIndicator({
             "pointer-events-none absolute -top-2 -right-1 rounded-full px-1.5 py-[1px]",
             "text-[9px] font-semibold leading-none tabular-nums",
             "bg-[color:var(--primary)] text-[color:var(--primary-foreground)]",
-            "shadow-sm animate-learn-badge",
+            "shadow-[var(--shadow-xs)] animate-learn-badge",
           )}
         >
           {formatDelta(delta.rules, delta.memories, t)}

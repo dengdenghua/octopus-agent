@@ -222,7 +222,7 @@ export function TeamTasksPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background/70">
-      <div className="shrink-0 border-b border-border/45 px-3 py-2">
+      <div className="shrink-0 border-b border-border-subtle px-3 py-2">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium text-foreground">
@@ -268,7 +268,7 @@ export function TeamTasksPanel({
             {t.teamTasksPanel.loading}
           </div>
         ) : visibleTasks.length === 0 ? (
-          <div className="flex min-h-48 items-center justify-center rounded-lg border border-dashed border-border/70 bg-muted/15 px-4 text-center text-sm text-muted-foreground">
+          <div className="flex min-h-48 items-center justify-center rounded-lg border border-dashed border-border-default bg-muted/15 px-4 text-center text-sm text-muted-foreground">
             {t.teamTasksPanel.emptyFilter}
           </div>
         ) : (
@@ -339,7 +339,7 @@ export function TeamTasksPanel({
       : null;
 
     return (
-      <article className="rounded-lg border border-border/60 bg-background/85 shadow-sm">
+      <article className="rounded-lg border border-border-default bg-background/85 shadow-[var(--shadow-xs)]">
         <div className="flex items-start gap-2.5 px-3 py-2.5">
           <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
             <ClipboardListIcon className="size-4" />
@@ -409,7 +409,7 @@ export function TeamTasksPanel({
         </div>
 
         {showArtifacts && artifactCount > 0 && (
-          <div className="space-y-1.5 border-t border-border/45 px-3 py-2">
+          <div className="space-y-1.5 border-t border-border-subtle px-3 py-2">
             {task.produced_artifacts.map((artifact, i) => {
               const a = artifact as Record<string, unknown>;
               const title = String(
@@ -420,7 +420,7 @@ export function TeamTasksPanel({
               return (
                 <div
                   key={String(a.id ?? i)}
-                  className="overflow-hidden rounded-md border border-border/50 bg-muted/20"
+                  className="overflow-hidden rounded-md border border-border-default bg-muted/20"
                 >
                   <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium">
                     {ok === true && (
@@ -432,7 +432,7 @@ export function TeamTasksPanel({
                     <span className="truncate">{title}</span>
                   </div>
                   {content && (
-                    <pre className="max-h-48 overflow-auto border-t border-border/40 px-2 py-1.5 text-[11px] leading-snug whitespace-pre-wrap break-words">
+                    <pre className="max-h-48 overflow-auto border-t border-border-subtle px-2 py-1.5 text-[11px] leading-snug whitespace-pre-wrap break-words">
                       {content}
                     </pre>
                   )}
@@ -470,7 +470,7 @@ export function TeamTasksPanel({
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-1 border-t border-border/45 px-2.5 py-1.5">
+        <div className="flex items-center justify-end gap-1 border-t border-border-subtle px-2.5 py-1.5">
           {task.status === "running" ? (
             <Button
               variant="ghost"
@@ -529,7 +529,7 @@ function TeamTaskTimelinePreview({
 }) {
   const nodes = (timeline?.timeline ?? []).slice(-8);
   return (
-    <div className="border-t border-border/45 px-3 py-2">
+    <div className="border-t border-border-subtle px-3 py-2">
       <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
         <span className="rounded-md bg-muted/60 px-1.5 py-0.5">
           {labels.processCount(timeline?.overview.event_count ?? 0)}
@@ -552,7 +552,7 @@ function TeamTaskTimelinePreview({
           {error instanceof Error ? error.message : String(error)}
         </div>
       ) : nodes.length === 0 ? (
-        <div className="mt-2 rounded-md border border-dashed border-border/70 bg-muted/15 px-2 py-3 text-center text-[11px] text-muted-foreground">
+        <div className="mt-2 rounded-md border border-dashed border-border-default bg-muted/15 px-2 py-3 text-center text-[11px] text-muted-foreground">
           {labels.empty}
         </div>
       ) : (
@@ -575,7 +575,7 @@ function TimelineNodeRow({ node }: { node: TeamTaskProcessTimelineNode }) {
           ? "border-destructive/25 bg-destructive/10"
           : node.lane === "artifact"
             ? "border-emerald-500/20 bg-emerald-500/10"
-            : "border-border/55 bg-muted/15",
+            : "border-border-default bg-muted/15",
       )}
     >
       <div className="min-w-0 text-muted-foreground">

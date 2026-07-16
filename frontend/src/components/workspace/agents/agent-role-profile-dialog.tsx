@@ -747,7 +747,7 @@ function AgentCoreVisual({
                       : "max-h-full w-full object-center",
                   )}
                   fallback={
-                    <div className="mb-24 flex size-32 items-center justify-center rounded-sm border border-primary/35 bg-background text-6xl shadow-lg">
+                    <div className="mb-24 flex size-32 items-center justify-center rounded-sm border border-primary/35 bg-background text-6xl shadow-[var(--shadow-xs)]">
                       {agent.icon || (
                         <Bot className="size-16 text-muted-foreground" />
                       )}
@@ -758,7 +758,7 @@ function AgentCoreVisual({
               </div>
             ) : (
               <div className="mb-28 flex flex-col items-center justify-center gap-3 text-muted-foreground">
-                <div className="flex size-32 items-center justify-center rounded-sm border border-primary/35 bg-background text-6xl shadow-lg">
+                <div className="flex size-32 items-center justify-center rounded-sm border border-primary/35 bg-background text-6xl shadow-[var(--shadow-xs)]">
                   {agent.icon || <Bot className="size-16" />}
                 </div>
                 <span className="font-mono text-[10px] uppercase tracking-[0.16em]">

@@ -26,7 +26,7 @@ interface PermissionIndicatorProps {
 }
 
 const PERMISSION_TRIGGER_TONE =
-  "border border-border/70 bg-background/90 text-muted-foreground shadow-sm hover:bg-muted/70 hover:text-foreground";
+  "border border-border-default bg-background/90 text-muted-foreground shadow-[var(--shadow-xs)] hover:bg-muted/70 hover:text-foreground";
 
 export function PermissionIndicator({
   mode,

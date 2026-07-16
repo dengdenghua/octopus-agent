@@ -251,8 +251,8 @@ export function InviteDialog({
 
           <MobileJoinSection />
 
-          <section className="min-w-0 rounded-lg border border-border/60 bg-muted/10">
-            <div className="border-b border-border/50 p-3">
+          <section className="min-w-0 rounded-lg border border-border-default bg-muted/10">
+            <div className="border-b border-border-default p-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-sm font-semibold">
@@ -285,7 +285,7 @@ export function InviteDialog({
                   value={agentQuery}
                   onChange={(event) => setAgentQuery(event.target.value)}
                   placeholder={t.collab.inviteAgents.searchPlaceholder}
-                  className="h-8 rounded-lg border-border/60 bg-background/70 pl-8 text-xs"
+                  className="h-8 border-border-default bg-background/70 pl-8 text-xs"
                 />
               </div>
             </div>
@@ -315,7 +315,7 @@ export function InviteDialog({
                           inTeam ? "bg-muted/35" : "hover:bg-muted/40",
                         )}
                       >
-                        <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/60 bg-background text-xs font-semibold text-muted-foreground">
+                        <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border-default bg-background text-xs font-semibold text-muted-foreground">
                           {avatarSrc ? (
                             <img
                               src={avatarSrc}

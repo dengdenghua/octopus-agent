@@ -163,7 +163,7 @@ export function ContextCompressor({
             </span>
           </div>
           {isFull && (
-            <div className="border-t border-border/50 pt-1 font-medium text-destructive">
+            <div className="border-t border-border-default pt-1 font-medium text-destructive">
               {t.contextCompressor?.contextFull ?? "Context nearly full!"}
             </div>
           )}

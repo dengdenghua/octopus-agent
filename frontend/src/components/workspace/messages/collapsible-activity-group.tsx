@@ -152,7 +152,7 @@ export function CollapsibleActivityGroup({
         onClick={() => setOpen((v) => !v)}
         className={cn(
           "flex w-full items-center gap-2 px-3 py-2 text-left text-sm",
-          "hover:bg-muted/50 transition-colors rounded-lg",
+          "hover:bg-muted/50 transition-colors",
           "cursor-pointer",
         )}
         aria-expanded={open}

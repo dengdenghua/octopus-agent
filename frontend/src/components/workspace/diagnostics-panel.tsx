@@ -78,7 +78,7 @@ export function DiagnosticsPanel({
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border-default">
         <div className="flex items-center gap-2">
           <InfoIcon className="size-4 text-primary" />
           <span className="text-sm font-medium">

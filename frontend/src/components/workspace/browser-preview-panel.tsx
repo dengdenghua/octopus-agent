@@ -1252,7 +1252,7 @@ export function BrowserPreviewPanel({
         )}
       >
         <div className="absolute inset-x-8 top-6 h-px bg-gradient-to-r from-transparent via-border/70 to-transparent" />
-        <div className="grid size-14 place-items-center rounded-2xl border border-border/60 bg-background/82 shadow-sm backdrop-blur">
+        <div className="grid size-14 place-items-center rounded-2xl border border-border-default bg-background/82 shadow-[var(--shadow-xs)] backdrop-blur">
           {loading ? (
             <Loader2Icon className="size-8 animate-spin text-primary" />
           ) : (
@@ -1274,7 +1274,7 @@ export function BrowserPreviewPanel({
           <button
             onClick={handleLaunch}
             disabled={loading}
-            className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow-[var(--shadow-xs)] transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
             {loading ? (
               <Loader2Icon className="size-3 animate-spin" />
@@ -1296,24 +1296,24 @@ export function BrowserPreviewPanel({
       )}
     >
       {/* URL Bar */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-border/60 bg-background/82 px-2 py-1.5 shadow-[inset_0_-1px_0_rgba(255,255,255,0.22)] backdrop-blur-xl">
+      <div className="flex shrink-0 items-center gap-1 border-b border-border-default bg-background/82 px-2 py-1.5 shadow-[inset_0_-1px_0_rgba(255,255,255,0.22)] backdrop-blur-xl">
         <button
           onClick={handleBack}
-          className="grid size-7 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border/60 hover:bg-muted/65 hover:text-foreground"
+          className="grid size-7 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border-default hover:bg-muted/65 hover:text-foreground"
           title={t.browser.back}
         >
           <ArrowLeftIcon className="size-3.5" />
         </button>
         <button
           onClick={handleForward}
-          className="grid size-7 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border/60 hover:bg-muted/65 hover:text-foreground"
+          className="grid size-7 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border-default hover:bg-muted/65 hover:text-foreground"
           title={t.browser.forward}
         >
           <ArrowRightIcon className="size-3.5" />
         </button>
         <button
           onClick={handleReload}
-          className="grid size-7 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border/60 hover:bg-muted/65 hover:text-foreground"
+          className="grid size-7 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border-default hover:bg-muted/65 hover:text-foreground"
           title={t.browser.reload}
         >
           <RefreshCwIcon className="size-3.5" />
@@ -1321,7 +1321,7 @@ export function BrowserPreviewPanel({
         <button
           type="button"
           onClick={() => void handleAttachScreenshotToComposer()}
-          className="grid size-7 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border/60 hover:bg-muted/65 hover:text-foreground"
+          className="grid size-7 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border-default hover:bg-muted/65 hover:text-foreground"
           title={bp.attachScreenshotToComposer}
         >
           <ImageIcon className="size-3.5" />
@@ -1334,7 +1334,7 @@ export function BrowserPreviewPanel({
           }}
           className="flex min-w-0 flex-1 items-center"
         >
-          <div className="relative flex h-7 min-w-0 flex-1 items-center rounded-md border border-border/60 bg-muted/45 shadow-inner transition-colors focus-within:border-ring focus-within:bg-background/80">
+          <div className="relative flex h-7 min-w-0 flex-1 items-center rounded-md border border-border-default bg-muted/45 shadow-inner transition-colors focus-within:border-ring focus-within:bg-background/80">
             <GlobeIcon className="absolute left-2 size-3 text-muted-foreground" />
             <input
               type="text"
@@ -1358,7 +1358,7 @@ export function BrowserPreviewPanel({
             "hidden h-7 shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 text-[10px] font-medium transition-colors sm:inline-flex",
             effectiveSurfaceMode === "live"
               ? "bg-primary/10 text-primary"
-              : "text-muted-foreground hover:border-border/60 hover:bg-muted/65 hover:text-foreground",
+              : "text-muted-foreground hover:border-border-default hover:bg-muted/65 hover:text-foreground",
             !canLivePreview && "pointer-events-none opacity-35",
           )}
           title={bp.toggleSurfaceMode}
@@ -1381,7 +1381,7 @@ export function BrowserPreviewPanel({
             )
           }
           disabled={viewportChanging}
-          className="hidden h-7 max-w-[112px] shrink-0 rounded-md border border-border/50 bg-background/70 px-1.5 text-[10px] font-medium text-muted-foreground outline-none hover:text-foreground md:block"
+          className="hidden h-7 max-w-[112px] shrink-0 rounded-md border border-border-default bg-background/70 px-1.5 text-[10px] font-medium text-muted-foreground outline-none hover:text-foreground md:block"
           title={bp.selectDevicePreset}
         >
           {(Object.keys(DEVICE_PREVIEW_PRESETS) as DevicePreviewPreset[]).map(
@@ -1402,7 +1402,7 @@ export function BrowserPreviewPanel({
             "hidden size-7 place-items-center rounded-md border border-transparent transition-colors lg:grid",
             autoRefresh
               ? "border-primary/20 bg-primary/15 text-primary"
-              : "text-muted-foreground hover:border-border/60 hover:bg-muted/65 hover:text-foreground",
+              : "text-muted-foreground hover:border-border-default hover:bg-muted/65 hover:text-foreground",
           )}
           title={
             autoRefresh ? t.browser.stopAutoRefresh : t.browser.startAutoRefresh
@@ -1435,7 +1435,7 @@ export function BrowserPreviewPanel({
         <button
           type="button"
           onClick={openInFullBrowser}
-          className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-primary/15 bg-primary/10 px-2 text-[10px] font-medium text-primary shadow-sm transition-colors hover:bg-primary/15"
+          className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-primary/15 bg-primary/10 px-2 text-[10px] font-medium text-primary shadow-[var(--shadow-xs)] transition-colors hover:bg-primary/15"
           title={bp.continueInFullBrowser}
         >
           <ExternalLinkIcon className="size-3" />
@@ -1470,7 +1470,7 @@ export function BrowserPreviewPanel({
       )}
 
       {semanticOpen && semanticSnapshot && (
-        <div className="shrink-0 border-b border-border/45 bg-background/90 px-2 py-2">
+        <div className="shrink-0 border-b border-border-subtle bg-background/90 px-2 py-2">
           <div className="mb-1 flex items-center gap-2">
             <FileTextIcon className="size-3.5 text-primary" />
             <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
@@ -1506,7 +1506,7 @@ export function BrowserPreviewPanel({
               className={cn(
                 "relative overflow-hidden bg-background ring-1 ring-black/5 shadow-[0_18px_48px_rgba(15,23,42,0.18)]",
                 devicePreview === "desktop"
-                  ? "w-full rounded-lg border border-border/55"
+                  ? "w-full rounded-lg border border-border-default"
                   : "border-[5px] border-foreground/80",
                 deviceFrameKind === "tablet" &&
                   "max-h-full rounded-[24px] shadow-[0_22px_64px_rgba(15,23,42,0.24)]",
@@ -1530,7 +1530,7 @@ export function BrowserPreviewPanel({
             >
               {!electronLiveSurface && !liveFrameLoaded && (
                 <div className="absolute inset-0 z-10 grid place-items-center bg-background/70">
-                  <div className="flex items-center gap-2 rounded-full border bg-background/90 px-3 py-1.5 text-[11px] text-muted-foreground shadow-sm">
+                  <div className="flex items-center gap-2 rounded-full border bg-background/90 px-3 py-1.5 text-[11px] text-muted-foreground shadow-[var(--shadow-xs)]">
                     <Loader2Icon className="size-3.5 animate-spin text-primary" />
                     {bp.loadingLivePage}
                   </div>
@@ -1567,7 +1567,7 @@ export function BrowserPreviewPanel({
               className={cn(
                 "relative overflow-hidden bg-background ring-1 ring-black/5 shadow-[0_18px_48px_rgba(15,23,42,0.18)]",
                 devicePreview === "desktop"
-                  ? "w-full rounded-lg border border-border/55"
+                  ? "w-full rounded-lg border border-border-default"
                   : "border-[5px] border-foreground/80",
                 deviceFrameKind === "tablet" &&
                   "max-h-full rounded-[24px] shadow-[0_22px_64px_rgba(15,23,42,0.24)]",
@@ -1608,7 +1608,7 @@ export function BrowserPreviewPanel({
                 style={{ cursor: "crosshair" }}
               />
               {hoverPoint && screenshotSize.width > 0 && (
-                <div className="pointer-events-none absolute bottom-2 left-2 z-30 rounded-full border border-border/55 bg-background/88 px-2 py-1 font-mono text-[10px] text-muted-foreground shadow-sm backdrop-blur">
+                <div className="pointer-events-none absolute bottom-2 left-2 z-30 rounded-full border border-border-default bg-background/88 px-2 py-1 font-mono text-[10px] text-muted-foreground shadow-[var(--shadow-xs)] backdrop-blur">
                   x {hoverPoint.x} · y {hoverPoint.y}
                 </div>
               )}
@@ -1621,7 +1621,7 @@ export function BrowserPreviewPanel({
                   }}
                 >
                   <span className="absolute size-9 rounded-full border border-primary/40 bg-primary/10 animate-ping" />
-                  <span className="grid size-5 place-items-center rounded-full border border-primary/55 bg-background/90 text-[8px] font-bold text-primary shadow-sm">
+                  <span className="grid size-5 place-items-center rounded-full border border-primary/55 bg-background/90 text-[8px] font-bold text-primary shadow-[var(--shadow-xs)]">
                     {clickMarker.mode === "double" ? "2x" : "1x"}
                   </span>
                 </div>
@@ -1632,7 +1632,7 @@ export function BrowserPreviewPanel({
           <div className="flex h-full flex-col items-center justify-center p-5">
             {/* 本地服务快速入口 */}
             {detectedServices.length > 0 ? (
-              <div className="w-full max-w-sm space-y-3 rounded-2xl border border-border/55 bg-background/82 p-3 shadow-sm backdrop-blur">
+              <div className="w-full max-w-sm space-y-3 rounded-2xl border border-border-default bg-background/82 p-3 shadow-[var(--shadow-xs)] backdrop-blur">
                 <div className="flex items-center gap-2">
                   <div className="grid size-7 place-items-center rounded-lg bg-primary/10 text-primary">
                     <ServerIcon className="size-3.5" />
@@ -1643,7 +1643,7 @@ export function BrowserPreviewPanel({
                   <button
                     onClick={handleRescanPorts}
                     disabled={scanningPorts}
-                    className="ml-auto flex h-6 items-center gap-1 rounded-md border border-border/50 px-1.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+                    className="ml-auto flex h-6 items-center gap-1 rounded-md border border-border-default px-1.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
                   >
                     {scanningPorts ? (
                       <Loader2Icon className="size-3 animate-spin" />
@@ -1658,7 +1658,7 @@ export function BrowserPreviewPanel({
                     <button
                       key={svc.port}
                       onClick={() => handleQuickNavigate(svc.url)}
-                      className="group flex w-full items-center gap-3 rounded-lg border border-border/55 bg-muted/25 px-3 py-2 text-left shadow-sm transition-colors hover:border-primary/25 hover:bg-primary/5"
+                      className="group flex w-full items-center gap-3 rounded-lg border border-border-default bg-muted/25 px-3 py-2 text-left shadow-[var(--shadow-xs)] transition-colors hover:border-primary/25 hover:bg-primary/5"
                     >
                       <div
                         className={cn(
@@ -1701,7 +1701,7 @@ export function BrowserPreviewPanel({
                 </div>
               </div>
             ) : (
-              <div className="max-w-sm rounded-2xl border border-border/55 bg-background/82 p-5 text-center shadow-sm backdrop-blur">
+              <div className="max-w-sm rounded-2xl border border-border-default bg-background/82 p-5 text-center shadow-[var(--shadow-xs)] backdrop-blur">
                 <div className="mx-auto grid size-10 place-items-center rounded-xl bg-muted/60">
                   <ImageIcon className="size-5 text-muted-foreground/45" />
                 </div>
@@ -1711,7 +1711,7 @@ export function BrowserPreviewPanel({
                 <button
                   onClick={handleRescanPorts}
                   disabled={scanningPorts}
-                  className="mx-auto mt-3 flex h-8 items-center gap-1.5 rounded-md border border-border/55 px-3 text-[11px] text-muted-foreground shadow-sm transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+                  className="mx-auto mt-3 flex h-8 items-center gap-1.5 rounded-md border border-border-default px-3 text-[11px] text-muted-foreground shadow-[var(--shadow-xs)] transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
                 >
                   {scanningPorts ? (
                     <Loader2Icon className="size-3 animate-spin" />
@@ -1766,7 +1766,7 @@ export function BrowserPreviewPanel({
           </span>
         </button>
         {selectedAction && (
-          <div className="border-t border-border/35 bg-primary/5 px-2 py-1.5 text-[10px]">
+          <div className="border-t border-border-subtle bg-primary/5 px-2 py-1.5 text-[10px]">
             <div className="flex min-w-0 items-center gap-1.5">
               <ActionIcon action={selectedAction.entry.action} />
               <span className="shrink-0 font-semibold text-foreground/85">
@@ -1825,7 +1825,7 @@ export function BrowserPreviewPanel({
                       type="button"
                       onClick={() => focusActionEntry(entry, absoluteIndex)}
                       className={cn(
-                        "group flex w-full items-start gap-2 rounded-lg border border-border/45 bg-muted/22 px-2 py-1.5 text-left text-[10px] transition-colors hover:bg-muted/38",
+                        "group flex w-full items-start gap-2 rounded-lg border border-border-subtle bg-muted/22 px-2 py-1.5 text-left text-[10px] transition-colors hover:bg-muted/38",
                         failed && "border-destructive/25 bg-destructive/8",
                         selectedActionKey === entryKey &&
                           "border-primary/35 bg-primary/10",

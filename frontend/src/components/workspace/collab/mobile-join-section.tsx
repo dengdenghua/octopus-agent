@@ -57,7 +57,7 @@ export function MobileJoinSection() {
   };
 
   return (
-    <section className="min-w-0 rounded-lg border border-border/60 bg-muted/10 p-3">
+    <section className="min-w-0 rounded-lg border border-border-default bg-muted/10 p-3">
       <div className="flex items-center gap-2 text-sm font-semibold">
         <SmartphoneIcon className="size-4 text-primary" />
         {t.collab.mobileJoin.title}
@@ -76,7 +76,7 @@ export function MobileJoinSection() {
               {t.collab.mobileJoin.connectCodeLabel}
             </div>
             <div className="flex gap-2">
-              <code className="min-w-0 flex-1 truncate rounded-md border border-border/60 bg-background px-2 py-1.5 text-[11px]">
+              <code className="min-w-0 flex-1 truncate rounded-md border border-border-default bg-background px-2 py-1.5 text-[11px]">
                 {data.connect_string}
               </code>
               <Button

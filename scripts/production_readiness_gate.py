@@ -62,6 +62,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--behavioral-bundle-path",
+        type=Path,
+        default=None,
+        help=(
+            "Digest-verified Octopus/Codex same-task evidence bundle. "
+            "Defaults to OCTOPUS_BEHAVIORAL_EVAL_BUNDLE or the repository result path."
+        ),
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         help="Emit a machine-readable readiness report instead of text.",
@@ -77,6 +86,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     result = run_gate(
         min_score=args.min_score,
         review_queue_path=args.review_queue_path,
+        behavioral_bundle_path=args.behavioral_bundle_path,
     )
     report = result.to_dict()
     if args.json_output is not None:
@@ -116,6 +126,7 @@ class GateResult:
         e2e_verdict: str,
         e2e_summary: dict[str, Any],
         e2e_coverage: dict[str, Any],
+        e2e_behavioral: dict[str, Any],
         e2e_failed_checks: list[str],
         quality_summary: str,
     ) -> None:
@@ -127,6 +138,7 @@ class GateResult:
         self.e2e_verdict = e2e_verdict
         self.e2e_summary = e2e_summary
         self.e2e_coverage = e2e_coverage
+        self.e2e_behavioral = e2e_behavioral
         self.e2e_failed_checks = e2e_failed_checks
         self.quality_summary = quality_summary
 
@@ -139,7 +151,8 @@ class GateResult:
             f"e2e_coverage={_nested_int(self.e2e_summary, 'coverage_ready')}/"
             f"{_nested_int(self.e2e_summary, 'coverage_total')}, "
             f"e2e_quality={_nested_int(self.e2e_summary, 'quality_ready')}/"
-            f"{_nested_int(self.e2e_summary, 'quality_total')}"
+            f"{_nested_int(self.e2e_summary, 'quality_total')}, "
+            f"e2e_behavioral={'ready' if self.e2e_behavioral.get('ready') else 'missing'}"
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -148,15 +161,14 @@ class GateResult:
             "ready": not self.failures,
             "failures": list(self.failures),
             "scorecard_score": self.scorecard_score,
-            "scorecard_evidence_adjusted_score": (
-                self.scorecard_evidence_adjusted_score
-            ),
+            "scorecard_evidence_adjusted_score": (self.scorecard_evidence_adjusted_score),
             "automation_score": self.automation_score,
             "e2e": {
                 "ready": self.e2e_ready,
                 "verdict": self.e2e_verdict,
                 "summary": dict(self.e2e_summary),
                 "coverage": dict(self.e2e_coverage),
+                "behavioral": dict(self.e2e_behavioral),
                 "failed_checks": list(self.e2e_failed_checks),
             },
             "quality_summary": self.quality_summary,
@@ -167,6 +179,7 @@ def run_gate(
     *,
     min_score: int = MIN_SCORE,
     review_queue_path: str | Path | None = None,
+    behavioral_bundle_path: str | Path | None = None,
 ) -> GateResult:
     failures: list[str] = []
 
@@ -178,6 +191,7 @@ def run_gate(
     e2e_certification = compute_e2e_surpass_certification(
         target_score=min_score,
         review_queue_path=review_queue_path,
+        behavioral_bundle_path=behavioral_bundle_path,
     )
     quality_reports = [
         compute_repo_context_quality(),
@@ -197,6 +211,7 @@ def run_gate(
     automation_score = _nested_int(automation, "overall", "octopus")
     e2e_summary = dict(e2e_certification.get("summary") or {})
     e2e_coverage = dict(e2e_certification.get("coverage") or {})
+    e2e_behavioral = dict(e2e_certification.get("behavioral") or {})
     e2e_failed_checks = _failed_check_ids(e2e_certification.get("checks"))
     quality_ready = sum(1 for report in quality_reports if bool(report.get("ready")))
     quality_total = len(quality_reports)
@@ -254,6 +269,11 @@ def run_gate(
         "e2e surpass certification",
         e2e_certification,
     )
+    _require_ready(
+        failures,
+        "behavioral surpass evidence",
+        e2e_behavioral,
+    )
     _require_no_failed_checks(
         failures,
         "e2e surpass certification checks",
@@ -292,6 +312,19 @@ def run_gate(
                 scorecard_surpass_summary.get("gap_dimensions") or 0,
             ),
             "automation_gap_dimensions": len(automation.get("octopus_gaps") or []),
+            "behavioral_ready": bool(e2e_behavioral.get("ready")),
+            "behavioral_octopus_pass_pow_k": _nested_float(
+                e2e_behavioral,
+                "systems",
+                "octopus",
+                "aggregate_pass_pow_k",
+            ),
+            "behavioral_codex_pass_pow_k": _nested_float(
+                e2e_behavioral,
+                "systems",
+                "codex",
+                "aggregate_pass_pow_k",
+            ),
         },
     )
 
@@ -318,6 +351,7 @@ def run_gate(
         e2e_verdict=str(e2e_certification.get("verdict") or "unknown"),
         e2e_summary=e2e_summary,
         e2e_coverage=e2e_coverage,
+        e2e_behavioral=e2e_behavioral,
         e2e_failed_checks=e2e_failed_checks,
         quality_summary=quality_summary,
     )
@@ -378,10 +412,7 @@ def _require_no_evidence_gaps(
     if not isinstance(rows, Sequence) or isinstance(rows, str):
         return
     blocking = [
-        row
-        for row in rows
-        if isinstance(row, Mapping)
-        and (row.get("evidence_ready") is not True)
+        row for row in rows if isinstance(row, Mapping) and (row.get("evidence_ready") is not True)
     ]
     if blocking:
         failures.append(f"{label}: {_row_ids(blocking)}")
@@ -395,12 +426,7 @@ def _require_no_failed_checks(
     if not isinstance(rows, Sequence) or isinstance(rows, str):
         failures.append(f"{label} are unavailable")
         return
-    failed = [
-        row
-        for row in rows
-        if isinstance(row, Mapping)
-        and row.get("passed") is not True
-    ]
+    failed = [row for row in rows if isinstance(row, Mapping) and row.get("passed") is not True]
     if failed:
         failures.append(f"{label}: {_row_ids(failed)}")
 
@@ -415,8 +441,7 @@ def _require_e2e_summary_consistency(
         if actual_value == expected_value:
             continue
         failures.append(
-            "e2e summary mismatch: "
-            f"{key}={actual_value!r}, expected {expected_value!r}",
+            f"e2e summary mismatch: {key}={actual_value!r}, expected {expected_value!r}",
         )
 
 
@@ -465,6 +490,15 @@ def _nested_int(report: Mapping[str, Any], *keys: str) -> int:
             return 0
         value = value.get(key)
     return int(value or 0)
+
+
+def _nested_float(report: Mapping[str, Any], *keys: str) -> float:
+    value: Any = report
+    for key in keys:
+        if not isinstance(value, Mapping):
+            return 0.0
+        value = value.get(key)
+    return float(value or 0.0)
 
 
 def _best_external_score(scorecard: Mapping[str, Any]) -> int:

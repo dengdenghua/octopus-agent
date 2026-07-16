@@ -197,7 +197,7 @@ export function CronSettingsPage() {
 
         <div className="space-y-2">
           {loading && jobs.length === 0 ? (
-            <div className="flex items-center justify-center rounded-lg border border-border/60 bg-card/40 py-8 text-sm text-muted-foreground">
+            <div className="flex items-center justify-center rounded-lg border border-border-default bg-card/40 py-8 text-sm text-muted-foreground">
               <Loader2Icon className="mr-2 size-4 animate-spin" />
               {t.cronSettings.title}
             </div>

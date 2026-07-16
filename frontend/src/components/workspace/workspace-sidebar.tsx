@@ -1701,7 +1701,7 @@ export function WorkspaceSurfaceSwitch({
             className={cn(
               "relative z-10 flex h-7 items-center justify-center",
               "text-[11px] font-medium",
-              "transition-colors duration-200",
+              "transition-colors",
               isActive
                 ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground",
@@ -1741,7 +1741,7 @@ function SurfaceCreateButton() {
       title={t.sidebar.actionNewTask}
       aria-label={t.sidebar.actionNewTask}
       onClick={() => eventBus.emit("task:new")}
-      className="flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-md border border-border/55 bg-background/60 px-3 text-[11px] font-medium text-muted-foreground transition-[background-color,border-color,color] hover:border-border hover:bg-background hover:text-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:translate-x-[3px] group-data-[collapsible=icon]:px-0"
+      className="flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-md border border-border-default bg-background/60 px-3 text-[11px] font-medium text-muted-foreground transition-[background-color,border-color,color] hover:border-border hover:bg-background hover:text-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:translate-x-[3px] group-data-[collapsible=icon]:px-0"
     >
       <PlusIcon className="size-4" />
       <span className="group-data-[collapsible=icon]:sr-only">
@@ -1917,7 +1917,7 @@ function ThreadRunStatusLight({
       )}
       <span
         className={cn(
-          "relative inline-flex size-2 rounded-full shadow-sm",
+          "relative inline-flex size-2 rounded-full shadow-[var(--shadow-xs)]",
           colorClass,
         )}
       />
@@ -2108,7 +2108,7 @@ function ProjectGroup({
                 setProjectToDelete(project);
               }}
               className={cn(
-                "absolute right-1 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity duration-150 group-hover/project:opacity-100 hover:bg-destructive/10 hover:text-destructive",
+                "absolute right-1 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity group-hover/project:opacity-100 hover:bg-destructive/10 hover:text-destructive",
                 deleting && "opacity-100 cursor-wait hover:bg-transparent",
               )}
             >
@@ -2183,7 +2183,7 @@ function ProjectGroup({
                     }}
                     className={cn(
                       "absolute right-0.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md border border-transparent bg-background/70 text-muted-foreground/75 shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-[opacity,background-color,border-color,color] duration-150",
-                      "hover:border-border/65 hover:bg-background hover:text-foreground",
+                      "hover:border-border-default hover:bg-background hover:text-foreground",
                       active
                         ? "opacity-100"
                         : "opacity-0 group-hover/thread:opacity-100 focus-visible:opacity-100",
@@ -2201,7 +2201,7 @@ function ProjectGroup({
                       e.stopPropagation();
                       setThreadToDelete(thread);
                     }}
-                    className="absolute right-8 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity duration-150 hover:bg-destructive/10 hover:text-destructive group-hover/thread:opacity-100 focus-visible:opacity-100"
+                    className="absolute right-8 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover/thread:opacity-100 focus-visible:opacity-100"
                   >
                     <Trash2Icon className="size-3" />
                   </button>
@@ -2679,7 +2679,7 @@ function ChatsSection({
                         e.stopPropagation();
                         setThreadToDelete(t);
                       }}
-                      className="absolute right-0.5 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity duration-150 group-hover/thread:opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100"
+                      className="absolute right-0.5 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity group-hover/thread:opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100"
                     >
                       <Trash2Icon className="size-3" />
                     </button>
@@ -2727,7 +2727,7 @@ export function CollapseToggle({ compact = false }: { compact?: boolean }) {
           }
           aria-expanded={open}
           className={cn(
-            "flex shrink-0 items-center justify-center justify-self-center border border-transparent bg-transparent text-muted-foreground shadow-none transition-[background-color,border-color,color] hover:border-border/55 hover:bg-muted/55 hover:text-foreground",
+            "flex shrink-0 items-center justify-center justify-self-center border border-transparent bg-transparent text-muted-foreground shadow-none transition-[background-color,border-color,color] hover:border-border-default hover:bg-muted/55 hover:text-foreground",
             compact
               ? "size-8 rounded-[var(--appearance-radius-control)]"
               : "size-10 rounded-[var(--appearance-radius-lg)]",
@@ -2745,7 +2745,7 @@ export function CollapseToggle({ compact = false }: { compact?: boolean }) {
 
 function EmptyHint({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-1 rounded-md border border-dashed border-border/50 px-2.5 py-1.5 text-[11px] leading-tight text-muted-foreground/75">
+    <div className="mt-1 rounded-md border border-dashed border-border-default px-2.5 py-1.5 text-[11px] leading-tight text-muted-foreground/75">
       {children}
     </div>
   );

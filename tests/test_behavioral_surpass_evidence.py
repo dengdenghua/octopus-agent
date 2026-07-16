@@ -36,10 +36,22 @@ def _write_valid_bundle(root: Path, now: datetime) -> Path:
                     )
                     content = json.dumps(
                         {
-                            "system": system_id,
-                            "case": case_id,
-                            "trial": trial_index,
-                            "outcome": "passed",
+                            "schema": "octopus.behavioral_trajectory.v1",
+                            "system_id": system_id,
+                            "system_version": f"{system_id}-test",
+                            "case_id": case_id,
+                            "trial_index": trial_index,
+                            "prompt_sha256": _digest(f"prompt:{case_id}"),
+                            "trajectory": {
+                                "trial_id": f"{system_id}-{case_id}-{trial_index}",
+                                "case_id": case_id,
+                                "steps": [{"kind": "text_delta", "payload": {"delta": "ok"}}],
+                            },
+                            "verdict": {
+                                "passed": True,
+                                "score": 1.0,
+                                "reason": "passed",
+                            },
                         },
                         sort_keys=True,
                     )
@@ -56,6 +68,7 @@ def _write_valid_bundle(root: Path, now: datetime) -> Path:
                         "isolated_state": True,
                         "execution_mode": sorted(ALLOWED_EXECUTION_MODES[domain])[0],
                         "rubric_digest": _digest(f"rubric:{case_id}"),
+                        "prompt_digest": _digest(f"prompt:{case_id}"),
                         "artifacts": artifacts,
                     }
                 )
@@ -133,6 +146,25 @@ def test_different_rubric_is_not_a_head_to_head_comparison(tmp_path: Path) -> No
     assert next(row for row in report["checks"] if row["id"] == "same_cases")["passed"] is False
 
 
+def test_different_prompt_is_not_a_head_to_head_comparison(tmp_path: Path) -> None:
+    now = datetime(2026, 7, 17, tzinfo=UTC)
+    path = _write_valid_bundle(tmp_path, now)
+    bundle = _load(path)
+    systems = bundle["systems"]
+    assert isinstance(systems, dict)
+    codex = systems["codex"]
+    assert isinstance(codex, dict)
+    cases = codex["cases"]
+    assert isinstance(cases, list)
+    cases[0]["prompt_digest"] = _digest("different-prompt")
+    _write(path, bundle)
+
+    report = compute_behavioral_surpass_evidence(root=tmp_path, now=now)
+
+    assert report["ready"] is False
+    assert next(row for row in report["checks"] if row["id"] == "same_cases")["passed"] is False
+
+
 def test_tampered_trajectory_artifact_fails_digest_gate(tmp_path: Path) -> None:
     now = datetime(2026, 7, 17, tzinfo=UTC)
     path = _write_valid_bundle(tmp_path, now)
@@ -154,3 +186,26 @@ def test_tampered_trajectory_artifact_fails_digest_gate(tmp_path: Path) -> None:
         is False
     )
     assert any("digest mismatch" in error for error in report["errors"])
+
+
+def test_reused_trajectory_does_not_count_as_repeated_trials(tmp_path: Path) -> None:
+    now = datetime(2026, 7, 17, tzinfo=UTC)
+    path = _write_valid_bundle(tmp_path, now)
+    bundle = _load(path)
+    systems = bundle["systems"]
+    assert isinstance(systems, dict)
+    octopus = systems["octopus"]
+    assert isinstance(octopus, dict)
+    cases = octopus["cases"]
+    assert isinstance(cases, list)
+    cases[0]["artifacts"][1] = dict(cases[0]["artifacts"][0])
+    _write(path, bundle)
+
+    report = compute_behavioral_surpass_evidence(root=tmp_path, now=now)
+
+    assert report["ready"] is False
+    assert (
+        next(row for row in report["checks"] if row["id"] == "artifacts_verified")["passed"]
+        is False
+    )
+    assert any("reuses trajectory artifact paths" in error for error in report["errors"])

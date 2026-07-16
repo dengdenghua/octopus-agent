@@ -75,7 +75,7 @@ export function WorkstationSeat({
     : "group/seat inline-flex min-w-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors";
   const tone = selected
     ? "border-foreground/25 bg-muted/45 text-foreground"
-    : "border-transparent bg-transparent text-foreground hover:border-border/45 hover:bg-muted/35";
+    : "border-transparent bg-transparent text-foreground hover:border-border-subtle hover:bg-muted/35";
   const statusText = dotLabel ? `${name} · ${dotLabel}` : name;
   const accessibleLabel = ariaLabel ?? statusText;
 

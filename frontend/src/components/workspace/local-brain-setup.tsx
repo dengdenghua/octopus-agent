@@ -79,7 +79,7 @@ export default function LocalBrainSetup() {
   const ready = status?.ready ?? false;
 
   return (
-    <div className="mb-2 overflow-hidden rounded-lg border border-border/55 bg-card">
+    <div className="mb-2 overflow-hidden rounded-lg border border-border-default bg-card">
       {/* Collapsed by default: a single quiet row, never shoves the page. */}
       <div className="flex items-center gap-2 px-3 py-1.5">
         <BrainIcon className="size-4 shrink-0 text-muted-foreground" />
@@ -143,7 +143,7 @@ export default function LocalBrainSetup() {
       </div>
 
       {expanded && (
-        <div className="space-y-1.5 border-t border-border/40 px-3 py-2">
+        <div className="space-y-1.5 border-t border-border-subtle px-3 py-2">
           {error && (
             <p className="text-[11px] text-red-600">
               检测失败:{error}(后端没起?)

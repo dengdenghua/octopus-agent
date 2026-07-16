@@ -113,7 +113,7 @@ const ChatBox: React.FC<{
           aria-hidden={!drawerOpen}
           className={cn(
             "absolute right-0 top-0 bottom-0 z-20 flex flex-col overflow-hidden",
-            "border-l border-border/60 bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)]",
+            "border-l border-border-default bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)]",
             "backdrop-blur-[10px]",
             "shadow-[-12px_0_32px_-16px_rgba(0,0,0,0.12)]",
             "transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",

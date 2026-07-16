@@ -267,9 +267,9 @@ function SubtaskHoverPreview({
       className="pointer-events-auto absolute left-8 top-full z-40 hidden w-[min(42rem,calc(100vw-5rem))] pt-2 group-focus-within/subtask-row:block group-hover/subtask-row:block"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="rounded-xl border border-border/60 bg-background/95 p-4 text-left shadow-2xl shadow-black/15 backdrop-blur-xl">
+      <div className="rounded-xl border border-border-default bg-background/95 p-4 text-left shadow-2xl shadow-black/15 backdrop-blur-xl">
         <div className="flex items-start gap-3">
-          <span className="flex size-14 shrink-0 items-center justify-center rounded-full border border-border/55 bg-muted/35 text-2xl">
+          <span className="flex size-14 shrink-0 items-center justify-center rounded-full border border-border-default bg-muted/35 text-2xl">
             {task.avatarEmoji ?? "🤖"}
           </span>
           <div className="min-w-0 flex-1">
@@ -346,7 +346,7 @@ function SubtaskHoverPreview({
           <button
             type="button"
             onClick={handleViewComputer}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-transparent px-3 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/50"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-default bg-transparent px-3 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/50"
           >
             <MonitorIcon className="size-3" />
             {t.message.viewComputer}
@@ -385,7 +385,7 @@ function AgentIdentityCard({
   const brief = task.prompt ?? "";
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border/55 bg-background shadow-sm">
+    <div className="overflow-hidden rounded-lg border border-border-default bg-background shadow-[var(--shadow-xs)]">
       {/* 黑色标题条 — 复用 HUD 风格 */}
       <div className="flex items-center gap-2 rounded-md bg-foreground px-3 py-1.5 text-sm font-semibold text-background">
         <span className="truncate flex-1">{displayName}</span>
@@ -403,7 +403,7 @@ function AgentIdentityCard({
       <div className="flex items-center gap-3 px-3 py-3">
         {/* 大头像 */}
         <span
-          className="flex size-12 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/25 text-2xl"
+          className="flex size-12 shrink-0 items-center justify-center rounded-lg border border-border-default bg-muted/25 text-2xl"
           style={
             task.hue != null
               ? { background: `hsl(${task.hue} 70% 92%)` }
@@ -423,7 +423,7 @@ function AgentIdentityCard({
       </div>
       {/* 角色说明 */}
       {brief && (
-        <div className="border-t border-border/40 px-3 py-2">
+        <div className="border-t border-border-subtle px-3 py-2">
           <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60">
             {t.agentWorkbenchPages.roleDescription}
           </div>
@@ -433,7 +433,7 @@ function AgentIdentityCard({
         </div>
       )}
       {/* 底部标识 */}
-      <div className="flex items-center gap-2 border-t border-border/40 px-3 py-1.5">
+      <div className="flex items-center gap-2 border-t border-border-subtle px-3 py-1.5">
         <span className="text-sm font-bold tracking-tight text-foreground/50">
           OCTOPUS
         </span>
@@ -568,7 +568,7 @@ export function ParallelSubtasksGrid({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-border/60 py-1.5 text-[11px] text-muted-foreground transition-colors hover:border-border hover:bg-muted/35 hover:text-foreground"
+          className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-border-default py-1.5 text-[11px] text-muted-foreground transition-colors hover:border-border hover:bg-muted/35 hover:text-foreground"
         >
           {expanded ? (
             <>

@@ -103,7 +103,7 @@ export default function EvolutionSettingsPage() {
       </div>
 
       {/* Scheduler */}
-      <div className="rounded-lg border border-border/60 bg-card/30 p-4">
+      <div className="rounded-lg border border-border-default bg-card/30 p-4">
         <div className="flex items-center gap-2 text-sm font-medium">
           <ActivityIcon className="h-4 w-4" />
           {e.schedulerStatus}
@@ -173,7 +173,7 @@ export default function EvolutionSettingsPage() {
                 rules.rules.map((r) => (
                   <div
                     key={r.rule_id}
-                    className="rounded-lg border border-border/60 bg-card/30 p-3"
+                    className="rounded-lg border border-border-default bg-card/30 p-3"
                   >
                     <div className="flex items-center gap-2">
                       <Badge
@@ -225,7 +225,7 @@ export default function EvolutionSettingsPage() {
           <div className="mt-2 overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-border/60 text-left text-muted-foreground">
+                <tr className="border-b border-border-default text-left text-muted-foreground">
                   <th className="px-2 py-1">{e.colRecipe}</th>
                   <th className="px-2 py-1">{e.colUses}</th>
                   <th className="px-2 py-1">{e.colSuccessRate}</th>
@@ -236,7 +236,7 @@ export default function EvolutionSettingsPage() {
               </thead>
               <tbody>
                 {recipes.scores.map((s) => (
-                  <tr key={s.recipe_id} className="border-b border-border/30">
+                  <tr key={s.recipe_id} className="border-b border-border-subtle">
                     <td className="px-2 py-1.5 font-mono">{s.recipe_id}</td>
                     <td className="px-2 py-1.5">{s.uses}</td>
                     <td className="px-2 py-1.5">
@@ -284,7 +284,7 @@ export default function EvolutionSettingsPage() {
               {gepa.results.slice(0, 8).map((r, i) => (
                 <div
                   key={`${r.recipe_id}-${i}`}
-                  className="rounded-md border border-border/40 bg-card/20 p-2 text-xs"
+                  className="rounded-md border border-border-subtle bg-card/20 p-2 text-xs"
                 >
                   <div className="font-mono">{r.recipe_id}</div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
@@ -400,7 +400,7 @@ export default function EvolutionSettingsPage() {
                   return (
                     <div
                       key={v.name}
-                      className="flex items-center gap-2 rounded-md border border-border/40 bg-card/20 px-2 py-1.5 text-xs"
+                      className="flex items-center gap-2 rounded-md border border-border-subtle bg-card/20 px-2 py-1.5 text-xs"
                     >
                       <span className="font-mono">{v.name}</span>
                       <Badge variant="outline" className="gap-1 text-[10px]">

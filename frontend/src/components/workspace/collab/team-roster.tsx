@@ -111,7 +111,7 @@ export function TeamRoster({
           {t.collab.roster.collaboratorsGroup}
         </div>
         {humans.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border/70 bg-muted/15 px-4 py-6 text-center text-xs text-muted-foreground">
+          <div className="rounded-lg border border-dashed border-border-default bg-muted/15 px-4 py-6 text-center text-xs text-muted-foreground">
             {t.collab.roster.emptyHint}
           </div>
         ) : (

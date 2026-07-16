@@ -16,17 +16,18 @@ def review_queue_path(tmp_path: Path) -> Path:
     return tmp_path / "data" / "review_queue.json"
 
 
-def test_production_readiness_gate_passes_current_release_signals(
+def test_production_readiness_gate_requires_behavioral_release_evidence(
     review_queue_path: Path,
 ) -> None:
     result = gate.run_gate(review_queue_path=review_queue_path)
 
-    assert result.failures == []
+    assert result.failures
+    assert any("e2e surpass certification is not ready" in item for item in result.failures)
     assert result.scorecard_score == 97
     assert result.scorecard_evidence_adjusted_score >= gate.MIN_SCORE
     assert result.automation_score >= gate.MIN_SCORE
-    assert result.e2e_ready is True
-    assert result.e2e_verdict == "surpassed"
+    assert result.e2e_ready is False
+    assert result.e2e_verdict == "needs_behavioral_evidence"
     assert result.e2e_summary["scorecard_octopus"] == 97
     assert result.e2e_summary["scorecard_best_external"] == 87
     assert result.e2e_summary["automation_octopus"] == 96
@@ -36,15 +37,86 @@ def test_production_readiness_gate_passes_current_release_signals(
     assert result.e2e_summary["quality_ready"] == result.e2e_summary["quality_total"]
     assert result.e2e_coverage["summary"]["ready_domains"] == 7
     assert result.e2e_coverage["summary"]["gap_domain_ids"] == []
-    assert result.e2e_failed_checks == []
+    assert "behavioral:bundle_present" in result.e2e_failed_checks
+    assert result.e2e_behavioral["verdict"] == "missing_behavioral_evidence"
     assert result.e2e_summary_text == (
         "e2e_scorecard=97, e2e_best_external=87, "
-        "e2e_automation=96, e2e_coverage=7/7, e2e_quality=6/6"
+        "e2e_automation=96, e2e_coverage=7/7, e2e_quality=6/6, "
+        "e2e_behavioral=missing"
     )
     assert "octopus.repo_context_quality.v1" in result.quality_summary
     assert "octopus.product_experience_quality.v1" in result.quality_summary
     assert "octopus.agent_loop_quality.v1" in result.quality_summary
     assert "octopus.digital_employee_quality.v1" in result.quality_summary
+
+
+def test_production_readiness_gate_passes_verified_behavioral_evidence(
+    monkeypatch,
+    review_queue_path: Path,
+) -> None:
+    real_e2e = gate.compute_e2e_surpass_certification
+
+    def verified_e2e(**kwargs):
+        report = real_e2e(**kwargs)
+        behavior = {
+            **report["behavioral"],
+            "ready": True,
+            "verdict": "surpassed",
+            "systems": {
+                "octopus": {"aggregate_pass_pow_k": 1.0},
+                "codex": {"aggregate_pass_pow_k": 0.96},
+            },
+            "checks": [],
+            "next_actions": [],
+        }
+        report["behavioral"] = behavior
+        report["summary"] = {
+            **report["summary"],
+            "behavioral_ready": True,
+            "behavioral_octopus_pass_pow_k": 1.0,
+            "behavioral_codex_pass_pow_k": 0.96,
+        }
+        report["checks"] = [
+            {**row, "passed": True} if str(row.get("id") or "").startswith("behavioral:") else row
+            for row in report["checks"]
+        ]
+        report["ready"] = True
+        report["verdict"] = "surpassed"
+        report["next_actions"] = []
+        return report
+
+    monkeypatch.setattr(gate, "compute_e2e_surpass_certification", verified_e2e)
+
+    result = gate.run_gate(review_queue_path=review_queue_path)
+
+    assert result.failures == []
+    assert result.e2e_ready is True
+    assert result.e2e_verdict == "surpassed"
+    assert result.e2e_behavioral["ready"] is True
+    assert result.e2e_summary_text.endswith("e2e_behavioral=ready")
+
+
+def test_production_readiness_gate_forwards_behavioral_bundle_path(
+    monkeypatch,
+    review_queue_path: Path,
+    tmp_path: Path,
+) -> None:
+    bundle_path = tmp_path / "behavioral.json"
+    captured: dict[str, object] = {}
+    real_e2e = gate.compute_e2e_surpass_certification
+
+    def capture_path(**kwargs):
+        captured.update(kwargs)
+        return real_e2e(**kwargs)
+
+    monkeypatch.setattr(gate, "compute_e2e_surpass_certification", capture_path)
+
+    gate.run_gate(
+        review_queue_path=review_queue_path,
+        behavioral_bundle_path=bundle_path,
+    )
+
+    assert captured["behavioral_bundle_path"] == bundle_path
 
 
 def test_production_readiness_gate_prints_e2e_summary(
@@ -55,13 +127,9 @@ def test_production_readiness_gate_prints_e2e_summary(
 
     captured = capsys.readouterr()
 
-    assert code == 0
-    assert "e2e=surpassed" in captured.out
-    assert "e2e_scorecard=97" in captured.out
-    assert "e2e_best_external=87" in captured.out
-    assert "e2e_automation=96" in captured.out
-    assert "e2e_coverage=7/7" in captured.out
-    assert "e2e_quality=6/6" in captured.out
+    assert code == 1
+    assert "production readiness gate failed" in captured.err
+    assert "behavioral:bundle_present" in captured.err
 
 
 def test_production_readiness_gate_can_emit_json_summary(
@@ -79,18 +147,19 @@ def test_production_readiness_gate_can_emit_json_summary(
     captured = capsys.readouterr()
     data = json.loads(captured.out)
 
-    assert code == 0
+    assert code == 1
     assert data["schema"] == "octopus.production_readiness_gate.v1"
-    assert data["ready"] is True
-    assert data["failures"] == []
+    assert data["ready"] is False
+    assert data["failures"]
     assert data["scorecard_score"] == 97
     assert data["automation_score"] == 96
-    assert data["e2e"]["ready"] is True
-    assert data["e2e"]["verdict"] == "surpassed"
+    assert data["e2e"]["ready"] is False
+    assert data["e2e"]["verdict"] == "needs_behavioral_evidence"
     assert data["e2e"]["summary"]["scorecard_best_external"] == 87
     assert data["e2e"]["summary"]["coverage_ready"] == 7
     assert data["e2e"]["coverage"]["summary"]["gap_domain_ids"] == []
-    assert data["e2e"]["failed_checks"] == []
+    assert "behavioral:bundle_present" in data["e2e"]["failed_checks"]
+    assert data["e2e"]["behavioral"]["verdict"] == "missing_behavioral_evidence"
 
 
 def test_production_readiness_gate_can_write_json_output(
@@ -112,11 +181,11 @@ def test_production_readiness_gate_can_write_json_output(
     captured = capsys.readouterr()
     data = json.loads(output_path.read_text(encoding="utf-8"))
 
-    assert code == 0
+    assert code == 1
     assert output_path.exists()
-    assert "production readiness gate passed" in captured.out
+    assert "production readiness gate failed" in captured.err
     assert data["schema"] == "octopus.production_readiness_gate.v1"
-    assert data["ready"] is True
+    assert data["ready"] is False
     assert data["e2e"]["summary"]["coverage_ready"] == 7
     assert data["e2e"]["coverage"]["summary"]["total_domains"] == 7
 

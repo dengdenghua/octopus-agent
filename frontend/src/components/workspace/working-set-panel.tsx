@@ -164,7 +164,7 @@ function ThinkingPlanMini({ plan }: { plan: ThinkingPlanSnapshot }) {
     ];
 
   return (
-    <div className="border-b border-border/50 px-3 py-2">
+    <div className="border-b border-border-default px-3 py-2">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
           <BrainIcon className="size-3.5 shrink-0 text-primary" />
@@ -247,7 +247,7 @@ export function WorkingSetPanel({
 
   return (
     <div className={cn("flex h-full flex-col", className)}>
-      <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
+      <div className="flex items-center justify-between border-b border-border-default px-3 py-2">
         <div className="flex items-center gap-2">
           <FolderOpenIcon className="size-4 text-primary" />
           <span className="text-sm font-medium">{t.workingSet?.title}</span>
@@ -265,7 +265,7 @@ export function WorkingSetPanel({
       </div>
 
       {progressSummary && (
-        <div className="border-b border-border/50 px-3 py-1.5">
+        <div className="border-b border-border-default px-3 py-1.5">
           <p className="text-[11px] text-muted-foreground/70 line-clamp-2">
             {progressSummary}
           </p>
@@ -319,7 +319,7 @@ export function WorkingSetPanel({
       </div>
 
       {files.length > 0 && (
-        <div className="border-t border-border/50 px-3 py-1.5">
+        <div className="border-t border-border-default px-3 py-1.5">
           <div className="flex items-center justify-between text-[10px] text-muted-foreground/50">
             <span>
               {editingFiles.length} {t.workingSet?.editing} ·{" "}

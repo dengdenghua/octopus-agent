@@ -262,7 +262,7 @@ function Bar({ pct, tone }: { pct: number; tone: "ok" | "warn" | "bad" }) {
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border/60 px-6 py-10 text-center">
+    <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border-default px-6 py-10 text-center">
       <CircleDashedIcon className="size-5 text-muted-foreground" />
       <p className="text-sm text-muted-foreground">{text}</p>
     </div>
@@ -428,7 +428,7 @@ function BudgetSection() {
                 <button
                   type="button"
                   onClick={() => resetBreaker(c.name)}
-                  className="rounded-lg border border-border/60 px-2 py-1 text-[10px] hover:bg-muted"
+                  className="rounded-lg border border-border-default px-2 py-1 text-[10px] hover:bg-muted"
                 >
                   {t.evolutionControl.budget.resetButton}
                 </button>
@@ -608,7 +608,7 @@ function ModelProposalsSection() {
           type="button"
           disabled={running}
           onClick={runBenchmarks}
-          className="rounded-lg border border-border/60 px-2 py-1 text-[10px] hover:bg-muted disabled:opacity-50"
+          className="rounded-lg border border-border-default px-2 py-1 text-[10px] hover:bg-muted disabled:opacity-50"
         >
           {running
             ? t.evolutionControl.models.runningBenchmarks
@@ -722,7 +722,7 @@ function McpProposalsSection() {
         <button
           type="button"
           onClick={vetAll}
-          className="rounded-lg border border-border/60 px-2 py-1 text-[10px] hover:bg-muted"
+          className="rounded-lg border border-border-default px-2 py-1 text-[10px] hover:bg-muted"
         >
           {t.evolutionControl.mcp.vetAll}
         </button>
@@ -849,7 +849,7 @@ function CurriculumSection() {
         <button
           type="button"
           onClick={runCycle}
-          className="rounded-lg border border-border/60 px-2 py-1 text-[10px] hover:bg-muted"
+          className="rounded-lg border border-border-default px-2 py-1 text-[10px] hover:bg-muted"
         >
           {t.evolutionControl.curriculum.runCycle}
         </button>
@@ -877,14 +877,14 @@ function CurriculumSection() {
               <button
                 type="button"
                 onClick={() => decide(g.id, "in_progress")}
-                className="rounded-lg border border-border/60 px-2 py-0.5 text-[10px] hover:bg-muted"
+                className="rounded-lg border border-border-default px-2 py-0.5 text-[10px] hover:bg-muted"
               >
                 {t.evolutionControl.curriculum.start}
               </button>
               <button
                 type="button"
                 onClick={() => decide(g.id, "dismissed")}
-                className="rounded-lg border border-border/60 px-2 py-0.5 text-[10px] hover:bg-muted"
+                className="rounded-lg border border-border-default px-2 py-0.5 text-[10px] hover:bg-muted"
               >
                 {t.evolutionControl.curriculum.dismiss}
               </button>
@@ -1076,7 +1076,7 @@ function ProtocolDriftSection() {
             type="button"
             onClick={scan}
             disabled={busy}
-            className="rounded-lg border border-border/60 px-2 py-1 text-[10px] hover:bg-muted disabled:opacity-50"
+            className="rounded-lg border border-border-default px-2 py-1 text-[10px] hover:bg-muted disabled:opacity-50"
           >
             {t.evolutionControl.drift.scanButton}
           </button>
@@ -1084,7 +1084,7 @@ function ProtocolDriftSection() {
             type="button"
             onClick={sweep}
             disabled={busy}
-            className="rounded-lg border border-border/60 px-2 py-1 text-[10px] hover:bg-muted disabled:opacity-50"
+            className="rounded-lg border border-border-default px-2 py-1 text-[10px] hover:bg-muted disabled:opacity-50"
           >
             {t.evolutionControl.drift.sweepButton}
           </button>
@@ -1118,7 +1118,7 @@ function ProtocolDriftSection() {
             <button
               type="button"
               onClick={() => acknowledge(ev.id)}
-              className="rounded-lg border border-border/60 px-2 py-1 text-[10px] hover:bg-muted"
+              className="rounded-lg border border-border-default px-2 py-1 text-[10px] hover:bg-muted"
             >
               {t.evolutionControl.drift.acknowledgeButton}
             </button>
@@ -1145,14 +1145,14 @@ function ProtocolDriftSection() {
               {r.rationale}
             </div>
             {r.repair_tasks?.length ? (
-              <div className="mt-1 rounded-md border border-border/60 bg-muted/40 px-2 py-1.5">
+              <div className="mt-1 rounded-md border border-border-default bg-muted/40 px-2 py-1.5">
                 {r.repair_tasks.slice(0, 2).map((task) => (
                   <div key={task.id} className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2 text-[10px]">
                       <span className="font-medium text-foreground">
                         {task.title}
                       </span>
-                      <span className="rounded border border-border/60 px-1.5 py-0.5 font-mono text-muted-foreground">
+                      <span className="rounded border border-border-default px-1.5 py-0.5 font-mono text-muted-foreground">
                         {task.priority}
                       </span>
                       <span className="text-muted-foreground">
@@ -1361,7 +1361,7 @@ export function EvolutionControlPanel() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 border-b border-border/60 pb-2 text-xs">
+      <div className="flex items-center gap-2 border-b border-border-default pb-2 text-xs">
         <div className="flex items-center gap-1.5 font-semibold uppercase tracking-wider text-muted-foreground">
           <CheckCircle2Icon className="size-3.5" />
           {t.evolutionControl.panelTitle}

@@ -337,12 +337,12 @@ function OfficialPricingSection() {
               className={cn(
                 "relative flex flex-col rounded-xl border p-5 transition-all",
                 isRecommended
-                  ? "border-violet-300/60 bg-gradient-to-b from-violet-50/50 to-white shadow-md dark:from-violet-950/20 dark:to-transparent dark:border-violet-700/40"
-                  : "bg-card border-border/60 hover:border-border hover:shadow-sm",
+                  ? "border-violet-300/60 bg-gradient-to-b from-violet-50/50 to-white shadow-[var(--shadow-sm)] dark:from-violet-950/20 dark:to-transparent dark:border-violet-700/40"
+                  : "bg-card border-border-default hover:border-border hover:shadow-[var(--shadow-xs)]",
               )}
             >
               {isRecommended && (
-                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-violet-500 to-violet-600 px-2.5 py-0.5 text-[10px] font-medium text-white shadow-sm">
+                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-violet-500 to-violet-600 px-2.5 py-0.5 text-[10px] font-medium text-white shadow-[var(--shadow-xs)]">
                   🔥 {t.payOrder.recommended}
                 </span>
               )}

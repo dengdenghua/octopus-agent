@@ -225,8 +225,8 @@ function ProviderCard({
       className={cn(
         "flex flex-col items-start gap-1 rounded-lg border px-3 py-2.5 text-left text-xs transition-all duration-200",
         selected
-          ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30 shadow-sm shadow-primary/5"
-          : "border-border/60 hover:border-primary/40 hover:bg-accent/40",
+          ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30 shadow-[var(--shadow-xs)] shadow-primary/5"
+          : "border-border-default hover:border-primary/40 hover:bg-accent/40",
         !provider.configured && "cursor-not-allowed opacity-50",
       )}
     >
@@ -271,7 +271,7 @@ function ConfigPreview({
         {t.deploy.generatedConfigs}
       </p>
       {configs.map((cfg, i) => (
-        <div key={cfg.filename} className="rounded-lg border border-border/60">
+        <div key={cfg.filename} className="rounded-lg border border-border-default">
           <button
             onClick={() => setExpanded(expanded === i ? null : i)}
             className="flex w-full items-center gap-2 px-2 py-1.5 text-xs transition-colors hover:bg-accent/40"
@@ -314,7 +314,7 @@ function DeployLogViewer({ logs }: { logs: string[] }) {
   if (logs.length === 0) return null;
 
   return (
-    <div className="bg-muted/20 max-h-40 overflow-auto rounded-lg border border-border/60 p-2 font-mono text-[10px] leading-relaxed">
+    <div className="bg-muted/20 max-h-40 overflow-auto rounded-lg border border-border-default p-2 font-mono text-[10px] leading-relaxed">
       {logs.map((line, i) => (
         <div key={i} className="text-muted-foreground whitespace-pre-wrap">
           {line}
@@ -345,7 +345,7 @@ function HistoryItem({ record }: { record: DeployRecord }) {
     : "";
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-border/60 px-2 py-1.5 text-xs transition-colors hover:bg-accent/30">
+    <div className="flex items-center gap-2 rounded-lg border border-border-default px-2 py-1.5 text-xs transition-colors hover:bg-accent/30">
       <ProvIcon className={cn("size-3.5 shrink-0", provMeta.color)} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">
@@ -525,12 +525,12 @@ export function DeployPanel({
   return (
     <div
       className={cn(
-        "bg-popover flex max-h-[32rem] w-[26rem] flex-col overflow-hidden rounded-lg border border-border/60 shadow-2xl shadow-black/5 animate-in slide-in-from-bottom-2 fade-in duration-200",
+        "bg-popover flex max-h-[32rem] w-[26rem] flex-col overflow-hidden rounded-lg border border-border-default shadow-2xl shadow-black/5 animate-in slide-in-from-bottom-2 fade-in duration-200",
         className,
       )}
     >
       {/* Header */}
-      <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5">
+      <div className="flex items-center gap-2 border-b border-border-default px-4 py-2.5">
         <div className="flex size-6 items-center justify-center rounded-lg bg-primary/10">
           <RocketIcon className="text-primary size-3.5" />
         </div>
@@ -541,7 +541,7 @@ export function DeployPanel({
           <button
             onClick={() => setView("detect")}
             className={cn(
-              "rounded-lg px-2 py-0.5 text-[11px] transition-colors duration-200",
+              "rounded-lg px-2 py-0.5 text-[11px] transition-colors",
               view === "detect"
                 ? "bg-primary/10 text-primary"
                 : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -552,7 +552,7 @@ export function DeployPanel({
           <button
             onClick={() => setView("deploy")}
             className={cn(
-              "rounded-lg px-2 py-0.5 text-[11px] transition-colors duration-200",
+              "rounded-lg px-2 py-0.5 text-[11px] transition-colors",
               view === "deploy"
                 ? "bg-primary/10 text-primary"
                 : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -567,7 +567,7 @@ export function DeployPanel({
               loadHistory();
             }}
             className={cn(
-              "rounded-lg px-2 py-0.5 text-[11px] transition-colors duration-200",
+              "rounded-lg px-2 py-0.5 text-[11px] transition-colors",
               view === "history"
                 ? "bg-primary/10 text-primary"
                 : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -683,7 +683,7 @@ export function DeployPanel({
                   disabled={loading || !selectedProvider}
                   className={cn(
                     "flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200",
-                    "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm shadow-primary/10",
+                    "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[var(--shadow-xs)] shadow-primary/10",
                     "disabled:cursor-not-allowed disabled:opacity-50",
                   )}
                 >
@@ -707,7 +707,7 @@ export function DeployPanel({
                 </p>
                 <button
                   onClick={handleDetect}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-4 py-2 text-xs font-medium shadow-sm shadow-primary/10 transition-colors"
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-4 py-2 text-xs font-medium shadow-[var(--shadow-xs)] shadow-primary/10 transition-colors"
                 >
                   <RefreshCwIcon className="mr-1.5 inline size-3" />
                   {t.deploy.detectProject}
@@ -733,7 +733,7 @@ export function DeployPanel({
                     STATE_DISPLAY[currentDeploy.state] ?? fallbackState;
                   const StateIcon = stateInfo.icon;
                   return (
-                    <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-card p-3">
+                    <div className="flex items-center gap-3 rounded-lg border border-border-default bg-card p-3">
                       <StateIcon
                         className={cn(
                           "size-5",
@@ -897,10 +897,10 @@ export function DeployButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium shadow-sm transition-all duration-200",
+        "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium shadow-[var(--shadow-xs)] transition-all duration-200",
         isActive
           ? "bg-primary text-primary-foreground border-primary/60 shadow-primary/10"
-          : "bg-background/80 text-muted-foreground hover:bg-muted/50 hover:text-foreground border-border/60",
+          : "bg-background/80 text-muted-foreground hover:bg-muted/50 hover:text-foreground border-border-default",
         className,
       )}
     >

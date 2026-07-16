@@ -25,6 +25,7 @@ Usage::
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import uuid
@@ -40,9 +41,16 @@ from typing import Any, Protocol
 class TrajectoryStep:
     """One observable event in a trial. Mirrors the ReAct event shape."""
 
-    kind: str              # "text_delta" / "tool_start" / "tool_end" / ...
+    kind: str  # "text_delta" / "tool_start" / "tool_end" / ...
     payload: dict[str, Any] = field(default_factory=dict)
     ts: float = field(default_factory=time.time)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "payload": self.payload,
+            "ts": self.ts,
+        }
 
 
 @dataclass
@@ -74,15 +82,22 @@ class Trajectory:
 
     def tool_names(self) -> list[str]:
         """Every ``tool_start`` name in order. Useful for "did agent call X?" graders."""
-        return [
-            str(s.payload.get("tool_name", ""))
-            for s in self.steps
-            if s.kind == "tool_start"
-        ]
+        return [str(s.payload.get("tool_name", "")) for s in self.steps if s.kind == "tool_start"]
 
     def runtime_ms(self) -> float:
         end = self.ended_at or time.time()
         return (end - self.started_at) * 1000.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "trial_id": self.trial_id,
+            "case_id": self.case_id,
+            "started_at": self.started_at,
+            "ended_at": self.ended_at,
+            "runtime_ms": self.runtime_ms(),
+            "error": self.error,
+            "steps": [step.to_dict() for step in self.steps],
+        }
 
 
 # ── Grader ───────────────────────────────────────────────────
@@ -91,7 +106,7 @@ class Trajectory:
 @dataclass(frozen=True)
 class Verdict:
     passed: bool
-    score: float = 0.0       # 0..1 partial-credit score
+    score: float = 0.0  # 0..1 partial-credit score
     reason: str = ""
     rubric: dict[str, Any] = field(default_factory=dict)
 
@@ -191,9 +206,7 @@ class SuiteReport:
             "",
         ]
         for c in self.cases:
-            mark = "✓" if c.pass_pow_k == 1.0 else (
-                "~" if c.pass_at_k == 1.0 else "✗"
-            )
+            mark = "✓" if c.pass_pow_k == 1.0 else ("~" if c.pass_at_k == 1.0 else "✗")
             lines.append(
                 f"  {mark} {c.case_id:30s} "
                 f"{c.passes}/{c.k} · score={c.avg_score:.2f} · "
@@ -217,9 +230,15 @@ class SuiteReport:
                     "avg_score": c.avg_score,
                     "avg_runtime_ms": c.avg_runtime_ms,
                     "verdicts": [
-                        {"passed": v.passed, "score": v.score, "reason": v.reason}
+                        {
+                            "passed": v.passed,
+                            "score": v.score,
+                            "reason": v.reason,
+                            "rubric": v.rubric,
+                        }
                         for v in c.verdicts
                     ],
+                    "trajectories": [trajectory.to_dict() for trajectory in c.trajectories],
                 }
                 for c in self.cases
             ],
@@ -230,6 +249,147 @@ class SuiteReport:
             json.dumps(self.to_dict(), indent=2),
             encoding="utf-8",
         )
+
+
+def write_behavioral_system_evidence(
+    report: SuiteReport,
+    cases: Sequence[EvalCase],
+    *,
+    root: Path | str,
+    system_id: str,
+    version: str,
+    artifact_dir: Path | str = "benchmarks/results/behavioral-artifacts",
+) -> dict[str, Any]:
+    """Write digest-addressed trajectories for one side of a head-to-head run.
+
+    Each ``EvalCase.metadata`` must contain ``domain``, ``execution_mode``,
+    ``outcome_grader``, ``isolated_state``, and a 64-character
+    ``rubric_digest``. The returned object is ready to place under
+    ``systems.<system_id>`` in a behavioral surpass bundle.
+    """
+
+    base = Path(root).resolve()
+    output_dir = (base / Path(artifact_dir)).resolve()
+    try:
+        output_dir.relative_to(base)
+    except ValueError as exc:
+        raise ValueError("artifact_dir must stay inside root") from exc
+    output_dir.mkdir(parents=True, exist_ok=True)
+    case_by_id = {case.id: case for case in cases}
+    if len(case_by_id) != len(cases):
+        raise ValueError("evaluation case IDs must be unique")
+    result_rows: list[dict[str, Any]] = []
+    for result in report.cases:
+        case = case_by_id.get(result.case_id)
+        if case is None:
+            raise ValueError(f"missing EvalCase metadata for {result.case_id}")
+        metadata = case.metadata
+        rubric_digest = str(metadata.get("rubric_digest") or "").lower()
+        prompt_digest = hashlib.sha256(case.prompt.encode("utf-8")).hexdigest()
+        if len(rubric_digest) != 64 or any(
+            character not in "0123456789abcdef" for character in rubric_digest
+        ):
+            raise ValueError(f"invalid rubric_digest for {case.id}")
+        if len(result.trajectories) != result.k or len(result.verdicts) != result.k:
+            raise ValueError(f"case {case.id} does not contain exactly k trials")
+        artifacts: list[dict[str, str]] = []
+        for trial_index, (trajectory, verdict) in enumerate(
+            zip(result.trajectories, result.verdicts, strict=True)
+        ):
+            artifact = {
+                "schema": "octopus.behavioral_trajectory.v1",
+                "system_id": system_id,
+                "system_version": version,
+                "case_id": case.id,
+                "trial_index": trial_index,
+                "prompt_sha256": prompt_digest,
+                "trajectory": trajectory.to_dict(),
+                "verdict": {
+                    "passed": verdict.passed,
+                    "score": verdict.score,
+                    "reason": verdict.reason,
+                    "rubric": verdict.rubric,
+                },
+            }
+            serialized = json.dumps(
+                artifact,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            artifact_digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+            filename = (
+                f"{_safe_artifact_name(system_id)}-{_safe_artifact_name(case.id)}-"
+                f"{trial_index}-{artifact_digest[:12]}.json"
+            )
+            path = output_dir / filename
+            path.write_text(serialized, encoding="utf-8")
+            artifacts.append(
+                {
+                    "path": str(path.relative_to(base)),
+                    "sha256": artifact_digest,
+                }
+            )
+        result_rows.append(
+            {
+                "id": case.id,
+                "domain": str(metadata.get("domain") or ""),
+                "k": result.k,
+                "passes": result.passes,
+                "trajectory_count": len(result.trajectories),
+                "outcome_grader": metadata.get("outcome_grader") is True,
+                "isolated_state": metadata.get("isolated_state") is True,
+                "execution_mode": str(metadata.get("execution_mode") or ""),
+                "rubric_digest": rubric_digest,
+                "prompt_digest": prompt_digest,
+                "artifacts": artifacts,
+            }
+        )
+    return {
+        "version": version,
+        "cases": result_rows,
+    }
+
+
+def write_behavioral_bundle(
+    *,
+    path: Path | str,
+    suite_id: str,
+    runner_version: str,
+    source_revision: str,
+    generated_at: str,
+    systems: dict[str, dict[str, Any]],
+) -> None:
+    """Write an atomic-shaped head-to-head bundle without fabricating results."""
+
+    payload = {
+        "schema": "octopus.behavioral_surpass_bundle.v1",
+        "suite_id": suite_id,
+        "runner_version": runner_version,
+        "source_revision": source_revision,
+        "generated_at": generated_at,
+        "systems": systems,
+    }
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    temporary = output.with_name(f".{output.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(serialized, encoding="utf-8")
+        temporary.replace(output)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _safe_artifact_name(value: str) -> str:
+    cleaned = "".join(
+        character if character.isalnum() or character in "-_." else "-" for character in value
+    )
+    cleaned = cleaned.strip("-.") or "unnamed"
+    if len(cleaned) <= 80:
+        return cleaned
+    suffix = hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
+    return f"{cleaned[:64]}-{suffix}"
 
 
 # ── Runner core ──────────────────────────────────────────────
@@ -307,4 +467,6 @@ __all__ = [
     "Verdict",
     "run_case",
     "run_suite",
+    "write_behavioral_bundle",
+    "write_behavioral_system_evidence",
 ]

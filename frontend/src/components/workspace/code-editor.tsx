@@ -396,7 +396,7 @@ export function CodeEditor({
               <Button
                 variant="secondary"
                 size="sm"
-                className="h-7 gap-1 px-2 text-xs shadow-sm"
+                className="h-7 gap-1 px-2 text-xs shadow-[var(--shadow-xs)]"
                 onClick={() => void handleGoToDefinition()}
                 title={t.codeEditor.goToDefinitionTitle(currentSymbol)}
               >
@@ -405,7 +405,7 @@ export function CodeEditor({
               <Button
                 variant="secondary"
                 size="sm"
-                className="h-7 gap-1 px-2 text-xs shadow-sm"
+                className="h-7 gap-1 px-2 text-xs shadow-[var(--shadow-xs)]"
                 onClick={() => void handleFindReferences()}
                 title={t.codeEditor.findReferencesTitle(currentSymbol)}
               >
@@ -416,7 +416,7 @@ export function CodeEditor({
           <Button
             variant="secondary"
             size="sm"
-            className="h-7 gap-1 px-2 text-xs shadow-sm"
+            className="h-7 gap-1 px-2 text-xs shadow-[var(--shadow-xs)]"
             disabled={isDiagnosing}
             onClick={() => void handleDiagnose()}
             title={t.codeEditor.diagnose}

@@ -144,7 +144,7 @@ export function ScopeSettings({
 
   if (!codeModeEnabled) {
     return (
-      <div className="rounded-lg border border-dashed border-border/50 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+      <div className="rounded-lg border border-dashed border-border-default bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
         {t.scopeSettings.codeModeDisabled}
         {/* team workspace also allowed when team_id set — we don't
             surface that here because it's driven by the team picker
@@ -154,7 +154,7 @@ export function ScopeSettings({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border/50 bg-background/40 px-4 py-3">
+    <div className="flex flex-col gap-3 rounded-lg border border-border-default bg-background/40 px-4 py-3">
       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <FolderIcon className="size-3.5" />
         {t.scopeSettings.authorizeWorkspaces}
@@ -247,7 +247,7 @@ export function ScopeSettingsButton({
               : t.scopeSettings.codeModeDisabled
           }
           className={cn(
-            "text-muted-foreground hover:text-foreground flex size-7 items-center justify-center rounded-md transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+            "text-muted-foreground hover:text-foreground flex size-7 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
             className,
           )}
         >

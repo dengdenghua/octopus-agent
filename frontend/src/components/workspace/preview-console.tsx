@@ -70,7 +70,7 @@ export function PreviewConsole({
   return (
     <div
       className={cn(
-        "border-t border-border/50 bg-background/50 text-xs",
+        "border-t border-border-default bg-background/50 text-xs",
         className,
       )}
     >
@@ -119,7 +119,7 @@ export function PreviewConsole({
                     className={cn(
                       "rounded px-1.5 text-[10px] capitalize transition-colors",
                       filter === lvl
-                        ? "bg-background text-foreground shadow-sm"
+                        ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
@@ -144,7 +144,7 @@ export function PreviewConsole({
 
       {/* Expanded log list */}
       {expanded && hasEntries && (
-        <div className="max-h-48 overflow-y-auto border-t border-border/40">
+        <div className="max-h-48 overflow-y-auto border-t border-border-subtle">
           {visible.length === 0 ? (
             <div className="px-3 py-4 text-center text-muted-foreground text-[11px]">
               {t.codeMode.previewConsoleEmpty}

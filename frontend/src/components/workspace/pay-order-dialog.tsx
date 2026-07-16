@@ -135,7 +135,7 @@ export function PayOrderDialog({
             <p className="mt-2 text-sm text-muted-foreground text-center">
               {t.payOrder.subtitle}
             </p>
-            <div className="mt-6 flex size-[260px] items-center justify-center rounded-xl bg-white p-4 shadow-sm">
+            <div className="mt-6 flex size-[260px] items-center justify-center rounded-xl bg-white p-4 shadow-[var(--shadow-xs)]">
               {paymentLink ? (
                 <QRCodeSVG
                   value={paymentLink}

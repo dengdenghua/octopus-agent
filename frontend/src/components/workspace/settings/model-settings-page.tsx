@@ -1234,7 +1234,7 @@ function BuiltInCompatProfilesCard({
               return (
                 <div
                   key={item.id}
-                  className="rounded-lg border border-border/70 bg-background/50 px-3 py-2"
+                  className="rounded-lg border border-border-default bg-background/50 px-3 py-2"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -1906,9 +1906,9 @@ function EditModelForm({
                   <button
                     type="button"
                     className={cn(
-                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors",
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border-default text-muted-foreground transition-colors",
                       "hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive",
-                      "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border/60 disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
+                      "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border-default disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
                     )}
                     onClick={() => handleModelRemove(idx)}
                     disabled={loading || models.length <= 1}
@@ -1933,7 +1933,7 @@ function EditModelForm({
             </Button>
           </div>
 
-          <div className="rounded-lg border border-border/60 bg-muted/20">
+          <div className="rounded-lg border border-border-default bg-muted/20">
             <button
               type="button"
               onClick={() => setShowHeaders((v) => !v)}
@@ -1951,7 +1951,7 @@ function EditModelForm({
               </span>
             </button>
             {showHeaders && (
-              <div className="space-y-2 border-t border-border/60 px-3 py-3">
+              <div className="space-y-2 border-t border-border-default px-3 py-3">
                 <textarea
                   value={headersText}
                   onChange={(e) => setHeadersText(e.target.value)}
@@ -2275,9 +2275,9 @@ function AddModelForm({
               <button
                 type="button"
                 className={cn(
-                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors",
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border-default text-muted-foreground transition-colors",
                   "hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive",
-                  "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border/60 disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
+                  "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border-default disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
                 )}
                 onClick={() => handleModelRemove(idx)}
                 disabled={models.length <= 1}
@@ -2313,7 +2313,7 @@ function AddModelForm({
                   key={m}
                   type="button"
                   onClick={() => handleModelChange(0, m)}
-                  className="rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  className="rounded-md border border-border-default bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                   title={t.settings.model.fillModelId ?? "Fill this model ID"}
                 >
                   {m}
@@ -2415,7 +2415,7 @@ function AddModelForm({
       {/* Extra HTTP headers — collapsed by default to keep the form
           uncluttered for the 95% case. Needed for APIs that gate on
           User-Agent (Kimi Coding) or require custom routing headers. */}
-      <div className="rounded-lg border border-border/60 bg-muted/20">
+      <div className="rounded-lg border border-border-default bg-muted/20">
         <button
           type="button"
           onClick={() => setShowHeaders((v) => !v)}
@@ -2433,7 +2433,7 @@ function AddModelForm({
           </span>
         </button>
         {showHeaders && (
-          <div className="space-y-2 border-t border-border/60 px-3 py-3">
+          <div className="space-y-2 border-t border-border-default px-3 py-3">
             <textarea
               value={headersText}
               onChange={(e) => setHeadersText(e.target.value)}

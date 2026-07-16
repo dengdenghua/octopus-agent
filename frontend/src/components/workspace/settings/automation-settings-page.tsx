@@ -166,7 +166,7 @@ export default function AutomationSettingsPage() {
         </p>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-card/35 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-lg border border-border-default bg-card/35 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="text-sm font-medium">
             {dirty
@@ -365,7 +365,7 @@ function CapabilityCard({
   groupLabel = "group:",
 }: CapabilityCardProps) {
   return (
-    <div className="rounded-lg border border-border/60 bg-card/30 p-4">
+    <div className="rounded-lg border border-border-default bg-card/30 p-4">
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
           {icon}
@@ -373,7 +373,7 @@ function CapabilityCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <div className="font-medium">{title}</div>
-            <span className="rounded-md border border-border/60 bg-background px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+            <span className="rounded-md border border-border-default bg-background px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
               {groupLabel} {groupName}
             </span>
           </div>
@@ -501,7 +501,7 @@ function ApprovalRulesSection() {
           {error instanceof Error ? error.message : String(error)}
         </div>
       ) : rules.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+        <div className="rounded-lg border border-dashed border-border-default bg-muted/30 p-3 text-xs text-muted-foreground">
           {t.settings.automation.rules.emptyState}
         </div>
       ) : (
@@ -530,7 +530,7 @@ function ApprovalRulesSection() {
         {t.settings.automation.rules.firstMatchHint}
       </p>
 
-      <div className="rounded-lg border border-border/60 bg-card/30 p-3 space-y-2">
+      <div className="rounded-lg border border-border-default bg-card/30 p-3 space-y-2">
         <div className="text-sm font-medium">
           {t.settings.automation.rules.addTitle}
         </div>
@@ -638,7 +638,7 @@ function RuleRow({
 }: RuleRowProps) {
   const { t } = useI18n();
   return (
-    <li className="flex items-start gap-2 rounded-md border border-border/60 bg-background px-3 py-2 text-sm">
+    <li className="flex items-start gap-2 rounded-md border border-border-default bg-background px-3 py-2 text-sm">
       <span className="mt-0.5 w-6 text-right text-[11px] font-mono text-muted-foreground">
         {index}
       </span>

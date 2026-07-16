@@ -102,7 +102,7 @@ export function AnnotationThread({
   return (
     <div
       className={cn(
-        "rounded-lg border bg-card p-3 text-sm shadow-sm transition-colors",
+        "rounded-lg border bg-card p-3 text-sm shadow-[var(--shadow-xs)] transition-colors",
         annotation.resolved && "opacity-60",
         className,
       )}
@@ -393,7 +393,7 @@ export function AddAnnotationButton({
   return (
     <div
       className={cn(
-        "mt-1 flex flex-col gap-1.5 rounded-lg border bg-card p-2 shadow-sm",
+        "mt-1 flex flex-col gap-1.5 rounded-lg border bg-card p-2 shadow-[var(--shadow-xs)]",
         className,
       )}
     >

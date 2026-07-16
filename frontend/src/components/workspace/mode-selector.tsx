@@ -412,10 +412,10 @@ export function ModeSelector({
           }
         }}
         className={cn(
-          "group flex items-center gap-1.5 text-[11px] font-medium text-foreground shadow-none transition-colors duration-150",
+          "group flex items-center gap-1.5 text-[11px] font-medium text-foreground shadow-none transition-colors",
           chromeless
             ? "h-8 rounded-md px-1.5 hover:bg-muted/55 hover:text-foreground"
-            : "h-8 rounded-full border border-transparent bg-transparent px-2 hover:border-border/50 hover:bg-muted/55",
+            : "h-8 rounded-full border border-transparent bg-transparent px-2 hover:border-border-default hover:bg-muted/55",
         )}
         title={activeOption.tooltip}
       >
@@ -454,7 +454,7 @@ export function ModeSelector({
         ? createPortal(
             <div
               ref={menuRef}
-              className="fixed z-[100] overflow-hidden rounded-xl border bg-background shadow-xl ring-1 ring-border/30"
+              className="fixed z-[100] overflow-hidden rounded-xl border bg-background shadow-xl ring-1 ring-border-subtle"
               style={{
                 left: `${panelRect.left}px`,
                 width: `${panelRect.width}px`,
@@ -523,9 +523,9 @@ export function ModeSelector({
                             type="button"
                             onClick={() => onAuditIntensityChange?.(level)}
                             className={cn(
-                              "flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors duration-150",
+                              "flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
                               active
-                                ? "bg-background text-foreground shadow-sm ring-1 ring-border/40"
+                                ? "bg-background text-foreground shadow-[var(--shadow-xs)] ring-1 ring-border-subtle"
                                 : "text-muted-foreground hover:text-foreground",
                             )}
                           >

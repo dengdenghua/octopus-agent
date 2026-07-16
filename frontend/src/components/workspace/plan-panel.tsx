@@ -167,15 +167,15 @@ function PlanStepItem({
   return (
     <div
       className={cn(
-        "rounded-lg border px-3 py-2 transition-colors duration-200",
+        "rounded-lg border px-3 py-2 transition-colors",
         step.status === "completed" &&
           "border-green-200/60 bg-green-50/50 dark:border-green-900/30 dark:bg-green-950/20",
         step.status === "in_progress" &&
-          "border-primary/30 bg-primary/5 shadow-sm shadow-primary/5",
+          "border-primary/30 bg-primary/5 shadow-[var(--shadow-xs)] shadow-primary/5",
         step.status === "failed" &&
           "border-red-200/60 bg-red-50/50 dark:border-red-900/30 dark:bg-red-950/20",
         step.status === "pending" &&
-          "border-border/60 bg-muted/20 hover:bg-muted/30",
+          "border-border-default bg-muted/20 hover:bg-muted/30",
       )}
     >
       <button
@@ -268,10 +268,10 @@ export function PlanButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium shadow-sm transition-colors transition-shadow duration-200",
+        "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium shadow-[var(--shadow-xs)] transition-colors transition-shadow duration-200",
         isActive
           ? "border-primary/60 bg-primary/10 text-primary shadow-primary/10"
-          : "border-border/60 bg-background/80 text-muted-foreground hover:text-foreground hover:border-foreground/20 hover:bg-muted/50",
+          : "border-border-default bg-background/80 text-muted-foreground hover:text-foreground hover:border-foreground/20 hover:bg-muted/50",
         className,
       )}
     >
@@ -337,13 +337,13 @@ export function PlanPanel({
   return (
     <div
       className={cn(
-        "w-80 rounded-lg border border-border/60 bg-popover shadow-xl shadow-black/5",
+        "w-80 rounded-lg border border-border-default bg-popover shadow-xl shadow-black/5",
         "animate-in slide-in-from-bottom-2 fade-in duration-200",
         className,
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/50 px-4 py-2.5">
+      <div className="flex items-center justify-between border-b border-border-default px-4 py-2.5">
         <div className="flex items-center gap-2">
           <div className="flex size-6 items-center justify-center rounded-lg bg-primary/10">
             <ClipboardListIcon className="text-primary size-3.5" />

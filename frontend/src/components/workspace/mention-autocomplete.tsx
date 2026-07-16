@@ -684,7 +684,7 @@ export function MentionAutocompletePopup({
   return (
     <div
       className={cn(
-        "bg-popover text-popover-foreground absolute bottom-full left-0 z-50 mb-1 w-80 overflow-hidden rounded-lg border shadow-lg",
+        "bg-popover text-popover-foreground absolute bottom-full left-0 z-50 mb-1 w-80 overflow-hidden rounded-lg border shadow-[var(--shadow-md)]",
         className,
       )}
     >

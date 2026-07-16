@@ -863,7 +863,7 @@ export function AgentSummaryPage({
           (diffEntries.length > 0 ||
             totalReferenceItems > 0 ||
             agentTiles.length > 0) && (
-            <section className="border-b border-border/25 pb-4">
+            <section className="border-b border-border-subtle pb-4">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate text-xs font-semibold text-foreground">
@@ -925,7 +925,7 @@ export function AgentSummaryPage({
           )}
         {/* 进展 */}
         {phases.length > 0 && (
-          <section className="border-b border-border/25 py-4">
+          <section className="border-b border-border-subtle py-4">
             <button
               type="button"
               aria-expanded={expandedSections.has("progress")}
@@ -996,7 +996,7 @@ export function AgentSummaryPage({
 
         {/* 产物 */}
         {diffEntries.length > 0 && (
-          <section className="border-b border-border/25 py-4">
+          <section className="border-b border-border-subtle py-4">
             <button
               type="button"
               aria-expanded={expandedSections.has("artifacts")}
@@ -1048,7 +1048,7 @@ export function AgentSummaryPage({
                       className={cn(
                         "mb-1 mt-3 flex items-center gap-1.5",
                         artifactDiffEntries.length > 0 &&
-                          "border-t border-border/20 pt-3",
+                          "border-t border-border-subtle pt-3",
                       )}
                     >
                       <span className="text-[11px] font-medium text-foreground">
@@ -1078,7 +1078,7 @@ export function AgentSummaryPage({
 
         {/* 子智能体 */}
         {agentTiles.length > 0 && (
-          <section className="border-b border-border/25 py-4">
+          <section className="border-b border-border-subtle py-4">
             <button
               type="button"
               aria-expanded={expandedSections.has("subagents")}
@@ -1300,7 +1300,7 @@ export function AgentSummaryPage({
                 </div>
                 {/* 标签页切换 */}
                 {observedReferenceTabs.length > 0 && (
-                  <div className="mt-3 flex gap-4 overflow-x-auto border-b border-border/20 pb-2">
+                  <div className="mt-3 flex gap-4 overflow-x-auto border-b border-border-subtle pb-2">
                     {observedReferenceTabs.map((tab) => {
                       const meta = OBSERVED_REFERENCE_META[tab.id];
                       const TabIcon = meta.Icon;
@@ -1406,21 +1406,21 @@ export function AgentCreationCard({
   const waiting = agent.status === "waiting_approval";
 
   return (
-    <section className="overflow-hidden rounded-lg border border-border/55 bg-background shadow-sm">
-      <div className="flex items-center justify-center border-b border-border/45 px-3 py-2 text-sm font-medium text-muted-foreground">
+    <section className="overflow-hidden rounded-lg border border-border-default bg-background shadow-[var(--shadow-xs)]">
+      <div className="flex items-center justify-center border-b border-border-subtle px-3 py-2 text-sm font-medium text-muted-foreground">
         {t.agentWorkbenchPages.agentClusterCreateAssistant}
       </div>
       <div className="flex justify-center overflow-hidden bg-[color:color-mix(in_oklch,var(--muted)_38%,var(--background))] px-7 pb-8 pt-16">
         <div className="relative w-full max-w-sm rotate-[3deg] transition-transform duration-300 hover:rotate-0">
           <div
             aria-hidden="true"
-            className="absolute -top-20 left-1/2 z-10 h-24 w-12 -translate-x-1/2 rounded-b-lg border-x border-border/55 bg-foreground shadow-sm"
+            className="absolute -top-20 left-1/2 z-10 h-24 w-12 -translate-x-1/2 rounded-b-lg border-x border-border-default bg-foreground shadow-[var(--shadow-xs)]"
           />
           <div
             aria-hidden="true"
             className="absolute -top-3 left-1/2 z-20 h-5 w-16 -translate-x-1/2 rounded-full border-4 border-foreground bg-background"
           />
-          <div className="relative min-h-[28rem] rounded-xl border border-border/70 bg-background px-5 py-5 shadow-xl shadow-black/10">
+          <div className="relative min-h-[28rem] rounded-xl border border-border-default bg-background px-5 py-5 shadow-xl shadow-black/10">
             {showBrief ? (
               <div className="flex h-full min-h-[25rem] flex-col">
                 <div className="flex items-center gap-3">
@@ -1677,9 +1677,9 @@ export function AgentDiffPage({
         {entries.map((entry) => (
           <section
             key={entry.id}
-            className="overflow-hidden rounded-lg border border-border/55 bg-background/85 shadow-sm"
+            className="overflow-hidden rounded-lg border border-border-default bg-background/85 shadow-[var(--shadow-xs)]"
           >
-            <div className="flex items-center gap-2 border-b border-border/45 px-3 py-2">
+            <div className="flex items-center gap-2 border-b border-border-subtle px-3 py-2">
               <StatusGlyph status={entry.status} />
               <GitBranchIcon className="size-4 shrink-0 text-muted-foreground" />
               <span

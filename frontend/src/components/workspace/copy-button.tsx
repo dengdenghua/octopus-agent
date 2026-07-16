@@ -46,7 +46,7 @@ export function CopyButton({
         size="icon-sm"
         type="button"
         variant="ghost"
-        className="rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border/50 hover:bg-muted/60 hover:text-foreground"
+        className="rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border-default hover:bg-muted/60 hover:text-foreground"
         onClick={handleCopy}
         {...props}
       >

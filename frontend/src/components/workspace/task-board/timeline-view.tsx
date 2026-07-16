@@ -502,7 +502,7 @@ export function TimelineView({
         {/* Tooltip overlay */}
         {tooltip && (
           <div
-            className="pointer-events-none absolute z-50 rounded-lg border bg-popover px-3 py-2 shadow-lg"
+            className="pointer-events-none absolute z-50 rounded-lg border bg-popover px-3 py-2 shadow-[var(--shadow-md)]"
             style={{
               left: Math.min(tooltip.x + 12, layout.totalWidth - 200),
               top: tooltip.y - 60,

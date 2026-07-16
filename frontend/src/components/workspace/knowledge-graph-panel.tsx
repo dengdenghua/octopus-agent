@@ -265,7 +265,7 @@ export function KnowledgeGraphPanel() {
               ))}
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-4 py-10 text-center">
+            <div className="rounded-lg border border-dashed border-border-default bg-muted/20 px-4 py-10 text-center">
               <SearchIcon className="mx-auto mb-2 size-5 text-muted-foreground/50" />
               <div className="text-sm font-medium">
                 {t.knowledgeGraph.noMatchingEntities}

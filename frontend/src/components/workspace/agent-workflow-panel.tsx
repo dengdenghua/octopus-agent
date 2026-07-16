@@ -173,7 +173,7 @@ function StepItem({
           </div>
 
           {expanded && hasDetails && (
-            <div className="mt-2 space-y-2 rounded-md border border-border/50 bg-muted/30 p-2">
+            <div className="mt-2 space-y-2 rounded-md border border-border-default bg-muted/30 p-2">
               {step.inputText && (
                 <div className="space-y-1">
                   <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
@@ -227,7 +227,7 @@ export function AgentWorkflowPanel({
 
   return (
     <div className={cn("flex h-full flex-col", className)}>
-      <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
+      <div className="flex items-center justify-between border-b border-border-default px-3 py-2">
         <div className="flex items-center gap-2">
           <BotIcon className="size-4 text-violet-500" />
           <span className="text-sm font-medium">{t.agentWorkflow.title}</span>

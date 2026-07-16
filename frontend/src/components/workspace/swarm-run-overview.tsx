@@ -242,11 +242,11 @@ export function SwarmRunOverview({
     <section
       aria-label={t.swarmPanel.title}
       className={cn(
-        "mb-2 overflow-hidden rounded-md border border-border/60 bg-background/85 text-xs shadow-sm shadow-black/[0.03]",
+        "mb-2 overflow-hidden rounded-md border border-border-default bg-background/85 text-xs shadow-[var(--shadow-xs)] shadow-black/[0.03]",
         className,
       )}
     >
-      <div className="flex items-center gap-2 border-b border-border/45 px-3 py-2">
+      <div className="flex items-center gap-2 border-b border-border-subtle px-3 py-2">
         <BrainCircuitIcon className="size-4 shrink-0 text-sky-600 dark:text-sky-400" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -300,7 +300,7 @@ export function SwarmRunOverview({
         />
       </div>
 
-      <div className="flex min-w-0 items-center gap-2 border-b border-border/45 px-3 py-1.5 text-[11px]">
+      <div className="flex min-w-0 items-center gap-2 border-b border-border-subtle px-3 py-1.5 text-[11px]">
         <span
           className={cn(
             "size-1.5 shrink-0 rounded-sm",
@@ -316,11 +316,11 @@ export function SwarmRunOverview({
         </span>
       </div>
 
-      <div className="grid grid-cols-4 border-b border-border/45 bg-muted/15">
+      <div className="grid grid-cols-4 border-b border-border-subtle bg-muted/15">
         {overview.phases.map((phase) => (
           <div
             key={phase.id}
-            className="flex min-w-0 items-center gap-1.5 border-r border-border/35 px-2 py-1.5 last:border-r-0"
+            className="flex min-w-0 items-center gap-1.5 border-r border-border-subtle px-2 py-1.5 last:border-r-0"
           >
             <span
               className={cn(
@@ -353,7 +353,7 @@ export function SwarmRunOverview({
           <button
             key={agent.id}
             type="button"
-            className="group flex min-w-0 items-center gap-2 rounded-md border border-border/50 bg-muted/20 px-2 py-1.5 text-left transition-colors hover:border-border hover:bg-muted/35"
+            className="group flex min-w-0 items-center gap-2 rounded-md border border-border-default bg-muted/20 px-2 py-1.5 text-left transition-colors hover:border-border hover:bg-muted/35"
             onClick={() => emitAgentWorkbenchFocus({ agentId: agent.id })}
           >
             <span
@@ -389,7 +389,7 @@ export function SwarmRunOverview({
           </button>
         ))}
         {hiddenCount > 0 && (
-          <div className="flex items-center justify-center rounded-md border border-dashed border-border/60 px-2 py-1.5 text-[11px] text-muted-foreground">
+          <div className="flex items-center justify-center rounded-md border border-dashed border-border-default px-2 py-1.5 text-[11px] text-muted-foreground">
             +{hiddenCount}
           </div>
         )}
@@ -459,7 +459,7 @@ function SynthesisStrip({
   }
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/45 px-3 py-2 text-[11px]">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border-subtle px-3 py-2 text-[11px]">
       <span
         className={cn(
           "rounded-sm px-1.5 py-0.5 font-medium",

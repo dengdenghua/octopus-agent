@@ -223,7 +223,7 @@ export function ExecutionTimeline() {
           return (
             <div
               key={tid}
-              className="rounded-xl border border-border/60 bg-background/60 overflow-hidden"
+              className="rounded-xl border border-border-default bg-background/60 overflow-hidden"
             >
               <button
                 className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/30"
@@ -262,8 +262,8 @@ export function ExecutionTimeline() {
               </button>
 
               {isOpen && (
-                <div className="border-t border-border/40 px-4 py-3">
-                  <div className="relative ml-3 border-l-2 border-border/40 pl-6 space-y-4">
+                <div className="border-t border-border-subtle px-4 py-3">
+                  <div className="relative ml-3 border-l-2 border-border-subtle pl-6 space-y-4">
                     {events.map((ev, i) => {
                       const style = eventStyle(ev.event_type);
                       return (

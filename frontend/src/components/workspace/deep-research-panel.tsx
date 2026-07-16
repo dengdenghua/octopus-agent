@@ -198,7 +198,7 @@ export function DeepResearchPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
+      <div className="flex items-center justify-between border-b border-border-default px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <TelescopeIcon className="size-4 text-primary" />
           <div className="min-w-0">
@@ -268,7 +268,7 @@ export function DeepResearchPanel({
           />
         </div>
 
-        <div className="mt-3 rounded-lg border border-border/60 bg-muted/20 p-3">
+        <div className="mt-3 rounded-lg border border-border-default bg-muted/20 p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div className="text-xs font-medium">Agent Budget</div>
             <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -377,7 +377,7 @@ export function DeepResearchPanel({
                   ]
                     .filter(Boolean)
                     .join(" | ")}
-                  className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-background px-2 py-1 text-[10px] text-muted-foreground"
+                  className="inline-flex items-center gap-1 rounded-md border border-border-default bg-background px-2 py-1 text-[10px] text-muted-foreground"
                 >
                   <span>{source.label}</span>
                   <span className="text-[9px] text-muted-foreground/60">
@@ -397,7 +397,7 @@ export function DeepResearchPanel({
                   {currentJob.evidence.slice(0, 12).map((item) => (
                     <div
                       key={item.id}
-                      className="rounded-lg border border-border/60 bg-background/70 p-2"
+                      className="rounded-lg border border-border-default bg-background/70 p-2"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 text-[11px] font-medium">
@@ -470,7 +470,7 @@ export function DeepResearchPanel({
         ) : batch?.aggregated_content ? (
           <div className="mt-4 space-y-2">
             <div className="text-xs font-medium">Stage Summary</div>
-            <div className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border/60 bg-background/70 p-3 text-[11px] leading-relaxed text-muted-foreground">
+            <div className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border-default bg-background/70 p-3 text-[11px] leading-relaxed text-muted-foreground">
               {batch.aggregated_content}
             </div>
           </div>
@@ -486,15 +486,15 @@ function PrefetchLogRow({ item }: { item: ResearchPrefetchLog }) {
     item.status === "failed"
       ? "border-destructive/30 bg-destructive/10 text-destructive"
       : item.status === "skipped"
-        ? "border-border/60 bg-muted/30 text-muted-foreground"
+        ? "border-border-default bg-muted/30 text-muted-foreground"
         : "border-green-500/25 bg-green-500/10 text-green-600 dark:text-green-400";
 
   return (
-    <div className="rounded-lg border border-border/60 bg-background/70 p-2">
+    <div className="rounded-lg border border-border-default bg-background/70 p-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="shrink-0 rounded-md border border-border/60 bg-muted/30 px-1.5 py-0.5 text-[9px] uppercase text-muted-foreground">
+            <span className="shrink-0 rounded-md border border-border-default bg-muted/30 px-1.5 py-0.5 text-[9px] uppercase text-muted-foreground">
               {item.action}
             </span>
             <span className="truncate text-[11px] font-medium">{subject}</span>
@@ -684,7 +684,7 @@ function Metric({
   value: number;
 }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-background/60 px-2.5 py-2">
+    <div className="rounded-lg border border-border-default bg-background/60 px-2.5 py-2">
       <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
         {icon}
         {label}
@@ -727,7 +727,7 @@ function StepRow({
     status === "failed" || status === "timed_out" || status === "cancelled";
 
   return (
-    <div className="flex gap-2 rounded-lg border border-border/60 bg-background/60 p-2.5">
+    <div className="flex gap-2 rounded-lg border border-border-default bg-background/60 p-2.5">
       <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium">
         {isRunning ? (
           <Loader2Icon className="size-3 animate-spin" />

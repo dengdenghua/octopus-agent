@@ -1001,6 +1001,9 @@ describe("<AgentOperatorPanel />", () => {
         all_dimensions_surpassed: true,
         scorecard_gap_dimensions: 0,
         automation_gap_dimensions: 0,
+        behavioral_ready: true,
+        behavioral_octopus_pass_pow_k: 1,
+        behavioral_codex_pass_pow_k: 0.96,
       },
       checks: [
         {
@@ -1042,6 +1045,24 @@ describe("<AgentOperatorPanel />", () => {
         gap_count: 0,
       },
       quality: [],
+      behavioral: {
+        schema: "octopus.behavioral_surpass_evidence.v1",
+        ready: true,
+        verdict: "surpassed",
+        systems: {
+          octopus: {
+            aggregate_pass_pow_k: 1,
+            total_cases: 14,
+            valid_cases: 14,
+          },
+          codex: {
+            aggregate_pass_pow_k: 0.96,
+            total_cases: 14,
+            valid_cases: 14,
+          },
+        },
+        next_actions: [],
+      },
       next_actions: [],
     });
     pluginApi.fetchPluginSmokeSummary.mockResolvedValue({
@@ -1296,12 +1317,16 @@ describe("<AgentOperatorPanel />", () => {
       await screen.findByText("E2E surpass certification"),
     ).toBeInTheDocument();
     expect(await screen.findByText("quality 6/6")).toBeInTheDocument();
+    expect(await screen.findByText("behavior verified")).toBeInTheDocument();
     expect(
       await screen.findByText(
         /scorecard 97 vs best external 87 .* automation 95 vs Codex 93/,
       ),
     ).toBeInTheDocument();
     expect(await screen.findByText("all checks passed")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/pass\^k 100% vs Codex 96%/),
+    ).toBeInTheDocument();
     expect(
       await screen.findByText("Browser/Desktop replay review"),
     ).toBeInTheDocument();
@@ -1323,7 +1348,9 @@ describe("<AgentOperatorPanel />", () => {
       await screen.findByText(/1 recipe\(s\) need rerun evidence/),
     ).toBeInTheDocument();
     expect(
-      await screen.findByText("IDE and product experience gap 1 vs effective target"),
+      await screen.findByText(
+        "IDE and product experience gap 1 vs effective target",
+      ),
     ).toBeInTheDocument();
     expect((await screen.findAllByText("Evidence")).length).toBeGreaterThan(0);
     expect(await screen.findByText("OpenClaw")).toBeInTheDocument();

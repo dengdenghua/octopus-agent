@@ -315,7 +315,7 @@ function ReportCover({
   return (
     <div
       className={cn(
-        "relative isolate overflow-hidden rounded-lg border border-border/60 bg-foreground text-white shadow-sm",
+        "relative isolate overflow-hidden rounded-lg border border-border-default bg-foreground text-white shadow-[var(--shadow-xs)]",
         compact ? "h-20" : "h-36",
       )}
     >
@@ -369,7 +369,7 @@ function ReportTimelineItem({
           "group rounded-lg border p-2.5 text-left transition-colors",
           selected
             ? "border-primary/35 bg-primary/5"
-            : "border-border/70 bg-card/70 hover:border-border hover:bg-card",
+            : "border-border-default bg-card/70 hover:border-border hover:bg-card",
         )}
       >
         <div
@@ -672,7 +672,7 @@ export function IntelligencePanel() {
 
   return (
     <div data-testid="intelligence-panel" className="space-y-3.5">
-      <section className="rounded-lg border border-border/50 bg-card/40">
+      <section className="rounded-lg border border-border-default bg-card/40">
         <button
           type="button"
           onClick={() => setBuilderOpen((value) => !value)}
@@ -691,7 +691,7 @@ export function IntelligencePanel() {
         </button>
 
         {builderOpen && (
-          <div className="grid gap-2.5 border-t border-border/50 px-3 pb-3 pt-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.68fr)]">
+          <div className="grid gap-2.5 border-t border-border-default px-3 pb-3 pt-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.68fr)]">
             <div className="space-y-2">
               <Textarea
                 value={goal}
@@ -705,7 +705,7 @@ export function IntelligencePanel() {
                     key={example}
                     type="button"
                     onClick={() => setGoal(example)}
-                    className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+                    className="rounded-full border border-border-default bg-background/70 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
                   >
                     {example.slice(0, 18)}...
                   </button>
@@ -726,7 +726,7 @@ export function IntelligencePanel() {
               </Button>
             </div>
 
-            <div className="rounded-lg border border-border/60 bg-muted/20 p-2.5">
+            <div className="rounded-lg border border-border-default bg-muted/20 p-2.5">
               {draft ? (
                 <div className="space-y-1.5">
                   <Input
@@ -900,7 +900,7 @@ export function IntelligencePanel() {
                       />
                     </div>
                   </div>
-                  <div className="rounded-md border border-border/50 bg-background/50 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+                  <div className="rounded-md border border-border-default bg-background/50 px-2.5 py-1.5 text-[11px] text-muted-foreground">
                     {t.intelligencePanel.expectedRun(scheduleText(draft, t))}
                   </div>
                   <Textarea
@@ -929,7 +929,7 @@ export function IntelligencePanel() {
                   </Button>
                 </div>
               ) : (
-                <div className="flex h-full min-h-32 flex-col justify-center rounded-md border border-dashed border-border/60 px-4 py-3 text-sm text-muted-foreground">
+                <div className="flex h-full min-h-32 flex-col justify-center rounded-md border border-dashed border-border-default px-4 py-3 text-sm text-muted-foreground">
                   <div className="font-medium text-foreground">
                     {t.intelligence.draftPlaceholder}
                   </div>
@@ -980,7 +980,7 @@ export function IntelligencePanel() {
           </div>
 
           {subscriptions.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border/70 bg-card/50 p-4">
+            <div className="rounded-xl border border-dashed border-border-default bg-card/50 p-4">
               <div className="flex items-start gap-3">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <RadarIcon className="size-4" />
@@ -1004,7 +1004,7 @@ export function IntelligencePanel() {
                       key={example}
                       type="button"
                       onClick={() => handleUseExample(example)}
-                      className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-border/60 bg-background/70 px-2.5 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-foreground"
+                      className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-border-default bg-background/70 px-2.5 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-foreground"
                     >
                       <SparklesIcon className="size-3 shrink-0 text-primary/70" />
                       <span className="truncate">{example}</span>
@@ -1048,7 +1048,7 @@ export function IntelligencePanel() {
                         (selectedReport?.topic === item.topic ||
                           selectedReport?.title === title)
                         ? "border-primary/30 bg-primary/5"
-                        : "border-border/70 bg-card/60 hover:border-border hover:bg-card",
+                        : "border-border-default bg-card/60 hover:border-border hover:bg-card",
                     )}
                   >
                     <div className="flex items-start gap-2.5">
@@ -1159,8 +1159,8 @@ export function IntelligencePanel() {
           )}
         </section>
 
-        <section className="min-w-0 overflow-hidden rounded-xl border border-border/70 bg-card/60">
-          <div className="flex items-center justify-between gap-3 border-b border-border/50 px-3 py-2.5">
+        <section className="min-w-0 overflow-hidden rounded-xl border border-border-default bg-card/60">
+          <div className="flex items-center justify-between gap-3 border-b border-border-default px-3 py-2.5">
             <div>
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <NewspaperIcon className="size-4 text-primary" />
@@ -1180,7 +1180,7 @@ export function IntelligencePanel() {
           </div>
 
           {reports.length === 0 ? (
-            <div className="m-3 rounded-xl border border-dashed border-border/70 bg-background/45 p-4">
+            <div className="m-3 rounded-xl border border-dashed border-border-default bg-background/45 p-4">
               <div className="flex items-start gap-3">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
                   <NewspaperIcon className="size-4" />
@@ -1211,7 +1211,7 @@ export function IntelligencePanel() {
             </div>
           ) : (
             <div className="space-y-2.5 px-3 py-3">
-              <div className="rounded-lg border border-border/70 bg-background/55 px-3 py-2 text-xs text-muted-foreground">
+              <div className="rounded-lg border border-border-default bg-background/55 px-3 py-2 text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">
                   {t.intelligencePanel.trackingNow}
                 </span>
@@ -1237,12 +1237,12 @@ export function IntelligencePanel() {
       </div>
 
       {selectedReport && (
-        <section className="overflow-hidden rounded-[1.75rem] border border-border/70 bg-card/70">
-          <div className="border-b border-border/50 bg-background/40 px-4 py-4">
+        <section className="overflow-hidden rounded-[1.75rem] border border-border-default bg-card/70">
+          <div className="border-b border-border-default bg-background/40 px-4 py-4">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-foreground">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-border-default bg-background/70 px-2.5 py-1 text-foreground">
                     <BellRingIcon className="size-3.5 text-primary" />
                     {t.intelligencePanel.subscriptionTopic}
                   </span>
@@ -1287,7 +1287,7 @@ export function IntelligencePanel() {
           </div>
 
           <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.42fr)]">
-            <article className="min-w-0 border-b border-border/50 bg-background/70 px-4 py-5 lg:border-b-0 lg:border-r lg:border-border/50">
+            <article className="min-w-0 border-b border-border-default bg-background/70 px-4 py-5 lg:border-b-0 lg:border-r lg:border-border-default">
               <div className="prose prose-sm max-w-none prose-headings:scroll-mt-24 prose-p:leading-7 prose-li:leading-7 prose-a:text-primary">
                 {reportBody ? (
                   <MarkdownContent
@@ -1318,7 +1318,7 @@ export function IntelligencePanel() {
                         .map((finding, findingIndex) => (
                           <div
                             key={`${selectedReportKey}-finding-${findingIndex}`}
-                            className="rounded-xl border border-border/60 bg-background/80 px-3 py-2 text-sm leading-6"
+                            className="rounded-xl border border-border-default bg-background/80 px-3 py-2 text-sm leading-6"
                           >
                             {stripMd(finding)}
                           </div>
@@ -1342,7 +1342,7 @@ export function IntelligencePanel() {
                               source.id ??
                               `${selectedReportKey}-source-${sourceIndex}`
                             }
-                            className="rounded-xl border border-border/60 bg-background/80 p-3"
+                            className="rounded-xl border border-border-default bg-background/80 p-3"
                           >
                             <div className="flex items-center gap-2">
                               <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">

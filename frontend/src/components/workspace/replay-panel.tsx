@@ -108,7 +108,7 @@ export function ReplayGateCard({
           ? "border-emerald-500/25 bg-emerald-500/10"
           : blocked
             ? "border-destructive/30 bg-destructive/10"
-            : "border-border/60 bg-muted/15",
+            : "border-border-default bg-muted/15",
       )}
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">

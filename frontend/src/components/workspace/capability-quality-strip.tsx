@@ -127,7 +127,7 @@ export function CapabilityQualityStrip({
   return (
     <section
       className={cn(
-        "workspace-panel-subtle flex flex-col gap-3 rounded-xl border border-border/60 bg-background/75 px-4 py-3 md:flex-row md:items-center md:justify-between",
+        "workspace-panel-subtle flex flex-col gap-3 rounded-xl border border-border-default bg-background/75 px-4 py-3 md:flex-row md:items-center md:justify-between",
         className,
       )}
     >
@@ -226,7 +226,7 @@ function QualityPill({
         tone === "warn" &&
           "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
         tone === "muted" &&
-          "border-border/60 bg-muted/40 text-muted-foreground",
+          "border-border-default bg-muted/40 text-muted-foreground",
       )}
     >
       {icon}

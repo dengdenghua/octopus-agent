@@ -1062,7 +1062,7 @@ function InlineSummaryRow({
         "mt-1 ml-5 flex min-w-0 items-start gap-2 border-l pl-2 text-[10px] leading-4",
         tone === "result"
           ? "border-emerald-500/25 text-emerald-700/85 dark:text-emerald-400/85"
-          : "border-border/50 text-muted-foreground/85",
+          : "border-border-default text-muted-foreground/85",
       )}
     >
       <span className="shrink-0 rounded-sm bg-muted/60 px-1.5 py-0.5 font-medium text-muted-foreground">
@@ -1195,7 +1195,7 @@ function ToolEventRow({
             {researchLog.sources.slice(0, 3).map((source) => (
               <span
                 key={source}
-                className="max-w-20 truncate rounded-full border border-border/60 bg-background/80 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                className="max-w-20 truncate rounded-full border border-border-default bg-background/80 px-1.5 py-0.5 text-[10px] text-muted-foreground"
                 title={source}
               >
                 {source}
@@ -1253,7 +1253,7 @@ function ToolEventRow({
       </div>
 
       {researchLog?.detail && (
-        <div className="mt-2 ml-5 border-l border-border/60 pl-3 text-sm leading-6 text-foreground/80">
+        <div className="mt-2 ml-5 border-l border-border-default pl-3 text-sm leading-6 text-foreground/80">
           {researchLog.detail}
         </div>
       )}
@@ -1269,7 +1269,7 @@ function ToolEventRow({
       )}
 
       {codeLog?.detail && (
-        <div className="mt-1 ml-5 break-words border-l border-border/60 pl-3 text-sm leading-6 text-foreground/75">
+        <div className="mt-1 ml-5 break-words border-l border-border-default pl-3 text-sm leading-6 text-foreground/75">
           {codeLog.detail}
         </div>
       )}
@@ -1310,7 +1310,7 @@ function ToolEventRow({
       )}
 
       {open && inputDetail && (
-        <div className="mt-2 ml-5 overflow-hidden border-l border-border/55 pl-2">
+        <div className="mt-2 ml-5 overflow-hidden border-l border-border-default pl-2">
           <div className="pb-1 text-[10px] font-medium text-muted-foreground">
             {detailTitle(t, "input")}
           </div>
@@ -1358,7 +1358,7 @@ function ToolEventRow({
       )}
 
       {open && contentPreview && (
-        <div className="mt-2 ml-5 overflow-hidden border-l border-border/55 pl-2">
+        <div className="mt-2 ml-5 overflow-hidden border-l border-border-default pl-2">
           <div className="pb-1 text-[10px] font-medium text-muted-foreground">
             {detailTitle(t, "preview")}
           </div>
@@ -1383,7 +1383,7 @@ function SearchResultsInline({
   const visibleResults = expanded ? results : results.slice(0, collapsedCount);
   const hiddenCount = Math.max(0, results.length - visibleResults.length);
   return (
-    <div className="mt-2 ml-5 space-y-1 border-l border-border/60 pl-3">
+    <div className="mt-2 ml-5 space-y-1 border-l border-border-default pl-3">
       {visibleResults.map((result, index) => (
         <div
           key={`${result.url ?? result.title}-${index}`}

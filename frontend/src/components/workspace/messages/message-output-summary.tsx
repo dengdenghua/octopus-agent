@@ -542,7 +542,7 @@ export function MessageOutputSummary({
           </div>
         </div>
         {summary.changes.length > 0 && (
-          <div className="shrink-0 rounded-full bg-background/75 px-2 py-1 font-mono text-[11px] shadow-sm">
+          <div className="shrink-0 rounded-full bg-background/75 px-2 py-1 font-mono text-[11px] shadow-[var(--shadow-xs)]">
             <span className="text-emerald-600 dark:text-emerald-400">
               +{totalAdded}
             </span>
@@ -555,7 +555,7 @@ export function MessageOutputSummary({
         <button
           type="button"
           onClick={() => emitOpenAgentWorkbench({ tab: "agent" })}
-          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border/60 bg-background/70 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
+          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-background/70 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
         >
           <PlayCircleIcon className="size-3" />
           {t.message.viewProcess}
@@ -565,7 +565,7 @@ export function MessageOutputSummary({
             href={resultUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border/60 bg-background/70 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-background/70 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
             title={t.message.resultUrl}
           >
             <LinkIcon className="size-3" />
@@ -601,7 +601,7 @@ export function MessageOutputSummary({
                 type="button"
                 onClick={() => openArtifact(artifact.path)}
                 className={cn(
-                  "group flex w-full items-center gap-3 rounded-lg border border-border/70 bg-muted/25 px-3 py-2.5 text-left",
+                  "group flex w-full items-center gap-3 rounded-lg border border-border-default bg-muted/25 px-3 py-2.5 text-left",
                   "transition-colors hover:border-border hover:bg-muted/45",
                 )}
               >
@@ -640,7 +640,7 @@ export function MessageOutputSummary({
               {summary.verifications.length}
             </span>
           </div>
-          <ul className="overflow-hidden rounded-lg border border-border/70 bg-muted/25 divide-y divide-border/50">
+          <ul className="overflow-hidden rounded-lg border border-border-default bg-muted/25 divide-y divide-border-default">
             {summary.verifications.map((entry) => {
               const passed = entry.passed;
               const label = friendlyVerificationName(entry.toolName);
@@ -689,7 +689,7 @@ export function MessageOutputSummary({
         <Collapsible open={changesOpen} onOpenChange={setChangesOpen}>
           <section
             aria-label={t.message.changesSummary}
-            className="overflow-hidden rounded-lg border border-border/70 bg-muted/25"
+            className="overflow-hidden rounded-lg border border-border-default bg-muted/25"
           >
             <div className="flex flex-wrap items-start gap-2 px-3 py-2.5 sm:flex-nowrap sm:items-center">
               <ChangeSummaryIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground/45" />
@@ -725,7 +725,7 @@ export function MessageOutputSummary({
                     onClick={() => void handleRevertAll()}
                     disabled={reverting || revertableChanges.length === 0}
                     className={cn(
-                      "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border/70 bg-transparent px-2 text-[11px] font-medium text-foreground/80 transition-colors",
+                      "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-transparent px-2 text-[11px] font-medium text-foreground/80 transition-colors",
                       "hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-55",
                     )}
                   >
@@ -736,7 +736,7 @@ export function MessageOutputSummary({
                     )}
                     {t.common.revert}
                   </button>
-                  <label className="relative inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 overflow-hidden rounded-md border border-border/70 bg-transparent px-2 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-muted/60">
+                  <label className="relative inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 overflow-hidden rounded-md border border-border-default bg-transparent px-2 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-muted/60">
                     <UserCheckIcon className="size-3 text-muted-foreground/70" />
                     {t.common.review}
                     <ChevronDownIcon className="size-3 text-muted-foreground/55" />
@@ -759,7 +759,7 @@ export function MessageOutputSummary({
               )}
             </div>
             <CollapsibleContent>
-              <ul className="divide-y divide-border/50 border-t border-border/60">
+              <ul className="divide-y divide-border-default border-t border-border-default">
                 {visibleChanges.map((change) => (
                   <ChangeRow
                     key={change.path}
@@ -775,7 +775,7 @@ export function MessageOutputSummary({
               </ul>
             </CollapsibleContent>
             {summary.artifacts.length > 0 && (
-              <div className="border-t border-border/50 px-3 py-2 text-xs text-muted-foreground">
+              <div className="border-t border-border-default px-3 py-2 text-xs text-muted-foreground">
                 <DownloadIcon className="mr-1 inline size-3.5 align-[-2px]" />
                 {t.message.downloadStillInArtifactsPanel}
               </div>
@@ -925,10 +925,10 @@ function HunkDecisionRow({
   const header = `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`;
   return (
     <div
-      className="overflow-hidden rounded border border-border/40 bg-card/60 text-xs"
+      className="overflow-hidden rounded border border-border-subtle bg-card/60 text-xs"
       data-hunk-decision={decision}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-border/40 bg-muted/30 px-2 py-1">
+      <div className="flex items-center justify-between gap-2 border-b border-border-subtle bg-muted/30 px-2 py-1">
         <span className="font-mono text-[11px] text-muted-foreground">
           {header}
         </span>
@@ -938,7 +938,7 @@ function HunkDecisionRow({
               <button
                 type="button"
                 onClick={onAccept}
-                className="inline-flex h-6 items-center rounded-md border border-border/70 px-2 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/10 dark:text-emerald-400"
+                className="inline-flex h-6 items-center rounded-md border border-border-default px-2 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/10 dark:text-emerald-400"
               >
                 {t.message.accept}
               </button>
@@ -946,7 +946,7 @@ function HunkDecisionRow({
                 type="button"
                 onClick={onReject}
                 disabled={rejecting}
-                className="inline-flex h-6 items-center gap-1 rounded-md border border-border/70 px-2 text-[11px] font-medium text-red-700 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-55 dark:text-red-400"
+                className="inline-flex h-6 items-center gap-1 rounded-md border border-border-default px-2 text-[11px] font-medium text-red-700 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-55 dark:text-red-400"
               >
                 {rejecting && (
                   <Loader2Icon className="size-3 animate-spin text-muted-foreground/70" />

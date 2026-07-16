@@ -65,13 +65,13 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
   return (
     <>
       <Card
-        className="group flex cursor-pointer flex-col overflow-hidden rounded-lg border-border/55 bg-card/75 py-0 shadow-sm transition-colors duration-150 hover:border-primary/25 hover:bg-card"
+        className="group flex cursor-pointer flex-col overflow-hidden rounded-lg border-border-default bg-card/75 py-0 shadow-[var(--shadow-xs)] transition-colors hover:border-primary/25 hover:bg-card"
         onClick={() => onSelect?.(agent)}
       >
         <CardHeader className="px-3 py-3">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
-              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/60 bg-muted text-lg leading-none">
+              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border-default bg-muted text-lg leading-none">
                 {agent.avatar_url ? (
                   <AuthenticatedImage
                     src={withAgentAvatarVersion(agent.avatar_url)}
@@ -118,11 +118,11 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
           )}
         </CardHeader>
 
-        <CardFooter className="mt-auto flex items-center justify-between gap-2 border-t border-border/45 bg-muted/10 px-3 py-2">
+        <CardFooter className="mt-auto flex items-center justify-between gap-2 border-t border-border-subtle bg-muted/10 px-3 py-2">
           <Button
             size="sm"
             variant="secondary"
-            className="h-8 flex-1 rounded-lg border border-border/50 bg-background/80 text-foreground shadow-none hover:border-primary/25 hover:bg-primary/10 hover:text-primary"
+            className="h-8 flex-1 border border-border-default bg-background/80 text-foreground shadow-none hover:border-primary/25 hover:bg-primary/10 hover:text-primary"
             onClick={(event) => {
               event.stopPropagation();
               handleChat();
@@ -135,7 +135,7 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
             <Button
               size="icon"
               variant="outline"
-              className="h-8 w-8 shrink-0 rounded-lg border-border/60 bg-background/70 text-muted-foreground hover:border-primary/30 hover:bg-muted/60 hover:text-primary"
+              className="h-8 w-8 shrink-0 border-border-default bg-background/70 text-muted-foreground hover:border-primary/30 hover:bg-muted/60 hover:text-primary"
               onClick={(event) => {
                 event.stopPropagation();
                 onSelect?.(agent);
@@ -149,7 +149,7 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
               <Button
                 size="icon"
                 variant="ghost"
-                className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 w-8 shrink-0 rounded-lg"
+                className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 w-8 shrink-0"
                 onClick={(event) => {
                   event.stopPropagation();
                   setDeleteOpen(true);
