@@ -175,8 +175,8 @@ function EmailLoginForm() {
           className="text-primary underline-offset-2 hover:text-primary/80 hover:underline"
         >
           {t.auth.terms.userAgreement}
-        </Link>{" "}
-        {t.common.other}{" "}
+        </Link>
+        {" 和 "}
         <Link
           to="/privacy"
           className="text-primary underline-offset-2 hover:text-primary/80 hover:underline"

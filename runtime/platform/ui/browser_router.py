@@ -133,9 +133,10 @@ def create_browser_router(
         "command_results": {},
         "control_lease": None,
         "human_interrupt": None,
+        "push_connections": 0,
     }
     browser_relay_queue_lock = threading.Lock()
-    relay_read_only_actions = {"extract", "aria", "screenshot", "wait"}
+    relay_read_only_actions = {"extract", "aria", "state", "screenshot", "wait"}
 
     def _normalize_relay_host_patterns(value: Any) -> list[str]:
         raw_items: list[Any]
@@ -1579,6 +1580,7 @@ def create_browser_router(
                 or ("local-dev" if manifest.exists() else "")
             ),
             "pending_commands": len(browser_relay_state.get("pending_commands") or []),
+            "push_connected": int(browser_relay_state.get("push_connections") or 0) > 0,
             "last_seen": last_seen,
             "active_tab": browser_relay_state.get("active_tab"),
             "extension_path": str(extension_path),
@@ -1600,8 +1602,12 @@ def create_browser_router(
     @router.websocket("/api/browser/relay/ws")
     async def api_browser_relay_ws(websocket: WebSocket) -> None:
         await websocket.accept()
-        browser_relay_state["connected"] = True
-        browser_relay_state["last_seen"] = _now_ts()
+        with browser_relay_queue_lock:
+            browser_relay_state["push_connections"] = (
+                int(browser_relay_state.get("push_connections") or 0) + 1
+            )
+            browser_relay_state["connected"] = True
+            browser_relay_state["last_seen"] = _now_ts()
         last_keepalive = time.monotonic()
         try:
             while True:
@@ -1639,6 +1645,12 @@ def create_browser_router(
                     last_keepalive = now
         except WebSocketDisconnect:
             pass
+        finally:
+            with browser_relay_queue_lock:
+                browser_relay_state["push_connections"] = max(
+                    0,
+                    int(browser_relay_state.get("push_connections") or 0) - 1,
+                )
 
     @router.post("/api/browser/relay/control")
     def api_browser_relay_control(body: dict[str, Any]) -> dict[str, Any]:

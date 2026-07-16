@@ -16,10 +16,32 @@
             <p id="connectionText">Connecting</p>
           </div>
         </div>
-        <button id="newThreadButton" class="icon-button" type="button" title="New thread">
-          +
-        </button>
+        <div class="topbar-actions">
+          <button id="authToggleButton" class="icon-button" type="button" title="连接密钥">
+            ◇
+          </button>
+          <button id="newThreadButton" class="icon-button" type="button" title="New thread">
+            +
+          </button>
+        </div>
       </header>
+
+      <section id="authPanel" class="auth-panel" aria-label="Gateway authentication" hidden>
+        <form id="authForm">
+          <label for="authTokenInput">连接密钥</label>
+          <div class="auth-row">
+            <input
+              id="authTokenInput"
+              type="password"
+              autocomplete="off"
+              placeholder="仅在主控开启认证时填写"
+            />
+            <button class="primary" type="submit">保存</button>
+            <button id="authClearButton" class="secondary" type="button">清除</button>
+          </div>
+          <span id="authStatus">密钥仅保存在此 Chrome 配置中。</span>
+        </form>
+      </section>
 
       <section class="tab-strip" aria-label="Current tab">
         <div class="status-dot" id="relayDot"></div>

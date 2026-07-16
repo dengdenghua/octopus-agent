@@ -1780,7 +1780,8 @@
   :root
     :is(
       [data-slot="card"],
-      [data-slot="dialog-content"]
+      [data-slot="dialog-content"],
+      [data-slot="alert"]
     ) {
     border-radius: var(--appearance-radius-2xl) !important;
   }
@@ -1802,6 +1803,7 @@
       [data-slot="dropdown-menu-content"],
       [data-slot="select-content"],
       [data-slot="popover-content"],
+      [data-slot="hover-card-content"],
       [data-slot="segmented-control"]
     ) {
     border-radius: var(--appearance-radius-xl) !important;
@@ -1817,9 +1819,18 @@
       [data-slot="dropdown-menu-checkbox-item"],
       [data-slot="dropdown-menu-radio-item"],
       [data-slot="select-item"],
-      [data-slot="segmented-control-item"]
+      [data-slot="segmented-control-item"],
+      [data-slot="tabs-list"]
     ) {
     border-radius: var(--appearance-radius-control) !important;
+  }
+
+  :root [data-slot="switch"] {
+    border-radius: var(--appearance-radius-pill) !important;
+  }
+
+  :root [data-slot="switch-thumb"] {
+    border-radius: calc(var(--appearance-radius-control) - 2px) !important;
   }
 
   :root
@@ -1829,7 +1840,9 @@
       [data-slot="textarea"],
       [data-slot="select-trigger"],
       [data-slot="card"],
-      [data-slot="badge"]
+      [data-slot="badge"],
+      [data-slot="tabs-trigger"],
+      [data-slot="switch"]
     ) {
     transition-duration: var(--motion-duration-fast) !important;
     transition-timing-function: var(--motion-ease-out) !important;

@@ -6,9 +6,13 @@ import time
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from runtime.platform.ui.app import create_app
+from runtime.platform.ui.browser_router import create_browser_router
+from runtime.safety.auth import Identity, IdentityStore
 
 
 @pytest.fixture
@@ -248,6 +252,43 @@ def test_browser_relay_heartbeat_and_status(client: TestClient) -> None:
     assert data["site_policy"]["schema"] == "octopus.browser_relay_site_policy.v1"
 
 
+def test_browser_relay_websocket_respects_gateway_auth() -> None:
+    store = IdentityStore()
+    store.add(Identity(actor_id="extension"), api_key_plaintext="sk-extension")
+    app = FastAPI()
+    app.include_router(create_browser_router(identity_store=store, require_auth=True))
+    client = TestClient(app)
+
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/api/browser/relay/ws"),
+    ):
+        pass
+
+    with client.websocket_connect("/api/browser/relay/ws?token=sk-extension") as websocket:
+        websocket.send_json(
+            {
+                "type": "heartbeat",
+                "extension_version": "auth-test",
+                "active_tab": {"id": 3, "url": "https://example.test"},
+            }
+        )
+        deadline = time.time() + 1
+        while time.time() < deadline:
+            response = client.get(
+                "/api/browser/relay/status",
+                headers={"Authorization": "Bearer sk-extension"},
+            )
+            if response.json().get("active_tab", {}).get("id") == 3:
+                break
+            time.sleep(0.02)
+        else:
+            pytest.fail("authenticated websocket heartbeat was not observed")
+
+    assert response.status_code == 200
+    assert response.json()["extension_version"] == "auth-test"
+
+
 def test_browser_relay_command_includes_site_policy(client: TestClient) -> None:
     client.post(
         "/api/browser/relay/heartbeat",
@@ -314,6 +355,7 @@ def test_browser_relay_websocket_pushes_command_and_accepts_result(
             time.sleep(0.02)
         else:
             pytest.fail("websocket heartbeat was not observed")
+        assert status["push_connected"] is True
 
         holder: dict[str, object] = {}
 
@@ -354,6 +396,7 @@ def test_browser_relay_websocket_pushes_command_and_accepts_result(
     response = holder["response"]
     assert response.status_code == 200
     assert response.json()["url"] == "https://example.test/done"
+    assert client.get("/api/browser/relay/status").json()["push_connected"] is False
 
 
 def test_browser_relay_command_carries_tab_control_lease(client: TestClient) -> None:
@@ -369,7 +412,7 @@ def test_browser_relay_command_carries_tab_control_lease(client: TestClient) -> 
     def send_command() -> None:
         holder["response"] = client.post(
             "/api/browser/relay/command",
-            json={"action": "click", "selector": "#go", "timeout_seconds": 1},
+            json={"action": "state", "max_items": 10, "timeout_seconds": 1},
         )
 
     thread = threading.Thread(target=send_command)
@@ -387,6 +430,7 @@ def test_browser_relay_command_carries_tab_control_lease(client: TestClient) -> 
     assert command["lease"]["schema"] == "octopus.browser_relay_tab_lease.v1"
     assert command["lease"]["tab"]["id"] == 7
     assert command["lease"]["require_same_tab"] is True
+    assert command["lease"]["read_only"] is True
 
     status = client.get("/api/browser/relay/status").json()
     assert status["control"]["mode"] == "agent_active"

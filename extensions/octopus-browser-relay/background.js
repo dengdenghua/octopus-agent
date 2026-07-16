@@ -1,12 +1,48 @@
 const API_BASES = ["http://127.0.0.1:8000", "http://localhost:8000"];
 const EXTENSION_VERSION = chrome.runtime.getManifest().version;
-const READ_ONLY_ACTIONS = new Set(["extract", "aria", "screenshot", "wait"]);
+const AUTH_TOKEN_KEY = "octopus.gatewayToken";
+const READ_ONLY_ACTIONS = new Set(["extract", "aria", "state", "screenshot", "wait"]);
 const runningCommands = new Set();
 const recentHumanActivityByTab = new Map();
 let lastWorkingBase = API_BASES[0];
 let activeLease = null;
 let relaySocket = null;
 let relaySocketReconnectTimer = null;
+let relaySocketConnecting = false;
+let gatewayToken = "";
+let gatewayTokenLoaded = false;
+let gatewayTokenRevision = 0;
+
+async function readGatewayToken() {
+  if (gatewayTokenLoaded) return gatewayToken;
+  const revision = gatewayTokenRevision;
+  const stored = await chrome.storage.local.get(AUTH_TOKEN_KEY).catch(() => ({}));
+  // A side-panel save may finish while the initial storage read is pending.
+  // Never let that stale read overwrite the newer in-memory credential.
+  if (!gatewayTokenLoaded && revision === gatewayTokenRevision) {
+    gatewayToken = String(stored?.[AUTH_TOKEN_KEY] || "").trim();
+    gatewayTokenLoaded = true;
+  }
+  return gatewayToken;
+}
+
+async function updateGatewayToken(nextToken) {
+  gatewayTokenRevision += 1;
+  gatewayToken = String(nextToken || "").trim();
+  gatewayTokenLoaded = true;
+  if (gatewayToken) {
+    await chrome.storage.local.set({ [AUTH_TOKEN_KEY]: gatewayToken });
+  } else {
+    await chrome.storage.local.remove(AUTH_TOKEN_KEY);
+  }
+  if (relaySocket) {
+    const socket = relaySocket;
+    relaySocket = null;
+    socket.close(1000, "gateway credentials changed");
+  }
+  connectRelaySocket();
+  return { ok: true, configured: Boolean(gatewayToken) };
+}
 
 async function activeTabInfo() {
   const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
@@ -20,10 +56,15 @@ async function activeTabInfo() {
 }
 
 async function apiFetch(path, init) {
+  const token = await readGatewayToken();
+  const headers = new Headers(init?.headers || {});
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
   const bases = [lastWorkingBase, ...API_BASES.filter((base) => base !== lastWorkingBase)];
   for (const base of bases) {
     try {
-      const res = await fetch(`${base}${path}`, init);
+      const res = await fetch(`${base}${path}`, { ...init, headers });
       if (res.ok) {
         lastWorkingBase = base;
         return res;
@@ -273,128 +314,21 @@ async function runInTab(tabId, fn, args = []) {
   return result?.result;
 }
 
-function runDomAction(action, params) {
-  const selector = String(params.selector || "");
-  const text = String(params.text || "");
-  const key = String(params.key || "Enter");
-  const y = Number(params.y ?? params.deltaY ?? 700);
-  const timeout = Number(params.timeout || 10000);
-
-  function findElement(css) {
-    if (!css) throw new Error("selector is required");
-    const el = document.querySelector(css);
-    if (!el) throw new Error(`selector not found: ${css}`);
-    return el;
-  }
-
-  function pageAgentSnapshot() {
-    if (window.__octopusPageAgent?.snapshot) {
-      return window.__octopusPageAgent.snapshot();
-    }
-    return null;
-  }
-
-  async function runPageAgent(payload) {
-    if (!window.__octopusPageAgent?.run) {
-      throw new Error("page agent bridge is not available on this page");
-    }
-    return window.__octopusPageAgent.run(payload);
-  }
-
-  function visibleText() {
-    return (document.body?.innerText || document.documentElement?.innerText || "").trim();
-  }
-
-  if (action === "pageAction") {
-    return runPageAgent({
-      type: "click",
-      id: String(params.id || ""),
-      confirm: params.confirm === true,
-    });
-  }
-  if (action === "pageInput") {
-    return runPageAgent({
-      type: "input",
-      id: String(params.id || ""),
-      text,
-      clear: params.clear !== false,
-    });
-  }
-  if (action === "pageCapability") {
-    return runPageAgent({
-      type: "capability",
-      id: String(params.id || ""),
-      input: params.input && typeof params.input === "object" ? params.input : {},
-      confirm: params.confirm === true,
-    });
-  }
-  if (action === "click") {
-    findElement(selector).click();
-    return { ok: true };
-  }
-  if (action === "type") {
-    const el = findElement(selector);
-    el.focus();
-    if ("value" in el) {
-      el.value = text;
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-      el.dispatchEvent(new Event("change", { bubbles: true }));
-    } else {
-      el.textContent = text;
-      el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text }));
-    }
-    return { ok: true };
-  }
-  if (action === "hover") {
-    const el = findElement(selector);
-    el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-    el.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
-    return { ok: true };
-  }
-  if (action === "scroll") {
-    if (selector) findElement(selector).scrollIntoView({ block: "center", behavior: "instant" });
-    else window.scrollBy({ top: y, left: 0, behavior: "instant" });
-    return { ok: true };
-  }
-  if (action === "press") {
-    const target = document.activeElement || document.body;
-    target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
-    target.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }));
-    return { ok: true };
-  }
-  if (action === "wait") {
-    const started = Date.now();
-    return new Promise((resolve, reject) => {
-      const check = () => {
-        if (!selector || document.querySelector(selector)) resolve({ ok: true });
-        else if (Date.now() - started > timeout) reject(new Error(`selector not found: ${selector}`));
-        else setTimeout(check, 150);
-      };
-      check();
-    });
-  }
-  if (action === "extract" || action === "aria") {
-    const fullText = visibleText();
-    const pageAgent = pageAgentSnapshot();
-    return {
-      ok: true,
-      url: location.href,
-      title: document.title,
-      text: fullText.slice(0, 20000),
-      textLength: fullText.length,
-      truncated: fullText.length > 20000,
-      pageAgent,
-      nodes: {
-        role: "document",
-        name: document.title,
-        url: location.href,
-        text: fullText.slice(0, 5000),
-        pageAgent,
-        truncated: fullText.length > 5000,
-      },
-    };
-  }
-  throw new Error(`unsupported DOM action: ${action}`);
+async function runDomActionInTab(tabId, action, params) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["dom-actions.js"],
+  });
+  return runInTab(
+    tabId,
+    (nextAction, nextParams) => {
+      if (!globalThis.__OCTOPUS_DOM_ACTIONS__?.run) {
+        throw new Error("Octopus DOM action runtime failed to load");
+      }
+      return globalThis.__OCTOPUS_DOM_ACTIONS__.run(nextAction, nextParams);
+    },
+    [action, params],
+  );
 }
 
 async function validateCommandLease(command) {
@@ -476,6 +410,7 @@ async function executeCommand(command) {
   const action = command.action;
   const params = command.params || {};
   const control = await appendControlAction(command, tab, "running");
+  let actionResult = null;
 
   activeLease = lease;
   try {
@@ -501,17 +436,24 @@ async function executeCommand(command) {
       const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
       return finishControlAction(command, tab, control, action, { ok: true, dataUrl });
     } else {
-      const domResult = await runInTab(tabId, runDomAction, [action, params]);
-      if (domResult && action !== "extract" && action !== "aria") {
+      const domResult = await runDomActionInTab(tabId, action, params);
+      const returnsDomPayload = action === "extract" || action === "aria" || action === "state";
+      if (domResult && !returnsDomPayload) {
         await new Promise((resolve) => setTimeout(resolve, 150));
       }
-      if (domResult && (action === "extract" || action === "aria")) {
+      if (domResult && returnsDomPayload) {
         return finishControlAction(command, tab, control, action, domResult);
       }
+      actionResult = domResult;
     }
 
     const next = await chrome.tabs.get(tabId);
-    const result = { ok: true, url: next.url || "", title: next.title || "" };
+    const result = {
+      ...(actionResult && typeof actionResult === "object" ? actionResult : {}),
+      ok: true,
+      url: next.url || "",
+      title: next.title || "",
+    };
     return finishControlAction(command, next, control, action, result);
   } catch (error) {
     const detail = {
@@ -600,17 +542,33 @@ function scheduleRelaySocketReconnect() {
   }, 1000);
 }
 
-function connectRelaySocket() {
+async function connectRelaySocket() {
   if (
+    relaySocketConnecting ||
     relaySocket &&
     (relaySocket.readyState === WebSocket.OPEN ||
       relaySocket.readyState === WebSocket.CONNECTING)
   ) {
     return;
   }
-  const wsUrl = `${lastWorkingBase.replace(/^http/, "ws")}/api/browser/relay/ws`;
-  const socket = new WebSocket(wsUrl);
-  relaySocket = socket;
+  relaySocketConnecting = true;
+  let socket;
+  try {
+    const token = await readGatewayToken();
+    const query = token ? `?token=${encodeURIComponent(token)}` : "";
+    const wsUrl = `${lastWorkingBase.replace(/^http/, "ws")}/api/browser/relay/ws${query}`;
+    socket = new WebSocket(wsUrl);
+    relaySocket = socket;
+  } catch (error) {
+    console.warn(
+      "Octopus Browser Relay: failed to create push connection",
+      error instanceof Error ? error.message : String(error),
+    );
+    scheduleRelaySocketReconnect();
+    return;
+  } finally {
+    relaySocketConnecting = false;
+  }
   socket.onopen = () => {
     if (relaySocket !== socket) return;
     void relaySocketHeartbeat();
@@ -638,10 +596,12 @@ function connectRelaySocket() {
   };
 }
 
-async function postHeartbeat() {
+async function postHeartbeat(forceSocket = false) {
   // The push channel delivers commands without relying on MV3 timers. Keep
   // this HTTP path as a compatibility fallback for older local runtimes.
-  if (relaySocket?.readyState === WebSocket.OPEN) return true;
+  if (relaySocket?.readyState === WebSocket.OPEN) {
+    return forceSocket ? relaySocketHeartbeat() : true;
+  }
   const data = await apiJson("/api/browser/relay/heartbeat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -658,7 +618,7 @@ async function postHeartbeat() {
 }
 
 async function relayStatus() {
-  await postHeartbeat();
+  await postHeartbeat(true);
   const data = await apiJson("/api/browser/relay/status", { method: "GET" });
   return {
     ok: Boolean(data),
@@ -680,7 +640,7 @@ async function openPageAgent(tabId) {
     target: { tabId },
     files: ["bookmarklet.js"],
   });
-  await postHeartbeat();
+  await postHeartbeat(true);
   return true;
 }
 
@@ -716,7 +676,7 @@ chrome.action.onClicked.addListener(async (tab) => {
     if (!opened && tabId) {
       await openPageAgent(tabId);
     }
-    await postHeartbeat();
+    await postHeartbeat(true);
   } catch (error) {
     console.warn(
       "Octopus Browser Relay: failed to open Agent Sidecar",
@@ -736,10 +696,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return relayStatus();
     }
     if (type === "octopus.heartbeat") {
-      return { ok: await postHeartbeat(), base_url: lastWorkingBase };
+      return { ok: await postHeartbeat(true), base_url: lastWorkingBase };
     }
     if (type === "octopus.control") {
       return relayControl(String(message.action || ""), String(message.reason || ""));
+    }
+    if (type === "octopus.authChanged") {
+      return updateGatewayToken(message.token);
     }
     if (type === "octopus.openPageAgent") {
       const tab = await currentTab();
@@ -787,12 +750,12 @@ chrome.tabs.onActivated.addListener(() => {
       })
       .catch(() => null);
   }
-  void postHeartbeat();
+  void postHeartbeat(true);
 });
 
 chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
   if (changeInfo.status === "complete" || changeInfo.url) {
-    void postHeartbeat();
+    void postHeartbeat(true);
   }
 });
 

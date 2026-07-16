@@ -30,6 +30,9 @@ def test_sidepanel_is_extension_native_not_page_overlay() -> None:
     assert "页面轻面板" in html
     assert 'id="controlTitle"' in html
     assert 'id="stopButton"' in html
+    assert 'id="authPanel"' in html
+    assert 'id="authTokenInput"' in html
+    assert 'type="password"' in html
 
 
 def test_sidepanel_sends_chrome_turns_over_realtime() -> None:
@@ -47,6 +50,9 @@ def test_sidepanel_sends_chrome_turns_over_realtime() -> None:
     assert 'action: "decline"' in js
     assert 'type: "octopus.control"' in js
     assert "toggleControlStop" in js
+    assert 'AUTH_TOKEN_KEY = "octopus.gatewayToken"' in js
+    assert "encodeURIComponent(state.authToken)" in js
+    assert 'type: "octopus.authChanged"' in js
 
 
 def test_background_opens_sidepanel_and_keeps_bookmarklet_fallback() -> None:
@@ -58,6 +64,21 @@ def test_background_opens_sidepanel_and_keeps_bookmarklet_fallback() -> None:
     assert "openPageAgent" in js
     assert 'type === "octopus.status"' in js
     assert 'type === "octopus.openPageAgent"' in js
+    assert 'files: ["dom-actions.js"]' in js
+    assert "runDomActionInTab" in js
+
+
+def test_dom_action_runtime_covers_extension_backend_contract() -> None:
+    js = (EXTENSION / "dom-actions.js").read_text(encoding="utf-8")
+
+    assert 'action === "state"' in js
+    assert 'action === "type"' in js
+    assert 'action === "press"' in js
+    assert 'action === "wait"' in js
+    assert "setNativeValue" in js
+    assert "isContentEditable" in js
+    assert '"insertReplacementText"' in js
+    assert "selectorUnique" in js
 
 
 def test_background_enforces_tab_control_lease() -> None:
@@ -77,6 +98,11 @@ def test_background_enforces_tab_control_lease() -> None:
     assert "appendControlEvidence" in js
     assert "/takeover" in js
     assert "chrome_human_interrupt" in js
+    assert '"state"' in js
+    assert 'action === "state"' in js
+    assert 'headers.set("Authorization", `Bearer ${token}`)' in js
+    assert "encodeURIComponent(token)" in js
+    assert 'type === "octopus.authChanged"' in js
 
 
 def test_content_script_reports_trusted_user_activity() -> None:

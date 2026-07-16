@@ -310,42 +310,79 @@ Kimi 最终完成态由五件事组成：
 
 ## Octopus 优先级建议
 
+> **状态核查 2026-07-17。** 本节的勾此前严重滞后：P1/P2 里至少 7 项早已落地却没标，
+> 于是被当成待办反复讨论。下面每条 ✅ 都附了 `文件:行` 证据。
+>
+> **核查这份清单时踩过的两个坑，后来者请避开：**
+> 1. **按名字搜会漏掉换名实现。** 完成态 receipt 就活在 `message-output-summary.tsx`
+>    里，搜 `CompletionReceipt` 一无所获；`AgentComputerPanel` 实为
+>    `agent-workbench-panel.tsx`。按**能力**找，别按提案里的名字找。
+> 2. **grep 空结果 ≠ 功能不存在。** 「预览优先」一度被误判为唯一缺口，实际
+>    `page.tsx:2309` 早就实现了——只是当时那条 grep 因路径含 `[thread_id]` 方括号
+>    而静默读空。下结论前先用一个**已知存在的符号**验证命令本身能出结果。
+
 ### P0：把执行态骨架立住
 
 - ~~`secondaryPanel` 固定为 Agent Workbench，而不是临时抽屉。~~ ✅ 已实现。
-- ~~phase snapshot 贯通 header、workbench、消息流中的状态块。~~ ✅ 已实现。
+- phase snapshot 贯通 header、workbench、消息流中的状态块。**⚠️ 只做了一半**：
+  后端确实发 `turn/plan/updated` + `workbench/snapshot`（`realtime_event_bridge.py:635/645`），
+  phases 也经 todo 事件进了消息流（`use-thread-stream-realtime.ts:384`）；但
+  **右栏没吃这份快照**——`agent-workbench-panel.tsx` 里 `AgentPhaseSnapshot` 出现 0 次，
+  它用 `deriveAgentPhases(events)` 自己从事件重算，与 `WorkbenchSnapshotV2` docstring
+  “实时与回放共用同一当前帧”的初衷相悖。
+  更关键：**整条计划链的源头是模型调 `todo_write`**（`_phases_from_todo_preview`），
+  所以不调 todo_write 的 turn 根本没有计划可显示——这正是右栏空白的根因，
+  也是与 Kimi「一开跑就有 Phase 1..7」的真实差距。
 - ~~workbench 需要支持父级总电脑和子 agent 电脑两个 scope。~~ ✅ 已实现（通过 `selectedAgent`/`selectedRosterSeat` 切换；电脑视图含子 agent 选择列表、子 agent 操作轨迹、协作成员占位）。
 - 移除右侧面板"文件"tab（与左侧文件树功能重复），文件操作统一通过左侧文件树。 ✅ 已实现。
-- 只在回放/分享页考虑为 `ChatPageLayout` 新增 `bottomBar` 插槽作为持久回放控制条；常规 live chat 不引入底部执行 footer。
+- `ChatPageLayout` 的 `bottomBar` 插槽（持久回放控制条）。**未实现，且属有意不做**——
+  本条自述“只在回放/分享页*考虑*，常规 live chat 不引入底部执行 footer”。不是欠债。
 
 ### P1：让 agent 集群可理解
 
-- 在消息流中加入紧凑 `AgentClusterCard`。
-- 每个子 agent 支持 hover/click detail。
-- 支持按 agent 过滤右侧 timeline。
+- ~~在消息流中加入紧凑 `AgentClusterCard`。~~ ✅ 已实现（`messages/process-trace.tsx:232` 定义，158 使用）。
+- ~~每个子 agent 支持 hover/click detail。~~ ✅ 已实现（hover=`SubtaskHoverPreview`，click=`AgentIdentityCard`；`messages/parallel-subtasks-grid.tsx:214`）。
+- ~~支持按 agent 过滤右侧 timeline。~~ ✅ 已实现（`agent-workbench-panel.tsx:911` “Agent filter chip row”，可在主进程与各子 agent 间切换）。
 - 点击子 agent 后，右侧切换到该 agent 的独立电脑（电脑视图中的 SubagentProcessView）。 ✅ 已实现。
 
 ### P1：子 Agent 身份与角色说明
 
-- 创建子 agent 时展示 `AgentIdentityCard`。
-- 角色卡包含头像、名字、角色、使命短句、角色说明入口。
-- 角色说明可复用现有 agent profile dialog，并保留回到活动轨迹的入口。
+- ~~创建子 agent 时展示 `AgentIdentityCard`。~~ ✅ 已实现（`messages/parallel-subtasks-grid.tsx:369`）。
+- ~~角色卡包含头像、名字、角色、使命短句、角色说明入口。~~ ✅ 五项俱全（大头像 `:405`、
+  `displayName :377`、`roleName :378`、`motto :381`、`brief`(=task.prompt) `:385`）。
+- 角色说明可复用现有 agent profile dialog，并保留回到活动轨迹的入口。**未按此机制做**：
+  改为卡内内联 brief 段，未复用 profile dialog。意图（角色说明可读）已满足，
+  除非要统一入口，否则不必再动。
 
 ### P1：完成态 receipt
 
-- 标准完成卡：结果 URL、变更表、验证表、文件入口、复用按钮。
-- 支持“查看回放”和“做同款/复用流程”。
+- ~~标准完成卡：结果 URL、变更表、验证表、文件入口、复用按钮。~~ ✅ 已实现，
+  **组件名是 `messages/message-output-summary.tsx`**（`artifacts` 文件入口、`changes` 变更表、
+  `verifications` 验证表、`diffCounts`、`extractResultUrl :342` 且 `:563` 渲染成链接、
+  `makeSimilar`/`retryTask` 复用按钮）。
+- 支持“查看回放”和“做同款/复用流程”。**只做了一半**：`makeSimilar`（做同款）已在
+  `message-output-summary.tsx:588`；但**完成卡内没有“查看回放”入口**，回放目前只
+  挂在分享菜单里。
 
 ### P2：回放体验
 
-- 将 live tool events 存成 replay frames。
-- 回放时底栏显示进度、结果入口、复用入口。
-- 点击左侧任一 tool/agent block，右侧跳到对应机器证据。
+- ~~将 live tool events 存成 replay frames。~~ ✅ 已实现，但形态不同：
+  `replay-from-blocks.ts` 的 `buildReplayFromBlocks` + `core/sharing/replay-html.ts` 的
+  `buildReplayHtml`，产出**自包含 HTML 导出**，从统一分享菜单触发（`page.tsx:85/86/2008`），
+  而非站内回放播放器。
+- 回放时底栏显示进度、结果入口、复用入口。**未实现**（与上面的 `bottomBar` 同一条，有意不做）。
+- ~~点击左侧任一 tool/agent block，右侧跳到对应机器证据。~~ ✅ 已实现
+  （`emitAgentWorkbenchFocus`：`live-tool-timeline.tsx:1474`、`parallel-subtasks-grid.tsx:93/252`、
+  `swarm-run-overview.tsx:357`）。
 
 ### P2：预览优先
 
-- 网站/前端任务中，右侧默认最终落到 Preview tab。
-- 当 agent 发现视觉问题时，左侧显示问题判断，右侧保持问题现场。
+- ~~网站/前端任务中，右侧默认最终落到 Preview tab。~~ ✅ 已实现
+  （`page.tsx:2309-2336` 的 effect：跑完且有 `previewBlocks || resultPreviewUrl` 时
+  `setAgentWorkbenchTab("browser")`，并由 `agentWorkbenchTabTouched` 守门——用户手动
+  选过 tab 就不抢视图，移动端也不自动展开）。手动入口是 `openPreviewPanel`（`:2646`）。
+- 当 agent 发现视觉问题时，左侧显示问题判断，右侧保持问题现场。**未核查**——这是个
+  跨左右栏的联动行为，不是单个符号，没法靠 grep 定论；要判断得实跑一个视觉修复任务。
 
 ## 可以转成组件任务的清单
 

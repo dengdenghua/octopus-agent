@@ -1,6 +1,7 @@
 const API_BASES = ["http://127.0.0.1:8000", "http://localhost:8000"];
 const FRONTEND_BASES = ["http://localhost:3000", "http://127.0.0.1:3000"];
 const THREAD_KEY = "octopus.chrome.sidecar.threadId";
+const AUTH_TOKEN_KEY = "octopus.gatewayToken";
 
 const state = {
   apiBase: API_BASES[0],
@@ -13,6 +14,7 @@ const state = {
   activeTab: null,
   control: null,
   assistantItems: new Map(),
+  authToken: "",
 };
 
 const el = {
@@ -29,17 +31,45 @@ const el = {
   promptInput: document.getElementById("promptInput"),
   sendButton: document.getElementById("sendButton"),
   newThreadButton: document.getElementById("newThreadButton"),
+  authToggleButton: document.getElementById("authToggleButton"),
+  authPanel: document.getElementById("authPanel"),
+  authForm: document.getElementById("authForm"),
+  authTokenInput: document.getElementById("authTokenInput"),
+  authClearButton: document.getElementById("authClearButton"),
+  authStatus: document.getElementById("authStatus"),
   pageAgentButton: document.getElementById("pageAgentButton"),
   openAppButton: document.getElementById("openAppButton"),
 };
 
 localStorage.setItem(THREAD_KEY, state.threadId);
 wireUi();
-void refreshRelayStatus();
-connectRealtime();
-setInterval(() => void refreshRelayStatus(), 1500);
+void initialize();
+
+async function initialize() {
+  const stored = await chrome.storage.local.get(AUTH_TOKEN_KEY).catch(() => ({}));
+  state.authToken = String(stored?.[AUTH_TOKEN_KEY] || "").trim();
+  el.authTokenInput.value = state.authToken;
+  el.authStatus.textContent = state.authToken
+    ? "已配置连接密钥。"
+    : "密钥仅保存在此 Chrome 配置中。";
+  await refreshRelayStatus();
+  connectRealtime();
+  window.setInterval(() => void refreshRelayStatus(), 1500);
+}
 
 function wireUi() {
+  el.authToggleButton.addEventListener("click", () => {
+    el.authPanel.hidden = !el.authPanel.hidden;
+    if (!el.authPanel.hidden) el.authTokenInput.focus();
+  });
+  el.authForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void saveGatewayToken(el.authTokenInput.value);
+  });
+  el.authClearButton.addEventListener("click", () => {
+    el.authTokenInput.value = "";
+    void saveGatewayToken("");
+  });
   el.composer.addEventListener("submit", (event) => {
     event.preventDefault();
     void sendPrompt();
@@ -72,6 +102,20 @@ function wireUi() {
   el.stopButton.addEventListener("click", () => {
     void toggleControlStop();
   });
+}
+
+async function saveGatewayToken(value) {
+  const token = String(value || "").trim();
+  const result = await runtimeMessage({ type: "octopus.authChanged", token });
+  if (!result?.ok) {
+    el.authStatus.textContent = `连接密钥保存失败: ${result?.error || "unknown error"}`;
+    return;
+  }
+  state.authToken = token;
+  el.authTokenInput.value = token;
+  el.authStatus.textContent = token ? "连接密钥已保存并重新连接。" : "连接密钥已清除。";
+  reconnectRealtime();
+  await refreshRelayStatus();
 }
 
 function makeThreadId() {
@@ -176,20 +220,29 @@ function connectRealtime() {
   ) {
     return;
   }
-  const wsUrl = `${state.apiBase.replace(/^http/, "ws")}/api/realtime`;
+  const authQuery = state.authToken
+    ? `?token=${encodeURIComponent(state.authToken)}`
+    : "";
+  const wsUrl = `${state.apiBase.replace(/^http/, "ws")}/api/realtime${authQuery}`;
   const ws = new WebSocket(wsUrl);
   state.ws = ws;
   ws.onopen = () => {
+    if (state.ws !== ws) return;
     state.connected = true;
     setConnectionText("Realtime connected");
     appendSystem("Realtime 已连接。");
   };
-  ws.onmessage = (event) => handleRealtimeMessage(String(event.data || ""));
+  ws.onmessage = (event) => {
+    if (state.ws !== ws) return;
+    handleRealtimeMessage(String(event.data || ""));
+  };
   ws.onerror = () => {
+    if (state.ws !== ws) return;
     state.connected = false;
     setConnectionText("Realtime error");
   };
   ws.onclose = () => {
+    if (state.ws !== ws) return;
     state.connected = false;
     failPending("realtime websocket closed");
     state.streaming = false;
@@ -200,6 +253,14 @@ function connectRealtime() {
       connectRealtime();
     }, 900);
   };
+}
+
+function reconnectRealtime() {
+  const previous = state.ws;
+  state.ws = null;
+  previous?.close(1000, "gateway credentials changed");
+  state.connected = false;
+  connectRealtime();
 }
 
 function failPending(message) {

@@ -21,6 +21,16 @@ turns with `@Chrome`, and keeps the active tab available through the relay.
 
 When Octopus sends a browser action, the extension executes it in the currently active Chromium tab and posts the result back to the local server. If you change these files while the extension is loaded, click `Reload` on the extension card in `chrome://extensions`.
 
+The relay implements the same observe/act contract as the other browser
+backends: structured `state`, verified selectors, React-compatible input,
+contenteditable/select support, keyboard submission, conditional waits, and
+password-value redaction.
+
+If the Octopus gateway has authentication enabled, open the diamond button in
+the side panel and enter the same API key or session token used by the main
+app. The credential is stored only in the current Chrome profile and is sent
+as a bearer token for HTTP plus the browser-safe WebSocket token query.
+
 ## Side panel mode
 
 The Chrome Side Panel is the recommended external-browser experience:

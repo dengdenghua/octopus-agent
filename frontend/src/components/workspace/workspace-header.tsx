@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 function OctopusLogo({ size = 24 }: { size?: number }) {
   return (
     <div
-      className="flex shrink-0 items-center justify-center rounded-lg bg-background text-foreground ring-1 ring-border/70 transition-colors duration-200 hover:bg-muted"
+      className="flex shrink-0 items-center justify-center bg-background text-foreground ring-1 ring-border-default transition-colors hover:bg-muted"
       style={{ width: size, height: size }}
     >
       <BotIcon style={{ width: size * 0.62, height: size * 0.62 }} />
@@ -39,7 +39,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
   // also present; when collapsed the logo becomes a plain ghost-icon tile
   // matching the new-chat tile next to it.
   const iconTileClass =
-    "rounded-lg transition-all duration-150 hover:bg-muted hover:text-foreground text-muted-foreground group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:p-0";
+    "transition-all hover:bg-muted hover:text-foreground text-muted-foreground group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:p-0";
 
   return (
     <>
@@ -74,7 +74,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
               tooltip={t.sidebar.newChat}
             >
               <Link to={getNewChatPath()}>
-                <MessageSquarePlus className="size-[15px] transition-transform duration-200 group-hover:rotate-12" />
+                <MessageSquarePlus className="size-[15px] transition-transform group-hover:rotate-12" />
                 <span className="leading-none">{t.sidebar.newChat}</span>
               </Link>
             </SidebarMenuButton>
@@ -86,7 +86,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
           <div className="group-data-[collapsible=icon]:px-0 px-1.5">
             <div
               className={cn(
-                "group/workspace-header flex h-8 flex-col justify-center transition-all duration-200",
+                "group/workspace-header flex h-8 flex-col justify-center transition-all",
                 className,
               )}
             >
@@ -103,7 +103,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
                     <OctopusLogo size={18} />
                   </div>
                 )}
-                <SidebarTrigger className="flex h-7 w-7 items-center justify-center transition-all duration-150 hover:scale-105 hover:bg-accent/40 rounded-lg" />
+                <SidebarTrigger className="flex h-7 w-7 items-center justify-center transition-all hover:scale-105 hover:bg-accent/40" />
               </div>
             </div>
           </div>
@@ -112,13 +112,13 @@ export function WorkspaceHeader({ className }: { className?: string }) {
               <SidebarMenuButton
                 isActive={pathname?.endsWith("/new")}
                 asChild
-                className="rounded-lg py-1.5 text-[13px] transition-all duration-150 hover:bg-muted hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground data-[active=true]:font-medium text-muted-foreground"
+                className="py-1.5 text-[13px] transition-all hover:bg-muted hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground data-[active=true]:font-medium text-muted-foreground"
               >
                 <Link
                   className="flex h-full items-center gap-2"
                   to={getNewChatPath()}
                 >
-                  <MessageSquarePlus className="size-[15px] transition-transform duration-200 group-hover:rotate-12" />
+                  <MessageSquarePlus className="size-[15px] transition-transform group-hover:rotate-12" />
                   <span className="leading-none">{t.sidebar.newChat}</span>
                 </Link>
               </SidebarMenuButton>
