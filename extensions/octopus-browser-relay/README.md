@@ -24,12 +24,20 @@ When Octopus sends a browser action, the extension executes it in the currently 
 The relay implements the same observe/act contract as the other browser
 backends: structured `state`, verified selectors, React-compatible input,
 contenteditable/select support, keyboard submission, conditional waits, and
-password-value redaction.
+password-value redaction. Interactive actions also auto-wait for targets to
+become visible, enabled, stable, and uncovered before acting. After an SPA
+re-render, a stale selector can recover only when the prior role/name/type
+fingerprint has one unique match; ambiguous matches fail closed. Click-driven
+navigation is tracked separately so a destroyed execution context is not
+misreported as failure after the page has actually moved.
 
 If the Octopus gateway has authentication enabled, open the diamond button in
 the side panel and enter the same API key or session token used by the main
 app. The credential is stored only in the current Chrome profile and is sent
 as a bearer token for HTTP plus the browser-safe WebSocket token query.
+Also set `OCTOPUS_BROWSER_RELAY_TOKEN` for the Octopus runtime so its internal
+ExtensionBackend requests can pass the same authenticated gateway boundary;
+diagnostics expose only whether this is configured, never the credential.
 
 ## Side panel mode
 

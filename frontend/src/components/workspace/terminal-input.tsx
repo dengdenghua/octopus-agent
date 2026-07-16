@@ -51,7 +51,7 @@ export function TerminalInput({
   return (
     <div
       className={cn(
-        "rounded-lg border border-transparent bg-card overflow-hidden hover:border-border/60 focus-within:border-transparent transition-[border-color,box-shadow] duration-200",
+        "border border-transparent bg-card overflow-hidden hover:border-border-default focus-within:border-transparent transition-[border-color,box-shadow]",
         className,
       )}
     >
@@ -86,7 +86,7 @@ export function TerminalInput({
           <button
             onClick={onStop}
             title={t.codeMode.stop}
-            className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-foreground text-background hover:opacity-80 transition-opacity"
+            className="flex size-7 shrink-0 items-center justify-center bg-foreground text-background hover:opacity-80 transition-opacity"
           >
             <SquareIcon className="size-3" fill="currentColor" />
           </button>
@@ -96,7 +96,7 @@ export function TerminalInput({
             disabled={disabled || !value.trim()}
             title={t.codeMode.send}
             className={cn(
-              "flex size-7 shrink-0 items-center justify-center rounded-lg transition-[background-color,transform] duration-150",
+              "flex size-7 shrink-0 items-center justify-center transition-[background-color,transform] duration-150",
               "bg-foreground text-background hover:bg-foreground/90 active:scale-95",
               "disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed",
             )}

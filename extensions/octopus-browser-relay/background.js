@@ -281,13 +281,15 @@ async function setPageControlIndicator(tabId, mode, detail = {}) {
     .catch(() => null);
 }
 
-function waitForTabComplete(tabId, timeoutMs = 10000) {
+async function waitForTabComplete(tabId, timeoutMs = 10000) {
+  const current = await chrome.tabs.get(tabId).catch(() => null);
+  if (!current || current.status === "complete") return current;
   return new Promise((resolve) => {
     const timer = setTimeout(done, timeoutMs);
     function done() {
       clearTimeout(timer);
       chrome.tabs.onUpdated.removeListener(listener);
-      resolve();
+      chrome.tabs.get(tabId).then(resolve).catch(() => resolve(null));
     }
     function listener(updatedTabId, changeInfo) {
       if (updatedTabId === tabId && changeInfo.status === "complete") {
@@ -296,6 +298,42 @@ function waitForTabComplete(tabId, timeoutMs = 10000) {
     }
     chrome.tabs.onUpdated.addListener(listener);
   });
+}
+
+function watchTabNavigation(tabId) {
+  let observed = false;
+  let resolveObserved = null;
+  const observedPromise = new Promise((resolve) => {
+    resolveObserved = resolve;
+  });
+  function listener(updatedTabId, changeInfo) {
+    if (
+      updatedTabId === tabId &&
+      (Boolean(changeInfo.url) || changeInfo.status === "loading")
+    ) {
+      observed = true;
+      resolveObserved(true);
+    }
+  }
+  chrome.tabs.onUpdated.addListener(listener);
+  return {
+    async wait(timeoutMs) {
+      if (observed) return true;
+      return Promise.race([
+        observedPromise,
+        new Promise((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+      ]);
+    },
+    close() {
+      chrome.tabs.onUpdated.removeListener(listener);
+    },
+  };
+}
+
+function isExecutionContextLoss(error) {
+  return /(frame.*removed|context.*invalid|execution context.*destroyed|no frame with id)/i.test(
+    error instanceof Error ? error.message : String(error),
+  );
 }
 
 async function currentTab() {
@@ -408,7 +446,13 @@ async function executeCommand(command) {
   const tab = await currentTab();
   const tabId = tab.id;
   const action = command.action;
-  const params = command.params || {};
+  const params = { ...(command.params || {}) };
+  const deadlineAt = Number(command.deadline_at || 0);
+  if (params.timeout == null && deadlineAt > 0) {
+    // Leave a small margin for posting the result before the gateway's HTTP
+    // waiter expires. This prevents a DOM auto-wait from outliving its command.
+    params.timeout = Math.max(0, Math.floor(deadlineAt * 1000 - Date.now() - 250));
+  }
   const control = await appendControlAction(command, tab, "running");
   let actionResult = null;
 
@@ -436,15 +480,32 @@ async function executeCommand(command) {
       const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
       return finishControlAction(command, tab, control, action, { ok: true, dataUrl });
     } else {
-      const domResult = await runDomActionInTab(tabId, action, params);
       const returnsDomPayload = action === "extract" || action === "aria" || action === "state";
-      if (domResult && !returnsDomPayload) {
-        await new Promise((resolve) => setTimeout(resolve, 150));
+      const navigationWatch = returnsDomPayload ? null : watchTabNavigation(tabId);
+      let domResult = null;
+      let navigationObserved = false;
+      try {
+        try {
+          domResult = await runDomActionInTab(tabId, action, params);
+        } catch (error) {
+          navigationObserved = navigationWatch ? await navigationWatch.wait(750) : false;
+          if (!navigationObserved || !isExecutionContextLoss(error)) throw error;
+          domResult = { ok: true, recoveredByNavigation: true };
+        }
+        if (domResult && returnsDomPayload) {
+          return finishControlAction(command, tab, control, action, domResult);
+        }
+        if (navigationWatch && !navigationObserved) {
+          navigationObserved = await navigationWatch.wait(150);
+        }
+        if (navigationObserved) {
+          const remaining = Math.max(250, Math.min(5000, Number(params.timeout || 5000)));
+          await waitForTabComplete(tabId, remaining);
+        }
+      } finally {
+        navigationWatch?.close();
       }
-      if (domResult && returnsDomPayload) {
-        return finishControlAction(command, tab, control, action, domResult);
-      }
-      actionResult = domResult;
+      actionResult = { ...domResult, navigationObserved };
     }
 
     const next = await chrome.tabs.get(tabId);

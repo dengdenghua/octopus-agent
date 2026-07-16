@@ -504,7 +504,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
           {!isLoading && (user || isGuest || authStatus?.enabled) ? (
             <div className="mt-2 flex items-center justify-between rounded-lg border bg-muted/30 px-2.5 py-1.5">
               <div className="flex min-w-0 items-center gap-2.5">
-                <div className="relative flex size-7 items-center justify-center rounded-lg border border-border/70 bg-background text-muted-foreground shadow-sm">
+                <div className="relative flex size-7 items-center justify-center border border-border-default bg-background text-muted-foreground shadow-[var(--shadow-xs)]">
                   <UserIcon className="size-3.5" />
                   <span className="absolute -right-0.5 -bottom-0.5 size-2 rounded-full border border-background bg-emerald-500" />
                 </div>
@@ -575,7 +575,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
               ) : null}
             </div>
             {!normalizedSettingsQuery && (
-              <div className="mb-2 rounded-md border border-border/55 bg-background/55 p-1.5">
+              <div className="mb-2 rounded-md border border-border-default bg-background/55 p-1.5">
                 <div className="px-1 pb-1 text-[10px] font-medium uppercase text-muted-foreground">
                   {t.settings.dialog.quickAccess}
                 </div>
@@ -641,7 +641,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                           className={cn(
                             // Match sidebar NavRow: opacity + leading 2px
                             // accent bar instead of a full primary fill.
-                            "group/sec relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-[opacity,background-color] duration-150",
+                            "group/sec relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-[opacity,background-color]",
                             disabled
                               ? "cursor-not-allowed opacity-40"
                               : "opacity-75 hover:opacity-100 hover:bg-muted/50",
@@ -654,7 +654,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                             {label}
                           </span>
                           {disabled && (
-                            <span className="rounded border border-border/60 px-1 py-0.5 text-[9px] font-medium leading-none text-muted-foreground">
+                            <span className="rounded border border-border-default px-1 py-0.5 text-[9px] font-medium leading-none text-muted-foreground">
                               {t.common.guest}
                             </span>
                           )}

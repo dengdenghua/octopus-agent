@@ -357,6 +357,12 @@ def test_browser_relay_websocket_pushes_command_and_accepts_result(
             pytest.fail("websocket heartbeat was not observed")
         assert status["push_connected"] is True
 
+        invalid_timeout = client.post(
+            "/api/browser/relay/command",
+            json={"action": "click", "selector": "#go", "timeout_seconds": "never"},
+        )
+        assert invalid_timeout.status_code == 400
+
         holder: dict[str, object] = {}
 
         def send_command() -> None:
@@ -377,6 +383,7 @@ def test_browser_relay_websocket_pushes_command_and_accepts_result(
         command = pushed["commands"][0]
         assert command["action"] == "click"
         assert command["lease"]["tab"]["id"] == 11
+        assert time.time() < command["deadline_at"] <= time.time() + 2
 
         websocket.send_json(
             {

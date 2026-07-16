@@ -46,11 +46,16 @@ _BROWSER_RELAY_BASE_URL_ENV_KEYS = (
     "OCTOPUS_INTERNAL_GATEWAY_BASE_URL",
     "OCTOPUS_PUBLIC_BASE_URL",
 )
+_BROWSER_RELAY_TOKEN_ENV_KEYS = (
+    "OCTOPUS_BROWSER_RELAY_TOKEN",
+    "OCTOPUS_GATEWAY_TOKEN",
+)
 _BROWSER_RELAY_TIMEOUT_SECONDS = 10
 
 
 def browser_relay_diagnostics() -> dict[str, Any]:
     raw, source = _configured_browser_relay_base_url()
+    token, token_source = _configured_browser_relay_token()
     try:
         base_url = _normalize_browser_relay_base_url(raw)
         error = ""
@@ -63,6 +68,9 @@ def browser_relay_diagnostics() -> dict[str, Any]:
         "configured_by": source,
         "env_keys": list(_BROWSER_RELAY_BASE_URL_ENV_KEYS),
         "default_gateway_base_url": _DEFAULT_GATEWAY_BASE_URL,
+        "auth_configured": bool(token),
+        "auth_configured_by": token_source,
+        "auth_env_keys": list(_BROWSER_RELAY_TOKEN_ENV_KEYS),
         "error": error,
     }
 
@@ -73,6 +81,14 @@ def _configured_browser_relay_base_url() -> tuple[str, str]:
         if value:
             return value, key
     return _DEFAULT_GATEWAY_BASE_URL, "default"
+
+
+def _configured_browser_relay_token() -> tuple[str, str]:
+    for key in _BROWSER_RELAY_TOKEN_ENV_KEYS:
+        value = os.environ.get(key, "").strip()
+        if value:
+            return value, key
+    return "", ""
 
 
 def _normalize_browser_relay_base_url(raw: str) -> str:
@@ -109,6 +125,9 @@ def _browser_relay_request(
     url = f"{base_url}{route}"
     data = None if body is None else json.dumps(body).encode("utf-8")
     headers = {"Content-Type": "application/json"}
+    token, _token_source = _configured_browser_relay_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     req = urllib_request.Request(url, data=data, method=method, headers=headers)
     try:
         with urllib_request.urlopen(req, timeout=timeout_seconds) as resp:
@@ -349,10 +368,21 @@ class ExtensionBackend:
             "action": action,
             **payload,
         }
+        action_timeout_ms = int(payload.get("timeout") or 0)
+        command_timeout_seconds = 0.0
+        request_timeout_seconds = _BROWSER_RELAY_TIMEOUT_SECONDS
+        if action_timeout_ms > 0:
+            command_timeout_seconds = max(8.0, action_timeout_ms / 1000 + 1)
+            request_payload["timeout_seconds"] = command_timeout_seconds
+            request_timeout_seconds = max(
+                _BROWSER_RELAY_TIMEOUT_SECONDS,
+                command_timeout_seconds + 2,
+            )
         result = _browser_relay_request(
             "POST",
             "/command",
             request_payload,
+            timeout_seconds=request_timeout_seconds,
         )
         if isinstance(result, dict):
             result.setdefault("track", "extension")

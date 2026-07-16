@@ -154,7 +154,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
         )}
         style={{ width: DRAWER_WIDTH, maxWidth: DRAWER_WIDTH }}
       >
-        <SheetHeader className="border-b border-border/40 px-4 py-3 pr-12">
+        <SheetHeader className="border-b border-border-subtle px-4 py-3 pr-12">
           <SheetTitle className="text-sm font-semibold">
             {t.sidebar.sectionChats}
           </SheetTitle>
@@ -168,7 +168,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
             type="button"
             onClick={startNewChat}
             className={cn(
-              "group flex h-9 w-full items-center justify-center gap-2 rounded-lg",
+              "group flex h-9 w-full items-center justify-center gap-2",
               "border border-primary/30 bg-primary/8 text-[13px] font-medium text-primary",
               "transition-colors hover:bg-primary/14 active:scale-[0.99]",
             )}
@@ -200,7 +200,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
 
         <div className="mt-1 min-h-0 flex-1 overflow-y-auto px-2 pb-3">
           {filteredThreads.length === 0 ? (
-            <div className="mt-4 rounded-md border border-dashed border-border/50 px-3 py-4 text-center text-[12px] text-muted-foreground/75">
+            <div className="mt-4 rounded-md border border-dashed border-border-default px-3 py-4 text-center text-[12px] text-muted-foreground/75">
               {query.trim() ? t.sidebar.noMatchingChats : t.sidebar.noChatsYet}
             </div>
           ) : (
@@ -253,7 +253,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
                       }}
                       className={cn(
                         "absolute right-1 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-md",
-                        "text-muted-foreground/60 opacity-0 transition-opacity duration-150",
+                        "text-muted-foreground/60 opacity-0 transition-opacity",
                         "hover:bg-destructive/10 hover:text-destructive",
                         "group-hover/thread:opacity-100",
                       )}
@@ -267,7 +267,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
           )}
         </div>
 
-        <div className="border-t border-border/40 px-4 py-2 text-[10.5px] text-muted-foreground/55">
+        <div className="border-t border-border-subtle px-4 py-2 text-[10.5px] text-muted-foreground/55">
           <span className="flex items-center gap-1">
             <ArrowUpDownIcon className="size-2.5" />
             {t.sidebar.actionSort}

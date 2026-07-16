@@ -6,6 +6,9 @@ Playwright install, or a connected extension. Live end-to-end behaviour
 needs those runtimes and is out of scope.
 """
 
+import json
+
+from runtime.execution.suckers import browser_backends
 from runtime.execution.suckers.browser_backend import (
     BrowserBackend,
     Track,
@@ -16,6 +19,20 @@ from runtime.execution.suckers.browser_backends import (
     ExtensionBackend,
     PlaywrightBackend,
 )
+
+
+class _FakeResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def read(self):
+        return json.dumps(self.payload).encode("utf-8")
 
 
 class _Recorder:
@@ -114,6 +131,29 @@ class TestPlaywrightBackend:
 
 
 class TestExtensionBackend:
+    def test_relay_request_uses_configured_gateway_token_without_echoing_it(self, monkeypatch):
+        seen = {}
+        token = "sk-internal-browser-relay"
+        monkeypatch.setenv("OCTOPUS_BROWSER_RELAY_TOKEN", token)
+
+        def fake_urlopen(request, timeout):
+            seen["authorization"] = request.get_header("Authorization")
+            seen["timeout"] = timeout
+            return _FakeResponse({"connected": True})
+
+        monkeypatch.setattr(browser_backends.urllib_request, "urlopen", fake_urlopen)
+
+        result = browser_backends._browser_relay_request("GET", "/status")
+
+        assert seen == {
+            "authorization": f"Bearer {token}",
+            "timeout": browser_backends._BROWSER_RELAY_TIMEOUT_SECONDS,
+        }
+        assert result["connected"] is True
+        assert result["browser_relay"]["auth_configured"] is True
+        assert result["browser_relay"]["auth_configured_by"] == ("OCTOPUS_BROWSER_RELAY_TOKEN")
+        assert token not in str(result)
+
     def test_disconnected_default_relay_reports_unavailable(self, monkeypatch):
         def fake_request(method, path, body=None, *, timeout_seconds=10):
             assert method == "GET"
@@ -154,6 +194,35 @@ class TestExtensionBackend:
         assert calls == [
             ("GET", "/status", None, 2),
             ("POST", "/command", {"action": "navigate", "url": "https://x"}, 10),
+        ]
+
+    def test_default_relay_transport_keeps_wait_deadlines_aligned(self, monkeypatch):
+        calls = []
+
+        def fake_request(method, path, body=None, *, timeout_seconds=10):
+            calls.append((method, path, body, timeout_seconds))
+            return {"ok": True}
+
+        monkeypatch.setattr(
+            "runtime.execution.suckers.browser_backends._browser_relay_request",
+            fake_request,
+        )
+
+        result = ExtensionBackend().wait("#ready", timeout_ms=10_000)
+
+        assert result.ok is True
+        assert calls == [
+            (
+                "POST",
+                "/command",
+                {
+                    "action": "wait",
+                    "selector": "#ready",
+                    "timeout": 10_000,
+                    "timeout_seconds": 11.0,
+                },
+                13.0,
+            )
         ]
 
     def test_wired_transport_maps_actions(self):

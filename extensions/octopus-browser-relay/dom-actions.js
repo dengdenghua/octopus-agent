@@ -3,6 +3,10 @@
 
   const MAX_TEXT = 20_000;
   const DEFAULT_LIMIT = 30;
+  const CACHE_LIMIT = 300;
+  const existingCache = globalThis.__OCTOPUS_DOM_ACTION_CACHE__;
+  const snapshotCache = existingCache instanceof Map ? existingCache : new Map();
+  globalThis.__OCTOPUS_DOM_ACTION_CACHE__ = snapshotCache;
 
   function textOf(element) {
     return String(
@@ -142,7 +146,7 @@
         : element.isContentEditable
           ? textOf(element).slice(0, 160)
           : null;
-    return {
+    const description = {
       tag: element.tagName.toLowerCase(),
       role: roleOf(element),
       name: accessibleName(element),
@@ -158,6 +162,19 @@
           : null,
       disabled: isDisabled(element),
     };
+    if (description.selectorUnique) {
+      snapshotCache.delete(selector);
+      snapshotCache.set(selector, {
+        role: description.role,
+        name: description.name,
+        text: description.text,
+        type: description.type,
+      });
+      while (snapshotCache.size > CACHE_LIMIT) {
+        snapshotCache.delete(snapshotCache.keys().next().value);
+      }
+    }
+    return description;
   }
 
   function pick(selector, limit) {
@@ -218,6 +235,44 @@
     return Boolean(left && right && left.every((value, index) => value === right[index]));
   }
 
+  function matchesFingerprint(element, fingerprint) {
+    if (!fingerprint || roleOf(element) !== fingerprint.role) return false;
+    if (fingerprint.type && typeOf(element) !== fingerprint.type) return false;
+    const name = accessibleName(element);
+    if (fingerprint.name) return name === fingerprint.name;
+    return Boolean(fingerprint.text && textOf(element) === fingerprint.text);
+  }
+
+  function resolveCachedElement(selector) {
+    const fingerprint = snapshotCache.get(selector);
+    let direct = null;
+    try {
+      direct = document.querySelector(selector);
+    } catch (error) {
+      throw new Error(`invalid selector: ${selector}: ${error.message}`);
+    }
+    const fragile = selector.includes(":nth-of-type(");
+    if (direct && (!fingerprint || !fragile || matchesFingerprint(direct, fingerprint))) {
+      return { element: direct, recovered: false, reason: "" };
+    }
+    if (!fingerprint) {
+      return { element: null, recovered: false, reason: "not found" };
+    }
+    const matches = Array.from(
+      document.querySelectorAll(
+        'a[href],button,input,textarea,select,[role],[contenteditable="true"]',
+      ),
+    ).filter((element) => matchesFingerprint(element, fingerprint));
+    if (matches.length === 1) {
+      return { element: matches[0], recovered: true, reason: "" };
+    }
+    return {
+      element: null,
+      recovered: false,
+      reason: matches.length > 1 ? "semantic recovery is ambiguous" : "not found",
+    };
+  }
+
   function hitTarget(element) {
     const rect = element.getBoundingClientRect();
     const x = Math.max(0, Math.min(window.innerWidth - 1, rect.left + rect.width / 2));
@@ -234,15 +289,11 @@
     let previousRect = null;
     let lastReason = "not found";
     while (true) {
-      let element = null;
-      try {
-        element = document.querySelector(selector);
-      } catch (error) {
-        throw new Error(`invalid selector: ${selector}: ${error.message}`);
-      }
+      const resolved = resolveCachedElement(selector);
+      const element = resolved.element;
 
       if (!element) {
-        lastReason = "not found";
+        lastReason = resolved.reason;
         previousElement = null;
         previousRect = null;
       } else if (!isVisible(element)) {
@@ -270,7 +321,10 @@
         } else if (hitTest && !hitTarget(element)) {
           lastReason = "covered or outside the viewport";
         } else {
-          return element;
+          return {
+            element,
+            recoveredFromSelector: resolved.recovered ? selector : null,
+          };
         }
       }
 
@@ -512,25 +566,38 @@
       return globalThis.__octopusPageAgent.run(payload);
     }
     if (action === "click") {
-      const element = await waitForActionable(selector, "click", params, { hitTest: true });
+      const target = await waitForActionable(selector, "click", params, { hitTest: true });
+      const { element } = target;
       assertActionable(element, "click");
       focusElement(element);
       element.click();
-      return { ok: true, selector: selectorFor(element) };
+      return {
+        ok: true,
+        selector: selectorFor(element),
+        recoveredFromSelector: target.recoveredFromSelector,
+      };
     }
     if (action === "type") {
-      const element = await waitForActionable(selector, "type", params);
-      return typeInto(element, String(params.text || ""), params.clear === true);
+      const target = await waitForActionable(selector, "type", params);
+      return {
+        ...typeInto(target.element, String(params.text || ""), params.clear === true),
+        recoveredFromSelector: target.recoveredFromSelector,
+      };
     }
     if (action === "hover") {
-      const element = await waitForActionable(selector, "hover", params, { hitTest: true });
+      const target = await waitForActionable(selector, "hover", params, { hitTest: true });
+      const { element } = target;
       assertActionable(element, "hover");
       focusElement(element);
       element.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, composed: true }));
       element.dispatchEvent(new PointerEvent("pointerenter", { bubbles: false, composed: true }));
       element.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, composed: true }));
       element.dispatchEvent(new MouseEvent("mouseenter", { bubbles: false, composed: true }));
-      return { ok: true, selector: selectorFor(element) };
+      return {
+        ok: true,
+        selector: selectorFor(element),
+        recoveredFromSelector: target.recoveredFromSelector,
+      };
     }
     if (action === "scroll") {
       if (selector) {
@@ -542,10 +609,14 @@
       return { ok: true, x: window.scrollX, y: window.scrollY };
     }
     if (action === "press") {
-      const target = selector
+      const resolved = selector
         ? await waitForActionable(selector, "press", params)
-        : document.activeElement || document.body;
-      return pressKey(target, params);
+        : { element: document.activeElement || document.body, recoveredFromSelector: null };
+      return {
+        ...pressKey(resolved.element, params),
+        selector: selectorFor(resolved.element),
+        recoveredFromSelector: resolved.recoveredFromSelector,
+      };
     }
     if (action === "wait") return waitFor(params);
     if (action === "state") return pageState(Math.max(1, Number(params.max_items || DEFAULT_LIMIT)));

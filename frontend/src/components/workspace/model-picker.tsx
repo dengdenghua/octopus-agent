@@ -113,7 +113,7 @@ function ReasoningEffortSetting({
   const title = t.inputBox.reasoningEffort;
 
   return (
-    <div className="mx-1 mt-1 border-t border-border/60 pt-1">
+    <div className="mx-1 mt-1 border-t border-border-default pt-1">
       <div className="mb-0.5 flex items-center justify-between px-1">
         <span className="text-[10px] font-medium text-muted-foreground/70">
           {title}
@@ -143,7 +143,7 @@ function ReasoningEffortSetting({
               className={cn(
                 "h-5 rounded-[5px] px-1 text-[10px] transition-colors",
                 selected
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                   : "text-muted-foreground hover:text-foreground",
                 "disabled:cursor-not-allowed disabled:opacity-45",
               )}
@@ -182,7 +182,7 @@ function PickerRow({
         // Match sidebar NavRow language: h-8, opacity-based emphasis,
         // monochrome. No color accent — selection reads via opacity and
         // a 2px leading bar the way active nav items do.
-        "group/row relative flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-[12px] opacity-75 transition-[opacity,background-color] duration-150",
+        "group/row relative flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-[12px] opacity-75 transition-[opacity,background-color]",
         "hover:opacity-100 hover:bg-muted/40",
         disabled &&
           "cursor-not-allowed opacity-35 hover:opacity-35 hover:bg-transparent",
@@ -413,9 +413,9 @@ export function ModelPicker({
       type="button"
       data-testid="model-picker-trigger"
       className={cn(
-        "inline-flex h-8 min-w-0 items-center gap-1 rounded-lg border border-transparent",
+        "inline-flex h-8 min-w-0 items-center gap-1 border border-transparent",
         "bg-transparent px-2 py-1 text-xs text-muted-foreground transition outline-none",
-        "hover:border-border/60 hover:bg-muted/60 hover:text-foreground",
+        "hover:border-border-default hover:bg-muted/60 hover:text-foreground",
         "data-[state=open]:bg-muted data-[state=open]:text-foreground",
       )}
       aria-label={t.modelPicker.selectModel}
@@ -511,7 +511,7 @@ export function ModelPicker({
                 // Match sidebar section labels: opacity-based emphasis,
                 // monochrome. Active state is just the text going full
                 // opacity + muted underline — no violet accent.
-                "flex-1 rounded-md text-[10px] font-medium uppercase tracking-wider transition-[opacity,color] duration-150",
+                "flex-1 rounded-md text-[10px] font-medium uppercase tracking-wider transition-[opacity,color]",
                 "text-muted-foreground/60 hover:text-foreground",
                 "data-[state=active]:text-foreground data-[state=active]:opacity-100",
               )}
@@ -527,7 +527,7 @@ export function ModelPicker({
                 officialEntries.length > 0
               }
               className={cn(
-                "flex-1 rounded-md text-[10px] font-medium uppercase tracking-wider transition-[opacity,color] duration-150",
+                "flex-1 rounded-md text-[10px] font-medium uppercase tracking-wider transition-[opacity,color]",
                 "text-muted-foreground/60 hover:text-foreground",
                 "data-[state=active]:text-foreground data-[state=active]:opacity-100",
               )}

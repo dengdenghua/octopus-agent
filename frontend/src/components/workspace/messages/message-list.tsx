@@ -1517,7 +1517,7 @@ export function MessageList({
             <div
               role="alert"
               className={cn(
-                "flex items-start gap-3 rounded-lg border px-4 py-3 text-sm shadow-sm",
+                "flex items-start gap-3 rounded-lg border px-4 py-3 text-sm shadow-[var(--shadow-xs)]",
                 isNetworkError
                   ? "border-amber-200/70 bg-amber-50/90 text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/75 dark:text-amber-100"
                   : "border-destructive/25 bg-destructive/8 text-destructive dark:border-destructive/35 dark:bg-destructive/12",
@@ -1552,7 +1552,7 @@ export function MessageList({
                     <button
                       type="button"
                       onClick={() => emitOpenAgentWorkbench({ tab: "agent" })}
-                      className="inline-flex h-7 items-center gap-1 rounded-md border border-border/60 bg-background/60 px-2.5 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-background/90"
+                      className="inline-flex h-7 items-center gap-1 rounded-md border border-border-default bg-background/60 px-2.5 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-background/90"
                     >
                       <PlayCircleIcon className="size-3" />
                       {t.message.viewProcess}
@@ -1584,7 +1584,7 @@ export function MessageList({
       </ConversationScrollButton>
 
       {showTimeoutWarning && !thread.error && (
-        <div className="absolute top-4 left-[50%] z-10 -translate-x-1/2 flex items-center gap-3 rounded-lg border border-amber-300/70 bg-amber-50/95 px-4 py-2 text-xs text-amber-900 shadow-sm backdrop-blur-sm dark:border-amber-700/50 dark:bg-amber-950/90 dark:text-amber-200">
+        <div className="absolute top-4 left-[50%] z-10 -translate-x-1/2 flex items-center gap-3 rounded-lg border border-amber-300/70 bg-amber-50/95 px-4 py-2 text-xs text-amber-900 shadow-[var(--shadow-xs)] backdrop-blur-sm dark:border-amber-700/50 dark:bg-amber-950/90 dark:text-amber-200">
           <AlertTriangleIcon className="size-4 shrink-0 text-amber-600" />
           <span>
             {t.message.timeoutWarning(Math.floor(loadingAgeMs / 1000))}

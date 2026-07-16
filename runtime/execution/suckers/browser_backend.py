@@ -9,7 +9,7 @@ implementations, and the agent picks one through scattered
 * **Electron webview** (``browser_act_skills.py``) — stateful, visible,
   driven over a local bridge inside the desktop app.
 * **Extension relay** (``extensions/``) — acts on the user's own live
-  browser tab; not yet wired into skills.
+  browser tab and is wired as the highest-priority interactive track.
 
 This module defines the contract all three should satisfy and a single
 place to decide which one handles a call. It deliberately does NOT

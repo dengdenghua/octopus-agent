@@ -381,7 +381,7 @@ export const MessageListItem = memo(function MessageListItem({
             "mt-2 flex w-full items-center gap-1.5 text-muted-foreground",
             isHuman && "justify-end",
             isHuman &&
-              "opacity-0 pointer-events-none transition-opacity duration-150 group-hover/conversation-message:opacity-100 group-hover/conversation-message:pointer-events-auto",
+              "opacity-0 pointer-events-none transition-opacity group-hover/conversation-message:opacity-100 group-hover/conversation-message:pointer-events-auto",
           )}
         >
           {message.type === "ai" && (
@@ -614,7 +614,7 @@ function MessageContent_({
               href={src}
               target="_blank"
               rel="noopener noreferrer"
-              className="block overflow-hidden rounded-lg border border-border/40"
+              className="block overflow-hidden rounded-lg border border-border-subtle"
             >
               <img
                 src={src}
@@ -1001,7 +1001,7 @@ function RichFileCard({
 
   if (isUploading) {
     return (
-      <div className="bg-background border-border/40 flex max-w-50 min-w-30 flex-col gap-1 rounded-lg border p-3 opacity-60 shadow-sm">
+      <div className="bg-background border-border-subtle flex max-w-50 min-w-30 flex-col gap-1 rounded-lg border p-3 opacity-60 shadow-[var(--shadow-xs)]">
         <div className="flex items-start gap-2">
           <Loader2Icon className="text-muted-foreground mt-0.5 size-4 shrink-0 animate-spin" />
           <span
@@ -1036,7 +1036,7 @@ function RichFileCard({
         href={fileUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="group border-border/40 relative block overflow-hidden rounded-lg border"
+        className="group border-border-subtle relative block overflow-hidden rounded-lg border"
       >
         <img
           src={fileUrl}
@@ -1048,7 +1048,7 @@ function RichFileCard({
   }
 
   return (
-    <div className="bg-background border-border/40 flex max-w-50 min-w-30 flex-col gap-1 rounded-lg border p-3 shadow-sm">
+    <div className="bg-background border-border-subtle flex max-w-50 min-w-30 flex-col gap-1 rounded-lg border p-3 shadow-[var(--shadow-xs)]">
       <div className="flex items-start gap-2">
         <FileIcon className="text-muted-foreground mt-0.5 size-4 shrink-0" />
         <span

@@ -66,6 +66,8 @@ def test_background_opens_sidepanel_and_keeps_bookmarklet_fallback() -> None:
     assert 'type === "octopus.openPageAgent"' in js
     assert 'files: ["dom-actions.js"]' in js
     assert "runDomActionInTab" in js
+    assert "watchTabNavigation" in js
+    assert "recoveredByNavigation" in js
 
 
 def test_dom_action_runtime_covers_extension_backend_contract() -> None:
@@ -79,6 +81,10 @@ def test_dom_action_runtime_covers_extension_backend_contract() -> None:
     assert "isContentEditable" in js
     assert '"insertReplacementText"' in js
     assert "selectorUnique" in js
+    assert "waitForActionable" in js
+    assert "elementFromPoint" in js
+    assert "__OCTOPUS_DOM_ACTION_CACHE__" in js
+    assert "semantic recovery is ambiguous" in js
 
 
 def test_background_enforces_tab_control_lease() -> None:

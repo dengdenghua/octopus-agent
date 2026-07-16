@@ -324,15 +324,23 @@ Kimi 最终完成态由五件事组成：
 ### P0：把执行态骨架立住
 
 - ~~`secondaryPanel` 固定为 Agent Workbench，而不是临时抽屉。~~ ✅ 已实现。
-- phase snapshot 贯通 header、workbench、消息流中的状态块。**⚠️ 只做了一半**：
-  后端确实发 `turn/plan/updated` + `workbench/snapshot`（`realtime_event_bridge.py:635/645`），
-  phases 也经 todo 事件进了消息流（`use-thread-stream-realtime.ts:384`）；但
-  **右栏没吃这份快照**——`agent-workbench-panel.tsx` 里 `AgentPhaseSnapshot` 出现 0 次，
-  它用 `deriveAgentPhases(events)` 自己从事件重算，与 `WorkbenchSnapshotV2` docstring
-  “实时与回放共用同一当前帧”的初衷相悖。
-  更关键：**整条计划链的源头是模型调 `todo_write`**（`_phases_from_todo_preview`），
-  所以不调 todo_write 的 turn 根本没有计划可显示——这正是右栏空白的根因，
-  也是与 Kimi「一开跑就有 Phase 1..7」的真实差距。
+- ~~phase snapshot 贯通 header、workbench、消息流中的状态块。~~ ✅ 已实现，且是
+  **服务端快照优先、事件重算兜底**的正确形态：后端发 `turn/plan/updated` +
+  `workbench/snapshot`（`realtime_event_bridge.py:635/645`）→ 快照搭在事件上 →
+  `agent-workbench-snapshot.ts:108` 的
+  `serverSnapshotToAgentPhases(serverSnapshot, …) ?? derived.phases`
+  取快照，没有才回退 `deriveAgentPhases(events)`；`currentPhase`(`:116`)、
+  `currentBlock`(`:122`)、`focusedTab`(`:143`) 同样是快照优先。消息流侧走
+  `use-thread-stream-realtime.ts:384` 的 todo 事件。三处同源，符合
+  `WorkbenchSnapshotV2` docstring “实时与回放共用同一当前帧”的初衷。
+  > 注：面板里搜不到 `AgentPhaseSnapshot` 这个类型名——它经
+  > `useAgentWorkbenchSnapshot`/`WorkbenchSnapshotV2` 消费。**这正是本节顶部第 1 条
+  > 坑的活例**，别据此误判成“没接快照”。
+- **仍存在的真实约束（不是本条的欠债，但决定了右栏何时有内容）**：整条计划链的源头是
+  模型调 `todo_write`（`_phases_from_todo_preview`）。不调 todo_write 的 turn 没有
+  phases 可发，右栏就只有空壳——这才是「右栏空白」的根因，也是与 Kimi
+  「一开跑就有 Phase 1..7」的真实差距：Kimi 的 planner 架构上必出计划，我们的计划是
+  某个工具的副产品。要追平得让 planner 对实质任务强制先出计划（产品决策，非 UI 修补）。
 - ~~workbench 需要支持父级总电脑和子 agent 电脑两个 scope。~~ ✅ 已实现（通过 `selectedAgent`/`selectedRosterSeat` 切换；电脑视图含子 agent 选择列表、子 agent 操作轨迹、协作成员占位）。
 - 移除右侧面板"文件"tab（与左侧文件树功能重复），文件操作统一通过左侧文件树。 ✅ 已实现。
 - `ChatPageLayout` 的 `bottomBar` 插槽（持久回放控制条）。**未实现，且属有意不做**——

@@ -14,6 +14,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
+from runtime.execution.suckers.browser_backend import Track
+from runtime.execution.suckers.browser_backends import ExtensionBackend
 from runtime.platform.ui.browser_router import create_browser_router
 from runtime.safety.auth import Identity, IdentityStore
 
@@ -135,7 +137,13 @@ def live_extension_runtime(
           <input id="password" type="password" value="secret">
           <button type="submit">Search</button>
         </form>
+        <button id="delayed" disabled>Continue</button>
+        <button id="replaceable">Save changes</button>
+        <button id="navigate" type="button" onclick="location.href='/destination'">Next page</button>
+        <div id="cover" hidden></div>
         <output id="submitted">0</output>
+        <output id="clicked">0</output>
+        <output id="recovered">0</output>
         <script>
           const query = document.querySelector("#query");
           query.addEventListener("input", () => document.title = `Query: ${query.value}`);
@@ -144,8 +152,19 @@ def live_extension_runtime(
             const output = document.querySelector("#submitted");
             output.textContent = String(Number(output.textContent) + 1);
           });
+          document.querySelector("#delayed").addEventListener("click", () => {
+            const output = document.querySelector("#clicked");
+            output.textContent = String(Number(output.textContent) + 1);
+          });
+          document.querySelector("#replaceable").addEventListener("click", () => {
+            document.querySelector("#recovered").textContent = "1";
+          });
         </script>
         """
+
+    @app.get("/destination", response_class=HTMLResponse)
+    def destination_page() -> str:
+        return "<!doctype html><title>Destination</title><h1>Arrived</h1>"
 
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     server_thread = threading.Thread(target=server.run, daemon=True)
@@ -210,6 +229,32 @@ def test_real_chrome_extension_observes_and_operates_active_tab(
     assert state["inputs"][0]["value"] == "before"
     assert state["inputs"][1]["value"] is None
 
+    page.evaluate(
+        """() => {
+          const replacement = document.createElement("button");
+          replacement.id = "replacement";
+          replacement.textContent = "Save changes";
+          replacement.addEventListener("click", () => {
+            document.querySelector("#recovered").textContent = "1";
+          });
+          document.querySelector("#replaceable").replaceWith(replacement);
+        }"""
+    )
+    recovered = request_json(
+        base_url,
+        "/api/browser/relay/command",
+        {
+            "action": "click",
+            "selector": "#replaceable",
+            "timeout": 1_000,
+            "timeout_seconds": 5,
+        },
+    )
+    assert recovered["ok"] is True
+    assert recovered["selector"] == "#replacement"
+    assert recovered["recoveredFromSelector"] == "#replaceable"
+    assert page.locator("#recovered").text_content() == "1"
+
     typed = request_json(
         base_url,
         "/api/browser/relay/command",
@@ -222,6 +267,9 @@ def test_real_chrome_extension_observes_and_operates_active_tab(
         },
     )
     assert typed["ok"] is True
+    assert typed["selector"] == "#query"
+    assert typed["recoveredFromSelector"] is None
+    assert typed["value"] == "after"
     assert page.locator("#query").input_value() == "after"
     assert page.title() == "Query: after"
 
@@ -236,12 +284,62 @@ def test_real_chrome_extension_observes_and_operates_active_tab(
         },
     )
     assert pressed["ok"] is True
+    assert pressed["key"] == "Enter"
     assert page.locator("#submitted").text_content() == "1"
+
+    page.evaluate(
+        """() => {
+          const button = document.querySelector("#delayed");
+          const cover = document.querySelector("#cover");
+          Object.assign(cover.style, {
+            display: "block",
+            position: "fixed",
+            inset: "0",
+            zIndex: "9999",
+            background: "white",
+          });
+          cover.hidden = false;
+          setTimeout(() => {
+            button.disabled = false;
+            cover.remove();
+          }, 180);
+        }"""
+    )
+    clicked = request_json(
+        base_url,
+        "/api/browser/relay/command",
+        {
+            "action": "click",
+            "selector": "#delayed",
+            "timeout": 2_000,
+            "timeout_seconds": 5,
+        },
+    )
+    assert clicked["ok"] is True
+    assert clicked["selector"] == "#delayed"
+    assert page.locator("#clicked").text_content() == "1"
+
+    navigated = request_json(
+        base_url,
+        "/api/browser/relay/command",
+        {
+            "action": "click",
+            "selector": "#navigate",
+            "timeout": 2_000,
+            "timeout_seconds": 5,
+        },
+    )
+    assert navigated["ok"] is True
+    assert navigated["navigationObserved"] is True
+    assert navigated["url"].endswith("/destination")
+    page.wait_for_url("**/destination")
+    assert page.title() == "Destination"
 
 
 @pytest.mark.parametrize("live_extension_runtime", [True], indirect=True)
 def test_sidepanel_pairing_connects_extension_to_authenticated_gateway(
     live_extension_runtime: tuple[str, Any, Path, str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     base_url, context, _extension, api_key = live_extension_runtime
     extension_id = loaded_extension_id(context)
@@ -280,3 +378,13 @@ def test_sidepanel_pairing_connects_extension_to_authenticated_gateway(
     )
     assert state["ok"] is True
     assert state["inputs"][0]["selector"] == "#query"
+
+    monkeypatch.setenv("OCTOPUS_BROWSER_RELAY_BASE_URL", base_url)
+    monkeypatch.setenv("OCTOPUS_BROWSER_RELAY_TOKEN", api_key)
+    backend = ExtensionBackend()
+    assert backend.available() is True
+    backend_state = backend.state(max_items=10)
+    assert backend_state.ok is True
+    assert backend_state.track is Track.EXTENSION
+    assert backend_state.data is not None
+    assert backend_state.data["inputs"][0]["selector"] == "#query"

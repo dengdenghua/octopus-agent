@@ -7,6 +7,7 @@ import base64
 import contextlib
 import html
 import json
+import math
 import os
 import platform
 import re
@@ -1704,6 +1705,13 @@ def create_browser_router(
                     "site_policy": site_policy,
                 },
             )
+        try:
+            timeout_seconds = float(body.get("timeout_seconds") or 8)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, "timeout_seconds must be a number") from exc
+        if not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= 300:
+            raise HTTPException(400, "timeout_seconds must be between 0 and 300")
+        deadline = time.time() + timeout_seconds
         command_id = str(uuid.uuid4())
         lease = _make_relay_lease(
             command_id=command_id,
@@ -1718,6 +1726,7 @@ def create_browser_router(
             "site_policy": site_policy,
             "lease": lease,
             "created_at": _now_ts(),
+            "deadline_at": deadline,
         }
         browser_relay_state["control_lease"] = lease
         with browser_relay_queue_lock:
@@ -1725,7 +1734,6 @@ def create_browser_router(
             pending.append(command)
             browser_relay_state["pending_commands"] = pending
 
-        deadline = time.time() + float(body.get("timeout_seconds") or 8)
         results = browser_relay_state.setdefault("command_results", {})
         while time.time() < deadline:
             result = results.pop(command_id, None)

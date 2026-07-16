@@ -100,7 +100,7 @@ export function ExecutionPanel({
         "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-colors duration-300",
         isLoading
           ? "border-primary/15 bg-primary/[0.03] text-primary/70"
-          : "border-border/50 bg-muted/20 text-muted-foreground",
+          : "border-border-default bg-muted/20 text-muted-foreground",
         className,
       )}
     >
@@ -138,7 +138,7 @@ export function ExecutionPanel({
             <span
               key={`${tool}-${i}`}
               className={cn(
-                "rounded-lg bg-background/60 px-2 py-0.5 text-[10px] font-medium border border-border/30",
+                "rounded-lg bg-background/60 px-2 py-0.5 text-[10px] font-medium border border-border-subtle",
                 getToolColor(tool),
               )}
             >
