@@ -333,8 +333,8 @@ export function ExtensionMarketplace({
   return (
     <div className="fixed inset-0 z-50 bg-background/72 backdrop-blur-xl">
       <div className="flex h-full flex-col overflow-hidden">
-        <header className="flex shrink-0 items-center gap-3 border-b border-border/70 bg-background/72 px-5 py-4 shadow-sm">
-          <div className="flex size-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+        <header className="flex shrink-0 items-center gap-3 border-b border-border-default bg-background/72 px-5 py-4 shadow-[var(--shadow-xs)]">
+          <div className="flex size-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-[var(--shadow-xs)]">
             <Store className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
@@ -373,9 +373,9 @@ export function ExtensionMarketplace({
         </header>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(360px,480px)_1fr]">
-          <aside className="flex min-h-0 flex-col border-b border-border/70 bg-muted/18 lg:border-b-0 lg:border-r">
-            <div className="space-y-3 border-b border-border/60 p-4">
-              <label className="flex h-10 items-center gap-2 rounded-2xl border border-border/80 bg-background/86 px-3 shadow-sm focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
+          <aside className="flex min-h-0 flex-col border-b border-border-default bg-muted/18 lg:border-b-0 lg:border-r">
+            <div className="space-y-3 border-b border-border-default p-4">
+              <label className="flex h-10 items-center gap-2 rounded-2xl border border-border-strong bg-background/86 px-3 shadow-[var(--shadow-xs)] focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
                 <Search className="size-4 text-muted-foreground" />
                 <input
                   value={query}
@@ -393,8 +393,8 @@ export function ExtensionMarketplace({
                     className={cn(
                       "h-8 shrink-0 rounded-full border px-3 text-xs font-medium transition",
                       category === item
-                        ? "border-primary/30 bg-primary text-primary-foreground shadow-sm"
-                        : "border-border/70 bg-background/76 text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                        ? "border-primary/30 bg-primary text-primary-foreground shadow-[var(--shadow-xs)]"
+                        : "border-border-default bg-background/76 text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                     )}
                   >
                     {categoryLabels[item]}
@@ -418,13 +418,13 @@ export function ExtensionMarketplace({
                       className={cn(
                         "group grid grid-cols-[44px_1fr_auto] items-center gap-3 rounded-2xl border p-3 text-left transition",
                         active
-                          ? "border-primary/35 bg-background shadow-sm ring-4 ring-primary/10"
-                          : "border-transparent bg-background/58 hover:border-border/70 hover:bg-background/90",
+                          ? "border-primary/35 bg-background shadow-[var(--shadow-xs)] ring-4 ring-primary/10"
+                          : "border-transparent bg-background/58 hover:border-border-default hover:bg-background/90",
                       )}
                     >
                       <span
                         className={cn(
-                          "flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-sm",
+                          "flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-[var(--shadow-xs)]",
                           item.accent,
                         )}
                       >
@@ -455,7 +455,7 @@ export function ExtensionMarketplace({
           </aside>
 
           <main className="min-h-0 overflow-y-auto bg-background">
-            <section className="border-b border-border/70 px-5 py-5 md:px-8">
+            <section className="border-b border-border-default px-5 py-5 md:px-8">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-semibold text-foreground">
@@ -482,7 +482,7 @@ export function ExtensionMarketplace({
                   {browserExtensions.map((item) => (
                     <div
                       key={item.id}
-                      className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-border/70 bg-muted/18 p-3"
+                      className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-border-default bg-muted/18 p-3"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -522,13 +522,13 @@ export function ExtensionMarketplace({
                   ))}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-border/80 bg-muted/14 p-5 text-sm text-muted-foreground">
+                <div className="rounded-2xl border border-dashed border-border-strong bg-muted/14 p-5 text-sm text-muted-foreground">
                   {isElectron ? em.noExtensionsElectron : em.noExtensionsWeb}
                 </div>
               )}
             </section>
 
-            <section className="relative overflow-hidden border-b border-border/70">
+            <section className="relative overflow-hidden border-b border-border-default">
               <div
                 className={cn(
                   "absolute inset-0 opacity-18 blur-3xl bg-gradient-to-br",
@@ -587,7 +587,7 @@ export function ExtensionMarketplace({
 
             <section className="grid gap-5 px-5 py-6 md:px-8">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div className="rounded-2xl border border-border/70 bg-muted/24 p-4">
+                <div className="rounded-2xl border border-border-default bg-muted/24 p-4">
                   <div className="text-xs text-muted-foreground">
                     {em.rating}
                   </div>
@@ -596,7 +596,7 @@ export function ExtensionMarketplace({
                     {selected.rating}
                   </div>
                 </div>
-                <div className="rounded-2xl border border-border/70 bg-muted/24 p-4">
+                <div className="rounded-2xl border border-border-default bg-muted/24 p-4">
                   <div className="text-xs text-muted-foreground">
                     {em.installs}
                   </div>
@@ -604,7 +604,7 @@ export function ExtensionMarketplace({
                     {selected.installs}
                   </div>
                 </div>
-                <div className="rounded-2xl border border-border/70 bg-muted/24 p-4">
+                <div className="rounded-2xl border border-border-default bg-muted/24 p-4">
                   <div className="text-xs text-muted-foreground">
                     {em.status}
                   </div>
@@ -618,7 +618,7 @@ export function ExtensionMarketplace({
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-border/70 bg-muted/18 p-5">
+              <div className="rounded-2xl border border-border-default bg-muted/18 p-5">
                 <h4 className="text-sm font-semibold text-foreground">
                   {em.capabilityTags}
                 </h4>

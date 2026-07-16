@@ -10,6 +10,7 @@ from typing import Any
 from runtime.platform.process.paths import project_root as default_project_root
 
 BUNDLE_SCHEMA = "octopus.behavioral_surpass_bundle.v1"
+SUITE_SCHEMA = "octopus.behavioral_surpass_suite.v1"
 REPORT_SCHEMA = "octopus.behavioral_surpass_evidence.v1"
 REQUIRED_SYSTEMS = ("octopus", "codex")
 REQUIRED_DOMAINS = (
@@ -31,6 +32,7 @@ ALLOWED_EXECUTION_MODES: dict[str, set[str]] = {
     "extensions_ecosystem": {"live_runtime", "deterministic_integration"},
 }
 DEFAULT_BUNDLE_PATH = "benchmarks/results/behavioral-surpass-latest.json"
+DEFAULT_SUITE_MANIFEST_PATH = "benchmarks/behavioral-surpass-suite.json"
 
 
 def compute_behavioral_surpass_evidence(
@@ -46,10 +48,13 @@ def compute_behavioral_surpass_evidence(
 ) -> dict[str, Any]:
     base = Path(root) if root is not None else default_project_root(Path(__file__))
     path = _resolve_bundle_path(base, bundle_path)
+    manifest_path = _resolve_manifest_path(base)
     current_time = now or datetime.now(UTC)
     checks: list[dict[str, Any]] = []
     errors: list[str] = []
     bundle = _read_bundle(path, errors)
+    manifest = _read_manifest(manifest_path, errors)
+    manifest_digest = _file_digest(manifest_path)
 
     _add_check(
         checks,
@@ -69,6 +74,32 @@ def compute_behavioral_surpass_evidence(
         1 if schema_ok else 0,
         1,
         f"Write a {BUNDLE_SCHEMA} evidence bundle.",
+    )
+    manifest_signatures, manifest_valid = _manifest_signatures(manifest, errors)
+    manifest_schema_ok = bool(manifest_valid and manifest.get("schema") == SUITE_SCHEMA)
+    _add_check(
+        checks,
+        "suite_manifest",
+        "The fixed behavioral suite manifest is valid",
+        manifest_schema_ok,
+        len(manifest_signatures),
+        len(REQUIRED_DOMAINS) * 2,
+        f"Restore the version-controlled {SUITE_SCHEMA} manifest.",
+    )
+    manifest_locked = bool(
+        manifest_schema_ok
+        and manifest_digest
+        and manifest.get("suite_id") == bundle.get("suite_id")
+        and bundle.get("suite_manifest_sha256") == manifest_digest
+    )
+    _add_check(
+        checks,
+        "suite_manifest_locked",
+        "Evidence is bound to the version-controlled suite",
+        manifest_locked,
+        1 if manifest_locked else 0,
+        1,
+        "Run the fixed suite and record its exact SHA-256 in the evidence bundle.",
     )
 
     generated_at = _parse_datetime(bundle.get("generated_at") if isinstance(bundle, dict) else None)
@@ -141,6 +172,24 @@ def compute_behavioral_surpass_evidence(
         len(case_sets[0] & case_sets[1]) if len(case_sets) == 2 else 0,
         len(case_sets[0] | case_sets[1]) if len(case_sets) == 2 else 0,
         "Use identical case IDs, prompts, and rubrics for Octopus and Codex.",
+    )
+    fixed_suite_cases = bool(
+        manifest_locked
+        and all(row["comparison_signatures"] == manifest_signatures for row in system_rows.values())
+    )
+    _add_check(
+        checks,
+        "fixed_suite_cases",
+        "Both systems ran every case in the fixed suite",
+        fixed_suite_cases,
+        sum(
+            1
+            for signature in system_rows["octopus"]["comparison_signatures"]
+            if manifest_signatures.get(signature)
+            == system_rows["octopus"]["comparison_signatures"].get(signature)
+        ),
+        len(manifest_signatures),
+        "Run every manifest case without cherry-picking or post-run edits.",
     )
 
     domain_rows = _compare_domains(system_rows, min_cases_per_domain=min_cases_per_domain)
@@ -243,6 +292,8 @@ def compute_behavioral_surpass_evidence(
         "verdict": verdict,
         "bundle_path": str(path),
         "bundle_exists": path.exists(),
+        "suite_manifest_path": str(manifest_path),
+        "suite_manifest_sha256": manifest_digest,
         "generated_at": generated_at.isoformat() if generated_at else "",
         "age_days": round(age_days, 3) if age_days is not None else None,
         "max_age_days": max_age_days,
@@ -264,6 +315,12 @@ def _resolve_bundle_path(base: Path, bundle_path: str | Path | None) -> Path:
     return path if path.is_absolute() else base / path
 
 
+def _resolve_manifest_path(base: Path) -> Path:
+    raw = os.environ.get("OCTOPUS_BEHAVIORAL_SUITE_MANIFEST") or DEFAULT_SUITE_MANIFEST_PATH
+    path = Path(raw)
+    return path if path.is_absolute() else base / path
+
+
 def _read_bundle(path: Path, errors: list[str]) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -276,6 +333,83 @@ def _read_bundle(path: Path, errors: list[str]) -> dict[str, Any]:
         errors.append("bundle root must be an object")
         return {}
     return value
+
+
+def _read_manifest(path: Path, errors: list[str]) -> dict[str, Any]:
+    if not path.exists():
+        errors.append(f"suite manifest missing: {path}")
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        errors.append(f"suite manifest unreadable: {type(exc).__name__}: {exc}")
+        return {}
+    if not isinstance(value, dict):
+        errors.append("suite manifest root must be an object")
+        return {}
+    return value
+
+
+def _file_digest(path: Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+def _manifest_signatures(
+    manifest: dict[str, Any],
+    errors: list[str],
+) -> tuple[dict[str, str], bool]:
+    raw_cases = manifest.get("cases")
+    cases = raw_cases if isinstance(raw_cases, list) else []
+    signatures: dict[str, str] = {}
+    domain_counts = {domain: 0 for domain in REQUIRED_DOMAINS}
+    valid = bool(cases)
+    for index, raw_case in enumerate(cases):
+        if not isinstance(raw_case, dict):
+            errors.append(f"suite manifest cases[{index}] must be an object")
+            valid = False
+            continue
+        case_id = str(raw_case.get("id") or "").strip()
+        domain = str(raw_case.get("domain") or "").strip()
+        prompt = raw_case.get("prompt")
+        rubric = raw_case.get("rubric")
+        execution_mode = str(raw_case.get("execution_mode") or "")
+        case_valid = bool(
+            case_id
+            and case_id not in signatures
+            and domain in REQUIRED_DOMAINS
+            and isinstance(prompt, str)
+            and prompt.strip()
+            and isinstance(rubric, dict)
+            and rubric
+            and execution_mode in ALLOWED_EXECUTION_MODES[domain]
+        )
+        if not case_valid:
+            errors.append(f"suite manifest case is invalid: index={index}, id={case_id!r}")
+            valid = False
+            continue
+        prompt_digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        rubric_digest = hashlib.sha256(
+            json.dumps(
+                rubric,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        signatures[case_id] = f"{domain}:{rubric_digest}:{prompt_digest}"
+        domain_counts[domain] += 1
+    expected_cases = len(REQUIRED_DOMAINS) * 2
+    valid = bool(
+        valid
+        and len(signatures) == expected_cases
+        and all(count == 2 for count in domain_counts.values())
+    )
+    if not valid:
+        errors.append("suite manifest must contain exactly two valid cases per required domain")
+    return dict(sorted(signatures.items())), valid
 
 
 def _parse_datetime(value: Any) -> datetime | None:
@@ -543,8 +677,10 @@ __all__ = [
     "ALLOWED_EXECUTION_MODES",
     "BUNDLE_SCHEMA",
     "DEFAULT_BUNDLE_PATH",
+    "DEFAULT_SUITE_MANIFEST_PATH",
     "REPORT_SCHEMA",
     "REQUIRED_DOMAINS",
     "REQUIRED_SYSTEMS",
+    "SUITE_SCHEMA",
     "compute_behavioral_surpass_evidence",
 ]

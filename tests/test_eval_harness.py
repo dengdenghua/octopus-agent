@@ -11,6 +11,7 @@ from benchmarks.eval_harness import (
     Verdict,
     run_case,
     run_suite,
+    run_suite_by_case,
     write_behavioral_bundle,
     write_behavioral_system_evidence,
 )
@@ -100,6 +101,24 @@ def test_suite_aggregates() -> None:
     assert "pass^k" in summary
 
 
+def test_suite_can_select_a_runner_per_case() -> None:
+    cases = [
+        EvalCase(id="a", prompt="ignored", grader=lambda t: t.last_text() == "a"),
+        EvalCase(id="b", prompt="ignored", grader=lambda t: t.last_text() == "b"),
+    ]
+
+    report = run_suite_by_case(
+        cases,
+        runner_factory=lambda case: (
+            lambda _prompt: iter([{"kind": "text_delta", "delta": case.id}])
+        ),
+        k=3,
+    )
+
+    assert report.aggregate_pass_pow_k == 1.0
+    assert [result.passes for result in report.cases] == [3, 3]
+
+
 def test_setup_failure_recorded() -> None:
     def bad_setup() -> None:
         raise RuntimeError("env broken")
@@ -183,8 +202,14 @@ def test_writes_digest_verified_behavioral_system_evidence(tmp_path) -> None:
         assert hashlib.sha256(content).hexdigest() == artifact["sha256"]
 
     bundle_path = tmp_path / "benchmarks" / "results" / "bundle.json"
+    manifest_path = tmp_path / "benchmarks" / "behavioral-surpass-suite.json"
+    manifest_path.write_text(
+        json.dumps({"suite_id": "same-task-v1", "cases": []}),
+        encoding="utf-8",
+    )
     write_behavioral_bundle(
         path=bundle_path,
+        suite_manifest_path=manifest_path,
         suite_id="same-task-v1",
         runner_version="test-runner",
         source_revision="abc123",
@@ -193,6 +218,7 @@ def test_writes_digest_verified_behavioral_system_evidence(tmp_path) -> None:
     )
     bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
     assert bundle["schema"] == "octopus.behavioral_surpass_bundle.v1"
+    assert bundle["suite_manifest_sha256"] == hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     assert bundle["systems"]["octopus"]["cases"][0]["rubric_digest"] == rubric_digest
 
 

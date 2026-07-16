@@ -52,9 +52,9 @@ export default function WorkflowsPage() {
       <WorkspaceHeader />
       <WorkspaceBody className="items-stretch">
         <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-4 py-10">
-          <section className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+          <section className="overflow-hidden rounded-xl border border-border-default bg-card shadow-[var(--shadow-xs)]">
             <div className="grid gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">
-              <div className="border-b border-border/50 bg-muted/20 p-6 lg:border-b-0 lg:border-r">
+              <div className="border-b border-border-default bg-muted/20 p-6 lg:border-b-0 lg:border-r">
                 <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <WorkflowIcon className="size-5" />
                 </div>
@@ -89,10 +89,10 @@ export default function WorkflowsPage() {
                     <Link
                       key={item.title}
                       to={item.href}
-                      className="group flex min-h-[132px] flex-col rounded-lg border border-border/55 bg-background/70 p-4 transition-colors hover:border-primary/25 hover:bg-background"
+                      className="group flex min-h-[132px] flex-col rounded-lg border border-border-default bg-background/70 p-4 transition-colors hover:border-primary/25 hover:bg-background"
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <span className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                        <span className="flex size-9 items-center justify-center bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
                           <Icon className="size-4" />
                         </span>
                         <span className="text-xs font-medium text-muted-foreground transition-colors group-hover:text-primary">
@@ -113,7 +113,7 @@ export default function WorkflowsPage() {
           </section>
 
           <section className="mt-4 grid gap-3 md:grid-cols-3">
-            <div className="rounded-lg border border-border/55 bg-card/65 p-4">
+            <div className="rounded-lg border border-border-default bg-card/65 p-4">
               <div className="text-xs font-medium text-muted-foreground">
                 推荐过渡方案
               </div>
@@ -124,7 +124,7 @@ export default function WorkflowsPage() {
                 成功路径会在消息、工具轨迹和技能里逐步沉淀。
               </p>
             </div>
-            <div className="rounded-lg border border-border/55 bg-card/65 p-4">
+            <div className="rounded-lg border border-border-default bg-card/65 p-4">
               <div className="text-xs font-medium text-muted-foreground">
                 可复用资产
               </div>
@@ -135,7 +135,7 @@ export default function WorkflowsPage() {
                 比编辑器更轻，适合现在的插件和技能生态。
               </p>
             </div>
-            <div className="rounded-lg border border-border/55 bg-card/65 p-4">
+            <div className="rounded-lg border border-border-default bg-card/65 p-4">
               <div className="text-xs font-medium text-muted-foreground">
                 后续恢复
               </div>

@@ -122,11 +122,11 @@ export default function ArchitecturePage() {
           {/* Implementation note. */}
           <aside
             className={cn(
-              "shrink-0 border-r border-border/40 bg-muted/20",
+              "shrink-0 border-r border-border-subtle bg-muted/20",
               "md:w-64 md:h-full overflow-y-auto",
             )}
           >
-            <div className="px-4 py-3 border-b border-border/40">
+            <div className="px-4 py-3 border-b border-border-subtle">
               <h1 className="text-sm font-bold">{t.architecture.title}</h1>
               <p className="mt-0.5 text-[10px] text-muted-foreground leading-snug">
                 {t.architecture.subtitle}

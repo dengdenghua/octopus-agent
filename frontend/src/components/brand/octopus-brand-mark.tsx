@@ -32,7 +32,7 @@ export function OctopusBrandMark({
     <span
       aria-hidden="true"
       className={cn(
-        "relative inline-grid shrink-0 place-items-center overflow-hidden border border-foreground/15 bg-background/95 text-foreground shadow-sm",
+        "relative inline-grid shrink-0 place-items-center overflow-hidden border border-foreground/15 bg-background/95 text-foreground shadow-[var(--shadow-xs)]",
         token.outer,
         className,
       )}

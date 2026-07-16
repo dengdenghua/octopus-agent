@@ -270,7 +270,7 @@ export default function ReplayPage() {
           <section className="workspace-panel rounded-[1.75rem] px-4 py-4 sm:px-6 sm:py-5">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="flex min-w-0 items-start gap-4 sm:items-center">
-                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-sm">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-[var(--shadow-xs)]">
                   <PlayCircleIcon className="size-5" />
                 </div>
                 <div className="min-w-0">
@@ -388,14 +388,14 @@ function ReplayCasesTable({
 }) {
   if (loading && cases.length === 0) {
     return (
-      <div className="rounded-md border border-border/60 bg-muted/15 px-3 py-4 text-xs text-muted-foreground">
+      <div className="rounded-md border border-border-default bg-muted/15 px-3 py-4 text-xs text-muted-foreground">
         正在加载回放用例…
       </div>
     );
   }
   if (cases.length === 0) {
     return (
-      <div className="rounded-md border border-border/60 bg-muted/15 px-3 py-4 text-xs text-muted-foreground">
+      <div className="rounded-md border border-border-default bg-muted/15 px-3 py-4 text-xs text-muted-foreground">
         暂无回放用例。完成 task-run 后会自动生成对应的回放用例。
       </div>
     );
@@ -403,7 +403,7 @@ function ReplayCasesTable({
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-xs">
-        <thead className="border-b border-border/60 text-muted-foreground">
+        <thead className="border-b border-border-default text-muted-foreground">
           <tr>
             <th className="px-2 py-2 font-medium">case_id</th>
             <th className="px-2 py-2 font-medium">fingerprint</th>
@@ -418,7 +418,7 @@ function ReplayCasesTable({
           {cases.map((item) => (
             <tr
               key={item.case_id}
-              className="border-b border-border/40 align-top"
+              className="border-b border-border-subtle align-top"
             >
               <td className="px-2 py-2 font-mono text-[11px]">
                 {item.case_id}
@@ -480,14 +480,14 @@ function ReplayEvaluationsTable({
 }) {
   if (loading && evaluations.length === 0) {
     return (
-      <div className="rounded-md border border-border/60 bg-muted/15 px-3 py-4 text-xs text-muted-foreground">
+      <div className="rounded-md border border-border-default bg-muted/15 px-3 py-4 text-xs text-muted-foreground">
         正在加载回放评估…
       </div>
     );
   }
   if (evaluations.length === 0) {
     return (
-      <div className="rounded-md border border-border/60 bg-muted/15 px-3 py-4 text-xs text-muted-foreground">
+      <div className="rounded-md border border-border-default bg-muted/15 px-3 py-4 text-xs text-muted-foreground">
         暂无回放评估。回放评估会在回放用例生成后自动计算。
       </div>
     );
@@ -495,7 +495,7 @@ function ReplayEvaluationsTable({
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-xs">
-        <thead className="border-b border-border/60 text-muted-foreground">
+        <thead className="border-b border-border-default text-muted-foreground">
           <tr>
             <th className="px-2 py-2 font-medium">case_id</th>
             <th className="px-2 py-2 font-medium">fingerprint</th>
@@ -509,7 +509,7 @@ function ReplayEvaluationsTable({
           {evaluations.map((item) => (
             <tr
               key={item.case_id}
-              className="border-b border-border/40 align-top"
+              className="border-b border-border-subtle align-top"
             >
               <td className="px-2 py-2 font-mono text-[11px]">
                 {item.case_id}

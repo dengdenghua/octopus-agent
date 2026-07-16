@@ -51,7 +51,7 @@ function BrowserPageBody() {
         if (value) setMode(value as DevicePreset);
       }}
       spacing={0}
-      className="rounded-lg border border-border/60 bg-muted/35 p-0.5 shadow-sm"
+      className="rounded-lg border border-border-default bg-muted/35 p-0.5 shadow-[var(--shadow-xs)]"
     >
       {PRESET_ORDER.map((preset) => {
         const Icon = DEVICE_SPECS[preset].Icon;
@@ -67,7 +67,7 @@ function BrowserPageBody() {
             value={preset}
             size="sm"
             aria-label={label}
-            className="rounded-md px-2 py-1 data-[state=on]:bg-background data-[state=on]:shadow-sm"
+            className="rounded-md px-2 py-1 data-[state=on]:bg-background data-[state=on]:shadow-[var(--shadow-xs)]"
           >
             <Icon
               className={cn(
@@ -117,7 +117,7 @@ function BrowserPageBody() {
           className={
             isPhone
               ? "flex flex-col overflow-hidden rounded-[1.75rem] border-[6px] border-foreground/80 bg-background shadow-2xl"
-              : "flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm"
+              : "flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border-default bg-card shadow-[var(--shadow-xs)]"
           }
           style={
             isPhone
@@ -137,7 +137,7 @@ function BrowserPageBody() {
               : undefined
           }
         >
-          <div className="flex h-11 items-center gap-2.5 border-b border-border/60 bg-muted/20 px-3">
+          <div className="flex h-11 items-center gap-2.5 border-b border-border-default bg-muted/20 px-3">
             <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <GlobeIcon className="size-4" />
             </span>

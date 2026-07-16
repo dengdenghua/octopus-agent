@@ -269,7 +269,7 @@ function PluginListItem({
                 ? "border-destructive/20 bg-destructive/10 text-destructive"
                 : plugin.enabled
                   ? "border-primary/20 bg-primary/10 text-primary"
-                  : "border-border/60 bg-muted/35 text-muted-foreground",
+                  : "border-border-default bg-muted/35 text-muted-foreground",
             )}
           >
             {plugin.enabled ? "已启用" : plugin.error ? "异常" : "未启用"}
@@ -480,7 +480,7 @@ export default function PluginsPage() {
               type="button"
               variant="outline"
               size="sm"
-              className="h-9 rounded-lg px-3"
+              className="h-9 px-3"
               onClick={openCreatePluginChat}
             >
               <Plus className="mr-1.5 size-4" />

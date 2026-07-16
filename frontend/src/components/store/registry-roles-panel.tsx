@@ -119,7 +119,7 @@ export function RegistryRolesPanel() {
                 size="sm"
                 onClick={() => setActiveCategory(category)}
                 className={cn(
-                  "h-8 shrink-0 rounded-lg px-2.5 text-xs",
+                  "h-8 shrink-0 px-2.5 text-xs",
                   activeCategory === category &&
                     "border-primary/35 bg-primary/10 text-foreground",
                 )}
@@ -143,7 +143,7 @@ export function RegistryRolesPanel() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜索角色"
-            className="h-8 w-44 rounded-md border border-border/70 bg-background px-2 text-sm outline-none focus:border-primary/50"
+            className="h-8 w-44 rounded-md border border-border-default bg-background px-2 text-sm outline-none focus:border-primary/50"
           />
           <Button
             size="sm"

@@ -100,7 +100,7 @@ export default function ObservabilityPage({
           <section className="workspace-panel rounded-[1.75rem] px-6 py-5">
             <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
               <div className="flex items-center gap-4">
-                <div className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-cyan-500 text-white shadow-lg shadow-violet-500/20">
+                <div className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-cyan-500 text-white shadow-[var(--shadow-md)] shadow-violet-500/20">
                   <ActivityIcon className="size-5" />
                 </div>
                 <div className="flex-1">
@@ -411,7 +411,7 @@ function SwarmPanel() {
         {grouped.map(([taskId, sub]) => (
           <div
             key={taskId}
-            className="rounded-lg border border-border/60 bg-muted/20 p-3"
+            className="rounded-lg border border-border-default bg-muted/20 p-3"
           >
             <div className="mb-2 flex items-center justify-between">
               <div className="text-xs font-mono text-muted-foreground">
@@ -714,7 +714,7 @@ function JournalPanel() {
               <div
                 key={i}
                 className={cn(
-                  "border-b border-border/40 px-2 py-1.5",
+                  "border-b border-border-subtle px-2 py-1.5",
                   eventRowColor(e.event_type),
                 )}
               >
@@ -809,7 +809,7 @@ function JournalPanel() {
                             e.filename ||
                             t.observabilityPage.eventArtifactScreenshot
                           }
-                          className="max-h-32 max-w-[12rem] sm:max-w-[20rem] rounded-md border border-border/40 object-contain"
+                          className="max-h-32 max-w-[12rem] sm:max-w-[20rem] rounded-md border border-border-subtle object-contain"
                           loading="lazy"
                         />
                       </a>
@@ -1143,7 +1143,7 @@ function HemolymphPanel() {
                   .slice()
                   .reverse()
                   .map((s, i) => (
-                    <tr key={i} className="border-b border-border/40">
+                    <tr key={i} className="border-b border-border-subtle">
                       <td className="py-1 text-muted-foreground">
                         {new Date(s.ts * 1000).toLocaleTimeString()}
                       </td>
@@ -1263,7 +1263,7 @@ function CostPanel() {
                 </thead>
                 <tbody className="font-mono">
                   {data.tasks.map((tk) => (
-                    <tr key={tk.task_id} className="border-b border-border/40">
+                    <tr key={tk.task_id} className="border-b border-border-subtle">
                       <td
                         className="py-1 max-w-[12rem] truncate"
                         title={tk.task_id}
@@ -1312,7 +1312,7 @@ function EmptyState({
 
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+    <div className="rounded-lg border border-border-default bg-muted/20 p-3">
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
@@ -1442,7 +1442,7 @@ function ObservabilitySignalCard({
   description: string;
 }) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-background/70 px-4 py-3">
+    <div className="rounded-2xl border border-border-default bg-background/70 px-4 py-3">
       <div className="flex items-center gap-2 text-sm font-medium">
         <span className="text-primary">{icon}</span>
         {title}

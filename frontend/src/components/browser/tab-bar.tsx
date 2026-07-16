@@ -85,7 +85,7 @@ export function TabBar() {
               isHomeTab && "min-w-[68px] max-w-[96px]",
               active
                 ? cn(liquidGlassClass("thin", true), "text-foreground")
-                : "border border-transparent bg-background/18 text-muted-foreground hover:border-border/35 hover:bg-background/42 hover:text-foreground",
+                : "border border-transparent bg-background/18 text-muted-foreground hover:border-border-subtle hover:bg-background/42 hover:text-foreground",
               dragOver && "ring-2 ring-primary ring-offset-0",
             )}
             // Implementation note.

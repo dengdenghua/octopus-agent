@@ -584,7 +584,7 @@ function BackendBrowserTab({
       }
       className="relative flex-col overflow-auto bg-muted/20"
     >
-      <div className="absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full border bg-background/90 p-1 text-[11px] shadow-sm backdrop-blur">
+      <div className="absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full border bg-background/90 p-1 text-[11px] shadow-[var(--shadow-xs)] backdrop-blur">
         <button
           type="button"
           onClick={() => setExtensionGuideOpen((v) => !v)}
@@ -634,7 +634,7 @@ function BackendBrowserTab({
                   href={bookmarkletHref}
                   draggable
                   onClick={(event) => event.preventDefault()}
-                  className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
+                  className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-xs)] hover:bg-primary/90"
                   title={wt.dragToBookmarksTitle}
                 >
                   Octopus Agent
@@ -715,7 +715,7 @@ function BackendBrowserTab({
         </div>
       )}
       {extensionHint && (
-        <div className="absolute bottom-3 left-3 right-3 rounded-md border bg-background/95 px-3 py-2 text-xs text-muted-foreground shadow-sm">
+        <div className="absolute bottom-3 left-3 right-3 rounded-md border bg-background/95 px-3 py-2 text-xs text-muted-foreground shadow-[var(--shadow-xs)]">
           {extensionHint}
         </div>
       )}
@@ -876,7 +876,7 @@ function BrowserDesktopHome({
           mobileDesktop && "left-2 w-11",
         )}
       >
-        <div className="grid size-8 place-items-center rounded-2xl bg-white/70 text-foreground shadow-sm">
+        <div className="grid size-8 place-items-center rounded-2xl bg-white/70 text-foreground shadow-[var(--shadow-xs)]">
           <BotIcon className="size-5" />
         </div>
         <div className="mt-8 flex flex-col gap-4">
@@ -962,7 +962,7 @@ function BrowserDesktopHome({
             <button
               type="button"
               onClick={resetDesktopLayout}
-              className="rounded-full bg-white/55 px-3 py-1.5 text-xs font-medium text-foreground shadow-lg shadow-black/10 backdrop-blur-xl transition hover:bg-white/75"
+              className="rounded-full bg-white/55 px-3 py-1.5 text-xs font-medium text-foreground shadow-[var(--shadow-md)] shadow-black/10 backdrop-blur-xl transition hover:bg-white/75"
             >
               {wt.resetLayout}
             </button>
@@ -971,7 +971,7 @@ function BrowserDesktopHome({
             type="button"
             onClick={() => setEditMode((value) => !value)}
             className={cn(
-              "rounded-full px-3 py-1.5 text-xs font-medium shadow-lg shadow-black/10 backdrop-blur-xl transition",
+              "rounded-full px-3 py-1.5 text-xs font-medium shadow-[var(--shadow-md)] shadow-black/10 backdrop-blur-xl transition",
               editMode
                 ? "bg-blue-600 text-white hover:bg-blue-700"
                 : "bg-white/55 text-foreground hover:bg-white/75",
@@ -983,7 +983,7 @@ function BrowserDesktopHome({
         {editMode && (
           <div
             className={cn(
-              "absolute left-24 top-8 rounded-full bg-black/22 px-3 py-1.5 text-xs font-medium text-white shadow-lg backdrop-blur",
+              "absolute left-24 top-8 rounded-full bg-black/22 px-3 py-1.5 text-xs font-medium text-white shadow-[var(--shadow-md)] backdrop-blur",
               compactDesktop && "left-20 top-24",
               tabletDesktop && "left-24",
               mobileDesktop && "left-16 right-4 text-center",
@@ -1011,7 +1011,7 @@ function BrowserDesktopHome({
             )}
           >
             <div className="text-center">
-              <div className="flex overflow-hidden rounded-[20px] bg-white/90 text-foreground shadow-lg shadow-black/10">
+              <div className="flex overflow-hidden rounded-[20px] bg-white/90 text-foreground shadow-[var(--shadow-md)] shadow-black/10">
                 <div
                   className={cn(
                     "grid w-24 place-items-center bg-white px-4 py-3 text-center",
@@ -1232,7 +1232,7 @@ function BrowserDesktopHome({
                 onDrop={(event) => dropApp(event, app.url)}
                 onDragEnd={() => setDraggingUrl(null)}
                 className={cn(
-                  "grid size-16 place-items-center rounded-[18px] bg-gradient-to-br text-white shadow-lg shadow-black/12 transition hover:-translate-y-1 hover:shadow-xl",
+                  "grid size-16 place-items-center rounded-[18px] bg-gradient-to-br text-white shadow-[var(--shadow-md)] shadow-black/12 transition hover:-translate-y-1 hover:shadow-xl",
                   app.color,
                   compactDesktop && "size-13 shrink-0 rounded-2xl",
                   tabletDesktop && "size-14",
@@ -1517,7 +1517,7 @@ function DesktopAppIcon({
     >
       <span
         className={cn(
-          "grid place-items-center rounded-[18px] bg-gradient-to-br text-white shadow-lg shadow-black/14 transition group-hover:-translate-y-0.5 group-hover:shadow-xl",
+          "grid place-items-center rounded-[18px] bg-gradient-to-br text-white shadow-[var(--shadow-md)] shadow-black/14 transition group-hover:-translate-y-0.5 group-hover:shadow-xl",
           compact ? "size-16" : "size-[72px]",
           app.color,
         )}

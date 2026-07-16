@@ -265,7 +265,7 @@ export default function ReflexEditorPage() {
               <StatusBadge msg={statusMsg} kind={statusKind} />
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <div className="inline-flex rounded-md border border-border/60 p-0.5">
+              <div className="inline-flex rounded-md border border-border-default p-0.5">
                 <button
                   onClick={() => setMode("card")}
                   className={cn(
@@ -306,7 +306,7 @@ export default function ReflexEditorPage() {
                     {t.reflexEditor.saveNoReload}
                   </Button>
                   <span className="ml-auto text-xs text-muted-foreground">
-                    <kbd className="rounded border border-border/60 bg-background/60 px-1.5 py-0.5 font-mono text-[10px]">
+                    <kbd className="rounded border border-border-default bg-background/60 px-1.5 py-0.5 font-mono text-[10px]">
                       Ctrl/⌘+S
                     </kbd>{" "}
                     {t.reflexEditor.keyboardHintSuffix}

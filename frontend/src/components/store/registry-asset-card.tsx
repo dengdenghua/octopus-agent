@@ -96,7 +96,7 @@ export function RegistryAssetCard({
   return (
     <Card
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-lg border-border/70 bg-card/86 py-0 transition-all duration-200 ease-out",
+        "group relative flex flex-col overflow-hidden rounded-lg border-border-default bg-card/86 py-0 transition-all duration-200 ease-out",
         "hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_0_24px_hsl(var(--primary)/0.10)]",
       )}
     >
@@ -107,12 +107,12 @@ export function RegistryAssetCard({
         <div className="flex items-start gap-2">
           <div
             className={cn(
-              "relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/60 text-lg leading-none",
+              "relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border-default text-lg leading-none",
               style.bg,
             )}
           >
             <span className={style.text}>{style.icon}</span>
-            <div className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-sky-500 shadow-sm">
+            <div className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-sky-500 shadow-[var(--shadow-xs)]">
               <CloudIcon className="h-2.5 w-2.5 text-white" />
             </div>
           </div>
@@ -142,7 +142,7 @@ export function RegistryAssetCard({
         )}
       </CardHeader>
 
-      <CardFooter className="mt-auto flex items-center justify-end gap-2 border-t border-border/65 bg-background/54 px-3 py-2">
+      <CardFooter className="mt-auto flex items-center justify-end gap-2 border-t border-border-default bg-background/54 px-3 py-2">
         {actionSlot}
       </CardFooter>
     </Card>

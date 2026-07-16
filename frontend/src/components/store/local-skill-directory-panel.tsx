@@ -280,7 +280,7 @@ export function LocalSkillDirectoryPanel({
     <Button
       size="sm"
       variant={!showSkillPacks && category === "all" ? "secondary" : "ghost"}
-      className="h-8 shrink-0 rounded-lg px-3 text-xs"
+      className="h-8 shrink-0 px-3 text-xs"
       onClick={() => handleCategorySelect("all")}
     >
       {t.agentWorld.categories.all}
@@ -316,7 +316,7 @@ export function LocalSkillDirectoryPanel({
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               aria-label={t.unifiedStore.skills.searchAria}
-              className="h-9 rounded-lg border-border bg-background pl-10 text-sm shadow-none"
+              className="h-9 border-border bg-background pl-10 text-sm shadow-none"
               placeholder={t.unifiedStore.skills.searchPlaceholder}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -330,7 +330,7 @@ export function LocalSkillDirectoryPanel({
           <Button
             size="sm"
             variant={showSkillPacks ? "secondary" : "ghost"}
-            className="h-8 shrink-0 rounded-lg px-3 text-xs"
+            className="h-8 shrink-0 px-3 text-xs"
             onClick={onSkillPacksSelect}
           >
             <Boxes className="mr-1.5 size-3.5" />
@@ -348,7 +348,7 @@ export function LocalSkillDirectoryPanel({
               variant={
                 !showSkillPacks && category === item.key ? "secondary" : "ghost"
               }
-              className="h-8 shrink-0 rounded-lg px-3 text-xs"
+              className="h-8 shrink-0 px-3 text-xs"
               onClick={() => handleCategorySelect(item.key)}
             >
               {categoryLabel(item.key)}
@@ -362,7 +362,7 @@ export function LocalSkillDirectoryPanel({
             variant={
               !showSkillPacks && category === "other" ? "secondary" : "ghost"
             }
-            className="h-8 shrink-0 rounded-lg px-3 text-xs"
+            className="h-8 shrink-0 px-3 text-xs"
             onClick={() => handleCategorySelect("other")}
           >
             {t.unifiedStore.skills.other}
@@ -390,7 +390,7 @@ export function LocalSkillDirectoryPanel({
             {hiddenSkillCount > 0 && (
               <button
                 type="button"
-                className="rounded-lg px-2 py-1 transition-colors hover:bg-muted hover:text-foreground"
+                className="px-2 py-1 transition-colors hover:bg-muted hover:text-foreground"
                 onClick={() => setShowInternalSkills((value) => !value)}
               >
                 {showInternalSkills
@@ -415,7 +415,7 @@ export function LocalSkillDirectoryPanel({
                     <div className="flex min-w-0 items-start gap-3">
                       <div
                         className={cn(
-                          "flex size-12 shrink-0 items-center justify-center rounded-lg border shadow-none",
+                          "flex size-12 shrink-0 items-center justify-center border shadow-none",
                           skill.enabled
                             ? "border-border bg-primary/10 text-primary"
                             : "border-border bg-muted text-muted-foreground",

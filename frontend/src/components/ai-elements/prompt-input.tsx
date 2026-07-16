@@ -310,7 +310,7 @@ export function PromptInputAttachment({
       <HoverCardTrigger asChild>
         <div
           className={cn(
-            "group border-border hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 relative flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-1.5 text-sm font-medium transition-all select-none",
+            "group border-border hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 relative flex h-8 cursor-pointer items-center gap-1.5 border px-1.5 text-sm font-medium transition-all select-none",
             className,
           )}
           key={data.id}
@@ -1100,7 +1100,7 @@ export const PromptInputSubmit = ({
   return (
     <InputGroupButton
       className={cn(
-        "rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-md shadow-purple-500/20 transition-all hover:shadow-lg hover:shadow-purple-500/30 hover:brightness-110",
+        "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-[var(--shadow-sm)] shadow-purple-500/20 transition-all hover:shadow-[var(--shadow-md)] hover:shadow-purple-500/30 hover:brightness-110",
         className,
       )}
       size={size}
@@ -1268,7 +1268,7 @@ export const PromptInputSpeechButton = ({
   return (
     <PromptInputButton
       className={cn(
-        "relative transition-all duration-200",
+        "relative transition-all",
         isListening && "bg-accent text-accent-foreground animate-pulse",
         className,
       )}

@@ -56,7 +56,7 @@ export function RegistryPluginsPanel() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜索插件"
-            className="h-8 w-44 rounded-md border border-border/70 bg-background px-2 text-sm outline-none focus:border-primary/50"
+            className="h-8 w-44 rounded-md border border-border-default bg-background px-2 text-sm outline-none focus:border-primary/50"
           />
           <Button
             size="sm"

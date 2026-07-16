@@ -561,7 +561,7 @@ export default function DesktopShellPage() {
   if (!organizerEnabled) {
     return (
       <main className="flex h-screen items-center justify-center bg-background p-6 text-foreground">
-        <section className="w-full max-w-xl rounded-3xl border border-border bg-card p-6 shadow-sm">
+        <section className="w-full max-w-xl rounded-3xl border border-border bg-card p-6 shadow-[var(--shadow-xs)]">
           <div className="mb-5 flex items-center gap-3">
             <div className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
               <FolderIcon className="size-5" />
@@ -579,21 +579,21 @@ export default function DesktopShellPage() {
             <button
               type="button"
               onClick={enableOrganizer}
-              className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90"
+              className="inline-flex h-10 items-center justify-center bg-primary px-4 text-sm font-medium text-primary-foreground shadow-[var(--shadow-xs)] transition hover:bg-primary/90"
             >
               {t.desktop.enableButton}
             </button>
             <button
               type="button"
               onClick={() => navigate("/workspace/desktop-organizer")}
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-medium transition hover:bg-muted"
+              className="inline-flex h-10 items-center justify-center border border-border bg-background px-4 text-sm font-medium transition hover:bg-muted"
             >
               {t.desktop.pluginSettingsButton}
             </button>
             <button
               type="button"
               onClick={() => navigate("/workspace/realtime/new")}
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-medium transition hover:bg-muted"
+              className="inline-flex h-10 items-center justify-center border border-border bg-background px-4 text-sm font-medium transition hover:bg-muted"
             >
               {t.desktop.backToWorkspaceButton}
             </button>
@@ -611,10 +611,10 @@ export default function DesktopShellPage() {
             <button
               type="button"
               onClick={() => navigate("/workspace/realtime/new")}
-              className="flex shrink-0 items-center gap-2 rounded-lg px-1 py-0.5 transition hover:bg-white/32"
+              className="flex shrink-0 items-center gap-2 px-1 py-0.5 transition hover:bg-white/32"
               title={t.desktop.header.workspaceTooltip}
             >
-              <span className="grid size-6 place-items-center rounded-md bg-white/50 text-foreground shadow-sm ring-1 ring-white/35">
+              <span className="grid size-6 place-items-center rounded-md bg-white/50 text-foreground shadow-[var(--shadow-xs)] ring-1 ring-white/35">
                 <BotIcon className="size-4" />
               </span>
               <span className="font-semibold">{t.desktop.header.brand}</span>
@@ -787,7 +787,7 @@ export default function DesktopShellPage() {
                     type="button"
                     onClick={handleAutoArchive}
                     disabled={archiving || loadingItems}
-                    className="inline-flex h-7 items-center gap-1 rounded-lg bg-blue-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
+                    className="inline-flex h-7 items-center gap-1 bg-blue-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
                     title={t.desktop.drawer.autoArchiveTooltip}
                   >
                     <ArchiveIcon className="size-3" />
@@ -801,7 +801,7 @@ export default function DesktopShellPage() {
                     type="button"
                     onClick={handleUndo}
                     disabled={undoing || loadingItems}
-                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-border bg-white px-2.5 text-[11px] font-medium text-muted-foreground transition hover:bg-muted/50 disabled:opacity-50"
+                    className="inline-flex h-7 items-center gap-1 border border-border bg-white px-2.5 text-[11px] font-medium text-muted-foreground transition hover:bg-muted/50 disabled:opacity-50"
                     title={t.desktop.drawer.undoTooltip}
                   >
                     <RotateCcwIcon className="size-3" />
@@ -985,7 +985,7 @@ export default function DesktopShellPage() {
                                 >
                                   <span
                                     className={cn(
-                                      "grid size-12 place-items-center rounded-[14px] text-white shadow-lg shadow-black/12 ring-1 ring-white/35 transition-transform duration-150 group-hover:scale-105",
+                                      "grid size-12 place-items-center rounded-[14px] text-white shadow-[var(--shadow-md)] shadow-black/12 ring-1 ring-white/35 transition-transform duration-150 group-hover:scale-105",
                                       category === "folder"
                                         ? "bg-gradient-to-br from-amber-400 to-orange-500"
                                         : category === "app"
@@ -1012,7 +1012,7 @@ export default function DesktopShellPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="grid h-56 place-items-center rounded-3xl border border-dashed border-border/80 bg-white/32 text-center">
+                    <div className="grid h-56 place-items-center rounded-3xl border border-dashed border-border-strong bg-white/32 text-center">
                       <div>
                         <SearchIcon className="mx-auto size-8 text-muted-foreground/70" />
                         <p className="mt-3 text-sm font-medium text-muted-foreground">
@@ -1089,7 +1089,7 @@ export default function DesktopShellPage() {
                 onClick={() => openApp(app)}
                 title={app.name}
                 className={cn(
-                  "grid size-[54px] place-items-center rounded-[15px] bg-gradient-to-br text-white shadow-lg shadow-black/18 ring-1 ring-white/25 transition hover:-translate-y-2 hover:scale-110",
+                  "grid size-[54px] place-items-center rounded-[15px] bg-gradient-to-br text-white shadow-[var(--shadow-md)] shadow-black/18 ring-1 ring-white/25 transition hover:-translate-y-2 hover:scale-110",
                   app.color,
                 )}
               >
@@ -1107,7 +1107,7 @@ export default function DesktopShellPage() {
                 onClick={() => openApp(app)}
                 title={`${app.name} · ${app.subtitle}`}
                 className={cn(
-                  "grid size-[54px] place-items-center rounded-[15px] bg-gradient-to-br shadow-lg shadow-black/12 ring-1 ring-white/25 transition hover:-translate-y-2 hover:scale-110",
+                  "grid size-[54px] place-items-center rounded-[15px] bg-gradient-to-br shadow-[var(--shadow-md)] shadow-black/12 ring-1 ring-white/25 transition hover:-translate-y-2 hover:scale-110",
                   app.color,
                 )}
               >
@@ -1120,7 +1120,7 @@ export default function DesktopShellPage() {
             type="button"
             onClick={() => setDesktopDrawerOpen(true)}
             title={t.desktop.dock.desktopFiles}
-            className="grid size-[54px] place-items-center rounded-[15px] bg-white/76 text-orange-500 shadow-lg shadow-black/12 transition hover:-translate-y-2 hover:scale-110"
+            className="grid size-[54px] place-items-center rounded-[15px] bg-white/76 text-orange-500 shadow-[var(--shadow-md)] shadow-black/12 transition hover:-translate-y-2 hover:scale-110"
           >
             <FolderIcon className="size-6" />
           </button>
@@ -1129,7 +1129,7 @@ export default function DesktopShellPage() {
             onClick={() => setShowWidget(!showWidget)}
             title={t.desktop.dock.systemMonitor}
             className={cn(
-              "grid size-[54px] place-items-center rounded-[15px] shadow-lg shadow-black/12 transition hover:-translate-y-2 hover:scale-110",
+              "grid size-[54px] place-items-center rounded-[15px] shadow-[var(--shadow-md)] shadow-black/12 transition hover:-translate-y-2 hover:scale-110",
               showWidget
                 ? "bg-blue-500 text-white ring-2 ring-blue-300"
                 : "bg-white/76 text-foreground",
@@ -1141,7 +1141,7 @@ export default function DesktopShellPage() {
             type="button"
             onClick={() => navigate("/workspace")}
             title={t.desktop.dock.settings}
-            className="grid size-[54px] place-items-center rounded-[15px] bg-white/76 text-foreground shadow-lg shadow-black/12 transition hover:-translate-y-2 hover:scale-110"
+            className="grid size-[54px] place-items-center rounded-[15px] bg-white/76 text-foreground shadow-[var(--shadow-md)] shadow-black/12 transition hover:-translate-y-2 hover:scale-110"
           >
             <SettingsIcon className="size-6" />
           </button>

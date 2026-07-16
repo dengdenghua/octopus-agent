@@ -33,7 +33,7 @@ export default function McpPage() {
               </p>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
-              <div className="workspace-panel-subtle ui-density-panel rounded-lg bg-gradient-to-br from-primary/5 to-transparent transition-colors duration-200">
+              <div className="workspace-panel-subtle ui-density-panel rounded-lg bg-gradient-to-br from-primary/5 to-transparent transition-colors">
                 <div className="mb-1 flex items-center gap-2 text-sm font-medium">
                   <div className="flex size-5 items-center justify-center rounded bg-primary/10">
                     <PlugZapIcon className="size-3 text-primary" />
@@ -44,7 +44,7 @@ export default function McpPage() {
                   {t.mcpCenter.toolExtensionDesc}
                 </p>
               </div>
-              <div className="workspace-panel-subtle ui-density-panel rounded-lg bg-gradient-to-br from-blue-500/5 to-transparent transition-colors duration-200">
+              <div className="workspace-panel-subtle ui-density-panel rounded-lg bg-gradient-to-br from-blue-500/5 to-transparent transition-colors">
                 <div className="mb-1 flex items-center gap-2 text-sm font-medium">
                   <div className="flex size-5 items-center justify-center rounded bg-blue-500/10">
                     <ServerIcon className="size-3 text-blue-500" />

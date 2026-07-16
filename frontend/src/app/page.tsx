@@ -128,7 +128,7 @@ export default function HomePage() {
               <Button
                 size="lg"
                 onClick={() => navigate("/workspace")}
-                className="group gap-2 rounded-xl px-6 shadow-lg shadow-primary/20"
+                className="group gap-2 rounded-xl px-6 shadow-[var(--shadow-md)] shadow-primary/20"
               >
                 {t.landing.getStarted}
                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
@@ -137,7 +137,7 @@ export default function HomePage() {
                 size="lg"
                 variant="outline"
                 asChild
-                className="group gap-2 rounded-xl border-border/60 bg-card/40 backdrop-blur-sm"
+                className="group gap-2 rounded-xl border-border-default bg-card/40 backdrop-blur-sm"
               >
                 <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
                   <Github className="size-4" />
@@ -157,20 +157,20 @@ export default function HomePage() {
               <OctopusMark className="relative z-10 size-28 drop-shadow-[0_0_32px_rgba(var(--primary)_0.35)] md:size-36" />
             </div>
 
-            <div className="absolute -right-4 top-8 hidden rounded-xl border border-border/50 bg-card/60 p-3 shadow-xl backdrop-blur-md md:block">
+            <div className="absolute -right-4 top-8 hidden rounded-xl border border-border-default bg-card/60 p-3 shadow-xl backdrop-blur-md md:block">
               <Brain className="size-5 text-primary" />
             </div>
-            <div className="absolute -left-4 bottom-16 hidden rounded-xl border border-border/50 bg-card/60 p-3 shadow-xl backdrop-blur-md md:block">
+            <div className="absolute -left-4 bottom-16 hidden rounded-xl border border-border-default bg-card/60 p-3 shadow-xl backdrop-blur-md md:block">
               <Workflow className="size-5 text-cyan-400" />
             </div>
-            <div className="absolute bottom-4 right-12 hidden rounded-xl border border-border/50 bg-card/60 p-3 shadow-xl backdrop-blur-md md:block">
+            <div className="absolute bottom-4 right-12 hidden rounded-xl border border-border-default bg-card/60 p-3 shadow-xl backdrop-blur-md md:block">
               <Shield className="size-5 text-violet-400" />
             </div>
           </div>
         </section>
 
         {/* System loop */}
-        <section className="relative my-24 rounded-2xl border border-border/40 bg-card/40 p-8 shadow-2xl backdrop-blur-xl md:p-12">
+        <section className="relative my-24 rounded-2xl border border-border-subtle bg-card/40 p-8 shadow-2xl backdrop-blur-xl md:p-12">
           <div className="octo-landing-loop-line hidden md:block">
             <div className="octo-landing-loop-dot" />
           </div>
@@ -188,10 +188,10 @@ export default function HomePage() {
             {loop.map((step, index) => (
               <div
                 key={step.key}
-                className="group relative flex flex-col items-center gap-3 rounded-xl border border-border/40 bg-background/40 p-4 text-center transition-all hover:-translate-y-1 hover:border-primary/30 hover:bg-background/60 hover:shadow-lg"
+                className="group relative flex flex-col items-center gap-3 rounded-xl border border-border-subtle bg-background/40 p-4 text-center transition-all hover:-translate-y-1 hover:border-primary/30 hover:bg-background/60 hover:shadow-[var(--shadow-md)]"
                 style={{ animationDelay: `${index * 120}ms` }}
               >
-                <div className="flex size-10 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary shadow-sm transition-colors group-hover:bg-primary/20">
+                <div className="flex size-10 items-center justify-center border border-primary/20 bg-primary/10 text-primary shadow-[var(--shadow-xs)] transition-colors group-hover:bg-primary/20">
                   <step.icon className="size-4.5" />
                 </div>
                 <span className="text-xs font-medium text-foreground/90">
@@ -237,7 +237,7 @@ export default function HomePage() {
                   );
                 }}
               >
-                <div className="mb-4 flex size-10 items-center justify-center rounded-lg border border-primary/15 bg-primary/8 text-primary transition-colors group-hover:bg-primary/15">
+                <div className="mb-4 flex size-10 items-center justify-center border border-primary/15 bg-primary/8 text-primary transition-colors group-hover:bg-primary/15">
                   <f.icon className="size-5" />
                 </div>
                 <h3 className="mb-1 text-sm font-semibold text-foreground/90">
@@ -275,7 +275,7 @@ export default function HomePage() {
                 }}
               >
                 <div className="mb-4 flex items-center justify-between">
-                  <div className="flex size-10 items-center justify-center rounded-lg border border-primary/15 bg-primary/8 text-primary transition-colors group-hover:bg-primary/15">
+                  <div className="flex size-10 items-center justify-center border border-primary/15 bg-primary/8 text-primary transition-colors group-hover:bg-primary/15">
                     <route.icon className="size-5" />
                   </div>
                   <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
@@ -292,7 +292,7 @@ export default function HomePage() {
         </section>
 
         {/* Footer */}
-        <footer className="flex flex-col items-center justify-between gap-4 border-t border-border/30 pt-10 text-xs text-muted-foreground md:flex-row">
+        <footer className="flex flex-col items-center justify-between gap-4 border-t border-border-subtle pt-10 text-xs text-muted-foreground md:flex-row">
           <div className="flex items-center gap-2">
             <OctopusMark className="size-5 text-primary" />
             <span className="font-medium text-foreground/80">Octopus</span>

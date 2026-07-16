@@ -77,7 +77,7 @@ export function FileReferenceChip({
   );
 
   const cls = cn(
-    "inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-1.5 py-0.5",
+    "inline-flex items-center gap-1 rounded-md border border-border-default bg-muted/40 px-1.5 py-0.5",
     "align-[2px]", // vertical align to sit nicely in text runs
     "transition-colors hover:border-border hover:bg-muted/70",
     (href || onClick) && "cursor-pointer",

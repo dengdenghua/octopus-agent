@@ -143,6 +143,9 @@ class TrialRunner(Protocol):
     def __call__(self, prompt: str) -> Any: ...
 
 
+CaseRunnerFactory = Callable[[EvalCase], TrialRunner]
+
+
 # ── Suite report ─────────────────────────────────────────────
 
 
@@ -354,6 +357,7 @@ def write_behavioral_system_evidence(
 def write_behavioral_bundle(
     *,
     path: Path | str,
+    suite_manifest_path: Path | str,
     suite_id: str,
     runner_version: str,
     source_revision: str,
@@ -362,12 +366,18 @@ def write_behavioral_bundle(
 ) -> None:
     """Write an atomic-shaped head-to-head bundle without fabricating results."""
 
+    manifest_path = Path(suite_manifest_path)
+    manifest_bytes = manifest_path.read_bytes()
+    manifest = json.loads(manifest_bytes)
+    if not isinstance(manifest, dict) or manifest.get("suite_id") != suite_id:
+        raise ValueError("suite manifest ID does not match bundle suite_id")
     payload = {
         "schema": "octopus.behavioral_surpass_bundle.v1",
         "suite_id": suite_id,
         "runner_version": runner_version,
         "source_revision": source_revision,
         "generated_at": generated_at,
+        "suite_manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
         "systems": systems,
     }
     output = Path(path)
@@ -456,8 +466,29 @@ def run_suite(
     return report
 
 
+def run_suite_by_case(
+    cases: Sequence[EvalCase],
+    *,
+    runner_factory: CaseRunnerFactory,
+    k: int = 3,
+) -> SuiteReport:
+    """Run a suite with case-specific system adapters.
+
+    This is required for fixed suites where browser, multi-agent, and coding
+    cases need different topology or sandbox parameters while preserving the
+    exact same prompts and graders across systems.
+    """
+
+    report = SuiteReport()
+    for case in cases:
+        report.add(run_case(case, runner=runner_factory(case), k=k))
+    report.ended_at = time.time()
+    return report
+
+
 __all__ = [
     "CaseResult",
+    "CaseRunnerFactory",
     "EvalCase",
     "Grader",
     "SuiteReport",
@@ -467,6 +498,7 @@ __all__ = [
     "Verdict",
     "run_case",
     "run_suite",
+    "run_suite_by_case",
     "write_behavioral_bundle",
     "write_behavioral_system_evidence",
 ]

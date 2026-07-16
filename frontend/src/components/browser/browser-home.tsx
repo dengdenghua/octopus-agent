@@ -430,7 +430,7 @@ function SearchEngineLogo({
   return (
     <span
       className={cn(
-        "grid place-items-center overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-black/5",
+        "grid place-items-center overflow-hidden rounded-full bg-white shadow-[var(--shadow-xs)] ring-1 ring-black/5",
         className,
       )}
     >
@@ -645,7 +645,7 @@ function MenuItem({
       type="button"
       onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors rounded-lg",
+        "w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors",
         active
           ? "bg-sky-400/20 text-sky-400"
           : "text-muted-foreground hover:bg-white/50 hover:text-foreground",
@@ -1018,7 +1018,7 @@ export function BrowserHome({
           className="group flex min-w-0 items-center gap-2 rounded-2xl border border-white/28 bg-white/20 p-2 text-left shadow-[inset_0_1px_1px_rgba(255,255,255,0.45)] transition hover:border-white/45 hover:bg-white/34"
           title={item.title}
         >
-          <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/55 bg-white/62 shadow-sm">
+          <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/55 bg-white/62 shadow-[var(--shadow-xs)]">
             {item.favicon || fallbackIcon ? (
               <img
                 src={item.favicon || fallbackIcon}
@@ -1560,7 +1560,7 @@ export function BrowserHome({
           mobileDesktop && "left-2 w-11",
         )}
       >
-        <div className="grid size-8 place-items-center rounded-2xl border border-white/70 bg-white/46 text-foreground shadow-sm backdrop-blur-xl">
+        <div className="grid size-8 place-items-center rounded-2xl border border-white/70 bg-white/46 text-foreground shadow-[var(--shadow-xs)] backdrop-blur-xl">
           <BotIcon className="size-5" />
         </div>
         <div className="mt-8 flex flex-col gap-4">
@@ -1579,7 +1579,7 @@ export function BrowserHome({
                   setActivePanel(item.id);
                 }}
                 className={cn(
-                  "grid size-9 place-items-center rounded-2xl border border-transparent text-muted-foreground/90 transition hover:border-white/60 hover:bg-white/46 hover:text-foreground hover:shadow-sm",
+                  "grid size-9 place-items-center rounded-2xl border border-transparent text-muted-foreground/90 transition hover:border-white/60 hover:bg-white/46 hover:text-foreground hover:shadow-[var(--shadow-xs)]",
                   selected &&
                     "border-white/80 bg-white/68 text-foreground shadow-[0_8px_22px_rgba(15,23,42,0.13),inset_0_1px_1px_rgba(255,255,255,0.86)]",
                 )}
@@ -1595,7 +1595,7 @@ export function BrowserHome({
             type="button"
             onClick={() => setActivePanel("add")}
             className={cn(
-              "grid size-9 place-items-center rounded-2xl border border-transparent text-muted-foreground/90 transition hover:border-white/60 hover:bg-white/46 hover:text-foreground hover:shadow-sm",
+              "grid size-9 place-items-center rounded-2xl border border-transparent text-muted-foreground/90 transition hover:border-white/60 hover:bg-white/46 hover:text-foreground hover:shadow-[var(--shadow-xs)]",
               activePanel === "add" &&
                 "border-white/80 bg-white/68 text-foreground shadow-[0_8px_22px_rgba(15,23,42,0.13),inset_0_1px_1px_rgba(255,255,255,0.86)]",
             )}
@@ -1607,7 +1607,7 @@ export function BrowserHome({
             type="button"
             onClick={() => setActivePanel("settings")}
             className={cn(
-              "grid size-9 place-items-center rounded-2xl border border-transparent text-muted-foreground/90 transition hover:border-white/60 hover:bg-white/46 hover:text-foreground hover:shadow-sm",
+              "grid size-9 place-items-center rounded-2xl border border-transparent text-muted-foreground/90 transition hover:border-white/60 hover:bg-white/46 hover:text-foreground hover:shadow-[var(--shadow-xs)]",
               activePanel === "settings" &&
                 "border-white/80 bg-white/68 text-foreground shadow-[0_8px_22px_rgba(15,23,42,0.13),inset_0_1px_1px_rgba(255,255,255,0.86)]",
             )}
@@ -1764,7 +1764,7 @@ export function BrowserHome({
             type="button"
             onClick={() => setEditMode((value) => !value)}
             className={cn(
-              "rounded-full px-3 py-1.5 text-xs font-medium shadow-lg shadow-black/10 backdrop-blur-xl transition",
+              "rounded-full px-3 py-1.5 text-xs font-medium shadow-[var(--shadow-md)] shadow-black/10 backdrop-blur-xl transition",
               editMode
                 ? "bg-blue-600 text-white hover:bg-blue-700"
                 : "border border-white/50 bg-white/34 text-foreground hover:bg-white/52",
@@ -1777,7 +1777,7 @@ export function BrowserHome({
         {editMode && (
           <div
             className={cn(
-              "absolute left-24 top-8 rounded-full bg-black/22 px-3 py-1.5 text-xs font-medium text-white shadow-lg backdrop-blur",
+              "absolute left-24 top-8 rounded-full bg-black/22 px-3 py-1.5 text-xs font-medium text-white shadow-[var(--shadow-md)] backdrop-blur",
               compactDesktop && "left-20 top-24",
               tabletDesktop && "left-24",
               mobileDesktop && "left-16 right-4 text-center",
@@ -1880,7 +1880,7 @@ export function BrowserHome({
                         <DesktopAppLogo
                           key={app.url}
                           app={app}
-                          className="size-full rounded-[12px] shadow-sm"
+                          className="size-full rounded-[12px] shadow-[var(--shadow-xs)]"
                           iconClassName="size-[82%]"
                         />
                       ))}
@@ -1935,7 +1935,7 @@ export function BrowserHome({
                         >
                           <DesktopAppLogo
                             app={app}
-                            className="size-9 rounded-xl shadow-sm"
+                            className="size-9 rounded-xl shadow-[var(--shadow-xs)]"
                           />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-semibold">
@@ -2143,7 +2143,7 @@ export function BrowserHome({
                             handleContext(e, link.id, "icon")
                           }
                         >
-                          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-400 to-violet-400 flex items-center justify-center shadow-lg">
+                          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-400 to-violet-400 flex items-center justify-center shadow-[var(--shadow-md)]">
                             <span className="text-white text-xl font-bold">
                               {link.name[0]}
                             </span>
@@ -2155,7 +2155,7 @@ export function BrowserHome({
                         {editMode && (
                           <button
                             onClick={() => handleDelete(link.id)}
-                            className="absolute -top-1 -right-1 w-5 h-5 bg-red-400 rounded-full flex items-center justify-center shadow-lg"
+                            className="absolute -top-1 -right-1 w-5 h-5 bg-red-400 rounded-full flex items-center justify-center shadow-[var(--shadow-md)]"
                           >
                             <X className="w-3 h-3 text-white" />
                           </button>
@@ -2196,7 +2196,7 @@ export function BrowserHome({
                         }}
                         onClick={() => toggleFolder(folder.id)}
                       >
-                        <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center shadow-lg relative">
+                        <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center shadow-[var(--shadow-md)] relative">
                           {isOpen ? (
                             <FolderOpen className="w-6 h-6 text-white" />
                           ) : (
@@ -2298,7 +2298,7 @@ export function BrowserHome({
                 <button
                   type="button"
                   onClick={() => removeAppFromDock(app.url)}
-                  className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-rose-500 text-white shadow-lg transition hover:bg-rose-600"
+                  className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-rose-500 text-white shadow-[var(--shadow-md)] transition hover:bg-rose-600"
                   title={bt.removeFromDock}
                 >
                   <X className="size-3" />
@@ -2662,7 +2662,7 @@ function DesktopControlPanel({
                   title={wt.wallpaperTitle(index + 1)}
                 >
                   {selectedBackdrop === backdropId && (
-                    <span className="absolute right-3 top-3 grid size-6 place-items-center rounded-md bg-white/82 text-blue-600 shadow-sm">
+                    <span className="absolute right-3 top-3 grid size-6 place-items-center rounded-md bg-white/82 text-blue-600 shadow-[var(--shadow-xs)]">
                       <CheckIcon className="size-3.5" />
                     </span>
                   )}
@@ -2724,7 +2724,7 @@ function DesktopControlPanel({
                       "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition",
                       inDock
                         ? "border border-white/30 bg-white/18 text-muted-foreground/70"
-                        : "bg-foreground/90 text-white shadow-lg shadow-black/15 hover:bg-muted-foreground",
+                        : "bg-foreground/90 text-white shadow-[var(--shadow-md)] shadow-black/15 hover:bg-muted-foreground",
                     )}
                   >
                     {inDock ? bt.alreadyInDock : bt.add}

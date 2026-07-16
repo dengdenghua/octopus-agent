@@ -339,7 +339,7 @@ export default function ChannelsPage() {
               </div>
 
               <div className="grid min-w-[220px] grid-cols-2 gap-2 tabular-nums">
-                <div className="rounded-xl border border-border/60 bg-background/62 px-3 py-2">
+                <div className="rounded-xl border border-border-default bg-background/62 px-3 py-2">
                   <div className="text-[11px] text-muted-foreground">
                     {t.channels.channelCount(rows.length)}
                   </div>
@@ -411,7 +411,7 @@ export default function ChannelsPage() {
                     className="h-10 rounded-xl pl-9"
                   />
                 </div>
-                <div className="grid shrink-0 grid-cols-3 gap-1 rounded-xl border border-border/60 bg-muted/25 p-1">
+                <div className="grid shrink-0 grid-cols-3 gap-1 rounded-xl border border-border-default bg-muted/25 p-1">
                   {[
                     { value: "all", label: t.channels.filterAll },
                     { value: "connected", label: t.channels.filterConnected },
@@ -424,7 +424,7 @@ export default function ChannelsPage() {
                       className={cn(
                         "h-8 rounded-lg px-3 text-xs font-medium transition-colors",
                         filter === item.value
-                          ? "bg-background text-foreground shadow-sm"
+                          ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                           : "text-muted-foreground hover:text-foreground",
                       )}
                     >
@@ -547,9 +547,9 @@ export default function ChannelsPage() {
                           assigningId && void assignAgent(assigningId, a.id)
                         }
                         className={cn(
-                          "w-full flex items-center gap-3 rounded-lg border border-border/40",
+                          "w-full flex items-center gap-3 rounded-lg border border-border-subtle",
                           "bg-background px-3 py-2 text-left transition-colors",
-                          "hover:bg-muted/40 hover:border-border/80",
+                          "hover:bg-muted/40 hover:border-border-strong",
                           isCurrent &&
                             "border-primary/40 bg-primary/5 hover:border-primary/60",
                         )}
@@ -585,7 +585,7 @@ export default function ChannelsPage() {
           </div>
 
           {assignRow?.assigned_agent_id && (
-            <div className="mt-3 pt-3 border-t border-border/40">
+            <div className="mt-3 pt-3 border-t border-border-subtle">
               <Button
                 variant="ghost"
                 size="sm"
@@ -630,8 +630,8 @@ function ChannelCard({
     <div
       className={cn(
         "workspace-panel ui-density-panel group relative overflow-hidden rounded-2xl border bg-background/60",
-        "transition-colors hover:border-border/80",
-        row.connected ? "border-emerald-500/20" : "border-border/60",
+        "transition-colors hover:border-border-strong",
+        row.connected ? "border-emerald-500/20" : "border-border-default",
       )}
     >
       <div
@@ -645,7 +645,7 @@ function ChannelCard({
         <div className="flex items-start gap-3">
           <div
             className={cn(
-              "flex size-11 items-center justify-center rounded-xl text-lg shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
+              "flex size-11 items-center justify-center rounded-xl text-lg shadow-[var(--shadow-xs)] ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
               colorCls,
             )}
           >
@@ -747,7 +747,7 @@ function ChannelCard({
             onClick={onRequestAssign}
             className={cn(
               "group flex w-full items-center justify-between rounded-xl",
-              "border border-dashed border-border/60 bg-muted/18 px-3 py-2.5 text-left",
+              "border border-dashed border-border-default bg-muted/18 px-3 py-2.5 text-left",
               "hover:border-border hover:bg-muted/40 transition-colors",
             )}
           >
@@ -768,7 +768,7 @@ function ChannelCard({
       </div>
 
       {/* Implementation note. */}
-      <div className="mt-3 flex gap-2 border-t border-border/50 pt-3">
+      <div className="mt-3 flex gap-2 border-t border-border-default pt-3">
         {row.connected ? (
           <Button
             variant="outline"
@@ -812,7 +812,7 @@ function Metric({
     </>
   );
   const baseClass = cn(
-    "rounded-lg border border-border/45 bg-background/70",
+    "rounded-lg border border-border-subtle bg-background/70",
     "px-2 py-1.5 text-center",
   );
   if (!onClick) {

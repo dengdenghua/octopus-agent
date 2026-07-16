@@ -1081,7 +1081,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
       <div className="shrink-0 border-t border-white/20 p-2">
         <div
           className={cn(
-            "flex items-end gap-2 rounded-lg p-2 focus-within:ring-2 focus-within:ring-primary/30",
+            "flex items-end gap-2 p-2 focus-within:ring-2 focus-within:ring-primary/30",
             liquidGlassClass("input", true),
           )}
         >

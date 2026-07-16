@@ -373,7 +373,7 @@ export default function LoginPage() {
               const Icon = loopIcons[index] ?? SparklesIcon;
               return (
                 <li key={step} className="flex items-center gap-3">
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-sm">
+                  <span className="flex size-7 shrink-0 items-center justify-center border border-border bg-card text-foreground shadow-[var(--shadow-xs)]">
                     <Icon className="size-3.5" />
                   </span>
                   <span className="text-sm font-medium text-foreground/90">

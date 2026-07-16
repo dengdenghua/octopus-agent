@@ -54,7 +54,7 @@ export function BrowserPluginPanel() {
 
   return (
     <div className="ui-density-stack grid gap-3">
-      <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-background/70 px-3 py-2 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-2 rounded-lg border border-border-default bg-background/70 px-3 py-2 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-center gap-2">
           <Package className="size-4 text-primary" />
           <h3 className="text-sm font-semibold">
@@ -99,14 +99,14 @@ export function BrowserPluginPanel() {
             <div
               key={plugin.id}
               className={cn(
-                "group min-w-0 rounded-lg border border-border/60 bg-background/70 px-3 py-2.5 transition-colors hover:border-primary/30 hover:bg-muted/15",
+                "group min-w-0 rounded-lg border border-border-default bg-background/70 px-3 py-2.5 transition-colors hover:border-primary/30 hover:bg-muted/15",
                 plugin.error && "border-destructive/35",
                 !plugin.enabled && "opacity-70",
               )}
             >
               <div className="flex min-w-0 items-start justify-between gap-2">
                 <div className="flex min-w-0 items-start gap-2">
-                  <div className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/60 bg-background">
+                  <div className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border-default bg-background">
                     {pluginImageUrl(plugin) ? (
                       <img
                         src={pluginImageUrl(plugin)!}

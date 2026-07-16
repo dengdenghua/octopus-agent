@@ -20,12 +20,41 @@ def _digest(value: str) -> str:
 def _write_valid_bundle(root: Path, now: datetime) -> Path:
     artifact_root = root / "benchmarks" / "results" / "artifacts"
     artifact_root.mkdir(parents=True)
+    manifest_cases = []
+    case_metadata: dict[str, tuple[str, str]] = {}
+    for domain in REQUIRED_DOMAINS:
+        for case_index in range(2):
+            case_id = f"{domain}-{case_index}"
+            prompt = f"prompt:{case_id}"
+            rubric = {"grader": "test", "expected": case_id}
+            prompt_digest = _digest(prompt)
+            rubric_digest = _digest(json.dumps(rubric, sort_keys=True, separators=(",", ":")))
+            case_metadata[case_id] = (prompt_digest, rubric_digest)
+            manifest_cases.append(
+                {
+                    "id": case_id,
+                    "domain": domain,
+                    "execution_mode": sorted(ALLOWED_EXECUTION_MODES[domain])[0],
+                    "prompt": prompt,
+                    "rubric": rubric,
+                }
+            )
+    manifest = {
+        "schema": "octopus.behavioral_surpass_suite.v1",
+        "suite_id": "same-task-head-to-head-v1",
+        "cases": manifest_cases,
+    }
+    manifest_path = root / "benchmarks" / "behavioral-surpass-suite.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     systems: dict[str, object] = {}
     for system_id in ("octopus", "codex"):
         cases = []
         for domain in REQUIRED_DOMAINS:
             for case_index in range(2):
                 case_id = f"{domain}-{case_index}"
+                prompt_digest, rubric_digest = case_metadata[case_id]
                 artifacts = []
                 for trial_index in range(3):
                     relative = (
@@ -41,7 +70,7 @@ def _write_valid_bundle(root: Path, now: datetime) -> Path:
                             "system_version": f"{system_id}-test",
                             "case_id": case_id,
                             "trial_index": trial_index,
-                            "prompt_sha256": _digest(f"prompt:{case_id}"),
+                            "prompt_sha256": prompt_digest,
                             "trajectory": {
                                 "trial_id": f"{system_id}-{case_id}-{trial_index}",
                                 "case_id": case_id,
@@ -67,8 +96,8 @@ def _write_valid_bundle(root: Path, now: datetime) -> Path:
                         "outcome_grader": True,
                         "isolated_state": True,
                         "execution_mode": sorted(ALLOWED_EXECUTION_MODES[domain])[0],
-                        "rubric_digest": _digest(f"rubric:{case_id}"),
-                        "prompt_digest": _digest(f"prompt:{case_id}"),
+                        "rubric_digest": rubric_digest,
+                        "prompt_digest": prompt_digest,
                         "artifacts": artifacts,
                     }
                 )
@@ -78,6 +107,7 @@ def _write_valid_bundle(root: Path, now: datetime) -> Path:
         "suite_id": "same-task-head-to-head-v1",
         "runner_version": "test-runner-v1",
         "source_revision": "abc123",
+        "suite_manifest_sha256": manifest_digest,
         "generated_at": now.isoformat(),
         "systems": systems,
     }
@@ -163,6 +193,28 @@ def test_different_prompt_is_not_a_head_to_head_comparison(tmp_path: Path) -> No
 
     assert report["ready"] is False
     assert next(row for row in report["checks"] if row["id"] == "same_cases")["passed"] is False
+
+
+def test_cherry_picked_cases_do_not_match_fixed_suite(tmp_path: Path) -> None:
+    now = datetime(2026, 7, 17, tzinfo=UTC)
+    path = _write_valid_bundle(tmp_path, now)
+    bundle = _load(path)
+    systems = bundle["systems"]
+    assert isinstance(systems, dict)
+    for system in systems.values():
+        assert isinstance(system, dict)
+        cases = system["cases"]
+        assert isinstance(cases, list)
+        cases.pop()
+    _write(path, bundle)
+
+    report = compute_behavioral_surpass_evidence(root=tmp_path, now=now)
+
+    assert report["ready"] is False
+    assert next(row for row in report["checks"] if row["id"] == "same_cases")["passed"] is True
+    assert (
+        next(row for row in report["checks"] if row["id"] == "fixed_suite_cases")["passed"] is False
+    )
 
 
 def test_tampered_trajectory_artifact_fails_digest_gate(tmp_path: Path) -> None:

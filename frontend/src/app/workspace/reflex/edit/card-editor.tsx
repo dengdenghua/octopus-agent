@@ -339,7 +339,7 @@ export function ReflexCardEditor({ onSwitchToYaml, onSavedExternally }: Props) {
       </div>
 
       {cards.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border/60 px-4 py-12 text-center text-sm text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-border-default px-4 py-12 text-center text-sm text-muted-foreground">
           {t.reflexEditor.cardEmpty}
         </div>
       ) : (
@@ -435,7 +435,7 @@ function RuleCard({
             onChange={(e) => onChange({ id: e.target.value })}
             placeholder={t.reflexEditor.cardField_id}
             aria-label={t.reflexEditor.cardField_id}
-            className="flex-1 rounded-md border border-border/60 bg-background px-3 py-1.5 font-mono text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
+            className="flex-1 rounded-md border border-border-default bg-background px-3 py-1.5 font-mono text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
           />
           {readOnly && (
             <span className="flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs text-amber-300">
@@ -465,7 +465,7 @@ function RuleCard({
               onChange={(e) =>
                 onChange({ trigger_mode: e.target.value as TriggerMode })
               }
-              className="rounded-md border border-border/60 bg-background px-2 py-1.5 text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
+              className="rounded-md border border-border-default bg-background px-2 py-1.5 text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
             >
               <option value="exact">{t.reflexEditor.triggerMode_exact}</option>
               <option value="contains">
@@ -485,7 +485,7 @@ function RuleCard({
                     ? "天气"
                     : "你好"
               }
-              className="flex-1 rounded-md border border-border/60 bg-background px-3 py-1.5 font-mono text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
+              className="flex-1 rounded-md border border-border-default bg-background px-3 py-1.5 font-mono text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
             />
           </div>
         </div>
@@ -495,7 +495,7 @@ function RuleCard({
             <label className="text-xs text-muted-foreground">
               {t.reflexEditor.cardField_replySource}
             </label>
-            <div className="inline-flex rounded-md border border-border/60 p-0.5">
+            <div className="inline-flex rounded-md border border-border-default p-0.5">
               {(["text", "workflow"] as ReplySource[]).map((s) => (
                 <button
                   key={s}
@@ -525,7 +525,7 @@ function RuleCard({
               onChange={(e) => onChange({ reply: e.target.value })}
               rows={2}
               placeholder={t.reflexEditor.cardField_reply}
-              className="rounded-md border border-border/60 bg-background px-3 py-1.5 text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
+              className="rounded-md border border-border-default bg-background px-3 py-1.5 text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
             />
           ) : (
             <div className="grid gap-1">
@@ -535,7 +535,7 @@ function RuleCard({
                 onChange={(e) =>
                   onChange({ delegate_to_workflow: e.target.value })
                 }
-                className="rounded-md border border-border/60 bg-background px-3 py-1.5 text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
+                className="rounded-md border border-border-default bg-background px-3 py-1.5 text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
               >
                 <option value="">
                   {t.reflexEditor.cardField_workflowPick}
@@ -553,7 +553,7 @@ function RuleCard({
                 onChange={(e) => onChange({ reply: e.target.value })}
                 rows={1}
                 placeholder={t.reflexEditor.cardField_workflowFallback}
-                className="rounded-md border border-border/60 bg-background px-3 py-1.5 text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
+                className="rounded-md border border-border-default bg-background px-3 py-1.5 text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
               />
             </div>
           )}
@@ -616,7 +616,7 @@ function RuleCard({
               onChange={(e) => onChange({ reply_on_failure: e.target.value })}
               placeholder={t.reflexEditor.cardField_replyOnFailurePlaceholder}
               aria-label={t.reflexEditor.cardField_replyOnFailure}
-              className="rounded-md border border-border/60 bg-background px-3 py-1.5 text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
+              className="rounded-md border border-border-default bg-background px-3 py-1.5 text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
             />
           </div>
         )}
@@ -642,7 +642,7 @@ function ActionEditor({
 }) {
   const { t } = useI18n();
   return (
-    <div className="grid gap-2 rounded-lg border border-border/40 bg-muted/10 p-3">
+    <div className="grid gap-2 rounded-lg border border-border-subtle bg-muted/10 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground">
           {t.reflexEditor.cardField_action}
@@ -671,7 +671,7 @@ function ActionEditor({
               if (p) onPreset(p);
               e.target.value = "";
             }}
-            className="ml-auto rounded-md border border-border/60 bg-background px-2 py-1 text-xs outline-none disabled:cursor-not-allowed"
+            className="ml-auto rounded-md border border-border-default bg-background px-2 py-1 text-xs outline-none disabled:cursor-not-allowed"
           >
             <option value="">{t.reflexEditor.cardField_hubPreset}</option>
             {HUB_PRESETS.filter((p) => p.forMode === action.mode).map((p) => (
@@ -730,7 +730,7 @@ function WebhookFields({
           value={cfg.method}
           disabled={readOnly}
           onChange={(e) => onChange({ method: e.target.value })}
-          className="rounded-md border border-border/60 bg-background px-2 py-1.5 font-mono text-xs outline-none disabled:cursor-not-allowed"
+          className="rounded-md border border-border-default bg-background px-2 py-1.5 font-mono text-xs outline-none disabled:cursor-not-allowed"
         >
           <option value="GET">GET</option>
           <option value="POST">POST</option>
@@ -743,7 +743,7 @@ function WebhookFields({
           onChange={(e) => onChange({ url: e.target.value })}
           placeholder="http://homeassistant.local:8123/api/services/light/turn_off"
           aria-label="URL"
-          className="flex-1 rounded-md border border-border/60 bg-background px-3 py-1.5 font-mono text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
+          className="flex-1 rounded-md border border-border-default bg-background px-3 py-1.5 font-mono text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
         />
       </div>
       <div className="grid gap-1">
@@ -764,7 +764,7 @@ function WebhookFields({
                 }}
                 placeholder="Authorization"
                 aria-label="Header name"
-                className="w-44 rounded-md border border-border/60 bg-background px-2 py-1 font-mono text-xs outline-none disabled:cursor-not-allowed"
+                className="w-44 rounded-md border border-border-default bg-background px-2 py-1 font-mono text-xs outline-none disabled:cursor-not-allowed"
               />
               <input
                 value={v}
@@ -774,7 +774,7 @@ function WebhookFields({
                 }
                 placeholder="Bearer ..."
                 aria-label="Header value"
-                className="flex-1 rounded-md border border-border/60 bg-background px-2 py-1 font-mono text-xs outline-none disabled:cursor-not-allowed"
+                className="flex-1 rounded-md border border-border-default bg-background px-2 py-1 font-mono text-xs outline-none disabled:cursor-not-allowed"
               />
               <Button
                 size="sm"
@@ -825,7 +825,7 @@ function WebhookFields({
             }
           }}
           placeholder='{"entity_id":"light.living_room"}'
-          className="rounded-md border border-border/60 bg-background px-3 py-1.5 font-mono text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
+          className="rounded-md border border-border-default bg-background px-3 py-1.5 font-mono text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
         />
       </div>
     </div>
@@ -850,7 +850,7 @@ function MqttFields({
           onChange={(e) => onChange({ broker: e.target.value })}
           placeholder="192.168.1.10"
           aria-label="MQTT broker"
-          className="flex-1 rounded-md border border-border/60 bg-background px-3 py-1.5 font-mono text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
+          className="flex-1 rounded-md border border-border-default bg-background px-3 py-1.5 font-mono text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
         />
         <input
           type="number"
@@ -858,7 +858,7 @@ function MqttFields({
           disabled={readOnly}
           onChange={(e) => onChange({ port: Number(e.target.value) || 1883 })}
           aria-label="Port"
-          className="w-24 rounded-md border border-border/60 bg-background px-2 py-1.5 font-mono text-xs outline-none disabled:cursor-not-allowed"
+          className="w-24 rounded-md border border-border-default bg-background px-2 py-1.5 font-mono text-xs outline-none disabled:cursor-not-allowed"
         />
       </div>
       <input
@@ -867,7 +867,7 @@ function MqttFields({
         onChange={(e) => onChange({ topic: e.target.value })}
         placeholder="zigbee2mqtt/living_room_light/set"
         aria-label="Topic"
-        className="rounded-md border border-border/60 bg-background px-3 py-1.5 font-mono text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
+        className="rounded-md border border-border-default bg-background px-3 py-1.5 font-mono text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
       />
       <input
         value={cfg.payload}
@@ -875,7 +875,7 @@ function MqttFields({
         onChange={(e) => onChange({ payload: e.target.value })}
         placeholder='{"state":"OFF"} 或 OFF'
         aria-label="Payload"
-        className="rounded-md border border-border/60 bg-background px-3 py-1.5 font-mono text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
+        className="rounded-md border border-border-default bg-background px-3 py-1.5 font-mono text-xs outline-none focus:border-primary disabled:cursor-not-allowed"
       />
       <div className="flex gap-3 text-xs text-muted-foreground">
         <label className="flex items-center gap-1">
@@ -884,7 +884,7 @@ function MqttFields({
             value={cfg.qos}
             disabled={readOnly}
             onChange={(e) => onChange({ qos: Number(e.target.value) })}
-            className="rounded-md border border-border/60 bg-background px-2 py-0.5 font-mono text-xs disabled:cursor-not-allowed"
+            className="rounded-md border border-border-default bg-background px-2 py-0.5 font-mono text-xs disabled:cursor-not-allowed"
           >
             <option value={0}>0</option>
             <option value={1}>1</option>

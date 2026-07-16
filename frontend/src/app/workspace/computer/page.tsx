@@ -954,7 +954,7 @@ export default function ComputerAutomationPage() {
           <section className="workspace-panel flex flex-col gap-4 rounded-[1.75rem] p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex size-11 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
+                <div className="flex size-11 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-[var(--shadow-xs)]">
                   <MonitorCheckIcon className="size-5" />
                 </div>
                 <div>
@@ -1190,12 +1190,12 @@ export default function ComputerAutomationPage() {
                       target={visualTarget}
                     />
                     {visualTarget && (
-                      <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-border bg-background/90 px-3 py-1 text-xs font-medium shadow-sm">
+                      <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-border bg-background/90 px-3 py-1 text-xs font-medium shadow-[var(--shadow-xs)]">
                         {visualTarget.label} · {Math.round(visualTarget.x)},{" "}
                         {Math.round(visualTarget.y)}
                       </div>
                     )}
-                    <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-1 text-xs shadow-sm">
+                    <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-1 text-xs shadow-[var(--shadow-xs)]">
                       <span
                         className={cn(
                           "size-1.5 rounded-full",
@@ -1209,7 +1209,7 @@ export default function ComputerAutomationPage() {
                       <span>{liveScreenDetail}</span>
                     </div>
                     {pcScreenError ? (
-                      <div className="pointer-events-none absolute inset-x-6 top-6 rounded-xl border border-destructive/30 bg-background/95 px-3 py-2 text-xs leading-5 text-destructive shadow-sm">
+                      <div className="pointer-events-none absolute inset-x-6 top-6 rounded-xl border border-destructive/30 bg-background/95 px-3 py-2 text-xs leading-5 text-destructive shadow-[var(--shadow-xs)]">
                         {pcScreenError}
                       </div>
                     ) : null}
@@ -1262,7 +1262,7 @@ export default function ComputerAutomationPage() {
                       target={visualTarget}
                     />
                     {visualTarget && (
-                      <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-border bg-background/90 px-3 py-1 text-xs font-medium shadow-sm">
+                      <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-border bg-background/90 px-3 py-1 text-xs font-medium shadow-[var(--shadow-xs)]">
                         {visualTarget.label} · {Math.round(visualTarget.x)},{" "}
                         {Math.round(visualTarget.y)}
                       </div>
@@ -2043,8 +2043,8 @@ function ScreenshotActionOverlay({
           className="absolute -translate-x-1/2 -translate-y-1/2"
           style={{ left: cursorPosition.left, top: cursorPosition.top }}
         >
-          <span className="block size-2.5 rounded-full bg-foreground shadow-sm ring-2 ring-white dark:bg-white dark:ring-background" />
-          <span className="absolute left-3 top-2 whitespace-nowrap rounded-md bg-background/90 px-1.5 py-0.5 text-[10px] font-medium text-foreground shadow-sm">
+          <span className="block size-2.5 rounded-full bg-foreground shadow-[var(--shadow-xs)] ring-2 ring-white dark:bg-white dark:ring-background" />
+          <span className="absolute left-3 top-2 whitespace-nowrap rounded-md bg-background/90 px-1.5 py-0.5 text-[10px] font-medium text-foreground shadow-[var(--shadow-xs)]">
             当前鼠标
           </span>
         </div>
@@ -2066,7 +2066,7 @@ function ScreenshotActionOverlay({
           />
           <span
             className={cn(
-              "relative grid size-8 place-items-center rounded-full text-white shadow-lg ring-2 ring-white/90",
+              "relative grid size-8 place-items-center rounded-full text-white shadow-[var(--shadow-md)] ring-2 ring-white/90",
               target.tone === "preview"
                 ? "bg-blue-600"
                 : target.tone === "candidate"
@@ -2076,7 +2076,7 @@ function ScreenshotActionOverlay({
           >
             <MousePointerClickIcon className="size-4" />
           </span>
-          <span className="absolute left-6 top-6 max-w-56 truncate whitespace-nowrap rounded-md border border-border bg-background/95 px-2 py-1 text-[11px] font-medium text-foreground shadow-sm">
+          <span className="absolute left-6 top-6 max-w-56 truncate whitespace-nowrap rounded-md border border-border bg-background/95 px-2 py-1 text-[11px] font-medium text-foreground shadow-[var(--shadow-xs)]">
             {target.label}
           </span>
         </div>

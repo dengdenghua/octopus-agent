@@ -31,7 +31,7 @@ export type StatusTone =
   | "paused";
 
 const STATUS_STYLES: Record<StatusTone, string> = {
-  idle: "border-border/60 bg-muted/35 text-muted-foreground",
+  idle: "border-border-default bg-muted/35 text-muted-foreground",
   queued:
     "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
   running:

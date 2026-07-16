@@ -171,7 +171,7 @@ function CommandShortcut({
       data-slot="command-shortcut"
       className={cn(
         "ml-auto inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground",
-        "[&_kbd]:rounded-md [&_kbd]:border [&_kbd]:border-border/60 [&_kbd]:bg-muted/40 [&_kbd]:px-1.5 [&_kbd]:py-0.5 [&_kbd]:font-mono [&_kbd]:text-[10px]",
+        "[&_kbd]:rounded-md [&_kbd]:border [&_kbd]:border-border-default [&_kbd]:bg-muted/40 [&_kbd]:px-1.5 [&_kbd]:py-0.5 [&_kbd]:font-mono [&_kbd]:text-[10px]",
         className,
       )}
       {...props}

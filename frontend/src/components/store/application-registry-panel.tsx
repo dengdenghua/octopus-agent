@@ -206,7 +206,7 @@ export function ApplicationRegistryPanel() {
         </div>
         <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
           <Button
-            className="h-9 rounded-lg"
+            className="h-9"
             size="sm"
             variant="default"
             onClick={openCreatePluginChat}
@@ -295,10 +295,10 @@ export function ApplicationRegistryPanel() {
             return (
               <div
                 key={item.id}
-                className="group min-w-0 rounded-lg border border-border/60 bg-background/70 px-3 py-2.5 transition-colors hover:border-primary/30 hover:bg-muted/15"
+                className="group min-w-0 rounded-lg border border-border-default bg-background/70 px-3 py-2.5 transition-colors hover:border-primary/30 hover:bg-muted/15"
               >
                 <div className="flex items-start gap-2">
-                  <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-muted/40">
+                  <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border-default bg-muted/40">
                     {iconUrl ? (
                       <img
                         alt=""
@@ -394,7 +394,7 @@ export function ApplicationRegistryPanel() {
                 </div>
                 {openable ? (
                   <Button
-                    className="mt-2 h-8 w-full rounded-lg text-xs"
+                    className="mt-2 h-8 w-full text-xs"
                     size="sm"
                     variant="outline"
                     onClick={() => {
@@ -430,7 +430,7 @@ export function ApplicationRegistryPanel() {
           })}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 p-8 text-center text-sm text-muted-foreground">
+        <div className="rounded-lg border border-dashed border-border-default bg-muted/10 p-8 text-center text-sm text-muted-foreground">
           {t.applicationRegistry.noMatches}
         </div>
       )}

@@ -37,7 +37,7 @@ export default function TermsPage() {
           </Link>
         </Button>
 
-        <article className="rounded-lg border border-border bg-white px-6 py-7 shadow-sm">
+        <article className="rounded-lg border border-border bg-white px-6 py-7 shadow-[var(--shadow-xs)]">
           <p className="text-xs font-medium uppercase text-muted-foreground">
             Octopus Agent OS
           </p>

@@ -379,7 +379,7 @@ function BrowserShell() {
         <div className="relative z-[80] shrink-0">
           <LiquidGlass
             material="dock"
-            className="flex h-11 shrink-0 items-center gap-0.5 rounded-none border-x-0 border-t-0 border-border/35 px-1.5"
+            className="flex h-11 shrink-0 items-center gap-0.5 rounded-none border-x-0 border-t-0 border-border-subtle px-1.5"
             style={
               {
                 paddingLeft: 10,
@@ -424,7 +424,7 @@ function BrowserShell() {
                 });
               }}
               className={cn(
-                "grid size-7 shrink-0 place-items-center rounded-[12px] border border-border/35 bg-background/55 text-muted-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.48),0_6px_16px_rgba(15,23,42,0.045)] transition-colors hover:bg-background/70 hover:text-foreground",
+                "grid size-7 shrink-0 place-items-center rounded-[12px] border border-border-subtle bg-background/55 text-muted-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.48),0_6px_16px_rgba(15,23,42,0.045)] transition-colors hover:bg-background/70 hover:text-foreground",
                 sidePanelOpen && "bg-background text-foreground",
               )}
               style={
@@ -448,7 +448,7 @@ function BrowserShell() {
           <div className="flex min-h-0 flex-1 overflow-hidden">
             {state.copilotOpen && (
               <div
-                className="flex min-h-0 border-r border-border/35 bg-background"
+                className="flex min-h-0 border-r border-border-subtle bg-background"
                 style={{
                   flex:
                     renderDevice !== "desktop"
@@ -631,7 +631,7 @@ function BrowserSidePanel({
           } as React.CSSProperties
         }
       >
-        <div className="octo-liquid-glass octo-liquid-glass--thin grid size-7 place-items-center rounded-lg text-foreground">
+        <div className="octo-liquid-glass octo-liquid-glass--thin grid size-7 place-items-center text-foreground">
           <MenuIcon className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
@@ -737,7 +737,7 @@ function BrowserSidePanel({
               className={cn(
                 "flex h-8 items-center justify-center gap-1 rounded-lg transition-colors",
                 active
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                   : "hover:bg-background/60 hover:text-foreground",
               )}
             >
@@ -779,7 +779,7 @@ function BrowserSidePanel({
                 className={cn(
                   "group flex h-10 cursor-pointer items-center gap-2 rounded-xl px-2.5 text-sm transition-colors",
                   active
-                    ? "bg-background text-foreground shadow-sm ring-1 ring-border/60"
+                    ? "bg-background text-foreground shadow-[var(--shadow-xs)] ring-1 ring-border-default"
                     : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
                 )}
                 title={tab.title || tab.url}

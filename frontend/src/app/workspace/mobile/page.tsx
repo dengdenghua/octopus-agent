@@ -658,7 +658,7 @@ function Drawer({
               onClick={onNewConversation}
               className="flex w-full items-center gap-3 rounded-xl bg-muted/50 px-3 py-3 text-left transition-colors hover:bg-muted dark:bg-muted dark:hover:bg-muted"
             >
-              <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-foreground text-white dark:bg-white dark:text-foreground">
+              <div className="flex size-7 shrink-0 items-center justify-center bg-foreground text-white dark:bg-white dark:text-foreground">
                 <MessageSquarePlusIcon className="size-3.5" />
               </div>
               <span className="flex-1 text-sm font-medium">新建对话</span>
@@ -742,7 +742,7 @@ function DrawerEntry({
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-muted/50 dark:hover:bg-muted-foreground"
+      className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 dark:hover:bg-muted-foreground"
     >
       <Icon className="size-4 text-muted-foreground dark:text-muted-foreground/70" />
       <span className="flex-1 text-sm">{label}</span>

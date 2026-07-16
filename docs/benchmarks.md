@@ -31,7 +31,12 @@ from benchmarks.eval_harness import (
     write_behavioral_bundle,
     write_behavioral_system_evidence,
 )
+from benchmarks.realtime_runner import RealtimeTrialRunner
 
+octopus_runner = RealtimeTrialRunner(
+    url="ws://127.0.0.1:8000/api/realtime",
+    approval_policy="never",
+)
 report = run_suite(cases, runner=octopus_runner, k=3)
 octopus = write_behavioral_system_evidence(
     report,
@@ -43,6 +48,7 @@ octopus = write_behavioral_system_evidence(
 # 用完全相同的 cases/rubric 再运行 Codex，得到 codex 片段，然后组装 bundle。
 write_behavioral_bundle(
     path="benchmarks/results/behavioral-surpass-latest.json",
+    suite_manifest_path="benchmarks/behavioral-surpass-suite.json",
     suite_id="same-task-head-to-head-v1",
     runner_version=runner_version,
     source_revision=source_revision,
@@ -59,6 +65,12 @@ python -m scripts.production_readiness_gate \
   --json
 ```
 
+先验证生产实时通道可重复运行：
+
+```bash
+python benchmarks/bench_runner.py --k 3
+```
+
 证据包和轨迹位于 `benchmarks/results/`，默认不入 Git；CI 应通过受控 artifact
 存储传入，并设置 `OCTOPUS_BEHAVIORAL_EXPECTED_REVISION` 绑定待发布 revision。
 
@@ -69,15 +81,9 @@ python -m scripts.production_readiness_gate \
 > **跑的是真实生产配置**(`claude-mirror` ~= claude-sonnet-4-6 经 mirror
 > 代理)· 不是 mock。所有数字含网络抖动 + Windows fs IO 现实噪声。
 >
-> Reproduce:
->
-> ```bash
-> # 启动 backend
-> python -m runtime.cli serve --config config.local.yaml --port 8000
-> # 跑 bench
-> python benchmarks/bench_runner.py
-> # 结果在 benchmarks/results/{runs,summary}-<ts>.{jsonl,json}
-> ```
+> 原 SSE 场景 runner 已随 realtime 迁移退役；这些数字只能由 2026-04-24
+> 保存的 result artifact 或对应历史 revision 复核。当前
+> `benchmarks/bench_runner.py` 是 WebSocket smoke，不会复现下表。
 
 ## 结果汇总(单 case 平均)
 

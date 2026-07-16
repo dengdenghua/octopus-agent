@@ -72,8 +72,8 @@ export function UnifiedStore({
         onValueChange={(value) => setTab(value as StoreTab)}
         className="min-h-0 flex-1 gap-0"
       >
-        <div className="relative shrink-0 border-b border-border/60 bg-background px-3 py-2">
-          <TabsList className="grid h-auto w-full grid-cols-4 rounded-lg border border-border/70 bg-muted/35 p-0.5 sm:w-[30rem]">
+        <div className="relative shrink-0 border-b border-border-default bg-background px-3 py-2">
+          <TabsList className="grid h-auto w-full grid-cols-4 rounded-lg border border-border-default bg-muted/35 p-0.5 sm:w-[30rem]">
             <TabsTrigger
               value="agents"
               className="gap-1.5 rounded-sm px-3 data-[state=active]:border data-[state=active]:border-primary/35 data-[state=active]:shadow-none"
@@ -107,7 +107,7 @@ export function UnifiedStore({
 
         <div className="ui-density-page relative min-h-0 flex-1 overflow-y-auto">
           <TabsContent value="plugins" className="m-0">
-            <div className="workspace-panel ui-density-panel min-h-[520px] rounded-2xl border border-border/60 shadow-sm shadow-black/[0.02]">
+            <div className="workspace-panel ui-density-panel min-h-[520px] rounded-2xl border border-border-default shadow-[var(--shadow-xs)] shadow-black/[0.02]">
               <ApplicationRegistryPanel />
             </div>
           </TabsContent>
@@ -120,7 +120,7 @@ export function UnifiedStore({
             </div>
           </TabsContent>
           <TabsContent value="registry" className="m-0">
-            <div className="workspace-panel ui-density-panel min-h-[520px] rounded-2xl border border-border/60 shadow-sm shadow-black/[0.02]">
+            <div className="workspace-panel ui-density-panel min-h-[520px] rounded-2xl border border-border-default shadow-[var(--shadow-xs)] shadow-black/[0.02]">
               <RegistrySkillsPanel />
             </div>
           </TabsContent>

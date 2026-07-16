@@ -374,8 +374,8 @@ function RightPanelMenu({
       className={cn(
         "flex size-[42px] items-center justify-center rounded-md border shadow-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 sm:size-8",
         activePage
-          ? "border-transparent bg-transparent text-foreground/82 hover:border-border/55 hover:bg-muted/55 hover:text-foreground"
-          : "border-transparent bg-transparent text-muted-foreground hover:border-border/55 hover:bg-muted/55 hover:text-foreground",
+          ? "border-transparent bg-transparent text-foreground/82 hover:border-border-default hover:bg-muted/55 hover:text-foreground"
+          : "border-transparent bg-transparent text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",
       )}
     >
       <PanelRightIcon className="size-4" />
@@ -469,7 +469,7 @@ function ChatHeaderAgentBadge({
   if (!label || label === "general") return null;
   return (
     <div
-      className="inline-flex h-8 max-w-[180px] shrink-0 items-center gap-1.5 rounded-lg px-1.5 text-[12px] text-foreground/88 transition-colors hover:bg-muted/45"
+      className="inline-flex h-8 max-w-[180px] shrink-0 items-center gap-1.5 px-1.5 text-[12px] text-foreground/88 transition-colors hover:bg-muted/45"
       title={label}
     >
       <span className="flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
@@ -541,7 +541,7 @@ function ChatHeaderRecButton({
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
         recording
           ? "border-red-500/25 bg-red-500/10 text-red-600 hover:bg-red-500/16 dark:text-red-400"
-          : "border-transparent bg-transparent text-muted-foreground hover:border-border/50 hover:bg-muted/55 hover:text-foreground",
+          : "border-transparent bg-transparent text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",
       )}
     >
       <CircleDotIcon className={cn("size-3.5", recording && "animate-pulse")} />
@@ -679,7 +679,7 @@ function TaskCollaboratorControl({
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
             isTeamDraft
               ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
-              : "border-transparent bg-transparent text-muted-foreground hover:border-border/50 hover:bg-muted/50 hover:text-foreground",
+              : "border-transparent bg-transparent text-muted-foreground hover:border-border-default hover:bg-muted/50 hover:text-foreground",
           )}
           title={t.chatInputBox.collaborators}
         >
@@ -688,7 +688,7 @@ function TaskCollaboratorControl({
               {displayRoster.map((agent) => (
                 <span
                   key={agent.agent_id}
-                  className="grid size-5 place-items-center overflow-hidden rounded-sm border border-border/60 bg-muted text-[10px] font-semibold text-muted-foreground"
+                  className="grid size-5 place-items-center overflow-hidden rounded-sm border border-border-default bg-muted text-[10px] font-semibold text-muted-foreground"
                   title={agent.display_name}
                 >
                   {agent.avatar_url ? (
@@ -707,7 +707,7 @@ function TaskCollaboratorControl({
                 </span>
               ))}
               {extraRosterCount > 0 && (
-                <span className="grid size-5 place-items-center rounded-sm border border-border/60 bg-muted text-[9px] font-semibold text-muted-foreground">
+                <span className="grid size-5 place-items-center rounded-sm border border-border-default bg-muted text-[9px] font-semibold text-muted-foreground">
                   +{extraRosterCount}
                 </span>
               )}
@@ -739,9 +739,9 @@ function TaskCollaboratorControl({
         align="end"
         side="bottom"
         sideOffset={8}
-        className="w-[min(22rem,calc(100vw-1rem))] overflow-hidden rounded-md border-border/70 p-0 shadow-sm"
+        className="w-[min(22rem,calc(100vw-1rem))] overflow-hidden rounded-md border-border-default p-0 shadow-[var(--shadow-xs)]"
       >
-        <div className="border-b border-border/45 px-3 py-2.5">
+        <div className="border-b border-border-subtle px-3 py-2.5">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2 text-[12px] font-medium">
               <UsersRoundIcon className="size-4 text-primary" />
@@ -771,7 +771,7 @@ function TaskCollaboratorControl({
                     "inline-flex h-7 items-center gap-1.5 rounded-sm border px-2.5 text-[11px] font-medium transition-colors",
                     active
                       ? "border-primary/30 bg-primary/10 text-primary"
-                      : "border-border/55 text-muted-foreground hover:bg-muted/55 hover:text-foreground",
+                      : "border-border-default text-muted-foreground hover:bg-muted/55 hover:text-foreground",
                     !isTeamDraft &&
                       "cursor-not-allowed opacity-45 hover:bg-transparent",
                   )}
@@ -818,7 +818,7 @@ function TaskCollaboratorControl({
           )}
         </div>
         <div className="p-3">
-          <label className="flex h-8 items-center gap-2 rounded-sm border border-border/50 bg-background/45 px-2">
+          <label className="flex h-8 items-center gap-2 rounded-sm border border-border-default bg-background/45 px-2">
             <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
             <Input
               value={query}
@@ -881,7 +881,7 @@ function TaskCollaboratorControl({
                         "grid size-5 shrink-0 place-items-center rounded border",
                         selected
                           ? "border-primary/30 bg-primary/10 text-primary"
-                          : "border-border/50 text-transparent",
+                          : "border-border-default text-transparent",
                       )}
                     >
                       <CheckIcon className="size-3.5" />
@@ -892,7 +892,7 @@ function TaskCollaboratorControl({
             </div>
           </div>
         </div>
-        <div className="flex items-center justify-end border-t border-border/45 p-2">
+        <div className="flex items-center justify-end border-t border-border-subtle p-2">
           <button
             type="button"
             onClick={() => void handleCopyLink()}
@@ -2965,7 +2965,7 @@ function RealtimePageContent({
                       }
                       className={cn(
                         isNewThread &&
-                          "border-border/70 bg-card/95 shadow-[0_18px_56px_-34px_rgba(15,23,42,0.45)]",
+                          "border-border-default bg-card/95 shadow-[0_18px_56px_-34px_rgba(15,23,42,0.45)]",
                         showAgentProgressPill && "rounded-t-none border-t-0",
                       )}
                     />
@@ -3007,7 +3007,7 @@ function RealtimePageContent({
                 />
               ) : showResearch && researchError ? (
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                  <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
+                  <div className="flex items-center justify-between border-b border-border-default px-3 py-2">
                     <span className="text-sm font-medium">Agent</span>
                     <button
                       onClick={() => setShowResearch(false)}
@@ -3097,8 +3097,8 @@ function NewChatStarterGrid({ onPick }: { onPick: (prompt: string) => void }) {
             onClick={() => onPick(item.prompt)}
             title={item.prompt}
             className={cn(
-              "group inline-flex items-center gap-2 rounded-xl border border-border/60 bg-background/80 px-3.5 py-2.5 text-[13px] font-medium text-foreground shadow-sm",
-              "transition-colors transition-shadow transition-transform duration-150 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-card hover:shadow-md",
+              "group inline-flex items-center gap-2 rounded-xl border border-border-default bg-background/80 px-3.5 py-2.5 text-[13px] font-medium text-foreground shadow-[var(--shadow-xs)]",
+              "transition-colors transition-shadow transition-transform duration-150 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-card hover:shadow-[var(--shadow-sm)]",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:translate-y-0",
             )}
           >

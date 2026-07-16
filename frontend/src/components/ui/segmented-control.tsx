@@ -70,7 +70,7 @@ export function SegmentedControl<T extends string | number>({
                 : "min-w-[92px] px-3 py-1.5 text-xs",
               fullWidth && "flex-1",
               active
-                ? "bg-background text-foreground shadow-sm"
+                ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                 : "text-muted-foreground hover:text-foreground",
               opt.disabled && "pointer-events-none opacity-40",
               opt.preview ? "flex-col gap-0.5" : "",

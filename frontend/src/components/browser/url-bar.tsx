@@ -487,7 +487,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
   return (
     <LiquidGlass
       material="dock"
-      className="flex h-14 min-w-0 items-center gap-1 rounded-none border-x-0 border-border/35 px-2 sm:gap-2 sm:px-3"
+      className="flex h-14 min-w-0 items-center gap-1 rounded-none border-x-0 border-border-subtle px-2 sm:gap-2 sm:px-3"
       style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
     >
       <button
@@ -535,7 +535,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
         <LiquidGlass
           material="input"
           interactive
-          className="flex h-10 items-center gap-1 rounded-[18px] border-border/35 px-3 transition-colors focus-within:border-primary/25 focus-within:ring-2 focus-within:ring-primary/12"
+          className="flex h-10 items-center gap-1 rounded-[18px] border-border-subtle px-3 transition-colors focus-within:border-primary/25 focus-within:ring-2 focus-within:ring-primary/12"
         >
           <input
             type="text"
@@ -588,21 +588,21 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
                     {ub.siteInfoDesc}
                   </div>
                   {siteDataStatus && (
-                    <div className="mt-2 rounded-lg border border-border/65 px-3 py-2 text-xs text-muted-foreground">
+                    <div className="mt-2 rounded-lg border border-border-default px-3 py-2 text-xs text-muted-foreground">
                       {siteDataStatus}
                     </div>
                   )}
                   <div className="mt-3 flex items-center gap-2">
                     <button
                       onClick={clearCurrentSiteData}
-                      className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border/70 bg-background text-xs font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                      className="flex h-8 flex-1 items-center justify-center gap-1.5 border border-border-default bg-background text-xs font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                     >
                       <Trash2Icon className="size-3.5" />
                       {ub.clearData}
                     </button>
                     <button
                       onClick={openExternalCurrentSite}
-                      className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                      className="flex h-8 flex-1 items-center justify-center gap-1.5 bg-primary text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                     >
                       <ExternalLinkIcon className="size-3.5" />
                       {ub.openExternally}
@@ -678,7 +678,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={submit}
-              className="mt-1 flex w-full items-center gap-2 border-t border-border/55 px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+              className="mt-1 flex w-full items-center gap-2 border-t border-border-default px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
             >
               <SearchIcon className="size-4" />
               {ub.searchOrOpen(draft.trim())}
@@ -743,7 +743,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
           "ml-1 hidden h-10 items-center gap-1.5 rounded-[18px] border px-3 text-xs font-semibold shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),0_4px_14px_rgba(15,23,42,0.04)] transition-colors sm:flex",
           state.copilotOpen
             ? "border-primary/35 bg-primary/12 text-primary"
-            : "border-border/35 bg-background/50 text-muted-foreground hover:bg-background/70 hover:text-foreground",
+            : "border-border-subtle bg-background/50 text-muted-foreground hover:bg-background/70 hover:text-foreground",
         )}
         title={ub.aiAssistant}
       >
@@ -875,7 +875,7 @@ function BrowserActionsMenu({
           type="button"
           disabled={!canUsePageActions || activeZoom <= 50}
           onClick={() => onZoomChange(activeZoom - 10)}
-          className="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+          className="grid size-7 place-items-center text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
           title={ub.zoomOut}
           aria-label={ub.zoomOut}
         >
@@ -888,7 +888,7 @@ function BrowserActionsMenu({
           type="button"
           disabled={!canUsePageActions || activeZoom >= 200}
           onClick={() => onZoomChange(activeZoom + 10)}
-          className="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+          className="grid size-7 place-items-center text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
           title={ub.zoomIn}
           aria-label={ub.zoomIn}
         >
@@ -898,7 +898,7 @@ function BrowserActionsMenu({
           type="button"
           disabled={!canUsePageActions || activeZoom === 100}
           onClick={() => onZoomChange(100)}
-          className="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+          className="grid size-7 place-items-center text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
           title={ub.resetZoom}
           aria-label={ub.resetZoom}
         >
@@ -922,7 +922,7 @@ function BrowserActionsMenu({
                 className={cn(
                   "flex h-8 items-center justify-center gap-1 rounded-lg text-xs font-medium transition-colors",
                   active
-                    ? "bg-background text-foreground shadow-sm ring-1 ring-border/40"
+                    ? "bg-background text-foreground shadow-[var(--shadow-xs)] ring-1 ring-border-subtle"
                     : "text-muted-foreground hover:bg-background/65 hover:text-foreground",
                 )}
                 title={ub.switchToDevice(deviceLabelMap[d])}
@@ -962,7 +962,7 @@ function BrowserActionsMenu({
         {ub.clearData}
       </button>
       {siteDataStatus && (
-        <div className="mt-1 rounded-lg border border-border/55 px-2.5 py-2 text-[11px] text-muted-foreground">
+        <div className="mt-1 rounded-lg border border-border-default px-2.5 py-2 text-[11px] text-muted-foreground">
           {siteDataStatus}
         </div>
       )}
@@ -1019,7 +1019,7 @@ function DownloadDropdown({
       ref={ref}
       className="octo-liquid-glass octo-liquid-glass--sheet absolute right-0 top-full z-50 mt-1 w-[360px] overflow-hidden rounded-xl text-popover-foreground"
     >
-      <div className="flex items-center justify-between border-b border-border/65 px-3 py-2">
+      <div className="flex items-center justify-between border-b border-border-default px-3 py-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <DownloadIcon className="size-4" />
           {title}

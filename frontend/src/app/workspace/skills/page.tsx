@@ -218,7 +218,7 @@ function InstalledSkillsPanel() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t.skillsPage.searchPlaceholder}
             className={cn(
-              "w-full rounded-lg border border-border/60 bg-background/60 py-2 pl-9 pr-3",
+              "w-full rounded-lg border border-border-default bg-background/60 py-2 pl-9 pr-3",
               "text-sm placeholder:text-muted-foreground/60 outline-none",
               "focus:border-primary/50 focus:ring-2 focus:ring-primary/10",
             )}
@@ -316,9 +316,9 @@ function SkillCard({
   return (
     <div
       className={cn(
-        "group relative grid grid-cols-[2rem_minmax(0,1fr)_auto] items-start gap-3 rounded-lg border border-border/50",
+        "group relative grid grid-cols-[2rem_minmax(0,1fr)_auto] items-start gap-3 rounded-lg border border-border-default",
         "bg-background/60 px-3 py-2.5 transition-colors",
-        "hover:border-border/80 hover:bg-background",
+        "hover:border-border-strong hover:bg-background",
         !isEnabled && "opacity-60",
       )}
       title={[
@@ -352,7 +352,7 @@ function SkillCard({
             </span>
           )}
           {(skill.market_visibility ?? "market") !== "market" && (
-            <span className="rounded border border-border/50 bg-muted/35 px-1 py-0.5 text-[10px] leading-none text-muted-foreground">
+            <span className="rounded border border-border-default bg-muted/35 px-1 py-0.5 text-[10px] leading-none text-muted-foreground">
               {skill.market_visibility === "duplicate"
                 ? "重复"
                 : skill.market_visibility === "provider"
@@ -371,7 +371,7 @@ function SkillCard({
             {(skill.affinity || []).slice(0, 3).map((tag) => (
               <span
                 key={tag}
-                className="max-w-28 truncate rounded border border-border/50 bg-muted/35 px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground"
+                className="max-w-28 truncate rounded border border-border-default bg-muted/35 px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground"
               >
                 {tag}
               </span>
@@ -463,13 +463,13 @@ export default function SkillsPage() {
             <div className="mt-3 flex-1 w-full">
               <TabsContent
                 value="installed"
-                className="workspace-panel w-full rounded-lg p-4 shadow-sm border border-border/50 min-h-[500px] outline-none"
+                className="workspace-panel w-full rounded-lg p-4 shadow-[var(--shadow-xs)] border border-border-default min-h-[500px] outline-none"
               >
                 <InstalledSkillsPanel />
               </TabsContent>
               <TabsContent
                 value="registry"
-                className="workspace-panel w-full rounded-lg shadow-sm border border-border/50 min-h-[500px] outline-none"
+                className="workspace-panel w-full rounded-lg shadow-[var(--shadow-xs)] border border-border-default min-h-[500px] outline-none"
               >
                 <RegistrySkillsPanel />
               </TabsContent>

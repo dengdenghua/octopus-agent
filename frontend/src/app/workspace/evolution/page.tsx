@@ -26,7 +26,7 @@ export default function EvolutionPage() {
           <section className="workspace-panel rounded-[1.75rem] px-6 py-5">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="flex min-w-0 items-start gap-4 sm:items-center">
-                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-sm">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-[var(--shadow-xs)]">
                   <DnaIcon className="size-5" />
                 </div>
                 <div className="min-w-0">

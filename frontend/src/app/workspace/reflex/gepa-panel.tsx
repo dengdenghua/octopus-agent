@@ -576,7 +576,7 @@ export function GepaPanel() {
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         {/* Currently applied */}
-        <div className="rounded-xl border border-border/60 bg-background/60 px-4 py-3">
+        <div className="rounded-xl border border-border-default bg-background/60 px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="font-medium">
               {t.recipeForge.addendumAppliedTitle}
@@ -619,7 +619,7 @@ export function GepaPanel() {
         </div>
 
         {/* Run controls */}
-        <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border/60 bg-background/60 px-4 py-3">
+        <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border-default bg-background/60 px-4 py-3">
           <NumberKnob
             label={t.recipeForge.knobIterations}
             value={nIter}
@@ -637,7 +637,7 @@ export function GepaPanel() {
           <label className="flex min-w-[180px] flex-col gap-1 text-[11px] text-muted-foreground">
             <span>Optimizer</span>
             <select
-              className="h-9 rounded-md border border-border/60 bg-background px-2 text-xs text-foreground"
+              className="h-9 rounded-md border border-border-default bg-background px-2 text-xs text-foreground"
               value={optimizerBackend}
               onChange={(event) => setOptimizerBackend(event.target.value)}
             >
@@ -680,7 +680,7 @@ export function GepaPanel() {
             and skipped runs still tell the operator WHY they were
             skipped via the history list). */}
         {run && run.ok && (
-          <div className="space-y-3 rounded-xl border border-border/60 bg-background/60 px-4 py-3">
+          <div className="space-y-3 rounded-xl border border-border-default bg-background/60 px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 font-medium">
                 <TrendingUpIcon className="size-4 text-emerald-400" />
@@ -733,7 +733,7 @@ export function GepaPanel() {
 
         {/* Active addendums · global + per-recipe map */}
         {addendums.length > 0 && (
-          <div className="rounded-xl border border-border/60 bg-background/60 px-4 py-3">
+          <div className="rounded-xl border border-border-default bg-background/60 px-4 py-3">
             <div className="mb-2 flex items-center justify-between">
               <div className="font-medium">
                 {t.recipeForge.addendumsByScope(addendums.length)}
@@ -778,7 +778,7 @@ export function GepaPanel() {
         )}
 
         {/* Canary states · active / full / rolled back */}
-        <div className="rounded-xl border border-border/60 bg-background/60 px-4 py-3">
+        <div className="rounded-xl border border-border-default bg-background/60 px-4 py-3">
           <div className="mb-2 flex items-center justify-between">
             <div className="flex items-center gap-2 font-medium">
               <ShieldCheckIcon className="size-4" />
@@ -804,7 +804,7 @@ export function GepaPanel() {
           </div>
           <div className="space-y-2">
             {canaries.length === 0 ? (
-              <div className="rounded-md border border-dashed border-border/50 px-3 py-2 text-xs text-muted-foreground">
+              <div className="rounded-md border border-dashed border-border-default px-3 py-2 text-xs text-muted-foreground">
                 {t.recipeForge.canaryEmpty}
               </div>
             ) : (
@@ -817,7 +817,7 @@ export function GepaPanel() {
 
         {/* Past runs · cross-session history of all Forge runs */}
         {history.length > 0 && (
-          <div className="rounded-xl border border-border/60 bg-background/60 px-4 py-3">
+          <div className="rounded-xl border border-border-default bg-background/60 px-4 py-3">
             <div className="mb-2 flex items-center justify-between">
               <div className="flex items-center gap-2 font-medium">
                 <HistoryIcon className="size-4" />
@@ -995,7 +995,7 @@ function ConvergenceChart({
   }, [points, t.recipeForge.noIterationsYet]);
 
   return (
-    <div className="rounded-md border border-border/40 bg-background/40 p-2">
+    <div className="rounded-md border border-border-subtle bg-background/40 p-2">
       <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
         <TrendingUpIcon className="size-3" />
         Convergence · best-so-far (line) + per-iter score (dots)
@@ -1023,7 +1023,7 @@ function CanaryRow({ entry, t }: { entry: CanaryEntry; t: Translations }) {
         "rounded-md border px-3 py-2 text-xs",
         entry.phase === "rolled_back"
           ? "border-rose-500/30 bg-rose-500/5"
-          : "border-border/50 bg-background/40",
+          : "border-border-default bg-background/40",
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -1169,7 +1169,7 @@ function PastRunRow({
           ? "border-rose-500/30 bg-rose-500/5"
           : run.applied
             ? "border-emerald-500/30 bg-emerald-500/5"
-            : "border-border/50",
+            : "border-border-default",
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -1266,7 +1266,7 @@ function PastRunRow({
         sandboxReplayCandidate ||
         turnReplayCandidate ||
         llmReplayCandidate) && (
-        <div className="mt-2 rounded-md border border-border/40 bg-background/40 px-2 py-1.5 text-[10px] text-muted-foreground">
+        <div className="mt-2 rounded-md border border-border-subtle bg-background/40 px-2 py-1.5 text-[10px] text-muted-foreground">
           <button
             type="button"
             className="flex w-full items-center gap-2 text-left"
@@ -1323,7 +1323,7 @@ function PastRunRow({
             </span>
           </button>
           {evidenceOpen && (
-            <div className="mt-2 space-y-1 border-t border-border/40 pt-2">
+            <div className="mt-2 space-y-1 border-t border-border-subtle pt-2">
               {nativeEvaluation && (
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
                   <span>
@@ -1396,7 +1396,7 @@ function PastRunRow({
         </div>
       )}
       {detailOpen && (
-        <div className="mt-2 rounded-md border border-border/40 bg-background/50 p-2 text-[10px] text-muted-foreground">
+        <div className="mt-2 rounded-md border border-border-subtle bg-background/50 p-2 text-[10px] text-muted-foreground">
           {!detail ? (
             <div>{t.recipeForge.proposalDetailsLoading}</div>
           ) : detail.ok && detail.proposal ? (
@@ -1491,7 +1491,7 @@ function NumberKnob({
       <input
         type="number"
         aria-label={label}
-        className="w-20 rounded-md border border-border/60 bg-background/60 px-2 py-1 text-sm tabular-nums"
+        className="w-20 rounded-md border border-border-default bg-background/60 px-2 py-1 text-sm tabular-nums"
         value={value}
         min={min}
         max={max}
@@ -1524,7 +1524,7 @@ function CandidateRow({
         "rounded-lg border px-3 py-2",
         isBest
           ? "border-emerald-500/30 bg-emerald-500/5"
-          : "border-border/50 bg-background/40",
+          : "border-border-default bg-background/40",
       )}
     >
       <div className="flex items-center gap-2">
@@ -1627,7 +1627,7 @@ function AddendumRow({
       ? "bg-cyan-500/15 text-cyan-300"
       : "bg-violet-500/15 text-violet-300";
   return (
-    <div className="rounded-md border border-border/50 bg-background/40 px-3 py-2 text-xs">
+    <div className="rounded-md border border-border-default bg-background/40 px-3 py-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">
         <Badge className={cn("text-[10px]", scopeColor, "hover:" + scopeColor)}>
           {entry.scope === "global"

@@ -209,7 +209,7 @@ export default function ReflexMonitorPage() {
           {/* Hero / actions */}
           <section className="workspace-panel rounded-[1.75rem] px-4 py-4 sm:px-6 sm:py-5">
             <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-center">
-              <div className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500 text-white shadow-lg shadow-emerald-500/20">
+              <div className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500 text-white shadow-[var(--shadow-md)] shadow-emerald-500/20">
                 <ZapIcon className="size-5" />
               </div>
               <div className="min-w-0 flex-1">
@@ -357,7 +357,7 @@ export default function ReflexMonitorPage() {
             <CardContent className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr className="border-b border-border/60">
+                  <tr className="border-b border-border-default">
                     <th className="pb-2 text-left font-medium">
                       {t.reflexPage.colRule}
                     </th>
@@ -439,7 +439,7 @@ function StatCard({
   tone?: "good" | "warn";
 }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-background/60 px-3 py-3">
+    <div className="rounded-xl border border-border-default bg-background/60 px-3 py-3">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         {icon}
         {label}
@@ -490,7 +490,7 @@ function Sparkline({ buckets }: { buckets: TimeseriesBucket[] }) {
   }, [buckets, totalHits]);
   if (totalHits === 0) {
     return (
-      <div className="flex h-[60px] w-full items-center justify-center rounded-md border border-dashed border-border/50 text-xs text-muted-foreground">
+      <div className="flex h-[60px] w-full items-center justify-center rounded-md border border-dashed border-border-default text-xs text-muted-foreground">
         {t.reflexPage.sparklineEmpty}
       </div>
     );
@@ -509,7 +509,7 @@ function Sparkline({ buckets }: { buckets: TimeseriesBucket[] }) {
 function TierCard({ tier }: { tier: TierInfo }) {
   const { t } = useI18n();
   return (
-    <div className="rounded-xl border border-border/60 bg-background/60 px-4 py-3">
+    <div className="rounded-xl border border-border-default bg-background/60 px-4 py-3">
       <div className="flex items-center justify-between">
         <div className="font-medium">{tier.name}</div>
         <Badge
@@ -576,7 +576,7 @@ function RuleRow({
   const { t } = useI18n();
   const ratePct = (stats.hit_rate * 100).toFixed(0);
   return (
-    <tr className="border-b border-border/30 align-top hover:bg-background/40">
+    <tr className="border-b border-border-subtle align-top hover:bg-background/40">
       <td className="py-2 pr-3">
         <div className="flex flex-wrap items-center gap-1 font-mono">
           <span>{rule.rule_id}</span>

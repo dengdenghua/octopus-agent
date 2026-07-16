@@ -324,7 +324,7 @@ function RecipeRow({
   }, [summary.recipe_id, loadStats, onChange]);
 
   return (
-    <div className="rounded-xl border border-border/60 bg-background/60 px-4 py-3">
+    <div className="rounded-xl border border-border-default bg-background/60 px-4 py-3">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
         <span className="font-mono text-xs text-muted-foreground">recipe:</span>
         <span className="font-mono">{summary.recipe_id}</span>
@@ -345,7 +345,7 @@ function RecipeRow({
       {stats && stats.variants.length > 0 && (
         <table className="w-full text-xs">
           <thead className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            <tr className="border-b border-border/40">
+            <tr className="border-b border-border-subtle">
               <th className="pb-1 text-left font-medium">variant</th>
               <th className="pb-1 text-right font-medium">uses</th>
               <th className="pb-1 text-right font-medium">✓</th>
@@ -500,7 +500,7 @@ function AutoTickBar({
         "rounded-xl border px-4 py-3",
         status.enabled
           ? "border-emerald-500/30 bg-emerald-500/5"
-          : "border-border/60 bg-background/60",
+          : "border-border-default bg-background/60",
       )}
     >
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -631,7 +631,7 @@ function VariantStatRow({
   return (
     <tr
       className={cn(
-        "border-b border-border/20",
+        "border-b border-border-subtle",
         isLeader && "bg-emerald-500/5",
       )}
     >
