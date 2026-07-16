@@ -373,9 +373,7 @@ export function ChatPageLayout({
       <header
         className={cn(
           "flex h-11 shrink-0 items-center justify-between overflow-hidden pl-12 pr-3",
-          isNewThread
-            ? "border-b border-border/20"
-            : "border-b border-border/30",
+          isNewThread ? "border-b border-transparent" : "border-b border-border-subtle",
           "bg-background/80 backdrop-blur-lg",
           headerClassName,
         )}
@@ -423,7 +421,7 @@ export function ChatPageLayout({
              "relative z-20 flex flex-col overflow-hidden bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)] backdrop-blur-[10px]",
              isNarrowViewport
                 ? cn(
-                    "fixed right-0 bottom-0 left-0 z-40 rounded-t-2xl border-t border-border/60 pt-0 shadow-[0_-18px_42px_-24px_rgba(0,0,0,0.28)]",
+                    "fixed right-0 bottom-0 left-0 z-40 rounded-t-2xl border-t border-border-default pt-0 shadow-[0_-18px_42px_-24px_rgba(0,0,0,0.28)]",
                     showSidebar
                       ? "translate-y-0 opacity-100"
                       : "translate-y-full opacity-0 pointer-events-none",
@@ -431,7 +429,7 @@ export function ChatPageLayout({
                 : cn(
                     "flex-shrink-0 border-l",
                     showSidebar
-                      ? "border-border/60 opacity-100 shadow-[-12px_0_32px_-16px_rgba(0,0,0,0.12)]"
+                      ? "border-border-default opacity-100 shadow-[-12px_0_32px_-16px_rgba(0,0,0,0.12)]"
                       : "border-transparent opacity-0 pointer-events-none",
                   ),
             )}
@@ -462,7 +460,7 @@ export function ChatPageLayout({
            style={{ width: secondaryResolvedWidth }}
            className={cn(
              "relative z-20 flex flex-col overflow-hidden bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)] backdrop-blur-[10px]",
-             "flex-shrink-0 border-l border-border/60 opacity-100 shadow-[-12px_0_32px_-16px_rgba(0,0,0,0.12)]",
+             "flex-shrink-0 border-l border-border-default opacity-100 shadow-[-12px_0_32px_-16px_rgba(0,0,0,0.12)]",
            )}
           >
             <div
@@ -495,7 +493,7 @@ export function ChatPageLayout({
             <aside
               aria-label={t.sidebar.ariaAgentWorkbench}
               style={{ height: "min(72vh, 640px)" }}
-              className="fixed right-0 bottom-0 left-0 z-50 flex flex-col overflow-hidden rounded-t-2xl border-t border-border/60 bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)] shadow-[0_-18px_42px_-24px_rgba(0,0,0,0.28)] backdrop-blur-[10px]"
+              className="fixed right-0 bottom-0 left-0 z-50 flex flex-col overflow-hidden rounded-t-2xl border-t border-border-default bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)] shadow-[0_-18px_42px_-24px_rgba(0,0,0,0.28)] backdrop-blur-[10px]"
             >
               {secondaryPanel}
             </aside>

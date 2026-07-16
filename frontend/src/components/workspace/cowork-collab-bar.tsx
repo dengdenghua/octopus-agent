@@ -147,7 +147,7 @@ export function CoworkCollabBar({
   return (
     <div
       className={cn(
-        "shrink-0 border-b border-border/45 bg-background/60 px-3 py-1.5",
+        "shrink-0 border-b border-border-subtle bg-background/60 px-3 py-1.5",
         className,
       )}
       data-testid="cowork-collab-bar"
@@ -162,7 +162,7 @@ export function CoworkCollabBar({
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t.coworkCollab.searchPlaceholder}
             aria-label={t.coworkCollab.searchPlaceholder}
-            className="h-7 w-full rounded-md border border-border/55 bg-background/70 pl-7 pr-2 text-xs text-foreground placeholder:text-muted-foreground/70 focus-visible:border-primary/30 focus-visible:outline-none"
+            className="h-7 w-full rounded-md border border-border-default bg-background/70 pl-7 pr-2 text-xs text-foreground placeholder:text-muted-foreground/70 focus-visible:border-primary/30 focus-visible:outline-none"
           />
         </div>
       </div>

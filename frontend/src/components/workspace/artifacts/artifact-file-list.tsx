@@ -67,7 +67,7 @@ export function ArtifactFileList({
   return (
     <div
       className={cn(
-        "rounded-lg border border-border/55 bg-background/80",
+        "rounded-lg border border-border-default bg-background/80",
         className,
       )}
     >
@@ -77,7 +77,7 @@ export function ArtifactFileList({
           type="button"
           className={cn(
             "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50",
-            index > 0 && "border-t border-border/40",
+            index > 0 && "border-t border-border-subtle",
           )}
           onClick={() => handleClick(file)}
         >

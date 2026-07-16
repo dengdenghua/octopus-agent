@@ -43,7 +43,7 @@ export function ArtifactPanel({
       className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", className)}
     >
       {showHeader && (
-        <header className="flex shrink-0 items-center gap-2 border-b border-border/40 px-3 py-2.5">
+        <header className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-2.5">
           <FilesIcon className="size-4 text-muted-foreground" />
           <h2 className="flex-1 truncate text-sm font-medium">
             {t.conversation.artifactsTitle}

@@ -162,7 +162,7 @@ export function TodoPanel({
       <button
         type="button"
         className={cn(
-          "ml-auto flex w-fit max-w-full items-center gap-2 rounded-full border border-border/70 bg-background/90 px-3 py-1.5 text-xs shadow-sm backdrop-blur-xl transition-colors hover:bg-muted/60",
+          "ml-auto flex w-fit max-w-full items-center gap-2 rounded-full border border-border-default bg-background/90 px-3 py-1.5 text-xs shadow-[var(--shadow-xs)] backdrop-blur-xl transition-colors hover:bg-muted/60",
           className,
         )}
         onClick={() => {
@@ -182,7 +182,7 @@ export function TodoPanel({
   return (
     <div
       className={cn(
-        "workspace-panel-subtle overflow-hidden rounded-2xl border border-border/70 shadow-lg shadow-black/5 backdrop-blur-xl",
+        "workspace-panel-subtle overflow-hidden rounded-2xl border border-border-default shadow-[var(--shadow-md)] shadow-black/5 backdrop-blur-xl",
         className,
       )}
     >

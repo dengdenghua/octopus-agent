@@ -301,10 +301,10 @@ export function PersonalModeSelector({
           }
         }}
         className={cn(
-          "group flex items-center gap-1.5 text-[11px] font-medium text-foreground shadow-none transition-colors duration-150",
+          "group flex items-center gap-1.5 text-[11px] font-medium text-foreground shadow-none transition-colors",
           chromeless
             ? "h-8 rounded-md px-1.5 hover:bg-muted/55 hover:text-foreground"
-            : "h-8 rounded-full border border-transparent bg-transparent px-2 hover:border-border/50 hover:bg-muted/55",
+            : "h-8 rounded-full border border-transparent bg-transparent px-2 hover:border-border-subtle hover:bg-muted/55",
         )}
         title={activeLabels.desc}
       >
@@ -361,7 +361,7 @@ export function PersonalModeSelector({
                         aria-selected={mode === option.name}
                         onClick={() => handlePick(option.name)}
                         className={cn(
-                          "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs transition-all duration-200",
+                          "flex w-full items-center gap-2 px-3 py-2 text-xs transition-colors",
                           mode === option.name
                             ? option.activeTone
                             : "text-muted-foreground hover:bg-muted",

@@ -311,7 +311,7 @@ export function LiveRunFeedbackPanel({
   return (
     <div
       className={cn(
-        "workspace-panel-subtle my-2 w-full rounded-lg border border-border/60 p-3 text-xs",
+        "workspace-panel-subtle my-2 w-full rounded-lg border border-border-default p-3 text-xs",
         className,
       )}
     >
@@ -374,8 +374,8 @@ export function LiveRunFeedbackPanel({
         )}
 
         {contentPreview && (
-          <div className="overflow-hidden rounded-md border border-border/50 bg-background/70">
-            <div className="flex items-center gap-1.5 border-b border-border/40 px-2 py-1 text-[10px] font-medium text-muted-foreground">
+          <div className="overflow-hidden rounded-md border border-border-default bg-background/70">
+            <div className="flex items-center gap-1.5 border-b border-border-subtle px-2 py-1 text-[10px] font-medium text-muted-foreground">
               <FileTextIcon className="size-3" />
               {t.liveRunFeedback.contentPreview}
               {eventPath(contentEvent!) ? ` · ${eventPath(contentEvent!)}` : ""}

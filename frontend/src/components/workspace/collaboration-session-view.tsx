@@ -56,7 +56,7 @@ export function CollaborationSessionView({
   if (!hasTasks && !hasOnlinePresence && !hasRoomActivity) return null;
   return (
     <div
-      className="flex flex-col gap-2 rounded-xl border border-border/60 bg-background/70 p-3"
+      className="flex flex-col gap-2 rounded-xl border border-border-default bg-background/70 p-3"
       data-testid="collab-session-view"
     >
       <div className="flex min-w-0 items-center gap-2">
@@ -83,7 +83,7 @@ export function CollaborationSessionView({
 
       {hasRoomActivity && (
         <div
-          className="flex min-w-0 flex-wrap items-center gap-2 border-t border-border/45 pt-2"
+          className="flex min-w-0 flex-wrap items-center gap-2 border-t border-border-subtle pt-2"
           data-testid="collab-session-room"
         >
           <span

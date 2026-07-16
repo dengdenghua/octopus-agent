@@ -13,10 +13,10 @@ export const ArtifactTrigger = ({ className }: { className?: string }) => {
   return (
     <Button
       className={cn(
-        "relative size-8 rounded-lg border text-muted-foreground transition-colors",
+        "relative size-8 border text-muted-foreground transition-colors",
         open
           ? "border-border bg-muted text-foreground"
-          : "border-transparent hover:border-border/50 hover:bg-muted/60 hover:text-foreground",
+          : "border-transparent hover:border-border-subtle hover:bg-muted/60 hover:text-foreground",
         className,
       )}
       variant="ghost"

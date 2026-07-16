@@ -61,7 +61,7 @@ export const TokenUsageIndicator = memo(function TokenUsageIndicator({
         <button
           type="button"
           className={cn(
-            "text-muted-foreground hover:text-foreground hover:bg-muted flex h-8 cursor-default items-center gap-1 rounded-lg border border-transparent px-2 text-xs transition-colors",
+            "text-muted-foreground hover:text-foreground hover:bg-muted flex h-8 cursor-default items-center gap-1 border border-transparent px-2 text-xs transition-colors",
             className,
           )}
         >
@@ -84,7 +84,7 @@ export const TokenUsageIndicator = memo(function TokenUsageIndicator({
               {formatTokenCount(usage.outputTokens)}
             </span>
           </div>
-          <div className="border-t border-border/50 pt-1">
+          <div className="border-t border-border-default pt-1">
             <div className="flex justify-between gap-4">
               <span>{t.tokenUsage.total}</span>
               <span className="font-mono font-medium">
@@ -99,7 +99,7 @@ export const TokenUsageIndicator = memo(function TokenUsageIndicator({
             </div>
           )}
           {usage && (
-            <div className="border-t border-border/50 pt-1 mt-1">
+            <div className="border-t border-border-default pt-1 mt-1">
               <div className="flex justify-between gap-4 mb-1">
                 <span>{t.tokenUsage.context}</span>
                 <span className="font-mono">

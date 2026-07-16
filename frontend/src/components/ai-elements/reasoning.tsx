@@ -136,7 +136,7 @@ export const ReasoningTrigger = memo(
     return (
       <CollapsibleTrigger
         className={cn(
-          "text-muted-foreground hover:text-foreground inline-flex w-full items-center gap-2 rounded-lg px-1 py-0.5 text-sm transition-colors hover:bg-muted/30",
+          "text-muted-foreground hover:text-foreground inline-flex w-full items-center gap-2 px-1 py-0.5 text-sm transition-colors hover:bg-muted/30",
           className,
         )}
         {...props}
@@ -172,7 +172,7 @@ export const ReasoningContent = memo(
         className={cn(
           "mt-2 text-sm relative overflow-hidden",
           "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground data-[state=closed]:animate-out data-[state=open]:animate-in outline-none",
-          "rounded-lg border border-border/40 bg-muted/20 p-3 pl-4",
+          "rounded-lg border border-border-subtle bg-muted/20 p-3 pl-4",
           isStreaming &&
             "border-l-primary/50 shadow-[inset_2px_0_0_0_var(--primary)]",
           className,

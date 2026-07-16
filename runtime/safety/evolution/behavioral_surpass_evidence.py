@@ -1,0 +1,471 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from runtime.platform.process.paths import project_root as default_project_root
+
+BUNDLE_SCHEMA = "octopus.behavioral_surpass_bundle.v1"
+REPORT_SCHEMA = "octopus.behavioral_surpass_evidence.v1"
+REQUIRED_SYSTEMS = ("octopus", "codex")
+REQUIRED_DOMAINS = (
+    "general_runtime_and_coding",
+    "frontend_product_experience",
+    "browser_desktop_automation",
+    "multi_agent_digital_employee",
+    "repo_memory_knowledge",
+    "security_governance",
+    "extensions_ecosystem",
+)
+ALLOWED_EXECUTION_MODES: dict[str, set[str]] = {
+    "general_runtime_and_coding": {"real_provider"},
+    "frontend_product_experience": {"live_runtime"},
+    "browser_desktop_automation": {"live_runtime"},
+    "multi_agent_digital_employee": {"real_provider"},
+    "repo_memory_knowledge": {"real_provider", "live_runtime"},
+    "security_governance": {"live_runtime", "deterministic_integration"},
+    "extensions_ecosystem": {"live_runtime", "deterministic_integration"},
+}
+DEFAULT_BUNDLE_PATH = "benchmarks/results/behavioral-surpass-latest.json"
+
+
+def compute_behavioral_surpass_evidence(
+    *,
+    root: str | Path | None = None,
+    bundle_path: str | Path | None = None,
+    now: datetime | None = None,
+    max_age_days: int = 30,
+    min_k: int = 3,
+    min_cases_per_domain: int = 2,
+    min_pass_pow_k: float = 0.95,
+    surpass_margin: float = 0.0,
+) -> dict[str, Any]:
+    base = Path(root) if root is not None else default_project_root(Path(__file__))
+    path = _resolve_bundle_path(base, bundle_path)
+    current_time = now or datetime.now(UTC)
+    checks: list[dict[str, Any]] = []
+    errors: list[str] = []
+    bundle = _read_bundle(path, errors)
+
+    _add_check(
+        checks,
+        "bundle_present",
+        "Behavioral evidence bundle exists",
+        path.exists(),
+        1 if path.exists() else 0,
+        1,
+        "Run the same behavioral suite against Octopus and Codex.",
+    )
+    schema_ok = isinstance(bundle, dict) and bundle.get("schema") == BUNDLE_SCHEMA
+    _add_check(
+        checks,
+        "bundle_schema",
+        "Behavioral evidence uses the current schema",
+        schema_ok,
+        1 if schema_ok else 0,
+        1,
+        f"Write a {BUNDLE_SCHEMA} evidence bundle.",
+    )
+
+    generated_at = _parse_datetime(bundle.get("generated_at") if isinstance(bundle, dict) else None)
+    age_days = None
+    fresh = False
+    if generated_at is not None:
+        age_days = (current_time - generated_at).total_seconds() / 86_400
+        fresh = -(5 / 1440) <= age_days <= max_age_days
+    _add_check(
+        checks,
+        "bundle_fresh",
+        "Behavioral evidence is fresh",
+        fresh,
+        round(age_days, 3) if age_days is not None else -1,
+        max_age_days,
+        f"Regenerate behavioral evidence within {max_age_days} days.",
+    )
+
+    metadata_ok = bool(
+        isinstance(bundle, dict)
+        and str(bundle.get("suite_id") or "").strip()
+        and str(bundle.get("runner_version") or "").strip()
+        and str(bundle.get("source_revision") or "").strip()
+    )
+    _add_check(
+        checks,
+        "bundle_metadata",
+        "Suite, runner, and source revision are recorded",
+        metadata_ok,
+        1 if metadata_ok else 0,
+        1,
+        "Record suite_id, runner_version, and source_revision.",
+    )
+
+    systems = bundle.get("systems") if isinstance(bundle, dict) else None
+    system_rows: dict[str, dict[str, Any]] = {}
+    for system_id in REQUIRED_SYSTEMS:
+        raw_system = systems.get(system_id) if isinstance(systems, dict) else None
+        system_rows[system_id] = _validate_system(
+            base=base,
+            system_id=system_id,
+            raw_system=raw_system,
+            min_k=min_k,
+            min_cases_per_domain=min_cases_per_domain,
+            errors=errors,
+        )
+    systems_present = all(row["present"] for row in system_rows.values())
+    _add_check(
+        checks,
+        "systems_present",
+        "Octopus and Codex results are both present",
+        systems_present,
+        sum(1 for row in system_rows.values() if row["present"]),
+        len(REQUIRED_SYSTEMS),
+        "Run the identical suite on both systems.",
+    )
+
+    case_sets = [set(row["case_ids"]) for row in system_rows.values()]
+    comparison_signatures = [row["comparison_signatures"] for row in system_rows.values()]
+    same_cases = (
+        systems_present
+        and bool(case_sets[0])
+        and all(signature == comparison_signatures[0] for signature in comparison_signatures[1:])
+    )
+    _add_check(
+        checks,
+        "same_cases",
+        "Both systems ran the exact same cases",
+        same_cases,
+        len(case_sets[0] & case_sets[1]) if len(case_sets) == 2 else 0,
+        len(case_sets[0] | case_sets[1]) if len(case_sets) == 2 else 0,
+        "Use identical case IDs and rubrics for Octopus and Codex.",
+    )
+
+    domain_rows = _compare_domains(system_rows, min_cases_per_domain=min_cases_per_domain)
+    domains_ready = all(row["ready"] for row in domain_rows)
+    _add_check(
+        checks,
+        "domain_coverage",
+        "Every required domain has repeated isolated trials",
+        domains_ready,
+        sum(1 for row in domain_rows if row["ready"]),
+        len(REQUIRED_DOMAINS),
+        f"Provide at least {min_cases_per_domain} cases per domain with k >= {min_k}.",
+    )
+
+    artifacts_verified = all(row["artifacts_verified"] for row in system_rows.values())
+    _add_check(
+        checks,
+        "artifacts_verified",
+        "Every case has digest-verified trajectory artifacts",
+        artifacts_verified,
+        sum(int(row["verified_artifacts"]) for row in system_rows.values()),
+        sum(int(row["expected_artifacts"]) for row in system_rows.values()),
+        "Store each trajectory artifact and its SHA-256 digest.",
+    )
+
+    methods_valid = all(row["methods_valid"] for row in system_rows.values())
+    _add_check(
+        checks,
+        "methods_valid",
+        "Trials use outcome grading, isolated state, and real execution modes",
+        methods_valid,
+        sum(int(row["valid_cases"]) for row in system_rows.values()),
+        sum(int(row["total_cases"]) for row in system_rows.values()),
+        "Use outcome graders, isolated trials, and the required live/provider execution mode.",
+    )
+
+    octopus_score = float(system_rows["octopus"]["aggregate_pass_pow_k"])
+    codex_score = float(system_rows["codex"]["aggregate_pass_pow_k"])
+    octopus_clears_floor = octopus_score >= min_pass_pow_k
+    _add_check(
+        checks,
+        "octopus_reliability_floor",
+        "Octopus repeated-run reliability clears the floor",
+        octopus_clears_floor,
+        round(octopus_score, 4),
+        min_pass_pow_k,
+        "Fix failing Octopus cases and rerun the full suite.",
+    )
+    head_to_head = same_cases and octopus_score >= codex_score + surpass_margin
+    _add_check(
+        checks,
+        "head_to_head",
+        "Octopus meets or exceeds Codex on the same suite",
+        head_to_head,
+        round(octopus_score - codex_score, 4),
+        surpass_margin,
+        "Run comparable trials and close the measured Codex gap.",
+    )
+    no_domain_regressions = bool(domain_rows) and all(
+        row["octopus_pass_pow_k"] >= row["codex_pass_pow_k"] for row in domain_rows
+    )
+    _add_check(
+        checks,
+        "no_domain_regressions",
+        "Octopus is not behind Codex in any required domain",
+        no_domain_regressions,
+        sum(1 for row in domain_rows if row["octopus_pass_pow_k"] >= row["codex_pass_pow_k"]),
+        len(REQUIRED_DOMAINS),
+        "Repair every domain where Octopus trails the Codex baseline.",
+    )
+
+    expected_revision = os.environ.get("OCTOPUS_BEHAVIORAL_EXPECTED_REVISION", "").strip()
+    revision_matches = not expected_revision or (
+        isinstance(bundle, dict) and str(bundle.get("source_revision") or "") == expected_revision
+    )
+    _add_check(
+        checks,
+        "source_revision",
+        "Evidence matches the requested source revision",
+        revision_matches,
+        1 if revision_matches else 0,
+        1,
+        "Regenerate evidence for the release revision.",
+    )
+
+    ready = bool(checks) and all(bool(check["passed"]) for check in checks)
+    verdict = "surpassed" if ready else _failure_verdict(checks)
+    next_actions = [
+        str(check["next_action"])
+        for check in checks
+        if not check["passed"] and check.get("next_action")
+    ]
+    return {
+        "schema": REPORT_SCHEMA,
+        "ready": ready,
+        "verdict": verdict,
+        "bundle_path": str(path),
+        "bundle_exists": path.exists(),
+        "generated_at": generated_at.isoformat() if generated_at else "",
+        "age_days": round(age_days, 3) if age_days is not None else None,
+        "max_age_days": max_age_days,
+        "min_k": min_k,
+        "min_cases_per_domain": min_cases_per_domain,
+        "min_pass_pow_k": min_pass_pow_k,
+        "surpass_margin": surpass_margin,
+        "systems": system_rows,
+        "domains": domain_rows,
+        "checks": checks,
+        "errors": sorted(set(errors)),
+        "next_actions": list(dict.fromkeys(next_actions)),
+    }
+
+
+def _resolve_bundle_path(base: Path, bundle_path: str | Path | None) -> Path:
+    raw = bundle_path or os.environ.get("OCTOPUS_BEHAVIORAL_EVAL_BUNDLE") or DEFAULT_BUNDLE_PATH
+    path = Path(raw)
+    return path if path.is_absolute() else base / path
+
+
+def _read_bundle(path: Path, errors: list[str]) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        errors.append(f"bundle unreadable: {type(exc).__name__}: {exc}")
+        return {}
+    if not isinstance(value, dict):
+        errors.append("bundle root must be an object")
+        return {}
+    return value
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(float(value), tz=UTC)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+
+
+def _validate_system(
+    *,
+    base: Path,
+    system_id: str,
+    raw_system: Any,
+    min_k: int,
+    min_cases_per_domain: int,
+    errors: list[str],
+) -> dict[str, Any]:
+    present = isinstance(raw_system, dict) and bool(str(raw_system.get("version") or "").strip())
+    cases = raw_system.get("cases") if isinstance(raw_system, dict) else None
+    case_rows = cases if isinstance(cases, list) else []
+    valid_cases = 0
+    verified_artifacts = 0
+    expected_artifacts = 0
+    case_ids: list[str] = []
+    comparison_signatures: dict[str, str] = {}
+    domain_scores: dict[str, list[float]] = {domain: [] for domain in REQUIRED_DOMAINS}
+    for index, raw_case in enumerate(case_rows):
+        if not isinstance(raw_case, dict):
+            errors.append(f"{system_id}.cases[{index}] must be an object")
+            continue
+        case_id = str(raw_case.get("id") or "").strip()
+        domain = str(raw_case.get("domain") or "").strip()
+        if case_id:
+            case_ids.append(case_id)
+        k = _safe_int(raw_case.get("k"))
+        passes = _safe_int(raw_case.get("passes"))
+        trajectory_count = _safe_int(raw_case.get("trajectory_count"))
+        rubric_digest = str(raw_case.get("rubric_digest") or "").strip().lower()
+        pass_pow_k = 1.0 if k >= min_k and passes == k else 0.0
+        allowed_modes = ALLOWED_EXECUTION_MODES.get(domain, set())
+        method_valid = bool(
+            case_id
+            and domain in REQUIRED_DOMAINS
+            and k >= min_k
+            and 0 <= passes <= k
+            and trajectory_count >= k
+            and raw_case.get("outcome_grader") is True
+            and raw_case.get("isolated_state") is True
+            and str(raw_case.get("execution_mode") or "") in allowed_modes
+            and len(rubric_digest) == 64
+            and all(character in "0123456789abcdef" for character in rubric_digest)
+        )
+        if method_valid:
+            valid_cases += 1
+            domain_scores[domain].append(pass_pow_k)
+            comparison_signatures[case_id] = f"{domain}:{rubric_digest}"
+        artifacts = raw_case.get("artifacts")
+        artifact_rows = artifacts if isinstance(artifacts, list) else []
+        expected_artifacts += max(k, len(artifact_rows))
+        verified_artifacts += sum(
+            1 for artifact in artifact_rows if _verify_artifact(base, artifact, errors)
+        )
+    duplicate_case_ids = len(case_ids) != len(set(case_ids))
+    if duplicate_case_ids:
+        errors.append(f"{system_id} contains duplicate case IDs")
+    domain_counts = {domain: len(scores) for domain, scores in domain_scores.items()}
+    aggregate_scores = [score for scores in domain_scores.values() for score in scores]
+    return {
+        "present": present,
+        "version": str(raw_system.get("version") or "") if isinstance(raw_system, dict) else "",
+        "total_cases": len(case_rows),
+        "valid_cases": valid_cases,
+        "methods_valid": bool(case_rows)
+        and valid_cases == len(case_rows)
+        and not duplicate_case_ids,
+        "case_ids": sorted(set(case_ids)),
+        "comparison_signatures": dict(sorted(comparison_signatures.items())),
+        "domain_case_counts": domain_counts,
+        "domains_ready": all(count >= min_cases_per_domain for count in domain_counts.values()),
+        "domain_pass_pow_k": {
+            domain: round(sum(scores) / len(scores), 4) if scores else 0.0
+            for domain, scores in domain_scores.items()
+        },
+        "aggregate_pass_pow_k": (
+            round(sum(aggregate_scores) / len(aggregate_scores), 4) if aggregate_scores else 0.0
+        ),
+        "verified_artifacts": verified_artifacts,
+        "expected_artifacts": expected_artifacts,
+        "artifacts_verified": bool(case_rows)
+        and expected_artifacts > 0
+        and verified_artifacts == expected_artifacts,
+    }
+
+
+def _verify_artifact(base: Path, raw_artifact: Any, errors: list[str]) -> bool:
+    if not isinstance(raw_artifact, dict):
+        return False
+    relative = str(raw_artifact.get("path") or "").strip()
+    expected = str(raw_artifact.get("sha256") or "").strip().lower()
+    if not relative or len(expected) != 64:
+        return False
+    path = (base / relative).resolve()
+    try:
+        path.relative_to(base.resolve())
+    except ValueError:
+        errors.append(f"artifact escapes repository root: {relative}")
+        return False
+    try:
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return False
+    if actual != expected:
+        errors.append(f"artifact digest mismatch: {relative}")
+        return False
+    return True
+
+
+def _compare_domains(
+    systems: dict[str, dict[str, Any]],
+    *,
+    min_cases_per_domain: int,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for domain in REQUIRED_DOMAINS:
+        octopus_count = int(systems["octopus"]["domain_case_counts"].get(domain, 0))
+        codex_count = int(systems["codex"]["domain_case_counts"].get(domain, 0))
+        rows.append(
+            {
+                "id": domain,
+                "ready": (
+                    octopus_count >= min_cases_per_domain and codex_count >= min_cases_per_domain
+                ),
+                "octopus_cases": octopus_count,
+                "codex_cases": codex_count,
+                "octopus_pass_pow_k": float(
+                    systems["octopus"]["domain_pass_pow_k"].get(domain, 0.0)
+                ),
+                "codex_pass_pow_k": float(systems["codex"]["domain_pass_pow_k"].get(domain, 0.0)),
+            }
+        )
+    return rows
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return -1
+
+
+def _add_check(
+    checks: list[dict[str, Any]],
+    check_id: str,
+    title: str,
+    passed: bool,
+    score: Any,
+    target: Any,
+    next_action: str,
+) -> None:
+    checks.append(
+        {
+            "id": check_id,
+            "title": title,
+            "passed": bool(passed),
+            "score": score,
+            "target": target,
+            "next_action": next_action,
+        }
+    )
+
+
+def _failure_verdict(checks: list[dict[str, Any]]) -> str:
+    failed = {str(check["id"]) for check in checks if not check["passed"]}
+    if "bundle_present" in failed:
+        return "missing_behavioral_evidence"
+    if "bundle_fresh" in failed:
+        return "stale_behavioral_evidence"
+    if failed & {"head_to_head", "no_domain_regressions", "octopus_reliability_floor"}:
+        return "behavioral_gap"
+    return "invalid_behavioral_evidence"
+
+
+__all__ = [
+    "ALLOWED_EXECUTION_MODES",
+    "BUNDLE_SCHEMA",
+    "DEFAULT_BUNDLE_PATH",
+    "REPORT_SCHEMA",
+    "REQUIRED_DOMAINS",
+    "REQUIRED_SYSTEMS",
+    "compute_behavioral_surpass_evidence",
+]
