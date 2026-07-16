@@ -134,6 +134,37 @@ def test_setup_failure_recorded() -> None:
     assert "setup failed" in (result.trajectories[0].error or "")
 
 
+def test_grader_observes_state_before_teardown() -> None:
+    state = {"value": "missing"}
+    case = EvalCase(
+        id="lifecycle",
+        prompt="x",
+        setup=lambda: state.update(value="ready"),
+        grader=lambda _trajectory: state["value"] == "ready",
+        teardown=lambda: state.update(value="removed"),
+    )
+
+    result = run_case(case, runner=_mock_runner_echo, k=1)
+
+    assert result.passes == 1
+    assert state["value"] == "removed"
+
+
+def test_grader_exception_becomes_failed_trajectory() -> None:
+    def broken_grader(_trajectory):
+        raise RuntimeError("verifier unavailable")
+
+    result = run_case(
+        EvalCase(id="grader-error", prompt="x", grader=broken_grader),
+        runner=_mock_runner_echo,
+        k=1,
+    )
+
+    assert result.passes == 0
+    assert result.verdicts[0].reason == "grader raised: verifier unavailable"
+    assert result.trajectories[0].error == "grader raised: verifier unavailable"
+
+
 def test_runner_exception_captured() -> None:
     def bad_runner(prompt: str):
         yield {"kind": "text_delta", "delta": "starting"}

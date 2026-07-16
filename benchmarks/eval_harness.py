@@ -423,6 +423,11 @@ def run_case(
             except Exception as exc:
                 traj.error = f"setup failed: {exc}"
                 traj.ended_at = time.time()
+                if case.teardown:
+                    try:
+                        case.teardown()
+                    except Exception as teardown_exc:
+                        traj.append("teardown_error", message=str(teardown_exc))
                 result.trajectories.append(traj)
                 result.verdicts.append(Verdict(passed=False, reason=traj.error))
                 continue
@@ -435,15 +440,21 @@ def run_case(
                     traj.steps.append(TrajectoryStep(kind=kind, payload=payload))
         except Exception as exc:
             traj.error = f"runner raised: {exc}"
-        finally:
-            traj.ended_at = time.time()
-            if case.teardown:
-                try:
-                    case.teardown()
-                except Exception as exc:
-                    traj.append("teardown_error", message=str(exc))
-
-        verdict = _coerce_verdict(case.grader(traj))
+        traj.ended_at = time.time()
+        try:
+            verdict = _coerce_verdict(case.grader(traj))
+        except Exception as exc:
+            grader_error = f"grader raised: {exc}"
+            traj.error = f"{traj.error}; {grader_error}" if traj.error else grader_error
+            verdict = Verdict(passed=False, reason=grader_error)
+        if case.teardown:
+            try:
+                case.teardown()
+            except Exception as exc:
+                teardown_error = f"teardown failed: {exc}"
+                traj.append("teardown_error", message=str(exc))
+                traj.error = f"{traj.error}; {teardown_error}" if traj.error else teardown_error
+                verdict = Verdict(passed=False, reason=teardown_error)
         if verdict.passed:
             result.passes += 1
         result.trajectories.append(traj)

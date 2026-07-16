@@ -149,7 +149,7 @@ export function agentRunPanelClass(status: AgentRunStatusInput): string {
   if (state === "done") {
     return "border-sky-500/25 bg-sky-500/10 text-sky-600 dark:text-sky-400";
   }
-  return "border-border/70 bg-muted/45 text-muted-foreground";
+  return "border-border-default bg-muted/45 text-muted-foreground";
 }
 
 export function agentRunRobotButtonClass(status: AgentRunStatusInput): string {
@@ -161,7 +161,7 @@ export function agentRunRobotButtonClass(status: AgentRunStatusInput): string {
   if (state === "pending") return "border-amber-500/40 bg-amber-500/10";
   if (state === "error") return "border-destructive/50 bg-destructive/10";
   if (state === "done") return "border-sky-500/30 bg-sky-500/8";
-  return "border-border/60 bg-muted/35";
+  return "border-border-default bg-muted/35";
 }
 
 export function agentRunAvatarAnimationClass(

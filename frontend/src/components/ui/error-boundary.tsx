@@ -77,7 +77,7 @@ export class ErrorBoundary extends Component<
     const chunkFailed = this.isChunkLoadError(this.state.error);
     return (
       <div className="flex items-center justify-center p-8">
-        <Card className="max-w-lg border-border/70 bg-background/92 shadow-sm">
+        <Card className="max-w-lg border-border-default bg-background/92 shadow-[var(--shadow-xs)]">
           <CardHeader>
             <CardTitle className="text-base text-foreground">
               {chunkFailed ? t.chunkTitle : t.title}
