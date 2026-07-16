@@ -16,16 +16,21 @@ vi.mock("mermaid-real", () => ({
 
 vi.mock("@/components/ai-elements/message", async () => {
   const React = await import("react");
-  return {
-    MessageResponse: ({
+  type MockMessageResponseProps = {
+    children: string;
+    components: {
+      pre?: (props: { children?: React.ReactNode }) => React.ReactNode;
+    };
+    isAnimating?: boolean;
+    "aria-busy"?: boolean;
+  };
+  const MessageResponse = React.memo(
+    ({
       children,
       components,
-    }: {
-      children: string;
-      components: {
-        pre?: (props: { children?: React.ReactNode }) => React.ReactNode;
-      };
-    }) => {
+      isAnimating,
+      "aria-busy": ariaBusy,
+    }: MockMessageResponseProps) => {
       const match = /^```([\w-]+)\n([\s\S]*?)\n?```$/.exec(children.trim());
       if (match && components.pre) {
         const language = match[1] ?? "text";
@@ -42,8 +47,21 @@ vi.mock("@/components/ai-elements/message", async () => {
           }),
         );
       }
-      return React.createElement("div", null, children);
+      return React.createElement(
+        "div",
+        {
+          "aria-busy": ariaBusy,
+          "data-is-animating": isAnimating ? "true" : "false",
+        },
+        children,
+      );
     },
+    // Streamdown memoizes parsed blocks by content. This reproduces the
+    // completion edge where only the streaming state changes.
+    (previous, next) => previous.children === next.children,
+  );
+  return {
+    MessageResponse,
   };
 });
 
@@ -85,5 +103,48 @@ describe("<MarkdownContent /> Mermaid", () => {
       );
     });
     expect(await screen.findByText("Rendered Mermaid")).toBeInTheDocument();
+  });
+
+  it("remounts stable blocks once so streaming visuals can settle", async () => {
+    const content = "```mermaid\ngraph TD\nA-->B\n```";
+    const view = renderMarkdown(content, true);
+
+    expect(await screen.findByText("mermaid")).toBeInTheDocument();
+    expect(mermaidMock.render).not.toHaveBeenCalled();
+
+    view.rerender(
+      <MarkdownContent
+        content={content}
+        isLoading={false}
+        remarkPlugins={[]}
+        rehypePlugins={[]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mermaidMock.render).toHaveBeenCalledWith(
+        expect.stringMatching(/^mermaid-chat-/),
+        expect.stringContaining("graph TD"),
+      );
+    });
+    expect(await screen.findByText("Rendered Mermaid")).toBeInTheDocument();
+  });
+});
+
+describe("<MarkdownContent /> streaming state", () => {
+  it("keeps markdown controls and assistive technology in the streaming state", () => {
+    renderMarkdown("Answer in progress", true);
+
+    const response = screen.getByText("Answer in progress");
+    expect(response).toHaveAttribute("data-is-animating", "true");
+    expect(response).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("settles the markdown renderer when streaming completes", () => {
+    renderMarkdown("Final answer");
+
+    const response = screen.getByText("Final answer");
+    expect(response).toHaveAttribute("data-is-animating", "false");
+    expect(response).not.toHaveAttribute("aria-busy");
   });
 });

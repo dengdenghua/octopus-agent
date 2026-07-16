@@ -236,6 +236,7 @@ export const jaJP: Translations = {
     jumpToLastTurn: "最後のターンへ",
     backToLatest: "最新メッセージへ戻る",
     latest: "最新",
+    newUpdates: () => "新着コンテンツ",
     timeoutWarning: (seconds: number) =>
       `${seconds} 秒間進捗がありません。停滞している可能性があります`,
     thinkingPlan: "思考プラン",
@@ -1251,6 +1252,7 @@ export const jaJP: Translations = {
     phaseStatusPending: "Pending",
     robot: "Robot",
     noRunningRobotProcess: "No robot process is currently running.",
+    startingRobotProcess: "Controller started — waiting for its first action…",
     tabList: "Tab list",
     summaryLabel: "Summary",
     agentStatusRunning: "Running",
@@ -1302,6 +1304,7 @@ export const jaJP: Translations = {
       "Feature flags, follow-up suggestions, remote backends, and invariants — one place to see and tune them.",
     tabs: {
       runtime: "Runtime",
+      streaming: "ストリーミング",
       featureFlags: "Feature Flags",
       suggestions: "Suggestions",
       remote: "Remote",
@@ -1309,6 +1312,32 @@ export const jaJP: Translations = {
     },
     noActiveProject:
       "No active project bound. Open a workspace project to see suggestions.",
+    streaming: {
+      title: "ストリーミング応答メトリクス",
+      description:
+        "直近100ターンの遅延と状態のみを端末に保存します。メッセージ本文は保存しません。",
+      clear: "ストリーミング指標を消去",
+      empty:
+        "リアルタイム応答が完了すると、初回トークン遅延と停止時間が表示されます。",
+      samples: "サンプル",
+      ttftP50: "TTFT P50",
+      ttftP95: "TTFT P95",
+      maxGapP95: "最長停止 P95",
+      stalledRate: "停止の疑い",
+      unsuccessfulRate: "未完了",
+      time: "完了時刻",
+      outcome: "結果",
+      maxGap: "最長停止",
+      duration: "所要時間",
+      endState: "終了状態",
+      stalled: "長時間無応答",
+      normal: "正常",
+      outcomes: {
+        completed: "完了",
+        interrupted: "中断",
+        failed: "失敗",
+      },
+    },
   },
 
   runtimeSelfCheckPanel: {
@@ -1549,7 +1578,8 @@ export const jaJP: Translations = {
     confirmDeleteProject: (project: string) =>
       `プロジェクト「${project}」内のスレッドは削除されず、分類が解除されます。`,
     confirmDeleteProjectTitle: "プロジェクトを削除",
-    confirmDeleteThread: (title: string) => `チャット「${title}」を削除しますか?`,
+    confirmDeleteThread: (title: string) =>
+      `チャット「${title}」を削除しますか?`,
     tools: "ツール",
     navigate: "ナビゲーション",
     backgroundTasks: "バックグラウンドタスク",
@@ -1606,7 +1636,8 @@ export const jaJP: Translations = {
     deleteTeam: "グループを削除",
     newTeam: "コラボレーターを招待",
     teamMembers: (n: number) => `${n} 人のメンバー`,
-    lockedAgentTooltip: (name: string) => `このページは ${name} に固定されています`,
+    lockedAgentTooltip: (name: string) =>
+      `このページは ${name} に固定されています`,
     adminAgentName: "管理者",
     switchAgentLabel: "エージェントを切り替え",
     switchAgentMenuTitle: "エージェントを切り替え",
@@ -5617,14 +5648,17 @@ Strategy:
   // Public Thinking Status
   publicThinkingStatus: {
     title: "Thinking Status",
-    organizingReply: "Organizing reply",
-    executingTool: "Executing tool",
-    gotResults: "Got execution results",
-    analyzing: "Analyzing",
-    understandingTask: "Understanding task",
-    planningFirstStep: "Planning first step",
-    waitingForModel: "Waiting for model",
-    stillWaiting: "Still waiting",
+    organizingReply: "Writing back to you",
+    executingTool: "Working on it",
+    gotResults: "Got a result",
+    analyzing: "Reading the result and continuing",
+    understandingTask: "Understanding what you need",
+    planningFirstStep: "Working out the first step",
+    waitingForModel: "Still thinking",
+    stillWaiting: "Still working — I'll continue shortly",
+    modelWorking: "モデルが処理中です",
+    slowResponse: "処理に通常より時間がかかっています",
+    reconnecting: "接続が切れました。再接続しています",
   },
 
   // Evolution Dashboard

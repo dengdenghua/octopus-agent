@@ -9,6 +9,7 @@ import {
   MonitorIcon,
   SearchIcon,
   TerminalIcon,
+  WifiOffIcon,
   XCircleIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -21,6 +22,7 @@ import {
   type WorkBlock,
 } from "./work-blocks";
 import { useI18n } from "@/core/i18n/hooks";
+import type { StreamVitals } from "@/core/realtime";
 import { cn } from "@/lib/utils";
 import { agentRunBeadTone } from "./agent-run-status";
 
@@ -44,6 +46,46 @@ function rememberMinimizedPlan(
 function forgetMinimizedPlan(scopeKey: string | undefined) {
   if (!scopeKey) return;
   minimizedPlanByScope.delete(scopeKey);
+}
+
+// Pre-activity status-strip label. When vitals are available, phrase the
+// label from the model's actual liveness (still working vs. slow) instead
+// of the blind elapsed-time heuristic — the whole point of this strip is to
+// tell "working" apart from "stuck". Falls back to the time heuristic when
+// vitals are absent or we're merely waiting for the first token.
+function fallbackStatusLabel({
+  t,
+  vitals,
+  hasStreamingAnswer,
+  loadingAgeMs,
+}: {
+  t: ReturnType<typeof useI18n>["t"];
+  vitals?: StreamVitals;
+  hasStreamingAnswer?: boolean;
+  loadingAgeMs: number;
+}): string {
+  const s = t.publicThinkingStatus;
+  if (vitals?.phase === "disconnected") return s.reconnecting;
+  if (vitals?.phase === "slow") {
+    const elapsedS = Math.floor(vitals.elapsedMs / 1000);
+    return `${s.slowResponse}${elapsedS >= 3 ? ` · ${elapsedS}s` : ""}`;
+  }
+  if (hasStreamingAnswer) return s.organizingReply;
+  if (vitals && vitals.phase !== "idle" && vitals.phase !== "waiting") {
+    const elapsedS = Math.floor(vitals.elapsedMs / 1000);
+    const suffix = elapsedS >= 3 ? ` · ${elapsedS}s` : "";
+    switch (vitals.phase) {
+      case "streaming":
+        return s.organizingReply;
+      case "working":
+        return `${s.modelWorking}${suffix}`;
+    }
+  }
+  return loadingAgeMs < 3000
+    ? s.understandingTask
+    : loadingAgeMs < 12000
+      ? s.analyzing
+      : s.waitingForModel;
 }
 
 function StatusIcon({
@@ -100,23 +142,33 @@ function phaseWindow<T>(
 export function AgentProgressPill({
   events,
   hasAnswer,
+  hasStreamingAnswer,
+  isLoading,
   runSettled,
   runFailed,
   paused,
   className,
   progressScopeKey,
+  vitals,
 }: {
   events: LiveToolEvent[];
   hasAnswer?: boolean;
+  hasStreamingAnswer?: boolean;
+  isLoading?: boolean;
   runSettled?: boolean;
   runFailed?: boolean;
   paused?: boolean;
   className?: string;
   progressScopeKey?: string;
+  /** Live streaming vitals. When present, the pre-activity status label is
+   * driven by the model's actual liveness (working vs. slow/stalled)
+   * instead of a blind elapsed-time heuristic. */
+  vitals?: StreamVitals;
 }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const [minimized, setMinimized] = useState(false);
+  const [loadingAgeMs, setLoadingAgeMs] = useState(0);
   const displayEvents = useMemo(
     () =>
       normalizeEventsForSettledDisplay(events, {
@@ -157,6 +209,30 @@ export function AgentProgressPill({
   const autoMinimizeKey = displayPhase
     ? `${displayPhase.id}:${progress.current}/${progress.total}:${events.length}`
     : null;
+  const vitalsAttributes = vitals
+    ? {
+        "data-stream-phase": vitals.phase,
+        "data-stream-stalled": vitals.stalled ? "true" : "false",
+        "data-stream-ttft-ms": vitals.ttftMs ?? undefined,
+        "data-stream-max-gap-ms": vitals.maxDeltaGapMs,
+        "data-stream-since-activity-ms": Number.isFinite(vitals.sinceActivityMs)
+          ? Math.round(vitals.sinceActivityMs)
+          : undefined,
+      }
+    : {};
+
+  useEffect(() => {
+    if (!isLoading) {
+      setLoadingAgeMs(0);
+      return;
+    }
+    const startedAt = Date.now();
+    setLoadingAgeMs(0);
+    const timer = window.setInterval(() => {
+      setLoadingAgeMs(Date.now() - startedAt);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [isLoading]);
 
   useEffect(() => {
     if (!progressScopeKey || !planFingerprint) return;
@@ -194,7 +270,49 @@ export function AgentProgressPill({
   ]);
 
   if (!displayPhase || phases.length === 0 || blocks.length === 0) {
-    return null;
+    if (!isLoading) return null;
+    const fallbackLabel = fallbackStatusLabel({
+      t,
+      vitals,
+      hasStreamingAnswer,
+      loadingAgeMs,
+    });
+    // "slow" is the one genuinely ambiguous state — the model may still be
+    // working or the turn may be wedged. Tint it so it reads as "taking a
+    // while", distinct from the calm blue of normal progress.
+    const stalled = Boolean(vitals?.stalled);
+    const disconnected = vitals?.phase === "disconnected";
+    return (
+      <div
+        {...vitalsAttributes}
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className={cn(
+          "relative z-20 flex min-h-9 w-full items-center gap-2 rounded-t-lg border border-b-0 border-border/70 bg-background/95 px-3 py-1.5 text-[13px] shadow-lg shadow-black/5 backdrop-blur-xl",
+          className,
+        )}
+      >
+        {disconnected ? (
+          <WifiOffIcon className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+        ) : (
+          <Loader2Icon
+            className={cn(
+              "size-3.5 shrink-0 animate-spin",
+              stalled ? "text-amber-500" : "text-primary",
+            )}
+          />
+        )}
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate font-medium",
+            stalled ? "text-amber-600 dark:text-amber-400" : "text-foreground",
+          )}
+        >
+          {fallbackLabel}
+        </span>
+      </div>
+    );
   }
 
   const percent = Math.round((progress.current / progress.total) * 100);
@@ -259,7 +377,10 @@ export function AgentProgressPill({
   }
 
   return (
-    <div className={cn("relative z-20 flex w-full flex-col", className)}>
+    <div
+      {...vitalsAttributes}
+      className={cn("relative z-20 flex w-full flex-col", className)}
+    >
       {expanded ? (
         <div className="rounded-t-lg border border-b-0 border-border/70 bg-background/95 p-2.5 shadow-lg shadow-black/5 backdrop-blur-xl">
           <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">

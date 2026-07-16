@@ -24,6 +24,7 @@ import { FeatureFlagsPanel } from "@/components/workspace/feature-flags-panel";
 import { InvariantsPanel } from "@/components/workspace/invariants-panel";
 import { RemoteBackendsPanel } from "@/components/workspace/remote-backends-panel";
 import { RuntimeSelfCheckPanel } from "@/components/workspace/runtime-self-check-panel";
+import { StreamTelemetryPanel } from "@/components/workspace/stream-telemetry-panel";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   WorkspaceBody,
@@ -93,6 +94,9 @@ export function DiagnosticsContent() {
           <TabsTrigger value="runtime">
             {t.diagnosticsPage.tabs.runtime}
           </TabsTrigger>
+          <TabsTrigger value="streaming">
+            {t.diagnosticsPage.tabs.streaming}
+          </TabsTrigger>
           <TabsTrigger value="flags">
             {t.diagnosticsPage.tabs.featureFlags}
           </TabsTrigger>
@@ -109,6 +113,10 @@ export function DiagnosticsContent() {
 
         <TabsContent value="runtime">
           <RuntimeSelfCheckPanel />
+        </TabsContent>
+
+        <TabsContent value="streaming">
+          <StreamTelemetryPanel />
         </TabsContent>
 
         <TabsContent value="flags">

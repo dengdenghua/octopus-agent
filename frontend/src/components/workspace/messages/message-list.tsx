@@ -8,7 +8,15 @@ import {
   PlayCircleIcon,
   XCircleIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  memo,
+} from "react";
 
 import {
   Conversation,
@@ -37,6 +45,7 @@ import { cn } from "@/lib/utils";
 import { ArtifactFileList } from "../artifacts/artifact-file-list";
 import { emitOpenAgentWorkbench } from "../agent-workbench-events";
 import type { LiveToolEvent } from "../live-tool-timeline";
+import { PublicThinkingStatus } from "../public-thinking-status";
 import {
   type AgentRunState,
   agentRunAvatarAnimationClass,
@@ -107,6 +116,62 @@ interface AgentIdentity {
 const EMPTY_AGENT_ROSTER: MessageListAgentRosterEntry[] = [];
 const TURN_LOCATOR_VISIBLE_LIMIT = 17;
 const TURN_SCROLL_VIEWPORT_CLASS = "message-list-scroll-viewport";
+const STREAM_PROGRESS_TAIL_LENGTH = 240;
+
+export interface MessageTurnSlice {
+  /** Indexes into the grouped-message array, kept contiguous and ordered. */
+  groupIndexes: number[];
+  /** Human group key when present; leading system content uses a prelude key. */
+  key: string;
+}
+
+/**
+ * Split the flat message-group stream into stable user turns.
+ *
+ * A turn starts at a human group and owns every following group until the next
+ * human group. Keeping this boundary independent from streaming content lets
+ * completed turns use display locking while the newest turn remains fully
+ * rendered and free to grow token by token.
+ */
+export function partitionMessageGroupsIntoTurns(
+  groups: CoreMessageGroup[],
+): MessageTurnSlice[] {
+  const turns: MessageTurnSlice[] = [];
+
+  for (let index = 0; index < groups.length; index += 1) {
+    const group = groups[index]!;
+    if (group.type === "human" || turns.length === 0) {
+      turns.push({
+        groupIndexes: [index],
+        key:
+          group.type === "human"
+            ? `${group.type}:${group.id ?? `idx-${index}`}`
+            : `prelude:${group.type}:${group.id ?? `idx-${index}`}`,
+      });
+      continue;
+    }
+
+    turns[turns.length - 1]!.groupIndexes.push(index);
+  }
+
+  return turns;
+}
+
+export function streamingMessageProgressKey(
+  message: Message | null | undefined,
+): string {
+  if (!message) return "";
+  if (typeof message.content === "string") {
+    return `${message.content.length}:${message.content.slice(-STREAM_PROGRESS_TAIL_LENGTH)}`;
+  }
+  return message.content
+    .filter((part) => part.type === "text")
+    .map(
+      (part) =>
+        `${part.text.length}:${part.text.slice(-STREAM_PROGRESS_TAIL_LENGTH)}`,
+    )
+    .join("|");
+}
 
 function cleanIdentityText(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
@@ -373,6 +438,26 @@ function hasVisibleAssistantText(group: CoreMessageGroup): boolean {
   );
 }
 
+function assistantGroupContainsFailureMessage(
+  group: CoreMessageGroup,
+  failureMessage: string,
+): boolean {
+  const normalizedFailure = failureMessage.replace(/\s+/g, " ").trim();
+  if (!normalizedFailure) return false;
+
+  return group.messages.some((message) => {
+    if (message.type !== "ai") return false;
+    const visibleText = extractTextFromMessage(message)
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!visibleText) return false;
+    return (
+      visibleText.includes(normalizedFailure) ||
+      (visibleText.length >= 24 && normalizedFailure.includes(visibleText))
+    );
+  });
+}
+
 /**
  * Memoized wrapper around a single message group. Only the group that
  * contains the currently-streaming message (or the latest group while
@@ -402,7 +487,10 @@ const MemoizedGroup = memo(
     enableClarificationActions: boolean;
     deferGroupOutputs: boolean;
     groupAuditNotice: string | null;
-    groupFailure?: { message: string; kind?: "error" | "network" | "verification" } | null;
+    groupFailure?: {
+      message: string;
+      kind?: "error" | "network" | "verification";
+    } | null;
     renderGroupContent: (
       group: CoreMessageGroup,
       beforeAssistantContent?: ReactNode,
@@ -410,7 +498,10 @@ const MemoizedGroup = memo(
       keepOpen?: boolean,
       deferOutputs?: boolean,
       auditNotice?: string | null,
-      failure?: { message: string; kind?: "error" | "network" | "verification" } | null,
+      failure?: {
+        message: string;
+        kind?: "error" | "network" | "verification";
+      } | null,
     ) => ReactNode;
   }) {
     return (
@@ -450,20 +541,17 @@ const MemoizedGroup = memo(
 /**
  * Unified chat message list.
  *
- * Previous versions virtualized rows via ``@tanstack/react-virtual`` to
- * save render cost on long conversations. The approach interacted badly
- * with streaming: each token chunk grows the currently-streaming group by
- * a few lines, and the virtualizer's ResizeObserver measures async, so
- * rows below sat at stale ``translateY`` offsets for a frame or two:
- * visually, text would overlap and the scroll bar would jitter.
+ * Previous versions virtualized individual rows via ``@tanstack/react-virtual``
+ * to save render cost on long conversations. The approach interacted badly
+ * with streaming: each token chunk grows the currently-streaming group by a
+ * few lines, and the virtualizer's ResizeObserver measures async, so rows
+ * below sat at stale ``translateY`` offsets for a frame or two. Visually,
+ * text would overlap and the scroll bar would jitter.
  *
- * We now follow the upstream deer-flow layout: a plain flex-col rendered
- * inside ``<Conversation>/<ConversationContent>``, which wraps
- * ``use-stick-to-bottom`` and handles auto-scroll semantics natively.
- * No ResizeObserver in the critical path, no translateY recomputation.
- * The one known trade-off is memory on very long conversations (hundreds
- * of messages). We accept that; virtualization can be reintroduced as a
- * separate feature later if it actually shows up in profiles.
+ * Turns now stay in normal document flow. Stable historical turns opt into
+ * CSS ``content-visibility:auto`` while the latest turn is always fully
+ * rendered. This skips off-screen layout and paint without a measurement loop,
+ * translated rows, or any chance of hiding the active streaming response.
  */
 
 export function MessageList({
@@ -564,11 +652,25 @@ export function MessageList({
   // Content fingerprint: includes the tail of the streaming text so the
   // loading-age timer resets when new content arrives.
   const contentFingerprint = useMemo(() => {
-    const streamText = thread.streamingMessage
-      ? extractTextFromMessage(thread.streamingMessage).trim()
-      : "";
-    return [structuralFingerprint, streamText.slice(-240)].join("::");
+    return [
+      structuralFingerprint,
+      streamingMessageProgressKey(thread.streamingMessage),
+    ].join("::");
   }, [structuralFingerprint, thread.streamingMessage]);
+  const hasStreamingAnswer = Boolean(
+    thread.streamingMessage &&
+    extractContentFromMessage(thread.streamingMessage).trim(),
+  );
+
+  // A content delta is progress, so move the silence watermark without
+  // restarting the per-turn timer. The previous combined effect tore down
+  // and recreated an interval on every token, adding avoidable effect/timer
+  // churn to the hottest rendering path.
+  useEffect(() => {
+    if (!thread.isLoading) return;
+    loadingProgressAtRef.current = Date.now();
+    setLoadingAgeMs((age) => (age === 0 ? age : 0));
+  }, [thread.isLoading, contentFingerprint]);
 
   useEffect(() => {
     if (!thread.isLoading) {
@@ -576,14 +678,13 @@ export function MessageList({
       setLoadingAgeMs(0);
       return;
     }
-    loadingProgressAtRef.current = Date.now();
-    setLoadingAgeMs(0);
+    loadingProgressAtRef.current ??= Date.now();
     const timer = window.setInterval(() => {
       const progressAt = loadingProgressAtRef.current ?? Date.now();
       setLoadingAgeMs(Date.now() - progressAt);
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [thread.isLoading, contentFingerprint]);
+  }, [thread.isLoading]);
 
   // Suppress the warning when at least one tool call is still in-progress
   // (e.g. the agent is writing a large file and producing no streaming text;
@@ -670,19 +771,31 @@ export function MessageList({
     () => groupMessages(messages, (group) => group),
     [messages],
   );
+  const messageTurns = useMemo(
+    () => partitionMessageGroupsIntoTurns(groupedMessages),
+    [groupedMessages],
+  );
   // Must mirror the exact mount predicate of `groupFailure` below (latest
   // group is a plain assistant group and the thread is idle). Anything looser
   // suppresses the fallback banner while the receipt has no group to mount
   // on, leaving the error text with no visible rendering at all.
-  const failureReceiptAttachedToGroup = useMemo(
-    () =>
-      Boolean(
-        failureReceipt &&
-          !thread.isLoading &&
-          groupedMessages[groupedMessages.length - 1]?.type === "assistant",
-      ),
-    [failureReceipt, groupedMessages, thread.isLoading],
-  );
+  const failureReceiptAttachedToGroup = useMemo(() => {
+    if (!failureReceipt || thread.isLoading) return false;
+    const latestGroup = groupedMessages[groupedMessages.length - 1];
+    if (!latestGroup || latestGroup.type !== "assistant") return false;
+    const turnMessages = turnMessagesForGroup(groupedMessages, latestGroup);
+    return (
+      !hasVisibleAssistantText(latestGroup) ||
+      hasMessageOutputSummary(turnMessages)
+    );
+  }, [failureReceipt, groupedMessages, thread.isLoading]);
+  const failureAlreadyVisibleInAssistantText = useMemo(() => {
+    if (!errorBannerText || thread.isLoading) return false;
+    const latestGroup = groupedMessages[groupedMessages.length - 1];
+    return latestGroup?.type === "assistant"
+      ? assistantGroupContainsFailureMessage(latestGroup, errorBannerText)
+      : false;
+  }, [errorBannerText, groupedMessages, thread.isLoading]);
   // Mirror the receipt mount rule: the audit actions attach to the last
   // plain assistant group of the latest turn, and receipt content is judged
   // on the whole turn slice — file changes usually live in the processing
@@ -1102,10 +1215,11 @@ export function MessageList({
         keepOpen={keepOpen}
         codeMode={mode === "code"}
         isLoading={
-          thread.isLoading &&
-          group.messages.some(
-            (message) => message.id === thread.streamingMessage?.id,
-          )
+          keepOpen ||
+          (thread.isLoading &&
+            group.messages.some(
+              (message) => message.id === thread.streamingMessage?.id,
+            ))
         }
       />
     );
@@ -1127,7 +1241,10 @@ export function MessageList({
     keepOpen = false,
     deferOutputs = false,
     auditNotice: string | null = null,
-    failure: { message: string; kind?: "error" | "network" | "verification" } | null = null,
+    failure: {
+      message: string;
+      kind?: "error" | "network" | "verification";
+    } | null = null,
   ) => {
     if (group.type === "human" || group.type === "assistant") {
       let injectedBeforeContent = false;
@@ -1296,69 +1413,97 @@ export function MessageList({
         className="mx-auto w-full max-w-(--container-width-md) gap-4 px-4 pt-2"
       >
         {header}
-        {groupedMessages.map((group, index) => {
-          const groupKey = `${group.type}:${group.id ?? `idx-${index}`}`;
-          const isLatestGroup = index === groupedMessages.length - 1;
-          const groupHasStreamingMessage =
-            thread.streamingMessage != null &&
-            group.messages.some(
-              (message) => message.id === thread.streamingMessage?.id,
-            );
-          const keepGroupOpen =
-            groupHasStreamingMessage || (thread.isLoading && isLatestGroup);
-
-          const enableGroupClarificationActions =
-            !thread.isLoading && isLatestGroup;
-          const deferGroupOutputs =
-            thread.isLoading &&
-            latestHumanGroupIndex >= 0 &&
-            index > latestHumanGroupIndex;
-          const groupAuditNotice =
-            groupKey === auditNoticeGroupKey ? verificationAuditNotice : null;
-          const groupTurnMessages =
-            group.type === "assistant"
-              ? turnMessagesForGroup(groupedMessages, group)
-              : group.messages;
-          const shouldShowFailureReceipt =
-            Boolean(failureReceipt) &&
-            isLatestGroup &&
-            group.type === "assistant" &&
-            !thread.isLoading &&
-            (!hasVisibleAssistantText(group) ||
-              hasMessageOutputSummary(groupTurnMessages));
-          // Attach failure receipt only to the latest assistant group when
-          // it adds information beyond an already-visible assistant error.
-          // Earlier groups keep null.
-          const groupFailure =
-            failureReceipt && shouldShowFailureReceipt
-              ? failureReceipt
-              : null;
+        {messageTurns.map((turn, turnIndex) => {
+          const isLatestTurn = turnIndex === messageTurns.length - 1;
+          const markerKey = turn.key.startsWith("human:") ? turn.key : null;
 
           return (
             <div
-              key={groupKey}
+              key={turn.key}
               ref={(node) => {
-                if (group.type !== "human") return;
+                if (!markerKey) return;
                 if (node) {
-                  groupRefs.current[groupKey] = node;
+                  groupRefs.current[markerKey] = node;
                 } else {
-                  delete groupRefs.current[groupKey];
+                  delete groupRefs.current[markerKey];
                 }
               }}
+              className={cn(
+                "message-turn flex flex-col gap-4",
+                !isLatestTurn && "message-turn-history",
+              )}
+              data-message-turn={turn.key}
+              data-turn-rendering={isLatestTurn ? "active" : "history"}
             >
-              <MemoizedGroup
-                group={group}
-                index={index}
-                groupKey={groupKey}
-                isLatestGroup={isLatestGroup}
-                groupHasStreamingMessage={groupHasStreamingMessage}
-                keepGroupOpen={keepGroupOpen}
-                enableClarificationActions={enableGroupClarificationActions}
-                deferGroupOutputs={deferGroupOutputs}
-                groupFailure={groupFailure}
-                groupAuditNotice={groupAuditNotice}
-                renderGroupContent={renderGroupContent}
-              />
+              {turn.groupIndexes.map((index) => {
+                const group = groupedMessages[index]!;
+                const groupKey = `${group.type}:${group.id ?? `idx-${index}`}`;
+                const isLatestGroup = index === groupedMessages.length - 1;
+                const groupHasStreamingMessage =
+                  thread.streamingMessage != null &&
+                  group.messages.some(
+                    (message) => message.id === thread.streamingMessage?.id,
+                  );
+                const keepGroupOpen =
+                  groupHasStreamingMessage ||
+                  (thread.isLoading && isLatestGroup);
+                const enableGroupClarificationActions =
+                  !thread.isLoading && isLatestGroup;
+                const deferGroupOutputs =
+                  thread.isLoading &&
+                  latestHumanGroupIndex >= 0 &&
+                  index > latestHumanGroupIndex;
+                const groupAuditNotice =
+                  groupKey === auditNoticeGroupKey
+                    ? verificationAuditNotice
+                    : null;
+                const groupTurnMessages =
+                  group.type === "assistant"
+                    ? turnMessagesForGroup(groupedMessages, group)
+                    : group.messages;
+                const shouldShowFailureReceipt =
+                  Boolean(failureReceipt) &&
+                  isLatestGroup &&
+                  group.type === "assistant" &&
+                  !thread.isLoading &&
+                  (!hasVisibleAssistantText(group) ||
+                    hasMessageOutputSummary(groupTurnMessages));
+                const groupFailure =
+                  failureReceipt && shouldShowFailureReceipt
+                    ? failureReceipt
+                    : null;
+
+                const showActivityPulse =
+                  isLatestTurn && group.type === "human" && thread.isLoading;
+
+                return (
+                  <Fragment key={groupKey}>
+                    <MemoizedGroup
+                      group={group}
+                      index={index}
+                      groupKey={groupKey}
+                      isLatestGroup={isLatestGroup}
+                      groupHasStreamingMessage={groupHasStreamingMessage}
+                      keepGroupOpen={keepGroupOpen}
+                      enableClarificationActions={
+                        enableGroupClarificationActions
+                      }
+                      deferGroupOutputs={deferGroupOutputs}
+                      groupFailure={groupFailure}
+                      groupAuditNotice={groupAuditNotice}
+                      renderGroupContent={renderGroupContent}
+                    />
+                    {showActivityPulse && (
+                      <PublicThinkingStatus
+                        isLoading={thread.isLoading}
+                        liveToolEvents={liveToolEvents ?? []}
+                        hasStreamingMessage={hasStreamingAnswer}
+                        threadId={threadId}
+                      />
+                    )}
+                  </Fragment>
+                );
+              })}
             </div>
           );
         })}
@@ -1367,6 +1512,7 @@ export function MessageList({
 
         {errorBannerText &&
           !failureReceiptAttachedToGroup &&
+          !failureAlreadyVisibleInAssistantText &&
           !(verificationAuditNotice && auditNoticeGroupKey) && (
             <div
               role="alert"
@@ -1396,7 +1542,9 @@ export function MessageList({
                   )}
                 </div>
                 {!isNetworkError && (
-                  <div className="text-[13px] opacity-80">{errorBannerText}</div>
+                  <div className="text-[13px] opacity-80">
+                    {errorBannerText}
+                  </div>
                 )}
                 {isNetworkError && <span>{errorBannerText}</span>}
                 {!isNetworkError && (
@@ -1426,6 +1574,8 @@ export function MessageList({
       />
 
       <ConversationScrollButton
+        activityKey={contentFingerprint}
+        activityLabel={t.message.newUpdates}
         aria-label={t.message.backToLatest}
         title={t.message.backToLatest}
         style={{ bottom: `${Math.max(12, paddingBottom + 12)}px` }}

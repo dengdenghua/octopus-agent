@@ -64,11 +64,13 @@ class ServerMethod(StrEnum):
     # streaming spinner and mark the turn as cancelled.
     TURN_INTERRUPTED = "turn/interrupted"
     TURN_DIFF_UPDATED = "turn/diff/updated"
-    # ``TURN_PLAN_UPDATED`` is reserved but not currently emitted —
-    # plan state is derived client-side from ``todo_write`` tool-use
-    # events. Wire emission together with ``ITEM_PLAN_DELTA`` if /
-    # when the agent's plan needs to live as a first-class
-    # streaming item rather than being inferred from tool input.
+    # Emitted by ``_ReactBridgeState._emit_turn_update`` on every tool
+    # lifecycle tick, carrying ``phases`` + ``workbenchSnapshot``. The
+    # phases themselves are still *derived* — ``_phases_from_todo_preview``
+    # reads the agent's ``todo_write`` input server-side — so a turn that
+    # never calls ``todo_write`` has no plan to send, and the right-hand
+    # workbench stays empty. Making the plan unconditional (rather than a
+    # by-product of one tool) is what a plan-first workbench would need.
     TURN_PLAN_UPDATED = "turn/plan/updated"
     # Versioned current-frame payload for the right-side workbench. This
     # keeps realtime and replay rendering on one source of truth instead
@@ -103,9 +105,11 @@ class ServerMethod(StrEnum):
     # Item content streams
     ITEM_AGENT_MESSAGE_DELTA = "item/agentMessage/delta"
     ITEM_REASONING_TEXT_DELTA = "item/reasoning/textDelta"
-    # ``ITEM_PLAN_DELTA`` is reserved but not currently emitted —
-    # see ``TURN_PLAN_UPDATED`` above. Reducer side already has a
-    # handler so wiring emission only requires a backend change.
+    # Genuinely reserved: nothing emits this today (unlike
+    # ``TURN_PLAN_UPDATED`` above, which is live). It would carry the plan
+    # as a first-class streaming item instead of a per-tick snapshot. The
+    # reducer already has a handler, so wiring it up is a backend-only
+    # change.
     ITEM_PLAN_DELTA = "item/plan/delta"
     ITEM_COMMAND_OUTPUT_DELTA = "item/commandExecution/outputDelta"
     # ``ITEM_FILE_CHANGE_OUTPUT_DELTA`` is reserved but not currently

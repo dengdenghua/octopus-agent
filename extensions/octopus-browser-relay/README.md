@@ -11,7 +11,10 @@ without covering the page being operated.
 3. Click `Load unpacked`.
 4. Select this folder: `extensions/octopus-browser-relay`.
 
-The extension sends a local heartbeat to `http://127.0.0.1:8000/api/browser/relay/heartbeat`.
+The extension keeps a local push connection to
+`ws://127.0.0.1:8000/api/browser/relay/ws`, so commands still arrive when
+Chrome suspends normal background timers. It falls back to HTTP heartbeats at
+`http://127.0.0.1:8000/api/browser/relay/heartbeat` for older runtimes.
 Click the `Octopus Agent` toolbar icon on any page to open the Octopus Sidecar.
 The side panel talks to the local realtime gateway at `/api/realtime`, prefixes
 turns with `@Chrome`, and keeps the active tab available through the relay.

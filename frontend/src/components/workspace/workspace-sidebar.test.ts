@@ -3,13 +3,27 @@ import { describe, expect, test } from "vitest";
 import { __testing } from "./workspace-sidebar";
 
 describe("workspace sidebar route activation", () => {
+  test("uses a pending server route while a new realtime turn stays mounted", () => {
+    expect(
+      __testing.syncedSidebarPathname(
+        "/workspace/realtime/new",
+        "/workspace/realtime/thread-1",
+      ),
+    ).toBe("/workspace/realtime/thread-1");
+    expect(
+      __testing.syncedSidebarPathname("/workspace/realtime/new", null),
+    ).toBe("/workspace/realtime/new");
+  });
+
   test("leaves primary nav inactive on non-realtime agent subpaths", () => {
     const pathname = "/workspace/agents/general/threads/thread-1";
 
     expect(
       __testing.isNavRouteActive(pathname, "/workspace/realtime/new"),
     ).toBe(false);
-    expect(__testing.isNavRouteActive(pathname, "/workspace/agents")).toBe(true);
+    expect(__testing.isNavRouteActive(pathname, "/workspace/agents")).toBe(
+      true,
+    );
   });
 
   test("keeps primary chat active only on realtime entry routes", () => {
@@ -268,11 +282,10 @@ describe("workspace sidebar project grouping", () => {
       onNewProject: () => undefined,
     });
 
-    expect(actions.map((action) => action.label)).toEqual([
-      "添加工作区/项目",
-    ]);
-    expect(actions.some((action) => /排序|分组|Sort|group/i.test(action.label)))
-      .toBe(false);
+    expect(actions.map((action) => action.label)).toEqual(["添加工作区/项目"]);
+    expect(
+      actions.some((action) => /排序|分组|Sort|group/i.test(action.label)),
+    ).toBe(false);
     expect(
       __testing.buildProjectSectionActions({
         groupingEnabled: false,

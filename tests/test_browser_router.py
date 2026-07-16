@@ -291,6 +291,71 @@ def test_browser_relay_command_includes_site_policy(client: TestClient) -> None:
     assert response.json()["site_policy"]["target_host"] == "example.test"
 
 
+def test_browser_relay_websocket_pushes_command_and_accepts_result(
+    client: TestClient,
+) -> None:
+    with client.websocket_connect("/api/browser/relay/ws") as websocket:
+        websocket.send_json(
+            {
+                "type": "heartbeat",
+                "extension_version": "test-ws",
+                "active_tab": {
+                    "id": 11,
+                    "url": "https://example.test",
+                    "title": "Example",
+                },
+            }
+        )
+        deadline = time.time() + 1
+        while time.time() < deadline:
+            status = client.get("/api/browser/relay/status").json()
+            if status.get("active_tab", {}).get("id") == 11:
+                break
+            time.sleep(0.02)
+        else:
+            pytest.fail("websocket heartbeat was not observed")
+
+        holder: dict[str, object] = {}
+
+        def send_command() -> None:
+            holder["response"] = client.post(
+                "/api/browser/relay/command",
+                json={
+                    "action": "click",
+                    "selector": "#go",
+                    "timeout_seconds": 2,
+                },
+            )
+
+        thread = threading.Thread(target=send_command)
+        thread.start()
+        pushed = websocket.receive_json()
+        assert pushed["type"] == "commands"
+        assert len(pushed["commands"]) == 1
+        command = pushed["commands"][0]
+        assert command["action"] == "click"
+        assert command["lease"]["tab"]["id"] == 11
+
+        websocket.send_json(
+            {
+                "type": "result",
+                "id": command["id"],
+                "active_tab": {
+                    "id": 11,
+                    "url": "https://example.test/done",
+                    "title": "Done",
+                },
+                "result": {"ok": True, "url": "https://example.test/done"},
+            }
+        )
+        thread.join(timeout=3)
+
+    assert "response" in holder
+    response = holder["response"]
+    assert response.status_code == 200
+    assert response.json()["url"] == "https://example.test/done"
+
+
 def test_browser_relay_command_carries_tab_control_lease(client: TestClient) -> None:
     client.post(
         "/api/browser/relay/heartbeat",

@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import { AgentProgressPill } from "./agent-progress-pill";
 import type { LiveToolEvent } from "./live-tool-timeline";
 import { renderWithProviders } from "@/test/harness";
+import type { StreamVitals } from "@/core/realtime";
 
 function event(partial: Partial<LiveToolEvent>): LiveToolEvent {
   return {
@@ -16,7 +17,83 @@ function event(partial: Partial<LiveToolEvent>): LiveToolEvent {
   };
 }
 
+function vitals(partial: Partial<StreamVitals>): StreamVitals {
+  return {
+    phase: "working",
+    ttftMs: null,
+    lastDeltaAgeMs: Infinity,
+    sinceActivityMs: 0,
+    elapsedMs: 0,
+    maxDeltaGapMs: 0,
+    stalled: false,
+    ...partial,
+  };
+}
+
 describe("<AgentProgressPill />", () => {
+  test("shows one stable primary stage before tool events arrive", () => {
+    renderWithProviders(<AgentProgressPill events={[]} isLoading />);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Understanding what you need",
+    );
+  });
+
+  test("switches the primary stage to answer generation", () => {
+    renderWithProviders(
+      <AgentProgressPill events={[]} hasAnswer hasStreamingAnswer isLoading />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent("Writing back to you");
+  });
+
+  test("lets a real stall override an earlier partial answer", () => {
+    renderWithProviders(
+      <AgentProgressPill
+        events={[]}
+        hasAnswer
+        hasStreamingAnswer
+        isLoading
+        vitals={vitals({
+          phase: "slow",
+          ttftMs: 840,
+          sinceActivityMs: 11_000,
+          elapsedMs: 14_000,
+          maxDeltaGapMs: 2_400,
+          stalled: true,
+        })}
+      />,
+    );
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Still working");
+    expect(status).not.toHaveTextContent("Organizing reply");
+    expect(status).toHaveAttribute("data-stream-phase", "slow");
+    expect(status).toHaveAttribute("data-stream-stalled", "true");
+    expect(status).toHaveAttribute("data-stream-ttft-ms", "840");
+    expect(status).toHaveAttribute("data-stream-max-gap-ms", "2400");
+  });
+
+  test("shows reconnecting ahead of answer generation after a disconnect", () => {
+    renderWithProviders(
+      <AgentProgressPill
+        events={[]}
+        hasAnswer
+        hasStreamingAnswer
+        isLoading
+        vitals={vitals({ phase: "disconnected", stalled: true })}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Connection lost — reconnecting",
+    );
+    expect(screen.getByRole("status")).toHaveAttribute(
+      "data-stream-phase",
+      "disconnected",
+    );
+  });
+
   test("does not render for transport-only events", () => {
     const { container } = renderWithProviders(
       <AgentProgressPill

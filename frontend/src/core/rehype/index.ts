@@ -7,7 +7,7 @@ import type { BuildVisitor } from "unist-util-visit";
 import type { StreamdownProps } from "streamdown";
 
 const CJK_TEXT_RE =
-  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu;
 
 const cjkSegmenter = new Intl.Segmenter("zh", { granularity: "grapheme" });
 const wordSegmenter = new Intl.Segmenter("en", { granularity: "word" });
@@ -31,6 +31,30 @@ function splitNonCJKText(text: string): string[] {
 function splitTextIntoUnits(text: string): string[] {
   const isCJK = isPrimarilyCJK(text);
   return isCJK ? splitCJKText(text) : splitNonCJKText(text);
+}
+
+function animateLastVisibleUnit(text: string): ElementContent[] {
+  const units = splitTextIntoUnits(text);
+  let animatedIndex = units.length - 1;
+  while (animatedIndex >= 0 && !units[animatedIndex]?.trim()) {
+    animatedIndex -= 1;
+  }
+  if (animatedIndex < 0) return [{ type: "text", value: text }];
+
+  const children: ElementContent[] = [];
+  const prefix = units.slice(0, animatedIndex).join("");
+  const animated = units[animatedIndex] ?? "";
+  const suffix = units.slice(animatedIndex + 1).join("");
+
+  if (prefix) children.push({ type: "text", value: prefix });
+  children.push({
+    type: "element",
+    tagName: "span",
+    properties: { className: "animate-fade-in inline" },
+    children: [{ type: "text", value: animated }],
+  });
+  if (suffix) children.push({ type: "text", value: suffix });
+  return children;
 }
 
 export function rehypeSplitWordsIntoSpans() {
@@ -66,34 +90,15 @@ export function rehypeSplitWordsIntoSpans() {
               ? childIndex === lastTextNodeIndex
               : true;
 
-            if (text.length <= 3) {
-              newChildren.push({
-                type: "element",
-                tagName: "span",
-                properties: {
-                  className: isLastTextNode
-                    ? "animate-fade-in inline"
-                    : "inline",
-                },
-                children: [{ type: "text", value: text }],
-              });
+            if (!isLastTextNode) {
+              newChildren.push(child);
               return;
             }
 
-            const units = splitTextIntoUnits(text);
-            const lastIndex = units.length - 1;
-
-            units.forEach((unit: string, index: number) => {
-              const isLastUnit = isLastTextNode && index === lastIndex;
-              newChildren.push({
-                type: "element",
-                tagName: "span",
-                properties: {
-                  className: isLastUnit ? "animate-fade-in inline" : "inline",
-                },
-                children: [{ type: "text", value: unit }],
-              });
-            });
+            // Only the newest visible unit needs a wrapper. Wrapping every
+            // historical word makes a long streaming answer grow thousands
+            // of DOM nodes even though those older units no longer animate.
+            newChildren.push(...animateLastVisibleUnit(text));
           } else {
             newChildren.push(child);
           }

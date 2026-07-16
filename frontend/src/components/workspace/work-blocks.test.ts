@@ -36,6 +36,8 @@ describe("work blocks", () => {
     expect(blocks.map((block) => block.id)).toEqual(["read"]);
     expect(blocks[0]).toMatchObject({
       kind: "read",
+      actionLabel: "阅读",
+      target: "app.tsx",
       title: "阅读 app.tsx",
       subtitle: "src/app.tsx",
     });
@@ -62,8 +64,16 @@ describe("work blocks", () => {
       }),
     ]);
 
-    expect(blocks[0].title).toBe("implement renderer");
-    expect(blocks[1].title).toBe("运行 npm run typecheck");
+    expect(blocks[0]).toMatchObject({
+      actionLabel: "编写待办清单",
+      title: "编写待办清单",
+      subtitle: "implement renderer",
+    });
+    expect(blocks[1]).toMatchObject({
+      actionLabel: "运行终端",
+      target: "npm run typecheck",
+      title: "运行终端 npm run typecheck",
+    });
     const current = pickCurrentWorkBlock(blocks);
     expect(current?.id).toBe("shell");
     expect(progressForWorkBlocks(blocks, current!)).toEqual({
@@ -136,6 +146,25 @@ describe("work blocks", () => {
       kind: "read",
       status: "error",
       title: "阅读 missing.ts",
+    });
+  });
+
+  test("uses explicit terminal failure wording for command errors", () => {
+    const blocks = toWorkBlocks([
+      event({
+        id: "shell-error",
+        name: "shell_command",
+        status: "error",
+        input: { command: "npm run build" },
+        output: { error: "exit 1" },
+      }),
+    ]);
+
+    expect(blocks[0]).toMatchObject({
+      id: "shell-error",
+      actionLabel: "终端运行失败",
+      target: "npm run build",
+      title: "终端运行失败 npm run build",
     });
   });
 

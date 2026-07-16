@@ -180,6 +180,7 @@ export interface Translations {
     jumpToLastTurn: string;
     backToLatest: string;
     latest: string;
+    newUpdates: (n: number) => string;
     timeoutWarning: (seconds: number) => string;
     thinkingPlan: string;
     thinkingPlanSourceCheck: string;
@@ -1048,6 +1049,7 @@ export interface Translations {
     phaseStatusPending: string;
     robot: string;
     noRunningRobotProcess: string;
+    startingRobotProcess: string;
     tabList: string;
     summaryLabel: string;
     agentStatusRunning: string;
@@ -1094,12 +1096,37 @@ export interface Translations {
     description: string;
     tabs: {
       runtime: string;
+      streaming: string;
       featureFlags: string;
       suggestions: string;
       remote: string;
       invariants: string;
     };
     noActiveProject: string;
+    streaming: {
+      title: string;
+      description: string;
+      clear: string;
+      empty: string;
+      samples: string;
+      ttftP50: string;
+      ttftP95: string;
+      maxGapP95: string;
+      stalledRate: string;
+      unsuccessfulRate: string;
+      time: string;
+      outcome: string;
+      maxGap: string;
+      duration: string;
+      endState: string;
+      stalled: string;
+      normal: string;
+      outcomes: {
+        completed: string;
+        interrupted: string;
+        failed: string;
+      };
+    };
   };
 
   // Runtime self-check panel
@@ -4764,6 +4791,9 @@ export interface Translations {
     planningFirstStep: string;
     waitingForModel: string;
     stillWaiting: string;
+    modelWorking: string;
+    slowResponse: string;
+    reconnecting: string;
   };
 
   // Evolution Dashboard

@@ -6,6 +6,7 @@ import type { Message } from "@/core/api/types";
 import type { BaseStream } from "@/core/api/use-stream-types";
 import type { AgentThreadState } from "@/core/threads";
 import { SubtasksProvider } from "@/core/tasks/context";
+import { groupMessages } from "@/core/messages/utils";
 import { renderWithProviders } from "@/test/harness";
 
 import { ThreadProviders } from "./context";
@@ -13,6 +14,7 @@ import type { LiveToolEvent } from "../live-tool-timeline";
 import {
   MessageList,
   nearestTurnKeyByViewportCenter,
+  partitionMessageGroupsIntoTurns,
   turnMarkerKindFromMessages,
   visibleTurnMarkerWindow,
 } from "./message-list";
@@ -33,14 +35,23 @@ vi.mock("@/components/ai-elements/conversation", () => ({
     className?: string;
   }) => <div className={className}>{children}</div>,
   ConversationScrollButton: ({
+    activityKey: _activityKey,
+    activityLabel: _activityLabel,
     children,
     style,
     ...props
-  }: React.ComponentProps<"button">) => (
-    <button data-testid="scroll-to-latest" style={style} {...props}>
-      {children}
-    </button>
-  ),
+  }: React.ComponentProps<"button"> & {
+    activityKey?: string | number;
+    activityLabel?: (count: number) => React.ReactNode;
+  }) => {
+    void _activityKey;
+    void _activityLabel;
+    return (
+      <button data-testid="scroll-to-latest" style={style} {...props}>
+        {children}
+      </button>
+    );
+  },
 }));
 
 vi.mock("../artifacts", () => ({
@@ -165,6 +176,56 @@ describe("MessageList scroll-to-latest affordance", () => {
       behavior: "smooth",
       block: "start",
     });
+  });
+
+  test("display-locks only completed turns and keeps the newest turn active", () => {
+    const messages: Message[] = [
+      { id: "user-1", type: "human", content: "first request" },
+      { id: "assistant-1", type: "ai", content: "first answer" },
+      { id: "user-2", type: "human", content: "second request" },
+      { id: "assistant-2", type: "ai", content: "streaming answer" },
+    ];
+    const assistant = messages[3]!;
+    const thread = mockThread({
+      messages,
+      streamingMessage: assistant,
+      isLoading: true,
+    });
+
+    const { container } = renderWithProviders(
+      <SubtasksProvider>
+        <ThreadProviders thread={thread}>
+          <MessageList threadId="thread-1" thread={thread} paddingBottom={0} />
+        </ThreadProviders>
+      </SubtasksProvider>,
+      { initialRoute: "/workspace/realtime/thread-1" },
+    );
+
+    const turns = container.querySelectorAll("[data-message-turn]");
+    expect(turns).toHaveLength(2);
+    expect(turns[0]).toHaveAttribute("data-turn-rendering", "history");
+    expect(turns[0]).toHaveClass("message-turn-history");
+    expect(turns[1]).toHaveAttribute("data-turn-rendering", "active");
+    expect(turns[1]).not.toHaveClass("message-turn-history");
+    expect(turns[1]).toContainElement(screen.getByText("streaming answer"));
+  });
+
+  test("partitions leading activity and human turns without dropping groups", () => {
+    const grouped = groupMessages(
+      [
+        { id: "assistant-prelude", type: "ai", content: "restored context" },
+        { id: "user-1", type: "human", content: "first request" },
+        { id: "assistant-1", type: "ai", content: "first answer" },
+        { id: "user-2", type: "human", content: "second request" },
+      ],
+      (group) => group,
+    );
+
+    const turns = partitionMessageGroupsIntoTurns(grouped);
+
+    expect(turns.map((turn) => turn.groupIndexes)).toEqual([[0], [1, 2], [3]]);
+    expect(turns[0]?.key).toMatch(/^prelude:/);
+    expect(turns[1]?.key).toMatch(/^human:/);
   });
 
   test("renders phased turns as quiet bars and short turns as dots", () => {

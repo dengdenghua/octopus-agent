@@ -16,6 +16,8 @@ export interface WorkBlock {
   id: string;
   event: LiveToolEvent;
   kind: WorkBlockKind;
+  actionLabel: string;
+  target: string;
   title: string;
   subtitle: string;
   status: WorkBlockStatus;
@@ -121,13 +123,17 @@ export function statusText(status: WorkBlockStatus): string {
 
 function toWorkBlock(event: LiveToolEvent): WorkBlock {
   const kind = workKind(event.name);
-  const title = workTitle(event, kind);
-  const subtitle = workSubtitle(event);
   const status = workBlockStatus(event);
+  const actionLabel = workActionLabel(event, kind, status);
+  const target = workTarget(event, kind);
+  const title = workTitle(event, kind, actionLabel, target);
+  const subtitle = workSubtitle(event, target);
   return {
     id: event.id,
     event,
     kind,
+    actionLabel,
+    target,
     title,
     subtitle,
     status,
@@ -178,7 +184,12 @@ function workKind(name: string): WorkBlockKind {
   return "agent";
 }
 
-function workTitle(event: LiveToolEvent, kind: WorkBlockKind): string {
+function workTitle(
+  event: LiveToolEvent,
+  kind: WorkBlockKind,
+  actionLabel: string,
+  target: string,
+): string {
   if (isManualVerificationRequiredEvent(event)) {
     return "等待验证";
   }
@@ -189,7 +200,7 @@ function workTitle(event: LiveToolEvent, kind: WorkBlockKind): string {
     return `助手完成 ${agentDisplayName(event)}`;
   }
   if (event.name === "todo_write") {
-    return todoTitle(event.input) || "更新待办清单";
+    return actionLabel;
   }
   if (event.name === "call_agent_parallel") {
     const count = specCount(event.input);
@@ -202,31 +213,21 @@ function workTitle(event: LiveToolEvent, kind: WorkBlockKind): string {
   if (event.name.startsWith("mcp:") && progressLabel) {
     return compact(progressLabel, 64);
   }
-  const path = firstString(event.input, [
-    "path",
-    "file_path",
-    "filepath",
-    "filename",
-  ]);
-  const url = firstString(event.input, ["url"]);
-  const query = firstString(event.input, ["query", "pattern"]);
-  const command = firstString(event.input, ["command", "cmd"]);
-  if (kind === "read" && path) return `阅读 ${basename(path)}`;
-  if (kind === "file" && path) return `编辑 ${basename(path)}`;
-  if (kind === "browser" && url) return `浏览 ${hostOf(url)}`;
-  if (kind === "search" && query) return `搜索 ${compact(query, 48)}`;
-  if (kind === "terminal" && command) return `运行 ${compact(command, 48)}`;
+  if (target) return `${actionLabel} ${compact(target, 48)}`;
   if (event.name === "model_gateway") return "连接模型";
-  return event.name.replace(/[_-]+/g, " ");
+  return actionLabel || event.name.replace(/[_-]+/g, " ");
 }
 
-function workSubtitle(event: LiveToolEvent): string {
+function workSubtitle(event: LiveToolEvent, fallbackTarget: string): string {
   if (isManualVerificationRequiredEvent(event)) {
     return statusText(workBlockStatus(event));
   }
   const progress = progressSubtitleText(event);
   if (progress) return compact(progress, 88);
-  const target = firstString(event.input, [
+  if (event.name === "todo_write") {
+    return todoTitle(event.input) || statusText(workBlockStatus(event));
+  }
+  const inputTarget = firstString(event.input, [
     "path",
     "file_path",
     "filepath",
@@ -236,9 +237,77 @@ function workSubtitle(event: LiveToolEvent): string {
     "command",
     "cwd",
   ]);
-  if (target) return compact(target, 88);
+  if (inputTarget) return compact(inputTarget, 88);
+  if (fallbackTarget) return compact(fallbackTarget, 88);
   if (event.agentName) return event.agentName;
   return statusText(workBlockStatus(event));
+}
+
+function workActionLabel(
+  event: LiveToolEvent,
+  kind: WorkBlockKind,
+  status: WorkBlockStatus,
+): string {
+  if (isManualVerificationRequiredEvent(event)) return "等待验证";
+  if (event.lifecycle === "spawned" || /subagent_spawned/i.test(event.name)) {
+    return "创建助手";
+  }
+  if (event.lifecycle === "finished" || /subagent_finished/i.test(event.name)) {
+    return "助手完成";
+  }
+  if (event.name === "todo_write") return "编写待办清单";
+  if (event.name === "call_agent_parallel") return "并行分派";
+  if (kind === "skill") return "加载技能";
+  if (kind === "terminal") {
+    if (status === "error") return "终端运行失败";
+    if (status === "warning") return "终端已恢复";
+    return "运行终端";
+  }
+  if (kind === "read") return "阅读";
+  if (kind === "file") return fileActionLabel(event);
+  if (kind === "browser") return "浏览";
+  if (kind === "search") return "搜索";
+  if (kind === "swarm") return "并行分派";
+  return "执行";
+}
+
+function fileActionLabel(event: LiveToolEvent): string {
+  const op =
+    firstString(event.input, ["op", "operation", "action"]) ||
+    firstChangeString(event.input, ["op", "operation", "action"]);
+  if (/add|create|new|generate|write/i.test(op)) return "创建文件";
+  if (/delete|remove/i.test(op)) return "删除文件";
+  return "编辑";
+}
+
+function workTarget(event: LiveToolEvent, kind: WorkBlockKind): string {
+  if (event.lifecycle === "spawned" || /subagent_spawned/i.test(event.name)) {
+    return agentDisplayName(event);
+  }
+  if (event.lifecycle === "finished" || /subagent_finished/i.test(event.name)) {
+    return agentDisplayName(event);
+  }
+  if (event.name === "todo_write") return "";
+  if (event.name === "call_agent_parallel") {
+    const count = specCount(event.input);
+    return count > 0 ? `${count} 个子任务` : "子任务";
+  }
+  if (kind === "skill") {
+    return firstString(event.input, ["skill", "skill_name", "name"]);
+  }
+  const path =
+    firstChangeString(event.input, ["path", "file_path", "filepath"]) ||
+    firstString(event.input, ["path", "file_path", "filepath", "filename"]);
+  const url = firstString(event.input, ["url"]);
+  const query = firstString(event.input, ["query", "pattern"]);
+  const command =
+    firstString(event.input, ["description", "label", "title"]) ||
+    firstString(event.input, ["command", "cmd"]);
+  if ((kind === "read" || kind === "file") && path) return basename(path);
+  if (kind === "browser" && url) return hostOf(url);
+  if (kind === "search" && query) return compact(query, 48);
+  if (kind === "terminal" && command) return compact(command, 48);
+  return "";
 }
 
 function isManualVerificationRequiredEvent(event: LiveToolEvent): boolean {
@@ -366,6 +435,22 @@ function firstString(
     const value = input[key];
     if (typeof value === "string" && value.trim()) return value.trim();
     if (typeof value === "number") return String(value);
+  }
+  return "";
+}
+
+function firstChangeString(
+  input: Record<string, unknown> | undefined,
+  keys: string[],
+) {
+  const changes = input?.changes;
+  if (!Array.isArray(changes)) return "";
+  for (const change of changes) {
+    if (!change || typeof change !== "object" || Array.isArray(change)) {
+      continue;
+    }
+    const value = firstString(change as Record<string, unknown>, keys);
+    if (value) return value;
   }
   return "";
 }

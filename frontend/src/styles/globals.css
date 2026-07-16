@@ -752,6 +752,52 @@
     }
   }
 
+  /* Kimi-style semantic stream tail. The cursor is attached to the final
+     rendered text block, so it stays beside the newest character instead of
+     dropping onto a new line after Streamdown's block-level root. */
+  @keyframes kimi-stream-tail-pulse {
+    0%,
+    100% {
+      opacity: 0.34;
+      transform: scale(0.86);
+    }
+    50% {
+      opacity: 0.72;
+      transform: scale(1);
+    }
+  }
+
+  .kimi-streaming-tail > :where(p, h1, h2, h3, h4, h5, h6):last-child::after,
+  .kimi-streaming-tail > :where(ul, ol):last-child > li:last-child::after,
+  .kimi-streaming-tail > blockquote:last-child > p:last-child::after {
+    content: "";
+    display: inline-block;
+    width: 0.45rem;
+    height: 0.45rem;
+    margin-left: 0.2rem;
+    border-radius: 9999px;
+    background: color-mix(in oklch, var(--muted-foreground) 62%, transparent);
+    vertical-align: 0.06em;
+    animation: kimi-stream-tail-pulse 1.05s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .kimi-streaming-tail > :where(p, h1, h2, h3, h4, h5, h6):last-child::after,
+    .kimi-streaming-tail > :where(ul, ol):last-child > li:last-child::after,
+    .kimi-streaming-tail > blockquote:last-child > p:last-child::after {
+      animation: none;
+      opacity: 0.55;
+    }
+  }
+
+  /* Completed chat turns remain in normal flow and in the accessibility tree,
+     but the browser can skip off-screen style/layout/paint work. The newest
+     turn deliberately omits this class so streaming growth is never locked. */
+  .message-turn-history {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 20rem;
+  }
+
   /* Skeleton: muted base with a diagonal shimmer band. */
   .codex-skeleton {
     position: relative;

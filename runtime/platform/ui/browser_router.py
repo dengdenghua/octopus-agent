@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import contextlib
 import html
@@ -12,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -20,8 +22,17 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import FileResponse, Response
+from starlette.requests import HTTPConnection
 
 from runtime.memory.learning.review_queue import ReviewQueue
 from runtime.platform.io import atomic_write_json, read_json_with_backup
@@ -85,7 +96,7 @@ def create_browser_router(
     enabled it enforces 401 across every browser endpoint.
     """
 
-    def _auth_dep(request: Request) -> None:
+    def _auth_dep(request: HTTPConnection) -> None:
         from runtime.adapters.web_auth import _resolve_actor
 
         _resolve_actor(  # AUTH-OK: actor-agnostic
@@ -123,6 +134,7 @@ def create_browser_router(
         "control_lease": None,
         "human_interrupt": None,
     }
+    browser_relay_queue_lock = threading.Lock()
     relay_read_only_actions = {"extract", "aria", "screenshot", "wait"}
 
     def _normalize_relay_host_patterns(value: Any) -> list[str]:
@@ -154,6 +166,62 @@ def create_browser_router(
                 seen.add(text)
                 out.append(text)
         return out[:200]
+
+    def _apply_relay_heartbeat(body: dict[str, Any]) -> list[dict[str, Any]]:
+        browser_relay_state["connected"] = True
+        browser_relay_state["last_seen"] = _now_ts()
+        browser_relay_state["extension_version"] = str(body.get("extension_version") or "local-dev")
+        active_tab = body.get("active_tab")
+        if isinstance(active_tab, dict):
+            browser_relay_state["active_tab"] = {
+                "id": active_tab.get("id"),
+                "url": active_tab.get("url"),
+                "title": active_tab.get("title"),
+            }
+        control_event = body.get("control_event")
+        if isinstance(control_event, dict):
+            event_type = str(control_event.get("type") or "").strip()
+            if event_type == "human_interrupt":
+                _record_relay_interrupt(
+                    reason=str(control_event.get("reason") or "human_activity"),
+                    source=str(control_event.get("source") or "chrome_extension"),
+                    detail={
+                        "activity": control_event.get("activity"),
+                        "lease": control_event.get("lease"),
+                    },
+                )
+            elif event_type == "clear_interrupt":
+                _clear_relay_interrupt()
+        return _drain_relay_commands()
+
+    def _drain_relay_commands() -> list[dict[str, Any]]:
+        with browser_relay_queue_lock:
+            pending = list(browser_relay_state.get("pending_commands") or [])
+            browser_relay_state["pending_commands"] = []
+            return pending
+
+    def _apply_relay_result(body: dict[str, Any]) -> dict[str, Any]:
+        command_id = str(body.get("id") or "").strip()
+        if not command_id:
+            raise ValueError("id is required")
+        browser_relay_state["last_seen"] = _now_ts()
+        active_tab = body.get("active_tab")
+        if isinstance(active_tab, dict):
+            browser_relay_state["active_tab"] = {
+                "id": active_tab.get("id"),
+                "url": active_tab.get("url"),
+                "title": active_tab.get("title"),
+            }
+        result = body.get("result")
+        if not isinstance(result, dict):
+            result = {"ok": False, "error": "missing relay result"}
+        result.setdefault("ok", True)
+        result.setdefault("id", command_id)
+        if (browser_relay_state.get("control_lease") or {}).get("command_id") == command_id:
+            browser_relay_state["control_lease"] = None
+        result["control"] = _relay_control_snapshot()
+        browser_relay_state.setdefault("command_results", {})[command_id] = result
+        return result
 
     def _browser_policy_payload() -> dict[str, Any]:
         return {
@@ -1521,38 +1589,56 @@ def create_browser_router(
 
     @router.post("/api/browser/relay/heartbeat")
     def api_browser_relay_heartbeat(body: dict[str, Any]) -> dict[str, Any]:
-        browser_relay_state["connected"] = True
-        browser_relay_state["last_seen"] = _now_ts()
-        browser_relay_state["extension_version"] = str(body.get("extension_version") or "local-dev")
-        active_tab = body.get("active_tab")
-        if isinstance(active_tab, dict):
-            browser_relay_state["active_tab"] = {
-                "id": active_tab.get("id"),
-                "url": active_tab.get("url"),
-                "title": active_tab.get("title"),
-            }
-        control_event = body.get("control_event")
-        if isinstance(control_event, dict):
-            event_type = str(control_event.get("type") or "").strip()
-            if event_type == "human_interrupt":
-                _record_relay_interrupt(
-                    reason=str(control_event.get("reason") or "human_activity"),
-                    source=str(control_event.get("source") or "chrome_extension"),
-                    detail={
-                        "activity": control_event.get("activity"),
-                        "lease": control_event.get("lease"),
-                    },
-                )
-            elif event_type == "clear_interrupt":
-                _clear_relay_interrupt()
-        pending = list(browser_relay_state.get("pending_commands") or [])
-        browser_relay_state["pending_commands"] = []
+        pending = _apply_relay_heartbeat(body)
         return {
             "ok": True,
             "pending_commands": len(pending),
             "commands": pending,
             "control": _relay_control_snapshot(),
         }
+
+    @router.websocket("/api/browser/relay/ws")
+    async def api_browser_relay_ws(websocket: WebSocket) -> None:
+        await websocket.accept()
+        browser_relay_state["connected"] = True
+        browser_relay_state["last_seen"] = _now_ts()
+        last_keepalive = time.monotonic()
+        try:
+            while True:
+                message: Any = None
+                with contextlib.suppress(TimeoutError):
+                    message = await asyncio.wait_for(
+                        websocket.receive_json(),
+                        timeout=0.1,
+                    )
+
+                if isinstance(message, dict):
+                    message_type = str(message.get("type") or "")
+                    if message_type == "heartbeat":
+                        pending = _apply_relay_heartbeat(message)
+                        if pending:
+                            await websocket.send_json({"type": "commands", "commands": pending})
+                    elif message_type == "result":
+                        try:
+                            _apply_relay_result(message)
+                        except ValueError as exc:
+                            await websocket.send_json({"type": "error", "error": str(exc)})
+
+                # Commands can be enqueued by a concurrent HTTP request while
+                # no extension message is arriving. Drain them immediately so
+                # delivery no longer depends on an MV3 JavaScript timer.
+                pending = _drain_relay_commands()
+                if pending:
+                    await websocket.send_json({"type": "commands", "commands": pending})
+
+                # Chrome 116+ keeps an extension service worker alive when a
+                # WebSocket exchanges traffic inside the 30-second window.
+                now = time.monotonic()
+                if now - last_keepalive >= 15:
+                    await websocket.send_json({"type": "ping", "at": _now_ts()})
+                    last_keepalive = now
+        except WebSocketDisconnect:
+            pass
 
     @router.post("/api/browser/relay/control")
     def api_browser_relay_control(body: dict[str, Any]) -> dict[str, Any]:
@@ -1622,9 +1708,10 @@ def create_browser_router(
             "created_at": _now_ts(),
         }
         browser_relay_state["control_lease"] = lease
-        pending = list(browser_relay_state.get("pending_commands") or [])
-        pending.append(command)
-        browser_relay_state["pending_commands"] = pending
+        with browser_relay_queue_lock:
+            pending = list(browser_relay_state.get("pending_commands") or [])
+            pending.append(command)
+            browser_relay_state["pending_commands"] = pending
 
         deadline = time.time() + float(body.get("timeout_seconds") or 8)
         results = browser_relay_state.setdefault("command_results", {})
@@ -1640,37 +1727,22 @@ def create_browser_router(
                 return result
             time.sleep(0.1)
 
-        browser_relay_state["pending_commands"] = [
-            item
-            for item in (browser_relay_state.get("pending_commands") or [])
-            if item.get("id") != command_id
-        ]
+        with browser_relay_queue_lock:
+            browser_relay_state["pending_commands"] = [
+                item
+                for item in (browser_relay_state.get("pending_commands") or [])
+                if item.get("id") != command_id
+            ]
         if (browser_relay_state.get("control_lease") or {}).get("command_id") == command_id:
             browser_relay_state["control_lease"] = None
         raise HTTPException(504, "browser relay command timed out")
 
     @router.post("/api/browser/relay/result")
     def api_browser_relay_result(body: dict[str, Any]) -> dict[str, Any]:
-        command_id = str(body.get("id") or "").strip()
-        if not command_id:
-            raise HTTPException(400, "id is required")
-        browser_relay_state["last_seen"] = _now_ts()
-        active_tab = body.get("active_tab")
-        if isinstance(active_tab, dict):
-            browser_relay_state["active_tab"] = {
-                "id": active_tab.get("id"),
-                "url": active_tab.get("url"),
-                "title": active_tab.get("title"),
-            }
-        result = body.get("result")
-        if not isinstance(result, dict):
-            result = {"ok": False, "error": "missing relay result"}
-        result.setdefault("ok", True)
-        result.setdefault("id", command_id)
-        if (browser_relay_state.get("control_lease") or {}).get("command_id") == command_id:
-            browser_relay_state["control_lease"] = None
-        result["control"] = _relay_control_snapshot()
-        browser_relay_state.setdefault("command_results", {})[command_id] = result
+        try:
+            _apply_relay_result(body)
+        except ValueError:
+            raise HTTPException(400, "id is required") from None
         return {"ok": True}
 
     @router.get("/api/browser/relay/bookmarklet.js")

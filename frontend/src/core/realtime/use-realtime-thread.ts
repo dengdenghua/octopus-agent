@@ -28,6 +28,29 @@ import {
   type PendingApproval,
 } from "./items";
 import { type ConversationEvent, reduce } from "./reducer";
+import {
+  applyVitalNotification,
+  emptyVitalsMarks,
+  seedVitalsFromResumedTurn,
+  type StreamVitals,
+  type VitalsMarks,
+} from "./stream-vitals";
+import { useStreamVitals } from "./use-stream-vitals";
+import {
+  appendStreamTelemetry,
+  createStreamTurnTelemetry,
+  type StreamTurnOutcome,
+} from "./stream-telemetry";
+
+// Item types that represent the agent actively doing work — a running one
+// keeps a silent turn out of the "slow / maybe-stuck" bucket (a 60s command
+// or a busy subagent produces no deltas yet is plainly still working).
+const WORK_ITEM_TYPES = new Set<string>([
+  "commandExecution",
+  "fileChange",
+  "mcpToolCall",
+  "subagent",
+]);
 
 export interface UseRealtimeThreadArgs {
   threadId: string;
@@ -61,6 +84,10 @@ export interface UseRealtimeThreadValue {
     topologyId?: string;
   }) => Promise<void>;
   resolveApproval: (requestId: string | number, accept: boolean) => void;
+  /** Live streaming vitals for the active turn (TTFT, delta cadence, stall
+   * detection). Lets the status strip tell "model still working" apart
+   * from "connection stuck". ``phase: "idle"`` between turns. */
+  vitals: StreamVitals;
   resume: () => Promise<void>;
   /** Page backwards: prepend the next batch of turns older than the
    * current `state.turns[0]`. No-op when `state.hasMoreTurns` is
@@ -119,6 +146,10 @@ export function useRealtimeThread(
     Map<string | number, ReturnType<typeof setTimeout>>
   >(new Map());
   const clientRef = useRef<RealtimeClient | null>(null);
+  // Streaming-vitals timestamps, mutated off the notification stream (no
+  // re-render) and read by a ticking hook. A ref so the ``onNotification``
+  // closure sees the live object across reconnects.
+  const vitalsMarksRef = useRef<VitalsMarks>(emptyVitalsMarks());
   // Latest reduced snapshot for callbacks that don't want React's stale
   // closure semantics. Updated synchronously alongside ``setState``.
   const stateRef = useRef<Conversation>(state);
@@ -130,6 +161,20 @@ export function useRealtimeThread(
   // the real delivery signal — ``startTurn`` uses it to swallow later
   // transport rejections (reconnect + resume recover the turn state).
   const turnDeliveryWatchesRef = useRef<Set<{ delivered: boolean }>>(new Set());
+
+  const persistTurnTelemetry = useCallback(
+    (turnId: string, outcome: StreamTurnOutcome, completedAt = Date.now()) => {
+      const record = createStreamTurnTelemetry({
+        threadId: args.threadId,
+        turnId,
+        outcome,
+        marks: vitalsMarksRef.current,
+        completedAt,
+      });
+      if (record) appendStreamTelemetry(record);
+    },
+    [args.threadId],
+  );
 
   const applyEvent = useCallback((evt: ConversationEvent) => {
     setState((prev) => {
@@ -143,6 +188,7 @@ export function useRealtimeThread(
   useEffect(() => {
     setState(emptyConversation(args.threadId));
     stateRef.current = emptyConversation(args.threadId);
+    vitalsMarksRef.current = emptyVitalsMarks();
     const resolvers = approvalResolvers.current;
     const timers = approvalTimers.current;
     type ResumeResponse = {
@@ -224,6 +270,14 @@ export function useRealtimeThread(
         .then((result) => {
           if (cancelled || seq !== resumeSeq) return;
           resumeInFlight = false;
+          const resumedActive = [...(result.turns ?? [])]
+            .reverse()
+            .find((turn) => turn.status === "inProgress");
+          seedVitalsFromResumedTurn(
+            vitalsMarksRef.current,
+            resumedActive ?? null,
+            Date.now(),
+          );
           setState((prev) => {
             if (mode === "preserve-live" && prev.turns.length > 0) {
               // Live events landed before this resume response. Keep
@@ -262,6 +316,31 @@ export function useRealtimeThread(
       method: string;
       params: Record<string, unknown>;
     }): void => {
+      const belongsToThread = note.params?.threadId === args.threadId;
+      // Record liveness telemetry before the reducer runs. Cheap, pure,
+      // ref-mutating — never triggers a render on its own.
+      if (belongsToThread) {
+        applyVitalNotification(vitalsMarksRef.current, note, Date.now());
+      }
+      if (belongsToThread && note.method === "turn/completed") {
+        const turn = note.params?.turn as
+          | { id?: unknown; status?: unknown }
+          | undefined;
+        const outcome = turn?.status;
+        if (
+          typeof turn?.id === "string" &&
+          (outcome === "completed" ||
+            outcome === "interrupted" ||
+            outcome === "failed")
+        ) {
+          persistTurnTelemetry(turn.id, outcome);
+        }
+      } else if (belongsToThread && note.method === "turn/interrupted") {
+        const turnId = note.params?.turnId;
+        if (typeof turnId === "string") {
+          persistTurnTelemetry(turnId, "interrupted");
+        }
+      }
       if (
         note.method === "turn/started" &&
         note.params?.threadId === args.threadId
@@ -324,6 +403,7 @@ export function useRealtimeThread(
       const turns = stateRef.current.turns;
       const active = turns[turns.length - 1];
       if (!active || active.status !== "inProgress") return;
+      persistTurnTelemetry(active.id, "interrupted");
       applyEvent({
         method: "turn/interrupted",
         params: {
@@ -404,7 +484,7 @@ export function useRealtimeThread(
       timers.clear();
       setConnected(false);
     };
-  }, [args.threadId, args.clientFactory, applyEvent]);
+  }, [args.threadId, args.clientFactory, applyEvent, persistTurnTelemetry]);
 
   const startTurn = useCallback<UseRealtimeThreadValue["startTurn"]>(
     async (input) => {
@@ -472,6 +552,14 @@ export function useRealtimeThread(
       threadId: args.threadId,
       limit: RESUME_TURN_LIMIT,
     });
+    const resumedActive = [...(result.turns ?? [])]
+      .reverse()
+      .find((turn) => turn.status === "inProgress");
+    seedVitalsFromResumedTurn(
+      vitalsMarksRef.current,
+      resumedActive ?? null,
+      Date.now(),
+    );
     setState((prev) => {
       const next: Conversation = {
         ...prev,
@@ -540,6 +628,7 @@ export function useRealtimeThread(
       threadId: args.threadId,
       turnId: active.id,
     });
+    persistTurnTelemetry(active.id, "interrupted");
     applyEvent({
       method: "turn/interrupted",
       params: {
@@ -548,7 +637,7 @@ export function useRealtimeThread(
         completedAt: new Date().toISOString(),
       },
     });
-  }, [args.threadId, applyEvent]);
+  }, [args.threadId, applyEvent, persistTurnTelemetry]);
 
   const compact = useCallback<UseRealtimeThreadValue["compact"]>(async () => {
     const client = clientRef.current;
@@ -582,10 +671,28 @@ export function useRealtimeThread(
     [args.threadId],
   );
 
+  // Derive the two state-dependent inputs the vitals classifier needs.
+  const activeTurn = state.turns[state.turns.length - 1];
+  const turnActive = activeTurn?.status === "inProgress";
+  const hasRunningWork = useMemo(() => {
+    if (!activeTurn || activeTurn.status !== "inProgress") return false;
+    return activeTurn.items.some(
+      (it) => it.status === "inProgress" && WORK_ITEM_TYPES.has(it.type),
+    );
+  }, [activeTurn]);
+
+  const vitals = useStreamVitals({
+    marksRef: vitalsMarksRef,
+    connected,
+    turnActive,
+    hasRunningWork,
+  });
+
   return useMemo(
     () => ({
       state,
       connected,
+      vitals,
       startTurn,
       resolveApproval,
       resume,
@@ -597,6 +704,7 @@ export function useRealtimeThread(
     [
       state,
       connected,
+      vitals,
       startTurn,
       resolveApproval,
       resume,

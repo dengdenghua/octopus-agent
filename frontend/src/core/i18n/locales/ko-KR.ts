@@ -236,6 +236,7 @@ export const koKR: Translations = {
     jumpToLastTurn: "마지막 턴으로 이동",
     backToLatest: "최신 메시지로 돌아가기",
     latest: "최신",
+    newUpdates: () => "새 콘텐츠",
     timeoutWarning: (seconds: number) =>
       `${seconds}초 동안 진행이 없습니다. 멈춘 것 같습니다`,
     thinkingPlan: "생각 계획",
@@ -1247,6 +1248,7 @@ export const koKR: Translations = {
     phaseStatusPending: "Pending",
     robot: "Robot",
     noRunningRobotProcess: "No robot process is currently running.",
+    startingRobotProcess: "Controller started — waiting for its first action…",
     tabList: "Tab list",
     summaryLabel: "Summary",
     agentStatusRunning: "Running",
@@ -1298,6 +1300,7 @@ export const koKR: Translations = {
       "Feature flags, follow-up suggestions, remote backends, and invariants — one place to see and tune them.",
     tabs: {
       runtime: "Runtime",
+      streaming: "스트리밍",
       featureFlags: "Feature Flags",
       suggestions: "Suggestions",
       remote: "Remote",
@@ -1305,6 +1308,31 @@ export const koKR: Translations = {
     },
     noActiveProject:
       "No active project bound. Open a workspace project to see suggestions.",
+    streaming: {
+      title: "스트리밍 응답 지표",
+      description:
+        "최근 100개 턴의 지연과 상태만 이 기기에 저장하며 메시지 본문은 저장하지 않습니다.",
+      clear: "스트리밍 지표 지우기",
+      empty: "실시간 응답이 완료되면 첫 토큰 지연과 일시 중지가 표시됩니다.",
+      samples: "샘플",
+      ttftP50: "TTFT P50",
+      ttftP95: "TTFT P95",
+      maxGapP95: "최장 중지 P95",
+      stalledRate: "정지 의심",
+      unsuccessfulRate: "미완료",
+      time: "완료 시간",
+      outcome: "결과",
+      maxGap: "최장 중지",
+      duration: "소요 시간",
+      endState: "종료 상태",
+      stalled: "긴 무응답",
+      normal: "정상",
+      outcomes: {
+        completed: "완료",
+        interrupted: "중단",
+        failed: "실패",
+      },
+    },
   },
 
   runtimeSelfCheckPanel: {
@@ -1602,7 +1630,8 @@ export const koKR: Translations = {
     deleteTeam: "그룹 삭제",
     newTeam: "협업자 초대",
     teamMembers: (n: number) => `멤버 ${n}명`,
-    lockedAgentTooltip: (name: string) => `이 페이지는 ${name}(으)로 고정되어 있습니다`,
+    lockedAgentTooltip: (name: string) =>
+      `이 페이지는 ${name}(으)로 고정되어 있습니다`,
     adminAgentName: "관리자",
     switchAgentLabel: "에이전트 전환",
     switchAgentMenuTitle: "에이전트 전환",
@@ -5612,14 +5641,17 @@ Strategy:
   // Public Thinking Status
   publicThinkingStatus: {
     title: "Thinking Status",
-    organizingReply: "Organizing reply",
-    executingTool: "Executing tool",
-    gotResults: "Got execution results",
-    analyzing: "Analyzing",
-    understandingTask: "Understanding task",
-    planningFirstStep: "Planning first step",
-    waitingForModel: "Waiting for model",
-    stillWaiting: "Still waiting",
+    organizingReply: "Writing back to you",
+    executingTool: "Working on it",
+    gotResults: "Got a result",
+    analyzing: "Reading the result and continuing",
+    understandingTask: "Understanding what you need",
+    planningFirstStep: "Working out the first step",
+    waitingForModel: "Still thinking",
+    stillWaiting: "Still working — I'll continue shortly",
+    modelWorking: "모델이 처리 중입니다",
+    slowResponse: "평소보다 처리 시간이 길어지고 있습니다",
+    reconnecting: "연결이 끊어져 다시 연결하고 있습니다",
   },
 
   // Evolution Dashboard

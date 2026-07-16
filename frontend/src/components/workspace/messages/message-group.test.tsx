@@ -357,9 +357,12 @@ describe("MessageGroup reasoning grouping", () => {
       },
     ];
 
-    renderWithProviders(<MessageGroup codeMode messages={messages as never} />, {
-      locale: "en-US",
-    });
+    renderWithProviders(
+      <MessageGroup codeMode messages={messages as never} />,
+      {
+        locale: "en-US",
+      },
+    );
 
     expect(screen.getByText("View 2 saved steps")).toBeInTheDocument();
     expect(
@@ -408,7 +411,9 @@ describe("MessageGroup reasoning grouping", () => {
 
     expect(screen.getByText("View 2 saved steps")).toBeInTheDocument();
     expect(screen.queryByText("Hide saved steps")).not.toBeInTheDocument();
-    expect(screen.queryByText("Clarify task direction")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Clarify task direction"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByTestId("live-process-strip")).not.toBeInTheDocument();
   });
 
@@ -453,6 +458,33 @@ describe("MessageGroup reasoning grouping", () => {
     expect(screen.getByText("Hide process replay")).toBeInTheDocument();
     expect(screen.getByText("Clarify task direction")).toBeInTheDocument();
     expect(screen.getAllByText(/frontend route structure/).length).toBe(2);
+  });
+
+  it("shows the current action in chat mode without duplicating the code process strip", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-chat-action",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "search-chat",
+            name: "web_search",
+            args: { query: "conversational streaming rhythm" },
+          },
+        ],
+      },
+    ];
+
+    renderWithProviders(
+      <MessageGroup isLoading messages={messages as never} />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.queryByTestId("live-process-strip")).not.toBeInTheDocument();
+    expect(
+      screen.getAllByText(/conversational streaming rhythm/).length,
+    ).toBeGreaterThan(0);
   });
 
   it("marks the live code process strip as waiting when user confirmation is needed", () => {

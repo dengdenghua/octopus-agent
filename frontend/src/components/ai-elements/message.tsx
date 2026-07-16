@@ -351,17 +351,6 @@ export const MessageResponse = memo(
       />
     </Suspense>
   ),
-  // IMPORTANT: include `className` in the equality check. The original
-  // signature ignored it because the caller tends to pass a stable
-  // string literal — but once chat_font_size became runtime-driven,
-  // MarkdownContent started swapping between `prose-sm / prose-base /
-  // prose-lg` and the memo was eating every update, leaving the prose
-  // variant stuck at whatever was set on first mount.
-  (prevProps, nextProps) =>
-    prevProps.children === nextProps.children &&
-    prevProps.className === nextProps.className &&
-    prevProps.rehypePlugins === nextProps.rehypePlugins &&
-    prevProps.remarkPlugins === nextProps.remarkPlugins,
 );
 
 MessageResponse.displayName = "MessageResponse";

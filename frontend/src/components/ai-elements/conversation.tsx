@@ -1,8 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowDownIcon } from "lucide-react";
-import type { ComponentProps } from "react";
-import { useCallback } from "react";
+import type { ComponentProps, ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>;
@@ -75,18 +75,49 @@ export const ConversationEmptyState = ({
   </div>
 );
 
-export type ConversationScrollButtonProps = ComponentProps<typeof Button>;
+export type ConversationScrollButtonProps = Omit<
+  ComponentProps<typeof Button>,
+  "children"
+> & {
+  children?: ReactNode;
+  activityKey?: string | number;
+  activityLabel?: (count: number) => ReactNode;
+};
 
 export const ConversationScrollButton = ({
+  activityKey,
+  activityLabel,
   className,
   children,
   ...props
 }: ConversationScrollButtonProps) => {
   const { isAtBottom, scrollToBottom } = useStickToBottomContext();
+  const previousActivityKey = useRef(activityKey);
+  const [pendingActivityCount, setPendingActivityCount] = useState(0);
+
+  useEffect(() => {
+    if (Object.is(previousActivityKey.current, activityKey)) return;
+    previousActivityKey.current = activityKey;
+    // activityKey can advance once per streamed frame. Treat unseen activity
+    // as a boolean signal instead of counting transport chunks; otherwise a
+    // long answer produces labels such as "685 new updates" and keeps
+    // re-rendering this control while the reader is browsing older content.
+    if (!isAtBottom) setPendingActivityCount(1);
+  }, [activityKey, isAtBottom]);
+
+  useEffect(() => {
+    if (isAtBottom) setPendingActivityCount(0);
+  }, [isAtBottom]);
 
   const handleScrollToBottom = useCallback(() => {
+    setPendingActivityCount(0);
     scrollToBottom();
   }, [scrollToBottom]);
+
+  const label =
+    pendingActivityCount > 0 && activityLabel
+      ? activityLabel(pendingActivityCount)
+      : children;
 
   return (
     !isAtBottom && (
@@ -96,13 +127,13 @@ export const ConversationScrollButton = ({
           className,
         )}
         onClick={handleScrollToBottom}
-        size={children ? "sm" : "icon-sm"}
+        size={label ? "sm" : "icon-sm"}
         type="button"
         variant="outline"
         {...props}
       >
         <ArrowDownIcon className="size-4" />
-        {children}
+        {label}
       </Button>
     )
   );

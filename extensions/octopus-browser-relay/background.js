@@ -5,6 +5,8 @@ const runningCommands = new Set();
 const recentHumanActivityByTab = new Map();
 let lastWorkingBase = API_BASES[0];
 let activeLease = null;
+let relaySocket = null;
+let relaySocketReconnectTimer = null;
 
 async function activeTabInfo() {
   const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
@@ -538,14 +540,20 @@ async function executeCommand(command) {
 }
 
 async function reportResult(command, result) {
+  const payload = {
+    type: "result",
+    id: command.id,
+    active_tab: await activeTabInfo(),
+    result,
+  };
+  if (relaySocket?.readyState === WebSocket.OPEN) {
+    relaySocket.send(JSON.stringify(payload));
+    return;
+  }
   await apiFetch("/api/browser/relay/result", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      id: command.id,
-      active_tab: await activeTabInfo(),
-      result,
-    }),
+    body: JSON.stringify(payload),
   });
 }
 
@@ -570,7 +578,70 @@ async function processCommands(commands = []) {
   }
 }
 
+async function relaySocketHeartbeat() {
+  if (relaySocket?.readyState !== WebSocket.OPEN) return false;
+  relaySocket.send(
+    JSON.stringify({
+      type: "heartbeat",
+      extension_version: EXTENSION_VERSION,
+      active_tab: await activeTabInfo(),
+      active_lease: activeLease,
+      recent_human_activity: Array.from(recentHumanActivityByTab.values()).slice(-5),
+    }),
+  );
+  return true;
+}
+
+function scheduleRelaySocketReconnect() {
+  if (relaySocketReconnectTimer) return;
+  relaySocketReconnectTimer = setTimeout(() => {
+    relaySocketReconnectTimer = null;
+    connectRelaySocket();
+  }, 1000);
+}
+
+function connectRelaySocket() {
+  if (
+    relaySocket &&
+    (relaySocket.readyState === WebSocket.OPEN ||
+      relaySocket.readyState === WebSocket.CONNECTING)
+  ) {
+    return;
+  }
+  const wsUrl = `${lastWorkingBase.replace(/^http/, "ws")}/api/browser/relay/ws`;
+  const socket = new WebSocket(wsUrl);
+  relaySocket = socket;
+  socket.onopen = () => {
+    if (relaySocket !== socket) return;
+    void relaySocketHeartbeat();
+  };
+  socket.onmessage = (event) => {
+    if (relaySocket !== socket) return;
+    let message = null;
+    try {
+      message = JSON.parse(String(event.data || "{}"));
+    } catch {
+      return;
+    }
+    if (message?.type === "commands") {
+      void processCommands(Array.isArray(message.commands) ? message.commands : []);
+    } else if (message?.type === "ping") {
+      void relaySocketHeartbeat();
+    }
+  };
+  socket.onclose = () => {
+    if (relaySocket === socket) relaySocket = null;
+    scheduleRelaySocketReconnect();
+  };
+  socket.onerror = () => {
+    // onclose owns reconnect scheduling; HTTP polling stays active meanwhile.
+  };
+}
+
 async function postHeartbeat() {
+  // The push channel delivers commands without relying on MV3 timers. Keep
+  // this HTTP path as a compatibility fallback for older local runtimes.
+  if (relaySocket?.readyState === WebSocket.OPEN) return true;
   const data = await apiJson("/api/browser/relay/heartbeat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -627,11 +698,13 @@ async function configureSidePanelBehavior() {
 
 chrome.runtime.onInstalled.addListener(() => {
   void configureSidePanelBehavior();
+  connectRelaySocket();
   void postHeartbeat();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   void configureSidePanelBehavior();
+  connectRelaySocket();
   void postHeartbeat();
 });
 
@@ -727,4 +800,5 @@ setInterval(() => {
   void postHeartbeat();
 }, 500);
 
+connectRelaySocket();
 void postHeartbeat();

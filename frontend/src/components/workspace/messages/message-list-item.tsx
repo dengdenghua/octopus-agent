@@ -12,9 +12,7 @@ import { useParams } from "react-router-dom";
 import {
   memo,
   useCallback,
-  useEffect,
   useMemo,
-  useState,
   type ComponentProps,
   type ImgHTMLAttributes,
   type ReactNode,
@@ -52,7 +50,6 @@ import { useHumanMessagePlugins } from "@/core/streamdown";
 import { cn } from "@/lib/utils";
 
 import { CopyButton } from "../copy-button";
-import { ExecutionPanel } from "../execution-panel";
 import {
   ExecutionPlanReview,
   isExecutionPlanMessage,
@@ -64,7 +61,6 @@ import {
   getChecklistPlanFromMessage,
 } from "../task-progress-checklist";
 import { normalizeExecutionPlan } from "../execution-plan-utils";
-import { StreamingIndicator } from "../streaming-indicator";
 
 import { MarkdownContent } from "./markdown-content";
 import { useThreadStreaming, useThreadValues } from "./context";
@@ -517,11 +513,8 @@ function MessageContent_({
   // rehypeRaw and rehypeKatex, so we don't need to add them again.
   const allRehypePlugins = rehypePlugins;
 
-  // The inline status block (StreamingIndicator + ExecutionPanel) should
-  // only render on the message that's actively being streamed right now
-  // — never on already-committed prior messages, even though they share
-  // the same ``thread.isLoading`` flag. We detect that by matching the
-  // message id against the streaming-message id exposed by useStream.
+  // The typing cursor belongs only to the message actively receiving text,
+  // never to older messages that share the thread-level loading state.
   const isCurrentlyStreaming = isLoading && message.id === streamingMessage?.id;
 
   const components = useMemo(
@@ -534,8 +527,6 @@ function MessageContent_({
   );
 
   const rawContent = extractContentFromMessage(message);
-  const reasoningContent = extractReasoningContentFromMessage(message);
-
   const files = useMemo(() => {
     const files = message.additional_kwargs?.files;
     if (!Array.isArray(files) || files.length === 0) {
@@ -637,31 +628,6 @@ function MessageContent_({
     );
   }, [attachments, t.message.attachmentFallback]);
 
-  // Status-strip visibility · hoisted here (BEFORE any early
-  // returns below) so the hook is called in every render.
-  // Pre-fix ``useState`` + ``useEffect`` sat at L~410 · below half
-  // a dozen early returns (``element === "task"`` / task-checklist
-  // / execution-plan / reasoning-only / …) · meaning the hook
-  // count shifted across renders as different message element
-  // types scrolled through, triggering React's "Rendered more
-  // hooks than during the previous render" crash. All three deps
-  // "" isCurrentlyStreaming, contentToDisplay, reasoningContent ""
-  // are already computed above, so hoisting is a pure move.
-  const showStandaloneStatusStrip =
-    isCurrentlyStreaming && !visibleContentToDisplay && !reasoningContent;
-  const [showStandaloneStatusStripFrame, setShowStandaloneStatusStripFrame] =
-    useState(showStandaloneStatusStrip);
-  useEffect(() => {
-    if (showStandaloneStatusStrip) {
-      setShowStandaloneStatusStripFrame(true);
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setShowStandaloneStatusStripFrame(false);
-    }, 160);
-    return () => window.clearTimeout(timer);
-  }, [showStandaloneStatusStrip]);
-
   // Uploading state: mock AI message shown while files upload
   if (message.additional_kwargs?.element === "task") {
     return (
@@ -760,11 +726,6 @@ function MessageContent_({
         chatFontSize={chatFontSize}
       />
     ) : null;
-  // ``showStandaloneStatusStrip`` + its useState/useEffect were
-  // hoisted to the top of the function (see comment there) to fix
-  // a Rules-of-Hooks violation · this location just re-uses the
-  // already-computed state below.
-
   if (isHuman) {
     const messageResponse = visibleContentToDisplay ? (
       <AIElementMessageResponse
@@ -793,30 +754,6 @@ function MessageContent_({
 
   return (
     <AIElementMessageContent className={className}>
-      {/* Pre-content status strip. Collapse as soon as the message
-          starts emitting text: the reasoning panel above and the
-          typing cursor below already communicate "streaming". Keeping
-          this row visible while content flows produces the duplicate
-          "Thinking..." the user reported "" one here, one inside the
-          reasoning trigger. Once there's visible output, the typing
-          cursor is the single source of truth for "still streaming". */}
-      {showStandaloneStatusStripFrame && (
-        <div
-          className={cn(
-            "mb-4 flex flex-wrap items-center gap-2 transition-all duration-200",
-            showStandaloneStatusStrip
-              ? "translate-y-0 opacity-100"
-              : "-translate-y-1 opacity-0",
-          )}
-        >
-          <StreamingIndicator size="sm" showLabel />
-          <ExecutionPanel
-            metrics={values?.execution_metrics}
-            isLoading={isLoading}
-            showPrimaryStatus={false}
-          />
-        </div>
-      )}
       {filesList}
       {attachmentsList}
       <GroundingChip message={message} />
@@ -827,12 +764,12 @@ function MessageContent_({
             content={visibleContentToDisplay}
             isLoading={isLoading}
             rehypePlugins={allRehypePlugins}
-            className="my-3"
+            className={cn(
+              "my-3",
+              isCurrentlyStreaming && "kimi-streaming-tail",
+            )}
             components={components}
             chatFontSize={chatFontSize}
-          />
-          <TypingCursor
-            visible={isCurrentlyStreaming && !!visibleContentToDisplay}
           />
         </div>
       )}
@@ -1141,33 +1078,3 @@ function RichFileCard({
 }
 
 const MessageContent = memo(MessageContent_);
-
-function TypingCursor({ visible }: { visible: boolean }) {
-  const [show, setShow] = useState(visible);
-  const [exiting, setExiting] = useState(false);
-
-  useEffect(() => {
-    if (visible) {
-      setShow(true);
-      setExiting(false);
-    } else if (show) {
-      setExiting(true);
-      const timer = setTimeout(() => {
-        setShow(false);
-        setExiting(false);
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-  }, [visible, show]);
-
-  if (!show) return null;
-
-  return (
-    <span
-      className={cn(
-        "inline-block w-0.5 h-5 bg-primary ml-0.5 align-middle transition-opacity duration-300",
-        exiting ? "opacity-0" : "opacity-100 animate-pulse",
-      )}
-    />
-  );
-}

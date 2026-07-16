@@ -1215,166 +1215,169 @@ export function AgentSummaryPage({
 
         {/* 上下文（只展示本轮事件流里可确认的内容） */}
         {!isCompletelyEmpty && (
-        <section className="py-4">
-          <button
-            type="button"
-            aria-expanded={expandedSections.has("references")}
-            onClick={() => toggleSection("references")}
-            className="flex w-full items-center gap-2 text-left transition-colors hover:text-foreground"
-          >
-            <h3 className="text-xs font-medium text-foreground">
-              {t.agentWorkbenchPages.context}
-            </h3>
-            <span className="ml-auto truncate text-[10px] text-muted-foreground">
-              {totalReferenceItems > 0
-                ? t.agentWorkbenchPages.sourceCount(totalReferenceItems)
-                : t.agentWorkbenchPages.noSources}
-              {contextStats.percentage > 0
-                ? ` · ${t.agentWorkbenchPages.estimatePercentage(
-                    contextStats.percentage,
-                  )}`
-                : ""}
-            </span>
-            {expandedSections.has("references") ? (
-              <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
-            ) : (
-              <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
-            )}
-          </button>
-          {expandedSections.has("references") && (
-            <div className="mt-3">
-              {/* 上下文来源进度条 */}
-              <div>
-                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
-                  {observedReferenceTabs.length === 0 ? (
-                    <span>{t.agentWorkbenchPages.noSources}</span>
-                  ) : (
-                    observedReferenceTabs.map((tab) => {
-                      const meta = OBSERVED_REFERENCE_META[tab.id];
-                      return (
-                        <span key={tab.id} className="flex items-center gap-1">
-                          <span
-                            className={cn(
-                              "inline-block size-2 rounded-sm",
-                              meta.dotClassName,
-                            )}
-                          />
-                          {tab.label} {tab.items.length}
-                        </span>
-                      );
-                    })
-                  )}
-                  {contextStats.totalTokens > 0 && (
-                    <span className="font-mono">
-                      {t.agentWorkbenchPages.estimatedTokens(
-                        contextStats.totalTokens,
-                      )}
-                    </span>
-                  )}
-                </div>
-                <div className="h-px overflow-hidden bg-border/35">
-                  <div
-                    className="flex h-full"
-                    style={{ width: `${contextStats.percentage}%` }}
-                  >
-                    {contextStats.segments.length === 0 ? (
-                      <div className="h-full w-full bg-muted-foreground/25" />
+          <section className="py-4">
+            <button
+              type="button"
+              aria-expanded={expandedSections.has("references")}
+              onClick={() => toggleSection("references")}
+              className="flex w-full items-center gap-2 text-left transition-colors hover:text-foreground"
+            >
+              <h3 className="text-xs font-medium text-foreground">
+                {t.agentWorkbenchPages.context}
+              </h3>
+              <span className="ml-auto truncate text-[10px] text-muted-foreground">
+                {totalReferenceItems > 0
+                  ? t.agentWorkbenchPages.sourceCount(totalReferenceItems)
+                  : t.agentWorkbenchPages.noSources}
+                {contextStats.percentage > 0
+                  ? ` · ${t.agentWorkbenchPages.estimatePercentage(
+                      contextStats.percentage,
+                    )}`
+                  : ""}
+              </span>
+              {expandedSections.has("references") ? (
+                <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
+              ) : (
+                <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
+              )}
+            </button>
+            {expandedSections.has("references") && (
+              <div className="mt-3">
+                {/* 上下文来源进度条 */}
+                <div>
+                  <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+                    {observedReferenceTabs.length === 0 ? (
+                      <span>{t.agentWorkbenchPages.noSources}</span>
                     ) : (
-                      contextStats.segments.map((segment) => (
-                        <div
-                          key={segment.id}
-                          className={cn(
-                            "h-full transition-all",
-                            OBSERVED_REFERENCE_META[segment.id].barClassName,
-                          )}
-                          style={{ width: `${segment.percentage}%` }}
-                          title={`${segment.label} ${t.agentWorkbenchPages.estimatedTokens(segment.tokens)}`}
-                        />
-                      ))
+                      observedReferenceTabs.map((tab) => {
+                        const meta = OBSERVED_REFERENCE_META[tab.id];
+                        return (
+                          <span
+                            key={tab.id}
+                            className="flex items-center gap-1"
+                          >
+                            <span
+                              className={cn(
+                                "inline-block size-2 rounded-sm",
+                                meta.dotClassName,
+                              )}
+                            />
+                            {tab.label} {tab.items.length}
+                          </span>
+                        );
+                      })
+                    )}
+                    {contextStats.totalTokens > 0 && (
+                      <span className="font-mono">
+                        {t.agentWorkbenchPages.estimatedTokens(
+                          contextStats.totalTokens,
+                        )}
+                      </span>
                     )}
                   </div>
-                </div>
-              </div>
-              {/* 标签页切换 */}
-              {observedReferenceTabs.length > 0 && (
-                <div className="mt-3 flex gap-4 overflow-x-auto border-b border-border/20 pb-2">
-                  {observedReferenceTabs.map((tab) => {
-                    const meta = OBSERVED_REFERENCE_META[tab.id];
-                    const TabIcon = meta.Icon;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        aria-label={t.agentWorkbenchPages.sourceCountWithLabel(
-                          tab.label,
-                          tab.items.length,
-                        )}
-                        onClick={() => setRefTab(tab.id)}
-                        className={cn(
-                          "inline-flex shrink-0 items-center gap-1.5 border-b border-transparent pb-1 text-[11px] font-medium transition-colors",
-                          activeRefTab === tab.id
-                            ? "border-foreground/60 text-foreground"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        <TabIcon
-                          className={cn("size-3.5", meta.iconClassName)}
-                        />
-                        <span>{tab.label}</span>
-                        <span className="font-mono text-[9px] text-muted-foreground">
-                          {tab.items.length}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-              {/* 上下文列表 */}
-              <ul className="mt-3 max-h-48 space-y-3 overflow-y-auto">
-                {observedReferenceTabs.length === 0 ? (
-                  <li className="py-4 text-center text-[11px] text-muted-foreground">
-                    {t.agentWorkbenchPages.noObservableReferences}
-                  </li>
-                ) : (
-                  activeRefItems.map((ref) => (
-                    <li key={ref.id} className="flex items-center gap-3">
-                      <ReferenceIcon
-                        fallbackClassName={activeRefMeta.iconClassName}
-                        Icon={ActiveRefIcon}
-                        item={ref}
-                        tabId={activeRefTab}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <span className="block truncate text-[11px] text-foreground">
-                          {ref.title}
-                        </span>
-                      </div>
-                      {ref.tag && (
-                        <span className="shrink-0 text-[9px] text-muted-foreground/70">
-                          {ref.tag}
-                        </span>
+                  <div className="h-px overflow-hidden bg-border/35">
+                    <div
+                      className="flex h-full"
+                      style={{ width: `${contextStats.percentage}%` }}
+                    >
+                      {contextStats.segments.length === 0 ? (
+                        <div className="h-full w-full bg-muted-foreground/25" />
+                      ) : (
+                        contextStats.segments.map((segment) => (
+                          <div
+                            key={segment.id}
+                            className={cn(
+                              "h-full transition-all",
+                              OBSERVED_REFERENCE_META[segment.id].barClassName,
+                            )}
+                            style={{ width: `${segment.percentage}%` }}
+                            title={`${segment.label} ${t.agentWorkbenchPages.estimatedTokens(segment.tokens)}`}
+                          />
+                        ))
                       )}
-                    </li>
-                  ))
+                    </div>
+                  </div>
+                </div>
+                {/* 标签页切换 */}
+                {observedReferenceTabs.length > 0 && (
+                  <div className="mt-3 flex gap-4 overflow-x-auto border-b border-border/20 pb-2">
+                    {observedReferenceTabs.map((tab) => {
+                      const meta = OBSERVED_REFERENCE_META[tab.id];
+                      const TabIcon = meta.Icon;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          aria-label={t.agentWorkbenchPages.sourceCountWithLabel(
+                            tab.label,
+                            tab.items.length,
+                          )}
+                          onClick={() => setRefTab(tab.id)}
+                          className={cn(
+                            "inline-flex shrink-0 items-center gap-1.5 border-b border-transparent pb-1 text-[11px] font-medium transition-colors",
+                            activeRefTab === tab.id
+                              ? "border-foreground/60 text-foreground"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          <TabIcon
+                            className={cn("size-3.5", meta.iconClassName)}
+                          />
+                          <span>{tab.label}</span>
+                          <span className="font-mono text-[9px] text-muted-foreground">
+                            {tab.items.length}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
-              </ul>
-            </div>
-          )}
-        </section>
+                {/* 上下文列表 */}
+                <ul className="mt-3 max-h-48 space-y-3 overflow-y-auto">
+                  {observedReferenceTabs.length === 0 ? (
+                    <li className="py-4 text-center text-[11px] text-muted-foreground">
+                      {t.agentWorkbenchPages.noObservableReferences}
+                    </li>
+                  ) : (
+                    activeRefItems.map((ref) => (
+                      <li key={ref.id} className="flex items-center gap-3">
+                        <ReferenceIcon
+                          fallbackClassName={activeRefMeta.iconClassName}
+                          Icon={ActiveRefIcon}
+                          item={ref}
+                          tabId={activeRefTab}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <span className="block truncate text-[11px] text-foreground">
+                            {ref.title}
+                          </span>
+                        </div>
+                        {ref.tag && (
+                          <span className="shrink-0 text-[9px] text-muted-foreground/70">
+                            {ref.tag}
+                          </span>
+                        )}
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </div>
+            )}
+          </section>
         )}
 
         {/* 空状态 */}
         {isCompletelyEmpty && (
-            <div className="flex flex-col items-center justify-center px-4 py-8 text-center">
-              <BotIcon className="mb-2 size-8 text-muted-foreground/50" />
-              <p className="text-xs font-medium text-foreground">
-                {t.agentWorkbenchPages.dashboardOverview}
-              </p>
-              <p className="mt-1 max-w-[240px] text-[11px] text-muted-foreground">
-                {t.agentWorkbenchPages.dashboardOverviewDescription}
-              </p>
-            </div>
-          )}
+          <div className="flex flex-col items-center justify-center px-4 py-8 text-center">
+            <BotIcon className="mb-2 size-8 text-muted-foreground/50" />
+            <p className="text-xs font-medium text-foreground">
+              {t.agentWorkbenchPages.dashboardOverview}
+            </p>
+            <p className="mt-1 max-w-[240px] text-[11px] text-muted-foreground">
+              {t.agentWorkbenchPages.dashboardOverviewDescription}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1407,9 +1410,17 @@ export function AgentCreationCard({
       <div className="flex items-center justify-center border-b border-border/45 px-3 py-2 text-sm font-medium text-muted-foreground">
         {t.agentWorkbenchPages.agentClusterCreateAssistant}
       </div>
-      <div className="flex justify-center bg-[color:color-mix(in_oklch,var(--muted)_38%,var(--background))] px-4 py-5">
-        <div className="w-full max-w-sm">
-          <div className="min-h-[28rem] rounded-xl border border-border/70 bg-background px-5 py-5 shadow-md">
+      <div className="flex justify-center overflow-hidden bg-[color:color-mix(in_oklch,var(--muted)_38%,var(--background))] px-7 pb-8 pt-16">
+        <div className="relative w-full max-w-sm rotate-[3deg] transition-transform duration-300 hover:rotate-0">
+          <div
+            aria-hidden="true"
+            className="absolute -top-20 left-1/2 z-10 h-24 w-12 -translate-x-1/2 rounded-b-lg border-x border-border/55 bg-foreground shadow-sm"
+          />
+          <div
+            aria-hidden="true"
+            className="absolute -top-3 left-1/2 z-20 h-5 w-16 -translate-x-1/2 rounded-full border-4 border-foreground bg-background"
+          />
+          <div className="relative min-h-[28rem] rounded-xl border border-border/70 bg-background px-5 py-5 shadow-xl shadow-black/10">
             {showBrief ? (
               <div className="flex h-full min-h-[25rem] flex-col">
                 <div className="flex items-center gap-3">

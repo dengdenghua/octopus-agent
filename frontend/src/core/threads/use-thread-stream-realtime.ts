@@ -15,7 +15,7 @@ import {
   conversationToAgentThreadState,
 } from "@/core/threads/realtime-adapter";
 import { swallow } from "@/core/utils/log";
-import { useRealtimeThread } from "@/core/realtime";
+import { useRealtimeThread, type StreamVitals } from "@/core/realtime";
 import type {
   AgentPhaseSnapshot,
   ApprovalItem,
@@ -77,7 +77,7 @@ type SendMessageFn = (
 ) => void;
 
 export type UseThreadStreamRealtimeResult = readonly [
-  ExposedRealtimeThread,
+  ExposedRealtimeThread & { vitals: StreamVitals },
   SendMessageFn,
   boolean,
   LiveToolEvent[],
@@ -830,6 +830,7 @@ export function useThreadStreamRealtime(
     compact,
     resolveApproval,
     loadOlderTurns,
+    vitals,
   } = realtime;
   const [isUploading, setIsUploading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -995,7 +996,11 @@ export function useThreadStreamRealtime(
         },
         threadId: activeThreadId || null,
         compact,
-      }) as ExposedRealtimeThread & { compact: typeof compact },
+        vitals,
+      }) as ExposedRealtimeThread & {
+        compact: typeof compact;
+        vitals: typeof vitals;
+      },
     [
       mapped,
       streamingMessage,
@@ -1004,6 +1009,7 @@ export function useThreadStreamRealtime(
       stop,
       refresh,
       activeThreadId,
+      vitals,
       compact,
     ],
   );

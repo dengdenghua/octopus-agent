@@ -237,6 +237,7 @@ export const enUS: Translations = {
     jumpToLastTurn: "Jump to last turn",
     backToLatest: "Back to latest message",
     latest: "Latest",
+    newUpdates: () => "New content",
     timeoutWarning: (seconds: number) =>
       `No progress for ${seconds}s; it may be stuck`,
     thinkingPlan: "Thinking plan",
@@ -1253,6 +1254,7 @@ export const enUS: Translations = {
     robot: "Controller status",
     noRunningRobotProcess:
       "No active controller execution is running right now.",
+    startingRobotProcess: "Controller started — waiting for its first action…",
     tabList: "Tab list",
     summaryLabel: "Summary",
     agentStatusRunning: "Running",
@@ -1304,6 +1306,7 @@ export const enUS: Translations = {
       "Feature flags, follow-up suggestions, remote backends, and invariants — one place to see and tune them.",
     tabs: {
       runtime: "Runtime",
+      streaming: "Streaming",
       featureFlags: "Feature Flags",
       suggestions: "Suggestions",
       remote: "Remote",
@@ -1311,6 +1314,31 @@ export const enUS: Translations = {
     },
     noActiveProject:
       "No active project bound. Open a workspace project to see suggestions.",
+    streaming: {
+      title: "Streaming response metrics",
+      description:
+        "Keeps latency and status for the latest 100 turns on this device. Message content is never stored.",
+      clear: "Clear streaming metrics",
+      empty: "Complete a realtime turn to see first-token latency and pauses.",
+      samples: "Samples",
+      ttftP50: "TTFT P50",
+      ttftP95: "TTFT P95",
+      maxGapP95: "Longest pause P95",
+      stalledRate: "Possibly stalled",
+      unsuccessfulRate: "Not completed",
+      time: "Completed",
+      outcome: "Outcome",
+      maxGap: "Longest pause",
+      duration: "Duration",
+      endState: "End state",
+      stalled: "Long silence",
+      normal: "Normal",
+      outcomes: {
+        completed: "Completed",
+        interrupted: "Interrupted",
+        failed: "Failed",
+      },
+    },
   },
 
   runtimeSelfCheckPanel: {
@@ -5621,14 +5649,17 @@ Strategy:
   // Public Thinking Status
   publicThinkingStatus: {
     title: "Thinking Status",
-    organizingReply: "Organizing reply",
-    executingTool: "Executing tool",
-    gotResults: "Got execution results",
-    analyzing: "Analyzing",
-    understandingTask: "Understanding task",
-    planningFirstStep: "Planning first step",
-    waitingForModel: "Waiting for model",
-    stillWaiting: "Still waiting",
+    organizingReply: "Writing back to you",
+    executingTool: "Working on it",
+    gotResults: "Got a result",
+    analyzing: "Reading the result and continuing",
+    understandingTask: "Understanding what you need",
+    planningFirstStep: "Working out the first step",
+    waitingForModel: "Still thinking",
+    stillWaiting: "Still working — I'll continue shortly",
+    modelWorking: "Model is working",
+    slowResponse: "Still working — slower than usual",
+    reconnecting: "Connection lost — reconnecting",
   },
 
   // Evolution Dashboard

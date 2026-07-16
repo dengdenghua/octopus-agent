@@ -24,7 +24,6 @@ import { emitAgentWorkbenchFocus } from "../agent-workbench-events";
 import {
   type AgentRunState,
   agentRunAvatarAnimationClass,
-  agentRunBadgeClass,
   agentRunHue,
   agentRunIconClass,
   agentRunPanelClass,
@@ -290,10 +289,7 @@ function AgentClusterRow({
             </span>
           ) : (
             <BotIcon
-              className={cn(
-                "size-4",
-                agentRunIconClass(agent.status),
-              )}
+              className={cn("size-4", agentRunIconClass(agent.status))}
             />
           )}
         </span>
@@ -307,14 +303,7 @@ function AgentClusterRow({
                 {agent.role}
               </span>
             )}
-            <span
-              className={cn(
-                "ml-auto rounded-full px-2 py-0.5 text-[10px]",
-                agentRunBadgeClass(agent.status),
-              )}
-            >
-              {statusLabel}
-            </span>
+            <span className="sr-only">{statusLabel}</span>
           </div>
           <div className="mt-1 flex items-end gap-2">
             <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
@@ -334,17 +323,6 @@ function AgentClusterRow({
             </div>
           </div>
         </div>
-        {agent.status === "running" ? (
-          <Loader2Icon className="size-3.5 shrink-0 animate-spin text-emerald-600 dark:text-emerald-400" />
-        ) : agent.status === "waiting" ? (
-          <CircleIcon className="size-3.5 shrink-0 text-amber-500" />
-        ) : agent.status === "done" ? (
-          <CheckCircle2Icon className="size-3.5 shrink-0 text-emerald-500" />
-        ) : agent.status === "error" ? (
-          <XCircleIcon className="size-3.5 shrink-0 text-destructive" />
-        ) : (
-          <CircleIcon className="size-3.5 shrink-0 text-muted-foreground/45" />
-        )}
       </button>
       <AgentHoverPreview agent={agent} statusLabel={statusLabel} />
     </div>
@@ -419,9 +397,7 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
       : section.kind === "action"
         ? NetworkIcon
         : SquareActivityIcon;
-  const status = section.events.some(
-    (event) => event.status === "error",
-  )
+  const status = section.events.some((event) => event.status === "error")
     ? "error"
     : section.events.some((event) => event.status === "waiting_approval")
       ? "waiting"

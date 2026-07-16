@@ -107,7 +107,9 @@ describe("<AgentWorkbenchPanel />", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Diff/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /终端/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /浏览器/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: /浏览器/ }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByText("当前没有活跃中的主控执行过程。"),
     ).toBeInTheDocument();
@@ -132,6 +134,29 @@ describe("<AgentWorkbenchPanel />", () => {
       screen.getByRole("button", { name: "主电脑 · 已完成" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("工位")).not.toBeInTheDocument();
+  });
+
+  test("empty shell says the controller is idle when no turn is running", () => {
+    renderWorkbench(<AgentWorkbenchPanel activeTab="agent" events={[]} />);
+    expect(
+      screen.getByText("当前没有活跃中的主控执行过程。"),
+    ).toBeInTheDocument();
+  });
+
+  test("empty shell admits the turn is live before the first tool event", () => {
+    // The panel is event-driven, so a turn that has started but not yet run
+    // a tool leaves it with zero blocks. It must not claim nothing is
+    // running — that window is exactly when the user is watching for signs
+    // of life.
+    renderWorkbench(
+      <AgentWorkbenchPanel activeTab="agent" events={[]} isLoading />,
+    );
+    expect(
+      screen.getByText("主控已启动,正在等待第一个动作…"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("当前没有活跃中的主控执行过程。"),
+    ).not.toBeInTheDocument();
   });
 
   test("renders invited collaborators as workstation seats before they run", () => {
@@ -412,6 +437,12 @@ describe("<AgentWorkbenchPanel />", () => {
     fireEvent.click(screen.getByText("电脑视图"));
     expect(screen.getByText("暂无子智能体")).toBeInTheDocument();
     expect(screen.getByTitle("主电脑 · 执行任务中...")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("活动轨迹"));
+    expect(screen.getByText("阅读")).toBeInTheDocument();
+    expect(screen.getByText("app.tsx")).toBeInTheDocument();
+    expect(screen.getByText("运行终端")).toBeInTheDocument();
+    expect(screen.getByText("npm run typecheck")).toBeInTheDocument();
   });
 
   test("groups screen frames by phase while keeping phase titles visible", () => {
@@ -545,9 +576,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(
       screen.getByText(/Phase 1: 理解任务与准备上下文/),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Phase 2: 整理结果与交付/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Phase 2: 整理结果与交付/)).toBeInTheDocument();
     expect(screen.getByTitle("主电脑 · 待确认")).toBeInTheDocument();
     expect(screen.queryByTitle("主电脑 · 遇到问题")).not.toBeInTheDocument();
 
@@ -817,7 +846,9 @@ describe("<AgentWorkbenchPanel />", () => {
     });
     expect(screen.queryByRole("tab", { name: /Diff/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /终端/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /浏览器/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: /浏览器/ }),
+    ).not.toBeInTheDocument();
   });
 
   test("opens the focused sub-agent independent process view", async () => {
@@ -902,9 +933,7 @@ describe("<AgentWorkbenchPanel />", () => {
         "border-foreground/70",
       );
     });
-    expect(
-      screen.queryByText("Agent 集群 - 独立进程"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Agent 集群 - 独立进程")).not.toBeInTheDocument();
 
     // The sub-agent was still selected: switching to the computer view lands
     // straight on its independent process.
@@ -970,9 +999,7 @@ describe("<AgentWorkbenchPanel />", () => {
         ]}
       />,
     );
-    expect(
-      screen.queryByText("Agent 集群 - 独立进程"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Agent 集群 - 独立进程")).not.toBeInTheDocument();
   });
 
   test("a bumped nonce re-applies a repeat focus intent for the same agent", async () => {
@@ -1009,9 +1036,7 @@ describe("<AgentWorkbenchPanel />", () => {
         "border-foreground/70",
       );
     });
-    expect(
-      screen.queryByText("Agent 集群 - 独立进程"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Agent 集群 - 独立进程")).not.toBeInTheDocument();
 
     // Same agent, second emission (查看电脑 right after 查看过程 on one row): the
     // nonce bump makes it a fresh intent instead of being swallowed by the

@@ -172,10 +172,13 @@ export const MarkdownContent = memo(function MarkdownContent({
   // p/ul/blockquote — stays relative to prose's baseline.
   return (
     <MessageResponse
+      key={isLoading ? "streaming" : "settled"}
       className={cn(proseSizeClass, className)}
       remarkPlugins={resolvedRemarkPlugins}
       rehypePlugins={rehypePlugins}
       components={components}
+      isAnimating={isLoading}
+      aria-busy={isLoading || undefined}
     >
       {content}
     </MessageResponse>

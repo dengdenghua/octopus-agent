@@ -229,6 +229,7 @@ export const zhCN: Translations = {
     jumpToLastTurn: "跳到最后一轮对话",
     backToLatest: "回到最新消息",
     latest: "最新",
+    newUpdates: () => "有新内容",
     timeoutWarning: (seconds: number) =>
       `已 ${seconds} 秒没有新进展，可能卡住了`,
     thinkingPlan: "思考计划",
@@ -1205,6 +1206,7 @@ export const zhCN: Translations = {
     phaseStatusPending: "待开始",
     robot: "主控状态",
     noRunningRobotProcess: "当前没有活跃中的主控执行过程。",
+    startingRobotProcess: "主控已启动,正在等待第一个动作…",
     tabList: "标签页列表",
     summaryLabel: "概要",
     agentStatusRunning: "运行中",
@@ -1242,7 +1244,8 @@ export const zhCN: Translations = {
     processRecords: (count) => `${count} 条过程记录`,
     iterationRounds: (count) => `${count} 轮`,
     computerViewSubtitle: "选择子智能体查看其独立电脑",
-    computerViewSelectHint: "电脑视图仅显示子智能体的独立操作记录，点击下方卡片查看对应子智能体的电脑画面。",
+    computerViewSelectHint:
+      "电脑视图仅显示子智能体的独立操作记录，点击下方卡片查看对应子智能体的电脑画面。",
     computerViewEmpty: "暂无子智能体",
     computerViewEmptyDesc:
       "当任务派发给子智能体执行时，可以在这里查看子智能体的独立电脑操作记录。",
@@ -1253,12 +1256,38 @@ export const zhCN: Translations = {
     description: "集中查看和调试功能开关、后续建议、远程后端和不变量。",
     tabs: {
       runtime: "运行态",
+      streaming: "流式",
       featureFlags: "功能开关",
       suggestions: "建议",
       remote: "远程",
       invariants: "不变量",
     },
     noActiveProject: "当前没有绑定活跃项目。打开一个工作区项目后即可查看建议。",
+    streaming: {
+      title: "流式响应指标",
+      description:
+        "仅在本机保留最近 100 轮的时延与状态，不记录消息正文。P95 可用于定位偶发卡顿。",
+      clear: "清空流式指标",
+      empty: "完成一轮实时对话后，这里会显示首字延迟与流式停顿。",
+      samples: "样本",
+      ttftP50: "首字 P50",
+      ttftP95: "首字 P95",
+      maxGapP95: "最长停顿 P95",
+      stalledRate: "疑似卡顿",
+      unsuccessfulRate: "未正常完成",
+      time: "完成时间",
+      outcome: "结果",
+      maxGap: "最长停顿",
+      duration: "总耗时",
+      endState: "结束状态",
+      stalled: "静默过久",
+      normal: "正常",
+      outcomes: {
+        completed: "完成",
+        interrupted: "中断",
+        failed: "失败",
+      },
+    },
   },
 
   runtimeSelfCheckPanel: {
@@ -5323,14 +5352,17 @@ export const zhCN: Translations = {
   // Public Thinking Status
   publicThinkingStatus: {
     title: "思考状态",
-    organizingReply: "正在组织回复",
-    executingTool: "正在执行工具",
-    gotResults: "已拿到执行结果",
-    analyzing: "正在综合分析",
-    understandingTask: "正在理解任务",
-    planningFirstStep: "正在规划第一步",
-    waitingForModel: "等待模型响应",
-    stillWaiting: "仍在等待模型",
+    organizingReply: "正在回答你",
+    executingTool: "正在动手处理",
+    gotResults: "刚拿到结果",
+    analyzing: "正在看结果并继续",
+    understandingTask: "正在理解你的要求",
+    planningFirstStep: "正在想第一步怎么做",
+    waitingForModel: "正在继续思考",
+    stillWaiting: "还在处理，马上继续",
+    modelWorking: "模型处理中",
+    slowResponse: "仍在处理，响应较慢",
+    reconnecting: "连接中断，正在重连",
   },
 
   // Evolution Dashboard

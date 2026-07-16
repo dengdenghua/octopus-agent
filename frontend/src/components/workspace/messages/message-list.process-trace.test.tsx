@@ -9,7 +9,11 @@ import { renderWithProviders } from "@/test/harness";
 
 import type { LiveToolEvent } from "../live-tool-timeline";
 import { ThreadProviders } from "./context";
-import { MESSAGE_LIST_TIMEOUT_WARNING_MS, MessageList } from "./message-list";
+import {
+  MESSAGE_LIST_TIMEOUT_WARNING_MS,
+  MessageList,
+  streamingMessageProgressKey,
+} from "./message-list";
 
 vi.mock("../artifacts", () => ({
   useArtifacts: () => ({
@@ -323,6 +327,59 @@ describe("MessageList process trace lifecycle", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("pins the Kimi-style stream tail to only the active answer", () => {
+    const assistant = message("assistant-stream", "ai", "正在构建项目概览");
+    const activeThread = mockThread({
+      messages: [message("user-1", "human", "继续"), assistant],
+      streamingMessage: assistant,
+      isLoading: true,
+    });
+    const { container, rerender } = renderMessageList({ thread: activeThread });
+
+    expect(container.querySelectorAll(".kimi-streaming-tail")).toHaveLength(1);
+
+    rerender(
+      messageListTree({
+        thread: mockThread({ messages: activeThread.messages }),
+      }),
+    );
+
+    expect(container.querySelector(".kimi-streaming-tail")).toBeNull();
+  });
+
+  test("keeps a conversational activity pulse visible before the first answer token", () => {
+    const activeThread = mockThread({
+      messages: [message("user-1", "human", "帮我检查项目")],
+      isLoading: true,
+    });
+    const { rerender } = renderMessageList({
+      thread: activeThread,
+      mode: "chat",
+      liveToolEvents: [
+        toolEvent("read_file", {
+          id: "read-live",
+          status: "running",
+          input: { path: "src/app.ts" },
+        }),
+      ],
+    });
+
+    const pulse = screen.getByTestId("conversation-activity-pulse");
+    expect(pulse).toHaveTextContent("Working on it");
+    expect(pulse).toHaveTextContent("read file: src/app.ts");
+
+    rerender(
+      messageListTree({
+        thread: mockThread({ messages: activeThread.messages }),
+        mode: "chat",
+      }),
+    );
+
+    expect(
+      screen.queryByTestId("conversation-activity-pulse"),
+    ).not.toBeInTheDocument();
+  });
+
   test("does not mark a delivered run red for partial tool failures", () => {
     const messages: Message[] = [
       message("user-1", "human", "Write a research report"),
@@ -353,6 +410,34 @@ describe("MessageList process trace lifecycle", () => {
       container.querySelector('[data-turn-marker-status="error"]'),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Report artifact generated.")).toBeInTheDocument();
+  });
+});
+
+describe("streamingMessageProgressKey", () => {
+  test("tracks string growth and same-length tail revisions", () => {
+    const first = message("assistant-1", "ai", "A".repeat(300) + "tail-a");
+    const grown = message("assistant-1", "ai", "A".repeat(301) + "tail-a");
+    const revised = message("assistant-1", "ai", "A".repeat(300) + "tail-b");
+
+    expect(streamingMessageProgressKey(first)).not.toBe(
+      streamingMessageProgressKey(grown),
+    );
+    expect(streamingMessageProgressKey(first)).not.toBe(
+      streamingMessageProgressKey(revised),
+    );
+  });
+
+  test("reads text parts without including image payloads", () => {
+    const withImage: Message = {
+      id: "assistant-1",
+      type: "ai",
+      content: [
+        { type: "text", text: "hello" },
+        { type: "image_url", image_url: "data:image/png;base64,large" },
+      ],
+    };
+
+    expect(streamingMessageProgressKey(withImage)).toBe("5:hello");
   });
 });
 
@@ -600,6 +685,7 @@ describe("MessageList stalled-run warning", () => {
   test("resets the warning timer when streaming content advances", () => {
     vi.useFakeTimers();
     try {
+      const intervalSpy = vi.spyOn(window, "setInterval");
       const firstMessages = [
         message("user-1", "human", "Write a report"),
         message("assistant-1", "ai", "Planning"),
@@ -626,6 +712,8 @@ describe("MessageList stalled-run warning", () => {
       });
 
       rerender(messageListTree({ thread: nextThread }));
+
+      expect(intervalSpy).toHaveBeenCalledTimes(1);
 
       act(() => {
         vi.advanceTimersByTime(60_000);

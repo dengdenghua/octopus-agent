@@ -3,7 +3,6 @@
 import {
   BrainCircuitIcon,
   ClockIcon,
-  Loader2Icon,
   MessageSquareTextIcon,
   WrenchIcon,
 } from "lucide-react";
@@ -32,12 +31,6 @@ interface StatusLine {
 interface ThinkingSignal {
   iteration?: number | null;
   type?: string | null;
-}
-
-function elapsedLabel(ms: number) {
-  const seconds = Math.max(0, Math.floor(ms / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
 function compact(value: unknown, max = 120): string | undefined {
@@ -107,9 +100,21 @@ function statusLines({
       event.status !== "running" && event.status !== "waiting_approval",
   );
   const latestFinished = latestEvent(finished);
+  const recentFinished = [...finished]
+    .sort(
+      (a, b) => (a.finishedAt ?? a.startedAt) - (b.finishedAt ?? b.startedAt),
+    )
+    .slice(-2)
+    .map((event) => ({
+      label: t.publicThinkingStatus.gotResults,
+      detail: eventSummary(event),
+      tone: "done" as const,
+      icon: "tool" as const,
+    }));
 
   if (hasStreamingMessage) {
     return [
+      ...recentFinished.slice(-1),
       {
         label: t.publicThinkingStatus.organizingReply,
         tone: "active",
@@ -120,6 +125,7 @@ function statusLines({
 
   if (running) {
     return [
+      ...recentFinished.slice(-1),
       {
         label: t.publicThinkingStatus.executingTool,
         detail: eventSummary(running),
@@ -131,12 +137,16 @@ function statusLines({
 
   if (finished.length > 0) {
     return [
-      {
-        label: t.publicThinkingStatus.gotResults,
-        detail: eventSummary(latestFinished),
-        tone: "done",
-        icon: "tool",
-      },
+      ...(recentFinished.length > 0
+        ? recentFinished
+        : [
+            {
+              label: t.publicThinkingStatus.gotResults,
+              detail: eventSummary(latestFinished),
+              tone: "done" as const,
+              icon: "tool" as const,
+            },
+          ]),
       {
         label: t.publicThinkingStatus.analyzing,
         tone: "active",
@@ -220,20 +230,19 @@ export function PublicThinkingStatus({
   className,
 }: PublicThinkingStatusProps) {
   const { t } = useI18n();
-  const [startedAt, setStartedAt] = useState(() => Date.now());
-  const [now, setNow] = useState(() => Date.now());
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [thinkingSignal, setThinkingSignal] = useState<ThinkingSignal | null>(
     null,
   );
 
   useEffect(() => {
     if (!isLoading) return;
-    const start = Date.now();
-    setStartedAt(start);
-    setNow(start);
+    setElapsedMs(0);
     setThinkingSignal(null);
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
+    const timers = [4_000, 12_000, 25_000].map((delay) =>
+      window.setTimeout(() => setElapsedMs(delay), delay),
+    );
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [isLoading]);
 
   useEffect(() => {
@@ -260,7 +269,6 @@ export function PublicThinkingStatus({
     return () => window.removeEventListener("octopus:thinking_signal", handler);
   }, [isLoading, threadId]);
 
-  const elapsedMs = Math.max(0, now - startedAt);
   const lines = useMemo(
     () =>
       statusLines({
@@ -277,48 +285,46 @@ export function PublicThinkingStatus({
 
   return (
     <div
-      className={cn(
-        "workspace-panel-subtle my-2 w-full rounded-lg border border-border/60 p-3 text-xs",
-        className,
-      )}
+      role="status"
+      aria-live="polite"
+      aria-atomic="false"
+      data-testid="conversation-activity-pulse"
+      className={cn("my-2 ml-11 w-auto text-xs", className)}
     >
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-1.5 font-semibold text-foreground">
-          <Loader2Icon className="size-3.5 animate-spin text-primary" />
-          {t.publicThinkingStatus.title}
+      <div className="flex min-w-0 items-start gap-2.5 rounded-lg border-l-2 border-primary/20 bg-muted/15 px-3 py-2">
+        <span className="relative mt-1.5 flex size-2.5 shrink-0 items-center justify-center">
+          <span className="absolute inline-flex size-2.5 animate-ping rounded-full bg-primary/20 motion-reduce:animate-none" />
+          <span className="relative inline-flex size-1.5 rounded-full bg-primary/70" />
         </span>
-        <span className="text-[11px] tabular-nums text-muted-foreground">
-          {elapsedLabel(elapsedMs)}
-        </span>
-      </div>
-      <div className="space-y-1.5">
-        {lines.map((line) => (
-          <div
-            key={`${line.label}:${line.detail ?? ""}`}
-            className="flex gap-2"
-          >
-            <div className="mt-0.5">
-              <StatusIcon line={line} />
-            </div>
-            <div className="min-w-0">
-              <div
-                className={cn(
-                  "leading-5",
-                  line.tone === "done"
-                    ? "text-emerald-700 dark:text-emerald-300"
-                    : "font-medium text-foreground",
-                )}
-              >
-                {line.label}
+        <div className="min-w-0 flex-1 space-y-1">
+          {lines.map((line, index) => (
+            <div
+              key={`${line.label}:${line.detail ?? ""}:${index}`}
+              className="animate-in fade-in slide-in-from-bottom-1 flex min-w-0 gap-2 duration-200 motion-reduce:animate-none"
+            >
+              <div className="mt-0.5 shrink-0">
+                <StatusIcon line={line} />
               </div>
-              {line.detail && (
-                <div className="mt-0.5 break-words text-[11px] leading-4 text-muted-foreground/85">
-                  {line.detail}
+              <div className="min-w-0">
+                <div
+                  className={cn(
+                    "leading-5",
+                    line.tone === "done"
+                      ? "text-emerald-700 dark:text-emerald-300"
+                      : "font-medium text-foreground",
+                  )}
+                >
+                  {line.label}
                 </div>
-              )}
+                {line.detail && (
+                  <div className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground/80">
+                    {line.detail}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );

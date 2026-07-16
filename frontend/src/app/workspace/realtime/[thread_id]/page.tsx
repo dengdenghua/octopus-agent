@@ -402,7 +402,9 @@ function FinalArtifactCompletionNotice({
     >
       <FileTextIcon className="size-4 shrink-0" />
       <span className="min-w-0 flex-1">
-        <span className="font-medium">{t.realtime.finalArtifact.generated}</span>
+        <span className="font-medium">
+          {t.realtime.finalArtifact.generated}
+        </span>
         <span className="ml-2 font-mono text-[11px] text-emerald-700/80 dark:text-emerald-200/80">
           {first.path || first.title}
         </span>
@@ -729,9 +731,7 @@ function TaskCollaboratorControl({
             {hasOnlineMembers && (
               <span className="size-1.5 rounded-full bg-emerald-500" />
             )}
-            {hasOnlineMembers
-              ? `${onlineCount}/${totalCount}`
-              : countLabel}
+            {hasOnlineMembers ? `${onlineCount}/${totalCount}` : countLabel}
           </span>
         </button>
       </DropdownMenuTrigger>
@@ -1200,34 +1200,31 @@ function RealtimePageContent({
     () => [composerDisplayAgent, ...allTaskCollaboratorAgents],
     [allTaskCollaboratorAgents, composerDisplayAgent],
   );
-  const coworkCollaborationRoster = useMemo(
-    () => {
-      const sessionRoster = coworkSessionToCollaborationRoster(
-        collabSessionQuery.data,
-        currentTaskAgentName,
-        coworkCollaborationProfiles,
-      );
-      const groupRoster = coworkGroupToCollaborationRoster(
-        coworkGroupQuery.data,
-        currentTaskAgentName,
-        coworkCollaborationProfiles,
-      );
-      if (sessionRoster.length === 0) return groupRoster;
-      if (groupRoster.length === 0) return sessionRoster;
-      const seen = new Map<string, ChatCollaborationRosterEntry>();
-      for (const entry of sessionRoster) seen.set(entry.agent_id, entry);
-      for (const entry of groupRoster) {
-        if (!seen.has(entry.agent_id)) seen.set(entry.agent_id, entry);
-      }
-      return Array.from(seen.values());
-    },
-    [
+  const coworkCollaborationRoster = useMemo(() => {
+    const sessionRoster = coworkSessionToCollaborationRoster(
       collabSessionQuery.data,
+      currentTaskAgentName,
       coworkCollaborationProfiles,
+    );
+    const groupRoster = coworkGroupToCollaborationRoster(
       coworkGroupQuery.data,
       currentTaskAgentName,
-    ],
-  );
+      coworkCollaborationProfiles,
+    );
+    if (sessionRoster.length === 0) return groupRoster;
+    if (groupRoster.length === 0) return sessionRoster;
+    const seen = new Map<string, ChatCollaborationRosterEntry>();
+    for (const entry of sessionRoster) seen.set(entry.agent_id, entry);
+    for (const entry of groupRoster) {
+      if (!seen.has(entry.agent_id)) seen.set(entry.agent_id, entry);
+    }
+    return Array.from(seen.values());
+  }, [
+    collabSessionQuery.data,
+    coworkCollaborationProfiles,
+    coworkGroupQuery.data,
+    currentTaskAgentName,
+  ]);
   const savedCollaborationRoster = useMemo(() => {
     if (coworkCollaborationRoster.length > 0) return coworkCollaborationRoster;
     return persistedCollaborationRoster;
@@ -1319,14 +1316,17 @@ function RealtimePageContent({
           mode: collabSessionQuery.data.mode,
           event_count: coworkGroupQuery.data?.state.event_count ?? 0,
           is_one_to_one:
-            collabSessionQuery.data.roster.filter((member) => member.kind === "agent")
-              .length <= 1 &&
-            collabSessionQuery.data.roster.filter((member) => member.kind === "human")
-              .length <= 1,
+            collabSessionQuery.data.roster.filter(
+              (member) => member.kind === "agent",
+            ).length <= 1 &&
+            collabSessionQuery.data.roster.filter(
+              (member) => member.kind === "human",
+            ).length <= 1,
           room_id: collabSessionQuery.data.room_id,
         }
       : null;
-    const currentCoworkState = sessionState ?? coworkGroupQuery.data?.state ?? null;
+    const currentCoworkState =
+      sessionState ?? coworkGroupQuery.data?.state ?? null;
     if (
       currentCoworkState === null &&
       (collabSessionQuery.isPending || coworkGroupQuery.isPending)
@@ -1408,13 +1408,10 @@ function RealtimePageContent({
     },
     [currentTaskAgentName],
   );
-  const handleTeamModeIntentChange = useCallback(
-    (mode: TeamMode) => {
-      collaboratorSelectionTouchedRef.current = true;
-      setTeamModeIntent(mode);
-    },
-    [],
-  );
+  const handleTeamModeIntentChange = useCallback((mode: TeamMode) => {
+    collaboratorSelectionTouchedRef.current = true;
+    setTeamModeIntent(mode);
+  }, []);
   const collaborationRoster = useMemo<ChatCollaborationRosterEntry[]>(() => {
     const leaderName = composerDisplayAgent.name?.trim() || effectiveAgentId;
     const roster: ChatCollaborationRosterEntry[] = [
@@ -1450,7 +1447,9 @@ function RealtimePageContent({
         ? collaborationRoster
         : savedCollaborationRoster;
     const secondary =
-      primary === collaborationRoster ? savedCollaborationRoster : collaborationRoster;
+      primary === collaborationRoster
+        ? savedCollaborationRoster
+        : collaborationRoster;
     if (secondary.length === 0) return primary;
     const seen = new Map<string, ChatCollaborationRosterEntry>();
     for (const entry of primary) seen.set(entry.agent_id, entry);
@@ -1824,6 +1823,14 @@ function RealtimePageContent({
       localStartedThreadIdRef.current = startedThreadId;
       setIsNewThread(false);
       const targetPath = threadRouteFor(startedThreadId);
+      // The live page deliberately stays mounted until the turn settles, so
+      // React Router cannot own this transition yet. Keep sidebar selection
+      // and its thread list in sync with the server-issued id immediately.
+      eventBus.emit("thread:route-sync", {
+        href: targetPath,
+        threadId: startedThreadId,
+      });
+      void qc.invalidateQueries({ queryKey: ["threads", "search"] });
       const currentPath =
         typeof window === "undefined"
           ? ""
@@ -1836,6 +1843,7 @@ function RealtimePageContent({
       }
     },
     onFinish: () => {
+      void qc.invalidateQueries({ queryKey: ["threads", "search"] });
       const targetPath = pendingRouteSyncRef.current;
       pendingRouteSyncRef.current = null;
       if (targetPath) {
@@ -2142,23 +2150,29 @@ function RealtimePageContent({
     thread.isLoading,
     thread.streamingMessage,
   ]);
+  const sidebarThreadId =
+    thread.threadId ?? localStartedThreadIdRef.current ?? threadId;
   useEffect(() => {
-    const href = threadRouteFor(threadId);
+    const href = threadRouteFor(sidebarThreadId);
     eventBus.emit("thread:run-status", {
       href,
       state: sidebarRunState,
-      threadId,
+      threadId: sidebarThreadId,
     });
     return () => {
       eventBus.emit("thread:run-status", {
         href,
         state: null,
-        threadId,
+        threadId: sidebarThreadId,
       });
     };
-  }, [sidebarRunState, threadId, threadRouteFor]);
+  }, [sidebarRunState, sidebarThreadId, threadRouteFor]);
   const shouldHideSettledProcessChrome =
     agentRunSettled && hasCompletedAgentOutput;
+  const hasStreamingAnswer = Boolean(
+    thread.streamingMessage &&
+    extractTextFromMessage(thread.streamingMessage).trim(),
+  );
   const currentTodoEvents = shouldHideSettledProcessChrome
     ? []
     : agentDisplayEvents;
@@ -2184,7 +2198,8 @@ function RealtimePageContent({
     ],
   );
   const showAgentProgressPill =
-    hasRenderableAgentWorkbench && !shouldHideSettledProcessChrome;
+    (thread.isLoading || hasRenderableAgentWorkbench) &&
+    !shouldHideSettledProcessChrome;
   const canOpenAgentWorkbench =
     !isNewThread ||
     collaborationEnabled ||
@@ -2364,7 +2379,10 @@ function RealtimePageContent({
     };
     window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpenWorkbench);
     return () =>
-      window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpenWorkbench);
+      window.removeEventListener(
+        AGENT_WORKBENCH_OPEN_EVENT,
+        handleOpenWorkbench,
+      );
   }, [setArtifactsOpen]);
 
   const handleSubmit = useCallback(
@@ -2852,11 +2870,16 @@ function RealtimePageContent({
                     {showAgentProgressPill ? (
                       <AgentProgressPill
                         events={agentDisplayEvents}
-                        hasAnswer={hasCompletedAgentOutput}
+                        hasAnswer={
+                          hasCompletedAgentOutput || hasStreamingAnswer
+                        }
+                        hasStreamingAnswer={hasStreamingAnswer}
+                        isLoading={thread.isLoading}
                         runSettled={agentRunSettled}
                         runFailed={agentRunFailed}
                         paused={hasPausedOrPendingBackgroundTask}
                         progressScopeKey={`${threadId}:agent-progress-plan`}
+                        vitals={thread.vitals}
                       />
                     ) : (
                       <TodoPanel
@@ -3017,6 +3040,7 @@ function RealtimePageContent({
                   focusedAgentView={focusedWorkbenchAgentView}
                   focusedAgentNonce={focusedWorkbenchAgentNonce}
                   hasAnswer={hasCompletedAgentOutput}
+                  isLoading={thread.isLoading}
                   runSettled={agentRunSettled}
                   runFailed={agentRunFailed}
                   paused={hasPausedOrPendingBackgroundTask}
@@ -3046,7 +3070,9 @@ function RealtimePageContent({
           open={recOverlayOpen}
           threadId={threadId}
           defaultName={
-            thread?.values?.title || initialPrompt || t.realtime.recorder.defaultName
+            thread?.values?.title ||
+            initialPrompt ||
+            t.realtime.recorder.defaultName
           }
           initiallyRecording={recIsRecording}
           onClose={() => setRecOverlayOpen(false)}

@@ -635,12 +635,36 @@ function activeTaskRoomIdFromPathname(pathname: string): string | null {
   }
 }
 
+export function syncedSidebarPathname(
+  pathname: string,
+  pendingThreadPath: string | null,
+): string {
+  return pendingThreadPath ?? pathname;
+}
+
 export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { pathname, search } = useLocation();
   const { t } = useI18n();
   const { materialTheme } = useAppearance();
   const queryClient = useQueryClient();
   const apiClient = useMemo(() => getAPIClient(), []);
+  // Starting from `/new` swaps in a server thread id before the live page can
+  // safely remount. Use its transient route for sidebar selection until the
+  // page finishes the Router transition.
+  const [pendingThreadPath, setPendingThreadPath] = useState<string | null>(
+    null,
+  );
+  useEvent("thread:route-sync", ({ href }) => setPendingThreadPath(href), []);
+  useEffect(() => {
+    if (!pendingThreadPath) return;
+    if (
+      pathname === pendingThreadPath ||
+      (pathname !== "/workspace/realtime/new" && pathname !== pendingThreadPath)
+    ) {
+      setPendingThreadPath(null);
+    }
+  }, [pathname, pendingThreadPath]);
+  const sidebarPathname = syncedSidebarPathname(pathname, pendingThreadPath);
 
   // Resolve a NavRoute's labelKey against the sidebar namespace. The cast
   // keeps TS narrowing happy without silently swallowing typos in route keys.
@@ -923,7 +947,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   // Group code/team threads by project. Team history defaults to its bound
   // workspace folder, so multi-agent work sits with the project instead of
   // falling back to loose chat recents.
-  const activeTaskRoomId = activeTaskRoomIdFromPathname(pathname);
+  const activeTaskRoomId = activeTaskRoomIdFromPathname(sidebarPathname);
 
   const activeThread = useMemo(() => {
     if (!activeTaskRoomId) return null;
@@ -1165,7 +1189,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
             <ProjectsSection
               groups={projectOrder}
               byProject={byProject}
-              pathname={pathname}
+              pathname={sidebarPathname}
               draftOpen={projectDraftOpen}
               deletableProjects={deletableProjects}
               deletingProject={deletingProject}
@@ -1179,7 +1203,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
             />
             <ChatsSection
               threads={allHistoryThreads}
-              pathname={pathname}
+              pathname={sidebarPathname}
               label={t.sidebar.sectionChats}
               runStatusByHref={runStatusByHref}
             />
@@ -1606,6 +1630,7 @@ export const __testing = {
   withThreadSidebarMode,
   buildProjectSectionActions,
   buildChatsSectionActions,
+  syncedSidebarPathname,
 };
 
 type WorkspaceSurfaceMode = "agent" | "browser";

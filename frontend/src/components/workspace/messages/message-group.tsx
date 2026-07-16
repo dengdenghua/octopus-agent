@@ -8,10 +8,8 @@ import {
   GlobeIcon,
   ListTodoIcon,
   MessageCircleQuestionMarkIcon,
-  MonitorIcon,
   NotebookPenIcon,
   SearchIcon,
-  SquareActivityIcon,
   ShieldAlertIcon,
   SquareTerminalIcon,
   UsersIcon,
@@ -671,23 +669,18 @@ export function MessageGroup({
               {liveProcessSummary}
             </span>
           </div>
-          <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5 pl-4">
-            <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-background/70 px-2 py-0.5 text-muted-foreground">
-              <SquareActivityIcon className="size-3 shrink-0" />
-              <span className="truncate">{t.agentWorkbench.activityTrace}</span>
-            </span>
-            <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-background/70 px-2 py-0.5 text-muted-foreground">
-              <MonitorIcon className="size-3 shrink-0" />
-              <span className="truncate">
-                {t.agentWorkbench.computerViewLabel}
-              </span>
-            </span>
-            {replayStepCount > 0 && (
+          {/* The activity-trace / computer-view surfaces live in the
+              right-hand workbench panel, which owns them as real tabs.
+              Echoing those tab names here as inert chips duplicated the
+              panel's vocabulary without offering the feature — the strip
+              now carries only what's local to this card. */}
+          {replayStepCount > 0 && (
+            <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5 pl-4">
               <span className="inline-flex min-w-0 items-center rounded-full bg-muted/55 px-2 py-0.5 text-muted-foreground/80">
                 {t.messageGrouping.liveProcessHistory(replayStepCount)}
               </span>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
       {showTimelineToggle && (
