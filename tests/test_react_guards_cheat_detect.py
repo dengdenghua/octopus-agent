@@ -574,3 +574,55 @@ class TestBroadExceptSuppressionGuard:
             )
             is None
         )
+
+
+# ─── browser-mode scoping of the evidence guards ──────────────────────
+
+
+class TestEvidenceGuardsBrowserScope:
+    """Browser turns prove work via browser-action evidence, not file
+    writes. A CRUD-style browser goal ("create/edit/delete …") matches the
+    mutation markers, so without the browser_operation_mode skip the write
+    guard derails the model into writing throwaway files (observed live:
+    browser.dynamic-crud burned 25+ iterations appeasing it)."""
+
+    def _browser_ctx(self, **overrides):
+        from runtime.core.cerebrum.react_guards import GuardContext
+        from runtime.core.cerebrum.react_types import ReActStep
+
+        defaults = dict(
+            steps=[
+                ReActStep(
+                    iteration=1,
+                    action='browser_navigate({"url": "http://127.0.0.1:8123/"})',
+                    observation="page loaded",
+                )
+            ],
+            final_answer="Created, edited and deleted the plan through the UI.",
+            is_code_mode=True,
+            tools_active=True,
+            goal="Use the browser UI to create, edit and delete a plan entry.",
+            browser_operation_mode=True,
+        )
+        defaults.update(overrides)
+        return GuardContext(**defaults)
+
+    def test_write_guard_skips_browser_mode(self) -> None:
+        from runtime.core.cerebrum.react_guards import _invoke_missing_write
+
+        assert _invoke_missing_write(self._browser_ctx()) is None
+
+    def test_inspection_guard_skips_browser_mode(self) -> None:
+        from runtime.core.cerebrum.react_guards import _invoke_missing_inspection
+
+        assert _invoke_missing_inspection(self._browser_ctx()) is None
+
+    def test_write_guard_still_fires_for_plain_code_mode(self) -> None:
+        from runtime.core.cerebrum.react_guards import _invoke_missing_write
+
+        ctx = self._browser_ctx(
+            browser_operation_mode=False,
+            goal="Fix the cache implementation and verify it.",
+            final_answer="Implemented the fix and verified it.",
+        )
+        assert _invoke_missing_write(ctx) is not None

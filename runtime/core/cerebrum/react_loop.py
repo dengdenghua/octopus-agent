@@ -202,12 +202,12 @@ def _browser_operation_requested(user_context: Any) -> bool:
         return False
     metadata = user_context.get("metadata")
     metadata = metadata if isinstance(metadata, dict) else {}
-    surface = str(
-        user_context.get("browser_surface") or metadata.get("browser_surface") or ""
-    ).strip().lower()
-    runtime_surfaces = user_context.get("runtime_surfaces") or metadata.get(
-        "runtime_surfaces"
+    surface = (
+        str(user_context.get("browser_surface") or metadata.get("browser_surface") or "")
+        .strip()
+        .lower()
     )
+    runtime_surfaces = user_context.get("runtime_surfaces") or metadata.get("runtime_surfaces")
     surface_names = (
         {str(item).strip().lower() for item in runtime_surfaces}
         if isinstance(runtime_surfaces, list)
@@ -345,6 +345,32 @@ def _evaluate_final_answer_guards(
         disabled_labels=_disabled_guard_labels(),
         categories=categories,
     )
+
+
+def _note_guard_impasse(state: dict, label: str, steps: list) -> bool:
+    """Track repeated same-guard rejections; True when the loop is stuck.
+
+    A guard pushing back is healthy — the model does more work and returns
+    with evidence. It stops being healthy when the SAME guard rejects the
+    final answer again and again while the trajectory gains no new
+    action-bearing steps: the model either cannot produce the demanded
+    evidence or (worse) its attempts to comply never execute — e.g. its
+    tool calls arrive in a format the parser drops. Left unbounded, that
+    burns the whole iteration budget and then terminates through the
+    auto-pause path, whose "paused — continue from checkpoint" wording
+    misreports what actually happened. Three no-progress rejections in a
+    row is the bound: real evidence-gathering always grows the step list.
+    """
+    progress = sum(
+        1
+        for s in steps
+        if (getattr(s, "action", "") or "").strip() or getattr(s, "action_results", None)
+    )
+    if state.get("label") == label and state.get("progress") == progress:
+        state["count"] = state.get("count", 0) + 1
+    else:
+        state.update(label=label, progress=progress, count=1)
+    return state["count"] >= 3
 
 
 def _build_resume_context_prompt(resume_intent: Any) -> str:
@@ -984,6 +1010,8 @@ def stream_react_loop(
         or _browser_surface_value in {"browser", "chrome"}
         or bool({"browser", "chrome"} & _surface_names)
     )
+    # Consecutive same-guard rejection tracker — see _note_guard_impasse.
+    _guard_impasse_state: dict = {}
     if _chrome_operation_mode:
         volatile_parts.append(
             "\n<browser-operation-guidance>\n"
@@ -2338,11 +2366,7 @@ def stream_react_loop(
                     "登录",
                 )
             )
-            if (
-                not _error_text_was_exposed
-                and not _auth_failure
-                and consecutive_llm_errors < 2
-            ):
+            if not _error_text_was_exposed and not _auth_failure and consecutive_llm_errors < 2:
                 consecutive_llm_errors += 1
                 messages.append(
                     Message(
@@ -2488,11 +2512,7 @@ def stream_react_loop(
                 if reasoning_step is not None:
                     step = reasoning_step
                     maybe_final = None
-        if (
-            _looks_like_special_tool_envelope(text)
-            and not step.actions
-            and not step.action
-        ):
+        if _looks_like_special_tool_envelope(text) and not step.actions and not step.action:
             # The provider exposed a private tool sentinel but supplied no
             # structured call.  Make the failure an Observation so the next
             # model round repairs its syntax instead of ending the user turn
@@ -3181,6 +3201,28 @@ def stream_react_loop(
             )
             if _guard_hit is not None:
                 _guard_label, _guard_message = _guard_hit
+                if _note_guard_impasse(_guard_impasse_state, _guard_label, steps):
+                    # Same guard, three rejections, zero new action-bearing
+                    # steps in between: pushing back again only burns the
+                    # remaining budget and ends in the auto-pause path's
+                    # misleading "paused" report. Terminate with the truth.
+                    _logger.warning(
+                        "react_loop guard impasse · %s rejected the final answer "
+                        "3x with no intervening tool execution — terminating "
+                        "explicitly instead of burning the iteration budget",
+                        _guard_label,
+                    )
+                    final_answer = (
+                        "任务未能完成:我连续多次尝试收尾,但始终无法满足"
+                        f"「{_guard_label}」要求的执行证据,期间也没有任何新的"
+                        "工具执行成功。为避免空转,我停止了重试。\n\n"
+                        f"最后一次拦截原因:\n{_guard_message}\n\n"
+                        "这通常意味着模型输出的工具调用格式未被执行层识别,"
+                        "或任务所需的能力/权限当前不可用。请检查上面的原因后重试。"
+                    )
+                    terminated_reason = "guard_impasse"
+                    steps.append(step)
+                    break
                 maybe_final = None
                 step.observation = (
                     (((step.observation or "") + "\n\n") if step.observation else "")
@@ -3621,7 +3663,12 @@ def stream_react_loop(
 
     any_step_failed = any(not _beak_step_effective_success(s) for s in executed_beak_steps)
     effective_success = not any_step_failed
-    final_success = effective_success and terminated_reason not in {"paused", "cancelled", "error"}
+    final_success = effective_success and terminated_reason not in {
+        "paused",
+        "cancelled",
+        "error",
+        "guard_impasse",
+    }
     _persist_react_trajectory(
         stack,
         react_task_id=react_task_id,

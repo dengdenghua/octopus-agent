@@ -161,6 +161,12 @@ _DIRECT_NAMED_TOOL_CONTAINER_RE = re.compile(
     r"</tool_calls>",
     re.IGNORECASE | re.DOTALL,
 )
+_BARE_NAMED_TOOL_TAG_RE = re.compile(
+    r"<(?P<name>[a-z][a-z0-9]*(?:_[a-z0-9]+)+)>\s*"
+    r"(?P<args>\{.*?\})\s*"
+    r"</(?P=name)>",
+    re.DOTALL,
+)
 _XML_ARG_RE = re.compile(
     r"<(?P<key>[A-Za-z_][A-Za-z0-9_:-]*)>(?P<value>.*?)</(?P=key)>",
     re.IGNORECASE | re.DOTALL,
@@ -416,6 +422,28 @@ def _extract_tool_actions_from_loose_output(text: str) -> list[str]:
     for xml in _DIRECT_NAMED_TOOL_CONTAINER_RE.finditer(text):
         name = _normalize_action_name(xml.group("name").strip())
         args = _xml_args_from_body(xml.group("body") or "")
+        actions.append(_format_action(name, args))
+    if actions:
+        return actions
+
+    # DeepSeek-style bare tool tags: ``<write_text_file>\n{json}\n
+    # </write_text_file>`` with no wrapper at all.  There is no container
+    # marker to anchor on, so the gates are strict instead: the tag must be
+    # lowercase snake_case (real tool names always carry an underscore —
+    # prose XML like ``<summary>`` or ``<Action>`` never matches), the tag
+    # must close with the same name, and the body must be one closed JSON
+    # object.  This path only runs after every anchored format above found
+    # nothing, so ordinary responses never reach it.
+    for xml in _BARE_NAMED_TOOL_TAG_RE.finditer(text):
+        try:
+            args = json.loads(xml.group("args"))
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(args, dict):
+            continue
+        name = _normalize_action_name(xml.group("name").strip())
+        if name == "todo_write" and "todos" in args and "items" not in args:
+            args["items"] = args.pop("todos")
         actions.append(_format_action(name, args))
     if actions:
         return actions

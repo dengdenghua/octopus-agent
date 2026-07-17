@@ -1399,6 +1399,47 @@ def test_parse_step_recovers_fenced_json_command() -> None:
     assert step.action == 'write_text_file({"path": "plan.md", "content": "x"})'
 
 
+def test_parse_step_recovers_bare_named_tool_tag() -> None:
+    # DeepSeek emits the tool name as a bare XML element with a JSON body
+    # and no wrapper container at all. Observed live: every call in this
+    # shape was dropped as prose while the write-evidence guard demanded
+    # exactly the write the parser was discarding.
+    text = (
+        "Let me try `write_text_file` one more time, then read it back.\n\n"
+        "<write_text_file>\n"
+        '{"path": "test_write.txt", "content": "probe"}\n'
+        "</write_text_file>\n\n"
+        "<read_file>\n"
+        '{"path": "test_write.txt"}\n'
+        "</read_file>"
+    )
+
+    step, final = _parse_step(text, iteration=1)
+
+    assert final is None
+    assert len(step.actions) == 2
+    assert _parse_action(step.actions[0]) == (
+        "write_text_file",
+        {"path": "test_write.txt", "content": "probe"},
+    )
+    assert _parse_action(step.actions[1]) == ("read_file", {"path": "test_write.txt"})
+
+
+def test_bare_named_tool_tag_ignores_prose_xml() -> None:
+    # Single-word tags (no underscore), unclosed tags, and non-JSON bodies
+    # must all stay prose — the bare-tag recovery has no container marker,
+    # so these gates are what keeps XML examples in answers inert.
+    for text in (
+        "<summary>\n{\"path\": \"a\"}\n</summary>",  # no underscore
+        "<write_text_file>\n{\"path\": \"a\"}\n",  # unclosed
+        "<write_text_file>\nnot json\n</write_text_file>",  # not a JSON object
+        '<Write_Text_File>\n{"path": "a"}\n</Write_Text_File>',  # not lowercase
+    ):
+        step, final = _parse_step(text + "\nFinal Answer: done", iteration=1)
+        assert (step.action or "") in ("", "none"), text
+        assert final == "done", text
+
+
 def test_parse_action_json_brackets() -> None:
     r = _parse_action('search[{"q": "octopus", "k": 3}]')
     assert r == ("search", {"q": "octopus", "k": 3})
@@ -4773,3 +4814,45 @@ def test_subagent_loop_resets_leaked_gate_handled_flag() -> None:
     assert exec_ends, "exec_shell should have produced a tool_end"
     assert exec_ends[0]["status"] != "success", "leaked gate_handled must not bypass the chokepoint"
     assert not ran["exec"], "blocked exec_shell handler must NOT have run"
+
+
+# ─── guard-impasse bound ──────────────────────────────────────────────
+
+
+def test_guard_impasse_trips_after_three_stalled_rejections() -> None:
+    from runtime.core.cerebrum.react_loop import _note_guard_impasse
+
+    state: dict = {}
+    steps = [ReActStep(iteration=1, action='read_file({"path": "a"})', observation="x")]
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+    # Third rejection with an unchanged trajectory: the model is not making
+    # progress toward the guard's demand — stop pushing back.
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is True
+
+
+def test_guard_impasse_resets_when_new_actions_land() -> None:
+    from runtime.core.cerebrum.react_loop import _note_guard_impasse
+
+    state: dict = {}
+    steps = [ReActStep(iteration=1, action='read_file({"path": "a"})', observation="x")]
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+    # The model executed another real action before its next attempt —
+    # that is progress, so the counter starts over.
+    steps.append(
+        ReActStep(iteration=2, action='write_text_file({"path": "b", "content": "y"})')
+    )
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is True
+
+
+def test_guard_impasse_resets_on_different_guard() -> None:
+    from runtime.core.cerebrum.react_loop import _note_guard_impasse
+
+    state: dict = {}
+    steps = [ReActStep(iteration=1, action='read_file({"path": "a"})', observation="x")]
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+    assert _note_guard_impasse(state, "inspection-evidence guard", steps) is False
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False

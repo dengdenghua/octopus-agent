@@ -636,13 +636,7 @@ def _code_mode_completion_guard(steps: list[ReActStep], final_answer: str) -> st
         )
 
     completed_todo_text = "\n".join(
-        str(
-            item.get("title")
-            or item.get("content")
-            or item.get("text")
-            or item.get("task")
-            or ""
-        )
+        str(item.get("title") or item.get("content") or item.get("text") or item.get("task") or "")
         for item in todos
         if str(item.get("status") or "").lower() == "completed"
     )
@@ -2500,7 +2494,9 @@ def _browser_goal_required_evidence(goal: str) -> set[str]:
 
     lowered = str(goal or "").lower()
     required: set[str] = set()
-    if any(marker in lowered for marker in ("native select", "select ", "dropdown", "下拉", "选择")):
+    if any(
+        marker in lowered for marker in ("native select", "select ", "dropdown", "下拉", "选择")
+    ):
         required.add("select")
     if any(marker in lowered for marker in ("rich-text", "rich text", "contenteditable", "富文本")):
         required.add("rich_text")
@@ -2578,7 +2574,7 @@ def _browser_action_evidence(steps: list[ReActStep]) -> tuple[set[str], int]:
     return evidence, submit_attempts
 
 
-def _browser_interaction_completion_guard(ctx: "GuardContext") -> str | None:
+def _browser_interaction_completion_guard(ctx: GuardContext) -> str | None:
     if not ctx.browser_operation_mode or _final_answer_requests_user_help(ctx.final_answer):
         return None
     required = _browser_goal_required_evidence(ctx.goal)
@@ -2686,6 +2682,10 @@ def _spec_security(
 def _invoke_missing_inspection(ctx: GuardContext) -> str | None:
     if not ctx.is_code_mode:
         return None
+    if ctx.browser_operation_mode:
+        # Browser turns inspect the app through browser_state/browser_get;
+        # the file-inspection requirement belongs to workspace code tasks.
+        return None
     return _code_mode_missing_inspection_tool_guard(
         ctx.steps,
         ctx.final_answer,
@@ -2717,6 +2717,14 @@ def _invoke_false_tool_result(ctx: GuardContext) -> str | None:
 
 def _invoke_missing_write(ctx: GuardContext) -> str | None:
     if not ctx.is_code_mode or not ctx.tools_active:
+        return None
+    if ctx.browser_operation_mode:
+        # A browser turn proves its work through browser-action evidence
+        # (see _browser_interaction_completion_guard) — its goal wording
+        # ("create/edit/delete …") matches the mutation markers, but the
+        # mutations land in the app under test, not in workspace files.
+        # Demanding a file write here derails the model into writing
+        # throwaway files just to appease this guard.
         return None
     return _code_mode_missing_write_guard(
         ctx.steps,
