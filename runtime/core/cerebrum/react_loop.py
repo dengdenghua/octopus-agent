@@ -373,6 +373,20 @@ def _note_guard_impasse(state: dict, label: str, steps: list) -> bool:
     return state["count"] >= 3
 
 
+def _guard_impasse_final_answer(label: str, message: str) -> str:
+    """The honest terminal answer for a guard impasse — shared by every
+    in-loop guard-rejection site so the wording (and the truth it tells)
+    can't drift between them."""
+    return (
+        "任务未能完成:我连续多次尝试收尾,但始终无法满足"
+        f"「{label}」要求的执行证据,期间也没有任何新的工具执行成功。"
+        "为避免空转,我停止了重试。\n\n"
+        f"最后一次拦截原因:\n{message}\n\n"
+        "这通常意味着模型输出的工具调用格式未被执行层识别,"
+        "或任务所需的能力/权限当前不可用。请检查上面的原因后重试。"
+    )
+
+
 def _build_resume_context_prompt(resume_intent: Any) -> str:
     if not isinstance(resume_intent, dict):
         return ""
@@ -2584,6 +2598,19 @@ def stream_react_loop(
             )
             if _guard_hit is not None:
                 _guard_label, _guard_message = _guard_hit
+                if _note_guard_impasse(_guard_impasse_state, _guard_label, steps):
+                    # Same loop-level bound as the main guard site: the
+                    # chat-flush path rejects and continues too, so an
+                    # unsatisfiable guard here would livelock identically.
+                    _logger.warning(
+                        "react_loop guard impasse (chat-flush) · %s rejected 3x "
+                        "with no intervening tool execution — terminating",
+                        _guard_label,
+                    )
+                    final_answer = _guard_impasse_final_answer(_guard_label, _guard_message)
+                    terminated_reason = "guard_impasse"
+                    steps.append(step)
+                    break
                 _final_stream_started = False
                 step.observation = (
                     (((step.observation or "") + "\n\n") if step.observation else "")
@@ -3212,14 +3239,7 @@ def stream_react_loop(
                         "explicitly instead of burning the iteration budget",
                         _guard_label,
                     )
-                    final_answer = (
-                        "任务未能完成:我连续多次尝试收尾,但始终无法满足"
-                        f"「{_guard_label}」要求的执行证据,期间也没有任何新的"
-                        "工具执行成功。为避免空转,我停止了重试。\n\n"
-                        f"最后一次拦截原因:\n{_guard_message}\n\n"
-                        "这通常意味着模型输出的工具调用格式未被执行层识别,"
-                        "或任务所需的能力/权限当前不可用。请检查上面的原因后重试。"
-                    )
+                    final_answer = _guard_impasse_final_answer(_guard_label, _guard_message)
                     terminated_reason = "guard_impasse"
                     steps.append(step)
                     break
