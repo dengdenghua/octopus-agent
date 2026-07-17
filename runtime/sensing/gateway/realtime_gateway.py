@@ -239,6 +239,75 @@ class SharedTurnInterrupts:
 
 RequestHandler = Callable[[dict[str, Any]], Awaitable[Any]]
 
+# A single WS frame over the client's ~16 MiB message ceiling is dropped
+# with code 1009, which kills the whole connection (and has taken backends
+# down mid-run). The per-field caps upstream (e.g. command output) are the
+# primary defense; this is the last-ditch net for ANY field that grows
+# unbounded — a huge diff, a huge snapshot. Bound to 12 MiB, leaving margin
+# for protocol overhead. The trigger is an O(1) char-count so normal frames
+# pay nothing; only the rare oversized frame does the precise byte work.
+_FRAME_BYTE_LIMIT = 12 * 1024 * 1024
+# A JSON char is at most 4 UTF-8 bytes, so under this many chars a frame is
+# guaranteed under the byte limit and can skip the encode-and-measure path.
+_FRAME_CHAR_FASTPASS = _FRAME_BYTE_LIMIT // 4
+_FRAME_TRUNC_MARK = "…(字段过大已截断以保住连接)"
+
+
+def _iter_string_leaves(obj: Any) -> list[tuple[Any, Any, int]]:
+    """Every (container, key, length) for string leaves, so the largest can
+    be found and shortened in place."""
+    out: list[tuple[Any, Any, int]] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if isinstance(v, str):
+                    out.append((node, k, len(v)))
+                else:
+                    walk(v)
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                if isinstance(v, str):
+                    out.append((node, i, len(v)))
+                else:
+                    walk(v)
+
+    walk(obj)
+    return out
+
+
+def _bound_oversized_frame(
+    message: JsonRpcRequest | JsonRpcResponse | Notification,
+) -> JsonRpcRequest | JsonRpcResponse | Notification:
+    """Return a copy whose serialized size is under ``_FRAME_BYTE_LIMIT``,
+    halving the single longest string leaf until it fits. Structure is
+    preserved (only string leaves shrink), so the JSON stays valid."""
+    params = getattr(message, "params", None)
+    if not isinstance(params, dict):
+        return message  # responses/errors carry no bulk field to shrink
+    import copy
+
+    params = copy.deepcopy(params)
+    for _ in range(80):  # bounded; each pass halves the biggest string
+        leaves = _iter_string_leaves(params)
+        if not leaves:
+            break
+        container, key, longest = max(leaves, key=lambda x: x[2])
+        if longest <= len(_FRAME_TRUNC_MARK) + 1024:
+            break  # nothing left big enough to help
+        s = container[key]
+        container[key] = s[: max(1024, len(s) // 2)] + _FRAME_TRUNC_MARK
+        trimmed = message.model_copy(update={"params": params})
+        if len(encode_message(trimmed).encode("utf-8")) <= _FRAME_BYTE_LIMIT:
+            _logger.warning(
+                "realtime: frame for %s exceeded %d bytes — truncated its "
+                "largest field to protect the connection",
+                getattr(message, "method", "?"),
+                _FRAME_BYTE_LIMIT,
+            )
+            return trimmed
+    return message.model_copy(update={"params": params})
+
 
 class RpcConnection:
     """One client. Owns the WS, the approval manager, and a write lock.
@@ -285,7 +354,15 @@ class RpcConnection:
             return
         async with self._write_lock:
             try:
-                await self.ws.send_text(encode_message(message))
+                text = encode_message(message)
+                # O(1) char-count fast-path; only a rare oversized frame
+                # pays the precise byte measure + shrink.
+                if (
+                    len(text) > _FRAME_CHAR_FASTPASS
+                    and len(text.encode("utf-8")) > _FRAME_BYTE_LIMIT
+                ):
+                    text = encode_message(_bound_oversized_frame(message))
+                await self.ws.send_text(text)
             except WebSocketDisconnect:
                 # Client went away mid-stream. Flip the closed flag so
                 # subsequent ``send`` calls fast-path return rather than
