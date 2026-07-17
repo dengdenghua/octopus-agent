@@ -20,6 +20,19 @@ except ImportError:  # pragma: no cover
 DEFAULT_TIMEOUT_MS = 10_000
 MAX_TEXT_BYTES = 100_000
 MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024  # 10MB hard cap
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+
+def _has_agent_browser_session() -> bool:
+    """Whether an agent turn can reuse the thread's persistent page."""
+    if not PLAYWRIGHT_AVAILABLE:
+        return False
+    try:
+        from runtime.platform.process.session import current_session
+
+        return current_session() is not None
+    except Exception:  # noqa: BLE001 - session support is optional
+        return False
 
 
 # ═══════════════════════════════════════════════════════════
@@ -57,42 +70,28 @@ def _browser_get(
             err = _check_url_safe(url, allow_private)
             if err:
                 return {"error": err, "blocked": err.startswith("ssrf_")}
-        routed = _dispatch_higher_track("extract", {}, url=url)
-        if routed is not None:
-            return routed
         if not url:
-            return {"error": "missing url", "blocked": False}
-    elif not url:
-        return {"error": "missing url"}
+            routed = _dispatch_higher_track("extract", {}, url="")
+            if routed is not None:
+                return routed
+            if not _has_agent_browser_session():
+                return {"error": "missing url", "blocked": False}
 
-    if page is not None:
-        return _navigate_and_read(page, url, timeout_ms, wait_ms, max_bytes)
-
-    if not PLAYWRIGHT_AVAILABLE:
-        return {
-            "error": "playwright not installed · `pip install playwright && playwright install chromium`"
-        }
-
-    try:
-        with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True)
-            try:
-                ctx = browser.new_context()
-                page = ctx.new_page()
-                return _navigate_and_read(page, url, timeout_ms, wait_ms, max_bytes)
-            finally:
-                browser.close()
-    except Exception as e:  # noqa: BLE001
-        return {"error": f"browser_error: {type(e).__name__}: {e}"}
+    return _with_page(
+        page,
+        lambda current: _navigate_and_read(current, url, timeout_ms, wait_ms, max_bytes),
+    )
 
 
 def _navigate_and_read(
     page: Any, url: str, timeout_ms: int, wait_ms: int, max_bytes: int
 ) -> dict[str, Any]:
-    try:
-        resp = page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
-    except Exception as e:  # noqa: BLE001
-        return {"error": f"nav_error: {type(e).__name__}: {e}"}
+    resp = None
+    if url:
+        try:
+            resp = page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+        except Exception as e:  # noqa: BLE001
+            return {"error": f"nav_error: {type(e).__name__}: {e}"}
 
     if wait_ms > 0:
         page.wait_for_timeout(wait_ms)
@@ -114,7 +113,49 @@ def _navigate_and_read(
         "length": len(text),
         "truncated": truncated,
         "content": text,
+        "frames": _child_frame_snapshots(page, max_bytes=max_bytes),
     }
+
+
+def _child_frame_snapshots(page: Any, *, max_bytes: int) -> list[dict[str, Any]]:
+    """Return readable evidence from child frames without failing the page read.
+
+    ``body.innerText`` on the top page intentionally excludes iframe
+    documents.  Browser tasks that must wait for an iframe confirmation would
+    therefore have no observable success signal even though the UI completed.
+    Keep this best-effort and bounded: cross-origin or detached frames may
+    reject DOM access and should not make the whole browser observation fail.
+    """
+
+    frames_value = getattr(page, "frames", [])
+    frames = frames_value() if callable(frames_value) else frames_value
+    if not isinstance(frames, (list, tuple)):
+        return []
+    main_frame = getattr(page, "main_frame", None)
+    snapshots: list[dict[str, Any]] = []
+    remaining = max(0, int(max_bytes))
+    for frame in frames:
+        if frame is main_frame:
+            continue
+        try:
+            frame_text = str(frame.inner_text("body") or "")
+            frame_url = str(getattr(frame, "url", "") or "")
+            frame_name = str(getattr(frame, "name", "") or "")
+        except Exception:  # noqa: BLE001 - detached/cross-origin frame
+            continue
+        clipped = frame_text[:remaining]
+        snapshots.append(
+            {
+                "url": frame_url,
+                "name": frame_name,
+                "content": clipped,
+                "truncated": len(frame_text) > len(clipped),
+            }
+        )
+        remaining = max(0, remaining - len(clipped))
+        if remaining == 0:
+            break
+    return snapshots
 
 
 # ═══════════════════════════════════════════════════════════
@@ -137,29 +178,25 @@ def _browser_extract(
     if not selector:
         return {"error": "missing selector", "items": []}
     if page is None:
-        err = _check_url_safe(url, allow_private)
-        if err:
-            return {"error": err, "blocked": err.startswith("ssrf_"), "items": []}
-    elif not url:
-        return {"error": "missing url", "items": []}
+        if url:
+            err = _check_url_safe(url, allow_private)
+            if err:
+                return {"error": err, "blocked": err.startswith("ssrf_"), "items": []}
+        elif not _has_agent_browser_session():
+            return {"error": "missing url", "items": []}
 
-    if page is not None:
-        return _extract_from_page(page, url, selector, attr, limit, timeout_ms, wait_ms)
-
-    if not PLAYWRIGHT_AVAILABLE:
-        return {"error": "playwright not installed", "items": []}
-
-    try:
-        with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True)
-            try:
-                ctx = browser.new_context()
-                page = ctx.new_page()
-                return _extract_from_page(page, url, selector, attr, limit, timeout_ms, wait_ms)
-            finally:
-                browser.close()
-    except Exception as e:  # noqa: BLE001
-        return {"error": f"browser_error: {type(e).__name__}: {e}", "items": []}
+    return _with_page(
+        page,
+        lambda current: _extract_from_page(
+            current,
+            url,
+            selector,
+            attr,
+            limit,
+            timeout_ms,
+            wait_ms,
+        ),
+    )
 
 
 def _extract_from_page(
@@ -171,10 +208,11 @@ def _extract_from_page(
     timeout_ms: int,
     wait_ms: int,
 ) -> dict[str, Any]:
-    try:
-        page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
-    except Exception as e:  # noqa: BLE001
-        return {"error": f"nav_error: {type(e).__name__}: {e}", "items": []}
+    if url:
+        try:
+            page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+        except Exception as e:  # noqa: BLE001
+            return {"error": f"nav_error: {type(e).__name__}: {e}", "items": []}
 
     if wait_ms > 0:
         page.wait_for_timeout(wait_ms)
@@ -193,7 +231,7 @@ def _extract_from_page(
         items.append(val)
 
     return {
-        "url": url,
+        "url": page.url,
         "selector": selector,
         "attr": attr,
         "count": len(items),
@@ -520,32 +558,33 @@ def _browser_find(
                     max_results=max_results,
                     context_chars=context_chars,
                 )
-            return {"error": "missing url", "matches": []}
-        err = _check_url_safe(url, allow_private)
-        if err:
-            return {"error": err, "blocked": err.startswith("ssrf_"), "matches": []}
-        routed = _dispatch_higher_track("extract", {}, url=url)
-        if routed is not None:
-            if "error" in routed:
-                return {**routed, "matches": []}
-            text_value = routed.get("text") or routed.get("content") or ""
-            return _find_matches_in_text(
-                text=str(text_value or ""),
-                needle=needle,
-                url=str(routed.get("url") or url),
-                title=str(routed.get("title") or ""),
-                case_sensitive=case_sensitive,
-                max_results=max_results,
-                context_chars=context_chars,
-            )
-    elif not url:
-        return {"error": "missing url", "matches": []}
+            if not _has_agent_browser_session():
+                return {"error": "missing url", "matches": []}
+        else:
+            err = _check_url_safe(url, allow_private)
+            if err:
+                return {"error": err, "blocked": err.startswith("ssrf_"), "matches": []}
+            routed = _dispatch_higher_track("extract", {}, url=url)
+            if routed is not None:
+                if "error" in routed:
+                    return {**routed, "matches": []}
+                text_value = routed.get("text") or routed.get("content") or ""
+                return _find_matches_in_text(
+                    text=str(text_value or ""),
+                    needle=needle,
+                    url=str(routed.get("url") or url),
+                    title=str(routed.get("title") or ""),
+                    case_sensitive=case_sensitive,
+                    max_results=max_results,
+                    context_chars=context_chars,
+                )
 
     def _act(p: Any) -> dict[str, Any]:
-        try:
-            p.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
-        except Exception as e:  # noqa: BLE001
-            return {"error": f"nav_error: {type(e).__name__}: {e}", "matches": []}
+        if url:
+            try:
+                p.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+            except Exception as e:  # noqa: BLE001
+                return {"error": f"nav_error: {type(e).__name__}: {e}", "matches": []}
         if wait_ms > 0:
             p.wait_for_timeout(wait_ms)
         try:
@@ -582,18 +621,20 @@ def _browser_state(
             routed = _dispatch_higher_track("state", {"max_items": max_items}, url="")
             if routed is not None:
                 return routed
-            return {"error": "missing url", "blocked": False}
-        err = _check_url_safe(url, allow_private)
-        if err:
-            return {"error": err, "blocked": err.startswith("ssrf_")}
-    elif not url:
-        return {"error": "missing url"}
+            if not _has_agent_browser_session():
+                return {"error": "missing url", "blocked": False}
+        else:
+            err = _check_url_safe(url, allow_private)
+            if err:
+                return {"error": err, "blocked": err.startswith("ssrf_")}
 
     def _act(p: Any) -> dict[str, Any]:
-        try:
-            resp = p.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
-        except Exception as e:  # noqa: BLE001
-            return {"error": f"nav_error: {type(e).__name__}: {e}"}
+        resp = None
+        if url:
+            try:
+                resp = p.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+            except Exception as e:  # noqa: BLE001
+                return {"error": f"nav_error: {type(e).__name__}: {e}"}
         if wait_ms > 0:
             p.wait_for_timeout(wait_ms)
         try:
@@ -613,6 +654,7 @@ def _browser_state(
             "status_code": resp.status if resp else None,
             "title": p.title(),
             "text_length": len(text),
+            "frames": _child_frame_snapshots(p, max_bytes=MAX_TEXT_BYTES),
             **snapshot,
         }
 
@@ -646,18 +688,19 @@ def _browser_click(
             )
             if routed is not None:
                 return routed
-            return {"error": "missing url", "blocked": False}
-        err = _check_url_safe(url, allow_private)
-        if err:
-            return {"error": err, "blocked": err.startswith("ssrf_")}
-    elif not url:
-        return {"error": "missing url"}
+            if not _has_agent_browser_session():
+                return {"error": "missing url", "blocked": False}
+        else:
+            err = _check_url_safe(url, allow_private)
+            if err:
+                return {"error": err, "blocked": err.startswith("ssrf_")}
 
     def _act(p: Any) -> dict[str, Any]:
-        try:
-            p.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
-        except Exception as e:  # noqa: BLE001
-            return {"error": f"nav_error: {type(e).__name__}: {e}"}
+        if url:
+            try:
+                p.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+            except Exception as e:  # noqa: BLE001
+                return {"error": f"nav_error: {type(e).__name__}: {e}"}
         try:
             p.click(selector, timeout=timeout_ms)
         except Exception as e:  # noqa: BLE001
@@ -688,6 +731,8 @@ def _browser_type(
     selector: str = "",
     text: str = "",
     *,
+    value: str | None = None,
+    option_label: str | None = None,
     press_enter: bool = False,
     clear_first: bool = True,
     timeout_ms: int = DEFAULT_TIMEOUT_MS,
@@ -697,6 +742,11 @@ def _browser_type(
 ) -> dict[str, Any]:
     if not selector:
         return {"error": "missing selector"}
+    # Native tool-capable models commonly use DOM-oriented ``value`` for
+    # inputs and ``option_label`` for selects.  Keep ``text`` canonical while
+    # accepting both explicit schema aliases instead of silently filling an
+    # empty string through ``**_kw``.
+    text = text or option_label or value or ""
     if page is None:
         if not url:
             routed = _dispatch_higher_track(
@@ -706,29 +756,55 @@ def _browser_type(
             )
             if routed is not None:
                 return routed
-            return {"error": "missing url", "blocked": False}
-        err = _check_url_safe(url, allow_private)
-        if err:
-            return {"error": err, "blocked": err.startswith("ssrf_")}
-    elif not url:
-        return {"error": "missing url"}
+            if not _has_agent_browser_session():
+                return {"error": "missing url", "blocked": False}
+        else:
+            err = _check_url_safe(url, allow_private)
+            if err:
+                return {"error": err, "blocked": err.startswith("ssrf_")}
 
     def _act(p: Any) -> dict[str, Any]:
+        if url:
+            try:
+                p.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+            except Exception as e:  # noqa: BLE001
+                return {"error": f"nav_error: {type(e).__name__}: {e}"}
         try:
-            p.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
-        except Exception as e:  # noqa: BLE001
-            return {"error": f"nav_error: {type(e).__name__}: {e}"}
-        try:
-            if clear_first:
-                p.fill(selector, "", timeout=timeout_ms)
-            p.fill(selector, text, timeout=timeout_ms)
-            if press_enter:
-                p.press(selector, "Enter", timeout=timeout_ms)
+            locator = p.locator(selector)
+            try:
+                tag_name = locator.evaluate("element => element.tagName")
+            except AttributeError:
+                # Lightweight/test backends may expose the older page-level
+                # fill/press API without a full Locator implementation.
+                if clear_first:
+                    p.fill(selector, "", timeout=timeout_ms)
+                p.fill(selector, text, timeout=timeout_ms)
+                if press_enter:
+                    p.press(selector, "Enter", timeout=timeout_ms)
+                input_kind = "text"
+            else:
+                if str(tag_name).upper() == "SELECT":
+                    # Keep one generic form-entry primitive while still handling
+                    # native selects correctly. Prefer the visible label, then
+                    # fall back to the value for machine-oriented forms.
+                    try:
+                        locator.select_option(label=text, timeout=timeout_ms)
+                    except Exception:  # noqa: BLE001
+                        locator.select_option(value=text, timeout=timeout_ms)
+                    input_kind = "select"
+                else:
+                    if clear_first:
+                        locator.fill("", timeout=timeout_ms)
+                    locator.fill(text, timeout=timeout_ms)
+                    input_kind = "text"
+                if press_enter:
+                    locator.press("Enter", timeout=timeout_ms)
         except Exception as e:  # noqa: BLE001
             return {"error": f"type_error: {type(e).__name__}: {e}"}
         return {
             "filled": selector,
             "text_len": len(text),
+            "input_kind": input_kind,
             "pressed_enter": press_enter,
             "final_url": p.url,
         }
@@ -764,18 +840,19 @@ def _browser_scroll(
             routed = _dispatch_higher_track("scroll", payload, url="")
             if routed is not None:
                 return routed
-            return {"error": "missing url", "blocked": False}
-        err = _check_url_safe(url, allow_private)
-        if err:
-            return {"error": err, "blocked": err.startswith("ssrf_")}
-    elif not url:
-        return {"error": "missing url"}
+            if not _has_agent_browser_session():
+                return {"error": "missing url", "blocked": False}
+        else:
+            err = _check_url_safe(url, allow_private)
+            if err:
+                return {"error": err, "blocked": err.startswith("ssrf_")}
 
     def _act(p: Any) -> dict[str, Any]:
-        try:
-            p.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
-        except Exception as e:  # noqa: BLE001
-            return {"error": f"nav_error: {type(e).__name__}: {e}"}
+        if url:
+            try:
+                p.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+            except Exception as e:  # noqa: BLE001
+                return {"error": f"nav_error: {type(e).__name__}: {e}"}
         try:
             if to_selector is not None:
                 p.locator(to_selector).scroll_into_view_if_needed(
@@ -798,6 +875,72 @@ def _browser_scroll(
             "delta_y": int(to_y) if to_y is not None else 0,
         },
         url=url,
+    )
+
+
+def _browser_upload(
+    url: str = "",
+    selector: str = "",
+    path: str = "",
+    *,
+    sandbox_dir: str | None = None,
+    timeout_ms: int = DEFAULT_TIMEOUT_MS,
+    allow_private: bool = False,
+    page: Any = None,
+    **_kw: Any,
+) -> dict[str, Any]:
+    """Set a file input from a path confined by the current workspace."""
+    if not selector:
+        return {"error": "missing selector"}
+    if not path:
+        return {"error": "missing path"}
+
+    from pathlib import Path
+
+    from runtime.safety.auth.path_guard import check_path
+
+    verdict = check_path(path, sandbox_dir=sandbox_dir, must_exist=True)
+    if not verdict.allow:
+        return {"error": f"path_blocked: {verdict.reason}"}
+    resolved = Path(verdict.resolved or path)
+    try:
+        if not resolved.is_file():
+            return {"error": "upload path is not a file"}
+        size = resolved.stat().st_size
+    except OSError as exc:
+        return {"error": f"upload_path_error: {type(exc).__name__}: {exc}"}
+    if size > MAX_UPLOAD_BYTES:
+        return {"error": f"upload too large: {size} > {MAX_UPLOAD_BYTES}"}
+
+    if page is None:
+        if not url:
+            if not _has_agent_browser_session():
+                return {"error": "missing url", "blocked": False}
+        else:
+            err = _check_url_safe(url, allow_private)
+            if err:
+                return {"error": err, "blocked": err.startswith("ssrf_")}
+
+    def _act(p: Any) -> dict[str, Any]:
+        if url:
+            try:
+                p.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+            except Exception as exc:  # noqa: BLE001
+                return {"error": f"nav_error: {type(exc).__name__}: {exc}"}
+        try:
+            p.locator(selector).set_input_files(str(resolved), timeout=timeout_ms)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"upload_error: {type(exc).__name__}: {exc}"}
+        return {
+            "uploaded": selector,
+            "file_name": resolved.name,
+            "size_bytes": size,
+            "final_url": p.url,
+        }
+
+    return _with_page(
+        page,
+        _act,
     )
 
 
@@ -824,18 +967,19 @@ def _browser_wait(
             )
             if routed is not None:
                 return routed
-            return {"error": "missing url", "blocked": False}
-        err = _check_url_safe(url, allow_private)
-        if err:
-            return {"error": err, "blocked": err.startswith("ssrf_")}
-    elif not url:
-        return {"error": "missing url"}
+            if not _has_agent_browser_session():
+                return {"error": "missing url", "blocked": False}
+        else:
+            err = _check_url_safe(url, allow_private)
+            if err:
+                return {"error": err, "blocked": err.startswith("ssrf_")}
 
     def _act(p: Any) -> dict[str, Any]:
-        try:
-            p.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
-        except Exception as e:  # noqa: BLE001
-            return {"error": f"nav_error: {type(e).__name__}: {e}"}
+        if url:
+            try:
+                p.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+            except Exception as e:  # noqa: BLE001
+                return {"error": f"nav_error: {type(e).__name__}: {e}"}
         try:
             p.wait_for_selector(selector, state=state, timeout=timeout_ms)
         except Exception as e:  # noqa: BLE001
@@ -887,18 +1031,19 @@ def _browser_screenshot(
             )
             if routed is not None:
                 return routed
-            return {"error": "missing url", "blocked": False}
-        err = _check_url_safe(url, allow_private)
-        if err:
-            return {"error": err, "blocked": err.startswith("ssrf_")}
-    elif not url:
-        return {"error": "missing url"}
+            if not _has_agent_browser_session():
+                return {"error": "missing url", "blocked": False}
+        else:
+            err = _check_url_safe(url, allow_private)
+            if err:
+                return {"error": err, "blocked": err.startswith("ssrf_")}
 
     def _act(p: Any) -> dict[str, Any]:
-        try:
-            p.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
-        except Exception as e:  # noqa: BLE001
-            return {"error": f"nav_error: {type(e).__name__}: {e}"}
+        if url:
+            try:
+                p.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+            except Exception as e:  # noqa: BLE001
+                return {"error": f"nav_error: {type(e).__name__}: {e}"}
         if wait_ms > 0:
             p.wait_for_timeout(wait_ms)
         try:
@@ -943,6 +1088,7 @@ BROWSER_SKILL_NAMES = [
     "browser_navigate",
     "browser_click",
     "browser_type",
+    "browser_upload",
     "browser_scroll",
     "browser_wait",
     "browser_screenshot",
@@ -951,14 +1097,25 @@ BROWSER_SKILL_NAMES = [
 ]
 
 
-def register_browser_skills(registry: SkillRegistry) -> int:
+def register_browser_skills(
+    registry: SkillRegistry,
+    *,
+    verify_tests: bool = True,
+) -> int:
     if not PLAYWRIGHT_AVAILABLE:
         return 0
 
-    registry.register(
+    def _register(skill: Skill) -> None:
+        registry.register(skill, verify_tests=verify_tests)
+
+    _register(
         Skill(
             name="browser_get",
-            description="Open a URL in headless Chromium, return rendered title + inner text.",
+            description=(
+                "Read rendered title, body text, and child-frame text. Pass url to navigate "
+                "first, or omit url to read the current persistent agent browser page; use "
+                "wait_ms before reading delayed UI or iframe confirmations."
+            ),
             affinity=["web", "browser", "io"],
             cost_profile="high",
             trusted_source="skill://public/browser_get",
@@ -973,10 +1130,13 @@ def register_browser_skills(registry: SkillRegistry) -> int:
             ],
         )
     )
-    registry.register(
+    _register(
         Skill(
             name="browser_extract",
-            description="Open a URL and extract matches via a CSS selector (text or attr).",
+            description=(
+                "Extract CSS matches (text or attr). Pass url to navigate, or omit it to "
+                "use the current persistent agent browser page."
+            ),
             affinity=["web", "browser", "scrape"],
             cost_profile="high",
             trusted_source="skill://public/browser_extract",
@@ -991,10 +1151,12 @@ def register_browser_skills(registry: SkillRegistry) -> int:
             ],
         )
     )
-    registry.register(
+    _register(
         Skill(
             name="browser_navigate",
-            description="Navigate to URL and return final URL + status (no content).",
+            description=(
+                "Navigate the persistent agent browser page to a URL and return final URL + status."
+            ),
             affinity=["web", "browser", "nav"],
             cost_profile="high",
             trusted_source="skill://public/browser_navigate",
@@ -1009,10 +1171,13 @@ def register_browser_skills(registry: SkillRegistry) -> int:
             ],
         )
     )
-    registry.register(
+    _register(
         Skill(
             name="browser_click",
-            description="Navigate to URL then click a CSS selector.",
+            description=(
+                "Click a CSS selector on the current persistent page; url is optional and "
+                "navigates first when supplied."
+            ),
             affinity=["web", "browser", "interact"],
             cost_profile="high",
             trusted_source="skill://public/browser_click",
@@ -1027,10 +1192,15 @@ def register_browser_skills(registry: SkillRegistry) -> int:
             ],
         )
     )
-    registry.register(
+    _register(
         Skill(
             name="browser_type",
-            description="Navigate and fill text into an input via CSS selector.",
+            description=(
+                "Fill an input/contenteditable or choose a native select option by visible "
+                "label/value on the current persistent page; url is optional and navigates "
+                "first when supplied. Pass content as text (value and option_label are also "
+                "accepted aliases)."
+            ),
             affinity=["web", "browser", "interact"],
             cost_profile="high",
             trusted_source="skill://public/browser_type",
@@ -1049,7 +1219,28 @@ def register_browser_skills(registry: SkillRegistry) -> int:
             ],
         )
     )
-    registry.register(
+    _register(
+        Skill(
+            name="browser_upload",
+            description=(
+                "Upload a workspace file into a CSS-selected file input on the current "
+                "persistent page. Pass selector and path; url is optional after navigation."
+            ),
+            affinity=["web", "browser", "interact", "read"],
+            cost_profile="high",
+            trusted_source="skill://public/browser_upload",
+            handler=_browser_upload,
+            tests=[
+                SkillTestCase(
+                    name="missing_path_error",
+                    tier="golden",
+                    args={"selector": "#file", "path": ""},
+                    expect=SkillExpect(schema_keys=["error"]),
+                ),
+            ],
+        )
+    )
+    _register(
         Skill(
             name="browser_scroll",
             description="Navigate and scroll to element or Y coordinate.",
@@ -1067,10 +1258,12 @@ def register_browser_skills(registry: SkillRegistry) -> int:
             ],
         )
     )
-    registry.register(
+    _register(
         Skill(
             name="browser_wait",
-            description="Navigate and wait for a CSS selector to reach a state.",
+            description=(
+                "Wait on the current persistent page for a CSS selector state; url is optional."
+            ),
             affinity=["web", "browser", "interact"],
             cost_profile="high",
             trusted_source="skill://public/browser_wait",
@@ -1089,7 +1282,7 @@ def register_browser_skills(registry: SkillRegistry) -> int:
             ],
         )
     )
-    registry.register(
+    _register(
         Skill(
             name="browser_screenshot",
             description="Navigate and save a page screenshot (path_guard enforced).",
@@ -1107,7 +1300,7 @@ def register_browser_skills(registry: SkillRegistry) -> int:
             ],
         )
     )
-    registry.register(
+    _register(
         Skill(
             name="browser_find",
             description="Navigate to a page and find text, returning match snippets.",
@@ -1125,12 +1318,12 @@ def register_browser_skills(registry: SkillRegistry) -> int:
             ],
         )
     )
-    registry.register(
+    _register(
         Skill(
             name="browser_state",
             description=(
-                "Navigate to a page and return current browser state: title, URL, "
-                "viewport, scroll, and visible links/buttons/inputs/headings."
+                "Return persistent browser state (optionally navigate with url): title, URL, "
+                "viewport, scroll, child-frame text, and visible links/buttons/inputs/headings."
             ),
             affinity=["web", "browser", "observe"],
             cost_profile="high",
@@ -1146,4 +1339,4 @@ def register_browser_skills(registry: SkillRegistry) -> int:
             ],
         )
     )
-    return 10
+    return 11

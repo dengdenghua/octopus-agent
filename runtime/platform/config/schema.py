@@ -322,5 +322,7 @@ class AgentConfig(BaseModel):
     mcp_servers: list[MCPServerConfigEntry] = Field(default_factory=list)
 
     journal_file: str | None = None  # Implementation note.
-    enable_web_skills: bool = True  # Implementation note.
+    # Disable external web/browser skill groups while retaining local coding,
+    # filesystem, git, shell, quality and desktop tools.
+    enable_web_skills: bool = True
     default_arm_id: str = "code_arm"

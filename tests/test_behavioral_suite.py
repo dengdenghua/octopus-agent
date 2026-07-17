@@ -32,7 +32,7 @@ def test_load_behavioral_suite_binds_outcome_grader(tmp_path) -> None:
     cases = load_behavioral_suite(
         manifest,
         grader_factories={
-            "exact_text": lambda rubric: (
+            "exact_text": lambda _case_id, rubric: (
                 lambda trajectory: Verdict(
                     passed=trajectory.last_text() == rubric["expected"],
                     score=1.0 if trajectory.last_text() == rubric["expected"] else 0.0,

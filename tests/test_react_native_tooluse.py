@@ -11,15 +11,18 @@ passed.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
 from runtime.core.cerebrum.react_native import (
+    build_loop_tool_specs,
     native_tool_use_active,
     native_tool_use_flag_enabled,
     step_from_tool_calls,
     trim_text_protocol_for_native,
 )
+from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.platform.models import ParsedIntent
 from runtime.platform.models.llm import ToolCall, ToolSpec
 from runtime.sensing.model_router.models import (
@@ -75,6 +78,38 @@ def test_gate_resolves_dispatch_subrouter(monkeypatch) -> None:
             return _Sub()
 
     assert native_tool_use_active(_Dispatch(), "claude") is True
+
+
+def test_browser_surface_keeps_late_registered_browser_tools_in_native_specs() -> None:
+    registry = SkillRegistry()
+    for index in range(60):
+        registry.register(
+            Skill(
+                name=f"dummy_{index}",
+                trusted_source=f"skill://test/dummy_{index}",
+                handler=lambda **_kw: {},
+            ),
+            verify_tests=False,
+        )
+    for name in ("browser_navigate", "browser_state", "browser_type", "browser_click"):
+        registry.register(
+            Skill(
+                name=name,
+                affinity=["browser"],
+                trusted_source=f"skill://test/{name}",
+                handler=lambda **_kw: {},
+            ),
+            verify_tests=False,
+        )
+
+    specs = build_loop_tool_specs(
+        SimpleNamespace(registry=registry),
+        goal="operate the UI",
+        user_context={"browser_surface": "browser", "runtime_surfaces": ["browser"]},
+    )
+
+    names = {spec.name for spec in specs}
+    assert {"browser_navigate", "browser_state", "browser_type", "browser_click"} <= names
 
 
 # ── unit: tool_calls → step synthesis ────────────────────────────────

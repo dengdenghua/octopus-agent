@@ -156,6 +156,149 @@ _SERIAL_BARRIER_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+_SCOPE_SENSITIVE_AFFINITIES = frozenset(
+    {
+        "file",
+        "shell",
+        "exec",
+        "write",
+        "edit",
+        "delete",
+        "dangerous",
+        "quality",
+        "test",
+        "lint",
+        "format",
+    }
+)
+
+_CODE_MUTATION_TOOLS = frozenset(
+    {
+        "write_text_file",
+        "append_text_file",
+        "edit_text_file",
+        "edit_file",
+        "multi_edit_file",
+        "format_code",
+    }
+)
+_CODE_VERIFICATION_TOOLS = frozenset({"run_tests"})
+
+
+def _is_code_change_task(intent: ParsedIntent) -> bool:
+    context = intent.user_context or {}
+    nested = context.get("metadata") if isinstance(context.get("metadata"), dict) else {}
+    mode = str(context.get("mode") or nested.get("mode") or "").lower()
+    code_mode = context.get("code_mode", nested.get("code_mode"))
+    if mode != "code" and code_mode is not True:
+        return False
+    goal = str(intent.normalized_goal or "").lower()
+    return any(
+        marker in goal
+        for marker in (
+            "fix",
+            "implement",
+            "repair",
+            "refactor",
+            "update",
+            "modify",
+            "create",
+            "add ",
+            "bug",
+            "vulnerability",
+            "修复",
+            "实现",
+            "重构",
+            "修改",
+            "新增",
+            "漏洞",
+        )
+    )
+
+
+def _is_security_change_task(intent: ParsedIntent) -> bool:
+    if not _is_code_change_task(intent):
+        return False
+    goal = str(intent.normalized_goal or "").lower()
+    return any(
+        marker in goal
+        for marker in (
+            "security",
+            "vulnerability",
+            "boundary",
+            "traversal",
+            "symlink",
+            "escape",
+            "injection",
+            "auth",
+            "安全",
+            "漏洞",
+            "边界",
+            "遍历",
+            "注入",
+            "越权",
+        )
+    )
+
+
+def _shell_command_text(call: ToolCall) -> str:
+    command = call.input.get("command") if isinstance(call.input, dict) else None
+    if isinstance(command, list):
+        return " ".join(str(part) for part in command).lower()
+    return str(command or "").lower()
+
+
+def _is_shell_verification(call: ToolCall) -> bool:
+    if call.name != "exec_shell":
+        return False
+    command = _shell_command_text(call)
+    return any(
+        marker in command
+        for marker in (
+            "pytest",
+            "unittest",
+            "npm test",
+            "npm run test",
+            "pnpm test",
+            "yarn test",
+            "cargo test",
+            "go test",
+            "dotnet test",
+        )
+    )
+
+
+def _is_shell_mutation(call: ToolCall) -> bool:
+    if call.name != "exec_shell":
+        return False
+    command = _shell_command_text(call)
+    return any(
+        marker in command
+        for marker in (
+            ".write(",
+            "write_text(",
+            "apply_patch",
+            "tee ",
+            "sed -i",
+        )
+    )
+
+
+def _tool_uses_session_scope(stack: Any, call: ToolCall) -> bool:
+    """Return whether a tool's correctness depends on Session filesystem scope.
+
+    ContextVars are reliable on the ordinary serial path, but production SSE
+    pumps can insert another thread boundary around a worker.  Until every
+    executor backend accepts an explicit scope object, keep filesystem and
+    shell tools serial. Pure compute/network tools still retain lane-B
+    concurrency.
+    """
+    try:
+        skill = stack.executor.registry.get(call.name)
+    except (AttributeError, KeyError, TypeError):
+        return True
+    return bool(set(skill.affinity or ()) & _SCOPE_SENSITIVE_AFFINITIES)
+
 
 #: UI/meta skills that are ALWAYS surfaced to the model, regardless
 #: of cap. ``todo_write`` drives the live task-checklist panel —
@@ -444,6 +587,55 @@ def _browser_operation_guidance(user_context: dict[str, Any]) -> str:
     )
 
 
+def _ensure_explicit_browser_skills(registry: Any, user_context: dict[str, Any]) -> int:
+    """Register local Playwright tools for an explicit Browser turn.
+
+    The realtime native loop builds ToolSpecs here and bypasses the ReAct
+    loop, so its dependency-gated Browser activation must happen before that
+    catalog is frozen as well.
+    """
+    if registry is None or not _browser_operation_guidance(user_context):
+        return 0
+    try:
+        if registry.has("browser_navigate"):
+            return 0
+        from runtime.execution.suckers.browser_skills import register_browser_skills
+
+        return int(register_browser_skills(registry, verify_tests=False))
+    except (AttributeError, ImportError, TypeError, ValueError):
+        _logger.debug("native realtime browser skill activation failed", exc_info=True)
+        return 0
+
+
+def _required_browser_action_evidence(goal: str) -> set[str]:
+    """Return minimum UI-action evidence implied by a mutating browser goal."""
+    text = str(goal or "").lower()
+    required: set[str] = set()
+    if any(term in text for term in ("create", "add", "edit", "update", "创建", "新增", "编辑", "修改")):
+        required.update(("type", "click"))
+    if any(term in text for term in ("verify", "验证", "校验")):
+        required.add("verify")
+    if any(term in text for term in ("delete", "remove", "删除", "移除")):
+        required.add("delete")
+    return required
+
+
+def _browser_action_evidence(call: ToolCall) -> set[str]:
+    """Extract coarse completion evidence from one browser tool call."""
+    if call.name == "browser_type":
+        return {"type"}
+    if call.name != "browser_click":
+        return set()
+    evidence = {"click"}
+    payload = call.input if isinstance(call.input, dict) else {}
+    target = " ".join(str(value).lower() for value in payload.values())
+    if "verify" in target or "验证" in target or "校验" in target:
+        evidence.add("verify")
+    if "delete" in target or "remove" in target or "删除" in target or "移除" in target:
+        evidence.add("delete")
+    return evidence
+
+
 def _is_semantic_error(output: Any) -> bool:
     """Return True when a skill's output structurally signals failure.
 
@@ -462,6 +654,104 @@ def _is_semantic_error(output: Any) -> bool:
     but possible signal of a warning the skill wants to surface.
     """
     return output_signals_error(output)
+
+
+def _recover_named_xml_tool_calls(
+    text: str,
+    *,
+    allowed_names: set[str],
+) -> list[ToolCall]:
+    """Recover explicit XML tool envelopes from non-compliant providers.
+
+    This intentionally requires a ``<tool_call...>`` marker and filters every
+    recovered name through the already-published tool catalog.  Markdown code
+    blocks and ordinary prose are never treated as executable calls here.
+    """
+    if "<tool_call" not in text.lower():
+        return []
+    from runtime.core.cerebrum.react_parsing import (
+        _extract_tool_actions_from_loose_output,
+        _parse_action,
+    )
+
+    recovered: list[ToolCall] = []
+    for action in _extract_tool_actions_from_loose_output(text):
+        parsed = _parse_action(action)
+        if parsed is None or parsed[0] not in allowed_names:
+            continue
+        recovered.append(
+            ToolCall(
+                id=f"text-tool-{uuid4().hex}",
+                name=parsed[0],
+                input=parsed[1],
+            )
+        )
+    return recovered
+
+
+def _is_provider_unavailable_error(exc: BaseException) -> bool:
+    text = f"{type(exc).__name__}: {exc}".lower()
+    return any(
+        marker in text
+        for marker in (
+            "http_402",
+            "insufficient_balance",
+            "insufficient account balance",
+            "模型账户余额不足",
+        )
+    )
+
+
+def _next_custom_model_fallback(current_model: str, attempted: set[str]) -> str | None:
+    """Pick the strongest tool-capable custom model after an outage."""
+    try:
+        import json
+
+        from runtime.platform.process.paths import app_paths
+
+        data = json.loads(app_paths().custom_models_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(data, dict):
+        return None
+    candidates: list[str] = []
+    for entry in data.values():
+        if not isinstance(entry, dict) or entry.get("supports_tool_use") is not True:
+            continue
+        raw_models = entry.get("models")
+        if isinstance(raw_models, list):
+            candidates.extend(
+                str(model).strip() for model in raw_models if str(model or "").strip()
+            )
+    if not candidates:
+        return None
+    indexed = list(enumerate(candidates))
+    ordered = [
+        model
+        for _idx, model in sorted(
+            indexed,
+            key=lambda row: (-_model_fallback_quality(row[1]), row[0]),
+        )
+    ]
+    return next((model for model in ordered if model not in attempted), None)
+
+
+def _model_fallback_quality(model_id: str) -> int:
+    name = str(model_id or "").lower()
+    score = 0
+    if "codex" in name:
+        score += 120
+    if "code" in name or "coder" in name:
+        score += 100
+    if "pro" in name:
+        score += 90
+    if "reason" in name or "thinking" in name:
+        score += 80
+    if "chat" in name:
+        score += 40
+    if "flash" in name or "mini" in name:
+        score += 10
+    return score
 
 
 def stream_agentic_fallback(
@@ -798,7 +1088,16 @@ def stream_agentic_fallback(
         )
 
     _intent_user_context = intent.user_context or {}
+    _ensure_explicit_browser_skills(
+        getattr(stack.executor, "registry", None),
+        _intent_user_context,
+    )
     _browser_prompt = _browser_operation_guidance(_intent_user_context)
+    _browser_required_evidence = (
+        _required_browser_action_evidence(intent.normalized_goal)
+        if _browser_prompt
+        else set()
+    )
     if _browser_prompt:
         messages.insert(0, Message(role="system", content=_browser_prompt))
     _capability_activation = activate_capabilities(
@@ -813,6 +1112,78 @@ def stream_agentic_fallback(
             Message(
                 role="system",
                 content=_capability_activation_prompt,
+            ),
+        )
+    _code_change_task = _is_code_change_task(intent)
+    if _code_change_task:
+        available_code_tools = [
+            name
+            for name in (
+                "list_cwd",
+                "read_file",
+                "grep_text",
+                "glob_files",
+                "edit_file",
+                "write_text_file",
+                "multi_edit_file",
+                "exec_shell",
+                "run_tests",
+                "lint_check",
+            )
+            if stack.executor.registry.has(name)
+        ]
+        messages.insert(
+            0,
+            Message(
+                role="system",
+                content=(
+                    "CODE EXECUTION CONTRACT:\n"
+                    "- These tools are enabled in this turn: "
+                    + ", ".join(f"`{name}`" for name in available_code_tools)
+                    + ". Do not claim tools are unavailable and do not merely "
+                    "draft a patch in prose; call the tools to change the scoped "
+                    "workspace.\n"
+                    "- Inspect an existing file with `read_file` before using "
+                    "an edit/write tool on it. Prefer native file tools over "
+                    "shell-generated source code.\n"
+                    "- After changing implementation or tests, run the focused "
+                    "test command that proves the requested behavior. Lint is "
+                    "useful additional evidence but does not prove runtime "
+                    "behavior and does not replace tests.\n"
+                    "- Prefer the smallest focused regression tests. In "
+                    "concurrency tests, coordinate callers before they enter "
+                    "the operation; never put a barrier for all callers inside "
+                    "a loader that correct coalescing should invoke only once.\n"
+                    "- A failed check is evidence that work remains. Diagnose it, "
+                    "repair the implementation or test, and rerun verification; "
+                    "do not mark the task complete or pause while the latest "
+                    "verification is failing.\n"
+                ),
+            ),
+        )
+    if _is_security_change_task(intent):
+        messages.insert(
+            0,
+            Message(
+                role="system",
+                content=(
+                    "SECURITY REPAIR CONTRACT:\n"
+                    "- Write down the trust boundary and the exact order of "
+                    "decode, normalization, resolution, and authorization checks.\n"
+                    "- Add adversarial regression cases, not only the reported "
+                    "example: repeated/mixed encoding, nested traversal, absolute "
+                    "paths, separator variants where relevant, and symlink/TOCTOU "
+                    "escape where the API touches paths.\n"
+                    "- Treat input that changes meaning under another decoding "
+                    "pass as ambiguous and unsafe: a downstream layer may decode "
+                    "again. Repeatedly encoded traversal must be rejected with the "
+                    "domain boundary exception, never left to FileNotFoundError.\n"
+                    "- Verify the rejection uses the promised domain exception, "
+                    "not an incidental file-not-found or permission error.\n"
+                    "- Do not claim zero residual risk solely because self-authored "
+                    "happy-path tests passed. Re-read the final implementation and "
+                    "challenge its normalization assumptions before finishing.\n"
+                ),
             ),
         )
     _todo_protocol_mode = context_mode(_intent_user_context)
@@ -926,17 +1297,34 @@ def stream_agentic_fallback(
     # full credit, any errors → partial). Bumped in the tool_result
     # building loop below.
     _tool_error_count = 0
+    _attempted_models = {effective_model}
+    _provider_failovers = 0
+    _code_mutation_seen = False
+    _code_verification_state: bool | None = None
+    _code_completion_nudges = 0
+    _code_no_action_stops = 0
+    _quality_failovers = 0
+    _browser_observed_evidence: set[str] = set()
+    _browser_guard_nudges = 0
 
-    # Bind the Session via the underlying ContextVar so skill handlers
-    # reading ``current_session()`` see the agent and write memory to
-    # the right per-agent files. We can't use a `with session_scope(...)`
-    # here without re-indenting ~80 lines of loop body, so push/reset
-    # the ContextVar explicitly. ``current_session._current_session`` is
-    # the live ContextVar; we own the token and reset it when the
-    # generator is GC'd or completes (try/finally below).
+    def _observe_code_tool_result(call: ToolCall, is_error: bool) -> None:
+        nonlocal _code_mutation_seen, _code_verification_state
+        if not _code_change_task:
+            return
+        if (call.name in _CODE_MUTATION_TOOLS or _is_shell_mutation(call)) and not is_error:
+            _code_mutation_seen = True
+            # Any later mutation invalidates proof from an earlier test run.
+            _code_verification_state = None
+        if call.name in _CODE_VERIFICATION_TOOLS or _is_shell_verification(call):
+            _code_verification_state = not is_error
+
+    # Realtime generators can be resumed by different worker contexts after
+    # every yielded SSE event.  A ContextVar set once for the generator is
+    # therefore not a durable execution-scope boundary.  Keep the concrete
+    # Session object here and bind it around each tool call below (including
+    # the thread-pool path), so every handler sees the same workspace even
+    # when adjacent ``next()`` calls arrive through different contexts.
     from runtime.platform.process.session import _current_session  # noqa: PLC0415
-
-    _session_token = _current_session.set(_session_obj)
 
     for round_i in range(MAX_TOOL_ROUNDS):
         # Soft reflection · at every REFLECTION_INTERVAL boundary
@@ -962,18 +1350,28 @@ def stream_agentic_fallback(
             max_tokens=4096,
             temperature=1.0,
             tools=tool_specs,
+            require_tool_use=(
+                (
+                    _code_change_task
+                    and (
+                        not _code_mutation_seen
+                        or _code_verification_state is not True
+                    )
+                )
+                or bool(_browser_required_evidence - _browser_observed_evidence)
+            ),
         )
 
         round_text_chunks: list[str] = []
         round_tool_calls: list[ToolCall] = []
 
+        _round_stream_event_seen = False
         try:
             for event in router.call_stream(req):
+                _round_stream_event_seen = True
                 etype = event.type
                 if etype == "text_delta":
                     round_text_chunks.append(event.delta)
-                    accumulated_text += event.delta
-                    yield ("text", event.delta, None)
                 elif etype == "thinking_delta":
                     # Thinking shouldn't fire here (tools+thinking
                     # are incompatible) but if a provider somehow
@@ -1000,14 +1398,105 @@ def stream_agentic_fallback(
                     # silently for routers that don't track).
                     fin = getattr(event, "final", None)
                     if fin is not None:
+                        response_model = str(getattr(fin, "model", "") or "").strip()
+                        if response_model and response_model != effective_model:
+                            # A dispatch-level provider rescue may transparently
+                            # serve this round from another model. Stick to the
+                            # healthy model for subsequent tool-result rounds;
+                            # retrying the unavailable provider every round can
+                            # corrupt cross-provider tool continuation state.
+                            effective_model = response_model
+                            _attempted_models.add(response_model)
                         _total_in_tokens += int(getattr(fin, "input_tokens", 0) or 0)
                         _total_out_tokens += int(getattr(fin, "output_tokens", 0) or 0)
                     break
-        except (ConnectionError, TimeoutError, OSError) as exc:
+        except Exception as exc:  # noqa: BLE001 — classify before re-raising
+            if (
+                not _round_stream_event_seen
+                and _provider_failovers < 2
+                and _is_provider_unavailable_error(exc)
+            ):
+                fallback_model = _next_custom_model_fallback(
+                    effective_model,
+                    _attempted_models,
+                )
+                if fallback_model:
+                    _logger.warning(
+                        "agentic provider unavailable for %s; retrying with %s",
+                        effective_model,
+                        fallback_model,
+                    )
+                    effective_model = fallback_model
+                    _attempted_models.add(fallback_model)
+                    _provider_failovers += 1
+                    continue
+            if not isinstance(exc, (ConnectionError, TimeoutError, OSError)):
+                raise
             _logger.warning("agentic round %d stream failed: %s", round_i, exc)
             break
 
+        round_text = "".join(round_text_chunks)
         if not round_tool_calls:
+            round_tool_calls = _recover_named_xml_tool_calls(
+                round_text,
+                allowed_names={spec.name for spec in tool_specs},
+            )
+
+        if not round_tool_calls:
+            _missing_browser_evidence = (
+                _browser_required_evidence - _browser_observed_evidence
+            )
+            if _missing_browser_evidence and _browser_guard_nudges < 3:
+                _browser_guard_nudges += 1
+                accumulated_text = ""
+                messages.append(
+                    Message(
+                        role="user",
+                        content=(
+                            "[SYSTEM CHECK - browser task incomplete]\n"
+                            "Do not finish yet. Continue through the browser UI. "
+                            "The current trajectory still lacks successful action "
+                            "evidence for: "
+                            + ", ".join(sorted(_missing_browser_evidence))
+                            + ". Use the persistent browser_* tools and verify the "
+                            "resulting page state before answering."
+                        ),
+                    )
+                )
+                continue
+            if _code_change_task and not _code_mutation_seen:
+                _code_no_action_stops += 1
+                if _code_no_action_stops >= 2 and _quality_failovers < 2:
+                    fallback_model = _next_custom_model_fallback(
+                        effective_model,
+                        _attempted_models,
+                    )
+                    if fallback_model:
+                        _logger.warning(
+                            "code model %s stopped without acting; switching to %s",
+                            effective_model,
+                            fallback_model,
+                        )
+                        effective_model = fallback_model
+                        _attempted_models.add(fallback_model)
+                        _quality_failovers += 1
+                        _code_no_action_stops = 0
+                        _code_completion_nudges = 0
+                        _todo_guard_nudges = 0
+                        messages.append(
+                            Message(
+                                role="user",
+                                content=(
+                                    "[SYSTEM CHECK - execution model fallback]\n"
+                                    "The previous model route stopped twice without "
+                                    "making the requested code change. Continue the "
+                                    "task now: inspect the scoped workspace, modify "
+                                    "the implementation and regression tests, and "
+                                    "run real verification before answering."
+                                ),
+                            )
+                        )
+                        continue
             if _todo_protocol_required and _has_todo_write:
                 _todo_guard_message: str | None = None
                 if not _todo_seen:
@@ -1036,7 +1525,40 @@ def stream_agentic_fallback(
                         )
                     )
                     continue
+            if (
+                _code_change_task
+                and (
+                    not _code_mutation_seen
+                    or _code_verification_state is not True
+                )
+                and _code_completion_nudges < 2
+            ):
+                _code_completion_nudges += 1
+                if not _code_mutation_seen:
+                    state = "No successful source or regression-test mutation was observed."
+                elif _code_verification_state is False:
+                    state = "The latest verification failed."
+                else:
+                    state = "The changed files have not been verified after the latest mutation."
+                accumulated_text = ""
+                messages.append(
+                    Message(
+                        role="user",
+                        content=(
+                            "[SYSTEM CHECK - implementation not verified]\n"
+                            f"{state} Do not finalize or pause yet. Inspect the "
+                            "current files, repair the implementation or regression "
+                            "tests, then rerun a focused test/lint command. Only "
+                            "finish after that command succeeds, or clearly report "
+                            "a concrete external blocker that tools cannot resolve."
+                        ),
+                    )
+                )
+                continue
             # Model replied with pure text · conversation is done.
+            accumulated_text += round_text
+            for chunk in round_text_chunks:
+                yield ("text", chunk, None)
             _final_duration = int((time.monotonic() - _started_at) * 1000)
             yield (
                 "stats",
@@ -1061,8 +1583,10 @@ def stream_agentic_fallback(
                 duration_ms=_final_duration,
             )
             yield ("done", "", accumulated_text)
-            _current_session.reset(_session_token)
             return
+
+        if _code_change_task:
+            _code_no_action_stops = 0
 
         # Rebuild the turn in Anthropic's structured shape so the
         # next ``messages.stream()`` call is a valid continuation.
@@ -1080,9 +1604,9 @@ def stream_agentic_fallback(
         # send; not resending the assistant text means we pay
         # less but the model loses its own context trail).
         assistant_blocks: list[dict[str, Any]] = []
-        round_text = "".join(round_text_chunks)
-        if round_text:
-            assistant_blocks.append({"type": "text", "text": round_text})
+        # Tool-round prose is intentionally not replayed. Providers that emit
+        # XML calls put the envelope in text; preserving it would leak raw
+        # protocol markup and can make the next round repeat the same call.
         for call in round_tool_calls:
             assistant_blocks.append(
                 {
@@ -1112,6 +1636,7 @@ def stream_agentic_fallback(
             PARALLEL_TOOL_USE_DEFAULT
             and len(round_tool_calls) >= 2
             and not any(c.name in _SERIAL_BARRIER_TOOLS for c in round_tool_calls)
+            and not any(_tool_uses_session_scope(stack, c) for c in round_tool_calls)
             and bool(
                 getattr(stack, "metadata", {}).get(
                     "parallel_tool_use",
@@ -1126,23 +1651,28 @@ def stream_agentic_fallback(
             # the whole batch (per-call propagation isn't needed
             # because the contextvar is read at handler-call time
             # not at gather-time).
+            # Read tracking lives in shared Session metadata. Initialise the
+            # list before workers start so simultaneous first reads cannot
+            # each install a different list and lose another worker's proof.
+            _session_obj.metadata.setdefault("_read_file_paths_this_turn", [])
             _outputs: dict[str, tuple[str, bool]] = {}
             _outputs_lock = threading.Lock()
 
             def _run_one(call: ToolCall) -> tuple[str, tuple[str, bool]]:
-                # Re-enter parent's session metadata so executor
-                # scope/cwd injection still works inside the worker
-                # thread. ``_active_parent_tool_use_id`` carries
-                # the id of the CURRENT call so any nested call_agent
-                # reports its parent correctly.
+                # ContextVars do not propagate into ThreadPoolExecutor
+                # workers.  Bind the parent Session explicitly; otherwise
+                # scope-aware skills resolve relative paths against the
+                # server process CWD and writes lose their workspace guard.
+                # ``_active_parent_tool_use_id`` carries the id of the
+                # CURRENT call so any nested call_agent reports its parent.
+                from runtime.platform.process.session import _current_session
+
+                _call_session_token = _current_session.set(_session_obj)
                 _session_obj.metadata["_active_parent_tool_use_id"] = call.id
                 try:
                     out, err = _execute_tool_call(stack, call)
                 finally:
-                    # Don't unset — concurrent siblings still need
-                    # their own value. Each thread overwrites for its
-                    # own call; cleanup happens after gather.
-                    pass
+                    _current_session.reset(_call_session_token)
                 return call.id, (out, err)
 
             with ThreadPoolExecutor(
@@ -1182,6 +1712,11 @@ def stream_agentic_fallback(
                     call.id,
                     ("(no result)", True),
                 )
+                _observe_code_tool_result(call, is_error)
+                if not is_error:
+                    _browser_observed_evidence.update(
+                        _browser_action_evidence(call)
+                    )
                 yield (
                     "tool_end",
                     {
@@ -1220,6 +1755,7 @@ def stream_agentic_fallback(
                 # call_agent_parallel) can tag their tool events with
                 # a ``parent_tool_use_id``. Cleared after the handler
                 # returns so no other call inherits it.
+                _call_session_token = _current_session.set(_session_obj)
                 _session_obj.metadata["_active_parent_tool_use_id"] = call.id
                 try:
                     output, is_error = _execute_tool_call(stack, call)
@@ -1227,6 +1763,12 @@ def stream_agentic_fallback(
                     _session_obj.metadata.pop(
                         "_active_parent_tool_use_id",
                         None,
+                    )
+                    _current_session.reset(_call_session_token)
+                _observe_code_tool_result(call, is_error)
+                if not is_error:
+                    _browser_observed_evidence.update(
+                        _browser_action_evidence(call)
                     )
                 yield (
                     "tool_end",
@@ -1339,7 +1881,6 @@ def stream_agentic_fallback(
         duration_ms=_final_duration,
     )
     yield ("done", "", final_text)
-    _current_session.reset(_session_token)
 
 
 def _record_score_safe(

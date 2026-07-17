@@ -490,6 +490,34 @@ def test_performance_routes_to_performance(monkeypatch: pytest.MonkeyPatch) -> N
     assert reason == "smart_routing:performance->performance"
 
 
+def test_code_mode_prefers_explicit_code_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OCTOPUS_SMART_ROUTING", "on")
+    monkeypatch.setenv("OCTOPUS_MODEL_CODE", "kimi-for-coding")
+    monkeypatch.setenv("OCTOPUS_MODEL_PERFORMANCE", "deepseek-v4-pro")
+
+    routed, reason = select_model_for_complexity(
+        "performance",
+        user_model=None,
+        is_code_mode=True,
+    )
+
+    assert routed == "kimi-for-coding"
+    assert reason == "smart_routing:code->specialist"
+
+
+def test_user_pinned_model_still_wins_in_code_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OCTOPUS_MODEL_CODE", "kimi-for-coding")
+
+    routed, reason = select_model_for_complexity(
+        "performance",
+        user_model="deepseek-v4-pro",
+        is_code_mode=True,
+    )
+
+    assert routed is None
+    assert reason == "user_pinned"
+
+
 def test_performance_unconfigured_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
     """If performance tier isn't configured we have nowhere to escalate
     to — return None, caller falls back to whatever the runtime's
@@ -604,6 +632,23 @@ def test_auto_derive_performance_picks_last_model(
         },
     )
     assert _resolve_tier_model("performance") == "big-model"
+
+
+def test_auto_derive_performance_uses_last_model_across_entries(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delenv("OCTOPUS_MODEL_PERFORMANCE", raising=False)
+    _write_custom_models(
+        monkeypatch,
+        tmp_path,
+        {
+            "flash": {"models": ["flash-model"]},
+            "coding": {"models": ["coding-model"]},
+            "pro": {"models": ["pro-model"]},
+        },
+    )
+    assert _resolve_tier_model("performance") == "pro-model"
 
 
 def test_auto_derive_value_uses_first_model(

@@ -35,6 +35,17 @@ class _FakeHandle:
         return self._attrs.get(name)
 
 
+class _FakeFrame:
+    def __init__(self, text: str, *, url: str, name: str = "") -> None:
+        self._text = text
+        self.url = url
+        self.name = name
+
+    def inner_text(self, selector: str) -> str:
+        assert selector == "body"
+        return self._text
+
+
 class _FakePage:
     def __init__(
         self,
@@ -44,6 +55,7 @@ class _FakePage:
         handles: list[_FakeHandle] | None = None,
         goto_raises: Exception | None = None,
         url: str = "https://example.com/",
+        frames: list[_FakeFrame] | None = None,
     ) -> None:
         self._title = title
         self._body = body_text
@@ -51,6 +63,8 @@ class _FakePage:
         self._goto_raises = goto_raises
         self.url = url
         self.wait_calls: list[int] = []
+        self.main_frame = object()
+        self.frames = [self.main_frame, *(frames or [])]
 
     def goto(self, url: str, timeout: int = 0, wait_until: str = "") -> _FakeResponse:
         if self._goto_raises is not None:
@@ -91,6 +105,29 @@ class TestBrowserGet:
         assert r["length"] == 11
         assert r["truncated"] is False
         assert r["status_code"] == 200
+        assert r["frames"] == []
+
+    def test_child_frame_text_is_included(self):
+        page = _FakePage(
+            frames=[
+                _FakeFrame(
+                    "Onboarding complete",
+                    url="https://example.com/confirmation.html",
+                    name="confirmation",
+                )
+            ]
+        )
+
+        result = _browser_get(url="https://example.com", page=page)
+
+        assert result["frames"] == [
+            {
+                "url": "https://example.com/confirmation.html",
+                "name": "confirmation",
+                "content": "Onboarding complete",
+                "truncated": False,
+            }
+        ]
 
     def test_text_truncated_at_max_bytes(self):
         page = _FakePage(body_text="x" * 200)

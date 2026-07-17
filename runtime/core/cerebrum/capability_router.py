@@ -271,6 +271,11 @@ _RULES: tuple[dict[str, Any], ...] = (
             "browser_extract",
             "browser_screenshot",
             "browser_click",
+            "browser_type",
+            "browser_upload",
+            "browser_wait",
+            "browser_scroll",
+            "browser_find",
             "screen_capture",
             "screen_info",
         ),
@@ -366,7 +371,12 @@ _RULES: tuple[dict[str, Any], ...] = (
 def _context_text(goal: str, user_context: dict[str, Any] | None) -> tuple[str, str]:
     user_context = user_context or {}
     pieces = [str(goal or "")]
-    mode = str(user_context.get("mode") or user_context.get("capability_mode") or "").lower()
+    mode = str(
+        user_context.get("mode")
+        or user_context.get("capability_mode")
+        or user_context.get("browser_surface")
+        or ""
+    ).lower()
     history = user_context.get("conversation_messages")
     if isinstance(history, list) and history:
         for item in history[-3:]:
@@ -475,6 +485,7 @@ def activate_capabilities(
             "browser_find",
             "browser_click",
             "browser_type",
+            "browser_upload",
             "browser_wait",
             "browser_scroll",
             "browser_screenshot",
@@ -501,6 +512,11 @@ def activate_capabilities(
             "live_browser_screenshot",
             "browser_state",
             "browser_navigate",
+            "browser_click",
+            "browser_type",
+            "browser_upload",
+            "browser_wait",
+            "browser_scroll",
             "browser_extract",
             "browser_screenshot",
         )

@@ -228,6 +228,12 @@ def output_signals_error(output: Any) -> bool:
     ok = output.get("ok")
     if ok is False:
         return True
+    success = output.get("success")
+    if success is False:
+        return True
+    exit_code = output.get("exit_code")
+    if isinstance(exit_code, int) and not isinstance(exit_code, bool) and exit_code != 0:
+        return True
     err = output.get("error")
     if isinstance(err, str) and err.strip() and ok is not True:
         return True

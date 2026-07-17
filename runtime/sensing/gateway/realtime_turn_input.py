@@ -80,7 +80,10 @@ def _should_default_planning_mode(text: str, params: TurnParams) -> bool:
     # Chat = casual conversation, never auto-plan.
     # React = single-agent tool use; planning mode is overkill for
     # one-shot tool invocations like "测试工具链：请调用 list_cwd".
-    if mode in ("chat", "react"):
+    # Code mode is execution-first: an explicit project workspace plus an
+    # implement/fix request must enter the native tool loop. Users can still
+    # request planning explicitly with planningMode=true or `/codex plan`.
+    if mode in ("chat", "react", "code"):
         return False
     from runtime.core.cerebrum.todo_protocol import should_require_todo_protocol
 
@@ -660,6 +663,18 @@ def _build_intent(
             store=thread_store,
         )
     context_payload = dict(context_payload)
+    # ``TurnParams.cwd`` is the public single-shot / power-user working
+    # directory contract.  Merely carrying it as ``user_context.cwd`` leaves
+    # the execution scope in chat mode, where filesystem tools default to the
+    # thread's empty artifact folder.  Promote an explicit caller-supplied cwd
+    # to the same project context the interactive work-directory selector
+    # emits.  Auto-allocated per-thread cwd values still follow the personal
+    # workspace path below and do not gain project scope implicitly.
+    explicit_cwd = isinstance(params.cwd, str) and bool(params.cwd.strip())
+    if explicit_cwd and isinstance(cwd, str) and cwd.strip():
+        context_payload.setdefault("workspace_path", cwd.strip())
+        context_payload.setdefault("workspace_scope", "project")
+        context_payload.setdefault("mode", "code")
     if marker_mode:
         context_payload.setdefault("codex_mode", marker_mode)
         context_payload.setdefault("completion_policy", marker_mode)

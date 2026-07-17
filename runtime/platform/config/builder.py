@@ -83,21 +83,16 @@ class BuiltStack:
 
 def build_from_config(config: AgentConfig) -> BuiltStack:
     """Assemble the complete runtime stack from ``AgentConfig``."""
-    # 1. SkillRegistry: load the full catalog (builtins + web + fs_write +
-    #    git + shell + computer + browser + memory + mode + agent_meta).
-    #    git + shell + computer + browser + memory + mode + agent_meta).
-    #    Keep cli serve aligned with the app/demo server by using the same
-    #    ``all_skills.register_all`` path. When ``enable_web_skills=False``,
-    #    retain the minimal builtins-only stack.
+    # 1. SkillRegistry: always retain the complete local coding surface.
+    #    ``enable_web_skills`` controls external-web capability only; it must
+    #    not silently remove filesystem writes, shell, git or test tools.
     registry = SkillRegistry()
-    if config.enable_web_skills:
-        from runtime.execution.all_skills import register_all
+    from runtime.execution.all_skills import register_all, register_local
 
+    if config.enable_web_skills:
         register_all(registry)
     else:
-        from runtime.execution.suckers.builtins import register_builtins
-
-        register_builtins(registry)
+        register_local(registry)
 
     # 2. MCP servers: connect configured servers one by one. Each server gets
     #    a persistent client to avoid spawning a new process per tool call.

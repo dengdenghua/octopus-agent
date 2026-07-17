@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from runtime.core.cerebrum.react_guards import (
     _broad_except_suppression_guard,
+    _code_mode_missing_write_guard,
     _commented_out_as_fix_guard,
     _false_verification_claim_guard,
 )
@@ -55,6 +56,9 @@ class TestFinalAnswerClaimsVerification:
         assert _final_answer_claims_verification("全部测试通过")
         assert _final_answer_claims_verification("已通过测试")
         assert _final_answer_claims_verification("测试已通过，无错误")
+
+    def test_numeric_pytest_summary(self) -> None:
+        assert _final_answer_claims_verification("pytest tests/ -v → 4 passed")
 
     def test_neutral_summary_no_claim(self) -> None:
         assert not _final_answer_claims_verification("Reformatted the imports.")
@@ -144,6 +148,84 @@ class TestFalseVerificationClaimGuard:
             is None
         )
 
+
+class TestCodeModeMissingWriteGuard:
+    def test_implementation_without_write_fires(self) -> None:
+        steps = [
+            _step(
+                1,
+                action='read_file({"path": "config.py"})',
+                observation='{"content":"max_turns = 8"}',
+            )
+        ]
+
+        msg = _code_mode_missing_write_guard(
+            steps,
+            "Implemented the requested rename.",
+            goal="Implement the configuration rename and update tests.",
+        )
+
+        assert msg is not None
+        assert "no successful file write" in msg
+
+    def test_failed_write_receipt_does_not_count(self) -> None:
+        step = _step(
+            1,
+            action='edit_file({"path": "config.py"})',
+            observation='{"error":"permission denied"}',
+        )
+        step.action_results = [
+            {
+                "tool_name": "edit_file",
+                "ok": False,
+                "observation": "permission denied",
+            }
+        ]
+
+        assert (
+            _code_mode_missing_write_guard(
+                [step],
+                "Done.",
+                goal="Fix config.py.",
+            )
+            is not None
+        )
+
+    def test_successful_write_receipt_allows_completion(self) -> None:
+        step = _step(
+            1,
+            action='edit_file({"path": "config.py"})',
+            observation='{"ok":true}',
+        )
+        step.action_results = [
+            {
+                "tool_name": "edit_file",
+                "ok": True,
+                "observation": "updated config.py",
+            }
+        ]
+
+        assert (
+            _code_mode_missing_write_guard(
+                [step],
+                "Done.",
+                goal="Fix config.py.",
+            )
+            is None
+        )
+
+    def test_read_only_review_does_not_require_write(self) -> None:
+        assert (
+            _code_mode_missing_write_guard(
+                [],
+                "Review complete.",
+                goal="Inspect the repository and report risks.",
+            )
+            is None
+        )
+
+
+class TestFalseVerificationClaimGuardOutcomes:
     def test_claim_with_failed_verifier_fires(self) -> None:
         steps = [
             _step(

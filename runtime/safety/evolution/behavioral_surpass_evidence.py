@@ -390,7 +390,23 @@ def _manifest_signatures(
             errors.append(f"suite manifest case is invalid: index={index}, id={case_id!r}")
             valid = False
             continue
-        prompt_digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        phases = raw_case.get("phases")
+        phase_rows = phases if isinstance(phases, list) else []
+        if any(not isinstance(phase, str) or not phase.strip() for phase in phase_rows):
+            errors.append(f"suite manifest case has invalid phases: {case_id}")
+            valid = False
+            continue
+        prompt_source = (
+            json.dumps(
+                {"prompt": prompt, "phases": phase_rows},
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            if phase_rows
+            else prompt
+        )
+        prompt_digest = hashlib.sha256(prompt_source.encode("utf-8")).hexdigest()
         rubric_digest = hashlib.sha256(
             json.dumps(
                 rubric,

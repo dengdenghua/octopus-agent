@@ -17,14 +17,17 @@ from runtime.execution.suckers.write_skills import (
     _edit_file,
     _edit_text_file,
     _exec_shell,
+    _format_code,
     _ipython,
     _kill_background_exec,
     _kill_shell,
+    _lint_check,
     _multi_edit_file,
     _read_background_output,
     _read_shell_output,
     _run_git,
     _run_quality_cmd,
+    _run_tests,
     _snapshot_background_metadata,
     _write_text_file,
     register_exec_skill,
@@ -325,6 +328,21 @@ class TestExecShell:
     def test_missing_command_error(self):
         assert "error" in _exec_shell(command="")
 
+    @pytest.mark.parametrize(
+        "command",
+        (
+            "cd tests && python -m pytest",
+            "python -m pytest 2>&1",
+            ["python", "-m", "pytest", "|", "tee", "result.txt"],
+        ),
+    )
+    def test_shell_operators_fail_loudly_instead_of_false_success(self, command):
+        result = _exec_shell(command=command)
+
+        assert "error" in result
+        assert "shell operators are not supported" in result["error"]
+        assert "cwd" in result["error"]
+
     def test_cwd_sandbox_blocks_escape(self, tmp_path: Path):
         outside = tmp_path.parent
         r = _exec_shell(
@@ -447,6 +465,35 @@ def test_quality_stream_error_preserves_execution_policy(
 
     assert "error" in r
     assert r["execution_policy"]["result"]["status"] == "sandbox_violation"
+
+
+def test_python_quality_defaults_disable_tool_caches(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+    commands: list[list[str]] = []
+
+    def fake_stream_run(command, **_kwargs):
+        commands.append(command)
+        return {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "timed_out": False,
+            "sandbox_backend": "direct",
+            "sandbox_hard": False,
+        }
+
+    monkeypatch.setattr("runtime.platform.process.streaming.stream_run", fake_stream_run)
+
+    assert _run_tests(cwd=str(tmp_path))["success"] is True
+    assert _lint_check(cwd=str(tmp_path))["success"] is True
+    assert _format_code(cwd=str(tmp_path))["success"] is True
+
+    assert commands[0][3:5] == ["-p", "no:cacheprovider"]
+    assert "--no-cache" in commands[1]
+    assert "--no-cache" in commands[2]
 
 
 # ═══════════════════════════════════════════════════════════

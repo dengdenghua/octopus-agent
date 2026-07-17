@@ -147,6 +147,7 @@ _DYNAMIC_SKILL_PACKS: dict[str, tuple[str, ...]] = {
         "browser_navigate",
         "browser_click",
         "browser_type",
+        "browser_upload",
         "browser_scroll",
         "browser_wait",
         "browser_screenshot",

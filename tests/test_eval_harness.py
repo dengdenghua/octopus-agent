@@ -174,6 +174,23 @@ def test_runner_exception_captured() -> None:
     result = run_case(case, runner=bad_runner, k=1)
     assert result.passes == 0
     assert "blew up" in (result.trajectories[0].error or "")
+    assert "blew up" in result.verdicts[0].reason
+
+
+def test_runner_error_event_fails_with_structured_reason() -> None:
+    case = EvalCase(id="error-event", prompt="go", grader=lambda _traj: True)
+
+    result = run_case(
+        case,
+        runner=lambda _prompt: iter(
+            [{"kind": "error", "error": {"type": "timeout", "timeout_seconds": 30}}]
+        ),
+        k=1,
+    )
+
+    assert result.passes == 0
+    assert result.trajectories[0].error is not None
+    assert '"type": "timeout"' in result.verdicts[0].reason
 
 
 def test_report_serialises_to_json(tmp_path) -> None:

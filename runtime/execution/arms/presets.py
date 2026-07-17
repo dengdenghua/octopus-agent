@@ -59,6 +59,7 @@ _BROWSER_READ = [
 _BROWSER_INTERACT = [
     SkillId("browser_click"),
     SkillId("browser_type"),
+    SkillId("browser_upload"),
     SkillId("browser_scroll"),
     SkillId("browser_wait"),
 ]

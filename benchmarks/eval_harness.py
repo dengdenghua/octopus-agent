@@ -288,7 +288,10 @@ def write_behavioral_system_evidence(
             raise ValueError(f"missing EvalCase metadata for {result.case_id}")
         metadata = case.metadata
         rubric_digest = str(metadata.get("rubric_digest") or "").lower()
-        prompt_digest = hashlib.sha256(case.prompt.encode("utf-8")).hexdigest()
+        prompt_digest = (
+            str(case.metadata.get("prompt_digest") or "")
+            or hashlib.sha256(case.prompt.encode("utf-8")).hexdigest()
+        )
         if len(rubric_digest) != 64 or any(
             character not in "0123456789abcdef" for character in rubric_digest
         ):
@@ -438,6 +441,14 @@ def run_case(
                     kind = raw.get("kind") or raw.get("type") or "event"
                     payload = {k_: v for k_, v in raw.items() if k_ not in ("kind", "type")}
                     traj.steps.append(TrajectoryStep(kind=kind, payload=payload))
+                    if kind == "error":
+                        detail = payload.get("error") or payload
+                        rendered = (
+                            json.dumps(detail, ensure_ascii=False, sort_keys=True)
+                            if isinstance(detail, (dict, list))
+                            else str(detail)
+                        )
+                        traj.error = f"runner error: {rendered}"
         except Exception as exc:
             traj.error = f"runner raised: {exc}"
         traj.ended_at = time.time()
@@ -447,6 +458,13 @@ def run_case(
             grader_error = f"grader raised: {exc}"
             traj.error = f"{traj.error}; {grader_error}" if traj.error else grader_error
             verdict = Verdict(passed=False, reason=grader_error)
+        if traj.error:
+            verdict = Verdict(
+                passed=False,
+                score=0.0,
+                reason=traj.error,
+                rubric=verdict.rubric,
+            )
         if case.teardown:
             try:
                 case.teardown()
@@ -454,7 +472,12 @@ def run_case(
                 teardown_error = f"teardown failed: {exc}"
                 traj.append("teardown_error", message=str(exc))
                 traj.error = f"{traj.error}; {teardown_error}" if traj.error else teardown_error
-                verdict = Verdict(passed=False, reason=teardown_error)
+                verdict = Verdict(
+                    passed=False,
+                    score=0.0,
+                    reason=traj.error,
+                    rubric=verdict.rubric,
+                )
         if verdict.passed:
             result.passes += 1
         result.trajectories.append(traj)

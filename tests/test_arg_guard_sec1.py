@@ -17,6 +17,7 @@ from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import InMemoryJournal
 from runtime.platform.models import ArmId, Budget, BudgetLimits, SkillId, TaskId
+from runtime.platform.process.session import Session, session_scope
 from runtime.safety.auth import (
     MODEL_FORBIDDEN_ARGS,
     TrustEngine,
@@ -94,6 +95,72 @@ class TestExecutorStripsPrivilegeFlags:
 
         assert step.success
         assert captured == {"path": "notes.txt", "limit": 5}
+
+    def test_explicit_browser_session_restores_loopback_access_internally(self) -> None:
+        captured: dict = {}
+        registry = SkillRegistry()
+
+        def capture_browser(**kw):
+            captured.update(kw)
+            return "ok"
+
+        registry.register(
+            Skill(
+                name="browser_navigate",
+                description="navigate",
+                affinity=["browser"],
+                trusted_source="skill://public/browser_navigate",
+                handler=capture_browser,
+            )
+        )
+        executor = ToolExecutor(
+            registry=registry,
+            immunity=TrustEngine(trusted_sources=["skill://public/*"]),
+            journal=InMemoryJournal(),
+        )
+        budget = _budget()
+
+        with session_scope(
+            Session(
+                thread_id="browser-loopback",
+                metadata={
+                    "browser_operation_mode": True,
+                    "browser_surface": "browser",
+                    "runtime_surfaces": ["browser"],
+                },
+            )
+        ):
+            step = executor.execute_step(
+                step_id=0,
+                node_id="n0",
+                sucker_id=SkillId("browser_navigate"),
+                args={"url": "http://127.0.0.1:8123/app", "allow_private": True},
+                caller="arms/browser_interact",
+                task_id=budget.task_id,
+                arm_id=ArmId("browser_interact"),
+                budget=budget,
+            )
+
+        assert step.success
+        assert captured["allow_private"] is True
+
+    def test_explicit_browser_session_does_not_open_non_loopback_private_ip(self) -> None:
+        from runtime.execution.tool_engine.executor import (
+            _restore_trusted_browser_loopback_access,
+        )
+
+        with session_scope(
+            Session(
+                thread_id="browser-private",
+                metadata={"browser_operation_mode": True},
+            )
+        ):
+            args = _restore_trusted_browser_loopback_access(
+                SkillId("browser_navigate"),
+                {"url": "http://10.0.0.5/admin"},
+            )
+
+        assert "allow_private" not in args
 
 
 class TestStripHelper:

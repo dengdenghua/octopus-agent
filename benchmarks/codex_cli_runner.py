@@ -118,6 +118,14 @@ def _codex_event_to_eval(event: dict[str, Any]) -> list[dict[str, Any]]:
                     "item": item,
                 }
             ]
+        if item_type in {
+            "subagent",
+            "collab_agent_tool_call",
+            "collabAgentToolCall",
+            "agent_tool_call",
+        }:
+            kind = "tool_start" if event_type.endswith("started") else "tool_end"
+            return [{"kind": kind, "tool_name": "subagent", "item": item}]
         if item_type == "reasoning":
             text = str(item.get("text") or item.get("summary") or "")
             return [{"kind": "reasoning_delta", "delta": text}] if text else []

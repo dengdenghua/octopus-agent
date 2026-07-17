@@ -108,6 +108,7 @@ def _default_role_caller(
     context: dict[str, Any] | None,
     timeout_seconds: int | None,
     use_cheap_model: bool = False,
+    event_emitter: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Run one role via the existing subagent bridge."""
     from runtime.execution.subagents.bridge import call_subagent
@@ -118,6 +119,7 @@ def _default_role_caller(
         context=context or {},
         timeout_seconds=timeout_seconds,
         use_cheap_model=use_cheap_model,
+        event_emitter=event_emitter,
     )
 
 

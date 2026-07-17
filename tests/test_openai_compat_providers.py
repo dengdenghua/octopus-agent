@@ -634,3 +634,18 @@ def test_parse_tool_call_arguments_accepts_json_and_python_repr() -> None:
     assert parse_tool_call_arguments("{'path': 'README.md'}") == {"path": "README.md"}
     assert parse_tool_call_arguments({"path": "README.md"}) == {"path": "README.md"}
     assert parse_tool_call_arguments("not-json") == {}
+
+
+def test_parse_tool_call_arguments_recovers_kimi_xml_parameters() -> None:
+    xml = (
+        '<parameter name="url" string="true">http://127.0.0.1:8001/</parameter>'
+        '<parameter name="allow_private" boolean="true">true</parameter>'
+    )
+    assert parse_tool_call_arguments(xml) == {
+        "url": "http://127.0.0.1:8001/",
+        "allow_private": True,
+    }
+    assert parse_tool_call_arguments({"browser_navigate": xml}) == {
+        "url": "http://127.0.0.1:8001/",
+        "allow_private": True,
+    }

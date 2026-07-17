@@ -14,7 +14,7 @@ from runtime.safety.evolution.behavioral_surpass_evidence import (
     REQUIRED_DOMAINS,
 )
 
-GraderFactory = Callable[[dict[str, Any]], Grader]
+GraderFactory = Callable[[str, dict[str, Any]], Grader]
 LifecycleHook = Callable[[], None]
 
 
@@ -24,6 +24,7 @@ def load_behavioral_suite(
     grader_factories: Mapping[str, GraderFactory],
     setup_hooks: Mapping[str, LifecycleHook] | None = None,
     teardown_hooks: Mapping[str, LifecycleHook] | None = None,
+    case_ids: set[str] | None = None,
 ) -> list[EvalCase]:
     """Load manifest cases and bind explicit outcome graders.
 
@@ -51,6 +52,8 @@ def load_behavioral_suite(
         rubric = raw_case.get("rubric")
         if not case_id or case_id in seen or not isinstance(prompt, str) or not prompt.strip():
             raise ValueError(f"suite case {index} has invalid identity or prompt")
+        if case_ids is not None and case_id not in case_ids:
+            continue
         if not isinstance(rubric, dict) or not rubric:
             raise ValueError(f"suite case {case_id} has no outcome rubric")
         domain = str(raw_case.get("domain") or "")
@@ -70,11 +73,16 @@ def load_behavioral_suite(
                 separators=(",", ":"),
             ).encode("utf-8")
         ).hexdigest()
+        phases = raw_case.get("phases")
+        phase_rows = phases if isinstance(phases, list) else []
+        if any(not isinstance(phase, str) or not phase.strip() for phase in phase_rows):
+            raise ValueError(f"suite case {case_id} has invalid phases")
+        prompt_digest = _prompt_digest(prompt, phase_rows)
         cases.append(
             EvalCase(
                 id=case_id,
                 prompt=prompt,
-                grader=factory(rubric),
+                grader=factory(case_id, rubric),
                 setup=setups.get(case_id),
                 teardown=teardowns.get(case_id),
                 metadata={
@@ -83,12 +91,31 @@ def load_behavioral_suite(
                     "outcome_grader": True,
                     "isolated_state": True,
                     "rubric_digest": rubric_digest,
+                    "prompt_digest": prompt_digest,
+                    "phases": list(phase_rows),
                     "suite_id": str(payload.get("suite_id") or ""),
                     "grader_id": grader_id,
                 },
             )
         )
+    if case_ids is not None:
+        missing = case_ids - {case.id for case in cases}
+        if missing:
+            raise ValueError(f"requested suite cases are missing: {sorted(missing)}")
     return cases
+
+
+def _prompt_digest(prompt: str, phases: list[str]) -> str:
+    if not phases:
+        return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        json.dumps(
+            {"prompt": prompt, "phases": phases},
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 __all__ = ["GraderFactory", "LifecycleHook", "load_behavioral_suite"]

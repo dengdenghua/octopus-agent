@@ -33,6 +33,7 @@ tier: "standard"
 | `browser_scroll` | browser |  | browser_interact | admin, general |
 | `browser_state` | browser |  | — | — |
 | `browser_type` | browser |  | browser_interact | admin, general |
+| `browser_upload` | browser |  | browser_interact | admin, general |
 | `browser_wait` | browser |  | browser_interact | admin, general |
 | `call_agent` | delegation |  | — | — |
 | `call_agent_parallel` | delegation |  | — | — |
@@ -64,6 +65,7 @@ tier: "standard"
 | `fetch_url` | web |  | ecommerce_mind, general, vibe_selling, web_read | admin, aoi, coder, echo_eve, echo_kane, echo_leon, echo_luna, echo_mira_voss, echo_noah, echo_raven, echo_shion, echo_zero, ecommerce_mind, general, local_claude_code, local_codex_cli, market_researcher, vibe_selling |
 | `file_stats` | builtin | ✅ | — | admin, aoi, coder, desktop_operator, echo_eve, echo_kane, echo_leon, echo_luna, echo_mira_voss, echo_noah, echo_raven, echo_shion, echo_zero, ecommerce_mind, general, local_claude_code, local_codex_cli, market_researcher, vibe_selling |
 | `find_asset_bbox` | kimi_compat |  | — | — |
+| `format_code` | code_quality |  | — | — |
 | `frontend-design` | agent_docs |  | — | — |
 | `frontend-ui-engineering` | agent_docs |  | — | — |
 | `generate_image` | kimi_compat |  | — | — |
@@ -89,6 +91,7 @@ tier: "standard"
 | `kill_background_exec` | shell |  | shell | admin, coder, general, local_claude_code, local_codex_cli |
 | `kill_shell` | shell |  | shell | admin, coder, general, local_claude_code, local_codex_cli |
 | `learn_skill_from_text` | skill_library |  | — | — |
+| `lint_check` | code_quality |  | — | — |
 | `list_cwd` | builtin | ✅ | — | admin, aoi, coder, desktop_operator, echo_eve, echo_kane, echo_leon, echo_luna, echo_mira_voss, echo_noah, echo_raven, echo_shion, echo_zero, ecommerce_mind, general, local_claude_code, local_codex_cli, market_researcher, vibe_selling |
 | `list_learned_skills` | skill_library | ✅ | — | admin, aoi, coder, desktop_operator, echo_eve, echo_kane, echo_leon, echo_luna, echo_mira_voss, echo_noah, echo_raven, echo_shion, echo_zero, ecommerce_mind, general, local_claude_code, local_codex_cli, market_researcher, vibe_selling |
 | `list_scheduled_tasks` | cron |  | — | — |
@@ -123,6 +126,7 @@ tier: "standard"
 | `recall_scores` | memory | ✅ | — | admin, aoi, coder, desktop_operator, echo_eve, echo_kane, echo_leon, echo_luna, echo_mira_voss, echo_noah, echo_raven, echo_shion, echo_zero, ecommerce_mind, general, local_claude_code, local_codex_cli, market_researcher, vibe_selling |
 | `remember` | memory | ✅ | — | admin, aoi, coder, desktop_operator, echo_eve, echo_kane, echo_leon, echo_luna, echo_mira_voss, echo_noah, echo_raven, echo_shion, echo_zero, ecommerce_mind, general, local_claude_code, local_codex_cli, market_researcher, vibe_selling |
 | `revert_soul` | memory | ✅ | — | admin, aoi, coder, desktop_operator, echo_eve, echo_kane, echo_leon, echo_luna, echo_mira_voss, echo_noah, echo_raven, echo_shion, echo_zero, ecommerce_mind, general, local_claude_code, local_codex_cli, market_researcher, vibe_selling |
+| `run_tests` | code_quality |  | — | — |
 | `schedule_task` | cron |  | — | — |
 | `screen_capture` | computer |  | desktop_operator | admin, desktop_operator, general |
 | `screen_info` | computer |  | desktop_operator | admin, desktop_operator, general |

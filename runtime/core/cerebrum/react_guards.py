@@ -240,6 +240,50 @@ def _goal_requests_project_inspection(goal: str) -> bool:
     return any(marker in lowered for marker in markers)
 
 
+def _goal_requests_code_mutation(goal: str) -> bool:
+    """Whether the user asked code mode to change workspace state.
+
+    This is intentionally keyed off explicit action verbs.  Code mode is
+    also used for read-only reviews, so merely mentioning a file/repository
+    must not force an edit.
+    """
+
+    lowered = (goal or "").lower()
+    markers = (
+        "implement",
+        "change",
+        "modify",
+        "rename",
+        "update",
+        "create",
+        "add ",
+        "remove",
+        "delete",
+        "write",
+        "patch",
+        "fix",
+        "build",
+        "migrate",
+        "refactor",
+        "实现",
+        "修改",
+        "改动",
+        "更改",
+        "重命名",
+        "更新",
+        "创建",
+        "新增",
+        "添加",
+        "删除",
+        "写入",
+        "修复",
+        "构建",
+        "迁移",
+        "重构",
+    )
+    return any(marker in lowered for marker in markers)
+
+
 def _final_answer_claims_no_tool_access(final_answer: str) -> bool:
     lowered = (final_answer or "").lower()
     denial_markers = (
@@ -320,6 +364,46 @@ def _has_successful_tool_observation(
             continue
         return True
     return False
+
+
+def _has_successful_code_write(steps: list[ReActStep]) -> bool:
+    """Return True only for a write tool with a successful execution receipt."""
+
+    for step in steps:
+        if not _is_code_write_step(step):
+            continue
+        if step.action_results:
+            if any(result.get("ok") is True for result in step.action_results):
+                return True
+            continue
+        # Older/replayed trajectories predate action receipts.  Preserve
+        # compatibility, but still require a non-error observation.
+        if _has_successful_tool_observation([step]):
+            return True
+    return False
+
+
+def _code_mode_missing_write_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    goal: str,
+) -> str | None:
+    """Reject an implementation final when no real workspace write succeeded."""
+
+    if not _goal_requests_code_mutation(goal):
+        return None
+    if _final_answer_requests_user_help(final_answer):
+        return None
+    if _has_successful_code_write(steps):
+        return None
+    return (
+        "Code mode cannot finish this implementation task yet: no successful "
+        "file write/edit execution is recorded. Plans, reasoning, todo status, "
+        "and remembered results are not workspace changes. Inspect the supplied "
+        "workspace, call a real write/edit tool for the requested change, read "
+        "the changed files back, and then run an appropriate verifier."
+    )
 
 
 def _final_answer_claims_tool_was_not_executed(final_answer: str) -> bool:
@@ -549,6 +633,34 @@ def _code_mode_completion_guard(steps: list[ReActStep], final_answer: str) -> st
             "Code mode cannot finish yet: unfinished todos remain: "
             f"{preview}. Keep working, update todo_write, "
             "or explicitly ask the user for help if blocked."
+        )
+
+    completed_todo_text = "\n".join(
+        str(
+            item.get("title")
+            or item.get("content")
+            or item.get("text")
+            or item.get("task")
+            or ""
+        )
+        for item in todos
+        if str(item.get("status") or "").lower() == "completed"
+    )
+    claims_persistent_test_write = bool(
+        re.search(
+            r"(?:create|add|write|新增|创建|添加|编写|写)"
+            r".{0,32}(?:tests?/|test_|tests?\b|测试文件|回归测试)",
+            completed_todo_text,
+            re.IGNORECASE,
+        )
+    )
+    if claims_persistent_test_write and not _has_test_write(steps):
+        return (
+            "Code mode cannot finish yet: a completed todo claims that a "
+            "persistent test/regression file was created, but no test-file "
+            "write is recorded in the trajectory. Inline one-off checks do "
+            "not satisfy that checklist item. Write the promised tests under "
+            "the repository test directory, read them back, and run them."
         )
 
     if _has_code_write(steps) and not _has_code_verification(steps):
@@ -2383,6 +2495,123 @@ from .react_security_guards import (  # noqa: E402, F401 — re-exported for bac
 )
 
 
+def _browser_goal_required_evidence(goal: str) -> set[str]:
+    """Translate an explicit browser task into observable completion facts."""
+
+    lowered = str(goal or "").lower()
+    required: set[str] = set()
+    if any(marker in lowered for marker in ("native select", "select ", "dropdown", "下拉", "选择")):
+        required.add("select")
+    if any(marker in lowered for marker in ("rich-text", "rich text", "contenteditable", "富文本")):
+        required.add("rich_text")
+    if any(marker in lowered for marker in ("upload", "上传")):
+        required.add("upload")
+    if any(marker in lowered for marker in ("submit", "提交")):
+        required.add("submit")
+    if any(marker in lowered for marker in ("iframe", "confirmation", "confirmed", "确认状态")):
+        required.add("confirmation")
+    if any(marker in lowered for marker in ("delete", "remove", "删除")):
+        required.add("delete")
+    if any(marker in lowered for marker in ("create", "edit", "update", "新增", "编辑", "更新")):
+        required.update(("type", "click"))
+    return required
+
+
+def _browser_action_evidence(steps: list[ReActStep]) -> tuple[set[str], int]:
+    """Collect successful UI actions and post-submit confirmation evidence."""
+
+    evidence: set[str] = set()
+    submit_attempts = 0
+    submitted = False
+    confirmation_markers = (
+        "onboarding complete",
+        "confirmation.html",
+        'id="confirmed"',
+        "'confirmed'",
+        '"confirmed"',
+    )
+    for step in steps:
+        actions = step.actions or ([step.action] if step.action else [])
+        for index, raw_action in enumerate(actions):
+            parsed = _parse_action(raw_action)
+            if parsed is None:
+                continue
+            name, args = parsed
+            name = name.lower()
+            target = " ".join(f"{key} {value}" for key, value in args.items()).lower()
+            action_ok = True
+            if index < len(step.action_results):
+                action_ok = bool(step.action_results[index].get("ok"))
+            else:
+                observation = (step.observation or "").lower()
+                action_ok = not any(
+                    marker in observation
+                    for marker in ("(工具失败)", "(工具执行异常)", '"error":', "timed_out")
+                )
+
+            if name in {"browser_type", "live_browser_type"} and action_ok:
+                evidence.add("type")
+                if any(marker in target for marker in ("role", "select", "dropdown", "option")):
+                    evidence.add("select")
+                if any(marker in target for marker in ("bio", "rich", "contenteditable")):
+                    evidence.add("rich_text")
+            elif name == "browser_upload" and action_ok:
+                evidence.add("upload")
+            elif name in {"browser_click", "live_browser_click"}:
+                if "submit" in target:
+                    # Count attempts, not only successful receipts: a click may
+                    # mutate the page before a transport error is reported and
+                    # must never be automatically repeated for "exactly once".
+                    submit_attempts += 1
+                    submitted = True
+                    if action_ok:
+                        evidence.add("submit")
+                if action_ok:
+                    evidence.add("click")
+                    if any(marker in target for marker in ("delete", "remove", "删除")):
+                        evidence.add("delete")
+
+        if submitted:
+            observation = (step.observation or "").lower()
+            if any(marker in observation for marker in confirmation_markers):
+                evidence.add("confirmation")
+    return evidence, submit_attempts
+
+
+def _browser_interaction_completion_guard(ctx: "GuardContext") -> str | None:
+    if not ctx.browser_operation_mode or _final_answer_requests_user_help(ctx.final_answer):
+        return None
+    required = _browser_goal_required_evidence(ctx.goal)
+    if not required:
+        return None
+    evidence, submit_attempts = _browser_action_evidence(ctx.steps)
+    missing = sorted(required - evidence)
+    if not missing:
+        return None
+    labels = {
+        "select": "native select interaction",
+        "rich_text": "rich-text entry",
+        "type": "form entry",
+        "upload": "browser_upload receipt",
+        "click": "UI click",
+        "submit": "successful submit click",
+        "delete": "delete click",
+        "confirmation": "post-submit iframe confirmation observation",
+    }
+    missing_text = ", ".join(labels[item] for item in missing)
+    once_note = (
+        " A submit click was already attempted; do not click Submit again. Observe the current "
+        "page with browser_get(wait_ms=300) or browser_state instead."
+        if submit_attempts
+        else ""
+    )
+    return (
+        "Cannot finish this explicit browser task yet. Missing executed UI evidence: "
+        f"{missing_text}.{once_note} Continue with the persistent browser page; for delayed "
+        "iframe results, read the child-frame evidence returned in the frames field."
+    )
+
+
 @dataclass
 class GuardContext:
     """Everything a guard might need to evaluate a candidate final answer.
@@ -2401,6 +2630,7 @@ class GuardContext:
     file_inspection_tools_visible: bool = False
     tools_active: bool = False
     goal: str = ""
+    browser_operation_mode: bool = False
 
 
 @dataclass(frozen=True)
@@ -2485,6 +2715,16 @@ def _invoke_false_tool_result(ctx: GuardContext) -> str | None:
     )
 
 
+def _invoke_missing_write(ctx: GuardContext) -> str | None:
+    if not ctx.is_code_mode or not ctx.tools_active:
+        return None
+    return _code_mode_missing_write_guard(
+        ctx.steps,
+        ctx.final_answer,
+        goal=ctx.goal,
+    )
+
+
 def _invoke_todo_protocol(ctx: GuardContext) -> str | None:
     if not (ctx.todo_protocol_required and ctx.todo_protocol_visible):
         return None
@@ -2503,6 +2743,10 @@ def _invoke_fabricated_citation(ctx: GuardContext) -> str | None:
     if ctx.is_code_mode:
         return None
     return _fabricated_citation_guard(ctx.steps, ctx.final_answer)
+
+
+def _invoke_browser_completion(ctx: GuardContext) -> str | None:
+    return _browser_interaction_completion_guard(ctx)
 
 
 def _preview_labels(labels: list[str], limit: int = 3) -> str:
@@ -2596,7 +2840,9 @@ GUARD_REGISTRY: list[GuardSpec] = [
     GuardSpec("inspection-evidence guard", "protocol", _invoke_missing_inspection),
     GuardSpec("tool-availability guard", "protocol", _invoke_false_no_tool),
     GuardSpec("tool-result guard", "protocol", _invoke_false_tool_result),
+    GuardSpec("implementation-write guard", "protocol", _invoke_missing_write),
     GuardSpec("todo-protocol guard", "protocol", _invoke_todo_protocol),
+    GuardSpec("browser-completion guard", "protocol", _invoke_browser_completion),
     # ── Research / chat quality (non-code turns) ──
     GuardSpec("citation-grounding guard", "research", _invoke_fabricated_citation),
     # ── Verification completeness ──

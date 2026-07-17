@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import ipaddress
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 if TYPE_CHECKING:
     from runtime.core.nerves.hooks import HookManager
@@ -68,6 +70,61 @@ _TRANSIENT_ERROR_NAME_HINTS = (
     "Temporary",
     "Transient",
 )
+
+
+def _restore_trusted_browser_loopback_access(
+    sucker_id: SkillId,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Authorize only loopback navigation in an explicit Browser session.
+
+    Model-supplied ``allow_private`` remains stripped unconditionally.  This
+    trusted runtime grant is reconstructed from session metadata and is
+    limited to browser tools plus localhost/loopback destinations; LAN and
+    cloud-metadata addresses remain blocked.
+    """
+    if not str(sucker_id).startswith("browser_"):
+        return args
+    raw_url = args.get("url")
+    if not isinstance(raw_url, str) or not raw_url.strip():
+        return args
+    try:
+        from runtime.platform.process.session import current_session
+
+        session = current_session()
+        metadata = getattr(session, "metadata", None) if session is not None else None
+    except (AttributeError, ImportError):
+        metadata = None
+    if not isinstance(metadata, dict):
+        return args
+    surfaces = metadata.get("runtime_surfaces")
+    surface_names = (
+        {str(item).strip().lower() for item in surfaces}
+        if isinstance(surfaces, list)
+        else set()
+    )
+    explicit_browser = bool(
+        metadata.get("browser_operation_mode") is True
+        or str(metadata.get("browser_surface") or "").strip().lower()
+        in {"browser", "chrome"}
+        or {"browser", "chrome"} & surface_names
+    )
+    if not explicit_browser:
+        return args
+    host = urlparse(raw_url).hostname
+    if not host:
+        return args
+    loopback = host.lower() == "localhost"
+    if not loopback:
+        try:
+            loopback = ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            loopback = False
+    if not loopback:
+        return args
+    trusted_args = dict(args)
+    trusted_args["allow_private"] = True
+    return trusted_args
 
 
 def _validate_output(output: dict, schema: dict) -> None:
@@ -198,6 +255,9 @@ def _prepare_scoped_args(
                 continue
             _supplied = args.get(_pp)
             if _supplied is None or _supplied == "":
+                default = handler_params[_pp].default
+                if default in (".", "./"):
+                    args = {**args, _pp: str(arg_primary)}
                 continue
             if _supplied == "." or _supplied == "./":
                 args = {**args, _pp: str(arg_primary)}
@@ -326,6 +386,7 @@ class ToolExecutor:
             # defeat the sensitive-file / SSRF guards. Trusted internal callers
             # set these by invoking handlers directly, never via execute_step.
             args, _stripped_overrides = strip_model_controlled_overrides(args)
+            args = _restore_trusted_browser_loopback_access(sucker_id, args)
             if _stripped_overrides:
                 span.set_attribute(
                     "octopus.args.stripped_overrides",
@@ -1033,7 +1094,18 @@ class ToolExecutor:
                     if type(_bt_exc).__name__ == "BudgetExceeded":
                         raise
 
-            if status == "success" and "file" in (skill.affinity or []):
+            affinity = set(skill.affinity or [])
+            if (
+                status == "success"
+                and "file" in affinity
+                and affinity
+                & {
+                    "write",
+                    "edit",
+                    "delete",
+                    "dangerous",
+                }
+            ):
                 with contextlib.suppress(Exception):
                     _emit_file_op_from_step(
                         journal=self.journal,
@@ -1158,12 +1230,32 @@ def _record_successful_read(
     args: dict[str, Any],
     output: Any,
 ) -> None:
-    if skill_name != "read_file":
-        return
     if isinstance(output, dict) and output.get("error"):
         return
-    path = canonical_tool_path(args)
-    if path is None:
+    paths: list[Path] = []
+    if skill_name in {"read_file", "read_file_range"}:
+        path = canonical_tool_path(args)
+        if path is not None:
+            paths.append(path)
+    elif skill_name == "exec_shell" and isinstance(output, dict):
+        # The guard is about ensuring the model has inspected the current
+        # contents, not about forcing one particular UI tool.  Native models
+        # often use an argv-safe ``cat file`` for that inspection.  Recognise
+        # only this narrow, successful, read-only form; arbitrary shell
+        # commands must never grant a write capability.
+        argv = output.get("argv")
+        if output.get("exit_code") == 0 and isinstance(argv, list) and argv:
+            command = str(argv[0])
+            if command == "cat":
+                cwd = args.get("cwd") or args.get("sandbox_dir")
+                base = Path(str(cwd)).expanduser() if cwd else Path.cwd()
+                for raw in argv[1:]:
+                    value = str(raw)
+                    if value.startswith("-"):
+                        continue
+                    candidate = Path(value).expanduser()
+                    paths.append(candidate if candidate.is_absolute() else base / candidate)
+    if not paths:
         return
     try:
         from runtime.platform.process.session import current_session
@@ -1173,13 +1265,16 @@ def _record_successful_read(
         session = None
     if session is None:
         return
-    key = _path_key(path)
     read_paths = session.metadata.get(_READ_TRACKING_KEY)
     if not isinstance(read_paths, list):
         read_paths = []
         session.metadata[_READ_TRACKING_KEY] = read_paths
-    if key not in set(str(p) for p in read_paths):
-        read_paths.append(key)
+    known = set(str(p) for p in read_paths)
+    for path in paths:
+        key = _path_key(path)
+        if key not in known:
+            read_paths.append(key)
+            known.add(key)
 
 
 def _path_key(path: Path) -> str:

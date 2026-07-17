@@ -243,6 +243,7 @@ async def _drive_team_topology(
                     topology,
                     text,
                     context={
+                        **session_metadata,
                         "thread_id": thread_id,
                         "turn_id": turn.id,
                     },
@@ -534,6 +535,7 @@ async def _drive_team_topology(
                         "tool_call_id": call_id,
                         "status": evt.get("status", "success"),
                         "duration_ms": evt.get("duration_ms"),
+                        "output_preview": evt.get("output_preview"),
                     },
                 )
             elif ekind in {"subagent_spawned", "subagent_finished"}:

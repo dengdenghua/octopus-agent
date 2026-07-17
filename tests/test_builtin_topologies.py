@@ -9,6 +9,7 @@ import pytest
 from runtime.safety.organization.builtin_topologies import (
     BUILTIN_TOPOLOGIES,
     seed_builtin_topologies,
+    upgrade_present_builtin_topologies,
 )
 from runtime.safety.organization.forge import load_registry, save_registry
 from runtime.safety.organization.topology import (
@@ -57,6 +58,18 @@ def test_research_swarm_synthesizer_requires_full_report_structure() -> None:
     assert "完整最终报告" in synth
     assert "不得压缩成摘要" in synth
     assert "正文第一行必须原样输出" in synth
+    assert "具体文件或结构化产物" in synth
+    assert "不要猜测其他文件名或重复探查" in synth
+
+
+def test_research_team_roles_can_exchange_evidence_and_write_final_artifacts() -> None:
+    from runtime.execution.suckers.ephemeral_agents import BUILTIN_ROLES
+
+    researcher_tools = set(BUILTIN_ROLES["researcher"].tool_allowlist)
+    synthesizer_tools = set(BUILTIN_ROLES["synthesizer"].tool_allowlist)
+
+    assert {"read_file", "bb_write", "bb_read", "bb_keys"} <= researcher_tools
+    assert {"bb_read", "bb_keys", "read_file", "write_text_file"} <= synthesizer_tools
 
 
 def test_seed_into_empty_dict_adds_all_four() -> None:
@@ -86,6 +99,39 @@ def test_seed_runs_twice_without_duplicating() -> None:
     second_added = seed_builtin_topologies(registry)
     assert second_added == 0
     assert len(registry) == 4
+
+
+def test_upgrade_replaces_present_stale_builtin_without_readding_deleted_ones() -> None:
+    research = next(t for t in BUILTIN_TOPOLOGIES if t.name == "research_swarm_v1")
+    stale_agents = dict(research.agents)
+    current_synth = stale_agents[Role.SYNTHESIZER]
+    stale_agents[Role.SYNTHESIZER] = AgentSpec(
+        agent_id=current_synth.agent_id,
+        model=current_synth.model,
+        temperature=current_synth.temperature,
+        system_addendum="旧版综合提示：只输出通用报告，不支持结构化文件产物。",
+    )
+    stale = TeamTopology(
+        name=research.name,
+        protocol=research.protocol,
+        agents=stale_agents,
+        task_bucket=research.task_bucket,
+        quality_threshold=research.quality_threshold,
+        max_iterations=research.max_iterations,
+        metadata={**research.metadata, "version": "1"},
+    )
+    custom = TeamTopology(
+        name="custom-only",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={Role.GENERATOR: AgentSpec(agent_id="custom")},
+    )
+    registry = {stale.fingerprint: stale, custom.fingerprint: custom}
+
+    assert upgrade_present_builtin_topologies(registry) == 1
+    assert research.fingerprint in registry
+    assert stale.fingerprint not in registry
+    assert custom.fingerprint in registry
+    assert all(t.name != "debug_team_v1" for t in registry.values())
 
 
 def test_load_registry_seeds_on_fresh_data_dir(

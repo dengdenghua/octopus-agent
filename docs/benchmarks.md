@@ -68,7 +68,33 @@ python -m scripts.production_readiness_gate \
 先验证生产实时通道可重复运行：
 
 ```bash
-python benchmarks/bench_runner.py --k 3
+python -m benchmarks.bench_runner --k 3
+```
+
+完整固定题集已经可以分别运行；两边必须使用相同 `k`、模型等级和同一 source
+revision：
+
+```bash
+python -m benchmarks.run_behavioral_suite \
+  --system octopus --k 3 \
+  --output benchmarks/results/octopus-full.json
+python -m benchmarks.run_behavioral_suite \
+  --system codex --k 3 --codex-ignore-user-config \
+  --output benchmarks/results/codex-full.json
+python -m benchmarks.assemble_behavioral_bundle \
+  --octopus-run benchmarks/results/octopus-full.json \
+  --codex-run benchmarks/results/codex-full.json
+```
+
+也可以先运行 coding slice 做低成本开发验证，但 partial evidence 不能通过完整认证：
+
+```bash
+python -m benchmarks.run_coding_suite \
+  --system octopus --k 3 \
+  --output benchmarks/results/octopus-coding.json
+python -m benchmarks.run_coding_suite \
+  --system codex --k 3 --codex-ignore-user-config \
+  --output benchmarks/results/codex-coding.json
 ```
 
 证据包和轨迹位于 `benchmarks/results/`，默认不入 Git；CI 应通过受控 artifact

@@ -445,6 +445,20 @@ def _parse_command(command: str | list[str]) -> tuple[list[str] | None, str | No
         return None, f"command must be str or list (got {type(command).__name__})"
     if not argv:
         return None, "empty argv after parsing"
+    unsupported = [
+        token
+        for token in argv
+        if token in {"&&", "||", ";", "|", "&", ">", ">>", "<", "<<"}
+        or token.startswith(("1>", "2>", "1<", "2<"))
+    ]
+    if unsupported:
+        return (
+            None,
+            "shell operators are not supported (shell=False): "
+            f"{unsupported!r}. Pass the working directory via the `cwd` "
+            "argument and invoke one command directly; stdout and stderr "
+            "are already returned separately, so redirection is unnecessary.",
+        )
     return argv, None
 
 
@@ -1656,7 +1670,7 @@ def register_exec_skill(registry: SkillRegistry) -> int:
             description=(
                 "用途: 执行本地 shell 命令 (无 shell=True、有超时)；最适合编译、打包、文件管线、调用各种 CLI；当没有专门 skill 匹配时的兜底。\n"
                 "何时不用: 谷歌/搜资料用 web_search；抓取已知 URL 用 fetch_url (curl/wget 抓回的 HTML 不好解析)；跑 Python 片段用 ipython；改文件用 edit_file/write_text_file；查 git 状态用 git_status。\n"
-                "关键参数: command (str 或 list[str], 必填); cwd (可选); timeout_s (默认 30); run_in_background (默认 False, True 时返回 task_id, 配合 read_shell_output / kill_shell)。\n"
+                "关键参数: command (str 或 list[str], 必填); cwd (可选); timeout_s (默认 30); run_in_background (默认 False, True 时返回 task_id, 配合 read_shell_output / kill_shell)。不要写 `cd dir && command` 或 `2>&1`：本工具不会启动 shell；请把 dir 放入 cwd，stdout/stderr 会分别返回。\n"
                 '示例: exec_shell({"command": "npm test", "cwd": "web", "timeout_s": 120})'
             ),
             affinity=["shell", "exec", "dangerous"],
@@ -2141,7 +2155,18 @@ def _run_tests(
     else:
         p = Path(str(resolved))
         if (p / "pytest.ini").exists() or (p / "pyproject.toml").exists():
-            argv = [sys.executable, "-m", "pytest", "--tb=short", "-q"]
+            # A sandboxed check must not need to write pytest's cache outside
+            # the selected project.  Disabling the cache also keeps fixture
+            # evaluations free from unrelated ``.pytest_cache`` diffs.
+            argv = [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-p",
+                "no:cacheprovider",
+                "--tb=short",
+                "-q",
+            ]
         elif (p / "package.json").exists():
             argv = (
                 ["npx", "vitest", "--run"]
@@ -2174,7 +2199,17 @@ def _lint_check(
     else:
         p = Path(str(resolved))
         if (p / "ruff.toml").exists() or (p / "pyproject.toml").exists():
-            argv = [sys.executable, "-m", "ruff", "check", "--output-format=concise"]
+            # Ruff otherwise discovers/creates a cache relative to an outer
+            # project root.  That path may intentionally be read-only in a
+            # workspace sandbox, so linting should be cache-independent.
+            argv = [
+                sys.executable,
+                "-m",
+                "ruff",
+                "check",
+                "--no-cache",
+                "--output-format=concise",
+            ]
         elif (
             (p / ".eslintrc.js").exists()
             or (p / ".eslintrc.json").exists()
@@ -2214,7 +2249,7 @@ def _format_code(
     else:
         p = Path(str(resolved))
         if (p / "ruff.toml").exists() or (p / "pyproject.toml").exists():
-            argv = [sys.executable, "-m", "ruff", "format"]
+            argv = [sys.executable, "-m", "ruff", "format", "--no-cache"]
             if check_only:
                 argv.append("--check")
         elif (

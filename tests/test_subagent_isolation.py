@@ -17,7 +17,9 @@ from __future__ import annotations
 from typing import Any
 
 from runtime.execution.subagents import bridge
-from runtime.platform.process.session import Session
+from runtime.execution.suckers.blackboard_skills import _bb_write
+from runtime.memory.runtime_state.blackboard import get_blackboard
+from runtime.platform.process.session import Session, current_session, session_scope
 
 
 def _restore_runner(orig):
@@ -288,6 +290,35 @@ def test_trace_context_falls_back_to_session(monkeypatch) -> None:
         "thread_id": "thread-session",
         "turn_id": "turn-session",
     }
+
+
+def test_timeout_worker_inherits_ambient_session_and_blackboard_scope() -> None:
+    captured: dict[str, Any] = {}
+    turn_id = "turn-ambient-timeout-worker"
+
+    def _runner(prompt, *, subagent_name, context):
+        del prompt, subagent_name, context
+        active = current_session()
+        captured["turn_id"] = active.turn_id if active is not None else None
+        captured["write"] = _bb_write("worker-result", {"ok": True})
+        return "ok"
+
+    orig = bridge._RUNNER
+    bridge._RUNNER = _runner
+    try:
+        with session_scope(Session(thread_id="thread-ambient", turn_id=turn_id)):
+            result = bridge.call_subagent(
+                agent_id="x",
+                prompt="p",
+                timeout_seconds=2,
+            )
+    finally:
+        _restore_runner(orig)
+
+    assert result["success"] is True
+    assert captured["turn_id"] == turn_id
+    assert captured["write"]["ok"] is True
+    assert get_blackboard(turn_id).read("worker-result") == {"ok": True}
 
 
 def test_parent_message_count_unchanged(monkeypatch) -> None:

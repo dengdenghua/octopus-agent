@@ -378,6 +378,26 @@ class TestRequestShape:
         assert "thinking" not in payload
         assert r._profile_for_model("K2.7 Code").id == "kimi_coding"
 
+    def test_agentic_request_can_require_a_tool_call(self):
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+
+        r.call(
+            _req(model="deepseek-chat").model_copy(
+                update={
+                    "tools": [
+                        ToolSpec(
+                            name="read_file",
+                            description="Read a project file",
+                        ),
+                    ],
+                    "require_tool_use": True,
+                },
+            ),
+        )
+
+        assert fake.calls[0]["json"]["tool_choice"] == "required"
+
     def test_kimi_coding_model_name_omits_sampling_on_plain_proxy(self):
         fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
         r = OpenAIModelRouter(

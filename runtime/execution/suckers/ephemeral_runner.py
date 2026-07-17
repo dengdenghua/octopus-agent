@@ -80,6 +80,7 @@ EPHEMERAL_MAX_ROUNDS: int = 5  # default for simple roles
 # Target: align with Claude Code depth (20-30 rounds for research tasks).
 EPHEMERAL_MAX_ROUNDS_BY_ROLE: dict[str, int] = {
     "researcher": 25,  # web_search + fetch + synthesize
+    "synthesizer": 12,  # gather sibling evidence + write/read-back artifact
     "explorer": 15,  # file traversal + grep + read
     "implementer": 30,  # edit + verify + test cycles
     "debugger": 20,  # trace + hypothesis + verify
@@ -640,6 +641,7 @@ def make_llm_ephemeral_runner(
                         "tool_call_id": getattr(tc, "id", "") or "",
                         "status": "failed" if is_error else "success",
                         "duration_ms": _duration_ms,
+                        "output_preview": output[:1000],
                     },
                 )
                 block: dict[str, Any] = {
@@ -939,7 +941,7 @@ def _emit_subagent_lifecycle_event(
 
 
 def _ephemeral_write_confine_block(call: Any, skill: Any) -> str | None:
-    """Confine a sub-agent's file writes to a locked worktree.
+    """Scope a sub-agent's filesystem tools to a locked worktree.
 
     Ephemeral runs bypass the executor's sandbox-arg injector, so a write skill
     would otherwise run with ``sandbox_dir=None`` (no confinement → it can write
@@ -958,10 +960,28 @@ def _ephemeral_write_confine_block(call: Any, skill: Any) -> str | None:
         return None
     name = (getattr(call, "name", "") or "").lower()
     affinity = [str(a).lower() for a in (getattr(skill, "affinity", None) or [])]
-    is_write = any(tok in name for tok in ("write", "edit", "patch", "create", "append")) or any(
-        a in ("write", "edit", "filesystem", "file-write") for a in affinity
+    call_input = getattr(call, "input", None)
+    args = call_input if isinstance(call_input, dict) else {}
+    path_payload = any(key in args for key in ("path", "file_path", "filepath", "root", "patch"))
+    filesystem_affinity = any(
+        a in ("file", "io", "filesystem", "file-read", "file-write", "write", "edit")
+        for a in affinity
     )
-    if not is_write:
+    filesystem_name = name in {
+        "list_cwd",
+        "read_file",
+        "file_stats",
+        "glob_files",
+        "grep_text",
+        "tree",
+        "read_file_range",
+    } or (
+        path_payload
+        and any(tok in name for tok in ("write", "edit", "patch", "create", "append"))
+    )
+    if not (filesystem_affinity or filesystem_name):
+        # Logical state writers such as bb_write / todo_write are not file
+        # operations and must remain usable inside a locked worktree.
         return None
     try:
         import inspect
@@ -969,13 +989,28 @@ def _ephemeral_write_confine_block(call: Any, skill: Any) -> str | None:
         params = inspect.signature(skill.handler).parameters
     except (TypeError, ValueError):
         params = {}
+    if isinstance(call_input, dict):
+        if "cwd" in params and not call_input.get("cwd"):
+            call_input["cwd"] = str(locked)
+        if "sandbox_dir" in params and not call_input.get("sandbox_dir"):
+            call_input["sandbox_dir"] = str(locked)
+        if "root" in params:
+            from pathlib import Path
+
+            root = str(call_input.get("root") or ".")
+            if not Path(root).is_absolute():
+                call_input["root"] = str(Path(str(locked)) / root)
+
+    is_write = any(tok in name for tok in ("write", "edit", "patch", "create", "append")) or any(
+        a in ("write", "edit", "file-write") for a in affinity
+    )
+    if not is_write:
+        return None
     if "sandbox_dir" not in params:
         return (
             f"(blocked: '{getattr(call, 'name', '?')}' can't be confined to the "
             f"locked worktree — refusing to write unsandboxed)"
         )
-    if isinstance(getattr(call, "input", None), dict) and not call.input.get("sandbox_dir"):
-        call.input["sandbox_dir"] = str(locked)
     return None
 
 
@@ -1042,6 +1077,9 @@ def _execute_tool_in_subagent(
     except Exception as exc:  # noqa: BLE001
         return (f"(skill error: {type(exc).__name__}: {exc})", True)
 
+    output_is_error = isinstance(output, dict) and (
+        output.get("ok") is False or output.get("success") is False
+    )
     if isinstance(output, str):
         rendered = output
     else:
@@ -1063,7 +1101,7 @@ def _execute_tool_in_subagent(
     # web_search output).
     if len(rendered) > 4000:
         rendered = rendered[:4000] + f"\n\n...(truncated, {len(rendered) - 4000} more chars)"
-    return (rendered, False)
+    return (rendered, output_is_error)
 
 
 __all__ = [

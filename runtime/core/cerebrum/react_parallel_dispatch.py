@@ -85,6 +85,18 @@ def _dispatch_parallel_actions(
     """
     import concurrent.futures as _cf
 
+    # ReAct multi-actions use a ThreadPoolExecutor for independent reads.
+    # ContextVars do not cross that boundary, so capture the concrete Session
+    # now and rebind it inside every worker. Without this, list_cwd may resolve
+    # against the selected workspace while adjacent read_file calls resolve
+    # against the server repository, producing the deceptive "listed but not
+    # found" failure seen in production behavioral runs.
+    from runtime.platform.process.session import current_session
+
+    parent_session = current_session()
+    if parent_session is not None:
+        parent_session.metadata.setdefault("_read_file_paths_this_turn", [])
+
     parsed_pairs: list[tuple[str, dict[str, Any]] | None] = [_parse_action(a) for a in actions]
     from runtime.safety.approval.approval_gate import assess_approval_risk
 
@@ -161,14 +173,29 @@ def _dispatch_parallel_actions(
                 f"(工具未注册或无法解析) action: {actions[idx][:200]}",
                 None,
             )
-        return _execute_action_via_beak(
-            stack,
-            actions[idx],
-            react_task_id=react_task_id,
-            react_step_counter=iteration,
-            agent=agent,
-            intent=intent,
-        )
+        if parent_session is None:
+            return _execute_action_via_beak(
+                stack,
+                actions[idx],
+                react_task_id=react_task_id,
+                react_step_counter=iteration,
+                agent=agent,
+                intent=intent,
+            )
+        from runtime.platform.process.session import _current_session
+
+        session_token = _current_session.set(parent_session)
+        try:
+            return _execute_action_via_beak(
+                stack,
+                actions[idx],
+                react_task_id=react_task_id,
+                react_step_counter=iteration,
+                agent=agent,
+                intent=intent,
+            )
+        finally:
+            _current_session.reset(session_token)
 
     observations: list[str | None] = [None] * len(actions)
     beak_steps: list[Any] = [None] * len(actions)

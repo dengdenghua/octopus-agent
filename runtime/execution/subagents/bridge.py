@@ -444,6 +444,18 @@ def call_subagent(
             "error": "prompt is required",
         }
 
+    # Capture the ambient parent Session before entering the timeout worker.
+    # ContextVars do not propagate into ThreadPoolExecutor threads, but the
+    # child needs the same turn_id for blackboard exchange, trace attribution,
+    # workspace scope, and approval context.
+    if session is None:
+        try:
+            from runtime.platform.process.session import current_session
+
+            session = current_session()
+        except (ImportError, AttributeError):
+            session = None
+
     # When a schema is requested, steer the model toward schema-valid JSON up
     # front. Enforcement still happens post-hoc (see ``_do_call_with_schema``)
     # so this works on any model, not just ones with native structured output.
@@ -631,19 +643,22 @@ def call_subagent(
             except ImportError:
                 denylist_token = None
         run_session = session
-        scope_token = None
         if _locked_root:
             import dataclasses
 
-            from runtime.platform.process.session import Session, _current_session
+            from runtime.platform.process.session import Session
 
             base = session if isinstance(session, Session) else Session()
             run_session = dataclasses.replace(
                 base,
                 metadata={**(base.metadata or {}), "_locked_write_root": _locked_root},
             )
-            # Bind on THIS worker thread so the ephemeral chokepoint's
-            # current_session() carries the locked root.
+        scope_token = None
+        if run_session is not None:
+            # Bind on THIS worker thread so blackboard skills see the parent's
+            # turn and the ephemeral chokepoint carries any locked write root.
+            from runtime.platform.process.session import _current_session
+
             scope_token = _current_session.set(run_session)
         try:
             with scoped_cancellation(_child_source.token):

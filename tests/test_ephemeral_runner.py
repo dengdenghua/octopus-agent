@@ -886,6 +886,41 @@ class TestSubToolEventDispatch:
         end = next(i for i in items if i[0] == "sub_tool_end")
         assert end[1]["is_error"] is True
 
+    def test_structured_ok_false_is_a_tool_error(self):
+        """Handlers often report expected failures as {ok: false}."""
+        import queue as _q
+
+        from runtime.execution.suckers.ephemeral_runner import (
+            make_llm_ephemeral_runner,
+        )
+        from runtime.platform.process.session import Session, _current_session
+
+        router = _ScriptedAgenticRouter(
+            script=[
+                [{"name": "bb_write", "input": {"key": "k"}}],
+                "recovered",
+            ],
+        )
+        registry = _StubRegistry(
+            {"bb_write": lambda **kw: {"ok": False, "error": "no turn"}}
+        )
+        runner = make_llm_ephemeral_runner(
+            router,
+            registry=registry,
+            default_model="m",
+        )
+        q: _q.Queue = _q.Queue()
+        sess = Session()
+        sess.metadata["sub_tool_event_queue"] = q
+        tok = _current_session.set(sess)
+        try:
+            runner(_make_call())
+        finally:
+            _current_session.reset(tok)
+        items = [q.get_nowait() for _ in range(q.qsize())]
+        end = next(i for i in items if i[0] == "sub_tool_end")
+        assert end[1]["is_error"] is True
+
 
 class TestToolBridgeParentIdTracking:
     def test_session_meta_flips_around_tool_call(self):
