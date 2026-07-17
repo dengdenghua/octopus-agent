@@ -318,19 +318,26 @@ class TestToolAllowlist:
             "researcher",
             "topic",
             context={
-                "extra_tool_allowlist": ["read_file", "bb_write"],
+                # ``read_file`` is in the role already (exercises dedupe);
+                # ``todo_write`` is not (exercises the new-grant path). Pick
+                # the second one from OUTSIDE the role deliberately — this
+                # assertion is about the merge, not about the role's roster,
+                # so a tool the role later adopts would silently gut the
+                # only coverage of "dynamic grant actually lands".
+                "extra_tool_allowlist": ["read_file", "todo_write"],
                 "skill_pack_names": ["research"],
             },
         )
 
         # `read_file` is already in researcher's role tool_allowlist,
-        # so the merge dedupes — only `bb_write` should land as new.
+        # so the merge dedupes — only `todo_write` should land as new.
+        assert "todo_write" not in BUILTIN_ROLES["researcher"].tool_allowlist
         assert captured["tools"] == [
             *list(BUILTIN_ROLES["researcher"].tool_allowlist),
-            "bb_write",
+            "todo_write",
         ]
         assert captured["sources"]["role"] == list(BUILTIN_ROLES["researcher"].tool_allowlist)
-        assert captured["sources"]["dynamic"] == ["read_file", "bb_write"]
+        assert captured["sources"]["dynamic"] == ["read_file", "todo_write"]
         assert "Granted Skills" in captured["system"]
         assert "Skill packs: research" in captured["system"]
         assert "read_file" in captured["system"]

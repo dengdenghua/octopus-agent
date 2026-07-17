@@ -9,13 +9,21 @@ from runtime.cli import main
 def test_root_prompt_runs_code_session(monkeypatch, tmp_path: Path, capsys) -> None:
     monkeypatch.setenv("OCTOPUS_HOME", str(tmp_path / "home"))
 
+    # "from root" is the point here — a bare prompt with no subcommand must
+    # still land in a code session. The wording stays inert (matching
+    # ``test_code_print_saves_session``'s "say hi") because a canned
+    # --mock-response can never produce a real read or write: a
+    # task-shaped verb trips the evidence guards ("fix" →
+    # implementation-write, "inspect" → inspection-evidence), and the loop
+    # then spends its entire iteration budget demanding proof the mock
+    # cannot supply. This test is about CLI routing, not those guards.
     rc = main(
         [
             "--no-color",
             "--mock-response",
             "Final Answer: rooted",
             "--print",
-            "fix this from root",
+            "say hi from root",
         ]
     )
 
@@ -24,7 +32,7 @@ def test_root_prompt_runs_code_session(monkeypatch, tmp_path: Path, capsys) -> N
     sessions = list((tmp_path / "home" / "sessions").glob("*.json"))
     assert len(sessions) == 1
     data = json.loads(sessions[0].read_text(encoding="utf-8"))
-    assert data["messages"][0]["content"] == "fix this from root"
+    assert data["messages"][0]["content"] == "say hi from root"
 
 
 def test_pyproject_exposes_octopus_coding_binary() -> None:

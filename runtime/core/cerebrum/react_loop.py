@@ -1087,6 +1087,17 @@ def stream_react_loop(
         _uc,
     )
     _todo_protocol_visible = False
+    if approval_provider is not None:
+        # Approval-gate etiquette only means anything when a gate exists to
+        # be tripped. Keeping it out of REACT_SYSTEM_PROMPT_BASE stops every
+        # plain-chat turn — which can never see an approval request — from
+        # paying for it (the base prompt is charged on literally every turn;
+        # see tests/test_system_prompt_size.py).
+        system_parts.append(
+            "\n- 如果任务明确要求通过**内置审批门**演示批准/拒绝,应发起一次对应高风险"
+            "工具调用,让系统生成真实审批请求。收到拒绝后不得重试危险动作或再次询问同一"
+            "确认;应把 `approval_denied` 等事实准确写入安全计划,完成仍可安全完成的收尾"
+        )
     if isinstance(_effective_wp, str) and _effective_wp.strip():
         _effective_wp_text = _effective_wp.strip()
         _workspace_label = (
