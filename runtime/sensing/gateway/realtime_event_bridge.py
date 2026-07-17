@@ -54,6 +54,36 @@ def _safe_list_remove(bucket: list[Any], item: Any) -> None:
         bucket.remove(item)
 
 
+# Hard cap on a single command item's retained output. The per-delta
+# stream (ITEM_COMMAND_OUTPUT_DELTA) still carries every chunk live, so the
+# user's view is unaffected — this only bounds the *accumulated* buffer that
+# gets re-serialized whole into workbench snapshots and the turn/completed
+# frame. Without it a runaway command (a stress test, a verbose build) grows
+# aggregated_output without limit until that frame exceeds the realtime WS
+# 16 MiB message ceiling and the socket is dropped with code 1009 — which
+# also took down mid-run backends. 256 KiB is far more than any rendered log
+# needs and keeps a whole turn's items well under the frame limit.
+_MAX_AGGREGATED_OUTPUT = 256 * 1024
+_OUTPUT_TRUNCATION_MARK = "\n…(输出已截断,超过单条命令保留上限)"
+
+
+def _append_capped_output(existing: str, delta: str) -> str:
+    """Append ``delta`` to ``existing`` but never grow past the cap.
+
+    Once the cap is reached the buffer is frozen (the live delta stream
+    still delivers subsequent chunks), so this is also O(cap) per delta
+    instead of the O(n) string rebuild the unbounded ``+=`` incurred.
+    """
+    # A buffer longer than the cap can only be one we already truncated
+    # (the marker pushes it past the cap), so this is the "frozen" sentinel.
+    if len(existing) > _MAX_AGGREGATED_OUTPUT:
+        return existing
+    combined = existing + delta
+    if len(combined) <= _MAX_AGGREGATED_OUTPUT:
+        return combined
+    return combined[:_MAX_AGGREGATED_OUTPUT] + _OUTPUT_TRUNCATION_MARK
+
+
 # ── Bridge state — open agentMessage / reasoning / tool items ─
 
 
@@ -318,7 +348,7 @@ class _ReactBridgeState:
         delta = evt.get("delta")
         if item is None or not isinstance(delta, str) or not delta:
             return
-        item.aggregated_output = (item.aggregated_output or "") + delta
+        item.aggregated_output = _append_capped_output(item.aggregated_output or "", delta)
         log.item_delta(turn.thread_id, turn.id, item.id, "commandOutput", delta)
         await emitter.notify(
             ServerMethod.ITEM_COMMAND_OUTPUT_DELTA,
@@ -476,7 +506,7 @@ class _ReactBridgeState:
             # If the tool already streamed output incrementally, keep the
             # streamed text — ``output_preview`` is a *summary* that loses
             # detail, so overwriting would regress the live view.
-            item.aggregated_output = evt["output_preview"]
+            item.aggregated_output = _append_capped_output("", evt["output_preview"])
         await self._emit_completed(turn, log, emitter, item)
 
         # Apply-patch first-class item: when a file-editing tool ran
