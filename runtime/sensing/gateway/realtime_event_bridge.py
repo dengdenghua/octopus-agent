@@ -129,6 +129,7 @@ class _ReactBridgeState:
     def __init__(
         self,
         on_background_task_start: Callable[[asyncio.Task[None]], None] | None = None,
+        timeline_binder: Callable[[Any, str | None], None] | None = None,
     ) -> None:
         self.agent_message: AgentMessageItem | None = None
         self.commentary_message: AgentMessageItem | None = None
@@ -158,6 +159,7 @@ class _ReactBridgeState:
         # ``test_background_tool_item_completes_after_turn_response`` —
         # but we don't want it bleeding into the NEXT conversation).
         self._on_background_task_start = on_background_task_start
+        self._timeline_binder = timeline_binder
 
     # ── Lifecycle helpers ──────────────────────────────────────────────
     # Every method in this class emits item lifecycle events as a pair:
@@ -181,6 +183,10 @@ class _ReactBridgeState:
         different schedule. A monotonic per-turn coordinate plus an explicit
         parent lets every client reconstruct the same conversational rhythm.
         """
+        if self._timeline_binder is not None:
+            self._timeline_binder(item, phase_id or self.current_phase_id)
+            self.last_timeline_item_id = item.id
+            return
         if getattr(item, "timeline_sequence", None) is None:
             self.timeline_sequence += 1
             item.timeline_sequence = self.timeline_sequence

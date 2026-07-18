@@ -1017,3 +1017,18 @@ class TestCreateAppApprovalBypassDefault:
         app = self._app(tmp_path, monkeypatch, allow_bypass=True)
         gw = app.state.realtime_gateway
         assert gw._allow_client_approval_bypass is True
+
+
+@pytest.mark.asyncio
+async def test_approval_manager_cancels_only_the_interrupted_turn() -> None:
+    from runtime.sensing.gateway.realtime_gateway import ApprovalManager
+
+    manager = ApprovalManager()
+    _, turn_a = await manager.open(turn_id="turn-a")
+    _, turn_b = await manager.open(turn_id="turn-b")
+
+    assert await manager.cancel_turn("turn-a") == 1
+    assert await turn_a == {"action": "decline", "reason": "turn interrupted"}
+    assert not turn_b.done()
+
+    await manager.cancel_all()

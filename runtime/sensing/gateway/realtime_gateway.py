@@ -148,10 +148,11 @@ class ApprovalManager:
 
     def __init__(self) -> None:
         self._pending: dict[int | str, asyncio.Future[Any]] = {}
+        self._pending_turn_ids: dict[int | str, str] = {}
         self._lock = asyncio.Lock()
         self._next_id = 1
 
-    async def open(self) -> tuple[int, asyncio.Future[Any]]:
+    async def open(self, *, turn_id: str | None = None) -> tuple[int, asyncio.Future[Any]]:
         """Reserve a request id and return its pending future."""
         async with self._lock:
             req_id = self._next_id
@@ -159,11 +160,14 @@ class ApprovalManager:
             loop = asyncio.get_running_loop()
             fut: asyncio.Future[Any] = loop.create_future()
             self._pending[req_id] = fut
+            if turn_id:
+                self._pending_turn_ids[req_id] = turn_id
             return req_id, fut
 
     async def resolve(self, req_id: int | str, response: JsonRpcResponse) -> None:
         async with self._lock:
             fut = self._pending.pop(req_id, None)
+            self._pending_turn_ids.pop(req_id, None)
         if fut is None or fut.done():
             return
         if response.error is not None:
@@ -174,14 +178,39 @@ class ApprovalManager:
     async def cancel_one(self, req_id: int | str, reason: str = "cancelled") -> None:
         async with self._lock:
             fut = self._pending.pop(req_id, None)
+            self._pending_turn_ids.pop(req_id, None)
         if fut is not None and not fut.done():
             fut.cancel()
         _logger.debug("approval cancelled req_id=%s (%s)", req_id, reason)
+
+    async def cancel_turn(self, turn_id: str) -> int:
+        """Cancel every approval request owned by one interrupted turn."""
+        async with self._lock:
+            request_ids = [
+                req_id
+                for req_id, pending_turn_id in self._pending_turn_ids.items()
+                if pending_turn_id == turn_id
+            ]
+            futures = [self._pending.pop(req_id, None) for req_id in request_ids]
+            for req_id in request_ids:
+                self._pending_turn_ids.pop(req_id, None)
+        cancelled = 0
+        for fut in futures:
+            if fut is not None and not fut.done():
+                # Resolve as an explicit decline instead of cancelling the
+                # Future: asyncio.wait_for can translate inner cancellation
+                # into a timeout, which incorrectly fails the whole turn.
+                fut.set_result({"action": "decline", "reason": "turn interrupted"})
+                cancelled += 1
+        if cancelled:
+            _logger.debug("approval manager cancelled %d for turn %s", cancelled, turn_id)
+        return cancelled
 
     async def cancel_all(self, reason: str = "connection closed") -> None:
         async with self._lock:
             pending = list(self._pending.items())
             self._pending.clear()
+            self._pending_turn_ids.clear()
         for _, fut in pending:
             if not fut.done():
                 fut.cancel()
@@ -399,7 +428,12 @@ class RpcConnection:
         timeout: float | None = None,
     ) -> Any:
         method_str = method.value if isinstance(method, ServerMethod) else method
-        req_id, fut = await self.approval.open()
+        turn_id = params.get("turnId")
+        if isinstance(turn_id, str) and self.is_turn_interrupted(turn_id):
+            return {"action": "decline", "reason": "turn interrupted"}
+        req_id, fut = await self.approval.open(
+            turn_id=turn_id if isinstance(turn_id, str) else None,
+        )
         await self.send(JsonRpcRequest(id=req_id, method=method_str, params=params))
         try:
             return await asyncio.wait_for(fut, timeout=timeout or self._approval_timeout)
@@ -775,6 +809,13 @@ class RealtimeGateway:
             # id is acknowledged but marks nothing, and the client
             # must not render it as "stopped".
             interrupted = self._shared_interrupts.request_interrupt(turn_id)
+            # Approval waits are part of the turn, not independent dialogs.
+            # Flag interruption before cancelling them: a racing approval
+            # request then either sees the flag and declines immediately, or
+            # registers early enough for cancel_turn to settle it.
+            await asyncio.gather(
+                *(connection.approval.cancel_turn(turn_id) for connection in self._connections)
+            )
             return {"turnId": turn_id, "interrupted": interrupted}
 
         # Anything else: defer to the runtime. Implementations that

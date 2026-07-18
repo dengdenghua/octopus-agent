@@ -83,6 +83,10 @@ export interface UseRealtimeThreadValue {
      */
     topologyId?: string;
   }) => Promise<void>;
+  /** Add a user correction to the currently running turn. The runtime
+   * consumes it at the next safe model boundary (never halfway through a
+   * tool side effect). */
+  steer: (params: { input: string; itemId?: string }) => Promise<void>;
   resolveApproval: (requestId: string | number, accept: boolean) => void;
   /** Live streaming vitals for the active turn (TTFT, delta cadence, stall
    * detection). Lets the status strip tell "model still working" apart
@@ -163,7 +167,10 @@ export function useRealtimeThread(
   // map (requestId → resolver) lives here so we can reply on the
   // socket without round-tripping through React render cycles.
   const approvalResolvers = useRef<
-    Map<string | number, (decision: { action: string }) => void>
+    Map<
+      string | number,
+      (decision: { action: string; reason?: string }) => void
+    >
   >(new Map());
   // Client-side expiry timers, keyed like the resolvers. The server
   // denies on its own timeout (params.timeoutMs); these keep the
@@ -290,7 +297,7 @@ export function useRealtimeThread(
             approvalResolvers.current.get(req.id)?.({
               action: "decline",
               reason: "timeout",
-            } as { action: string });
+            });
           }, timeoutMs),
         );
       });
@@ -567,6 +574,34 @@ export function useRealtimeThread(
     [args.threadId],
   );
 
+  const steer = useCallback<UseRealtimeThreadValue["steer"]>(
+    async ({ input, itemId }) => {
+      const client = clientRef.current;
+      if (!client) throw new Error("realtime client not ready");
+      const turns = stateRef.current.turns;
+      const active = turns.length > 0 ? turns[turns.length - 1] : null;
+      if (!active || active.status !== "inProgress") {
+        throw new Error("there is no active turn to steer");
+      }
+      const text = input.trim();
+      if (!text) return;
+      const generatedId =
+        itemId ??
+        `itm_steer_${
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}_${Math.random().toString(16).slice(2)}`
+        }`;
+      await client.request("turn/steer", {
+        threadId: args.threadId,
+        turnId: active.id,
+        itemId: generatedId,
+        text,
+      });
+    },
+    [args.threadId],
+  );
+
   const resolveApproval = useCallback<
     UseRealtimeThreadValue["resolveApproval"]
   >((requestId, accept) => {
@@ -675,6 +710,16 @@ export function useRealtimeThread(
     const turns = stateRef.current.turns;
     const active = turns.length ? turns[turns.length - 1] : null;
     if (!active || active.status !== "inProgress") return;
+    // Approval requests belong to the running turn. Decline and settle them
+    // locally before sending the interrupt so stale approval cards cannot
+    // outlive the action they guarded (and cannot execute after Stop).
+    for (const pending of stateRef.current.pendingApprovals) {
+      if (pending.params.turnId !== active.id) continue;
+      approvalResolvers.current.get(pending.requestId)?.({
+        action: "decline",
+        reason: "turn interrupted",
+      });
+    }
     await client.request("turn/interrupt", {
       threadId: args.threadId,
       turnId: active.id,
@@ -745,6 +790,7 @@ export function useRealtimeThread(
       connected,
       vitals,
       startTurn,
+      steer,
       resolveApproval,
       resume,
       loadOlderTurns,
@@ -757,6 +803,7 @@ export function useRealtimeThread(
       connected,
       vitals,
       startTurn,
+      steer,
       resolveApproval,
       resume,
       loadOlderTurns,

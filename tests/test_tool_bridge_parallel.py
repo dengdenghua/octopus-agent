@@ -124,6 +124,43 @@ def test_parallel_path_preserves_emission_order() -> None:
     assert all(e[1].get("parallel") is True for e in tool_end_events)
 
 
+def test_late_steering_supersedes_a_provisional_final_answer() -> None:
+    class Router:
+        def __init__(self) -> None:
+            self.requests = []
+
+        def call_stream(self, req):
+            self.requests.append(req)
+            text = "old answer" if len(self.requests) == 1 else "corrected answer"
+            yield ModelStreamEvent(type="text_delta", delta=text)
+            yield ModelStreamEvent(type="done", final=ModelResponse(text=text))
+
+    router = Router()
+    drains = iter([[], ["先核对数据再回答"], [], []])
+    intent = ParsedIntent(
+        raw="summarize the result",
+        intent_type="task",
+        normalized_goal="summarize the result",
+        user_context={"conversation_id": "thread-steer", "metadata": {"mode": "chat"}},
+    )
+    events = list(
+        stream_agentic_fallback(
+            _make_stack(router),
+            intent,
+            _agent(),
+            steering_drain=lambda: next(drains, []),
+        )
+    )
+
+    assert len(router.requests) == 2
+    assert any(
+        message.role == "user" and message.content == "先核对数据再回答"
+        for message in router.requests[1].messages
+    )
+    assert "old answer" not in "".join(str(event[1]) for event in events if event[0] == "text")
+    assert "corrected answer" in "".join(str(event[1]) for event in events if event[0] == "text")
+
+
 def test_quality_tools_are_scope_sensitive() -> None:
     registry = SkillRegistry()
     registry.register(

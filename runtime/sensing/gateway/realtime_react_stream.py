@@ -591,6 +591,7 @@ async def _drive_react(
                         intent,
                         agent,
                         model=model,
+                        steering_drain=lambda: runtime._drain_turn_steering(turn.id),
                     ):
                         evt = _agentic_stream_event_to_react_event(
                             kind,
@@ -630,7 +631,7 @@ async def _drive_react(
                 _safe_put(None, timeout=5.0)
 
     worker = asyncio.create_task(asyncio.to_thread(producer))
-    state = runtime._make_bridge_state(turn.thread_id)
+    state = runtime._make_bridge_state(turn.thread_id, turn.id)
 
     async def _interrupt_watcher() -> None:
         # Polls the gateway's interrupt registry. Consumer-side polling

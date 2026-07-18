@@ -73,7 +73,7 @@ import queue
 import re
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from uuid import uuid4
@@ -1271,6 +1271,7 @@ def stream_agentic_fallback(
     *,
     model: str | None = None,
     sub_event_queue: Any = None,
+    steering_drain: Callable[[], list[str]] | None = None,
 ) -> Iterator[tuple[str, Any, Any]]:
     """Agentic streaming · same ``(kind, delta, final)`` shape as
     ``_stream_direct_llm_fallback`` so the SSE loop can consume
@@ -1979,6 +1980,12 @@ def stream_agentic_fallback(
     from runtime.platform.process.session import _current_session  # noqa: PLC0415
 
     for round_i in range(MAX_TOOL_ROUNDS):
+        # User follow-ups accepted by turn/steer become real user messages at
+        # the next safe model boundary. We never mutate a request already in
+        # flight or interrupt a tool halfway through its side effect.
+        if steering_drain is not None:
+            for steering_text in steering_drain():
+                messages.append(Message(role="user", content=steering_text))
         # Soft reflection · at every REFLECTION_INTERVAL boundary
         # (after rounds 10, 20, …) drop a one-line system check-in
         # so the model can decide whether to wrap up or keep going.
@@ -2206,6 +2213,16 @@ def stream_agentic_fallback(
                 _last_public_checkpoint_at = time.monotonic()
 
         if not round_tool_calls:
+            # Close the narrow race where the user steers while the model is
+            # producing what would otherwise become its final answer. Treat
+            # that text as an intermediate assistant message and give the
+            # newly arrived user correction the next word.
+            late_steering = steering_drain() if steering_drain is not None else []
+            if late_steering:
+                if round_text.strip():
+                    messages.append(Message(role="assistant", content=round_text))
+                messages.extend(Message(role="user", content=text) for text in late_steering)
+                continue
             _missing_browser_evidence = _browser_required_evidence - _browser_observed_evidence
             if (
                 not _round_convergence_mode

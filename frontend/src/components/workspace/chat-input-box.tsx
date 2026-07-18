@@ -584,7 +584,7 @@ export function ChatInputBox({
     if (
       (!sendableText && !hasImages && !hasFiles) ||
       isBusy ||
-      status === "streaming"
+      (status === "streaming" && (hasImages || hasFiles))
     ) {
       return;
     }
@@ -1565,7 +1565,29 @@ export function ChatInputBox({
                 onReasoningEffortChange={onReasoningEffortChange}
               />
             )}
-            {status === "streaming" ? (
+            {status === "streaming" && sendableDraftText ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  data-testid="chat-steer-button"
+                  className="flex size-[42px] items-center justify-center rounded-lg bg-foreground text-background transition-all duration-200 hover:bg-foreground/90 active:scale-95 sm:size-8"
+                  title={sendLabel}
+                  aria-label={sendLabel}
+                >
+                  <ArrowUpIcon className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={onStop}
+                  className="flex size-[42px] items-center justify-center rounded-lg bg-destructive/90 text-destructive-foreground transition-all duration-200 hover:bg-destructive active:scale-95 sm:size-8"
+                  title={stopLabel}
+                  aria-label={stopLabel}
+                >
+                  <SquareIcon className="size-3" fill="currentColor" />
+                </button>
+              </>
+            ) : status === "streaming" ? (
               <button
                 type="button"
                 onClick={onStop}

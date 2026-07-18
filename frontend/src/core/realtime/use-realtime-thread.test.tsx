@@ -572,6 +572,152 @@ describe("useRealtimeThread turn/start delivery anchoring", () => {
   });
 });
 
+describe("useRealtimeThread live steering", () => {
+  it("targets the active turn with a durable client item id", async () => {
+    const requests: Array<{ method: string; params: Record<string, unknown> }> =
+      [];
+    let emitNotification!: (n: {
+      method: string;
+      params: Record<string, unknown>;
+    }) => void;
+    const factory = (deps: {
+      onNotification: (n: {
+        method: string;
+        params: Record<string, unknown>;
+      }) => void;
+      onOpen?: () => void;
+    }) => {
+      emitNotification = deps.onNotification;
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string, params: Record<string, unknown>) => {
+          requests.push({ method, params });
+          if (method === "thread/resume") {
+            return Promise.resolve({ thread: { id: "th" }, turns: [] });
+          }
+          return Promise.resolve({ accepted: true });
+        },
+      };
+    };
+    const rendered = renderHook(() =>
+      useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
+    );
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+    act(() => {
+      emitNotification({
+        method: "turn/started",
+        params: {
+          threadId: "th",
+          turn: {
+            id: "turn-live",
+            threadId: "th",
+            status: "inProgress",
+            items: [],
+            startedAt: "2026-01-01T00:00:00.000Z",
+            completedAt: null,
+            error: null,
+          },
+        },
+      });
+    });
+
+    await act(async () => {
+      await rendered.result.current.steer({ input: "  换一种实现  " });
+    });
+
+    const request = requests.find((entry) => entry.method === "turn/steer");
+    expect(request?.params).toMatchObject({
+      threadId: "th",
+      turnId: "turn-live",
+      text: "换一种实现",
+    });
+    expect(request?.params.itemId).toMatch(/^itm_steer_/);
+  });
+});
+
+describe("useRealtimeThread interrupt approvals", () => {
+  it("declines and removes approvals owned by the stopped turn", async () => {
+    let emitNotification!: (n: {
+      method: string;
+      params: Record<string, unknown>;
+    }) => void;
+    let emitRequest!: (req: JsonRpcRequest) => Promise<unknown>;
+    const methods: string[] = [];
+    const factory = (deps: {
+      onIncomingRequest: (req: JsonRpcRequest) => Promise<unknown>;
+      onNotification: (n: {
+        method: string;
+        params: Record<string, unknown>;
+      }) => void;
+      onOpen?: () => void;
+    }) => {
+      emitNotification = deps.onNotification;
+      emitRequest = deps.onIncomingRequest;
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string) => {
+          methods.push(method);
+          if (method === "thread/resume") {
+            return Promise.resolve({ thread: { id: "th" }, turns: [] });
+          }
+          return Promise.resolve({ interrupted: true });
+        },
+      };
+    };
+    const rendered = renderHook(() =>
+      useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
+    );
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+    act(() => {
+      emitNotification({
+        method: "turn/started",
+        params: {
+          threadId: "th",
+          turn: {
+            id: "turn-live",
+            threadId: "th",
+            status: "inProgress",
+            items: [],
+            startedAt: "2026-01-01T00:00:00.000Z",
+            completedAt: null,
+            error: null,
+          },
+        },
+      });
+    });
+    let decision: unknown;
+    act(() => {
+      void emitRequest({
+        jsonrpc: "2.0",
+        id: 91,
+        method: "item/commandExecution/requestApproval",
+        params: { threadId: "th", turnId: "turn-live" },
+      }).then((value) => {
+        decision = value;
+      });
+    });
+    expect(rendered.result.current.state.pendingApprovals).toHaveLength(1);
+
+    await act(async () => {
+      await rendered.result.current.interrupt();
+    });
+
+    await waitFor(() =>
+      expect(rendered.result.current.state.pendingApprovals).toHaveLength(0),
+    );
+    expect(decision).toEqual({ action: "decline", reason: "turn interrupted" });
+    expect(methods).toContain("turn/interrupt");
+  });
+});
+
 describe("useRealtimeThread backwards pagination", () => {
   function turn(id: string) {
     return {

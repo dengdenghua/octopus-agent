@@ -825,6 +825,7 @@ export function useThreadStreamRealtime(
   const {
     state,
     startTurn,
+    steer,
     interrupt,
     resume,
     compact,
@@ -1025,6 +1026,15 @@ export function useThreadStreamRealtime(
         _threadId && _threadId !== "new" ? _threadId : threadId;
       void (async () => {
         setSendError(null);
+        if (isLoading) {
+          if (files.length > 0) {
+            throw new Error(
+              "Files cannot be added while the current task is running; send a text correction or stop first.",
+            );
+          }
+          await steer({ input: text });
+          return;
+        }
         setIsUploading(files.length > 0);
         try {
           const attachments =
@@ -1119,6 +1129,8 @@ export function useThreadStreamRealtime(
     },
     [
       startTurn,
+      steer,
+      isLoading,
       effectiveApprovalPolicy,
       effectiveSandboxPolicy,
       model,

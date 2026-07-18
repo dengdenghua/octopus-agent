@@ -625,6 +625,33 @@ describe("<ChatInputBox /> cowork materials", () => {
   });
 });
 
+describe("<ChatInputBox /> live steering", () => {
+  it("keeps text input sendable while a turn is streaming", () => {
+    const onSubmit = vi.fn();
+    const onStop = vi.fn();
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-live"
+        status="streaming"
+        onSubmit={onSubmit}
+        onStop={onStop}
+      />,
+    );
+
+    const input = screen.getByTestId("chat-composer-input");
+    expect(input).not.toBeDisabled();
+    fireEvent.change(input, { target: { value: "先暂停修改，核对根因" } });
+    fireEvent.click(screen.getByTestId("chat-steer-button"));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      text: "先暂停修改，核对根因",
+      images: undefined,
+      files: undefined,
+    });
+  });
+});
+
 describe("<ChatInputBox /> send-failure draft restore", () => {
   function dispatchSendFailed(detail: {
     threadId?: string | null;

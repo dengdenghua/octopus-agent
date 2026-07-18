@@ -340,6 +340,7 @@ async def _start_turn(
     # where a client's turn/interrupt (matched by id, not sequence)
     # arrives before our first poll.
     emitter.register_turn(turn.id)
+    runtime._register_active_turn(turn, log)
     try:
         log.turn_started(thread_id, turn)
         runtime._active_turn_ids.add(turn.id)
@@ -624,6 +625,33 @@ async def _start_turn(
             )
             runtime._snapshot_to_thread_store(thread_id, log, intent)
             return turn
+
+        # Native tool turns consume steering between model rounds. Other
+        # drivers (reflection, topology, Project OS) may finish one atomic
+        # pass without such a boundary; hand any message that arrived during
+        # that pass to the normal agent loop before finalizing the same turn.
+        late_steering = runtime._drain_turn_steering(turn.id)
+        if late_steering and turn.status not in {TurnStatus.INTERRUPTED, TurnStatus.FAILED}:
+            correction = "\n\n".join(late_steering)
+            steering_context = dict(intent.user_context or {})
+            steering_context["live_steering"] = True
+            steering_intent = intent.model_copy(
+                update={
+                    "raw": correction,
+                    "normalized_goal": correction,
+                    "user_context": steering_context,
+                }
+            )
+            turn_driver = "react"
+            await runtime._drive_react(
+                turn,
+                log,
+                emitter,
+                steering_intent,
+                provider,
+                agent,
+                model=validated.model,
+            )
 
         # ── PHASE 6 · status finalization + snapshot ───────────────
         if turn.status == TurnStatus.INTERRUPTED:
@@ -969,6 +997,7 @@ async def _start_turn(
             turn.completed_at = now_utc()
         runtime._record_task_run_finished(turn)
         runtime._active_turn_ids.discard(turn.id)
+        runtime._unregister_active_turn(turn.id)
         emitter.unregister_turn(turn.id)
 
 

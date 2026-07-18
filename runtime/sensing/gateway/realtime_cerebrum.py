@@ -40,6 +40,7 @@ import json
 import logging
 import shlex
 from pathlib import Path
+from queue import Empty, SimpleQueue
 from typing import Any
 
 from runtime.memory.threads.event_log import EventLog
@@ -53,6 +54,7 @@ from runtime.protocol import (
     JsonRpcErrorCode,
     ReasoningItem,
     ServerMethod,
+    SteeringUserMessageItem,
     TodoEntry,
     TodoListItem,
     Turn,
@@ -583,6 +585,13 @@ class CerebrumRuntime:
         self._known_threads = BoundedSet(maxsize=8192)
         self._lock = asyncio.Lock()
         self._active_turn_ids: set[str] = set()
+        # Live steering state. The realtime RPC runs on the asyncio thread,
+        # while the native model/tool loop drains messages from a worker
+        # thread, so SimpleQueue is the deliberately small synchronization
+        # boundary between them.
+        self._active_turns: dict[str, tuple[Turn, EventLog]] = {}
+        self._turn_steering: dict[str, SimpleQueue[tuple[str, str]]] = {}
+        self._turn_timeline: dict[str, tuple[int, str | None]] = {}
         # Per-thread compaction serialization. Reference-counted so the
         # map is reclaimed when a thread goes idle rather than leaking one
         # lock per thread_id forever.
@@ -598,7 +607,11 @@ class CerebrumRuntime:
         # a brand-new conversation when the user reuses the thread.
         self._thread_background_tasks: dict[str, list[asyncio.Task[None]]] = {}
 
-    def _make_bridge_state(self, thread_id: str) -> _ReactBridgeState:
+    def _make_bridge_state(
+        self,
+        thread_id: str,
+        turn_id: str | None = None,
+    ) -> _ReactBridgeState:
         """Build a ``_ReactBridgeState`` wired to the per-thread
         background-task registry, so the next turn on this thread can
         sweep any watchers the previous turn left running."""
@@ -610,7 +623,59 @@ class CerebrumRuntime:
             # bucket bounded for long-lived threads.
             task.add_done_callback(lambda t: _safe_list_remove(bucket, t))
 
-        return _ReactBridgeState(on_background_task_start=_register)
+        binder = None
+        if turn_id is not None:
+
+            def _bind(item: Any, phase_id: str | None) -> None:
+                self._bind_turn_timeline(turn_id, item, phase_id=phase_id)
+
+            binder = _bind
+        return _ReactBridgeState(
+            on_background_task_start=_register,
+            timeline_binder=binder,
+        )
+
+    def _register_active_turn(self, turn: Turn, log: EventLog) -> None:
+        self._active_turns[turn.id] = (turn, log)
+        self._turn_steering[turn.id] = SimpleQueue()
+        self._turn_timeline[turn.id] = (0, None)
+
+    def _unregister_active_turn(self, turn_id: str) -> None:
+        self._active_turns.pop(turn_id, None)
+        self._turn_steering.pop(turn_id, None)
+        self._turn_timeline.pop(turn_id, None)
+
+    def _bind_turn_timeline(
+        self,
+        turn_id: str,
+        item: Any,
+        *,
+        phase_id: str | None = None,
+    ) -> None:
+        sequence, previous_id = self._turn_timeline.get(turn_id, (0, None))
+        if getattr(item, "timeline_sequence", None) is None:
+            sequence += 1
+            item.timeline_sequence = sequence
+        else:
+            sequence = max(sequence, int(item.timeline_sequence))
+        if getattr(item, "parent_item_id", None) is None:
+            item.parent_item_id = previous_id
+        if getattr(item, "phase_id", None) is None:
+            item.phase_id = phase_id
+        self._turn_timeline[turn_id] = (sequence, item.id)
+
+    def _drain_turn_steering(self, turn_id: str) -> list[str]:
+        pending = self._turn_steering.get(turn_id)
+        if pending is None:
+            return []
+        messages: list[str] = []
+        while True:
+            try:
+                _, text = pending.get_nowait()
+            except Empty:
+                break
+            messages.append(text)
+        return messages
 
     # ── Turn telemetry records (bodies in realtime_turn_outcome) ──
 
@@ -937,6 +1002,48 @@ class CerebrumRuntime:
         params: dict[str, Any],
         emitter: EventEmitter,
     ) -> Any:
+        if method == "turn/steer":
+            thread_id = self._require_thread_id(params.get("threadId"))
+            turn_id = params.get("turnId")
+            text = params.get("text")
+            item_id = params.get("itemId")
+            if not isinstance(turn_id, str) or not turn_id:
+                raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "turn/steer requires turnId")
+            if not isinstance(text, str) or not text.strip():
+                raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "turn/steer requires text")
+            text = text.strip()
+            if len(text) > 32_768:
+                raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "turn/steer text is too long")
+            active = self._active_turns.get(turn_id)
+            if active is None or turn_id not in self._active_turn_ids:
+                raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "target turn is not active")
+            turn, log = active
+            if turn.thread_id != thread_id:
+                raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "turn does not belong to thread")
+            self._require_thread_owner(log, getattr(emitter, "actor_id", None))
+            if isinstance(item_id, str) and item_id:
+                existing = next((item for item in turn.items if item.id == item_id), None)
+                if existing is not None:
+                    return {"turnId": turn_id, "itemId": item_id, "accepted": True}
+            else:
+                item_id = None
+            item = SteeringUserMessageItem(
+                **({"id": item_id} if item_id else {}),
+                text=text,
+                targetTurnId=turn_id,
+            )
+            pending = self._turn_steering.get(turn_id)
+            if pending is None:
+                raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "target turn is no longer active")
+            self._bind_turn_timeline(turn_id, item)
+            turn.items.append(item)
+            # Queue before the first socket await so the model cannot cross a
+            # safe boundary while the UI notification is still in flight.
+            pending.put((item.id, text))
+            await self._emit_item_started(turn, log, emitter, item)
+            item.status = ItemStatus.COMPLETED
+            await self._emit_item_completed(turn, log, emitter, item)
+            return {"turnId": turn_id, "itemId": item.id, "accepted": True}
         if method in ("thread/resume", "thread/read"):
             thread_id = self._require_thread_id(params.get("threadId"))
             log = self._log_for(thread_id)
