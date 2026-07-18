@@ -132,6 +132,7 @@ class _ReactBridgeState:
     ) -> None:
         self.agent_message: AgentMessageItem | None = None
         self.commentary_message: AgentMessageItem | None = None
+        self.last_public_commentary_key: str | None = None
         self.progress_sequence = 0
         self.timeline_sequence = 0
         self.last_timeline_item_id: str | None = None
@@ -282,6 +283,11 @@ class _ReactBridgeState:
     ) -> None:
         if not delta:
             return
+        if start_new_segment:
+            commentary_key = " ".join(delta.split()).casefold()
+            if commentary_key == self.last_public_commentary_key:
+                return
+            self.last_public_commentary_key = commentary_key
         # Public-checkpoint boundaries are structural. Never inspect prose or
         # a hard-coded "investigate / implement / verify" label to decide
         # whether two messages belong together.

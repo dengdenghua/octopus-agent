@@ -1687,7 +1687,7 @@ def test_narrow_remote_research_forces_final_after_soft_budget(monkeypatch):
         for message in router.requests[2].messages
         if message.role == "user"
     )
-    assert any(event[0] == "commentary" and "证据收集预算" in event[1] for event in events)
+    assert any(event[0] == "commentary_runtime" and "证据收集预算" in event[1] for event in events)
     assert events[-1] == (
         "done",
         "",
@@ -1761,7 +1761,7 @@ def test_agentic_timeout_emits_public_recovery_then_forces_final(monkeypatch):
 
     events = list(stream_agentic_fallback(_stack(Router()), intent, _agent()))
 
-    commentary_index = next(i for i, event in enumerate(events) if event[0] == "commentary")
+    commentary_index = next(i for i, event in enumerate(events) if event[0] == "commentary_runtime")
     text_index = next(i for i, event in enumerate(events) if event[0] == "text")
     assert commentary_index < text_index
     assert "超过单轮时限" in events[commentary_index][1]
@@ -1810,12 +1810,125 @@ def test_agentic_tool_preamble_becomes_commentary_before_execution():
     synthesis_index = next(
         i
         for i, event in enumerate(events)
-        if event[0] == "commentary" and "收束成最终回答" in event[1]
+        if event[0] == "commentary_runtime" and "收束成最终回答" in event[1]
     )
     text_index = next(i for i, event in enumerate(events) if event[0] == "text")
     assert commentary_index < tool_index
     assert tool_index < synthesis_index < text_index
     assert "confirmed the scope" in events[commentary_index][1]
+
+
+def test_quiet_realtime_tool_batch_gets_model_generated_public_update(
+    tmp_path,
+):
+    (tmp_path / "evidence.txt").write_text("verified marker", encoding="utf-8")
+
+    class Router:
+        def __init__(self):
+            self.requests = []
+
+        def call_stream(self, request):
+            self.requests.append(request)
+            is_progress_request = any(
+                "[PUBLIC PROGRESS UPDATE]" in str(message.content) for message in request.messages
+            )
+            if is_progress_request:
+                update = (
+                    "目录内容已经读取，evidence.txt 已确认存在；我接下来核对其中的标记并整理结论。"
+                )
+                yield ModelStreamEvent(type="text_delta", delta=update)
+                yield ModelStreamEvent(
+                    type="done",
+                    final=ModelResponse(text=update),
+                )
+                return
+            if len(self.requests) == 1:
+                yield ModelStreamEvent(
+                    type="tool_use",
+                    tool_call=ToolCall(
+                        id="list-1",
+                        name="list_cwd",
+                        input={"path": "."},
+                    ),
+                )
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            yield ModelStreamEvent(type="text_delta", delta="最终结论已完成。")
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(text="最终结论已完成。"),
+            )
+
+    router = Router()
+    intent = ParsedIntent(
+        raw="inspect the workspace and report",
+        intent_type="task",
+        normalized_goal="inspect the workspace and report",
+        user_context={
+            "conversation_id": "public-narrative-thread",
+            "mode": "code",
+            "workspace_path": str(tmp_path),
+            "realtime_public_narrative": True,
+            "public_narrative_silence_s": 0,
+        },
+    )
+
+    events = list(stream_agentic_fallback(_stack(router), intent, _agent()))
+
+    tool_end_index = next(i for i, event in enumerate(events) if event[0] == "tool_end")
+    commentary_index = next(i for i, event in enumerate(events) if event[0] == "commentary")
+    text_index = next(i for i, event in enumerate(events) if event[0] == "text")
+    assert tool_end_index < commentary_index < text_index
+    assert "evidence.txt" in events[commentary_index][1]
+    assert [event[0] for event in events].count("commentary") == 1
+    assert len(router.requests) == 3
+    assert router.requests[1].tools == []
+    assert router.requests[2].messages[-1].role == "user"
+    assert isinstance(router.requests[2].messages[-1].content, list)
+
+
+def test_fast_realtime_tool_batch_skips_extra_progress_model_call(tmp_path):
+    class Router:
+        def __init__(self):
+            self.requests = []
+
+        def call_stream(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                yield ModelStreamEvent(
+                    type="tool_use",
+                    tool_call=ToolCall(
+                        id="list-fast",
+                        name="list_cwd",
+                        input={"path": "."},
+                    ),
+                )
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            yield ModelStreamEvent(type="text_delta", delta="Fast result complete.")
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(text="Fast result complete."),
+            )
+
+    router = Router()
+    intent = ParsedIntent(
+        raw="inspect quickly",
+        intent_type="task",
+        normalized_goal="inspect quickly",
+        user_context={
+            "conversation_id": "fast-public-narrative-thread",
+            "mode": "code",
+            "workspace_path": str(tmp_path),
+            "realtime_public_narrative": True,
+        },
+    )
+
+    events = list(stream_agentic_fallback(_stack(router), intent, _agent()))
+
+    assert len(router.requests) == 2
+    assert all(event[0] != "commentary" for event in events)
+    assert events[-1] == ("done", "", "Fast result complete.")
 
 
 def test_native_result_checkpoint_extracts_real_source_titles():

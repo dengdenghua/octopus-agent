@@ -729,6 +729,10 @@ def _build_intent(
             "cwd": cwd,
             "mode": context_payload.get("mode") or _turn_mode(params),
             "planning_mode": bool(getattr(params, "planning_mode", False)),
+            # Native tool models often emit protocol calls with no surrounding
+            # prose. The realtime bridge may request one evidence-grounded
+            # public update after a genuinely quiet, long-running batch.
+            "realtime_public_narrative": True,
             # Pass attachments through so react_loop can fold image-typed
             # ones into the user message as OpenAI image_url content
             # blocks (vision models then actually "see" the image).

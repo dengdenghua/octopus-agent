@@ -81,12 +81,12 @@ def _agentic_stream_event_to_react_event(
 
     if kind == "text":
         return {"type": "text_delta", "delta": str(delta or "")}
-    if kind == "commentary":
+    if kind in {"commentary", "commentary_runtime"}:
         text = str(delta or "")
         return {
             "type": "commentary_delta",
             "delta": text,
-            "progress_source": "model",
+            "progress_source": ("runtime" if kind == "commentary_runtime" else "model"),
         }
     if kind == "reasoning":
         return {"type": "thinking_delta", "delta": str(delta or "")}

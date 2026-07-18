@@ -56,6 +56,20 @@ def test_agentic_commentary_maps_to_public_timeline_event():
     }
 
 
+def test_agentic_runtime_commentary_stays_non_public():
+    evt = _agentic_stream_event_to_react_event(
+        "commentary_runtime",
+        "Evidence collection budget reached.",
+        None,
+    )
+
+    assert evt == {
+        "type": "commentary_delta",
+        "delta": "Evidence collection budget reached.",
+        "progress_source": "runtime",
+    }
+
+
 def test_agentic_tool_error_maps_to_failed_tool_end():
     evt = _agentic_stream_event_to_react_event(
         "tool_end",
@@ -180,6 +194,7 @@ def test_browser_surface_marker_promotes_chat_turn_to_tool_mode():
     assert context["browser_operation_mode"] is True
     assert context["browser_session_policy"] == "thread_native"
     assert context["native_tool_loop"] is True
+    assert context["realtime_public_narrative"] is True
 
 
 def test_chrome_surface_marker_promotes_chat_turn_to_external_chrome_mode():

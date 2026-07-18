@@ -366,6 +366,44 @@ def test_commentary_event_boundary_starts_a_new_timeline_item(gateway: Any) -> N
     assert messages[2]["parentItemId"] == messages[1]["id"]
 
 
+def test_duplicate_public_commentary_is_collapsed(gateway: Any) -> None:
+    client, _ = gateway
+    _set_script(
+        [
+            {
+                "type": "commentary_delta",
+                "delta": "关键文件已经确认，下一步核对事件顺序。",
+                "progress_source": "model",
+            },
+            {
+                "type": "commentary_delta",
+                "delta": "  关键文件已经确认，下一步核对事件顺序。  ",
+                "progress_source": "model",
+            },
+            {"type": "text_delta", "delta": "最终答案"},
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-commentary-dedupe",
+                "input": [{"type": "text", "text": "inspect ordering"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    messages = [
+        item for item in out["response"].result["turn"]["items"] if item["type"] == "agentMessage"
+    ]
+    assert [message["text"] for message in messages] == [
+        "关键文件已经确认，下一步核对事件顺序。",
+        "最终答案",
+    ]
+
+
 def test_runtime_generated_commentary_is_not_shown_as_model_progress(gateway: Any) -> None:
     client, _ = gateway
     _set_script(

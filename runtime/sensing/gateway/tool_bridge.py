@@ -123,6 +123,12 @@ READ_ONLY_ROUND_BUDGET = 80
 DEFAULT_TOOL_ROUND_BUDGET = 96
 CODE_CHANGE_ROUND_BUDGET = 160
 
+# A silent tool batch can run for minutes. Realtime turns ask the model for a
+# short evidence-grounded public update once this interval passes; fast tool
+# rounds pay no extra model call and continue directly.
+PUBLIC_NARRATIVE_SILENCE_S = 8.0
+PUBLIC_NARRATIVE_TIMEOUT_S = 20.0
+
 # Soft reflection cadence · every N rounds we inject a one-line
 # system message asking the model "are you still making progress, or
 # lets us keep MAX_TOOL_ROUNDS high without burning budget on agents
@@ -251,6 +257,89 @@ def _native_public_checkpoint(text: str) -> str:
     ):
         return ""
     return value[:800].rstrip()
+
+
+def _public_narrative_silence_s(user_context: dict[str, Any]) -> float:
+    raw = user_context.get("public_narrative_silence_s")
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        return max(0.0, min(float(raw), 60.0))
+    return PUBLIC_NARRATIVE_SILENCE_S
+
+
+def _generate_native_evidence_checkpoint(
+    router: Any,
+    *,
+    model: str,
+    messages: list[Message],
+) -> tuple[str, int, int]:
+    """Ask the model—not runtime templates—to narrate a quiet tool result.
+
+    The main conversation already ends in structured ``tool_result`` blocks,
+    so this small tools-disabled continuation can cite real evidence without
+    exposing private reasoning or inventing work that has not happened.
+    """
+    prompt = (
+        "[PUBLIC PROGRESS UPDATE]\n"
+        "Based only on the completed tool results immediately above, "
+        "write one short user-facing update of at most two sentences. "
+        "State one concrete result that is now known and the next "
+        "decision or action. Do not mention tool names, system prompts, "
+        "protocols, hidden reasoning, or claim unobserved results. This "
+        "is a progress update, not the final answer. If the results add "
+        "no meaningful user-facing evidence, output exactly SKIP."
+    )
+    checkpoint_messages = list(messages)
+    if (
+        checkpoint_messages
+        and checkpoint_messages[-1].role == "user"
+        and isinstance(checkpoint_messages[-1].content, list)
+    ):
+        # Anthropic requires tool_result blocks to directly follow the
+        # assistant tool_use turn. Merge the instruction into that same user
+        # message instead of creating an invalid consecutive user message.
+        merged_content = [
+            *checkpoint_messages[-1].content,
+            {"type": "text", "text": prompt},
+        ]
+        checkpoint_messages[-1] = Message(role="user", content=merged_content)
+    else:
+        checkpoint_messages.append(Message(role="user", content=prompt))
+    request = ModelRequest(
+        model=model,
+        messages=checkpoint_messages,
+        max_tokens=180,
+        temperature=0.4,
+        tools=[],
+    )
+    chunks: list[str] = []
+    input_tokens = 0
+    output_tokens = 0
+    visible = {"started": False}
+    for event in _iter_native_model_stream_with_deadline(
+        router,
+        request,
+        PUBLIC_NARRATIVE_TIMEOUT_S,
+        visible_started=lambda: visible["started"],
+    ):
+        if event is _NATIVE_STREAM_DEADLINE:
+            break
+        if event.type == "text_delta":
+            chunks.append(event.delta)
+            visible["started"] = True
+        elif event.type == "done":
+            final = getattr(event, "final", None)
+            if final is not None:
+                input_tokens += int(getattr(final, "input_tokens", 0) or 0)
+                output_tokens += int(getattr(final, "output_tokens", 0) or 0)
+                if not chunks:
+                    text = str(getattr(final, "text", "") or "")
+                    if text:
+                        chunks.append(text)
+            break
+    checkpoint = _native_public_checkpoint("".join(chunks))
+    if checkpoint.strip().casefold() == "skip":
+        checkpoint = ""
+    return checkpoint, input_tokens, output_tokens
 
 
 def _native_result_checkpoint(
@@ -1724,6 +1813,9 @@ def stream_agentic_fallback(
     # + wall-clock duration). Per-round tokens come from the Anthropic
     # SDK's `final.usage` object; we just sum.
     _started_at = time.monotonic()
+    _last_public_checkpoint_at = _started_at
+    _realtime_public_narrative = bool(_intent_user_context.get("realtime_public_narrative"))
+    _public_narrative_interval = _public_narrative_silence_s(_intent_user_context)
     _total_in_tokens = 0
     _total_out_tokens = 0
     _todo_seen = False
@@ -1812,18 +1904,12 @@ def stream_agentic_fallback(
                     _code_semantic_guard_nudges = 0
         if call.name in _CODE_VERIFICATION_TOOLS or _is_shell_verification(call):
             _code_verification_state = not is_error
-        if (
-            call.name in _CODE_TERMINAL_VERIFIER_TOOLS
-            or _is_shell_terminal_verifier(call)
-        ):
+        if call.name in _CODE_TERMINAL_VERIFIER_TOOLS or _is_shell_terminal_verifier(call):
             if _code_mutation_seen and not is_error:
                 _clean_code_verifier_rounds += 1
             elif is_error:
                 _clean_code_verifier_rounds = 0
-            if (
-                _code_verification_state is True
-                and _clean_code_verifier_rounds >= 2
-            ):
+            if _code_verification_state is True and _clean_code_verifier_rounds >= 2:
                 _green_verification_convergence_active = True
 
     # Realtime generators can be resumed by different worker contexts after
@@ -1926,6 +2012,7 @@ def stream_agentic_fallback(
                             if checkpoint:
                                 yield ("commentary", checkpoint, None)
                                 _round_commentary_emitted = True
+                                _last_public_checkpoint_at = time.monotonic()
                         yield (
                             "tool_start",
                             {
@@ -1996,7 +2083,7 @@ def stream_agentic_fallback(
                 "这一轮推理超过单轮时限；已保留前面的有效结果，"
                 "现在关闭扩展工具调用，直接收敛阶段结论或最终答案。"
             )
-            yield ("commentary", recovery_update, None)
+            yield ("commentary_runtime", recovery_update, None)
             messages.append(
                 Message(
                     role="user",
@@ -2026,6 +2113,7 @@ def stream_agentic_fallback(
             if checkpoint:
                 yield ("commentary", checkpoint, None)
                 _round_commentary_emitted = True
+                _last_public_checkpoint_at = time.monotonic()
 
         if not round_tool_calls:
             _missing_browser_evidence = _browser_required_evidence - _browser_observed_evidence
@@ -2163,7 +2251,7 @@ def stream_agentic_fallback(
             # Model replied with pure text · conversation is done.
             if _completed_tool_count > 0:
                 yield (
-                    "commentary",
+                    "commentary_runtime",
                     "证据已经收齐；我现在把关键信息收束成最终回答。",
                     None,
                 )
@@ -2398,15 +2486,6 @@ def stream_agentic_fallback(
                     _tool_error_count += 1
                 tool_result_blocks.append(block)
 
-        if not _round_commentary_emitted:
-            checkpoint = _native_result_checkpoint(
-                round_tool_calls,
-                tool_result_blocks,
-            )
-            if checkpoint:
-                yield ("commentary", checkpoint, None)
-                _round_commentary_emitted = True
-
         _completed_tool_count += len(round_tool_calls)
 
         messages.append(
@@ -2415,6 +2494,46 @@ def stream_agentic_fallback(
                 content=tool_result_blocks,
             )
         )
+
+        meaningful_batch = any(
+            call.name not in {"todo_write", "write_todos", "exit_plan_mode"}
+            for call in round_tool_calls
+        )
+        if (
+            not _round_commentary_emitted
+            and _realtime_public_narrative
+            and meaningful_batch
+            and time.monotonic() - _last_public_checkpoint_at >= _public_narrative_interval
+        ):
+            try:
+                checkpoint, checkpoint_in_tokens, checkpoint_out_tokens = (
+                    _generate_native_evidence_checkpoint(
+                        router,
+                        model=effective_model,
+                        messages=messages,
+                    )
+                )
+                _total_in_tokens += checkpoint_in_tokens
+                _total_out_tokens += checkpoint_out_tokens
+            except Exception as exc:  # noqa: BLE001 — optional narration
+                _logger.warning("public progress synthesis failed: %s", exc)
+                checkpoint = ""
+            if checkpoint:
+                yield ("commentary", checkpoint, None)
+                _round_commentary_emitted = True
+                _last_public_checkpoint_at = time.monotonic()
+
+        if not _round_commentary_emitted:
+            checkpoint = _native_result_checkpoint(
+                round_tool_calls,
+                tool_result_blocks,
+            )
+            if checkpoint:
+                # Evidence-derived fallback remains useful to non-realtime
+                # consumers, but it is runtime prose and must never be
+                # presented as if the model said it.
+                yield ("commentary_runtime", checkpoint, None)
+                _round_commentary_emitted = True
 
         if _pending_code_semantic_nudge:
             messages.append(
@@ -2431,9 +2550,7 @@ def stream_agentic_fallback(
             _pending_code_semantic_nudge = ""
 
         if _green_verification_convergence_active and not _code_semantic_repair_required:
-            _todo_completed_this_round = any(
-                call.name == "todo_write" for call in round_tool_calls
-            )
+            _todo_completed_this_round = any(call.name == "todo_write" for call in round_tool_calls)
             if _green_convergence_todo_only and _todo_completed_this_round:
                 _green_convergence_todo_only = False
                 _force_convergence_next = True
@@ -2480,7 +2597,7 @@ def stream_agentic_fallback(
 
         if round_i + 1 >= _tool_round_budget and _tool_round_budget < MAX_TOOL_ROUNDS:
             yield (
-                "commentary",
+                "commentary_runtime",
                 "已达到本轮证据收集预算；现在停止扩展检索，直接用现有结果完成回答。",
                 None,
             )
