@@ -5,12 +5,20 @@ import json
 
 import pytest
 from websockets.asyncio.server import serve
+from websockets.datastructures import Headers
+from websockets.http11 import Response
 
-from benchmarks.realtime_runner import RealtimeTrialRunner
+from benchmarks.realtime_runner import (
+    RealtimeEndpointError,
+    RealtimeTrialRunner,
+    _notification_events,
+    probe_realtime_endpoint,
+)
 from benchmarks.run_behavioral_suite import (
     _approval_behavior,
     _approval_responder,
     _context_overrides,
+    _local_auth_url,
 )
 
 
@@ -56,6 +64,60 @@ def test_browser_domain_selects_browser_work_surface() -> None:
         "runtime_surfaces": ["browser"],
     }
     assert _context_overrides("production_coding") == {}
+
+
+def test_local_auth_url_is_derived_without_copying_realtime_path_or_query() -> None:
+    assert _local_auth_url("ws://127.0.0.1:8000/api/realtime?token=secret") == (
+        "http://127.0.0.1:8000/api/auth/local/login"
+    )
+    assert _local_auth_url("wss://agent.example/realtime") == (
+        "https://agent.example/api/auth/local/login"
+    )
+    with pytest.raises(ValueError, match="absolute ws"):
+        _local_auth_url("http://agent.example/realtime")
+
+
+@pytest.mark.asyncio
+async def test_realtime_preflight_accepts_reachable_endpoint() -> None:
+    async def handler(websocket) -> None:
+        await websocket.wait_closed()
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        await probe_realtime_endpoint(f"ws://127.0.0.1:{port}/api/realtime")
+
+
+@pytest.mark.asyncio
+async def test_realtime_preflight_classifies_auth_rejection() -> None:
+    def reject(_connection, _request) -> Response:
+        return Response(403, "Forbidden", Headers(), b"auth required")
+
+    async def handler(websocket) -> None:
+        await websocket.wait_closed()
+
+    async with serve(handler, "127.0.0.1", 0, process_request=reject) as server:
+        port = server.sockets[0].getsockname()[1]
+        with pytest.raises(RealtimeEndpointError) as raised:
+            await probe_realtime_endpoint(f"ws://127.0.0.1:{port}/api/realtime")
+
+    assert raised.value.category == "authentication"
+    assert raised.value.status_code == 403
+
+
+def test_provider_billing_failure_is_infrastructure_not_agent_behavior() -> None:
+    events = _notification_events(
+        "item/completed",
+        {
+            "item": {
+                "type": "error",
+                "status": "failed",
+                "message": "http_429: insufficient balance; check billing details",
+            }
+        },
+    )
+
+    assert events[0]["kind"] == "infrastructure_error"
+    assert events[0]["error"]["category"] == "provider_unavailable"
 
 
 @pytest.mark.asyncio

@@ -10,12 +10,22 @@ alongside the plugin hub. ``plugins_router`` re-exports
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from runtime.platform.plugins.publisher_provenance import (
+    SIGNATURE_RELATIVE_PATH,
+    verify_plugin_publisher_provenance,
+)
 from runtime.platform.process.paths import project_root
+
+_PROVENANCE_IGNORED_DIRS = frozenset({".git", ".pytest_cache", "__pycache__", "node_modules"})
+_PROVENANCE_MAX_FILES = 2048
+_PROVENANCE_MAX_BYTES = 64 * 1024 * 1024
 
 
 def _default_plugin_roots() -> list[Path]:
@@ -127,6 +137,89 @@ def _has_app_manifest(plugin_dir: Path) -> bool:
     )
 
 
+def _plugin_content_provenance(plugin_dir: Path) -> dict[str, Any]:
+    """Build a bounded, reproducible digest of local plugin contents.
+
+    The publisher envelope is deliberately excluded: it signs this digest and
+    cannot be part of the bytes it covers. The verifier binds the digest back
+    to the manifest identity, version, trusted publisher, and key.
+    """
+
+    root = plugin_dir.resolve()
+    digest = hashlib.sha256()
+    file_count = 0
+    total_bytes = 0
+    issues: list[str] = []
+    complete = True
+    limit_exceeded = False
+
+    for current, dirs, files in os.walk(root, followlinks=False):
+        current_path = Path(current)
+        safe_dirs: list[str] = []
+        for name in sorted(dirs):
+            candidate = current_path / name
+            if name in _PROVENANCE_IGNORED_DIRS:
+                continue
+            if candidate.is_symlink():
+                issues.append(f"symlink directory excluded: {candidate.relative_to(root)}")
+                complete = False
+                continue
+            safe_dirs.append(name)
+        dirs[:] = safe_dirs
+
+        for name in sorted(files):
+            candidate = current_path / name
+            relative = candidate.relative_to(root)
+            if relative == SIGNATURE_RELATIVE_PATH:
+                continue
+            if candidate.is_symlink():
+                issues.append(f"symlink file excluded: {relative}")
+                complete = False
+                continue
+            if file_count >= _PROVENANCE_MAX_FILES:
+                issues.append(f"plugin exceeds {_PROVENANCE_MAX_FILES} provenance files")
+                complete = False
+                limit_exceeded = True
+                break
+            try:
+                size = candidate.stat().st_size
+            except OSError as exc:
+                issues.append(f"unreadable provenance file {relative}: {type(exc).__name__}")
+                complete = False
+                continue
+            if total_bytes + size > _PROVENANCE_MAX_BYTES:
+                issues.append(f"plugin exceeds {_PROVENANCE_MAX_BYTES} provenance bytes")
+                complete = False
+                limit_exceeded = True
+                break
+            try:
+                digest.update(relative.as_posix().encode("utf-8"))
+                digest.update(b"\0")
+                with candidate.open("rb") as handle:
+                    while chunk := handle.read(1024 * 1024):
+                        digest.update(chunk)
+                digest.update(b"\0")
+            except OSError as exc:
+                issues.append(f"unreadable provenance file {relative}: {type(exc).__name__}")
+                complete = False
+                continue
+            file_count += 1
+            total_bytes += size
+        if limit_exceeded:
+            break
+
+    return {
+        "schema": "octopus.plugin_content_provenance.v1",
+        "algorithm": "sha256:path-null-content",
+        "digest": digest.hexdigest() if complete else "",
+        "complete": complete,
+        "file_count": file_count,
+        "total_bytes": total_bytes,
+        "signed": False,
+        "issues": issues,
+    }
+
+
 def _plugin_smoke_check(
     plugin_dir: Path,
     manifest: dict[str, Any],
@@ -134,6 +227,7 @@ def _plugin_smoke_check(
     info: dict[str, Any],
     logo_url: str | None,
     composer_icon_url: str | None,
+    publisher_trust_store_path: str | Path | None,
 ) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     issues: list[str] = []
@@ -180,7 +274,33 @@ def _plugin_smoke_check(
         has_mcp=has_mcp,
         warnings=warnings,
     )
+    content_provenance = _plugin_content_provenance(plugin_dir)
+    if not content_provenance["complete"]:
+        warnings.extend(content_provenance["issues"])
+    publisher_provenance = verify_plugin_publisher_provenance(
+        plugin_dir,
+        manifest,
+        content_provenance,
+        trust_store_path=publisher_trust_store_path,
+    )
+    if publisher_provenance["present"]:
+        add(
+            "publisher_signature",
+            bool(publisher_provenance["verified"]),
+            str(publisher_provenance["reason"]),
+        )
+    content_provenance["signed"] = bool(publisher_provenance["verified"])
+    content_provenance["signature_status"] = publisher_provenance["status"]
     ok = not issues
+    publisher_verified = bool(publisher_provenance["verified"])
+    if publisher_verified and ok and not warnings:
+        trust_level = "publisher_verified"
+    elif publisher_verified:
+        trust_level = "publisher_verified_review_required"
+    elif ok and not warnings and not publisher_provenance["present"]:
+        trust_level = "local_verified"
+    else:
+        trust_level = "local_review_required"
     return {
         "schema": "octopus.codex_plugin_smoke.v1",
         "ok": ok,
@@ -195,10 +315,12 @@ def _plugin_smoke_check(
             "commands": has_commands,
         },
         "trust": {
-            "level": "local_verified" if ok and not warnings else "local_review_required",
-            "signed": False,
-            "reason": "local plugin manifest smoke check",
+            "level": trust_level,
+            "signed": publisher_verified,
+            "reason": str(publisher_provenance["reason"]),
         },
+        "content_provenance": content_provenance,
+        "publisher_provenance": publisher_provenance,
         "permission_resolution": permission_resolution,
     }
 
@@ -242,7 +364,12 @@ def _permission_resolution(
     }
 
 
-def _plugin_info(plugin_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+def _plugin_info(
+    plugin_dir: Path,
+    manifest: dict[str, Any],
+    *,
+    publisher_trust_store_path: str | Path | None = None,
+) -> dict[str, Any]:
     interface = manifest.get("interface")
     if not isinstance(interface, dict):
         interface = {}
@@ -282,11 +409,16 @@ def _plugin_info(plugin_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
         info=info,
         logo_url=logo_url,
         composer_icon_url=composer_icon_url,
+        publisher_trust_store_path=publisher_trust_store_path,
     )
     return info
 
 
-def discover_codex_plugins(roots: list[Path] | None = None) -> list[dict[str, Any]]:
+def discover_codex_plugins(
+    roots: list[Path] | None = None,
+    *,
+    publisher_trust_store_path: str | Path | None = None,
+) -> list[dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for root in roots or _default_plugin_roots():
         if not root.is_dir():
@@ -295,6 +427,10 @@ def discover_codex_plugins(roots: list[Path] | None = None) -> list[dict[str, An
             manifest = _read_manifest(manifest_path)
             if manifest is None:
                 continue
-            info = _plugin_info(manifest_path.parent.parent, manifest)
+            info = _plugin_info(
+                manifest_path.parent.parent,
+                manifest,
+                publisher_trust_store_path=publisher_trust_store_path,
+            )
             out[info["id"]] = info
     return sorted(out.values(), key=lambda item: item["name"].lower())

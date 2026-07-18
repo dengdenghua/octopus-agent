@@ -52,6 +52,17 @@ class TrajectoryStep:
             "ts": self.ts,
         }
 
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> TrajectoryStep:
+        payload = raw.get("payload")
+        if not isinstance(payload, dict):
+            raise ValueError("trajectory step payload must be an object")
+        return cls(
+            kind=str(raw.get("kind") or "event"),
+            payload=payload,
+            ts=float(raw.get("ts") or time.time()),
+        )
+
 
 @dataclass
 class Trajectory:
@@ -66,6 +77,7 @@ class Trajectory:
     started_at: float = field(default_factory=time.time)
     ended_at: float | None = None
     error: str | None = None
+    failure_category: str | None = None
 
     def append(self, kind: str, **payload: Any) -> None:
         self.steps.append(TrajectoryStep(kind=kind, payload=payload))
@@ -96,8 +108,29 @@ class Trajectory:
             "ended_at": self.ended_at,
             "runtime_ms": self.runtime_ms(),
             "error": self.error,
+            "failure_category": self.failure_category,
             "steps": [step.to_dict() for step in self.steps],
         }
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> Trajectory:
+        steps = raw.get("steps")
+        if not isinstance(steps, list):
+            raise ValueError("trajectory steps must be a list")
+        ended_at = raw.get("ended_at")
+        error = raw.get("error")
+        failure_category = raw.get("failure_category")
+        return cls(
+            trial_id=str(raw.get("trial_id") or ""),
+            case_id=str(raw.get("case_id") or ""),
+            steps=[TrajectoryStep.from_dict(step) for step in steps if isinstance(step, dict)],
+            started_at=float(raw.get("started_at") or time.time()),
+            ended_at=float(ended_at) if ended_at is not None else None,
+            error=str(error) if error is not None else None,
+            failure_category=(
+                str(failure_category) if failure_category is not None else None
+            ),
+        )
 
 
 # ── Grader ───────────────────────────────────────────────────
@@ -179,6 +212,13 @@ class CaseResult:
             return 0.0
         return sum(t.runtime_ms() for t in self.trajectories) / len(self.trajectories)
 
+    @property
+    def has_infrastructure_failure(self) -> bool:
+        return any(
+            trajectory.failure_category == "infrastructure"
+            for trajectory in self.trajectories
+        )
+
 
 @dataclass
 class SuiteReport:
@@ -200,6 +240,10 @@ class SuiteReport:
         if not self.cases:
             return 0.0
         return sum(c.pass_pow_k for c in self.cases) / len(self.cases)
+
+    @property
+    def infrastructure_failures(self) -> list[CaseResult]:
+        return [case for case in self.cases if case.has_infrastructure_failure]
 
     def summary(self) -> str:
         lines = [
@@ -247,6 +291,49 @@ class SuiteReport:
             ],
         }
 
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> SuiteReport:
+        case_rows = raw.get("cases")
+        if not isinstance(case_rows, list):
+            raise ValueError("suite checkpoint cases must be a list")
+        report = cls(started_at=float(raw.get("started_at") or time.time()))
+        ended_at = raw.get("ended_at")
+        report.ended_at = float(ended_at) if ended_at is not None else None
+        for case_row in case_rows:
+            if not isinstance(case_row, dict):
+                raise ValueError("suite checkpoint case must be an object")
+            trajectories_raw = case_row.get("trajectories")
+            verdicts_raw = case_row.get("verdicts")
+            if not isinstance(trajectories_raw, list) or not isinstance(verdicts_raw, list):
+                raise ValueError("checkpoint case must include trajectories and verdicts")
+            verdicts: list[Verdict] = []
+            for verdict in verdicts_raw:
+                if not isinstance(verdict, dict):
+                    raise ValueError("checkpoint verdict must be an object")
+                rubric = verdict.get("rubric")
+                verdicts.append(
+                    Verdict(
+                        passed=verdict.get("passed") is True,
+                        score=float(verdict.get("score") or 0.0),
+                        reason=str(verdict.get("reason") or ""),
+                        rubric=rubric if isinstance(rubric, dict) else {},
+                    )
+                )
+            report.add(
+                CaseResult(
+                    case_id=str(case_row.get("case_id") or ""),
+                    k=int(case_row.get("k") or 0),
+                    passes=int(case_row.get("passes") or 0),
+                    trajectories=[
+                        Trajectory.from_dict(trajectory)
+                        for trajectory in trajectories_raw
+                        if isinstance(trajectory, dict)
+                    ],
+                    verdicts=verdicts,
+                )
+            )
+        return report
+
     def write_json(self, path: Path | str) -> None:
         Path(path).write_text(
             json.dumps(self.to_dict(), indent=2),
@@ -272,6 +359,11 @@ def write_behavioral_system_evidence(
     """
 
     base = Path(root).resolve()
+    if report.infrastructure_failures:
+        failed = ", ".join(case.case_id for case in report.infrastructure_failures)
+        raise ValueError(
+            "behavioral evidence cannot score infrastructure failures: " + failed
+        )
     output_dir = (base / Path(artifact_dir)).resolve()
     try:
         output_dir.relative_to(base)
@@ -441,7 +533,7 @@ def run_case(
                     kind = raw.get("kind") or raw.get("type") or "event"
                     payload = {k_: v for k_, v in raw.items() if k_ not in ("kind", "type")}
                     traj.steps.append(TrajectoryStep(kind=kind, payload=payload))
-                    if kind == "error":
+                    if kind in {"error", "infrastructure_error"}:
                         detail = payload.get("error") or payload
                         rendered = (
                             json.dumps(detail, ensure_ascii=False, sort_keys=True)
@@ -449,6 +541,10 @@ def run_case(
                             else str(detail)
                         )
                         traj.error = f"runner error: {rendered}"
+                        if kind == "infrastructure_error" or (
+                            isinstance(detail, dict) and detail.get("type") == "infrastructure"
+                        ):
+                            traj.failure_category = "infrastructure"
         except Exception as exc:
             traj.error = f"runner raised: {exc}"
         traj.ended_at = time.time()
@@ -505,6 +601,8 @@ def run_suite_by_case(
     *,
     runner_factory: CaseRunnerFactory,
     k: int = 3,
+    initial_report: SuiteReport | None = None,
+    case_complete: Callable[[SuiteReport], None] | None = None,
 ) -> SuiteReport:
     """Run a suite with case-specific system adapters.
 
@@ -513,9 +611,34 @@ def run_suite_by_case(
     exact same prompts and graders across systems.
     """
 
-    report = SuiteReport()
+    initial_by_id: dict[str, CaseResult] = {}
+    if initial_report is not None:
+        for result in initial_report.cases:
+            if result.case_id in initial_by_id:
+                raise ValueError(f"duplicate checkpoint case: {result.case_id}")
+            if (
+                result.k != k
+                or len(result.trajectories) != k
+                or len(result.verdicts) != k
+                or not 0 <= result.passes <= k
+                or result.has_infrastructure_failure
+            ):
+                raise ValueError(f"non-resumable checkpoint case: {result.case_id}")
+            initial_by_id[result.case_id] = result
+    report = SuiteReport(
+        started_at=initial_report.started_at if initial_report is not None else time.time()
+    )
     for case in cases:
-        report.add(run_case(case, runner=runner_factory(case), k=k))
+        result = initial_by_id.pop(case.id, None)
+        if result is None:
+            result = run_case(case, runner=runner_factory(case), k=k)
+            report.add(result)
+            if case_complete is not None:
+                case_complete(report)
+        else:
+            report.add(result)
+    if initial_by_id:
+        raise ValueError(f"checkpoint contains unknown cases: {sorted(initial_by_id)}")
     report.ended_at = time.time()
     return report
 

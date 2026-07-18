@@ -17,6 +17,9 @@ from runtime.safety.evolution.behavioral_surpass_evidence import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SUITE_ID = "same-task-head-to-head-v1"
+INFRASTRUCTURE_STATUS_PATH = (
+    REPO_ROOT / "benchmarks/results/behavioral-infrastructure-latest.json"
+)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -50,6 +53,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         root=REPO_ROOT,
         bundle_path=args.output,
     )
+    INFRASTRUCTURE_STATUS_PATH.unlink(missing_ok=True)
     print(json.dumps(report, ensure_ascii=False, sort_keys=True))
     return 0 if report["ready"] else 1
 

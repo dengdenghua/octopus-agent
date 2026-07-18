@@ -10,12 +10,14 @@ from .credential_pool import AllKeysExhausted, CredentialPool, KeyStats, PoolRep
 from .dispatch_router import ModelDispatchRouter
 from .gemini_router import GeminiModelRouter, GeminiRouterError
 from .models import (
+    EventType,
     LLMResponseFormatError,
     Message,
     MockModelRouter,
     ModelRequest,
     ModelResponse,
     ModelRouter,
+    ModelStreamEvent,
     ModelStrength,
 )
 from .multi_router import DispatchRecord, MultiModelRouter, RouteAttempt
@@ -37,6 +39,7 @@ __all__ = [
     "AllKeysExhausted",
     "CredentialPool",
     "DispatchRecord",
+    "EventType",
     "KeyStats",
     "ModelDispatchRouter",
     "GeminiModelRouter",
@@ -50,6 +53,7 @@ __all__ = [
     "ModelResponse",
     "ModelRouter",
     "ModelStrength",
+    "ModelStreamEvent",
     "MultiModelRouter",
     "OllamaModelRouter",
     "OllamaRouterError",

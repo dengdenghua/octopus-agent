@@ -6,6 +6,9 @@ from typing import Any
 
 from runtime.platform.process.paths import project_root as default_project_root
 from runtime.safety.evolution.agent_benchmark import compute_agent_benchmark
+from runtime.safety.evolution.behavioral_surpass_evidence import (
+    compute_behavioral_surpass_evidence,
+)
 from runtime.safety.evolution.codex_gap import compute_codex_gap_report
 from runtime.safety.evolution.ecosystem_readiness import compute_ecosystem_readiness
 from runtime.safety.evolution.parity_certification import compute_parity_certification
@@ -22,6 +25,22 @@ EXTERNAL_COMPETITORS: tuple[str, ...] = tuple(
     competitor for competitor in COMPETITORS if competitor != OCTOPUS_COMPETITOR
 )
 DEFAULT_TARGET_SCORE = 95
+BASELINE_CONTEXT: dict[str, Any] = {
+    "as_of": "2026-07-17",
+    "score_kind": "architecture_capability_estimate",
+    "codex_surface": (
+        "combined Codex desktop app, CLI, cloud execution, skills/plugins, "
+        "browser/computer-use, automations, and multi-agent collaboration"
+    ),
+    "excludes": "legacy CLI-only comparisons",
+    "behavioral_authority": (
+        "same-task behavioral bundle and parity certification, when current and available"
+    ),
+    "official_references": (
+        "https://openai.com/index/introducing-the-codex-app/",
+        "https://openai.com/index/codex-for-almost-everything/",
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -42,7 +61,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         weight=8,
         why="Handle broad user goals, choose tools, keep context, and finish without forcing a coding-only path.",
         scores={
-            "codex": 82,
+            "codex": 97,
             "claude_code": 88,
             "openclaw": 86,
             "hermes": 88,
@@ -64,7 +83,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         weight=8,
         why="Run persistent workspaces, recurring tasks, handoffs, memory, and accountable long-running work.",
         scores={
-            "codex": 70,
+            "codex": 96,
             "claude_code": 78,
             "openclaw": 88,
             "hermes": 89,
@@ -86,7 +105,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         weight=11,
         why="Plan, edit, run, verify, and recover inside a real repository.",
         scores={
-            "codex": 96,
+            "codex": 99,
             "claude_code": 96,
             "openclaw": 76,
             "hermes": 80,
@@ -103,7 +122,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         weight=7,
         why="Sustain a correct mental model across large, dirty, multi-module worktrees.",
         scores={
-            "codex": 94,
+            "codex": 98,
             "claude_code": 95,
             "openclaw": 82,
             "hermes": 84,
@@ -121,7 +140,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         weight=6,
         why="Make the working loop feel fast, obvious, and low-friction for operators.",
         scores={
-            "codex": 90,
+            "codex": 98,
             "claude_code": 89,
             "openclaw": 82,
             "hermes": 82,
@@ -139,16 +158,16 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         weight=7,
         why="Prevent unsafe local execution while preserving useful autonomy.",
         scores={
-            "codex": 95,
+            "codex": 97,
             "claude_code": 94,
             "openclaw": 84,
             "hermes": 84,
-            "octopus": 96,
+            "octopus": 97,
         },
         octopus_evidence_ids=("approvals_sandbox_security", "governance_audit"),
         octopus_next_actions=(
             "Keep permission/sandbox quality and high-risk policy coverage release-gated.",
-            "Extend plugin permission review to signed provenance verification.",
+            "Require trusted publisher provenance for every public plugin release.",
         ),
     ),
     ScoreDimension(
@@ -157,16 +176,16 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         weight=6,
         why="Make important behavior reproducible, reviewable, and rollback-friendly.",
         scores={
-            "codex": 94,
+            "codex": 96,
             "claude_code": 86,
             "openclaw": 82,
             "hermes": 83,
-            "octopus": 96,
+            "octopus": 97,
         },
         octopus_evidence_ids=("record_replay_gate", "governance_audit"),
         octopus_next_actions=(
             "Keep governance-chain export and replay-gate overrides in release audits.",
-            "Add large-corpus replay latency budgets to CI.",
+            "Expand replay latency budgets to pixel and multi-agent trace corpora.",
         ),
     ),
     ScoreDimension(
@@ -175,7 +194,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         weight=8,
         why="Delegate and coordinate work without polluting the main context or losing traceability.",
         scores={
-            "codex": 78,
+            "codex": 98,
             "claude_code": 80,
             "openclaw": 84,
             "hermes": 85,
@@ -193,15 +212,15 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         weight=6,
         why="Let operators add durable local capabilities without patching core code.",
         scores={
-            "codex": 94,
+            "codex": 98,
             "claude_code": 96,
             "openclaw": 90,
             "hermes": 88,
-            "octopus": 97,
+            "octopus": 98,
         },
         octopus_evidence_ids=("skills_plugins_hooks", "approvals_sandbox_security"),
         octopus_next_actions=(
-            "Extend plugin permission review to signed provenance verification.",
+            "Expose publisher key rotation and revocation controls in the operator UI.",
             "Add UI install controls for plugin permission rule drafts.",
         ),
     ),
@@ -211,7 +230,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         weight=7,
         why="Inspect screens, operate browsers, and validate visual state.",
         scores={
-            "codex": 92,
+            "codex": 98,
             "claude_code": 84,
             "openclaw": 78,
             "hermes": 78,
@@ -228,7 +247,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         weight=8,
         why="Carry proven experience forward across tasks, agents, and releases.",
         scores={
-            "codex": 74,
+            "codex": 95,
             "claude_code": 78,
             "openclaw": 91,
             "hermes": 92,
@@ -246,7 +265,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         weight=5,
         why="Give humans clear control over promotion, override, evidence, and policy.",
         scores={
-            "codex": 92,
+            "codex": 96,
             "claude_code": 88,
             "openclaw": 82,
             "hermes": 83,
@@ -264,7 +283,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         weight=5,
         why="Documentation, enterprise polish, integrations, and broad user trust.",
         scores={
-            "codex": 95,
+            "codex": 99,
             "claude_code": 90,
             "openclaw": 86,
             "hermes": 86,
@@ -282,7 +301,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         weight=8,
         why="Durable teams, memory, governance, and self-evolution beyond task-local coding.",
         scores={
-            "codex": 80,
+            "codex": 96,
             "claude_code": 82,
             "openclaw": 90,
             "hermes": 90,
@@ -313,6 +332,7 @@ def compute_agent_competitor_scorecard(
     ecosystem_readiness = compute_ecosystem_readiness(root=base)
     parity_certification = compute_parity_certification(root=base)
     agent_benchmark = compute_agent_benchmark(root=base)
+    behavioral_evidence = compute_behavioral_surpass_evidence(root=base)
     evidence_by_id = {
         str(item.get("id")): item
         for item in gap_report.get("capabilities", [])
@@ -351,6 +371,24 @@ def compute_agent_competitor_scorecard(
         key=lambda row: (row["score"], row["competitor"]),
         reverse=True,
     )
+    behavioral_systems = (
+        behavioral_evidence.get("systems")
+        if isinstance(behavioral_evidence.get("systems"), dict)
+        else {}
+    )
+    behavioral_octopus = (
+        behavioral_systems.get("octopus")
+        if isinstance(behavioral_systems.get("octopus"), dict)
+        else {}
+    )
+    behavioral_codex = (
+        behavioral_systems.get("codex") if isinstance(behavioral_systems.get("codex"), dict) else {}
+    )
+    behavioral_infrastructure = (
+        behavioral_evidence.get("infrastructure")
+        if isinstance(behavioral_evidence.get("infrastructure"), dict)
+        else {}
+    )
     octopus_below_target = [
         row for row in dimensions if row["scores"][OCTOPUS_COMPETITOR] < target_score
     ]
@@ -380,6 +418,37 @@ def compute_agent_competitor_scorecard(
         "surpass_margin": surpass_margin,
         "competitors": list(COMPETITORS),
         "external_competitors": list(EXTERNAL_COMPETITORS),
+        "baseline_context": dict(BASELINE_CONTEXT),
+        "evidence_layers": {
+            "schema": "octopus.agent_score_evidence_layers.v1",
+            "architecture": {
+                "status": "estimated",
+                "octopus_score": overall["octopus"],
+                "codex_score": overall["codex"],
+                "source": "current_combined_architecture_baseline",
+            },
+            "static_certification": {
+                "status": ("certified" if parity_certification.get("ready") else "not_certified"),
+                "ready": bool(parity_certification.get("ready")),
+                "passed": int(parity_certification.get("passed") or 0),
+                "total": int(parity_certification.get("total") or 0),
+            },
+            "behavioral_head_to_head": {
+                "status": ("certified" if behavioral_evidence.get("ready") else "not_certified"),
+                "ready": bool(behavioral_evidence.get("ready")),
+                "verdict": behavioral_evidence.get("verdict"),
+                "blocker": (
+                    "infrastructure"
+                    if behavioral_infrastructure.get("active")
+                    else "evidence"
+                    if not behavioral_evidence.get("ready")
+                    else None
+                ),
+                "infrastructure": behavioral_infrastructure,
+                "octopus_pass_pow_k": float(behavioral_octopus.get("aggregate_pass_pow_k") or 0.0),
+                "codex_pass_pow_k": float(behavioral_codex.get("aggregate_pass_pow_k") or 0.0),
+            },
+        },
         "overall": overall,
         "ranking": ranking,
         "verdict": _scorecard_verdict(overall),

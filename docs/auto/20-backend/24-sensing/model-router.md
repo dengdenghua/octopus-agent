@@ -16,6 +16,7 @@ tier: "standard"
 - `AllKeysExhausted`
 - `CredentialPool`
 - `DispatchRecord`
+- `EventType`
 - `KeyStats`
 - `ModelDispatchRouter`
 - `GeminiModelRouter`
@@ -29,6 +30,7 @@ tier: "standard"
 - `ModelResponse`
 - `ModelRouter`
 - `ModelStrength`
+- `ModelStreamEvent`
 - `MultiModelRouter`
 - `OllamaModelRouter`
 - `OllamaRouterError`

@@ -393,5 +393,7 @@ class TestMultiRouterRetry:
         assert _is_transient_error(ConnectionError("connection refused"))
         assert _is_transient_error(TimeoutError("read timeout"))
         assert _is_transient_error(RuntimeError("HTTP 503 Service Unavailable"))
+        assert _is_transient_error(RuntimeError("SSL: UNEXPECTED_EOF_WHILE_READING"))
+        assert not _is_transient_error(RuntimeError("SSL certificate verify failed"))
         assert not _is_transient_error(ValueError("bad input"))
         assert not _is_transient_error(KeyError("missing field"))

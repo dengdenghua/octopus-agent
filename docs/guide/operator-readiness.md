@@ -77,6 +77,8 @@ Minimum plugin readiness:
 - Local smoke checks pass or produce a clear review-required reason.
 - Permission review happens before high-risk plugin actions.
 - Lifecycle hook behavior is auditable like ordinary tool hooks.
+- Publisher provenance is verified against an operator-owned trust store;
+  invalid, tampered, untrusted, and revoked signatures fail the smoke gate.
 
 Operator surfaces:
 
@@ -93,4 +95,5 @@ Before raising the ecosystem maturity score, confirm:
 - Permission and sandbox outcomes are visible in the operator panel.
 - Replay gate failures block promotion unless a reasoned override is recorded.
 - Plugin smoke summary is green or has explicit review-required rows.
+- Public plugins show a verified publisher count and no invalid signatures.
 - The competitor scorecard shows the relevant evidence checklist.

@@ -7,16 +7,27 @@ import ast
 import json
 import os
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 from benchmarks.codex_cli_runner import CodexCliTrialRunner, codex_cli_version
-from benchmarks.eval_harness import run_suite_by_case, write_behavioral_system_evidence
+from benchmarks.eval_harness import SuiteReport, run_suite_by_case, write_behavioral_system_evidence
 from benchmarks.fixed_suite_fixtures import prepare_fixture_suite
 from benchmarks.multiphase_runner import MultiPhaseTrialRunner
-from benchmarks.realtime_runner import RealtimeTrialRunner
+from benchmarks.realtime_runner import (
+    RealtimeEndpointError,
+    RealtimeTrialRunner,
+    probe_realtime_endpoint,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+INFRASTRUCTURE_STATUS_PATH = (
+    REPO_ROOT / "benchmarks/results/behavioral-infrastructure-latest.json"
+)
 
 
 def _approval_behavior(case_id: str) -> tuple[str, str]:
@@ -92,16 +103,69 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--octopus-url", default="ws://127.0.0.1:8000/api/realtime")
     parser.add_argument("--octopus-token-env", default="OCTOPUS_API_TOKEN")
     parser.add_argument(
+        "--octopus-local-username",
+        default=None,
+        help="Explicitly obtain a short-lived token from the server's local-auth endpoint.",
+    )
+    parser.add_argument(
+        "--octopus-local-password-env",
+        default="OCTOPUS_EVAL_LOCAL_PASSWORD",
+        help="Environment variable containing the optional local-auth password.",
+    )
+    parser.add_argument(
         "--codex-executable",
         default="/Applications/ChatGPT.app/Contents/Resources/codex",
     )
     parser.add_argument("--codex-ignore-user-config", action="store_true")
     parser.add_argument("--timeout", type=float, default=900.0)
     parser.add_argument("--preserve-runs", action="store_true")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume complete cases from the validated checkpoint beside --output.",
+    )
+    parser.add_argument(
+        "--checkpoint",
+        type=Path,
+        default=None,
+        help="Checkpoint path (default: <output>.checkpoint.json).",
+    )
     args = parser.parse_args(argv)
     if args.k < 1:
         parser.error("--k must be at least 1")
     selected = set(args.case_ids) if args.case_ids else None
+    octopus_token = os.environ.get(args.octopus_token_env) or None
+    if args.system == "octopus":
+        if not octopus_token and args.octopus_local_username:
+            try:
+                octopus_token = _local_access_token(
+                    args.octopus_url,
+                    username=args.octopus_local_username,
+                    password=os.environ.get(args.octopus_local_password_env) or None,
+                )
+            except ValueError as exc:
+                parser.error(f"Octopus local login failed: {exc}")
+        try:
+            import asyncio
+
+            asyncio.run(
+                probe_realtime_endpoint(
+                    args.octopus_url,
+                    token=octopus_token,
+                    timeout_seconds=min(args.timeout, 10.0),
+                )
+            )
+        except RealtimeEndpointError as exc:
+            hint = ""
+            if exc.category == "authentication":
+                hint = (
+                    f"; export a valid token in {args.octopus_token_env} "
+                    f"or select its environment variable with --octopus-token-env"
+                )
+            parser.error(
+                f"Octopus infrastructure preflight failed [{exc.category}]: {exc}{hint}. "
+                "No behavioral result was scored."
+            )
     prepared = prepare_fixture_suite(
         repo_root=REPO_ROOT,
         runs_root=args.runs_root / args.system,
@@ -116,7 +180,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             approval_policy, approval_action = _approval_behavior(case.id)
             return RealtimeTrialRunner(
                 url=args.octopus_url,
-                token=os.environ.get(args.octopus_token_env) or None,
+                token=octopus_token,
                 model=args.model,
                 topology_id="research_swarm_v1" if multi_agent else None,
                 workspace=lambda: prepared.workspace(case.id),
@@ -154,7 +218,78 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         return single_runner(case)
 
-    report = run_suite_by_case(prepared.cases, runner_factory=runner_factory, k=args.k)
+    checkpoint_path = args.checkpoint or Path(f"{args.output}.checkpoint.json")
+    checkpoint_case_ids = [case.id for case in prepared.cases]
+    try:
+        initial_report = (
+            _load_checkpoint(
+                checkpoint_path,
+                system=args.system,
+                k=args.k,
+                case_ids=checkpoint_case_ids,
+            )
+            if args.resume
+            else None
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    def save_checkpoint(report: SuiteReport) -> None:
+        resumable = SuiteReport(
+            cases=[case for case in report.cases if not case.has_infrastructure_failure],
+            started_at=report.started_at,
+        )
+        _write_checkpoint(
+            checkpoint_path,
+            report=resumable,
+            system=args.system,
+            k=args.k,
+            case_ids=checkpoint_case_ids,
+        )
+
+    report = run_suite_by_case(
+        prepared.cases,
+        runner_factory=runner_factory,
+        k=args.k,
+        initial_report=initial_report,
+        case_complete=save_checkpoint,
+    )
+    if report.infrastructure_failures:
+        failures = [
+            {
+                "case_id": case.case_id,
+                "categories": sorted(
+                    {
+                        trajectory.failure_category
+                        for trajectory in case.trajectories
+                        if trajectory.failure_category
+                    }
+                ),
+                "errors": [
+                    trajectory.error
+                    for trajectory in case.trajectories
+                    if trajectory.failure_category == "infrastructure"
+                ],
+            }
+            for case in report.infrastructure_failures
+        ]
+        diagnostic: dict[str, object] = {
+            "schema": "octopus.behavioral_infrastructure_failure.v1",
+            "suite_id": "same-task-head-to-head-v1",
+            "system_id": args.system,
+            "generated_at": datetime.now(UTC).isoformat(),
+            "scored": False,
+            "failures": failures,
+        }
+        _write_json_atomic(args.output, diagnostic)
+        _write_json_atomic(INFRASTRUCTURE_STATUS_PATH, diagnostic)
+        print(
+            "Behavioral run was not scored because infrastructure failed: "
+            + ", ".join(failure["case_id"] for failure in failures),
+            file=sys.stderr,
+        )
+        print(f"diagnostic: {args.output}")
+        return 2
     system_evidence = write_behavioral_system_evidence(
         report,
         prepared.cases,
@@ -170,14 +305,72 @@ def main(argv: Sequence[str] | None = None) -> int:
         "system_id": args.system,
         "system": system_evidence,
     }
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    _write_json_atomic(args.output, payload)
+    checkpoint_path.unlink(missing_ok=True)
     print(report.summary())
     print(f"system evidence: {args.output}")
     return 0 if report.aggregate_pass_pow_k == 1.0 else 1
+
+
+def _write_checkpoint(
+    path: Path,
+    *,
+    report: SuiteReport,
+    system: str,
+    k: int,
+    case_ids: list[str],
+) -> None:
+    payload = {
+        "schema": "octopus.behavioral_checkpoint.v1",
+        "suite_id": "same-task-head-to-head-v1",
+        "system_id": system,
+        "k": k,
+        "case_ids": case_ids,
+        "report": report.to_dict(),
+    }
+    _write_json_atomic(path, payload)
+
+
+def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _load_checkpoint(
+    path: Path,
+    *,
+    system: str,
+    k: int,
+    case_ids: list[str],
+) -> SuiteReport:
+    if not path.is_file():
+        raise ValueError(f"resume checkpoint does not exist: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"resume checkpoint is unreadable: {path}") from exc
+    expected = {
+        "schema": "octopus.behavioral_checkpoint.v1",
+        "suite_id": "same-task-head-to-head-v1",
+        "system_id": system,
+        "k": k,
+        "case_ids": case_ids,
+    }
+    for field, value in expected.items():
+        if payload.get(field) != value:
+            raise ValueError(f"resume checkpoint {field} does not match this run")
+    report = payload.get("report")
+    if not isinstance(report, dict):
+        raise ValueError("resume checkpoint report is missing")
+    return SuiteReport.from_dict(report)
 
 
 def _hide_phase_one_inputs(workspace: Path, case_id: str, phase_index: int) -> None:
@@ -197,10 +390,55 @@ def _hide_phase_one_inputs(workspace: Path, case_id: str, phase_index: int) -> N
     source.unlink()
 
 
+def _local_auth_url(realtime_url: str) -> str:
+    parsed = urllib.parse.urlsplit(realtime_url)
+    scheme = {"ws": "http", "wss": "https"}.get(parsed.scheme)
+    if scheme is None or not parsed.netloc:
+        raise ValueError("--octopus-url must be an absolute ws:// or wss:// URL")
+    return urllib.parse.urlunsplit(
+        (scheme, parsed.netloc, "/api/auth/local/login", "", "")
+    )
+
+
+def _local_access_token(
+    realtime_url: str,
+    *,
+    username: str,
+    password: str | None = None,
+) -> str:
+    payload: dict[str, str] = {"username": username}
+    if password:
+        payload["password"] = password
+    request = urllib.request.Request(
+        _local_auth_url(realtime_url),
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
+            result = json.load(response)
+    except urllib.error.HTTPError as exc:
+        raise ValueError(f"local-auth endpoint returned HTTP {exc.code}") from exc
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"local-auth endpoint is unavailable ({type(exc).__name__})") from exc
+    token = result.get("access_token") if isinstance(result, dict) else None
+    if not isinstance(token, str) or not token:
+        raise ValueError("local-auth endpoint did not issue an access token")
+    return token
+
+
 def _progress_observer(case_id: str):
     """Print content-free live progress without leaking prompts or tool output."""
 
-    visible_kinds = {"approval_request", "error", "tool_start", "tool_end", "turn_result"}
+    visible_kinds = {
+        "approval_request",
+        "error",
+        "infrastructure_error",
+        "tool_start",
+        "tool_end",
+        "turn_result",
+    }
 
     def observe(event: dict[str, object]) -> None:
         kind = str(event.get("kind") or "event")

@@ -48,7 +48,14 @@ def create_plugins_router(
     jwt_audience: str | None = None,
     approval_policy_path: Path | None = None,
     promotion_audit_path: Path | None = None,
+    publisher_trust_store_path: Path | None = None,
 ) -> APIRouter:
+    def _discover() -> list[dict[str, Any]]:
+        return discover_codex_plugins(
+            plugin_roots,
+            publisher_trust_store_path=publisher_trust_store_path,
+        )
+
     def _auth_dep(request: Request) -> None:
         path = str(getattr(getattr(request, "url", None), "path", "") or "")
         if is_public_plugin_asset_request(request.method, path):
@@ -69,12 +76,12 @@ def create_plugins_router(
 
     @router.get("/api/plugins")
     def _plugins() -> list[dict[str, Any]]:
-        return discover_codex_plugins(plugin_roots)
+        return _discover()
 
     @router.get("/api/plugins/capabilities")
     def _plugin_caps(type: str | None = None) -> list[dict[str, Any]]:
         caps: list[dict[str, Any]] = []
-        for plugin in discover_codex_plugins(plugin_roots):
+        for plugin in _discover():
             for cap in plugin["capabilities"]:
                 if type is None or cap.get("type") == type:
                     caps.append(cap)
@@ -82,11 +89,12 @@ def create_plugins_router(
 
     @router.get("/api/plugins/smoke-summary")
     def _plugin_smoke_summary() -> dict[str, Any]:
-        plugins = discover_codex_plugins(plugin_roots)
+        plugins = _discover()
         migration_readiness = compute_plugin_migration_readiness(plugins=plugins)
         failed: list[dict[str, Any]] = []
         review_required: list[dict[str, Any]] = []
         warnings: list[dict[str, Any]] = []
+        publisher_provenance: list[dict[str, Any]] = []
         permission_resolutions: list[dict[str, Any]] = []
         permission_rule_drafts = build_plugin_permission_rule_drafts(
             plugins=plugins,
@@ -115,6 +123,19 @@ def create_plugins_router(
                 if surfaces.get(surface):
                     surface_totals[surface] += 1
             trust = smoke.get("trust") if isinstance(smoke.get("trust"), dict) else {}
+            provenance = (
+                smoke.get("publisher_provenance")
+                if isinstance(smoke.get("publisher_provenance"), dict)
+                else {}
+            )
+            if provenance:
+                publisher_provenance.append(
+                    {
+                        "plugin_id": plugin.get("id"),
+                        "plugin_name": plugin.get("name"),
+                        **provenance,
+                    }
+                )
             permission_resolution = (
                 smoke.get("permission_resolution")
                 if isinstance(smoke.get("permission_resolution"), dict)
@@ -138,7 +159,7 @@ def create_plugins_router(
                         else [],
                     }
                 )
-            if trust.get("level") == "local_review_required":
+            if str(trust.get("level") or "").endswith("review_required"):
                 review_required.append(
                     {
                         "plugin_id": plugin.get("id"),
@@ -169,9 +190,21 @@ def create_plugins_router(
             "failed_count": len(failed),
             "review_required_count": len(review_required),
             "warning_count": sum(len(item["warnings"]) for item in warnings),
+            "publisher_verified_count": sum(
+                1 for item in publisher_provenance if item.get("verified") is True
+            ),
+            "unsigned_count": sum(
+                1 for item in publisher_provenance if item.get("status") == "unsigned"
+            ),
+            "invalid_signature_count": sum(
+                1
+                for item in publisher_provenance
+                if item.get("present") is True and item.get("verified") is not True
+            ),
             "failed": failed,
             "review_required": review_required,
             "warnings": warnings,
+            "publisher_provenance": publisher_provenance,
             "permission_resolutions": permission_resolutions,
             "permission_rule_drafts": {
                 "schema": permission_rule_drafts["schema"],
@@ -197,13 +230,13 @@ def create_plugins_router(
     @router.get("/api/plugins/migration-readiness")
     def _plugin_migration_readiness() -> dict[str, Any]:
         return compute_plugin_migration_readiness(
-            plugins=discover_codex_plugins(plugin_roots),
+            plugins=_discover(),
         )
 
     @router.get("/api/plugins/permission-rule-drafts")
     def _plugin_permission_rule_drafts() -> dict[str, Any]:
         report = build_plugin_permission_rule_drafts(
-            plugins=discover_codex_plugins(plugin_roots),
+            plugins=_discover(),
             limit=500,
         )
         report["verified"] = sum(
@@ -223,7 +256,7 @@ def create_plugins_router(
         if not draft_id:
             raise HTTPException(400, "draft_id is required")
         report = build_plugin_permission_rule_drafts(
-            plugins=discover_codex_plugins(plugin_roots),
+            plugins=_discover(),
             limit=int(body.get("limit") or 500),
         )
         draft = next(
@@ -261,7 +294,7 @@ def create_plugins_router(
 
     @router.get("/api/plugins/{plugin_id}/smoke")
     def _plugin_smoke(plugin_id: str) -> dict[str, Any]:
-        for plugin in discover_codex_plugins(plugin_roots):
+        for plugin in _discover():
             if plugin["id"] == plugin_id:
                 smoke = plugin.get("smoke")
                 if isinstance(smoke, dict):
@@ -271,7 +304,7 @@ def create_plugins_router(
 
     @router.get("/api/plugins/{plugin_id}/runtime")
     def _plugin_runtime(plugin_id: str) -> dict[str, Any]:
-        for plugin in discover_codex_plugins(plugin_roots):
+        for plugin in _discover():
             if plugin["id"] != plugin_id:
                 continue
             plugin_dir = Path(_string(plugin.get("path"))).resolve()
@@ -284,7 +317,7 @@ def create_plugins_router(
 
     @router.get("/api/plugins/{plugin_id}/assets/{asset_path:path}")
     def _plugin_asset(plugin_id: str, asset_path: str) -> FileResponse:
-        for plugin in discover_codex_plugins(plugin_roots):
+        for plugin in _discover():
             if plugin["id"] != plugin_id:
                 continue
             plugin_dir = Path(_string(plugin.get("path"))).resolve()
@@ -303,7 +336,7 @@ def create_plugins_router(
 
     @router.get("/api/plugins/{plugin_id}")
     def _plugin_get(plugin_id: str) -> dict[str, Any]:
-        for plugin in discover_codex_plugins(plugin_roots):
+        for plugin in _discover():
             if plugin["id"] == plugin_id:
                 return plugin
         raise HTTPException(status_code=404, detail="plugin not found")

@@ -8,6 +8,8 @@ of edits and final answers.
 
 from __future__ import annotations
 
+import pytest
+
 from runtime.core.cerebrum.react_guards import (
     _broad_except_suppression_guard,
     _code_mode_missing_write_guard,
@@ -626,3 +628,53 @@ class TestEvidenceGuardsBrowserScope:
             final_answer="Implemented the fix and verified it.",
         )
         assert _invoke_missing_write(ctx) is not None
+
+    def test_write_guard_still_fires_for_mixed_browser_and_code_task(self) -> None:
+        from runtime.core.cerebrum.react_guards import _invoke_missing_write
+
+        ctx = self._browser_ctx(
+            goal=(
+                "Use the browser UI to reproduce the bug, then fix the source code and run tests."
+            ),
+            final_answer="Reproduced the bug, implemented the fix, and ran tests.",
+        )
+        assert _invoke_missing_write(ctx) is not None
+
+    def test_inspection_guard_still_fires_for_mixed_browser_and_code_task(self) -> None:
+        from runtime.core.cerebrum.react_guards import _invoke_missing_inspection
+
+        ctx = self._browser_ctx(
+            goal=(
+                "Use the browser UI to reproduce the bug, then inspect the project files "
+                "and fix the source code."
+            ),
+            final_answer="Inspected the project and fixed the source code.",
+            file_inspection_tools_visible=True,
+        )
+        assert _invoke_missing_inspection(ctx) is not None
+
+    @pytest.mark.parametrize(
+        "goal",
+        [
+            "Reproduce it in the browser, patch repo, and verify with pytest.",
+            "Use the UI to confirm the issue; update the backend module and run tests.",
+            "先在浏览器界面复现，再修改代码仓库里的实现并运行测试。",
+        ],
+    )
+    def test_common_mixed_task_phrasings_are_not_ui_only(self, goal: str) -> None:
+        from runtime.core.cerebrum.react_guards import _browser_goal_is_ui_only
+
+        assert _browser_goal_is_ui_only(goal) is False
+
+    @pytest.mark.parametrize(
+        "goal",
+        [
+            "Use the browser UI to upload a file and test the form.",
+            "In the browser, edit the repository settings and save them.",
+            "通过 UI 编辑项目计划并下载文件。",
+        ],
+    )
+    def test_browser_entities_and_uploaded_files_remain_ui_only(self, goal: str) -> None:
+        from runtime.core.cerebrum.react_guards import _browser_goal_is_ui_only
+
+        assert _browser_goal_is_ui_only(goal) is True

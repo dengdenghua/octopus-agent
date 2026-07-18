@@ -1053,10 +1053,18 @@ When making changes, first read the surrounding code.
         ):
             p = visuals_dir / f"{view}.{ext}"
             if p.is_file():
-                return FileResponse(str(p), media_type=mime)
+                return FileResponse(
+                    str(p),
+                    media_type=mime,
+                    headers={"Cache-Control": "no-store"},
+                )
         reference = visuals_dir / "reference.png"
         if reference.is_file():
-            return FileResponse(str(reference), media_type="image/png")
+            return FileResponse(
+                str(reference),
+                media_type="image/png",
+                headers={"Cache-Control": "no-store"},
+            )
         raise HTTPException(404, f"no {view} visual for agent: {agent_id}")
 
     @router.delete(
@@ -1144,7 +1152,11 @@ When making changes, first read the surrounding code.
         ):
             p = agent_dir / f"avatar.{ext}"
             if p.is_file():
-                return FileResponse(str(p), media_type=mime)
+                return FileResponse(
+                    str(p),
+                    media_type=mime,
+                    headers={"Cache-Control": "no-store"},
+                )
         raise HTTPException(404, f"no avatar for agent: {agent_id}")
 
     @router.post("/api/agents/{agent_id}/reload")

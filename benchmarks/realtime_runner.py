@@ -17,11 +17,94 @@ from pathlib import Path
 from typing import Any, Literal
 
 from websockets.asyncio.client import connect
+from websockets.exceptions import InvalidStatus
 
 ApprovalAction = Literal["accept", "decline"]
 ApprovalResponder = Callable[[str, dict[str, Any]], dict[str, Any]]
 EventObserver = Callable[[dict[str, Any]], None]
 WorkspaceResolver = str | Path | Callable[[], str | Path]
+
+
+class RealtimeEndpointError(RuntimeError):
+    """A transport/setup failure that must not be scored as agent behavior."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        category: str,
+        status_code: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.category = category
+        self.status_code = status_code
+
+    def to_event(self) -> dict[str, Any]:
+        error: dict[str, Any] = {
+            "type": "infrastructure",
+            "category": self.category,
+            "message": str(self),
+        }
+        if self.status_code is not None:
+            error["status_code"] = self.status_code
+        return {"kind": "infrastructure_error", "error": error}
+
+
+async def probe_realtime_endpoint(
+    url: str,
+    *,
+    token: str | None = None,
+    timeout_seconds: float = 10.0,
+) -> None:
+    """Verify reachability and authentication before creating eval fixtures."""
+
+    headers = {"Authorization": f"Bearer {token}"} if token else None
+    try:
+        async with asyncio.timeout(timeout_seconds):
+            async with connect(
+                url,
+                additional_headers=headers,
+                open_timeout=timeout_seconds,
+                close_timeout=2.0,
+            ):
+                return
+    except RealtimeEndpointError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - normalized at the transport boundary
+        raise _endpoint_error(exc) from exc
+
+
+def _endpoint_error(exc: Exception) -> RealtimeEndpointError:
+    if isinstance(exc, InvalidStatus):
+        response = getattr(exc, "response", None)
+        status_code = getattr(response, "status_code", None)
+        if status_code in {401, 403}:
+            return RealtimeEndpointError(
+                f"realtime WebSocket authentication was rejected (HTTP {status_code})",
+                category="authentication",
+                status_code=status_code,
+            )
+        category = "capacity" if status_code == 429 else "handshake"
+        return RealtimeEndpointError(
+            "realtime WebSocket handshake was rejected"
+            + (f" (HTTP {status_code})" if status_code is not None else ""),
+            category=category,
+            status_code=status_code,
+        )
+    if isinstance(exc, TimeoutError):
+        return RealtimeEndpointError(
+            "realtime WebSocket preflight timed out",
+            category="timeout",
+        )
+    if isinstance(exc, OSError):
+        return RealtimeEndpointError(
+            f"realtime WebSocket is unreachable: {exc}",
+            category="unreachable",
+        )
+    return RealtimeEndpointError(
+        f"realtime WebSocket preflight failed: {exc}",
+        category="transport",
+    )
 
 
 @dataclass
@@ -132,7 +215,7 @@ class RealtimeTrialRunner:
                             continue
                         if payload.get("id") == request_id:
                             if payload.get("error") is not None:
-                                self._record(events, {"kind": "error", "error": payload["error"]})
+                                self._record(events, _runtime_error_event(payload["error"]))
                             else:
                                 result = payload.get("result") or {}
                                 turn = result.get("turn") if isinstance(result, dict) else None
@@ -162,6 +245,8 @@ class RealtimeTrialRunner:
                     },
                 },
             )
+        except Exception as exc:  # noqa: BLE001 - emit a score-safe transport event
+            self._record(events, _endpoint_error(exc).to_event())
         return events
 
     def _record(self, events: list[dict[str, Any]], *new_events: dict[str, Any]) -> None:
@@ -210,7 +295,7 @@ def _notification_events(method: str, params: dict[str, Any]) -> list[dict[str, 
                     }
                 ]
             if item_type == "error" and method == "item/completed":
-                return [{"kind": "error", "error": item.get("errorInfo") or item}]
+                return [_runtime_error_event(item.get("errorInfo") or item)]
         return [{"kind": "item_event", "method": method, "item": item}]
     return [{"kind": "protocol_event", "method": method, "params": params}]
 
@@ -226,6 +311,39 @@ def _tool_name(item: dict[str, Any]) -> str:
     if item_type == "subagent":
         return "subagent"
     return item_type or "unknown"
+
+
+def _runtime_error_event(error: Any) -> dict[str, Any]:
+    """Separate provider/control-plane outages from scored agent failures."""
+
+    rendered = json.dumps(error, ensure_ascii=False, sort_keys=True) if isinstance(
+        error, (dict, list)
+    ) else str(error)
+    lowered = rendered.lower()
+    provider_markers = (
+        "http_429",
+        "insufficient balance",
+        "insufficient quota",
+        "billing details",
+        "account is suspended",
+        "rate limit",
+        "rate_limit",
+        "provider unavailable",
+        "service unavailable",
+        "http_502",
+        "http_503",
+        "http_504",
+    )
+    if any(marker in lowered for marker in provider_markers):
+        return {
+            "kind": "infrastructure_error",
+            "error": {
+                "type": "infrastructure",
+                "category": "provider_unavailable",
+                "message": rendered,
+            },
+        }
+    return {"kind": "error", "error": error}
 
 
 def _final_text_events(turn: Any) -> list[dict[str, Any]]:
@@ -247,6 +365,8 @@ __all__ = [
     "ApprovalAction",
     "ApprovalResponder",
     "EventObserver",
+    "RealtimeEndpointError",
     "RealtimeTrialRunner",
     "WorkspaceResolver",
+    "probe_realtime_endpoint",
 ]

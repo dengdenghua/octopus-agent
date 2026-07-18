@@ -86,6 +86,23 @@ python -m benchmarks.assemble_behavioral_bundle \
   --codex-run benchmarks/results/codex-full.json
 ```
 
+本地控制面启用认证时，可以从 `OCTOPUS_API_TOKEN` 读取已有 API/JWT token；
+也可以显式请求短期本地登录 token，runner 不会打印 token：
+
+```bash
+python -m benchmarks.run_behavioral_suite \
+  --system octopus --k 3 \
+  --octopus-local-username behavioral-eval \
+  --resume \
+  --output benchmarks/results/octopus-full.json
+```
+
+若本地登录需要密码，只会从 `OCTOPUS_EVAL_LOCAL_PASSWORD`（或
+`--octopus-local-password-env` 指定的环境变量）读取。Runner 会在创建 fixture
+前检查 WebSocket 可达性和认证；认证、供应商余额、配额、限流及服务不可用会写成
+`scored: false` 的基础设施诊断，不会变成 Agent 行为 0 分。每个完整 case 后会原子
+写入 checkpoint；`--resume` 只复用完整且没有基础设施故障的 case。
+
 也可以先运行 coding slice 做低成本开发验证，但 partial evidence 不能通过完整认证：
 
 ```bash
