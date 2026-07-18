@@ -132,6 +132,7 @@ interface ResumeResponse {
   totalTurns?: number;
   incremental?: boolean;
   nextEventSequence?: number;
+  eventStreamId?: string | null;
 }
 
 /** Replace changed turn snapshots without disturbing the surrounding
@@ -182,6 +183,10 @@ export function useRealtimeThread(
   // intentionally independent of rendered item sequence: reconnect asks
   // only for turns changed after this durable server position.
   const resumeCursorRef = useRef<number | null>(null);
+  // Stable identity of the append-only stream behind the numeric cursor.
+  // If a log is replaced or restored, the server returns a full snapshot
+  // instead of interpreting the old cursor inside unrelated history.
+  const resumeStreamIdRef = useRef<string | null>(null);
   // Delivery watches for in-flight turn/start requests. The server holds
   // the turn/start RPC response until the whole turn has run to
   // completion, so ANY mid-turn socket drop rejects the pending request
@@ -230,6 +235,7 @@ export function useRealtimeThread(
     setState(emptyConversation(args.threadId));
     stateRef.current = emptyConversation(args.threadId);
     resumeCursorRef.current = null;
+    resumeStreamIdRef.current = null;
     vitalsMarksRef.current = emptyVitalsMarks();
     const resolvers = approvalResolvers.current;
     const timers = approvalTimers.current;
@@ -298,11 +304,13 @@ export function useRealtimeThread(
       const seq = ++resumeSeq;
       resumeInFlight = true;
       const afterSequence = resumeCursorRef.current;
+      const eventStreamId = resumeStreamIdRef.current;
       void client
         .request<ResumeResponse>("thread/resume", {
           threadId: args.threadId,
           limit: RESUME_TURN_LIMIT,
           ...(afterSequence !== null ? { afterSequence } : {}),
+          ...(afterSequence !== null && eventStreamId ? { eventStreamId } : {}),
         })
         .then((result) => {
           if (cancelled || seq !== resumeSeq) return;
@@ -313,6 +321,9 @@ export function useRealtimeThread(
             result.nextEventSequence >= 0
           ) {
             resumeCursorRef.current = result.nextEventSequence;
+          }
+          if (typeof result.eventStreamId === "string") {
+            resumeStreamIdRef.current = result.eventStreamId;
           }
           setState((prev) => {
             const serverTurns = result.turns ?? [];
@@ -568,10 +579,12 @@ export function useRealtimeThread(
     const client = clientRef.current;
     if (!client) return;
     const afterSequence = resumeCursorRef.current;
+    const eventStreamId = resumeStreamIdRef.current;
     const result = await client.request<ResumeResponse>("thread/resume", {
       threadId: args.threadId,
       limit: RESUME_TURN_LIMIT,
       ...(afterSequence !== null ? { afterSequence } : {}),
+      ...(afterSequence !== null && eventStreamId ? { eventStreamId } : {}),
     });
     if (
       typeof result.nextEventSequence === "number" &&
@@ -579,6 +592,9 @@ export function useRealtimeThread(
       result.nextEventSequence >= 0
     ) {
       resumeCursorRef.current = result.nextEventSequence;
+    }
+    if (typeof result.eventStreamId === "string") {
+      resumeStreamIdRef.current = result.eventStreamId;
     }
     setState((prev) => {
       const turns =

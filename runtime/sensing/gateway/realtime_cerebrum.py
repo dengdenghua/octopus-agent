@@ -772,16 +772,27 @@ class CerebrumRuntime:
         except ValueError as exc:
             raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, str(exc)) from exc
 
-    def _require_thread_owner(self, log: EventLog, actor_id: str | None) -> None:
+    def _require_thread_owner(
+        self,
+        log: EventLog,
+        actor_id: str | None,
+        *,
+        turns: list[Turn] | None = None,
+    ) -> None:
         from runtime.memory.threads.event_log import owner_actor_id_from_turns
 
-        owner = owner_actor_id_from_turns(log.replay())
+        owner = owner_actor_id_from_turns(turns if turns is not None else log.replay())
         if owner is not None and actor_id != owner:
             raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {log.path.stem}")
 
-    def _resume_turns(self, log: EventLog) -> list[Turn]:
+    def _resume_turns(
+        self,
+        log: EventLog,
+        *,
+        turns: list[Turn] | None = None,
+    ) -> list[Turn]:
         """Replay and close in-progress turns left by an older process."""
-        turns = log.replay()
+        turns = turns if turns is not None else log.replay()
         if not turns:
             return turns
         stale = [
@@ -929,16 +940,24 @@ class CerebrumRuntime:
         if method in ("thread/resume", "thread/read"):
             thread_id = self._require_thread_id(params.get("threadId"))
             log = self._log_for(thread_id)
-            self._require_thread_owner(log, getattr(emitter, "actor_id", None))
-            summary = log.summary()
+            preflight_snapshot = log.snapshot()
+            preflight_turns = log.replay(preflight_snapshot)
+            self._require_thread_owner(
+                log,
+                getattr(emitter, "actor_id", None),
+                turns=preflight_turns,
+            )
+            summary = log.summary(preflight_snapshot)
             if summary is not None and summary.archived:
                 raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
-            # Close stale turns before anchoring the cursor. The response
-            # snapshot is replayed *after* that cursor is read: concurrent
-            # writes may therefore be returned twice on the next resume, but
-            # can never be skipped by a cursor that advanced past unseen data.
-            self._resume_turns(log)
+            # Close stale turns before capturing one immutable file prefix.
+            # Cursor and replay then come from the exact same snapshot, so a
+            # concurrent append is either wholly included or wholly deferred.
+            self._resume_turns(log, turns=preflight_turns)
+            snapshot = log.snapshot()
+            turns = log.replay(snapshot)
             raw_after_sequence = params.get("afterSequence")
+            requested_stream_id = params.get("eventStreamId")
             before_turn_id = (
                 params.get("beforeTurnId") if isinstance(params.get("beforeTurnId"), str) else None
             )
@@ -947,9 +966,15 @@ class CerebrumRuntime:
                 and not isinstance(raw_after_sequence, bool)
                 and raw_after_sequence >= 0
                 and before_turn_id is None
+                and (
+                    not isinstance(requested_stream_id, str)
+                    or requested_stream_id == snapshot.stream_id
+                )
             ):
-                changed_ids, next_sequence, requires_reset = log.cursor_delta(raw_after_sequence)
-                turns = log.replay()
+                changed_ids, next_sequence, requires_reset = log.cursor_delta(
+                    raw_after_sequence,
+                    snapshot=snapshot,
+                )
                 if not requires_reset:
                     changed = set(changed_ids)
                     return {
@@ -963,9 +988,9 @@ class CerebrumRuntime:
                         "hasMore": False,
                         "incremental": True,
                         "nextEventSequence": next_sequence,
+                        "eventStreamId": snapshot.stream_id,
                     }
-            next_sequence = log.latest_sequence()
-            turns = log.replay()
+            next_sequence = log.latest_sequence(snapshot=snapshot)
             raw_limit = params.get("limit")
             window, has_more = EventLog.paginate_turns(
                 turns,
@@ -983,6 +1008,7 @@ class CerebrumRuntime:
                 "hasMore": has_more,
                 "incremental": False,
                 "nextEventSequence": next_sequence,
+                "eventStreamId": snapshot.stream_id,
             }
         if method == "thread/compact":
             thread_id = self._require_thread_id(params.get("threadId"))

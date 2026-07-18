@@ -21,17 +21,19 @@ duplicates are detected by ``itemId`` and silently merged.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import re
 import threading
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from runtime.platform.models.primitives import now_utc
+from runtime.platform.models.primitives import new_id, now_utc
 from runtime.protocol.items import (
     AgentMessageItem,
     AgentPhaseSnapshot,
@@ -127,10 +129,54 @@ class LoggedEvent(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     event: EventKind
+    # Stable identity makes replay idempotent under at-least-once delivery,
+    # log replication and crash recovery. Old JSONL lines omit it and receive
+    # a deterministic content-derived ``legacy:<digest>`` identity.
+    event_id: str | None = Field(default=None, alias="eventId")
     thread_id: str = Field(alias="threadId")
     ts: datetime = Field(default_factory=now_utc)
     turn_id: str | None = Field(default=None, alias="turnId")
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class EventLogSnapshot:
+    """Immutable, byte-bounded view of one event log.
+
+    ``cursor`` and ``events`` always describe the same file prefix. Anything
+    appended after the snapshot boundary is intentionally deferred to the
+    next resume, eliminating the replay/cursor race that can otherwise skip a
+    live delta forever.
+    """
+
+    events: tuple[tuple[int, LoggedEvent], ...]
+    cursor: int
+    stream_id: str | None = None
+
+    def replay(self) -> list[Turn]:
+        turns: list[Turn] = []
+        by_id: dict[str, Turn] = {}
+        for _sequence, event in self.events:
+            _apply_event(event, turns, by_id)
+        return turns
+
+    def cursor_delta(self, after_sequence: int) -> tuple[list[str], bool]:
+        """Return changed turn ids and whether a full reset is required."""
+        after = max(0, int(after_sequence))
+        if after > self.cursor:
+            return [], True
+        changed_turn_ids: list[str] = []
+        seen_turn_ids: set[str] = set()
+        requires_reset = False
+        for sequence, event in self.events:
+            if sequence <= after:
+                continue
+            if event.event == "turn_compacted":
+                requires_reset = True
+            if event.turn_id and event.turn_id not in seen_turn_ids:
+                seen_turn_ids.add(event.turn_id)
+                changed_turn_ids.append(event.turn_id)
+        return changed_turn_ids, requires_reset
 
 
 class EventLog:
@@ -154,13 +200,21 @@ class EventLog:
     # ── Writer side ──────────────────────────────────────────
 
     def append(self, event: LoggedEvent) -> None:
+        if not event.event_id:
+            event = event.model_copy(update={"event_id": f"evt_{new_id().hex}"})
         line = event.model_dump_json(by_alias=True) + "\n"
         with self._lock, self._path.open("a", encoding="utf-8") as f:
             f.write(line)
             f.flush()
 
     def thread_started(self, thread_id: str) -> None:
-        self.append(LoggedEvent(event="thread_started", threadId=thread_id))
+        self.append(
+            LoggedEvent(
+                event="thread_started",
+                threadId=thread_id,
+                payload={"streamId": f"stream_{new_id().hex}"},
+            )
+        )
 
     def turn_started(self, thread_id: str, turn: Turn) -> None:
         self.append(
@@ -283,6 +337,56 @@ class EventLog:
 
     # ── Reader side ──────────────────────────────────────────
 
+    def snapshot(self) -> EventLogSnapshot:
+        """Capture one immutable prefix of the JSONL file.
+
+        The byte length is fixed before reading. Concurrent appends beyond
+        that boundary are never mixed into this snapshot, while a trailing
+        partial line stays invisible until a later capture.
+        """
+        if not self._path.exists():
+            return EventLogSnapshot(events=(), cursor=0, stream_id=None)
+        with self._path.open("rb") as stream:
+            stream.seek(0, 2)
+            boundary = stream.tell()
+            stream.seek(0)
+            raw = stream.read(boundary)
+
+        events: list[tuple[int, LoggedEvent]] = []
+        seen_event_ids: set[str] = set()
+        cursor = 0
+        stream_id: str | None = None
+        for sequence, raw_line in enumerate(raw.splitlines(keepends=True), start=1):
+            if not raw_line.endswith(b"\n"):
+                continue
+            cursor = sequence
+            try:
+                line = raw_line.decode("utf-8").strip()
+                if not line:
+                    continue
+                event = LoggedEvent.model_validate(json.loads(line))
+            except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+                continue
+            event_id = event.event_id or (
+                "legacy:" + hashlib.sha256(raw_line.removesuffix(b"\n")).hexdigest()[:24]
+            )
+            if event_id in seen_event_ids:
+                continue
+            seen_event_ids.add(event_id)
+            if event.event_id is None:
+                event = event.model_copy(update={"event_id": event_id})
+            if stream_id is None and event.event == "thread_started":
+                raw_stream_id = event.payload.get("streamId")
+                stream_id = (
+                    raw_stream_id if isinstance(raw_stream_id, str) and raw_stream_id else event_id
+                )
+            events.append((sequence, event))
+        return EventLogSnapshot(
+            events=tuple(events),
+            cursor=cursor,
+            stream_id=stream_id,
+        )
+
     def iter_events_with_sequence(self) -> Iterator[tuple[int, LoggedEvent]]:
         """Yield ``(cursor, event)`` pairs in append order.
 
@@ -291,33 +395,19 @@ class EventLog:
         process restarts. Malformed lines consume a cursor but are not yielded;
         a later valid line still advances beyond them.
         """
-        if not self._path.exists():
-            return
-        with self._path.open("r", encoding="utf-8") as f:
-            for sequence, line in enumerate(f, start=1):
-                # A concurrent writer may expose a trailing partial line.
-                # Do not make it visible or advance a resumable cursor until
-                # its terminating newline has landed.
-                if not line.endswith("\n"):
-                    continue
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    raw = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                try:
-                    yield sequence, LoggedEvent.model_validate(raw)
-                except (TypeError, ValueError):
-                    continue
+        yield from self.snapshot().events
 
     def iter_events(self) -> Iterator[LoggedEvent]:
         """Yield events in append order. Skips malformed lines."""
         for _sequence, event in self.iter_events_with_sequence():
             yield event
 
-    def cursor_delta(self, after_sequence: int) -> tuple[list[str], int, bool]:
+    def cursor_delta(
+        self,
+        after_sequence: int,
+        *,
+        snapshot: EventLogSnapshot | None = None,
+    ) -> tuple[list[str], int, bool]:
         """Return changed turn ids, latest cursor and whether a reset is needed.
 
         ``turn_compacted`` rewrites the visible turn set, so an incremental
@@ -325,56 +415,22 @@ class EventLog:
         and fall back to a normal window snapshot. A cursor beyond the current
         file also signals reset (log replacement/truncation).
         """
-        after = max(0, int(after_sequence))
-        changed_turn_ids: list[str] = []
-        seen_turn_ids: set[str] = set()
-        latest_sequence = 0
-        requires_reset = False
-        if self._path.exists():
-            with self._path.open("r", encoding="utf-8") as f:
-                for sequence, line in enumerate(f, start=1):
-                    if not line.endswith("\n"):
-                        continue
-                    latest_sequence = sequence
-                    if sequence <= after:
-                        continue
-                    try:
-                        raw = json.loads(line)
-                        event = LoggedEvent.model_validate(raw)
-                    except (json.JSONDecodeError, TypeError, ValueError):
-                        continue
-                    if event.event == "turn_compacted":
-                        requires_reset = True
-                    if event.turn_id and event.turn_id not in seen_turn_ids:
-                        seen_turn_ids.add(event.turn_id)
-                        changed_turn_ids.append(event.turn_id)
-        if after > latest_sequence:
-            requires_reset = True
-        return changed_turn_ids, latest_sequence, requires_reset
+        captured = snapshot or self.snapshot()
+        changed_turn_ids, requires_reset = captured.cursor_delta(after_sequence)
+        return changed_turn_ids, captured.cursor, requires_reset
 
-    def latest_sequence(self) -> int:
+    def latest_sequence(self, *, snapshot: EventLogSnapshot | None = None) -> int:
         """Return the current append cursor without decoding event payloads."""
-        if not self._path.exists():
-            return 0
-        latest = 0
-        with self._path.open("r", encoding="utf-8") as f:
-            for sequence, line in enumerate(f, start=1):
-                if line.endswith("\n"):
-                    latest = sequence
-        return latest
+        return (snapshot or self.snapshot()).cursor
 
-    def replay(self) -> list[Turn]:
+    def replay(self, snapshot: EventLogSnapshot | None = None) -> list[Turn]:
         """Reconstruct the full turn list from disk.
 
         After the call you have the same in-memory state the producing
         process held when it last wrote a ``turn_completed`` (or the
         last consistent ``item_*`` if the turn was still running).
         """
-        turns: list[Turn] = []
-        by_id: dict[str, Turn] = {}
-        for evt in self.iter_events():
-            _apply_event(evt, turns, by_id)
-        return turns
+        return (snapshot or self.snapshot()).replay()
 
     @staticmethod
     def paginate_turns(
@@ -409,7 +465,10 @@ class EventLog:
             return window, False
         return window[-limit:], True
 
-    def summary(self) -> ThreadSummary | None:
+    def summary(
+        self,
+        snapshot: EventLogSnapshot | None = None,
+    ) -> ThreadSummary | None:
         """Lightweight metadata snapshot for thread/list responses.
 
         Walks the file once to compute counts; doesn't materialize
@@ -422,7 +481,8 @@ class EventLog:
         turn_count = 0
         last_status: TurnStatus | None = None
         archived = False
-        for evt in self.iter_events():
+        captured = snapshot or self.snapshot()
+        for _sequence, evt in captured.events:
             if first_ts is None:
                 first_ts = evt.ts
             last_ts = evt.ts
@@ -792,6 +852,7 @@ def _merge_file_change_hunk(item: FileChangeItem, delta: dict[str, Any]) -> None
 __all__ = [
     "EventKind",
     "EventLog",
+    "EventLogSnapshot",
     "LoggedEvent",
     "ThreadSummary",
     "actor_id_from_turn_params",

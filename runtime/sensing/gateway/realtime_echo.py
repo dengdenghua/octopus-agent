@@ -79,10 +79,16 @@ class EchoRuntime:
         except ValueError as exc:
             raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, str(exc)) from exc
 
-    def _require_owner(self, log: EventLog, actor_id: str | None) -> None:
+    def _require_owner(
+        self,
+        log: EventLog,
+        actor_id: str | None,
+        *,
+        turns: list[Turn] | None = None,
+    ) -> None:
         from runtime.sensing.gateway.realtime_gateway import _RpcError
 
-        owner = owner_actor_id_from_turns(log.replay())
+        owner = owner_actor_id_from_turns(turns if turns is not None else log.replay())
         if owner is not None and actor_id != owner:
             raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {log.path.stem}")
 
@@ -247,13 +253,20 @@ class EchoRuntime:
     async def _handle_resume(self, params: dict[str, Any], emitter: EventEmitter) -> dict[str, Any]:
         thread_id = self._require_thread_id(params.get("threadId"))
         log = self._log_for(thread_id)
-        self._require_owner(log, getattr(emitter, "actor_id", None))
-        summary = log.summary()
+        snapshot = log.snapshot()
+        turns = log.replay(snapshot)
+        self._require_owner(
+            log,
+            getattr(emitter, "actor_id", None),
+            turns=turns,
+        )
+        summary = log.summary(snapshot)
         if summary is not None and summary.archived:
             from runtime.sensing.gateway.realtime_gateway import _RpcError
 
             raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
         raw_after_sequence = params.get("afterSequence")
+        requested_stream_id = params.get("eventStreamId")
         before_turn_id = (
             params.get("beforeTurnId") if isinstance(params.get("beforeTurnId"), str) else None
         )
@@ -262,9 +275,15 @@ class EchoRuntime:
             and not isinstance(raw_after_sequence, bool)
             and raw_after_sequence >= 0
             and before_turn_id is None
+            and (
+                not isinstance(requested_stream_id, str)
+                or requested_stream_id == snapshot.stream_id
+            )
         ):
-            changed_ids, next_sequence, requires_reset = log.cursor_delta(raw_after_sequence)
-            turns = log.replay()
+            changed_ids, next_sequence, requires_reset = log.cursor_delta(
+                raw_after_sequence,
+                snapshot=snapshot,
+            )
             if not requires_reset:
                 changed = set(changed_ids)
                 return {
@@ -278,9 +297,9 @@ class EchoRuntime:
                     "hasMore": False,
                     "incremental": True,
                     "nextEventSequence": next_sequence,
+                    "eventStreamId": snapshot.stream_id,
                 }
-        next_sequence = log.latest_sequence()
-        turns = log.replay()
+        next_sequence = log.latest_sequence(snapshot=snapshot)
         raw_limit = params.get("limit")
         window, has_more = EventLog.paginate_turns(
             turns,
@@ -298,6 +317,7 @@ class EchoRuntime:
             "hasMore": has_more,
             "incremental": False,
             "nextEventSequence": next_sequence,
+            "eventStreamId": snapshot.stream_id,
         }
 
     async def _handle_list(self, params: dict[str, Any], emitter: EventEmitter) -> dict[str, Any]:

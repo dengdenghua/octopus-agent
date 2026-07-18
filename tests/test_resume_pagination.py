@@ -8,7 +8,7 @@ newest window is returned; ``beforeTurnId`` pages backwards.
 from pathlib import Path
 
 from runtime.memory.threads.event_log import EventLog, LoggedEvent
-from runtime.protocol import Turn, TurnParams, TurnStatus
+from runtime.protocol import AgentMessageItem, Turn, TurnParams, TurnStatus
 
 
 def _turn(i: int) -> Turn:
@@ -89,6 +89,50 @@ def test_event_cursor_ignores_a_partial_trailing_write(tmp_path: Path) -> None:
     assert [sequence for sequence, _event in log.iter_events_with_sequence()] == [1, 2]
 
 
+def test_snapshot_cursor_and_replay_share_one_file_boundary(tmp_path: Path) -> None:
+    log = EventLog(tmp_path / "th-1.jsonl")
+    log.thread_started("th-1")
+    first = _turn(0)
+    log.turn_started("th-1", first)
+    log.turn_completed("th-1", first.id, TurnStatus.COMPLETED)
+
+    snapshot = log.snapshot()
+    second = _turn(1)
+    log.turn_started("th-1", second)
+    log.turn_completed("th-1", second.id, TurnStatus.COMPLETED)
+
+    assert snapshot.cursor == 3
+    assert [turn.id for turn in snapshot.replay()] == ["turn-0"]
+    changed_ids, next_sequence, requires_reset = log.cursor_delta(snapshot.cursor)
+    assert changed_ids == ["turn-1"]
+    assert next_sequence == 5
+    assert requires_reset is False
+
+
+def test_duplicate_event_id_is_applied_once_during_replay(tmp_path: Path) -> None:
+    log = EventLog(tmp_path / "th-1.jsonl")
+    log.thread_started("th-1")
+    turn = _turn(0)
+    log.turn_started("th-1", turn)
+    message = AgentMessageItem(id="msg-1", text="")
+    log.item_started("th-1", turn.id, message)
+    duplicate = LoggedEvent(
+        event="item_delta",
+        eventId="evt-fixed",
+        threadId="th-1",
+        turnId=turn.id,
+        payload={"itemId": message.id, "kind": "agentMessage", "delta": "hello"},
+    )
+    log.append(duplicate)
+    log.append(duplicate)
+
+    snapshot = log.snapshot()
+    replayed_message = next(item for item in snapshot.replay()[0].items if item.id == message.id)
+    assert replayed_message.text == "hello"
+    assert snapshot.cursor == 5
+    assert len(snapshot.events) == 4
+
+
 class TestEchoResumePagination:
     def _log_with_turns(self, tmp_path: Path, n: int) -> EventLog:
         log = EventLog(tmp_path / "th-1.jsonl")
@@ -116,6 +160,7 @@ class TestEchoResumePagination:
         assert out["hasMore"] is False
         assert out["incremental"] is False
         assert out["nextEventSequence"] == 11
+        assert out["eventStreamId"].startswith("stream_")
 
     def test_resume_with_limit_and_cursor(self, tmp_path: Path) -> None:
         import asyncio
@@ -197,6 +242,59 @@ class TestEchoResumePagination:
         assert unchanged["turns"] == []
         assert unchanged["nextEventSequence"] == 7
 
+    def test_append_crossing_snapshot_boundary_arrives_on_next_resume(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        import asyncio
+
+        from runtime.sensing.gateway.realtime_echo import EchoRuntime
+
+        log = self._log_with_turns(tmp_path, 1)
+        rt = EchoRuntime(logs_root=tmp_path)
+        monkeypatch.setattr(rt, "_log_for", lambda _thread_id: log)
+        capture = log.snapshot
+        capture_count = 0
+        appended = False
+
+        def snapshot_with_racing_append():
+            nonlocal capture_count, appended
+            capture_count += 1
+            snapshot = capture()
+            # Inject immediately after the resume handler's immutable
+            # ownership + history boundary has been fixed.
+            if capture_count == 1 and not appended:
+                appended = True
+                racing_turn = _turn(1)
+                log.turn_started("th-1", racing_turn)
+                log.turn_completed("th-1", racing_turn.id, TurnStatus.COMPLETED)
+            return snapshot
+
+        monkeypatch.setattr(log, "snapshot", snapshot_with_racing_append)
+
+        class _Emitter:
+            actor_id = None
+
+        first = asyncio.run(rt.handle_request("thread/resume", {"threadId": "th-1"}, _Emitter()))
+        assert [turn["id"] for turn in first["turns"]] == ["turn-0"]
+        assert first["nextEventSequence"] == 3
+
+        delta = asyncio.run(
+            rt.handle_request(
+                "thread/resume",
+                {
+                    "threadId": "th-1",
+                    "afterSequence": first["nextEventSequence"],
+                    "eventStreamId": first["eventStreamId"],
+                },
+                _Emitter(),
+            )
+        )
+        assert delta["incremental"] is True
+        assert [turn["id"] for turn in delta["turns"]] == ["turn-1"]
+        assert delta["nextEventSequence"] == 5
+
     def test_invalid_future_cursor_falls_back_to_full_snapshot(self, tmp_path: Path) -> None:
         import asyncio
 
@@ -218,3 +316,77 @@ class TestEchoResumePagination:
         assert out["incremental"] is False
         assert [turn["id"] for turn in out["turns"]] == ["turn-0", "turn-1"]
         assert out["nextEventSequence"] == 5
+
+    def test_compaction_after_cursor_forces_full_snapshot(self, tmp_path: Path) -> None:
+        import asyncio
+
+        from runtime.sensing.gateway.realtime_echo import EchoRuntime
+
+        log = self._log_with_turns(tmp_path, 4)
+        rt = EchoRuntime(logs_root=tmp_path)
+
+        class _Emitter:
+            actor_id = None
+
+        full = asyncio.run(
+            rt.handle_request("thread/resume", {"threadId": "th-1", "limit": 50}, _Emitter())
+        )
+        log.turn_compacted("th-1", _turn(99), ["turn-0", "turn-1"])
+
+        reset = asyncio.run(
+            rt.handle_request(
+                "thread/resume",
+                {
+                    "threadId": "th-1",
+                    "limit": 50,
+                    "afterSequence": full["nextEventSequence"],
+                },
+                _Emitter(),
+            )
+        )
+        assert reset["incremental"] is False
+        assert [turn["id"] for turn in reset["turns"]] == [
+            "turn-99",
+            "turn-2",
+            "turn-3",
+        ]
+        assert reset["nextEventSequence"] == full["nextEventSequence"] + 1
+
+    def test_replaced_same_length_log_forces_full_snapshot(self, tmp_path: Path) -> None:
+        import asyncio
+
+        from runtime.sensing.gateway.realtime_echo import EchoRuntime
+
+        original = self._log_with_turns(tmp_path, 1)
+        rt = EchoRuntime(logs_root=tmp_path)
+
+        class _Emitter:
+            actor_id = None
+
+        full = asyncio.run(rt.handle_request("thread/resume", {"threadId": "th-1"}, _Emitter()))
+        original.path.unlink()
+        replacement = EventLog(original.path)
+        replacement.thread_started("th-1")
+        replacement_turn = _turn(9)
+        replacement.turn_started("th-1", replacement_turn)
+        replacement.turn_completed(
+            "th-1",
+            replacement_turn.id,
+            TurnStatus.COMPLETED,
+        )
+        assert replacement.latest_sequence() == full["nextEventSequence"]
+
+        reset = asyncio.run(
+            rt.handle_request(
+                "thread/resume",
+                {
+                    "threadId": "th-1",
+                    "afterSequence": full["nextEventSequence"],
+                    "eventStreamId": full["eventStreamId"],
+                },
+                _Emitter(),
+            )
+        )
+        assert reset["incremental"] is False
+        assert [turn["id"] for turn in reset["turns"]] == ["turn-9"]
+        assert reset["eventStreamId"] != full["eventStreamId"]

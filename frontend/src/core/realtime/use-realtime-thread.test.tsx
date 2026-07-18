@@ -198,6 +198,7 @@ describe("useRealtimeThread reconnect reconciliation", () => {
             hasMore: false,
             incremental: resumeCount > 1,
             nextEventSequence: resumeCount === 1 ? 10 : 14,
+            eventStreamId: "stream-a",
           });
         },
       };
@@ -225,7 +226,81 @@ describe("useRealtimeThread reconnect reconciliation", () => {
       expect(rendered.result.current.state.turns[0]?.status).toBe("completed"),
     );
     expect(resumeCount).toBe(2);
-    expect(resumeParams[1]).toMatchObject({ afterSequence: 10 });
+    expect(resumeParams[1]).toMatchObject({
+      afterSequence: 10,
+      eventStreamId: "stream-a",
+    });
+  });
+
+  it("replaces the timeline when the server resets the event stream", async () => {
+    const handles: FakeClientHandles[] = [];
+    const resumeParams: Record<string, unknown>[] = [];
+    let resumeCount = 0;
+    const factory = (deps: {
+      onIncomingRequest: IncomingRequestFn;
+      onNotification: (n: {
+        method: string;
+        params: Record<string, unknown>;
+      }) => void;
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      handles.push({
+        emitRequest: (req) => deps.onIncomingRequest(req),
+        emitOpen: () => deps.onOpen?.(),
+        emitClose: (code, reason) => deps.onClose?.(code, reason),
+      });
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string, params?: Record<string, unknown>) => {
+          if (method !== "thread/resume") return Promise.resolve({});
+          resumeCount += 1;
+          resumeParams.push(params ?? {});
+          return Promise.resolve(
+            resumeCount === 1
+              ? {
+                  thread: { id: "th" },
+                  turns: [turn("t-old", "completed")],
+                  hasMore: false,
+                  incremental: false,
+                  nextEventSequence: 3,
+                  eventStreamId: "stream-old",
+                }
+              : {
+                  thread: { id: "th" },
+                  turns: [turn("t-new", "completed")],
+                  hasMore: false,
+                  incremental: false,
+                  nextEventSequence: 3,
+                  eventStreamId: "stream-new",
+                },
+          );
+        },
+      };
+    };
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
+    );
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("t-old"),
+    );
+
+    act(() => {
+      handles[0]!.emitClose(1006, "network lost");
+      handles[0]!.emitOpen();
+    });
+
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("t-new"),
+    );
+    expect(rendered.result.current.state.turns).toHaveLength(1);
+    expect(resumeParams[1]).toMatchObject({
+      afterSequence: 3,
+      eventStreamId: "stream-old",
+    });
   });
 
   it("preserves the timeline when an incremental resume has no changes", async () => {
