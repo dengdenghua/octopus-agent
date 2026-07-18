@@ -78,6 +78,7 @@ from runtime.core.cerebrum.react_parsing import (
     _is_code_write_step,
     _is_test_path,
     _latest_todo_items,
+    _latest_verification_observation_is_red,
     _parse_action,
     _path_language,
     _step_changed_public_signature,
@@ -1362,6 +1363,37 @@ def _false_verification_claim_guard(
         "command-not-found, traceback) or it never ran. Re-run the verifier, "
         "fix any errors, and only claim success after a clean run — or "
         "remove the unsupported claim from the Final Answer."
+    )
+
+
+def _red_verification_observation_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    is_code_mode: bool,
+) -> str | None:
+    """Block a code-mode Final Answer when the model's own most recent
+    verification run is red. The false-verification guard only fires when
+    the answer *claims* success; this one fires on the recorded failure
+    itself — you cannot declare done while your latest test/type/lint/build
+    run is failing, whether or not you claimed otherwise. Gated on an
+    actual code write so read-only turns that merely surface a red run
+    aren't blocked."""
+    if not is_code_mode or not steps:
+        return None
+    if _final_answer_requests_user_help(final_answer):
+        return None
+    if not _has_code_write(steps):
+        return None
+    if not _latest_verification_observation_is_red(steps):
+        return None
+    return (
+        "Cannot finish yet: your most recent verification run is failing "
+        "(failing tests / type errors / lint errors / build error in the "
+        "last verifier observation). Diagnose and fix the underlying cause, "
+        "then re-run the verifier until it is clean before finishing. Do not "
+        "finish on a red verification, and do not silence it by deleting or "
+        "skipping the failing check."
     )
 
 
@@ -2877,6 +2909,9 @@ GUARD_REGISTRY: list[GuardSpec] = [
         "dependency-declaration guard", "verification", _new_third_party_import_without_dep_guard
     ),
     _spec_code_mode("false-verification guard", "verification", _false_verification_claim_guard),
+    _spec_code_mode(
+        "red-verification guard", "verification", _red_verification_observation_guard
+    ),
     # ── Code-smell cluster ──
     _spec_code_mode("comment-out-fix guard", "code-smell", _commented_out_as_fix_guard),
     _spec_code_mode("broad-except guard", "code-smell", _broad_except_suppression_guard),

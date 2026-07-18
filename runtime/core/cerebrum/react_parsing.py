@@ -1201,10 +1201,45 @@ def _final_answer_claims_verification(final_answer: str) -> bool:
     return bool(_VERIFY_CLAIM_RE.search(final_answer))
 
 
+# A verifier observation showing FAILING output must never be mistaken for
+# a passing one. Conservative by construction: only strong, unambiguous
+# failure signals a green run never emits — non-zero failure/error counts,
+# uppercase runner tokens (pytest ``FAILED``, go ``FAIL``), compiler/lint
+# error lines. "0 failed", "13 passed", "Found 0 errors", "All checks
+# passed" deliberately do NOT match. Infra errors (ModuleNotFoundError,
+# command-not-found) are handled separately by the callers below.
+_RED_TOKEN_RE = re.compile(r"\bFAILED\b|\bFAIL\b")  # case-sensitive on purpose
+_RED_PHRASE_RE = re.compile(
+    r"\b[1-9]\d*\s+failed\b|"
+    r"\b[1-9]\d*\s+error(?:s)?\b|"
+    r"\bfound\s+[1-9]\d*\s+error|"
+    r"\berror\s+ts\d+|"
+    r"\bnpm\s+err!|"
+    r"\bassertion\s*error\b|"
+    r"\b(?:build|compilation|type-?check|typecheck|lint|tests?)\s+failed\b|"
+    r"\bexit\s+code\s+[1-9]|"
+    r"\breturned\s+non-?zero|"
+    r"测试[^。\n]{0,4}失败|构建失败|编译[^。\n]{0,4}失败|"
+    r"类型检查[^。\n]{0,6}(?:失败|错误)|校验[^。\n]{0,4}失败",
+    re.IGNORECASE,
+)
+
+
+def _verification_observation_is_red(observation: str) -> bool:
+    """True when a verifier observation shows failing output (failing
+    tests / type / lint / build), as opposed to an infra error like
+    ModuleNotFoundError which callers handle separately. Strong-signal
+    only — a passing run must never match."""
+    if not observation:
+        return False
+    return bool(_RED_TOKEN_RE.search(observation) or _RED_PHRASE_RE.search(observation))
+
+
 def _has_successful_verification_observation(steps: list[ReActStep]) -> bool:
-    """Whether any verification step produced a non-empty, non-error
-    observation. Stricter than ``_has_code_verification`` — that just
-    checks the action was issued; this checks the action *succeeded*.
+    """Whether any verification step produced a non-empty, non-error,
+    non-*failing* observation. Stricter than ``_has_code_verification`` —
+    that just checks the action was issued; this checks the action *ran
+    and did not report failures*.
     """
     for step in steps:
         if not _step_is_verify(step, markers=_VERIFY_MARKERS_ALL):
@@ -1223,9 +1258,25 @@ def _has_successful_verification_observation(steps: list[ReActStep]) -> bool:
             or "no such file" in lowered
             or "modulenotfounderror" in lowered
             or "traceback (most recent call last)" in lowered
+            or _verification_observation_is_red(observation)
         ):
             continue
         return True
+    return False
+
+
+def _latest_verification_observation_is_red(steps: list[ReActStep]) -> bool:
+    """Whether the MOST RECENT verifier observation in the trajectory is
+    red (failing tests / type / lint / build). Only the latest matters: a
+    run that went red then green (re-run after a fix) must not be flagged.
+    Returns False when no verifier observation exists."""
+    for step in reversed(steps):
+        if not _step_is_verify(step, markers=_VERIFY_MARKERS_ALL):
+            continue
+        observation = (step.observation or "").strip()
+        if not observation or observation == "N/A":
+            continue
+        return _verification_observation_is_red(observation)
     return False
 
 
