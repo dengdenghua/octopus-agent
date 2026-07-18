@@ -42,6 +42,29 @@ function isExternalUrl(href: string | undefined): boolean {
   return !!href && /^https?:\/\//.test(href);
 }
 
+const INTERNAL_CONTROL_TAG_LINE =
+  /^\s*(?:<read_only>\s*<\/read_only>|<\/?read_only>)\s*$/i;
+
+/**
+ * Hide leaked runtime control tags without changing examples inside fenced
+ * code blocks. Historical messages pass through this renderer too, so the
+ * display repairs already-persisted replies as well as new streams.
+ */
+export function stripLeakedControlMarkup(value: string): string {
+  let insideFence = false;
+  return value
+    .split(/\r?\n/)
+    .filter((line) => {
+      if (/^\s*```/.test(line)) {
+        insideFence = !insideFence;
+        return true;
+      }
+      return insideFence || !INTERNAL_CONTROL_TAG_LINE.test(line);
+    })
+    .join("\n")
+    .replace(/^\n+/, "");
+}
+
 export type MarkdownContentProps = {
   content: string;
   isLoading: boolean;
@@ -165,6 +188,8 @@ export const MarkdownContent = memo(function MarkdownContent({
   }, [componentsFromProps, isLoading]);
 
   if (!content) return null;
+  const publicContent = stripLeakedControlMarkup(content);
+  if (!publicContent) return null;
 
   // Pass the prose-size variant *into* MessageResponse's className rather
   // than wrapping in an outer <div>. MessageResponse forwards the class
@@ -180,7 +205,7 @@ export const MarkdownContent = memo(function MarkdownContent({
       isAnimating={isLoading}
       aria-busy={isLoading || undefined}
     >
-      {content}
+      {publicContent}
     </MessageResponse>
   );
 });

@@ -19,11 +19,14 @@ from .request_parser import _model_runtime_options, _resolve_custom_model_router
 
 
 def _strip_inline_thinking_markup(text: str) -> str:
-    """Remove provider/model thinking markup from user-facing text.
+    """Remove provider/model control markup from user-facing text.
 
     Reasoning has its own event/metadata channel. Leaving an inline
     ``<details><summary>思考过程`` block in ``content`` makes downstream
     clients treat the reasoning trace as ordinary answer text.
+
+    Some models also echo the runtime's read-only contract as a standalone
+    ``<read_only>`` wrapper. It is execution metadata, not answer content.
     """
     import re
 
@@ -44,6 +47,11 @@ def _strip_inline_thinking_markup(text: str) -> str:
         "",
         stripped,
         flags=re.DOTALL | re.IGNORECASE,
+    )
+    stripped = re.sub(
+        r"(?im)^[ \t]*(?:<read_only>[ \t]*</read_only>|</?read_only>)[ \t]*(?:\r?\n)?",
+        "",
+        stripped,
     )
     return stripped.lstrip()
 
@@ -363,9 +371,10 @@ def _stream_direct_llm_fallback(
             etype = event.type
             if etype == "text_delta":
                 text_buf.append(event.delta)
-                for _piece in _display_deltas(event.delta):
+                public_delta = _strip_inline_thinking_markup(event.delta)
+                for _piece in _display_deltas(public_delta):
                     yield ("text", _piece, None)
-                    if len(event.delta) > 40:
+                    if len(public_delta) > 40:
                         time.sleep(0.012)
             elif etype == "thinking_delta":
                 thinking_buf.append(event.delta)

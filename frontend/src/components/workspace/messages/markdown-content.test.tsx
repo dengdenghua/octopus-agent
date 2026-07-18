@@ -132,6 +132,23 @@ describe("<MarkdownContent /> Mermaid", () => {
 });
 
 describe("<MarkdownContent /> streaming state", () => {
+  it("hides leaked read-only control tags but preserves the answer", () => {
+    renderMarkdown(
+      "<read_only>\n</read_only>\n\nPython 与 TypeScript 定义一致。",
+    );
+
+    expect(screen.queryByText(/read_only/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Python 与 TypeScript 定义一致。"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps read-only tags when they are shown as a code example", () => {
+    renderMarkdown("```xml\n<read_only>\n</read_only>\n```");
+
+    expect(screen.getByText(/<read_only>/)).toBeInTheDocument();
+  });
+
   it("keeps markdown controls and assistive technology in the streaming state", () => {
     renderMarkdown("Answer in progress", true);
 

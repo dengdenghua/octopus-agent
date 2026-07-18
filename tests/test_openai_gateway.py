@@ -436,7 +436,8 @@ def test_direct_llm_fallback_strips_inline_reasoning_from_reply():
             return ModelResponse(
                 text=(
                     "<details>\n<summary>Reasoning</summary>\n"
-                    "private scratchpad\n</details>\n\nfinal answer"
+                    "private scratchpad\n</details>\n\n"
+                    "<read_only>\n</read_only>\n\nfinal answer"
                 ),
                 thinking="private scratchpad",
                 input_tokens=7,
@@ -514,7 +515,10 @@ class TestChatCompletionsStream:
 
             def call(self, _request):
                 return ModelResponse(
-                    text="final answer should stream without fake reasoning",
+                    text=(
+                        "<read_only>\n</read_only>\n\n"
+                        "final answer should stream without fake reasoning"
+                    ),
                     input_tokens=3,
                     output_tokens=12,
                 )
@@ -522,12 +526,18 @@ class TestChatCompletionsStream:
             def call_stream(self, _request):
                 yield ModelStreamEvent(
                     type="text_delta",
-                    delta="final answer should stream without fake reasoning",
+                    delta=(
+                        "<read_only>\n</read_only>\n\n"
+                        "final answer should stream without fake reasoning"
+                    ),
                 )
                 yield ModelStreamEvent(
                     type="done",
                     final=ModelResponse(
-                        text="final answer should stream without fake reasoning",
+                        text=(
+                            "<read_only>\n</read_only>\n\n"
+                            "final answer should stream without fake reasoning"
+                        ),
                         input_tokens=3,
                         output_tokens=12,
                     ),
@@ -566,7 +576,9 @@ class TestChatCompletionsStream:
         assert not any(kind == "reasoning" for kind, _delta, _final in events)
         assert [kind for kind, _delta, _final in events].count("done") == 1
         text_chunks = [delta for kind, delta, _final in events if kind == "text"]
-        assert "".join(text_chunks).startswith("final answer")
+        public_text = "".join(text_chunks)
+        assert public_text.startswith("final answer")
+        assert "read_only" not in public_text
 
 
 # ═══════════════════════════════════════════════════════════
