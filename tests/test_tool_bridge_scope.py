@@ -1931,6 +1931,127 @@ def test_fast_realtime_tool_batch_skips_extra_progress_model_call(tmp_path):
     assert events[-1] == ("done", "", "Fast result complete.")
 
 
+def test_long_tool_classification_covers_commands_agents_and_browser():
+    assert tool_bridge._batch_needs_live_public_narrative(
+        [ToolCall(id="shell", name="exec_shell", input={"command": "pytest"})]
+    )
+    assert tool_bridge._batch_needs_live_public_narrative(
+        [ToolCall(id="agent", name="call_agent", input={})]
+    )
+    assert tool_bridge._batch_needs_live_public_narrative(
+        [ToolCall(id="browser", name="browser_click", input={})]
+    )
+    assert not tool_bridge._batch_needs_live_public_narrative(
+        [ToolCall(id="read", name="read_file", input={"path": "README.md"})]
+    )
+
+
+def test_likely_long_tool_gets_model_update_while_execution_is_open(
+    tmp_path,
+    monkeypatch,
+):
+    execution = {"count": 0}
+
+    def inspect_directory(path: str = "."):
+        execution["count"] += 1
+        return {"path": path, "finding": "diagnostic completed"}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="list_cwd",
+            description="Inspect one directory.",
+            affinity=["file", "io"],
+            trusted_source="skill://public/list_cwd",
+            handler=inspect_directory,
+        ),
+        verify_tests=False,
+    )
+
+    class Router:
+        def __init__(self):
+            self.requests = []
+
+        def call_stream(self, request):
+            self.requests.append(request)
+            is_action_update = any(
+                "[PUBLIC ACTION UPDATE]" in str(message.content) for message in request.messages
+            )
+            if is_action_update:
+                assert execution["count"] == 0
+                update = "我正在核对一手资料的关键差异，结果会决定下一步是否继续扩展来源。"
+                yield ModelStreamEvent(type="text_delta", delta=update)
+                yield ModelStreamEvent(
+                    type="done",
+                    final=ModelResponse(text=update),
+                )
+                return
+            if len(self.requests) == 1:
+                yield ModelStreamEvent(
+                    type="tool_use",
+                    tool_call=ToolCall(
+                        id="research-long",
+                        name="list_cwd",
+                        input={"path": "."},
+                    ),
+                )
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            if len(self.requests) == 3:
+                yield ModelStreamEvent(
+                    type="tool_use",
+                    tool_call=ToolCall(
+                        id="research-long-2",
+                        name="list_cwd",
+                        input={"path": "follow-up"},
+                    ),
+                )
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            yield ModelStreamEvent(type="text_delta", delta="调研结论已完成。")
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(text="调研结论已完成。"),
+            )
+
+    router = Router()
+    monkeypatch.setattr(
+        tool_bridge,
+        "_batch_needs_live_public_narrative",
+        lambda _calls: True,
+    )
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=router, planner_model="mock"),
+    )
+    intent = ParsedIntent(
+        raw="run a long diagnostic command",
+        intent_type="task",
+        normalized_goal="run a long diagnostic command",
+        user_context={
+            "conversation_id": "live-public-narrative-thread",
+            "mode": "code",
+            "workspace_path": str(tmp_path),
+            "auto_approve": True,
+            "realtime_public_narrative": True,
+        },
+    )
+
+    events = list(stream_agentic_fallback(stack, intent, _agent()))
+
+    tool_start_index = next(i for i, event in enumerate(events) if event[0] == "tool_start")
+    commentary_index = next(i for i, event in enumerate(events) if event[0] == "commentary")
+    tool_end_index = next(i for i, event in enumerate(events) if event[0] == "tool_end")
+    assert tool_start_index < commentary_index < tool_end_index
+    assert execution["count"] == 2
+    assert "一手资料" in events[commentary_index][1]
+    assert [event[0] for event in events].count("commentary") == 1
+    # First long batch gets a live explanation; the immediate follow-up is
+    # inside the silence window and does not pay for another model call.
+    assert len(router.requests) == 4
+    assert router.requests[1].tools == []
+
+
 def test_native_result_checkpoint_extracts_real_source_titles():
     calls = [
         ToolCall(

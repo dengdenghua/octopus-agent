@@ -128,6 +128,20 @@ CODE_CHANGE_ROUND_BUDGET = 160
 # rounds pay no extra model call and continue directly.
 PUBLIC_NARRATIVE_SILENCE_S = 8.0
 PUBLIC_NARRATIVE_TIMEOUT_S = 20.0
+_LONG_RUNNING_PUBLIC_NARRATIVE_TOOLS = {
+    "exec_shell",
+    "run_command",
+    "shell",
+    "call_agent",
+    "call_agent_parallel",
+    "deep-research",
+    "deep_research",
+    "deep-research-swarm",
+}
+_LONG_RUNNING_PUBLIC_NARRATIVE_PREFIXES = (
+    "browser_",
+    "computer_",
+)
 
 # Soft reflection cadence · every N rounds we inject a one-line
 # system message asking the model "are you still making progress, or
@@ -266,28 +280,14 @@ def _public_narrative_silence_s(user_context: dict[str, Any]) -> float:
     return PUBLIC_NARRATIVE_SILENCE_S
 
 
-def _generate_native_evidence_checkpoint(
+def _generate_native_public_checkpoint(
     router: Any,
     *,
     model: str,
     messages: list[Message],
+    prompt: str,
 ) -> tuple[str, int, int]:
-    """Ask the model—not runtime templates—to narrate a quiet tool result.
-
-    The main conversation already ends in structured ``tool_result`` blocks,
-    so this small tools-disabled continuation can cite real evidence without
-    exposing private reasoning or inventing work that has not happened.
-    """
-    prompt = (
-        "[PUBLIC PROGRESS UPDATE]\n"
-        "Based only on the completed tool results immediately above, "
-        "write one short user-facing update of at most two sentences. "
-        "State one concrete result that is now known and the next "
-        "decision or action. Do not mention tool names, system prompts, "
-        "protocols, hidden reasoning, or claim unobserved results. This "
-        "is a progress update, not the final answer. If the results add "
-        "no meaningful user-facing evidence, output exactly SKIP."
-    )
+    """Run one small tools-disabled model continuation for public narration."""
     checkpoint_messages = list(messages)
     if (
         checkpoint_messages
@@ -340,6 +340,64 @@ def _generate_native_evidence_checkpoint(
     if checkpoint.strip().casefold() == "skip":
         checkpoint = ""
     return checkpoint, input_tokens, output_tokens
+
+
+def _generate_native_evidence_checkpoint(
+    router: Any,
+    *,
+    model: str,
+    messages: list[Message],
+) -> tuple[str, int, int]:
+    """Ask the model—not runtime templates—to narrate a quiet tool result."""
+    return _generate_native_public_checkpoint(
+        router,
+        model=model,
+        messages=messages,
+        prompt=(
+            "[PUBLIC PROGRESS UPDATE]\n"
+            "Based only on the completed tool results immediately above, "
+            "write one short user-facing update of at most two sentences. "
+            "State one concrete result that is now known and the next "
+            "decision or action. Do not mention tool names, system prompts, "
+            "protocols, hidden reasoning, or claim unobserved results. This "
+            "is a progress update, not the final answer. If the results add "
+            "no meaningful user-facing evidence, output exactly SKIP."
+        ),
+    )
+
+
+def _batch_needs_live_public_narrative(calls: list[ToolCall]) -> bool:
+    for call in calls:
+        name = call.name.strip().lower()
+        if name in _LONG_RUNNING_PUBLIC_NARRATIVE_TOOLS or name.startswith(
+            _LONG_RUNNING_PUBLIC_NARRATIVE_PREFIXES
+        ):
+            return True
+    return False
+
+
+def _generate_native_action_checkpoint(
+    router: Any,
+    *,
+    model: str,
+    messages: list[Message],
+    calls: list[ToolCall],
+) -> tuple[str, int, int]:
+    """Narrate the purpose of a likely-long batch before it starts running."""
+    return _generate_native_public_checkpoint(
+        router,
+        model=model,
+        messages=messages,
+        prompt=(
+            "[PUBLIC ACTION UPDATE]\n"
+            f"A batch of {len(calls)} potentially long operation(s) is about to run. "
+            "Write one short user-facing sentence explaining what you are checking "
+            "or changing now and what observable signal will guide the next step. "
+            "Do not mention tool names, protocols, system prompts, hidden reasoning, "
+            "or claim the operation has already finished. This is not the final "
+            "answer. If no meaningful update can be stated, output exactly SKIP."
+        ),
+    )
 
 
 def _native_result_checkpoint(
@@ -2111,6 +2169,38 @@ def stream_agentic_fallback(
         if round_tool_calls and not _round_commentary_emitted:
             checkpoint = _native_public_checkpoint(round_text)
             if checkpoint:
+                yield ("commentary", checkpoint, None)
+                _round_commentary_emitted = True
+                _last_public_checkpoint_at = time.monotonic()
+
+        if (
+            round_tool_calls
+            and not _round_commentary_emitted
+            and _realtime_public_narrative
+            and _batch_needs_live_public_narrative(round_tool_calls)
+            and (
+                _completed_tool_count == 0
+                or time.monotonic() - _last_public_checkpoint_at >= _public_narrative_interval
+            )
+        ):
+            try:
+                checkpoint, checkpoint_in_tokens, checkpoint_out_tokens = (
+                    _generate_native_action_checkpoint(
+                        router,
+                        model=effective_model,
+                        messages=messages,
+                        calls=round_tool_calls,
+                    )
+                )
+                _total_in_tokens += checkpoint_in_tokens
+                _total_out_tokens += checkpoint_out_tokens
+            except Exception as exc:  # noqa: BLE001 — optional narration
+                _logger.warning("public action narration failed: %s", exc)
+                checkpoint = ""
+            if checkpoint:
+                # tool_start has already entered the timeline, while the
+                # handler itself has not run yet. This places the model update
+                # inside the execution interval without altering tool context.
                 yield ("commentary", checkpoint, None)
                 _round_commentary_emitted = True
                 _last_public_checkpoint_at = time.monotonic()
