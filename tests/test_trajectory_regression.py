@@ -299,3 +299,43 @@ def test_trajectory_regression(case: dict[str, Any], monkeypatch) -> None:
     assert case["expect_final"] in final, (
         f"{case['id']}: final answer drifted — {case['expect_final']!r} not in {final!r}"
     )
+
+
+def test_guard_impasse_converges_on_real_loop(monkeypatch) -> None:
+    """An unsatisfiable evidence guard must NOT let the loop burn its whole
+    iteration budget and then misreport a pause. This drives the real
+    stream_react_loop with a controlled replay router (no model) that keeps
+    claiming an implementation is done while never writing a file — the
+    exact livelock a live sweep exposed. The loop must terminate at the
+    impasse bound (~3 rejections) far short of max_iter, and say so."""
+    monkeypatch.delenv("OCTOPUS_NATIVE_TOOLUSE", raising=False)
+    from runtime.core.cerebrum.react_loop import stream_react_loop
+
+    executor = _build_executor([("read_file", _echo)])  # a tool exists...
+    # ...but the model never calls a write — it just re-asserts completion,
+    # which the implementation-write guard rejects every single time.
+    router = _ReplayRouter(["Final Answer: 已完成实现并通过验证。"])
+    stack = _Stack(executor, router)
+    intent = ParsedIntent(
+        raw="修复并实现登录功能",
+        intent_type="task",
+        normalized_goal="修复并实现登录功能",
+        user_context={"mode": "code", "auto_approve": True},
+    )
+
+    result = None
+    gen = stream_react_loop(
+        stack, intent, agent=None, model="test-model", max_iterations=30
+    )
+    try:
+        while True:
+            next(gen)
+    except StopIteration as stop:
+        result = stop.value
+
+    # Terminated far short of the 30-iteration budget (impasse trips at 3
+    # consecutive no-progress rejections; a handful of calls, not 30).
+    assert router.calls <= 8, f"loop burned {router.calls} iterations before stopping"
+    assert result is not None
+    # And it tells the truth — an impasse report, not a "paused" fiction.
+    assert "停止了重试" in (result.final_answer or "")

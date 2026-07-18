@@ -10,23 +10,21 @@ import {
 
 const TASKS_KEY = ["tasks"] as const;
 
+function tasksRefetchInterval(query: { state: { data?: { active?: Array<unknown>; pending?: Array<unknown> } } }) {
+  const d = query.state.data;
+  const hasHot = (d?.active?.length ?? 0) > 0 || (d?.pending?.length ?? 0) > 0;
+  return hasHot ? 2000 : 5000;
+}
+
 export function useTasks(status?: "paused" | "pending" | "active" | "all") {
+  const statusValue = status ?? "all";
   return useQuery({
-    queryKey: [...TASKS_KEY, status ?? "all"],
-    queryFn: () => listTasks(status),
-    // Implementation note.
-    // Implementation note.
-    // Implementation note.
-    refetchInterval: (query) => {
-      const d = query.state.data;
-      const hasHot =
-        (d?.active?.length ?? 0) > 0 || (d?.pending?.length ?? 0) > 0;
-      return hasHot ? 1500 : 5000;
-    },
-    // Implementation note.
-    // Implementation note.
+    queryKey: [...TASKS_KEY, statusValue],
+    queryFn: () => listTasks(statusValue),
+    refetchInterval: tasksRefetchInterval,
     refetchIntervalInBackground: true,
-    staleTime: 1000,
+    staleTime: 2000,
+    gcTime: 30000,
   });
 }
 

@@ -5,8 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 
+import pytest
+
 from benchmarks.eval_harness import (
+    CaseResult,
     EvalCase,
+    SuiteReport,
     Trajectory,
     Verdict,
     run_case,
@@ -174,6 +178,64 @@ def test_runner_exception_captured() -> None:
     result = run_case(case, runner=bad_runner, k=1)
     assert result.passes == 0
     assert "blew up" in (result.trajectories[0].error or "")
+    assert "blew up" in result.verdicts[0].reason
+
+
+def test_runner_error_event_fails_with_structured_reason() -> None:
+    case = EvalCase(id="error-event", prompt="go", grader=lambda _traj: True)
+
+    result = run_case(
+        case,
+        runner=lambda _prompt: iter(
+            [{"kind": "error", "error": {"type": "timeout", "timeout_seconds": 30}}]
+        ),
+        k=1,
+    )
+
+    assert result.passes == 0
+    assert result.trajectories[0].error is not None
+    assert '"type": "timeout"' in result.verdicts[0].reason
+
+
+def test_infrastructure_error_is_not_eligible_for_behavioral_evidence(tmp_path) -> None:
+    case = EvalCase(
+        id="provider-down",
+        prompt="go",
+        grader=lambda _trajectory: True,
+        metadata={
+            "domain": "general_runtime_and_coding",
+            "execution_mode": "real_provider",
+            "outcome_grader": True,
+            "isolated_state": True,
+            "rubric_digest": hashlib.sha256(b"rubric").hexdigest(),
+        },
+    )
+    result = run_case(
+        case,
+        runner=lambda _prompt: iter(
+            [
+                {
+                    "kind": "infrastructure_error",
+                    "error": {
+                        "type": "infrastructure",
+                        "category": "provider_unavailable",
+                    },
+                }
+            ]
+        ),
+        k=1,
+    )
+    report = SuiteReport(cases=[result])
+
+    assert result.has_infrastructure_failure is True
+    with pytest.raises(ValueError, match="cannot score infrastructure failures"):
+        write_behavioral_system_evidence(
+            report,
+            [case],
+            root=tmp_path,
+            system_id="octopus",
+            version="test",
+        )
 
 
 def test_report_serialises_to_json(tmp_path) -> None:
@@ -191,6 +253,50 @@ def test_report_serialises_to_json(tmp_path) -> None:
         "payload": {"delta": "hello"},
         "ts": data["cases"][0]["trajectories"][0]["steps"][0]["ts"],
     }
+    restored = SuiteReport.from_dict(data)
+    assert restored.cases[0].passes == 2
+    assert restored.cases[0].trajectories[0].last_text() == "hello"
+
+
+def test_run_suite_by_case_resumes_only_complete_cases() -> None:
+    cases = [
+        EvalCase(id="first", prompt="one", grader=lambda trajectory: bool(trajectory.last_text())),
+        EvalCase(id="second", prompt="two", grader=lambda trajectory: bool(trajectory.last_text())),
+    ]
+    initial = run_suite_by_case(cases[:1], runner_factory=lambda _case: _mock_runner_echo, k=2)
+    created: list[str] = []
+    checkpoints: list[int] = []
+
+    def runner_factory(case: EvalCase):
+        created.append(case.id)
+        return _mock_runner_echo
+
+    report = run_suite_by_case(
+        cases,
+        runner_factory=runner_factory,
+        k=2,
+        initial_report=initial,
+        case_complete=lambda current: checkpoints.append(len(current.cases)),
+    )
+
+    assert [result.case_id for result in report.cases] == ["first", "second"]
+    assert created == ["second"]
+    assert checkpoints == [2]
+
+
+def test_run_suite_by_case_rejects_incomplete_checkpoint() -> None:
+    initial = SuiteReport(
+        cases=[CaseResult(case_id="first", k=2, passes=0)],
+    )
+    case = EvalCase(id="first", prompt="one", grader=lambda _trajectory: True)
+
+    with pytest.raises(ValueError, match="non-resumable checkpoint case"):
+        run_suite_by_case(
+            [case],
+            runner_factory=lambda _case: _mock_runner_echo,
+            k=2,
+            initial_report=initial,
+        )
 
 
 def test_writes_digest_verified_behavioral_system_evidence(tmp_path) -> None:

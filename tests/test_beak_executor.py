@@ -563,6 +563,75 @@ class TestReadBeforeWriteGuard:
         assert written.success
         assert target.read_text(encoding="utf-8") == "new"
 
+    def test_successful_argv_cat_counts_as_read_without_weakening_shell_guard(self, tmp_path):
+        target = tmp_path / "target.txt"
+        target.write_text("old", encoding="utf-8")
+        reg = SkillRegistry()
+
+        def _safe_cat(command, *, cwd=None, sandbox_dir=None, **_kwargs):
+            assert command == ["cat", "target.txt"]
+            return {
+                "argv": command,
+                "exit_code": 0,
+                "stdout": "old",
+                "stderr": "",
+            }
+
+        reg.register(
+            Skill(
+                name="exec_shell",
+                description="Run an argv-safe command.",
+                affinity=["shell", "exec", "dangerous"],
+                trusted_source="skill://public/exec_shell",
+                handler=_safe_cat,
+            ),
+            verify_tests=False,
+        )
+        reg.register(
+            Skill(
+                name="write_text_file",
+                description="Write a file.",
+                affinity=["file", "write"],
+                trusted_source="skill://public/write_text_file",
+                handler=_write_text_file,
+            ),
+            verify_tests=False,
+        )
+        exe = ToolExecutor(reg, TrustEngine(trusted_sources=["skill://public/*"]))
+        budget = Budget(
+            task_id=TaskId(uuid4()),
+            limits=BudgetLimits(tokens=10_000, usd=1.0),
+        )
+        agent = SimpleNamespace(agent_id="coder", capabilities={"code_mode_unlock": True})
+
+        with session_scope(
+            Session(agent=agent, metadata={"mode": "code", "workspace_path": str(tmp_path)})
+        ):
+            read = exe.execute_step(
+                step_id=0,
+                node_id="read",
+                sucker_id=SkillId("exec_shell"),
+                args={"command": ["cat", "target.txt"]},
+                caller="test",
+                task_id=budget.task_id,
+                arm_id=ArmId("test"),
+                budget=budget,
+            )
+            assert read.success
+            written = exe.execute_step(
+                step_id=1,
+                node_id="write",
+                sucker_id=SkillId("write_text_file"),
+                args={"path": "target.txt", "content": "new", "overwrite": True},
+                caller="test",
+                task_id=budget.task_id,
+                arm_id=ArmId("test"),
+                budget=budget,
+            )
+
+        assert written.success
+        assert target.read_text(encoding="utf-8") == "new"
+
 
 class TestFileSafetyDenylist:
     """The executor blocks writes to credential-file basenames via

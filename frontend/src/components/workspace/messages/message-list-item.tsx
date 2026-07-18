@@ -390,7 +390,7 @@ export const MessageListItem = memo(function MessageListItem({
                 onClick={() => {
                   void submitFeedback("liked");
                 }}
-                className="inline-flex size-6 items-center justify-center rounded-md transition-colors hover:text-emerald-500/80"
+                className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400"
                 title={t.conversation.goodResponse}
                 aria-label={t.conversation.goodResponse}
               >
@@ -400,7 +400,7 @@ export const MessageListItem = memo(function MessageListItem({
                 onClick={() => {
                   void submitFeedback("disliked");
                 }}
-                className="inline-flex size-6 items-center justify-center rounded-md transition-colors hover:text-rose-500/80"
+                className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400"
                 title={t.conversation.badResponse}
                 aria-label={t.conversation.badResponse}
               >
@@ -415,7 +415,7 @@ export const MessageListItem = memo(function MessageListItem({
               ""
             }
             size="icon-sm"
-            className="size-6 rounded-md border-0 bg-transparent p-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground focus-visible:ring-0 active:scale-100"
+            className="size-6 rounded-lg border-0 bg-transparent p-0 text-muted-foreground/70 shadow-none transition-all duration-200 hover:bg-muted/60 hover:text-foreground focus-visible:ring-0 active:scale-95"
           />
           {message.type === "ai" ? (
             <button
@@ -426,7 +426,7 @@ export const MessageListItem = memo(function MessageListItem({
                   }),
                 );
               }}
-              className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+              className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-muted/60 hover:text-foreground"
               title={t.conversation.regenerateResponse}
               aria-label={t.conversation.regenerateResponse}
             >
@@ -442,7 +442,7 @@ export const MessageListItem = memo(function MessageListItem({
                   }),
                 );
               }}
-              className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+              className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-muted/60 hover:text-foreground"
               title={t.conversation.editResend}
               aria-label={t.conversation.editResend}
             >

@@ -121,6 +121,31 @@ class TestBodyContextWins:
         )
         assert sess.metadata["project_signals"] == signals
 
+    def test_browser_surface_context_survives_thread_metadata_merge(self):
+        sess = build_turn_session(
+            actor="u",
+            agent=_StubAgent(),
+            thread_id="t-browser",
+            body={
+                "context": {
+                    "mode": "browser",
+                    "capability_mode": "browser",
+                    "runtime_surfaces": ["browser"],
+                    "tool_surface": "browser",
+                    "browser_operation_mode": True,
+                    "browser_surface": "browser",
+                    "browser_session_policy": "thread_native",
+                }
+            },
+            store=_StubStore(),
+        )
+
+        assert sess.metadata["mode"] == "browser"
+        assert sess.metadata["runtime_surfaces"] == ["browser"]
+        assert sess.metadata["browser_operation_mode"] is True
+        assert sess.metadata["browser_surface"] == "browser"
+        assert sess.metadata["browser_session_policy"] == "thread_native"
+
     def test_raw_identity_flag_sets_override(self):
         """``context.raw_identity=true`` writes the
         ``identity_lock_override=False`` key that the

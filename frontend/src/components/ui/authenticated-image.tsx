@@ -99,6 +99,7 @@ export function AuthenticatedImage({
       try {
         const res = await fetch(normalizedSrc, {
           headers: authHeaders(),
+          cache: "no-store",
         });
         if (!res.ok) {
           throw new Error(`Failed to load image: ${res.status}`);

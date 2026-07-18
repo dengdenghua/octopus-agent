@@ -184,6 +184,31 @@ class TestBuildFromConfig:
         stack = build_from_config(cfg)
         assert stack.is_llm_planner
 
+    def test_web_disabled_keeps_local_coding_tools(self):
+        stack = build_from_config(AgentConfig(enable_web_skills=False))
+
+        for name in (
+            "read_file",
+            "grep_text",
+            "write_text_file",
+            "edit_file",
+            "run_tests",
+            "lint_check",
+            "format_code",
+            "exec_shell",
+            "git_diff",
+        ):
+            assert stack.registry.has(name), name
+
+        for name in (
+            "web_search",
+            "fetch_url",
+            "crawl_site",
+            "browser_navigate",
+            "live_browser_navigate",
+        ):
+            assert not stack.registry.has(name), name
+
     def test_oct_llm_stack_without_anthropic_key(self, monkeypatch, tmp_path: Path):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)

@@ -132,6 +132,52 @@ def test_missing_bundle_never_claims_surpassed(tmp_path: Path) -> None:
     assert next(row for row in report["checks"] if row["id"] == "bundle_present")["passed"] is False
 
 
+def test_current_provider_failure_is_reported_as_unscored_blocker(tmp_path: Path) -> None:
+    now = datetime(2026, 7, 17, tzinfo=UTC)
+    status_path = (
+        tmp_path / "benchmarks" / "results" / "behavioral-infrastructure-latest.json"
+    )
+    status_path.parent.mkdir(parents=True)
+    status_path.write_text(
+        json.dumps(
+            {
+                "schema": "octopus.behavioral_infrastructure_failure.v1",
+                "system_id": "octopus",
+                "generated_at": now.isoformat(),
+                "scored": False,
+                "failures": [
+                    {
+                        "case_id": "browser.rich-editor-upload",
+                        "categories": ["infrastructure"],
+                        "errors": ["sensitive provider message is not exposed"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = compute_behavioral_surpass_evidence(root=tmp_path, now=now)
+
+    assert report["ready"] is False
+    assert report["verdict"] == "infrastructure_blocked"
+    assert report["infrastructure"] == {
+        "active": True,
+        "current": True,
+        "path": str(status_path),
+        "generated_at": now.isoformat(),
+        "age_days": 0.0,
+        "system_id": "octopus",
+        "failures": [
+            {
+                "case_id": "browser.rich-editor-upload",
+                "categories": ["infrastructure"],
+            }
+        ],
+    }
+    assert "sensitive provider message" not in json.dumps(report)
+
+
 def test_valid_fresh_same_task_bundle_certifies_behavior(tmp_path: Path) -> None:
     now = datetime(2026, 7, 17, tzinfo=UTC)
     _write_valid_bundle(tmp_path, now)

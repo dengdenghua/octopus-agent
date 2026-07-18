@@ -65,10 +65,10 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
   return (
     <>
       <Card
-        className="group flex cursor-pointer flex-col overflow-hidden rounded-lg border-border-default bg-card/75 py-0 shadow-[var(--shadow-xs)] transition-colors hover:border-primary/25 hover:bg-card"
+        className="group flex cursor-pointer flex-col overflow-hidden rounded-xl border-border-default bg-card/86 py-0 shadow-[var(--shadow-xs)] transition-all duration-200 sm:min-h-[176px] hover:-translate-y-0.5 hover:border-primary/30 hover:bg-card hover:shadow-[var(--shadow-sm)]"
         onClick={() => onSelect?.(agent)}
       >
-        <CardHeader className="px-3 py-3">
+        <CardHeader className="px-3.5 py-3.5">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
               <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border-default bg-muted text-lg leading-none">
@@ -112,13 +112,13 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
             </div>
           </div>
           {agent.description && (
-            <CardDescription className="mt-2 line-clamp-2 min-h-8 text-xs leading-4">
+            <CardDescription className="mt-2 line-clamp-2 min-h-8 text-xs leading-4 sm:line-clamp-3 sm:min-h-12">
               {agent.description}
             </CardDescription>
           )}
         </CardHeader>
 
-        <CardFooter className="mt-auto flex items-center justify-between gap-2 border-t border-border-subtle bg-muted/10 px-3 py-2">
+        <CardFooter className="mt-auto flex items-center justify-between gap-2 border-t border-border-subtle bg-muted/10 px-3.5 py-2.5">
           <Button
             size="sm"
             variant="secondary"

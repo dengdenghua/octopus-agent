@@ -11,6 +11,7 @@ transport instead of accumulating provider-specific branches.
 from __future__ import annotations
 
 import ast
+import html
 import json
 import re
 from dataclasses import dataclass, field, replace
@@ -1088,9 +1089,65 @@ def extract_openai_compat_usage(data: dict[str, Any]) -> tuple[int, int]:
     )
 
 
+_XML_PARAMETER_RE = re.compile(
+    r"<parameter\b(?P<attrs>[^>]*)>(?P<value>.*?)</parameter>",
+    re.IGNORECASE | re.DOTALL,
+)
+_XML_PARAMETER_NAME_RE = re.compile(
+    r"\bname\s*=\s*(['\"])(?P<name>[^'\"]+)\1",
+    re.IGNORECASE,
+)
+
+
+def _xml_parameter_arguments(text: str) -> dict[str, Any]:
+    parsed: dict[str, Any] = {}
+    for match in _XML_PARAMETER_RE.finditer(text):
+        attrs = match.group("attrs") or ""
+        name_match = _XML_PARAMETER_NAME_RE.search(attrs)
+        if name_match is None:
+            continue
+        name = html.unescape(name_match.group("name")).strip()
+        if not name:
+            continue
+        raw = html.unescape(match.group("value") or "").strip()
+        if re.search(r"\bstring\s*=\s*(['\"])true\1", attrs, re.IGNORECASE):
+            parsed[name] = raw
+            continue
+        if raw.lower() == "true":
+            parsed[name] = True
+        elif raw.lower() == "false":
+            parsed[name] = False
+        elif raw.lower() in {"null", "none"}:
+            parsed[name] = None
+        else:
+            try:
+                decoded = json.loads(raw)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                decoded = raw
+            parsed[name] = decoded
+    return parsed
+
+
+def _normalize_tool_argument_mapping(parsed: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(parsed)
+    wrapper_keys: list[str] = []
+    recovered: dict[str, Any] = {}
+    for key, raw in parsed.items():
+        if not isinstance(raw, str) or "<parameter" not in raw.lower():
+            continue
+        xml_args = _xml_parameter_arguments(raw)
+        if xml_args:
+            wrapper_keys.append(key)
+            recovered.update(xml_args)
+    for key in wrapper_keys:
+        normalized.pop(key, None)
+    normalized.update(recovered)
+    return normalized
+
+
 def parse_tool_call_arguments(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
-        return value
+        return _normalize_tool_argument_mapping(value)
     if value is None:
         return {}
     text = value if isinstance(value, str) else str(value)
@@ -1103,7 +1160,7 @@ def parse_tool_call_arguments(value: Any) -> dict[str, Any]:
         parsed = json.loads(text)
         if isinstance(parsed, str):
             parsed = json.loads(parsed)
-        return parsed if isinstance(parsed, dict) else {}
+        return _normalize_tool_argument_mapping(parsed) if isinstance(parsed, dict) else {}
     except (
         TypeError,
         ValueError,
@@ -1113,9 +1170,9 @@ def parse_tool_call_arguments(value: Any) -> dict[str, Any]:
 
     try:
         parsed = ast.literal_eval(text)
-        return parsed if isinstance(parsed, dict) else {}
+        return _normalize_tool_argument_mapping(parsed) if isinstance(parsed, dict) else {}
     except (SyntaxError, ValueError, TypeError):
-        return {}
+        return _xml_parameter_arguments(text)
 
 
 def _normalize_thinking_fields(

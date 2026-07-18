@@ -12,6 +12,7 @@ import {
   GlobeIcon,
   ListChecksIcon,
   Loader2Icon,
+  MonitorIcon,
   MoreHorizontalIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -73,10 +74,16 @@ export function WorkbenchEmptyPage({
   title: string;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 items-center justify-center bg-background/70 p-6 text-center">
-      <div className="max-w-xs">
-        <div className="text-sm font-medium text-foreground">{title}</div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+    <div className="flex min-h-0 flex-1 items-center justify-center bg-gradient-to-b from-background/50 to-background/80 p-6 text-center">
+      <div className="flex max-w-xs flex-col items-center gap-3">
+        <div className="relative">
+          <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/15 via-primary/5 to-transparent blur-lg" />
+          <div className="relative flex size-12 items-center justify-center rounded-2xl border border-border-default/60 bg-gradient-to-br from-card to-muted/30 shadow-[var(--shadow-xs)]">
+            <MonitorIcon className="size-5 text-muted-foreground/60" strokeWidth={1.5} />
+          </div>
+        </div>
+        <div className="text-sm font-medium text-foreground/90">{title}</div>
+        <p className="text-[12px] leading-relaxed text-muted-foreground/70">
           {description}
         </p>
       </div>
@@ -1243,39 +1250,58 @@ export function AgentSummaryPage({
             </button>
             {expandedSections.has("references") && (
               <div className="mt-3">
-                {/* 上下文来源进度条 */}
+                {/* 上下文来源分类（可点击切换）+ 进度条 */}
                 <div>
-                  <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+                  <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px]">
                     {observedReferenceTabs.length === 0 ? (
-                      <span>{t.agentWorkbenchPages.noSources}</span>
+                      <span className="text-muted-foreground">{t.agentWorkbenchPages.noSources}</span>
                     ) : (
                       observedReferenceTabs.map((tab) => {
                         const meta = OBSERVED_REFERENCE_META[tab.id];
+                        const isActive = activeRefTab === tab.id;
                         return (
-                          <span
+                          <button
                             key={tab.id}
-                            className="flex items-center gap-1"
+                            type="button"
+                            aria-label={t.agentWorkbenchPages.sourceCountWithLabel(
+                              tab.label,
+                              tab.items.length,
+                            )}
+                            onClick={() => setRefTab(tab.id)}
+                            className={cn(
+                              "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 transition-all",
+                              isActive
+                                ? "bg-muted font-medium text-foreground"
+                                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                            )}
                           >
                             <span
                               className={cn(
-                                "inline-block size-2 rounded-sm",
+                                "inline-block size-1.5 rounded-full transition-all",
                                 meta.dotClassName,
+                                isActive && "scale-110",
                               )}
                             />
-                            {tab.label} {tab.items.length}
-                          </span>
+                            <span>{tab.label}</span>
+                            <span className={cn(
+                              "font-mono text-[9px]",
+                              isActive ? "text-foreground/70" : "text-muted-foreground/60",
+                            )}>
+                              {tab.items.length}
+                            </span>
+                          </button>
                         );
                       })
                     )}
                     {contextStats.totalTokens > 0 && (
-                      <span className="font-mono">
+                      <span className="ml-auto font-mono text-[9px] text-muted-foreground/60">
                         {t.agentWorkbenchPages.estimatedTokens(
                           contextStats.totalTokens,
                         )}
                       </span>
                     )}
                   </div>
-                  <div className="h-px overflow-hidden bg-border/35">
+                  <div className="h-1 overflow-hidden rounded-full bg-border/35">
                     <div
                       className="flex h-full"
                       style={{ width: `${contextStats.percentage}%` }}
@@ -1298,42 +1324,8 @@ export function AgentSummaryPage({
                     </div>
                   </div>
                 </div>
-                {/* 标签页切换 */}
-                {observedReferenceTabs.length > 0 && (
-                  <div className="mt-3 flex gap-4 overflow-x-auto border-b border-border-subtle pb-2">
-                    {observedReferenceTabs.map((tab) => {
-                      const meta = OBSERVED_REFERENCE_META[tab.id];
-                      const TabIcon = meta.Icon;
-                      return (
-                        <button
-                          key={tab.id}
-                          type="button"
-                          aria-label={t.agentWorkbenchPages.sourceCountWithLabel(
-                            tab.label,
-                            tab.items.length,
-                          )}
-                          onClick={() => setRefTab(tab.id)}
-                          className={cn(
-                            "inline-flex shrink-0 items-center gap-1.5 border-b border-transparent pb-1 text-[11px] font-medium transition-colors",
-                            activeRefTab === tab.id
-                              ? "border-foreground/60 text-foreground"
-                              : "text-muted-foreground hover:text-foreground",
-                          )}
-                        >
-                          <TabIcon
-                            className={cn("size-3.5", meta.iconClassName)}
-                          />
-                          <span>{tab.label}</span>
-                          <span className="font-mono text-[9px] text-muted-foreground">
-                            {tab.items.length}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
                 {/* 上下文列表 */}
-                <ul className="mt-3 max-h-48 space-y-3 overflow-y-auto">
+                <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">
                   {observedReferenceTabs.length === 0 ? (
                     <li className="py-4 text-center text-[11px] text-muted-foreground">
                       {t.agentWorkbenchPages.noObservableReferences}

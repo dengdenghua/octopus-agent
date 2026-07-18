@@ -23,6 +23,12 @@ def test_codex_cli_runner_uses_ephemeral_json_without_shell(monkeypatch, tmp_pat
                 json.dumps(
                     {
                         "type": "item.started",
+                        "item": {"type": "collab_agent_tool_call", "agent": "worker-1"},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "item.started",
                         "item": {"type": "command_execution", "command": "pwd"},
                     }
                 ),
@@ -51,6 +57,9 @@ def test_codex_cli_runner_uses_ephemeral_json_without_shell(monkeypatch, tmp_pat
     assert "shell" not in captured
     assert {"kind": "text_delta", "delta": "done"} in events
     assert any(event["kind"] == "tool_start" for event in events)
+    assert any(
+        event["kind"] == "tool_start" and event["tool_name"] == "subagent" for event in events
+    )
 
 
 def test_codex_cli_runner_records_nonzero_exit(monkeypatch, tmp_path) -> None:

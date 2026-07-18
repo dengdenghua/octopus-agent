@@ -111,8 +111,11 @@ def test_render_tool_output_applies_bound():
 
 def test_output_signals_error_conventions():
     assert output_signals_error({"ok": False})
+    assert output_signals_error({"success": False})
+    assert output_signals_error({"exit_code": 2})
     assert output_signals_error({"error": "boom"})
     assert output_signals_error({"status": "failed"})
+    assert not output_signals_error({"success": True, "exit_code": 0})
     assert not output_signals_error({"ok": True, "error": "ignored"})
     assert not output_signals_error("error as plain text")
 

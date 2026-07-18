@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 function OctopusLogo({ size = 24 }: { size?: number }) {
   return (
     <div
-      className="flex shrink-0 items-center justify-center bg-background text-foreground ring-1 ring-border-default transition-colors hover:bg-muted"
+      className="flex shrink-0 items-center justify-center rounded-lg bg-card text-foreground ring-1 ring-border-subtle transition-colors hover:bg-muted"
       style={{ width: size, height: size }}
     >
       <BotIcon style={{ width: size * 0.62, height: size * 0.62 }} />

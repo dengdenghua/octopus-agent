@@ -76,6 +76,14 @@ def _plugin_row(
         if isinstance(smoke.get("permission_resolution"), dict)
         else {}
     )
+    provenance = (
+        smoke.get("content_provenance") if isinstance(smoke.get("content_provenance"), dict) else {}
+    )
+    publisher = (
+        smoke.get("publisher_provenance")
+        if isinstance(smoke.get("publisher_provenance"), dict)
+        else {}
+    )
     plugin_path = Path(str(plugin.get("path") or ""))
     plugin_id = str(plugin.get("id") or plugin.get("name") or "")
     plugin_name = str(plugin.get("name") or plugin.get("id") or "")
@@ -96,6 +104,10 @@ def _plugin_row(
         blockers.extend(str(issue) for issue in smoke.get("issues") or [])
     if not any(bool(value) for value in surfaces.values()):
         blockers.append("plugin exposes no migration-testable runtime surface")
+    if not provenance:
+        blockers.append("plugin content provenance is missing")
+    elif provenance.get("complete") is not True:
+        blockers.append("plugin content provenance is incomplete")
     if permission and "review_required" not in permission:
         blockers.append("plugin permission review status is not explicit")
     if not migration_notes_present and not central_migration_covered:
@@ -106,6 +118,8 @@ def _plugin_row(
     warnings: list[str] = []
     if permission.get("review_required") is True:
         warnings.append("permission review remains required before production enablement")
+    if publisher.get("verified") is not True:
+        warnings.append("trusted publisher signature is required before public distribution")
 
     contract = {
         "schema": _PLUGIN_SCHEMA,
@@ -119,6 +133,26 @@ def _plugin_row(
         },
         "permission_review_status": str(permission.get("status") or "unknown"),
         "permission_review_required": bool(permission.get("review_required")),
+        "content_provenance": {
+            "schema": provenance.get("schema"),
+            "algorithm": provenance.get("algorithm"),
+            "digest": provenance.get("digest"),
+            "complete": bool(provenance.get("complete")),
+            "file_count": int(provenance.get("file_count") or 0),
+            "total_bytes": int(provenance.get("total_bytes") or 0),
+            "signed": bool(provenance.get("signed")),
+        },
+        "publisher_provenance": {
+            "schema": publisher.get("schema"),
+            "present": bool(publisher.get("present")),
+            "verified": bool(publisher.get("verified")),
+            "trusted": bool(publisher.get("trusted")),
+            "status": str(publisher.get("status") or "missing"),
+            "publisher_id": str(publisher.get("publisher_id") or ""),
+            "key_id": str(publisher.get("key_id") or ""),
+            "signature_digest": str(publisher.get("signature_digest") or ""),
+            "reason": str(publisher.get("reason") or ""),
+        },
         "migration_notes_present": migration_notes_present,
         "central_migration_covered": central_migration_covered,
         "central_migration_path": str(_CENTRAL_MIGRATION_PATH),
@@ -128,6 +162,8 @@ def _plugin_row(
             "local_smoke_summary",
             "permission_review_visible",
             "runtime_surface_declared",
+            "content_provenance_complete",
+            "publisher_signature_verified_for_public_distribution",
             "migration_notes",
             "regression_tests",
             "disable_without_state_corruption",

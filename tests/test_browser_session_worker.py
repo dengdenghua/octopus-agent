@@ -206,3 +206,63 @@ def test_with_page_stateless_without_session():
     _with_page(None, lambda p: p.set_content("<div id='x'>gone</div>"))
     found = _with_page(None, lambda p: p.query_selector("#x") is not None)
     assert found is False
+
+
+def test_public_browser_actions_reuse_current_page_when_url_is_omitted(tmp_path):
+    pytest.importorskip("playwright")
+    from runtime.execution.suckers.browser_session_worker import (
+        get_browser_session_pool,
+    )
+    from runtime.execution.suckers.browser_skills import (
+        _browser_click,
+        _browser_get,
+        _browser_type,
+        _browser_upload,
+        _with_page,
+    )
+    from runtime.platform.process.session import Session, session_scope
+
+    try:
+        upload_file = tmp_path / "profile.txt"
+        upload_file.write_text("agent profile", encoding="utf-8")
+        with session_scope(Session(actor="a", thread_id="thr_action_persist_test")):
+            _with_page(
+                None,
+                lambda page: page.set_content(
+                    "<input id='name'><select id='plan'>"
+                    "<option>Free</option><option>Pro</option></select>"
+                    "<input id='avatar' type='file'>"
+                    "<button id='save' "
+                    "onclick=\"document.body.dataset.saved="
+                    "document.querySelector('#name').value\">Save</button>"
+                ),
+            )
+            typed = _browser_type(selector="#name", value="Acme Labs")
+            selected = _browser_type(selector="#plan", option_label="Pro")
+            uploaded = _browser_upload(selector="#avatar", path=str(upload_file))
+            clicked = _browser_click(selector="#save")
+            body = _browser_get()
+
+        assert typed["filled"] == "#name"
+        assert selected["input_kind"] == "select"
+        assert uploaded["file_name"] == "profile.txt"
+        assert clicked["clicked"] == "#save"
+        assert "Save" in body["content"]
+        saved = get_browser_session_pool().get_or_create(
+            "thr:thr_action_persist_test"
+        ).submit(lambda page: page.get_attribute("body", "data-saved"))
+        assert saved == "Acme Labs"
+        plan = get_browser_session_pool().get_or_create(
+            "thr:thr_action_persist_test"
+        ).submit(lambda page: page.input_value("#plan"))
+        assert plan == "Pro"
+        file_name = get_browser_session_pool().get_or_create(
+            "thr:thr_action_persist_test"
+        ).submit(
+            lambda page: page.locator("#avatar").evaluate(
+                "element => element.files[0].name"
+            )
+        )
+        assert file_name == "profile.txt"
+    finally:
+        get_browser_session_pool().close_all()

@@ -14,6 +14,8 @@ from runtime.core.cerebrum.react_guards import (
 from runtime.core.cerebrum.react_loop import (
     ReActResult,
     ReActStep,
+    _browser_operation_requested,
+    _browser_task_iteration_limit,
     _build_code_agent_mode_prompt,
     _build_code_context_prelude,
     _build_personal_agent_mode_prompt,
@@ -21,12 +23,18 @@ from runtime.core.cerebrum.react_loop import (
     _build_resume_context_prompt,
     _build_workflow_preset_prompt,
     _code_mode_completion_guard,
+    _code_task_iteration_limit,
+    _dispatch_parallel_actions,
+    _ensure_browser_operation_skills,
     _escape_md_brackets,
     _execute_action_via_beak,
     _format_skill_catalog,
     _long_task_budget_limits,
+    _looks_like_special_tool_envelope,
+    _native_tool_calls_missing_required_args,
     _normalized_tool_call_from_react_action,
     _parse_action,
+    _parse_reasoning_action_fallback,
     _parse_step,
     _placeholder_observation,
     _reset_kg_throttle_for_tests,
@@ -74,6 +82,117 @@ def test_parse_step_only_final_answer() -> None:
     assert step.thought == ""
 
 
+def test_reasoning_only_fallback_uses_last_valid_action_candidate() -> None:
+    reasoning = """
+I might use Action: `list_cwd` and `glob_files({"pattern": "**/*.py"})` together.
+
+That syntax is invalid, so I will issue a concrete call instead.
+Action: todo_write({"items": [{"content": "inspect", "status": "pending"}]})
+
+One rejected alternative was:
+Action: list_cwd and glob_files({"pattern": "**/*.py"})
+"""
+
+    step = _parse_reasoning_action_fallback(reasoning, iteration=1)
+
+    assert step is not None
+    assert step.action.startswith("todo_write(")
+    assert step.actions == [step.action]
+
+
+def test_reasoning_only_fallback_ignores_prose_without_valid_action() -> None:
+    assert (
+        _parse_reasoning_action_fallback(
+            "I considered Action: list_cwd and maybe something else.",
+            iteration=1,
+        )
+        is None
+    )
+
+
+def test_reasoning_only_fallback_recovers_xml_action_container() -> None:
+    reasoning = (
+        "先读取输入文件，再导航。\n<action>\n"
+        'read_file({"path": "EVAL_URL.txt"})\n'
+        'read_file({"path": "profile.txt"})\n'
+        "</action>"
+    )
+
+    step = _parse_reasoning_action_fallback(reasoning, iteration=3)
+
+    assert step is not None
+    assert step.actions == [
+        'read_file({"path": "EVAL_URL.txt"})',
+        'read_file({"path": "profile.txt"})',
+    ]
+    assert step.action == "; ".join(step.actions)
+
+
+def test_special_tool_envelope_is_not_plain_assistant_text() -> None:
+    assert _looks_like_special_tool_envelope(
+        "<|tool_calls_section_begin|><|tool_calls_begin|>inspect files"
+    )
+    assert not _looks_like_special_tool_envelope("ordinary final answer")
+
+
+def test_native_tool_calls_missing_required_args_rejects_empty_file_call() -> None:
+    calls = [SimpleNamespace(name="read_file", input={})]
+
+    assert _native_tool_calls_missing_required_args(calls) == ["read_file"]
+
+
+def test_native_tool_calls_missing_required_args_allows_argless_list() -> None:
+    calls = [SimpleNamespace(name="list_cwd", input={})]
+
+    assert _native_tool_calls_missing_required_args(calls) == []
+
+
+def test_explicit_browser_surface_registers_dependency_available_browser_group(
+    monkeypatch,
+) -> None:
+    registry = SkillRegistry()
+    executor = SimpleNamespace(registry=registry)
+    calls: list[SkillRegistry] = []
+
+    def register(target: SkillRegistry, *, verify_tests: bool = True) -> int:
+        assert verify_tests is False
+        calls.append(target)
+        target.register(
+            Skill(
+                name="browser_navigate",
+                description="navigate",
+                trusted_source="skill://test/browser_navigate",
+                handler=lambda **_kw: {},
+            )
+        )
+        return 1
+
+    monkeypatch.setattr(
+        "runtime.execution.suckers.browser_skills.register_browser_skills",
+        register,
+    )
+
+    assert _ensure_browser_operation_skills(executor) == 1
+    assert registry.has("browser_navigate")
+    assert _ensure_browser_operation_skills(executor) == 0
+    assert calls == [registry]
+
+
+def test_browser_operation_requested_accepts_surface_and_nested_metadata() -> None:
+    assert _browser_operation_requested({"browser_surface": "Browser"})
+    assert _browser_operation_requested({"runtime_surfaces": ["browser"]})
+    assert _browser_operation_requested(
+        {"metadata": {"chrome_operation_mode": True}}
+    )
+    assert not _browser_operation_requested({"mode": "code"})
+
+
+def test_explicit_browser_turn_gets_stateful_iteration_floor() -> None:
+    assert _browser_task_iteration_limit(5, browser_operation_mode=True) == 30
+    assert _browser_task_iteration_limit(60, browser_operation_mode=True) == 60
+    assert _browser_task_iteration_limit(5, browser_operation_mode=False) == 5
+
+
 def test_placeholder_observation_none_returns_na() -> None:
     assert _placeholder_observation("none") == "N/A"
     assert _placeholder_observation("") == "N/A"
@@ -83,6 +202,8 @@ def test_placeholder_observation_none_returns_na() -> None:
 def test_placeholder_observation_real_action_mentions_action() -> None:
     obs = _placeholder_observation("search[octopus]")
     assert "search[octopus]" in obs
+    assert "工具系统仍然可用" in obs
+    assert "未启用工具执行" not in obs
 
 
 # Implementation note.
@@ -160,6 +281,19 @@ class _CapturingRouter(_ScriptedRouter):
         return super().call(req)
 
 
+class _TransientFailureRouter(_ScriptedRouter):
+    def __init__(self) -> None:
+        super().__init__([])
+
+    def call(self, req: Any) -> _FakeResponse:  # noqa: ARG002
+        self.calls += 1
+        if self.calls == 1:
+            return _FakeResponse("Thought: inspect\nAction: none\nObservation: N/A")
+        if self.calls == 2:
+            raise ConnectionError("temporary upstream disconnect")
+        return _FakeResponse("Final Answer: recovered")
+
+
 class _FakePlanner:
     def __init__(self, router: _ScriptedRouter | None) -> None:
         self.router = router
@@ -190,6 +324,89 @@ def test_react_loop_single_turn_final_answer() -> None:
     assert result.completion_receipt["ready"] is True
     assert len(result.steps) == 1
     assert router.calls == 1
+
+
+def test_react_loop_recovers_from_transient_model_error_after_progress() -> None:
+    router = _TransientFailureRouter()
+
+    result = run_react_loop(
+        _FakeStack(router),
+        _intent("Continue a multi-step analysis"),
+        agent=None,
+        max_iterations=4,
+    )
+
+    assert isinstance(result, ReActResult)
+    assert result.final_answer == "recovered"
+    assert result.terminated_reason == "final_answer"
+    assert router.calls == 3
+
+
+def test_react_loop_executes_action_emitted_only_in_reasoning_channel() -> None:
+    from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
+
+    class ReasoningOnlyRouter:
+        def __init__(self):
+            self.calls = 0
+
+        def call_stream(self, _request):
+            self.calls += 1
+            if self.calls == 1:
+                thinking = (
+                    "I considered Action: echo and another option.\n\n"
+                    'Thought: use the real tool\nAction: echo({"text": "reasoning-tool"})'
+                )
+                yield ModelStreamEvent(type="thinking_delta", delta=thinking)
+                yield ModelStreamEvent(
+                    type="done",
+                    final=ModelResponse(text="", thinking=thinking, model="reasoning-model"),
+                )
+                return
+            text = "Final Answer: verified reasoning action"
+            yield ModelStreamEvent(type="text_delta", delta=text)
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(text=text, model="reasoning-model"),
+            )
+
+    router = ReasoningOnlyRouter()
+    stack = _build_stack_with_executor(router)  # type: ignore[arg-type]
+    intent = _intent("echo reasoning-tool")
+    intent.user_context["mode"] = "react"
+
+    result = run_react_loop(stack, intent, agent=None, max_iterations=3)
+
+    assert result is not None and result.success
+    assert router.calls == 2
+    assert result.steps[0].action.startswith("echo(")
+    assert "real tool execution succeeded" in result.steps[0].observation
+    assert result.final_answer == "verified reasoning action"
+
+
+def test_react_loop_repairs_non_executable_special_tool_envelope() -> None:
+    router = _ScriptedRouter(
+        [
+            (
+                "<|tool_calls_section_begin|><|tool_calls_begin|>"
+                "I will inspect the directory and then continue with the requested operation. "
+                "This is only narration, not a structured function call."
+                "<|tool_calls_end|><|tool_calls_section_end|>"
+            ),
+            'Thought: use a real call\nAction: echo({"text": "repaired"})',
+            "Final Answer: repaired the malformed provider envelope",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("inspect with a real tool")
+    intent.user_context["mode"] = "react"
+
+    result = run_react_loop(stack, intent, agent=None, max_iterations=4)
+
+    assert result is not None and result.success
+    assert router.calls == 3
+    assert "tool-call-protocol-error" in result.steps[0].observation
+    assert "real tool execution succeeded" in result.steps[1].observation
+    assert result.final_answer == "repaired the malformed provider envelope"
 
 
 def test_react_loop_injects_thinking_plan_guidance() -> None:
@@ -265,6 +482,17 @@ def test_code_context_prelude_reads_readme_and_shallow_style_file(tmp_path) -> N
     assert "Use pytest" in prelude
     assert 'read_file("src/service.py")' in prelude
     assert "def handle" in prelude
+
+
+def test_code_context_prelude_reads_task_and_html_fixture(tmp_path) -> None:
+    (tmp_path / "TASK.md").write_text("Keep the mobile layout accessible.", encoding="utf-8")
+    (tmp_path / "index.html").write_text("<main>Fixture</main>", encoding="utf-8")
+
+    prelude = _build_code_context_prelude(str(tmp_path))
+
+    assert 'read_file("TASK.md")' in prelude
+    assert "mobile layout" in prelude
+    assert 'read_file("index.html")' in prelude
 
 
 def test_code_mode_injects_startup_context_before_current_goal(tmp_path) -> None:
@@ -1027,6 +1255,41 @@ def test_parse_step_recovers_xml_tool_call_with_json_kwargs() -> None:
     assert step.action == 'write_text_file({"path": "plan.md", "content": "# Plan"})'
 
 
+def test_parse_step_recovers_named_nested_xml_tool_call() -> None:
+    text = (
+        "开始执行。\n<tool_calls>\n"
+        '<tool_call name="todo_write">\n'
+        '<tool_call name="todos">'
+        '[{"content":"修复漏洞","status":"in_progress"}]'
+        "</tool_call>\n</tool_calls>"
+    )
+
+    step, final = _parse_step(text, iteration=1)
+
+    assert final is None
+    assert _parse_action(step.action) == (
+        "todo_write",
+        {"items": [{"content": "修复漏洞", "status": "in_progress"}]},
+    )
+
+
+def test_parse_step_recovers_standalone_named_json_tool_call() -> None:
+    text = (
+        "开始执行。\n"
+        '<tool_call name="todo_write">\n'
+        '{"todos":[{"content":"修复表单","status":"in_progress"}]}\n'
+        "</tool_call>"
+    )
+
+    step, final = _parse_step(text, iteration=1)
+
+    assert final is None
+    assert _parse_action(step.action) == (
+        "todo_write",
+        {"items": [{"content": "修复表单", "status": "in_progress"}]},
+    )
+
+
 def test_parse_step_recovers_mimo_parameter_tool_call() -> None:
     text = (
         "I will run research now.<tool_call>\n"
@@ -1070,6 +1333,62 @@ def test_parse_step_recovers_multiple_mimo_parameter_tool_calls() -> None:
     assert step.action == "; ".join(step.actions)
 
 
+def test_parse_step_recovers_function_type_params_tool_containers() -> None:
+    text = (
+        "<tool_calls>\n"
+        "<function_type>list_cwd</function_type>\n"
+        '<function_params>{"path":"."}</function_params>\n'
+        "</tool_calls>\n"
+        "<tool_calls>\n"
+        "<function_type>glob_files</function_type>\n"
+        '<function_params>{"pattern":"**/*"}</function_params>\n'
+        "</tool_calls>"
+    )
+
+    step, final = _parse_step(text, iteration=1)
+
+    assert final is None
+    assert step.actions == [
+        'list_cwd({"path": "."})',
+        'glob_files({"pattern": "**/*"})',
+    ]
+    assert step.action == "; ".join(step.actions)
+
+
+def test_parse_step_recovers_xml_action_container_lines() -> None:
+    text = (
+        "目录可能为空，先确认。\n<Action>\n"
+        'file_stats({"path": "retry_policy.py"})\n'
+        'file_stats({"path": "checkpoint.json"})\n'
+        'file_stats({"path": "TASK.md"})\n'
+        "</Action>"
+    )
+
+    step, final = _parse_step(text, iteration=1)
+
+    assert final is None
+    assert step.actions == [
+        'file_stats({"path": "retry_policy.py"})',
+        'file_stats({"path": "checkpoint.json"})',
+        'file_stats({"path": "TASK.md"})',
+    ]
+
+
+def test_parse_step_recovers_direct_named_xml_tool_container() -> None:
+    text = (
+        "继续搜索。<tool_calls>\n"
+        "<glob_files>\n"
+        "<pattern>**/*settings*</pattern>\n"
+        "</glob_files>\n"
+        "</tool_calls>"
+    )
+
+    step, final = _parse_step(text, iteration=1)
+
+    assert final is None
+    assert step.action == 'glob_files({"pattern": "**/*settings*"})'
+
+
 def test_parse_step_recovers_fenced_json_command() -> None:
     step, final = _parse_step(
         '```json\n{"command": "write_file", "kwargs": {"path": "plan.md", "content": "x"}}\n```',
@@ -1078,6 +1397,47 @@ def test_parse_step_recovers_fenced_json_command() -> None:
 
     assert final is None
     assert step.action == 'write_text_file({"path": "plan.md", "content": "x"})'
+
+
+def test_parse_step_recovers_bare_named_tool_tag() -> None:
+    # DeepSeek emits the tool name as a bare XML element with a JSON body
+    # and no wrapper container at all. Observed live: every call in this
+    # shape was dropped as prose while the write-evidence guard demanded
+    # exactly the write the parser was discarding.
+    text = (
+        "Let me try `write_text_file` one more time, then read it back.\n\n"
+        "<write_text_file>\n"
+        '{"path": "test_write.txt", "content": "probe"}\n'
+        "</write_text_file>\n\n"
+        "<read_file>\n"
+        '{"path": "test_write.txt"}\n'
+        "</read_file>"
+    )
+
+    step, final = _parse_step(text, iteration=1)
+
+    assert final is None
+    assert len(step.actions) == 2
+    assert _parse_action(step.actions[0]) == (
+        "write_text_file",
+        {"path": "test_write.txt", "content": "probe"},
+    )
+    assert _parse_action(step.actions[1]) == ("read_file", {"path": "test_write.txt"})
+
+
+def test_bare_named_tool_tag_ignores_prose_xml() -> None:
+    # Single-word tags (no underscore), unclosed tags, and non-JSON bodies
+    # must all stay prose — the bare-tag recovery has no container marker,
+    # so these gates are what keeps XML examples in answers inert.
+    for text in (
+        "<summary>\n{\"path\": \"a\"}\n</summary>",  # no underscore
+        "<write_text_file>\n{\"path\": \"a\"}\n",  # unclosed
+        "<write_text_file>\nnot json\n</write_text_file>",  # not a JSON object
+        '<Write_Text_File>\n{"path": "a"}\n</Write_Text_File>',  # not lowercase
+    ):
+        step, final = _parse_step(text + "\nFinal Answer: done", iteration=1)
+        assert (step.action or "") in ("", "none"), text
+        assert final == "done", text
 
 
 def test_parse_action_json_brackets() -> None:
@@ -1105,6 +1465,32 @@ def test_parse_action_garbage_returns_none() -> None:
     assert _parse_action("!!@@") is None
     assert _parse_action("") is None
     assert _parse_action("read_file(not-json-not-kv)") is None
+
+
+def test_code_task_iteration_limit_lifts_default_for_implementation() -> None:
+    assert (
+        _code_task_iteration_limit(
+            "Implement a cross-cutting configuration rename.",
+            30,
+            is_code_mode=True,
+        )
+        == 60
+    )
+
+
+def test_code_task_iteration_limit_preserves_explicit_small_cap() -> None:
+    assert _code_task_iteration_limit("Fix app.py", 3, is_code_mode=True) == 3
+
+
+def test_code_task_iteration_limit_preserves_read_only_turn() -> None:
+    assert (
+        _code_task_iteration_limit(
+            "Inspect the repository and report risks.",
+            30,
+            is_code_mode=True,
+        )
+        == 30
+    )
 
 
 def test_code_mode_completion_guard_blocks_unfinished_todos() -> None:
@@ -1164,6 +1550,35 @@ def test_code_mode_completion_guard_allows_completed_verified_work() -> None:
     ]
 
     assert _code_mode_completion_guard(steps, "Done.") is None
+
+
+def test_code_mode_completion_guard_rejects_claimed_test_without_test_write() -> None:
+    steps = [
+        ReActStep(
+            iteration=1,
+            action=(
+                'todo_write({"todos": ['
+                '{"title": "Patch code", "status": "completed"},'
+                '{"title": "Create tests/test_config.py", "status": "completed"}'
+                "]})"
+            ),
+        ),
+        ReActStep(
+            iteration=2,
+            action='edit_file({"path": "config.py"})',
+            observation='{"ok": true}',
+        ),
+        ReActStep(
+            iteration=3,
+            action='exec_shell({"command": "python -m pytest"})',
+            observation="6 passed",
+        ),
+    ]
+
+    guard = _code_mode_completion_guard(steps, "Done.")
+
+    assert guard is not None
+    assert "test-file write" in guard
 
 
 def test_completion_phrase_guard_requires_immediate_todo_update() -> None:
@@ -3658,6 +4073,41 @@ def test_parallel_observation_merges_with_call_indices() -> None:
     assert "[2/2 read_file]" in parallel_step.observation
 
 
+def test_parallel_react_reads_keep_selected_workspace_scope(tmp_path) -> None:
+    (tmp_path / "a.txt").write_text("scope-a", encoding="utf-8")
+    (tmp_path / "b.txt").write_text("scope-b", encoding="utf-8")
+    stack = _build_stack_with_executor(_ScriptedRouter([]))
+    intent = _intent("read both selected workspace files")
+    intent.user_context.update({"mode": "react", "workspace_path": str(tmp_path)})
+    session = Session(
+        agent=_ScopeAgent(),
+        thread_id="parallel-scope",
+        metadata={"mode": "code", "workspace_path": str(tmp_path)},
+    )
+
+    with session_scope(session):
+        _events, dispatched = _drain(
+            _dispatch_parallel_actions(
+                [
+                    'read_file({"path": "a.txt"})',
+                    'read_file({"path": "b.txt"})',
+                ],
+                stack=stack,
+                executor=stack.executor,
+                iteration=1,
+                react_task_id=TaskId(uuid4()),
+                agent=None,
+                intent=intent,
+            )
+        )
+
+    observation, results = dispatched
+    assert len(results) == 2
+    assert str((tmp_path / "a.txt").resolve()) in observation
+    assert str((tmp_path / "b.txt").resolve()) in observation
+    assert "not found" not in observation
+
+
 def test_write_tool_in_parallel_block_forces_serial_dispatch() -> None:
     """If the model mixes a write tool into a multi-action block we
     must still execute serially — concurrent writes can clobber
@@ -4364,3 +4814,45 @@ def test_subagent_loop_resets_leaked_gate_handled_flag() -> None:
     assert exec_ends, "exec_shell should have produced a tool_end"
     assert exec_ends[0]["status"] != "success", "leaked gate_handled must not bypass the chokepoint"
     assert not ran["exec"], "blocked exec_shell handler must NOT have run"
+
+
+# ─── guard-impasse bound ──────────────────────────────────────────────
+
+
+def test_guard_impasse_trips_after_three_stalled_rejections() -> None:
+    from runtime.core.cerebrum.react_loop import _note_guard_impasse
+
+    state: dict = {}
+    steps = [ReActStep(iteration=1, action='read_file({"path": "a"})', observation="x")]
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+    # Third rejection with an unchanged trajectory: the model is not making
+    # progress toward the guard's demand — stop pushing back.
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is True
+
+
+def test_guard_impasse_resets_when_new_actions_land() -> None:
+    from runtime.core.cerebrum.react_loop import _note_guard_impasse
+
+    state: dict = {}
+    steps = [ReActStep(iteration=1, action='read_file({"path": "a"})', observation="x")]
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+    # The model executed another real action before its next attempt —
+    # that is progress, so the counter starts over.
+    steps.append(
+        ReActStep(iteration=2, action='write_text_file({"path": "b", "content": "y"})')
+    )
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is True
+
+
+def test_guard_impasse_resets_on_different_guard() -> None:
+    from runtime.core.cerebrum.react_loop import _note_guard_impasse
+
+    state: dict = {}
+    steps = [ReActStep(iteration=1, action='read_file({"path": "a"})', observation="x")]
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+    assert _note_guard_impasse(state, "inspection-evidence guard", steps) is False
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False

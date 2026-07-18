@@ -175,6 +175,12 @@ class ModelRequest(BaseModel):
     # router resolves the conflict by prioritizing tools (the
     # whole point of passing tools is that the caller wants them).
     tools: list[ToolSpec] = Field(default_factory=list)
+    # Protocol-level execution constraint. Agentic code loops set this while
+    # no successful mutation/verification exists, preventing reasoning-heavy
+    # OpenAI-compatible models from spending the whole response on analysis
+    # and returning no tool call. Providers without an equivalent may ignore
+    # it; the outer completion guard remains the fallback.
+    require_tool_use: bool = False
 
 
 class ModelResponse(BaseModel):

@@ -101,6 +101,8 @@ def team_workspace_root(team_id: str) -> Path:
 
 
 # Recognized modes. Anything else collapses to ``chat`` (safest tier).
+# ``browser`` keeps chat-level write confinement while allowing an explicitly
+# bound project workspace to be read for URLs and upload fixtures.
 #
 # ``plan`` is the strictest mode · write scope is empty. The agent can
 # read and call pure-inspection skills but every ``sandbox_dir``-
@@ -110,7 +112,7 @@ def team_workspace_root(team_id: str) -> Path:
 # thread's mode to the requested follow-on (``chat`` / ``team`` /
 # ``code``) after user confirmation. ``exit_plan_mode`` is a
 # protocol-level tool of the plan-mode contract.
-_VALID_MODES = frozenset({"plan", "chat", "team", "code"})
+_VALID_MODES = frozenset({"plan", "chat", "team", "code", "browser"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -509,7 +511,11 @@ def resolve_execution_scope(session: Session | None) -> ExecutionScope:
         except (OSError, ValueError):
             workspace_path = None
 
-    if write_scope.mode == "code" and workspace_path is not None:
+    browser_project_read = (
+        write_scope.requested_mode == "browser"
+        and str(meta.get("workspace_scope") or "").strip().lower() == "project"
+    )
+    if (write_scope.mode == "code" or browser_project_read) and workspace_path is not None:
         readable_roots = (
             workspace_path,
             *tuple(root for root in write_scope.roots if root != workspace_path),

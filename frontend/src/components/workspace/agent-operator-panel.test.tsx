@@ -750,7 +750,7 @@ describe("<AgentOperatorPanel />", () => {
       competitors: ["codex", "claude_code", "openclaw", "hermes", "octopus"],
       external_competitors: ["codex", "claude_code", "openclaw", "hermes"],
       overall: {
-        codex: 87,
+        codex: 97,
         claude_code: 87,
         openclaw: 84,
         hermes: 85,
@@ -758,14 +758,14 @@ describe("<AgentOperatorPanel />", () => {
       },
       ranking: [
         { competitor: "octopus", score: 97 },
-        { competitor: "codex", score: 87 },
+        { competitor: "codex", score: 97 },
         { competitor: "claude_code", score: 87 },
         { competitor: "hermes", score: 85 },
         { competitor: "openclaw", score: 84 },
       ],
-      verdict: "leading",
+      verdict: "competitive",
       evidence_adjusted_overall: {
-        codex: 87,
+        codex: 97,
         claude_code: 87,
         openclaw: 84,
         hermes: 85,
@@ -773,12 +773,34 @@ describe("<AgentOperatorPanel />", () => {
       },
       evidence_adjusted_ranking: [
         { competitor: "octopus", score: 97 },
-        { competitor: "codex", score: 87 },
+        { competitor: "codex", score: 97 },
         { competitor: "claude_code", score: 87 },
         { competitor: "hermes", score: 85 },
         { competitor: "openclaw", score: 84 },
       ],
-      evidence_adjusted_verdict: "leading",
+      evidence_adjusted_verdict: "competitive",
+      evidence_layers: {
+        schema: "octopus.agent_score_evidence_layers.v1",
+        architecture: {
+          status: "estimated",
+          octopus_score: 97,
+          codex_score: 97,
+          source: "current_combined_architecture_baseline",
+        },
+        static_certification: {
+          status: "certified",
+          ready: true,
+          passed: 17,
+          total: 17,
+        },
+        behavioral_head_to_head: {
+          status: "certified",
+          ready: true,
+          verdict: "surpassed",
+          octopus_pass_pow_k: 1,
+          codex_pass_pow_k: 0.96,
+        },
+      },
       scorecard_policy: {
         schema: "octopus.agent_scorecard_policy.v1",
         overall: "external_calibrated_baseline",
@@ -992,7 +1014,7 @@ describe("<AgentOperatorPanel />", () => {
       verdict: "surpassed",
       summary: {
         scorecard_octopus: 97,
-        scorecard_best_external: 87,
+        scorecard_best_external: 97,
         scorecard_evidence_adjusted_octopus: 97,
         automation_octopus: 95,
         automation_codex: 93,
@@ -1030,10 +1052,10 @@ describe("<AgentOperatorPanel />", () => {
       ],
       scorecard: {
         schema: "octopus.agent_competitor_scorecard.v1",
-        overall: { codex: 87, octopus: 97 },
-        evidence_adjusted_overall: { codex: 87, octopus: 97 },
-        verdict: "leading",
-        evidence_adjusted_verdict: "leading",
+        overall: { codex: 97, octopus: 97 },
+        evidence_adjusted_overall: { codex: 97, octopus: 97 },
+        verdict: "competitive",
+        evidence_adjusted_verdict: "competitive",
         surpass_summary: { all_dimensions_surpassed: true },
         next_focus: [],
       },
@@ -1310,6 +1332,9 @@ describe("<AgentOperatorPanel />", () => {
     ).toBeInTheDocument();
     expect(await screen.findByText("lease expired")).toBeInTheDocument();
     expect(await screen.findByText("Competitor scorecard")).toBeInTheDocument();
+    expect(await screen.findByText("Architecture")).toBeInTheDocument();
+    expect(await screen.findByText("Static evidence")).toBeInTheDocument();
+    expect(await screen.findByText("Behavior %")).toBeInTheDocument();
     expect(api.fetchAgentCompetitorScorecard).toHaveBeenCalledWith(95);
     expect(api.fetchAutomationRadar).toHaveBeenCalledWith(95);
     expect(api.fetchE2ESurpassCertification).toHaveBeenCalledWith(95);
@@ -1320,7 +1345,7 @@ describe("<AgentOperatorPanel />", () => {
     expect(await screen.findByText("behavior verified")).toBeInTheDocument();
     expect(
       await screen.findByText(
-        /scorecard 97 vs best external 87 .* automation 95 vs Codex 93/,
+        /scorecard 97 vs best external 97 .* automation 95 vs Codex 93/,
       ),
     ).toBeInTheDocument();
     expect(await screen.findByText("all checks passed")).toBeInTheDocument();

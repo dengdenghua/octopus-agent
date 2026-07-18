@@ -1783,6 +1783,31 @@ def test_code_capability_without_project_gets_personal_workspace(tmp_path: Path)
     assert "workspace_path" not in intent.user_context
 
 
+def test_explicit_turn_cwd_becomes_code_workspace(tmp_path: Path) -> None:
+    from runtime.platform.runtime_policy.workspaces import WorkspaceManager
+    from runtime.protocol.items import TurnParams
+    from runtime.sensing.gateway.realtime_cerebrum import _build_intent
+
+    params = TurnParams.model_validate(
+        {
+            "threadId": "th-explicit-cwd",
+            "cwd": str(tmp_path),
+            "input": [{"type": "text", "text": "inspect and fix the project"}],
+        }
+    )
+
+    intent = _build_intent(
+        "inspect and fix the project",
+        params,
+        workspaces=WorkspaceManager(tmp_path / "managed"),
+    )
+
+    assert intent.user_context["cwd"] == str(tmp_path)
+    assert intent.user_context["workspace_path"] == str(tmp_path)
+    assert intent.user_context["workspace_scope"] == "project"
+    assert intent.user_context["mode"] == "code"
+
+
 def test_explicit_chat_turn_does_not_inherit_personal_code_metadata(tmp_path: Path) -> None:
     from runtime.sensing.gateway.turn_session import build_turn_metadata
 

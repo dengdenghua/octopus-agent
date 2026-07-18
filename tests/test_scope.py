@@ -616,6 +616,32 @@ class TestSandboxMode:
 
 
 class TestExecutionScope:
+    def test_browser_project_scope_reads_fixture_but_keeps_writes_in_artifacts(
+        self,
+        mk_session,
+        data_dir: Path,
+        tmp_path: Path,
+    ):
+        from runtime.platform.process.scope import resolve_execution_scope
+
+        wp = tmp_path / "browser-fixture"
+        wp.mkdir()
+        (wp / "EVAL_URL.txt").write_text("http://127.0.0.1:1234/", encoding="utf-8")
+
+        sess = mk_session(mode="browser", thread_id="t-browser")
+        sess.metadata["workspace_path"] = str(wp)
+        sess.metadata["workspace_scope"] = "project"
+        scope = resolve_execution_scope(sess)
+
+        artifact_root = data_dir / "workspaces" / "t-browser" / "output" / "final"
+        assert scope.requested_mode == "browser"
+        assert scope.mode == "chat"
+        assert scope.primary_read == wp
+        assert scope.primary_write == artifact_root
+        assert scope.allows_read(wp / "EVAL_URL.txt")
+        assert not scope.allows_write(wp / "index.html")
+        assert scope.allows_write(artifact_root / "notes.txt")
+
     def test_sandbox_execution_scope_splits_read_and_write_roots(
         self,
         mk_session,

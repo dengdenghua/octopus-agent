@@ -141,8 +141,8 @@ export function EvolutionPanel({ status, trigger }: EvolutionPanelProps) {
               onClick={() => reflectMutation.mutate()}
               disabled={reflectMutation.isPending}
               className={cn(
-                "flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm font-medium",
-                "bg-foreground text-background transition-opacity hover:opacity-85",
+                "flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-medium",
+                "bg-foreground text-background transition-colors hover:bg-foreground/90 active:scale-[0.98]",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
               )}
             >

@@ -92,6 +92,26 @@ CHECKS: tuple[PermissionSandboxCheck, ...] = (
         ),
     ),
     PermissionSandboxCheck(
+        id="publisher_provenance_verification",
+        title="Trusted plugin publisher provenance",
+        paths=(
+            "runtime/platform/plugins/publisher_provenance.py",
+            "runtime/platform/plugins/codex_discovery.py",
+            "runtime/sensing/gateway/plugins_router.py",
+            "tests/test_codex_plugin_smoke.py",
+            "docs/guide/plugin-author-migration.md",
+        ),
+        required_terms=(
+            "octopus.plugin_publisher_signature.v1",
+            "octopus.plugin_publisher_trust_store.v1",
+            "canonical_publisher_signature_payload",
+            "verify_plugin_publisher_provenance",
+            "ed25519",
+            "revoked",
+            "publisher_verified_count",
+        ),
+    ),
+    PermissionSandboxCheck(
         id="high_risk_policy_coverage",
         title="High-risk policy coverage",
         paths=(

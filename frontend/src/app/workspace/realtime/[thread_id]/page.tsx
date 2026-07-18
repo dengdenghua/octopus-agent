@@ -372,7 +372,7 @@ function RightPanelMenu({
       title={panelToggleLabel}
       onClick={handleTogglePanel}
       className={cn(
-        "flex size-[42px] items-center justify-center rounded-md border shadow-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 sm:size-8",
+        "flex size-[42px] items-center justify-center rounded-lg border shadow-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 sm:size-8",
         activePage
           ? "border-transparent bg-transparent text-foreground/82 hover:border-border-default hover:bg-muted/55 hover:text-foreground"
           : "border-transparent bg-transparent text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",
@@ -537,7 +537,7 @@ function ChatHeaderRecButton({
       title={recordingTitle}
       aria-label={recordingTitle}
       className={cn(
-        "inline-flex h-[42px] shrink-0 items-center gap-1.5 rounded-md border px-3 text-[11px] font-semibold shadow-none transition-colors sm:h-8 sm:px-2.5",
+        "inline-flex h-[42px] shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[11px] font-semibold shadow-none transition-all duration-200 sm:h-8 sm:px-2.5",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
         recording
           ? "border-red-500/25 bg-red-500/10 text-red-600 hover:bg-red-500/16 dark:text-red-400"
@@ -592,6 +592,13 @@ function TaskCollaboratorControl({
     () => new Set(selectedAgentIds),
     [selectedAgentIds],
   );
+  const agentByName = useMemo(() => {
+    const map = new Map<string, Agent>();
+    for (const agent of agents) {
+      map.set(agent.name, agent);
+    }
+    return map;
+  }, [agents]);
   const isTeamDraft = selectedAgents.length > 0;
   const teamSize = isTeamDraft
     ? selectedAgents.length + (currentAgentName ? 1 : 0)
@@ -675,7 +682,7 @@ function TaskCollaboratorControl({
         <button
           type="button"
           className={cn(
-            "group inline-flex h-[42px] max-w-[11rem] items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium shadow-none transition-colors sm:h-8 sm:px-2",
+            "group inline-flex h-[42px] max-w-[11rem] items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium shadow-none transition-all duration-200 sm:h-8 sm:px-2",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
             isTeamDraft
               ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
@@ -688,7 +695,12 @@ function TaskCollaboratorControl({
               {displayRoster.map((agent) => (
                 <span
                   key={agent.agent_id}
-                  className="grid size-5 place-items-center overflow-hidden rounded-sm border border-border-default bg-muted text-[10px] font-semibold text-muted-foreground"
+                  className={cn(
+                    "grid size-5 place-items-center overflow-hidden rounded-md border text-[10px] font-semibold transition-all duration-200",
+                    isTeamDraft
+                      ? "border-primary-foreground/40 bg-primary-foreground/20 text-primary-foreground"
+                      : "border-border-default bg-muted text-muted-foreground",
+                  )}
                   title={agent.display_name}
                 >
                   {agent.avatar_url ? (
@@ -707,7 +719,14 @@ function TaskCollaboratorControl({
                 </span>
               ))}
               {extraRosterCount > 0 && (
-                <span className="grid size-5 place-items-center rounded-sm border border-border-default bg-muted text-[9px] font-semibold text-muted-foreground">
+                <span
+                  className={cn(
+                    "grid size-5 place-items-center rounded-md border text-[9px] font-semibold transition-all duration-200",
+                    isTeamDraft
+                      ? "border-primary/20 bg-primary-foreground/90 text-primary"
+                      : "border-border-default bg-muted text-muted-foreground",
+                  )}
+                >
                   +{extraRosterCount}
                 </span>
               )}
@@ -720,9 +739,9 @@ function TaskCollaboratorControl({
           </span>
           <span
             className={cn(
-              "inline-flex items-center gap-1 shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] transition-colors",
+              "inline-flex items-center gap-1 shrink-0 rounded-md px-1.5 py-0.5 mr-1 text-[10px] transition-all duration-200",
               isTeamDraft
-                ? "bg-primary/12 text-primary"
+                ? "bg-primary-foreground/80 text-primary font-semibold"
                 : hasOnlineMembers
                   ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                   : "bg-transparent text-muted-foreground group-hover:bg-background/75 group-hover:text-foreground",
@@ -739,7 +758,7 @@ function TaskCollaboratorControl({
         align="end"
         side="bottom"
         sideOffset={8}
-        className="w-[min(22rem,calc(100vw-1rem))] overflow-hidden rounded-md border-border-default p-0 shadow-[var(--shadow-xs)]"
+        className="w-[min(22rem,calc(100vw-1rem))] overflow-hidden rounded-lg border-border-default p-0 shadow-[var(--shadow-xs)]"
       >
         <div className="border-b border-border-subtle px-3 py-2.5">
           <div className="flex items-center justify-between gap-3">
@@ -750,7 +769,7 @@ function TaskCollaboratorControl({
             <button
               type="button"
               onClick={() => onSelectedAgentIdsChange([])}
-              className="rounded-sm px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+              className="rounded-lg px-2 py-1 text-[11px] text-muted-foreground transition-all duration-200 hover:bg-muted/70 hover:text-foreground"
             >
               {t.chatInputBox.collaboratorsSingle}
             </button>
@@ -768,7 +787,7 @@ function TaskCollaboratorControl({
                   onClick={() => onTeamModeChange(mode)}
                   title={meta.description}
                   className={cn(
-                    "inline-flex h-7 items-center gap-1.5 rounded-sm border px-2.5 text-[11px] font-medium transition-colors",
+                    "inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-medium transition-all duration-200",
                     active
                       ? "border-primary/30 bg-primary/10 text-primary"
                       : "border-border-default text-muted-foreground hover:bg-muted/55 hover:text-foreground",
@@ -784,41 +803,76 @@ function TaskCollaboratorControl({
           </div>
           {roster.length > 0 && (
             <div className="mt-2 grid grid-cols-1 gap-1">
-              {roster.slice(0, 4).map((agent) => (
-                <div
-                  key={agent.agent_id}
-                  className="flex min-w-0 items-center gap-2 rounded-sm bg-muted/35 px-2 py-1.5"
-                >
-                  <span className="grid size-6 shrink-0 place-items-center overflow-hidden rounded-sm bg-background text-[10px] font-semibold text-muted-foreground">
-                    {agent.avatar_url ? (
-                      <img
-                        src={agent.avatar_url}
-                        alt={agent.display_name}
-                        className="size-full object-cover"
-                      />
-                    ) : agent.icon?.trim() ? (
-                      <span className="text-[13px] leading-none">
-                        {agent.icon}
+              {roster.slice(0, 4).map((entry) => {
+                const isLeader = entry.role === "tl";
+                const agent = agentByName.get(entry.agent_id);
+                const handleRemove = () => {
+                  if (agent) {
+                    toggleAgent(agent);
+                  } else {
+                    onSelectedAgentIdsChange(
+                      selectedAgentIds.filter((id) => id !== entry.agent_id),
+                    );
+                  }
+                };
+                const content = (
+                  <>
+                    <span className="grid size-6 shrink-0 place-items-center overflow-hidden rounded-md bg-background text-[10px] font-semibold text-muted-foreground">
+                      {entry.avatar_url ? (
+                        <img
+                          src={entry.avatar_url}
+                          alt={entry.display_name}
+                          className="size-full object-cover"
+                        />
+                      ) : entry.icon?.trim() ? (
+                        <span className="text-[13px] leading-none">
+                          {entry.icon}
+                        </span>
+                      ) : (
+                        entry.display_name.charAt(0).toUpperCase()
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[11px] font-medium">
+                      {entry.display_name}
+                    </span>
+                    {isLeader ? (
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {t.agentWorkbenchPanel.mainController}
                       </span>
                     ) : (
-                      agent.display_name.charAt(0).toUpperCase()
+                      <span className="shrink-0 rounded p-0.5 text-muted-foreground opacity-60 transition-all duration-200 group-hover:opacity-100">
+                        <XIcon className="size-3.5" />
+                      </span>
                     )}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[11px] font-medium">
-                    {agent.display_name}
-                  </span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {agent.role === "tl"
-                      ? t.agentWorkbenchPanel.mainController
-                      : t.agentWorkbenchPanel.subComputer}
-                  </span>
-                </div>
-              ))}
+                  </>
+                );
+                if (isLeader) {
+                  return (
+                    <div
+                      key={entry.agent_id}
+                      className="flex min-w-0 items-center gap-2 rounded-lg bg-muted/35 px-2 py-1.5"
+                    >
+                      {content}
+                    </div>
+                  );
+                }
+                return (
+                  <button
+                    key={entry.agent_id}
+                    type="button"
+                    onClick={handleRemove}
+                    className="group flex min-w-0 w-full items-center gap-2 rounded-lg bg-muted/35 px-2 py-1.5 text-left transition-all duration-200 hover:bg-destructive/10 hover:text-destructive"
+                    title="点击移除"
+                  >
+                    {content}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
         <div className="p-3">
-          <label className="flex h-8 items-center gap-2 rounded-sm border border-border-default bg-background/45 px-2">
+          <label className="flex h-9 items-center gap-2 rounded-lg border border-border-default bg-background/45 px-2.5 transition-all duration-200 hover:border-border-strong hover:bg-background/60 focus-within:border-ring focus-within:bg-background focus-within:ring-2 focus-within:ring-ring/20">
             <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
             <Input
               value={query}
@@ -826,7 +880,7 @@ function TaskCollaboratorControl({
               onKeyDown={(event) => event.stopPropagation()}
               placeholder={t.chatInputBox.collaboratorsSearchPlaceholder}
               aria-label={t.chatInputBox.collaboratorsSearchPlaceholder}
-              className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/45"
+              className="h-auto min-w-0 flex-1 border-0 bg-transparent p-0 text-[12px] shadow-none outline-none placeholder:text-muted-foreground/45 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
           </label>
           {selectedAgents.length > 0 && (
@@ -836,7 +890,7 @@ function TaskCollaboratorControl({
                   key={agent.name}
                   type="button"
                   onClick={() => toggleAgent(agent)}
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-sm border border-primary/20 bg-primary/8 px-2 py-1 text-[11px] text-primary"
+                  className="group inline-flex max-w-full items-center gap-1 rounded-lg border border-primary/20 bg-primary/8 px-1.5 py-0.5 text-[11px] text-primary transition-all duration-200 hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive"
                 >
                   <AgentAvatar
                     agent={agent}
@@ -845,6 +899,7 @@ function TaskCollaboratorControl({
                   <span className="truncate">
                     {agent.display_name ?? agent.name}
                   </span>
+                  <XIcon className="size-3 shrink-0 opacity-60 transition-opacity group-hover:opacity-100" />
                 </button>
               ))}
             </div>
@@ -860,7 +915,7 @@ function TaskCollaboratorControl({
                     type="button"
                     onClick={() => toggleAgent(agent)}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left transition-colors",
+                      "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-all duration-200",
                       selected ? "bg-primary/8" : "hover:bg-muted/55",
                     )}
                   >
@@ -878,7 +933,7 @@ function TaskCollaboratorControl({
                     </span>
                     <span
                       className={cn(
-                        "grid size-5 shrink-0 place-items-center rounded border",
+                        "grid size-5 shrink-0 place-items-center rounded-md border transition-all duration-200",
                         selected
                           ? "border-primary/30 bg-primary/10 text-primary"
                           : "border-border-default text-transparent",
@@ -896,7 +951,7 @@ function TaskCollaboratorControl({
           <button
             type="button"
             onClick={() => void handleCopyLink()}
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-sm px-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium text-muted-foreground transition-all duration-200 hover:bg-muted/60 hover:text-foreground"
           >
             <CopyIcon className="size-3.5" />
             {t.collab.copyLink}
@@ -1101,6 +1156,8 @@ function RealtimePageContent({
   useEffect(() => {
     collaboratorSelectionTouchedRef.current = false;
     lastCoworkSyncSignatureRef.current = null;
+    setSelectedCollaboratorIds([]);
+    setTeamModeIntent("cluster");
   }, [threadId]);
 
   useEffect(() => {
@@ -1283,6 +1340,9 @@ function RealtimePageContent({
       threadIdentityQuery.isPending ||
       localStartedThreadIdRef.current === threadId
     ) {
+      return;
+    }
+    if (collaboratorSelectionTouchedRef.current) {
       return;
     }
     setSelectedCollaboratorIds((current) =>
@@ -2213,11 +2273,6 @@ function RealtimePageContent({
   const showAgentWorkbench =
     canOpenAgentWorkbench &&
     (agentWorkbenchManuallyOpened ||
-      (isNewThread &&
-        !isMobile &&
-        !agentWorkbenchDismissed &&
-        !artifactsOpen &&
-        !showAgentPlan) ||
       (collaborationEnabled && !agentWorkbenchDismissed) ||
       (hasRenderableAgentWorkbench &&
         (!agentWorkbenchDismissed || artifactsOpen || showAgentPlan))) &&
@@ -3087,7 +3142,7 @@ function NewChatStarterGrid({ onPick }: { onPick: (prompt: string) => void }) {
   const { t } = useI18n();
   const starters = t.realtime.chatStarters;
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+    <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
       {starters.map((item, index) => {
         const Icon = CHAT_STARTER_ICONS[index] ?? SearchIcon;
         return (
@@ -3097,12 +3152,12 @@ function NewChatStarterGrid({ onPick }: { onPick: (prompt: string) => void }) {
             onClick={() => onPick(item.prompt)}
             title={item.prompt}
             className={cn(
-              "group inline-flex items-center gap-2 rounded-xl border border-border-default bg-background/80 px-3.5 py-2.5 text-[13px] font-medium text-foreground shadow-[var(--shadow-xs)]",
-              "transition-colors transition-shadow transition-transform duration-150 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-card hover:shadow-[var(--shadow-sm)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:translate-y-0",
+              "group inline-flex items-center gap-2 rounded-xl border border-transparent bg-transparent px-3.5 py-2 text-[13px] font-medium text-muted-foreground/80",
+              "transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-border-default hover:bg-card hover:text-foreground hover:shadow-[var(--shadow-sm)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:translate-y-0 active:duration-75",
             )}
           >
-            <Icon className="size-4 text-muted-foreground transition-colors group-hover:text-primary" />
+            <Icon className="size-4 text-muted-foreground/70 transition-all duration-200 group-hover:scale-110 group-hover:text-primary" />
             {item.label}
           </button>
         );

@@ -83,6 +83,14 @@ def build_turn_metadata(
         "personal_workspace_path",
         "interaction_mode",
         "model_name",
+        "tool_surface",
+        "browser_surface",
+        "browser_session_policy",
+        "browser_track_preference",
+        "browser_permission_policy",
+        "browser_evidence_policy",
+        "browser_operation_mode",
+        "chrome_operation_mode",
     ):
         if explicit_conversation_mode and key in {
             "capability_mode",
@@ -103,6 +111,18 @@ def build_turn_metadata(
         value = stored_meta.get("personal_workspace_enabled")
     if isinstance(value, bool):
         metadata["personal_workspace_enabled"] = value
+
+    runtime_surfaces = ctx.get("runtime_surfaces")
+    if runtime_surfaces is None and not explicit_conversation_mode:
+        runtime_surfaces = stored_meta.get("runtime_surfaces")
+    if isinstance(runtime_surfaces, list):
+        clean_surfaces = [
+            item.strip()
+            for item in runtime_surfaces
+            if isinstance(item, str) and item.strip()
+        ]
+        if clean_surfaces:
+            metadata["runtime_surfaces"] = clean_surfaces
 
     project_signals = ctx.get("project_signals") or stored_meta.get("project_signals")
     if isinstance(project_signals, dict):

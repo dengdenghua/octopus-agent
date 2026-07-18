@@ -716,7 +716,7 @@ export function AgentWorkbenchPanel({
                       title={`Close ${tab.label}`}
                       onClick={() => handleCloseTab(tab.id)}
                       className={cn(
-                        "mr-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-colors",
+                        "mr-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg transition-all duration-200",
                         active
                           ? "text-muted-foreground/70 hover:bg-muted hover:text-foreground focus-visible:bg-muted"
                           : "text-muted-foreground/0 group-hover:text-muted-foreground/70 hover:!bg-muted hover:!text-foreground focus-visible:text-muted-foreground/70 focus-visible:bg-muted",
@@ -732,7 +732,7 @@ export function AgentWorkbenchPanel({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-transparent bg-transparent text-muted-foreground transition-all duration-200 hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
                   title={t.agentWorkbenchPanel.tabList}
                   aria-label={t.agentWorkbenchPanel.tabList}
                 >
@@ -1049,12 +1049,17 @@ export function AgentWorkbenchPanel({
               </div>
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center bg-background/35 px-6 text-center">
-              <MonitorIcon className="mb-3 size-10 text-muted-foreground/30" />
-              <p className="text-sm font-medium text-muted-foreground">
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center bg-gradient-to-b from-background/20 to-background/50 px-6 text-center">
+              <div className="relative mb-3.5">
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent blur-lg" />
+                <div className="relative flex size-12 items-center justify-center rounded-2xl border border-border-default/50 bg-gradient-to-br from-card to-muted/20 shadow-[var(--shadow-xs)]">
+                  <MonitorIcon className="size-5 text-muted-foreground/50" strokeWidth={1.5} />
+                </div>
+              </div>
+              <p className="text-sm font-medium text-muted-foreground/80">
                 {t.agentWorkbenchPanel.computerViewEmpty}
               </p>
-              <p className="mt-1 max-w-xs text-xs text-muted-foreground/70">
+              <p className="mt-1.5 max-w-xs text-[12px] leading-relaxed text-muted-foreground/55">
                 {t.agentWorkbenchPanel.computerViewEmptyDesc}
               </p>
             </div>

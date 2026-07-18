@@ -130,6 +130,43 @@ _TOOL_CALL_RE = re.compile(
     r"(?P<body>.*?)</function>\s*</tool_call>",
     re.IGNORECASE | re.DOTALL,
 )
+_STANDALONE_NAMED_TOOL_CALL_RE = re.compile(
+    r"<tool_call\s+name\s*=\s*[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_./:-]*)[\"']?\s*>"
+    r"\s*(?P<args>\{.*?\})\s*</tool_call>",
+    re.IGNORECASE | re.DOTALL,
+)
+_FUNCTION_TYPE_CONTAINER_RE = re.compile(
+    r"<tool_calls>\s*"
+    r"<function_type>\s*(?P<name>[A-Za-z_][A-Za-z0-9_./:-]*)\s*</function_type>\s*"
+    r"<function_params>\s*(?P<args>.*?)\s*</function_params>\s*"
+    r"</tool_calls>",
+    re.IGNORECASE | re.DOTALL,
+)
+_NAMED_TOOL_CONTAINER_RE = re.compile(
+    r"<tool_calls>\s*"
+    r"<tool_call\s+name\s*=\s*[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_./:-]*)[\"']?\s*>"
+    r"(?P<body>.*?)</tool_calls>",
+    re.IGNORECASE | re.DOTALL,
+)
+_NAMED_TOOL_ARG_RE = re.compile(
+    r"<tool_call\s+name\s*=\s*[\"']?(?P<key>[A-Za-z_][A-Za-z0-9_:-]*)[\"']?\s*>"
+    r"(?P<value>.*?)</tool_call>",
+    re.IGNORECASE | re.DOTALL,
+)
+_DIRECT_NAMED_TOOL_CONTAINER_RE = re.compile(
+    r"<tool_calls>\s*"
+    r"<(?P<name>[A-Za-z_][A-Za-z0-9_./:-]*)>\s*"
+    r"(?P<body>.*?)\s*"
+    r"</(?P=name)>\s*"
+    r"</tool_calls>",
+    re.IGNORECASE | re.DOTALL,
+)
+_BARE_NAMED_TOOL_TAG_RE = re.compile(
+    r"<(?P<name>[a-z][a-z0-9]*(?:_[a-z0-9]+)+)>\s*"
+    r"(?P<args>\{.*?\})\s*"
+    r"</(?P=name)>",
+    re.DOTALL,
+)
 _XML_ARG_RE = re.compile(
     r"<(?P<key>[A-Za-z_][A-Za-z0-9_:-]*)>(?P<value>.*?)</(?P=key)>",
     re.IGNORECASE | re.DOTALL,
@@ -143,6 +180,28 @@ _FENCED_JSON_RE = re.compile(
     r"```(?:json)?\s*(?P<body>\{.*?\})\s*```",
     re.IGNORECASE | re.DOTALL,
 )
+_ACTION_XML_CONTAINER_RE = re.compile(
+    r"<Action>\s*(?P<body>.*?)\s*</Action>",
+    re.IGNORECASE | re.DOTALL,
+)
+_SPECIAL_TOOL_ENVELOPE_MARKERS = (
+    "<|tool_calls_section_begin|>",
+    "<|tool_calls_begin|>",
+    "<|tool_calls_end|>",
+    "<|tool_calls_section_end|>",
+)
+
+
+def _looks_like_special_tool_envelope(text: str) -> bool:
+    """Return whether provider text claims to be a tool-call envelope.
+
+    Kimi-compatible endpoints occasionally surface their private tool-call
+    sentinels as assistant text.  The content may be prose rather than an
+    executable call, but it must never be streamed or accepted as a normal
+    final answer because that silently skips the requested operation.
+    """
+    lowered = (text or "").lower()
+    return any(marker in lowered for marker in _SPECIAL_TOOL_ENVELOPE_MARKERS)
 
 
 def _split_action_lines(action_block: str) -> list[str]:
@@ -225,6 +284,47 @@ def _parse_step(text: str, iteration: int) -> tuple[ReActStep, str | None]:
     return step, final_answer
 
 
+def _parse_reasoning_action_fallback(text: str, iteration: int) -> ReActStep | None:
+    """Recover the last syntactically valid Action from reasoning-only output.
+
+    Some OpenAI-compatible reasoning models put their complete ReAct response
+    in ``reasoning_content`` and leave the assistant text empty.  Parsing the
+    entire reasoning blob with ``_parse_step`` is too eager: deliberation may
+    mention several rejected Action candidates.  Walk candidates backwards
+    and accept only a block whose actions all parse as real tool calls.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return None
+    for match in reversed(list(_ACTION_RE.finditer(text))):
+        action_block = match.group(1).strip()
+        candidate, _final = _parse_step(
+            f"Action: {action_block}",
+            iteration=iteration,
+        )
+        if not candidate.actions:
+            continue
+        if not all(_parse_action(action) is not None for action in candidate.actions):
+            continue
+        candidate.raw_llm_output = text
+        return candidate
+
+    # Reuse the conservative loose-envelope parser for reasoning-only
+    # responses too.  Providers such as Kimi occasionally place a complete
+    # ``<action>...tool({...})...</action>`` block in reasoning_content while
+    # leaving assistant text empty.  _parse_step already accepts that exact
+    # explicit execution boundary; failing to do the same here makes the
+    # loop treat valid calls as a zero-anchor response and end the turn.
+    loose_actions = _extract_tool_actions_from_loose_output(text)
+    if loose_actions and all(_parse_action(action) is not None for action in loose_actions):
+        return ReActStep(
+            iteration=iteration,
+            action="; ".join(loose_actions),
+            actions=loose_actions,
+            raw_llm_output=text,
+        )
+    return None
+
+
 def _coerce_xml_arg_value(value: str) -> Any:
     stripped = value.strip()
     if stripped.startswith(("{", "[")):
@@ -261,6 +361,104 @@ def _extract_tool_actions_from_loose_output(text: str) -> list[str]:
         name = _normalize_action_name(xml.group("name").strip())
         args = _xml_args_from_body(xml.group("body") or "")
         actions.append(_format_action(name, args))
+    if actions:
+        return actions
+
+    # Some reasoning providers emit a complete, standalone named call with
+    # a JSON body, without the plural ``<tool_calls>`` wrapper.  Require both
+    # an explicit tool name and a closed JSON object so XML examples or
+    # incomplete streamed fragments in prose are never executed.
+    for xml in _STANDALONE_NAMED_TOOL_CALL_RE.finditer(text):
+        try:
+            args = json.loads(xml.group("args"))
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(args, dict):
+            continue
+        name = _normalize_action_name(xml.group("name").strip())
+        if name == "todo_write" and "todos" in args and "items" not in args:
+            args["items"] = args.pop("todos")
+        actions.append(_format_action(name, args))
+    if actions:
+        return actions
+
+    # A few OpenAI-compatible reasoning providers emit one explicit XML
+    # container per call, with a JSON object in ``function_params``.  Keep
+    # recovery scoped to the complete container so XML examples in prose do
+    # not become executable actions.
+    for xml in _FUNCTION_TYPE_CONTAINER_RE.finditer(text):
+        try:
+            args = json.loads(xml.group("args"))
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(args, dict):
+            continue
+        name = _normalize_action_name(xml.group("name").strip())
+        if name == "todo_write" and "todos" in args and "items" not in args:
+            args["items"] = args.pop("todos")
+        actions.append(_format_action(name, args))
+    if actions:
+        return actions
+
+    # Some OpenAI-compatible reasoning models serialize function calls as
+    # ``<tool_calls><tool_call name="fn"><tool_call name="arg">...``
+    # instead of returning protocol-level tool_calls.  Recover only inside
+    # the explicit container so ordinary XML/code examples are not executed.
+    for xml in _NAMED_TOOL_CONTAINER_RE.finditer(text):
+        name = _normalize_action_name(xml.group("name").strip())
+        args = {
+            arg.group("key"): _coerce_xml_arg_value(arg.group("value"))
+            for arg in _NAMED_TOOL_ARG_RE.finditer(xml.group("body") or "")
+        }
+        if name == "todo_write" and "todos" in args and "items" not in args:
+            args["items"] = args.pop("todos")
+        actions.append(_format_action(name, args))
+    if actions:
+        return actions
+
+    # Kimi-style reasoning occasionally uses the tool name itself as the XML
+    # element: ``<tool_calls><glob_files><pattern>…``.  The outer marker is an
+    # explicit execution boundary, so recover the named child and its args.
+    for xml in _DIRECT_NAMED_TOOL_CONTAINER_RE.finditer(text):
+        name = _normalize_action_name(xml.group("name").strip())
+        args = _xml_args_from_body(xml.group("body") or "")
+        actions.append(_format_action(name, args))
+    if actions:
+        return actions
+
+    # DeepSeek-style bare tool tags: ``<write_text_file>\n{json}\n
+    # </write_text_file>`` with no wrapper at all.  There is no container
+    # marker to anchor on, so the gates are strict instead: the tag must be
+    # lowercase snake_case (real tool names always carry an underscore —
+    # prose XML like ``<summary>`` or ``<Action>`` never matches), the tag
+    # must close with the same name, and the body must be one closed JSON
+    # object.  This path only runs after every anchored format above found
+    # nothing, so ordinary responses never reach it.
+    for xml in _BARE_NAMED_TOOL_TAG_RE.finditer(text):
+        try:
+            args = json.loads(xml.group("args"))
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(args, dict):
+            continue
+        name = _normalize_action_name(xml.group("name").strip())
+        if name == "todo_write" and "todos" in args and "items" not in args:
+            args["items"] = args.pop("todos")
+        actions.append(_format_action(name, args))
+    if actions:
+        return actions
+
+    # A few reasoning models wrap otherwise-valid ReAct calls in a literal
+    # ``<Action>`` block and put one call on each line.  This is still an
+    # explicit execution boundary, so recover the lines conservatively; do
+    # not scan arbitrary prose for call-looking snippets.
+    for container in _ACTION_XML_CONTAINER_RE.finditer(text):
+        for line in (container.group("body") or "").splitlines():
+            candidate = line.strip().lstrip("-*").strip()
+            parsed = _parse_action(candidate)
+            if parsed is None:
+                continue
+            actions.append(_format_action(*parsed))
     if actions:
         return actions
 
@@ -321,7 +519,10 @@ def _is_format_violation(
 def _placeholder_observation(action: str) -> str:
     if not action or action.lower() in {"none", "n/a", ""}:
         return "N/A"
-    return f"(未执行观察) Action '{action}' 已记录,但本次 ReAct 未启用工具执行。请继续推理。"
+    return (
+        f"(未执行观察) Action '{action}' 没有解析为可执行的已注册工具调用。"
+        "工具系统仍然可用；请检查工具名，并改用 skill_name({JSON}) 格式重试。"
+    )
 
 
 _ACTION_CALL_RE = re.compile(
@@ -983,6 +1184,7 @@ _VERIFY_CLAIM_RE = re.compile(
     r"\btypechecks?\s+pass(?:ed|ing)?\b|"
     r"\blint(?:ing)?\s+pass(?:ed|ing)?\b|"
     r"\bbuild\s+(?:passes|passed|succeed(?:ed|s)?)\b|"
+    r"\b\d+\s+pass(?:ed|ing)?\b|"
     # Chinese
     r"全部测试通过|测试[已都全]?通过|已通过测试|"
     r"已[运通]?(?:跑|过)?(?:完|过)?(?:测试|test)|"
@@ -999,10 +1201,45 @@ def _final_answer_claims_verification(final_answer: str) -> bool:
     return bool(_VERIFY_CLAIM_RE.search(final_answer))
 
 
+# A verifier observation showing FAILING output must never be mistaken for
+# a passing one. Conservative by construction: only strong, unambiguous
+# failure signals a green run never emits — non-zero failure/error counts,
+# uppercase runner tokens (pytest ``FAILED``, go ``FAIL``), compiler/lint
+# error lines. "0 failed", "13 passed", "Found 0 errors", "All checks
+# passed" deliberately do NOT match. Infra errors (ModuleNotFoundError,
+# command-not-found) are handled separately by the callers below.
+_RED_TOKEN_RE = re.compile(r"\bFAILED\b|\bFAIL\b")  # case-sensitive on purpose
+_RED_PHRASE_RE = re.compile(
+    r"\b[1-9]\d*\s+failed\b|"
+    r"\b[1-9]\d*\s+error(?:s)?\b|"
+    r"\bfound\s+[1-9]\d*\s+error|"
+    r"\berror\s+ts\d+|"
+    r"\bnpm\s+err!|"
+    r"\bassertion\s*error\b|"
+    r"\b(?:build|compilation|type-?check|typecheck|lint|tests?)\s+failed\b|"
+    r"\bexit\s+code\s+[1-9]|"
+    r"\breturned\s+non-?zero|"
+    r"测试[^。\n]{0,4}失败|构建失败|编译[^。\n]{0,4}失败|"
+    r"类型检查[^。\n]{0,6}(?:失败|错误)|校验[^。\n]{0,4}失败",
+    re.IGNORECASE,
+)
+
+
+def _verification_observation_is_red(observation: str) -> bool:
+    """True when a verifier observation shows failing output (failing
+    tests / type / lint / build), as opposed to an infra error like
+    ModuleNotFoundError which callers handle separately. Strong-signal
+    only — a passing run must never match."""
+    if not observation:
+        return False
+    return bool(_RED_TOKEN_RE.search(observation) or _RED_PHRASE_RE.search(observation))
+
+
 def _has_successful_verification_observation(steps: list[ReActStep]) -> bool:
-    """Whether any verification step produced a non-empty, non-error
-    observation. Stricter than ``_has_code_verification`` — that just
-    checks the action was issued; this checks the action *succeeded*.
+    """Whether any verification step produced a non-empty, non-error,
+    non-*failing* observation. Stricter than ``_has_code_verification`` —
+    that just checks the action was issued; this checks the action *ran
+    and did not report failures*.
     """
     for step in steps:
         if not _step_is_verify(step, markers=_VERIFY_MARKERS_ALL):
@@ -1021,9 +1258,25 @@ def _has_successful_verification_observation(steps: list[ReActStep]) -> bool:
             or "no such file" in lowered
             or "modulenotfounderror" in lowered
             or "traceback (most recent call last)" in lowered
+            or _verification_observation_is_red(observation)
         ):
             continue
         return True
+    return False
+
+
+def _latest_verification_observation_is_red(steps: list[ReActStep]) -> bool:
+    """Whether the MOST RECENT verifier observation in the trajectory is
+    red (failing tests / type / lint / build). Only the latest matters: a
+    run that went red then green (re-run after a fix) must not be flagged.
+    Returns False when no verifier observation exists."""
+    for step in reversed(steps):
+        if not _step_is_verify(step, markers=_VERIFY_MARKERS_ALL):
+            continue
+        observation = (step.observation or "").strip()
+        if not observation or observation == "N/A":
+            continue
+        return _verification_observation_is_red(observation)
     return False
 
 

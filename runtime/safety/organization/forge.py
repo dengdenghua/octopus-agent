@@ -23,7 +23,7 @@ from runtime.platform.io import atomic_write_json
 from runtime.platform.process.paths import app_paths
 from runtime.safety.evolution.subagent_policy import evaluate_agent_policy
 
-from .builtin_topologies import seed_builtin_topologies
+from .builtin_topologies import seed_builtin_topologies, upgrade_present_builtin_topologies
 from .evolver import Proposal
 from .topology import AgentSpec, CoordinationProtocol, TeamTopology
 
@@ -87,6 +87,14 @@ def load_registry(
                     target,
                     exc,
                 )
+    else:
+        upgraded = upgrade_present_builtin_topologies(out)
+        if upgraded:
+            _logger.info("upgraded %d present built-in topologies in %s", upgraded, target)
+            try:
+                save_registry(out, path=target)
+            except OSError as exc:
+                _logger.warning("could not persist upgraded registry to %s: %s", target, exc)
     return out
 
 

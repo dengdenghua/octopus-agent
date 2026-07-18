@@ -444,6 +444,8 @@ def _format_skill_catalog(
         "browser_extract",
         "browser_screenshot",
         "browser_click",
+        "browser_type",
+        "browser_upload",
         "screen_capture",
         "screen_info",
         # High-level document/research workflows.
@@ -832,8 +834,18 @@ def _prefetch_related_files(
         return None
 
 
-_CODE_CONTEXT_README_NAMES = ("README.md", "readme.md")
-_CODE_CONTEXT_STYLE_SUFFIXES = (".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs")
+_CODE_CONTEXT_README_NAMES = ("README.md", "readme.md", "TASK.md")
+_CODE_CONTEXT_STYLE_SUFFIXES = (
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".go",
+    ".rs",
+    ".html",
+    ".css",
+)
 _CODE_CONTEXT_SKIP_DIR_NAMES = {
     ".git",
     ".hg",

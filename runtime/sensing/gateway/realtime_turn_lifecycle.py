@@ -272,13 +272,14 @@ async def _start_turn(
             if isinstance(_user_ctx_for_complexity, dict)
             else None
         ) or ""
+        _is_code_mode_for_routing = bool(_mode_str == "code" or _capability_mode_str)
         _verdict = estimate_turn_complexity(
             text,
             has_explicit_model=bool(
                 "model" in getattr(validated, "model_fields_set", set()) and validated.model
             ),
             has_topology=bool(getattr(validated, "topology_id", None)),
-            is_code_mode=bool(_mode_str == "code" or _capability_mode_str),
+            is_code_mode=_is_code_mode_for_routing,
             is_swarm_mode=str(_mode_str).lower() in {"swarm", "swarms"},
             is_research_mode=str(_mode_str).lower() in {"deep", "deep_research", "research"},
             is_goal_mode=bool(getattr(validated, "planning_mode", False)),
@@ -301,6 +302,7 @@ async def _start_turn(
         _routed_model, _route_reason = select_model_for_complexity(
             _verdict,
             user_model=validated.model,
+            is_code_mode=_is_code_mode_for_routing,
         )
         if _routed_model:
             validated = validated.model_copy(update={"model": _routed_model})

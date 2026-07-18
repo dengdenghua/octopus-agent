@@ -408,30 +408,25 @@ export function AgentProgressPill({
             })}
           </div>
           {currentBlock ? (
-            <div className="mt-2 flex min-w-0 items-start gap-2 border-t border-border-subtle pt-2 text-xs">
+            <div className="mt-2 flex min-w-0 items-center gap-2 border-t border-border-subtle pt-2 text-xs">
               <WorkBlockIcon block={currentBlock} />
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <span className="shrink-0 font-medium text-foreground">
-                    {t.message.latestTool}
-                  </span>
-                  <span className="shrink-0 text-muted-foreground">·</span>
-                  <span className="min-w-0 truncate text-foreground/85">
-                    {currentBlock.title}
-                  </span>
-                </div>
-                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <span className="shrink-0">{activeStatus}</span>
-                  {currentBlock.subtitle ? (
-                    <>
-                      <span className="shrink-0">·</span>
-                      <span className="min-w-0 truncate">
-                        {currentBlock.subtitle}
-                      </span>
-                    </>
-                  ) : null}
-                </div>
-              </div>
+              <span className="min-w-0 flex-1 truncate text-foreground/85">
+                {currentBlock.title}
+              </span>
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                  currentBlock.status === "error"
+                    ? "bg-destructive/10 text-destructive"
+                    : currentBlock.status === "running"
+                      ? "bg-primary/10 text-primary"
+                      : currentBlock.status === "waiting_approval"
+                        ? "bg-amber-500/10 text-amber-600"
+                        : "bg-emerald-500/10 text-emerald-600",
+                )}
+              >
+                {activeStatus}
+              </span>
             </div>
           ) : null}
         </div>
@@ -475,14 +470,6 @@ export function AgentProgressPill({
                 )}
               />
             </div>
-            {currentBlock ? (
-              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
-                <WorkBlockIcon block={currentBlock} />
-                <span className="shrink-0">{activeStatus}</span>
-                <span className="shrink-0">·</span>
-                <span className="min-w-0 truncate">{currentBlock.title}</span>
-              </div>
-            ) : null}
             <div className="mt-1 h-0.5 overflow-hidden rounded-full bg-muted">
               <div
                 className={cn(

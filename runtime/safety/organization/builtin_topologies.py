@@ -85,7 +85,9 @@ _research_swarm = TeamTopology(
                 "个子问题,依次用 web_search + fetch_url + web_fetch 调研每一个,"
                 "为每个子问题至少引用 2 个来源。把每条发现通过 "
                 "bb_write('result_<n>', ...) 写入,n 取 1/2/3。保持原文链接,"
-                "不要预先合成。"
+                "不要预先合成。若任务说明证据包已在当前工作区,先 list_cwd 并读取"
+                "这些本地文件,不要改为上网搜索；完成读取后必须先写 result_1/2/3"
+                "再结束,不要只在内部分析里复述。"
             ),
         ),
         Role.CRITIC: AgentSpec(
@@ -104,6 +106,10 @@ _research_swarm = TeamTopology(
                 "事实核查员的批注,按用户原始要求产出完整最终报告。若 critic "
                 "指出缺项、截断、部分完成或给出'需补全内容',必须把这些缺项"
                 "当作硬性交付要求补齐,不得直接转述一份部分完成的底稿。\n\n"
+                "若用户要求创建具体文件或结构化产物,必须用工作区文件工具按精确"
+                "路径和字段落盘,再读回确认；此时以用户给出的文件契约为最高优先级,"
+                "不要套用下面的通用报告结构。对本地证据任务先 list_cwd,只读取实际"
+                "列出的文件；一旦证据齐全就立即写产物,不要猜测其他文件名或重复探查。\n\n"
                 '长任务/调研报告的默认结构:正文第一行必须原样输出"长任务回归开始";以用户要求的开头起笔;一、市场假设;'
                 "二、用户画像;三、竞品格局;四、技术风险;五、商业化路径;"
                 "六、90天行动计划;最后用 5 条 bullet 总结。保持段落紧凑,"
@@ -119,7 +125,7 @@ _research_swarm = TeamTopology(
             "事实核查员抽查,综合者产出报告。"
         ),
         "builtin": True,
-        "version": "1",
+        "version": "2",
     },
 )
 
@@ -300,7 +306,34 @@ def seed_builtin_topologies(registry: dict[str, TeamTopology]) -> int:
     return added
 
 
+def upgrade_present_builtin_topologies(registry: dict[str, TeamTopology]) -> int:
+    """Replace stale built-ins that are already present in a registry.
+
+    User deletion remains respected: a missing built-in is not re-added to a
+    non-empty registry.  Only entries explicitly marked ``builtin`` with the
+    same stable name and an older version are migrated.
+    """
+    upgraded = 0
+    for current in BUILTIN_TOPOLOGIES:
+        current_version = int(current.metadata.get("version") or 0)
+        stale = [
+            fp
+            for fp, candidate in registry.items()
+            if candidate.name == current.name
+            and candidate.metadata.get("builtin") is True
+            and int(candidate.metadata.get("version") or 0) < current_version
+        ]
+        if not stale:
+            continue
+        for fp in stale:
+            registry.pop(fp, None)
+        registry[current.fingerprint] = current
+        upgraded += 1
+    return upgraded
+
+
 __all__ = [
     "BUILTIN_TOPOLOGIES",
     "seed_builtin_topologies",
+    "upgrade_present_builtin_topologies",
 ]

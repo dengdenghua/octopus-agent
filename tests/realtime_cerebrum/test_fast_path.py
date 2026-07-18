@@ -189,6 +189,40 @@ def test_chat_mode_tool_intent_bypasses_reflection_fast_path(tmp_path: Path) -> 
     )
 
 
+def test_code_mode_never_uses_text_only_reflection_fast_path(tmp_path: Path) -> None:
+    from runtime.protocol.items import TurnParams
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+
+    runtime = CerebrumRuntime(
+        stack=SimpleNamespace(planner=SimpleNamespace(router=object())),
+        agent=None,
+        logs_root=str(tmp_path / "threads"),
+    )
+    params = TurnParams.model_validate(
+        {
+            "threadId": "th-code-tools",
+            "cwd": str(tmp_path),
+            "input": [
+                {
+                    "type": "text",
+                    "text": "fix the failing project tests",
+                    "metadata": {
+                        "context": {
+                            "mode": "code",
+                            "capability_mode": "code",
+                            "workspace_path": str(tmp_path),
+                        }
+                    },
+                }
+            ],
+        }
+    )
+
+    assert (
+        runtime._should_use_reflection_fast_path("fix the failing project tests", params) is False
+    )
+
+
 def test_react_mode_ambiguous_topic_bypasses_reflection_fast_path(tmp_path: Path) -> None:
     from runtime.protocol.items import TurnParams
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime

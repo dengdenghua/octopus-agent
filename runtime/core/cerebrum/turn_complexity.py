@@ -96,12 +96,10 @@ def _resolve_tier_model(tier: str) -> str | None:
       2. Tier-specific service_provider key: ``smart_routing.<tier>``
       3. Legacy fallback: ``OCTOPUS_SMART_ROUTING_CHEAP_MODEL`` /
          ``OCTOPUS_SUBAGENT_CHEAP_MODEL`` for ``value``
-      4. **Auto-derive from the first custom_models.json entry** —
-         when an operator imported a single API key (e.g. mimo),
-         the entry's ``models`` list naturally maps to the tiers:
-         ``local``/``value`` → ``models[0]``, ``performance`` →
-         ``models[-1]``. This makes "auto" mode work out of the
-         box without setting three env vars.
+      4. **Auto-derive across custom_models.json entries** — the first
+         configured model is the cheap local/value slot and the last
+         configured model is the performance slot. Several one-model
+         entries therefore form a useful cheap→strong ladder.
       5. Built-in default for ``value`` only (``glm-4-flash``); other
          tiers return None and the router escalates upward.
 
@@ -145,10 +143,9 @@ def _resolve_tier_model(tier: str) -> str | None:
             if legacy and legacy.strip():
                 return legacy.strip()
 
-    # Auto-derivation: fall back to the first entry in
-    # custom_models.json when nothing else is configured. Maps
-    # tier → entry slot the same way an explicit entry-reference
-    # would (local/value → models[0], performance → models[-1]).
+    # Auto-derivation: use the ordered custom-model catalog when nothing
+    # else is configured (local/value → first usable model, performance
+    # → last usable model across all entries).
     # Lets a single imported API key power smart routing without
     # any env tuning.
     auto_model = _auto_derive_tier_from_custom_models(tier)
@@ -167,18 +164,11 @@ def _resolve_tier_model(tier: str) -> str | None:
 
 
 def _auto_derive_tier_from_custom_models(tier: str) -> str | None:
-    """Pick a tier model from the first custom_models.json entry.
+    """Pick a tier model from the ordered custom-model catalog.
 
-    Returns the entry's ``models[0]`` for local/value tiers and
-    ``models[-1]`` for performance. None when no custom models
-    are configured (clean octopus install with only the built-in
-    routers — operator must set env to opt in).
-
-    Picking the first entry is deterministic but arbitrary; if
-    multiple entries exist the operator should set
-    ``OCTOPUS_MODEL_<TIER>`` explicitly. We log nothing here
-    because the caller already has telemetry on the resolved
-    tier name in select_model_for_complexity's reason string.
+    Local/value use the first usable model and performance uses the last.
+    This preserves the single-entry ``models[0]``/``models[-1]`` contract
+    while avoiding a flash-only first entry becoming the strongest tier.
     """
     try:
         from runtime.platform.process.paths import app_paths
@@ -193,9 +183,7 @@ def _auto_derive_tier_from_custom_models(tier: str) -> str | None:
         return None
     if not isinstance(data, dict) or not data:
         return None
-    # First entry wins. dict iteration order is insertion-order in
-    # Python 3.7+, so this matches the order operators added entries
-    # via the config UI.
+    candidates: list[str] = []
     for _entry_id, entry in data.items():
         if not isinstance(entry, dict):
             continue
@@ -204,13 +192,79 @@ def _auto_derive_tier_from_custom_models(tier: str) -> str | None:
             upstreams = [str(m).strip() for m in raw_models if str(m or "").strip()]
             if not upstreams:
                 continue
-            if tier == "performance":
-                return upstreams[-1]
-            return upstreams[0]
+            candidates.extend(upstreams)
+            continue
         # Legacy single-model entry.
         legacy = entry.get("model")
         if isinstance(legacy, str) and legacy.strip():
-            return legacy.strip()
+            if tier == "performance":
+                performance = entry.get("model_performance")
+                if isinstance(performance, str) and performance.strip():
+                    candidates.append(performance.strip())
+                    continue
+            candidates.append(legacy.strip())
+    if not candidates:
+        return None
+    return candidates[-1] if tier == "performance" else candidates[0]
+
+
+def _resolve_code_model() -> str | None:
+    """Resolve a code-specialized model without overriding operator pins.
+
+    ``OCTOPUS_MODEL_CODE`` / ``smart_routing.code`` are explicit. When
+    neither is set, an explicitly configured performance tier still wins;
+    otherwise the custom-model catalog is searched for a tool-capable entry
+    whose id/name/display/model identifies it as a coding model.
+    """
+    explicit = os.environ.get("OCTOPUS_MODEL_CODE")
+    if explicit and explicit.strip():
+        return _resolve_tier_value(explicit.strip(), "performance")
+    try:
+        from runtime.platform.process.service_provider import get_provider
+
+        provider = get_provider()
+        configured = provider.get("smart_routing.code")
+        if isinstance(configured, str) and configured.strip():
+            return _resolve_tier_value(configured.strip(), "performance")
+        if provider.get("smart_routing.performance"):
+            return None
+    except Exception:  # noqa: BLE001
+        pass
+    if os.environ.get("OCTOPUS_MODEL_PERFORMANCE"):
+        return None
+
+    try:
+        from runtime.platform.process.paths import app_paths
+
+        path = app_paths().custom_models_path
+        if not path.exists():
+            return None
+        import json
+
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(data, dict):
+        return None
+    for entry_id, entry in data.items():
+        if not isinstance(entry, dict) or entry.get("supports_tool_use") is False:
+            continue
+        raw_models = entry.get("models")
+        models = (
+            [str(model).strip() for model in raw_models if str(model or "").strip()]
+            if isinstance(raw_models, list)
+            else []
+        )
+        haystack = " ".join(
+            [
+                str(entry_id),
+                str(entry.get("name") or ""),
+                str(entry.get("display_name") or ""),
+                *models,
+            ]
+        ).lower()
+        if re.search(r"(?:^|[\s_.:/-])(code|coder|coding)(?:$|[\s_.:/-])", haystack):
+            return models[0] if models else None
     return None
 
 
@@ -380,6 +434,7 @@ def select_model_for_complexity(
     verdict: ComplexityVerdict,
     *,
     user_model: str | None,
+    is_code_mode: bool = False,
 ) -> tuple[str | None, str]:
     """Map a verdict to the actual model name to call.
 
@@ -398,6 +453,11 @@ def select_model_for_complexity(
 
     if not is_smart_routing_enabled():
         return None, "smart_routing_disabled"
+
+    if is_code_mode:
+        code_model = _resolve_code_model()
+        if code_model:
+            return code_model, "smart_routing:code->specialist"
 
     tier_chain = _escalation_chain(verdict)
     for tier in tier_chain:
@@ -426,5 +486,6 @@ __all__ = [
     "get_tier_config",
     "is_smart_routing_enabled",
     "select_model_for_complexity",
+    "_resolve_code_model",
     "_resolve_tier_model",
 ]

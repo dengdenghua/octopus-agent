@@ -95,6 +95,9 @@ from runtime.execution.suckers.web_skills import (
     register_web_skills as _register_web,
 )
 from runtime.execution.suckers.write_skills import (
+    register_code_quality_skills as _register_code_quality,
+)
+from runtime.execution.suckers.write_skills import (
     register_exec_skill as _register_shell,
 )
 from runtime.execution.suckers.write_skills import (
@@ -160,6 +163,10 @@ _CATALOG: dict[str, dict[str, Any]] = {
     "edit_text_file": {"group": "fs_write", "atomic": False},
     "edit_file": {"group": "fs_write", "atomic": False},
     "multi_edit_file": {"group": "fs_write", "atomic": False},
+    # ── local code verification ───────────────────────────────
+    "run_tests": {"group": "code_quality", "atomic": False},
+    "lint_check": {"group": "code_quality", "atomic": False},
+    "format_code": {"group": "code_quality", "atomic": False},
     # ── git ──────────────────────────────────────────────────
     "git_status": {"group": "git", "atomic": False},
     "git_diff": {"group": "git", "atomic": False},
@@ -195,6 +202,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
     "browser_navigate": {"group": "browser", "atomic": False},
     "browser_click": {"group": "browser", "atomic": False},
     "browser_type": {"group": "browser", "atomic": False},
+    "browser_upload": {"group": "browser", "atomic": False},
     "browser_scroll": {"group": "browser", "atomic": False},
     "browser_wait": {"group": "browser", "atomic": False},
     "browser_screenshot": {"group": "browser", "atomic": False},
@@ -381,6 +389,7 @@ _GROUP_REGISTRARS: dict[str, Callable[[SkillRegistry], Any]] = {
     "web": _register_web,
     "crawler": _register_crawler,
     "fs_write": _register_fs_write,
+    "code_quality": _register_code_quality,
     "git": _register_git,
     "shell": _register_shell,
     "computer": lambda registry: _register_computer(registry, verify_tests=False),
@@ -405,12 +414,41 @@ _GROUP_REGISTRARS: dict[str, Callable[[SkillRegistry], Any]] = {
 }
 
 
-def register_all(registry: SkillRegistry) -> None:
+# Local/offline mode keeps the complete coding and desktop surface while
+# removing capabilities whose primary purpose is reaching external web
+# content.  ``enable_web_skills=False`` must not collapse code mode to the
+# five read-only builtins.
+LOCAL_SKILL_GROUPS: frozenset[str] = frozenset(
+    {
+        "builtin",
+        "fs_search",
+        "fs_write",
+        "code_quality",
+        "git",
+        "shell",
+        "computer",
+        "memory",
+        "mode",
+        "agent_meta",
+        "ask_user",
+        "delegation",
+        "blackboard",
+        "skill_library",
+        "code_intel",
+        "lsp",
+        "agent_docs",
+        "cron",
+    }
+)
+
+
+def _register_groups(registry: SkillRegistry, groups: set[str] | frozenset[str]) -> None:
     from runtime.platform import capabilities as _caps_mod
 
     disabled = _caps_mod.load().disabled_skill_groups()
-
     for name, fn in _GROUP_REGISTRARS.items():
+        if name not in groups:
+            continue
         if name in disabled:
             _log.info(
                 "skill group %r disabled by automation capability gate "
@@ -427,6 +465,10 @@ def register_all(registry: SkillRegistry) -> None:
                 type(exc).__name__,
                 exc,
             )
+
+
+def register_all(registry: SkillRegistry) -> None:
+    _register_groups(registry, set(_GROUP_REGISTRARS))
     try:
         from runtime.platform.process.paths import resources_root
 
@@ -442,6 +484,16 @@ def register_all(registry: SkillRegistry) -> None:
             type(exc).__name__,
             exc,
         )
+
+
+def register_local(registry: SkillRegistry) -> None:
+    """Register the offline/local catalog, including full coding tools.
+
+    This excludes web search, crawler, browser and remote Kimi/market
+    groups, but retains filesystem writes, shell, git, test/lint/format,
+    code intelligence and local desktop operation.
+    """
+    _register_groups(registry, LOCAL_SKILL_GROUPS)
 
 
 def register_base(registry: SkillRegistry) -> None:

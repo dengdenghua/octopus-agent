@@ -83,6 +83,47 @@ def test_lock_ignores_non_write_skill(_session):
     assert "sandbox_dir" not in call.input
 
 
+def test_lock_does_not_treat_blackboard_or_todo_writes_as_files(_session):
+    _session({"_locked_write_root": "/wt"})
+    for name, affinity in (
+        ("bb_write", ["blackboard", "shared_state"]),
+        ("todo_write", ["meta", "plan", "ui"]),
+    ):
+        call = _Call(name, {"key": "k", "value": "v"})
+        assert _ephemeral_write_confine_block(call, _Skill(_unconfinable, affinity)) is None
+        assert "sandbox_dir" not in call.input
+
+
+def test_lock_scopes_read_and_discovery_tools_to_worktree(_session):
+    _session({"_locked_write_root": "/wt"})
+
+    def _reader(
+        path: str = "",
+        *,
+        cwd: str | None = None,
+        sandbox_dir: str | None = None,
+    ):
+        return None
+
+    read_call = _Call("read_file", {"path": "evidence.json"})
+    assert _ephemeral_write_confine_block(read_call, _Skill(_reader, ["file", "io"])) is None
+    assert read_call.input["cwd"] == "/wt"
+    assert read_call.input["sandbox_dir"] == "/wt"
+
+    def _glob(
+        pattern: str = "*",
+        root: str = ".",
+        *,
+        sandbox_dir: str | None = None,
+    ):
+        return None
+
+    glob_call = _Call("glob_files", {"pattern": "*.json", "root": "."})
+    assert _ephemeral_write_confine_block(glob_call, _Skill(_glob, ["file", "io"])) is None
+    assert glob_call.input["root"] == "/wt"
+    assert glob_call.input["sandbox_dir"] == "/wt"
+
+
 def test_lock_does_not_override_preset_sandbox_dir(_session):
     _session({"_locked_write_root": "/wt"})
     call = _Call("write_text_file", {"path": "a", "sandbox_dir": "/preset"})

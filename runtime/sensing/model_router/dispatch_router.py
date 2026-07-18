@@ -48,6 +48,16 @@ class ModelDispatchRouter(ModelRouter):
                 yielded_any = True
                 yield evt
         except Exception as exc:
+            if not yielded_any and _is_provider_unavailable_error(exc):
+                rescue = self._pick_provider_rescue(request.model, picked)
+                if rescue is not None:
+                    rescue_model, rescue_router = rescue
+                    rewritten = request.model_copy(update={"model": rescue_model})
+                    yield from _stamp_stream_model(
+                        rescue_router.call_stream(rewritten),
+                        rescue_model,
+                    )
+                    return
             if yielded_any or picked is not self._fallback:
                 raise
             exc_class = type(exc).__name__
@@ -85,6 +95,13 @@ class ModelDispatchRouter(ModelRouter):
         try:
             return picked.call(request)
         except Exception as exc:
+            if _is_provider_unavailable_error(exc):
+                rescue = self._pick_provider_rescue(request.model, picked)
+                if rescue is not None:
+                    rescue_model, rescue_router = rescue
+                    rewritten = request.model_copy(update={"model": rescue_model})
+                    response = rescue_router.call(rewritten)
+                    return response.model_copy(update={"model": rescue_model})
             # Guest-mode rescue · the default fallback (Molili) requires
             # a logged-in actor. A guest with ONE registered custom
             # model of the same family should just use that. Without
@@ -130,6 +147,40 @@ class ModelDispatchRouter(ModelRouter):
                         except (ConnectionError, TimeoutError, TypeError, ValueError):  # noqa: BLE001 — rescue router failed; re-raise original error
                             pass
             raise
+
+    def _pick_provider_rescue(
+        self,
+        model_id: str,
+        failed_router: ModelRouter,
+    ) -> tuple[str, ModelRouter] | None:
+        """Pick the strongest distinct route after an unavailable model.
+
+        A code-specialist outage must not silently downgrade a repair task to
+        the first cheap/chat entry in catalog order.  Rank model ids by their
+        advertised capability, while preserving registration order between
+        equal-quality candidates.  Aliases that point at the same router are
+        still deduplicated so an entry registered under both its id and
+        concrete model cannot retry itself.
+        """
+        with self._lock:
+            routes = list(self._routes.items())
+        if not routes:
+            return None
+        indexed = list(enumerate(routes))
+        ordered = [
+            route
+            for _idx, route in sorted(
+                indexed,
+                key=lambda row: (-_model_rescue_quality(row[1][0]), row[0]),
+            )
+        ]
+        seen = {id(failed_router)}
+        for name, router in ordered:
+            if id(router) in seen:
+                continue
+            seen.add(id(router))
+            return name, router
+        return None
 
     def _pick_guest_rescue(self) -> ModelRouter | None:
         """Pick a registered sub-router suitable as a guest-mode rescue.
@@ -179,3 +230,44 @@ class ModelDispatchRouter(ModelRouter):
     @property
     def default_model(self) -> Any:
         return getattr(self._fallback, "default_model", None)
+
+
+def _is_provider_unavailable_error(exc: BaseException) -> bool:
+    text = f"{type(exc).__name__}: {exc}".lower()
+    return any(
+        marker in text
+        for marker in (
+            "http_402",
+            "insufficient_balance",
+            "insufficient account balance",
+            "模型账户余额不足",
+        )
+    )
+
+
+def _model_rescue_quality(model_id: str) -> int:
+    """Cheap name-only ranking for provider-outage rescue selection."""
+    name = str(model_id or "").lower()
+    score = 0
+    if "codex" in name:
+        score += 120
+    if "code" in name or "coder" in name:
+        score += 100
+    if "pro" in name:
+        score += 90
+    if "reason" in name or "thinking" in name:
+        score += 80
+    if "chat" in name:
+        score += 40
+    if "flash" in name or "mini" in name:
+        score += 10
+    return score
+
+
+def _stamp_stream_model(events: Any, model_id: str):
+    """Make a transparent rescue visible to downstream sticky routing."""
+    for event in events:
+        if event.type == "done" and event.final is not None:
+            final = event.final.model_copy(update={"model": model_id})
+            event = event.model_copy(update={"final": final})
+        yield event

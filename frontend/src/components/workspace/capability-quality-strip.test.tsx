@@ -20,12 +20,34 @@ describe("<CapabilityQualityStrip />", () => {
       schema: "octopus.agent_competitor_scorecard.v1",
       target_score: 95,
       competitors: ["codex", "octopus"],
-      overall: { codex: 93, octopus: 97 },
+      overall: { codex: 97, octopus: 97 },
       ranking: [],
-      verdict: "leading",
-      evidence_adjusted_overall: { codex: 93, octopus: 97 },
+      verdict: "competitive",
+      evidence_adjusted_overall: { codex: 97, octopus: 97 },
       evidence_adjusted_ranking: [],
-      evidence_adjusted_verdict: "leading",
+      evidence_adjusted_verdict: "competitive",
+      evidence_layers: {
+        schema: "octopus.agent_score_evidence_layers.v1",
+        architecture: {
+          status: "estimated",
+          octopus_score: 97,
+          codex_score: 97,
+          source: "current_combined_architecture_baseline",
+        },
+        static_certification: {
+          status: "certified",
+          ready: true,
+          passed: 17,
+          total: 17,
+        },
+        behavioral_head_to_head: {
+          status: "not_certified",
+          ready: false,
+          verdict: "missing_behavioral_evidence",
+          octopus_pass_pow_k: 0,
+          codex_pass_pow_k: 0,
+        },
+      },
       dimensions: [],
       octopus_below_target: [],
       octopus_strengths: [],
@@ -74,6 +96,8 @@ describe("<CapabilityQualityStrip />", () => {
     expect(api.fetchAgentCompetitorScorecard).toHaveBeenCalledWith(95);
     expect(await screen.findByText("Overall")).toBeInTheDocument();
     expect(await screen.findByText("Evidence")).toBeInTheDocument();
+    expect(await screen.findByText("Behavior")).toBeInTheDocument();
+    expect(await screen.findByText("pending")).toBeInTheDocument();
     expect(await screen.findByText("Eco")).toBeInTheDocument();
     expect(await screen.findByText("Browser")).toBeInTheDocument();
     expect(await screen.findByText("100 · stale 0")).toBeInTheDocument();

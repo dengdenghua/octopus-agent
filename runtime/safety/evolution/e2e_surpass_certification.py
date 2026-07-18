@@ -300,6 +300,7 @@ def compute_e2e_surpass_certification(
             "evidence_adjusted_verdict": scorecard.get(
                 "evidence_adjusted_verdict",
             ),
+            "evidence_layers": scorecard.get("evidence_layers"),
             "surpass_summary": scorecard_summary,
             "next_focus": scorecard.get("next_focus") or [],
         },

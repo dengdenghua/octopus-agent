@@ -20,6 +20,8 @@ from __future__ import annotations
 import time
 from types import SimpleNamespace
 
+import runtime.sensing.gateway.tool_bridge as tool_bridge
+from runtime.execution.suckers.builtins import _list_cwd, _read_file
 from runtime.execution.suckers.registry import Skill, SkillRegistry
 from runtime.execution.tool_engine.executor import ToolExecutor
 from runtime.platform.models import ParsedIntent
@@ -122,6 +124,26 @@ def test_parallel_path_preserves_emission_order() -> None:
     assert all(e[1].get("parallel") is True for e in tool_end_events)
 
 
+def test_quality_tools_are_scope_sensitive() -> None:
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="run_tests",
+            description="Run tests.",
+            affinity=["quality", "test"],
+            trusted_source="skill://public/run_tests",
+            handler=lambda **_kwargs: {"success": True},
+        ),
+        verify_tests=False,
+    )
+    stack = SimpleNamespace(executor=SimpleNamespace(registry=registry))
+
+    assert tool_bridge._tool_uses_session_scope(
+        stack,
+        ToolCall(id="tests", name="run_tests", input={}),
+    )
+
+
 def test_parallel_path_yields_concurrency_speedup() -> None:
     calls = [
         ToolCall(id=f"t-{i}", name="slow_sum", input={"a": i, "b": 1, "sleep_ms": 80})
@@ -138,6 +160,118 @@ def test_parallel_path_yields_concurrency_speedup() -> None:
     tool_end_events = [e for e in events if e[0] == "tool_end"]
     assert len(tool_end_events) == 3
     assert elapsed < 0.18, f"parallel exec slower than expected: {elapsed:.3f}s"
+
+
+def test_parallel_tools_keep_code_workspace_scope(tmp_path) -> None:
+    """Filesystem tools stay serial so they cannot lose Session scope."""
+    nested = tmp_path / "nested"
+    nested.mkdir()
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="list_cwd",
+            description="List files in a directory.",
+            affinity=["file", "io"],
+            trusted_source="skill://public/list_cwd",
+            handler=_list_cwd,
+        ),
+        verify_tests=False,
+    )
+    router = _RouterEmitting(
+        [
+            ToolCall(id="root", name="list_cwd", input={"path": "."}),
+            ToolCall(id="nested", name="list_cwd", input={"path": "nested"}),
+        ]
+    )
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=router, planner_model="mock"),
+        metadata={},
+    )
+    intent = ParsedIntent(
+        raw="inspect workspace in parallel",
+        intent_type="task",
+        normalized_goal="inspect workspace in parallel",
+        user_context={
+            "conversation_id": "thread-scoped-parallel",
+            "metadata": {
+                "mode": "code",
+                "workspace_path": str(tmp_path),
+                "sandbox_mode": "full",
+            },
+        },
+    )
+
+    events = list(stream_agentic_fallback(stack, intent, _agent()))
+    outputs = {event[1]["id"]: event[1]["output"] for event in events if event[0] == "tool_end"}
+
+    assert str(tmp_path.resolve()) in outputs["root"]
+    assert str(nested.resolve()) in outputs["nested"]
+    tool_ends = [event for event in events if event[0] == "tool_end"]
+    assert all(event[1].get("parallel") is not True for event in tool_ends)
+
+
+def test_parallel_mixed_reads_keep_code_workspace_scope(tmp_path) -> None:
+    """Relative file reads must share the same scope as directory reads."""
+    (tmp_path / "file_service.py").write_text("fixture-marker", encoding="utf-8")
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_fixture.py").write_text("test-marker", encoding="utf-8")
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="list_cwd",
+            description="List files in a directory.",
+            affinity=["file", "io"],
+            trusted_source="skill://public/list_cwd",
+            handler=_list_cwd,
+        ),
+        verify_tests=False,
+    )
+    registry.register(
+        Skill(
+            name="read_file",
+            description="Read one file.",
+            affinity=["file", "io"],
+            trusted_source="skill://public/read_file",
+            handler=_read_file,
+        ),
+        verify_tests=False,
+    )
+    router = _RouterEmitting(
+        [
+            ToolCall(id="source", name="read_file", input={"path": "file_service.py"}),
+            ToolCall(id="tests", name="list_cwd", input={"path": "tests"}),
+        ]
+    )
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=router, planner_model="mock"),
+        metadata={},
+    )
+    intent = ParsedIntent(
+        raw="inspect fixture files in parallel",
+        intent_type="task",
+        normalized_goal="inspect fixture files in parallel",
+        user_context={
+            "conversation_id": "thread-scoped-parallel-read",
+            "metadata": {
+                "mode": "code",
+                "workspace_path": str(tmp_path),
+                "sandbox_mode": "full",
+            },
+        },
+    )
+
+    events = list(stream_agentic_fallback(stack, intent, _agent()))
+    outputs = {event[1]["id"]: event[1]["output"] for event in events if event[0] == "tool_end"}
+
+    assert str((tmp_path / "file_service.py").resolve()) in outputs["source"]
+    assert "test_fixture.py" in outputs["tests"]
+    tool_ends = [event for event in events if event[0] == "tool_end"]
+    assert all(event[1].get("parallel") is not True for event in tool_ends)
 
 
 def test_serial_when_only_one_tool() -> None:

@@ -134,6 +134,36 @@ class TestBeakAutoEmitsFileOp:
         file_ops = [e for e in journal.read_all() if isinstance(e, FileOpEvent)]
         assert file_ops == []
 
+    def test_read_only_file_skill_does_not_emit_write_diff(self, tmp_path: Path) -> None:
+        target = tmp_path / "readme.txt"
+        target.write_text("source text", encoding="utf-8")
+        executor, journal, registry = _make_executor(file_write_handler=lambda **_kw: None)
+        registry.register(
+            Skill(
+                name="read_file",
+                description="read",
+                trusted_source="builtin://read_file",
+                affinity=["file", "read"],
+                handler=lambda path: {"path": path, "content": Path(path).read_text()},
+            ),
+            verify_tests=False,
+        )
+
+        step = executor.execute_step(
+            step_id=1,
+            node_id="n-read",
+            sucker_id=SkillId("read_file"),
+            args={"path": str(target)},
+            caller="t",
+            task_id=TaskId(uuid4()),
+            arm_id=ArmId("a1"),
+            budget=_mk_budget(),
+        )
+
+        assert step.result.status == "success"
+        assert [e for e in journal.read_all() if isinstance(e, FileOpEvent)] == []
+        assert "diff_preview" not in str(step.result.output)
+
     def test_file_skill_handler_failure_does_not_emit(self) -> None:
         def _boom(path: str, content: str) -> None:  # noqa: ARG001
             raise PermissionError("nope")

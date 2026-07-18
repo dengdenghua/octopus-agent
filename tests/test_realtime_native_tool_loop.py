@@ -127,7 +127,7 @@ def test_native_tool_loop_enabled_for_tool_capable_router():
     assert _should_use_native_tool_loop(stack, intent, planning_mode=False)
 
 
-def test_native_tool_loop_disabled_for_chat_and_planning():
+def test_native_tool_loop_disabled_for_chat_but_not_plan_first_execution():
     router = SimpleNamespace(
         capabilities=SimpleNamespace(supports_tool_use=True),
         call_stream=lambda _request: iter(()),
@@ -141,7 +141,7 @@ def test_native_tool_loop_disabled_for_chat_and_planning():
     react = _intent("先给方案", "react")
 
     assert not _should_use_native_tool_loop(stack, chat, planning_mode=False)
-    assert not _should_use_native_tool_loop(stack, react, planning_mode=True)
+    assert _should_use_native_tool_loop(stack, react, planning_mode=True)
 
 
 def test_browser_surface_marker_promotes_chat_turn_to_tool_mode():
@@ -231,6 +231,28 @@ def test_explicit_planning_false_and_chat_mode_do_not_default():
     assert not _should_default_planning_mode("请完整实现这个功能并测试", chat)
 
 
+def test_code_mode_implementation_is_execution_first():
+    from runtime.protocol.items import TurnParams
+
+    params = TurnParams(
+        threadId="t-code-execute",
+        input=[
+            {
+                "type": "input_text",
+                "text": "请完整实现这个功能并测试",
+                "metadata": {
+                    "context": {
+                        "mode": "code",
+                        "workspace_path": "/tmp/project",
+                    },
+                },
+            },
+        ],
+    )
+
+    assert not _should_default_planning_mode("请完整实现这个功能并测试", params)
+
+
 def test_agentic_session_metadata_preserves_code_permission_context():
     from runtime.sensing.gateway.tool_bridge import _session_metadata_from_intent
 
@@ -297,6 +319,58 @@ def test_agentic_session_metadata_preserves_browser_surface_context():
     assert metadata["browser_session_policy"] == "thread_native"
     assert "thread-native browser operation" in guidance
     assert "live_browser_state" in guidance
+
+
+def test_explicit_browser_surface_registers_local_browser_tools(monkeypatch) -> None:
+    from runtime.execution.suckers import Skill, SkillRegistry
+    from runtime.sensing.gateway.tool_bridge import _ensure_explicit_browser_skills
+
+    registry = SkillRegistry()
+    calls: list[SkillRegistry] = []
+
+    def register(target: SkillRegistry, *, verify_tests: bool = True) -> int:
+        assert verify_tests is False
+        calls.append(target)
+        target.register(
+            Skill(
+                name="browser_navigate",
+                trusted_source="skill://test/browser_navigate",
+                handler=lambda **_kw: {},
+            ),
+            verify_tests=False,
+        )
+        return 1
+
+    monkeypatch.setattr(
+        "runtime.execution.suckers.browser_skills.register_browser_skills",
+        register,
+    )
+
+    context = {"browser_surface": "browser", "browser_operation_mode": True}
+    assert _ensure_explicit_browser_skills(registry, context) == 1
+    assert _ensure_explicit_browser_skills(registry, context) == 0
+    assert calls == [registry]
+
+
+def test_browser_mutation_evidence_tracks_required_ui_actions() -> None:
+    from runtime.sensing.gateway.tool_bridge import (
+        _browser_action_evidence,
+        _required_browser_action_evidence,
+    )
+
+    required = _required_browser_action_evidence(
+        "create a customer, edit it, verify it, and delete it"
+    )
+    assert required == {"type", "click", "verify", "delete"}
+    assert _browser_action_evidence(
+        SimpleNamespace(name="browser_type", input={"selector": "#name"})
+    ) == {"type"}
+    assert _browser_action_evidence(
+        SimpleNamespace(name="browser_click", input={"selector": "[data-verify]"})
+    ) == {"click", "verify"}
+    assert _browser_action_evidence(
+        SimpleNamespace(name="browser_click", input={"selector": "[data-delete]"})
+    ) == {"click", "delete"}
 
 
 def test_agentic_session_metadata_preserves_chrome_surface_context():

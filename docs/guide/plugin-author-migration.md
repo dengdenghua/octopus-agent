@@ -27,6 +27,23 @@ When migrating a plugin between releases:
    possible.
 4. Add or update regression tests for the operator workflow the plugin enables.
 5. Record unresolved compatibility warnings as accepted risk before release.
+6. For public distribution, sign the content digest with an Ed25519 publisher
+   key and have the operator trust that key explicitly.
+
+## Publisher Provenance
+
+Content hashing alone does not prove who published a plugin. Octopus therefore
+keeps publisher trust outside the plugin and verifies
+`.codex-plugin/provenance.json` against an operator-controlled trust store.
+Set `OCTOPUS_PLUGIN_PUBLISHER_TRUST_STORE` to the trust-store path, or place the
+store at `.octopus/plugin-publishers.json`. The store uses schema
+`octopus.plugin_publisher_trust_store.v1`; each publisher has one or more
+Ed25519 keys with a stable `key_id` and an `active` or `revoked` status.
+
+The signed canonical payload binds the plugin ID, version, content digest,
+publisher ID, and key ID. Any runtime-file change, manifest identity change,
+unknown key, or revoked key fails the smoke gate. The signature envelope itself
+is excluded from the content digest to avoid a circular hash.
 
 ## Permission Review
 
@@ -53,3 +70,5 @@ Before release, confirm:
 - Hook behavior is covered by regression tests.
 - The plugin can be disabled without corrupting memory, replay, or governance
   audit records.
+- Publicly distributed plugins have a trusted publisher signature; unsigned
+  local plugins remain visibly review-required.

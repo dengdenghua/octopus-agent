@@ -33,6 +33,9 @@ ALLOWED_EXECUTION_MODES: dict[str, set[str]] = {
 }
 DEFAULT_BUNDLE_PATH = "benchmarks/results/behavioral-surpass-latest.json"
 DEFAULT_SUITE_MANIFEST_PATH = "benchmarks/behavioral-surpass-suite.json"
+DEFAULT_INFRASTRUCTURE_STATUS_PATH = (
+    "benchmarks/results/behavioral-infrastructure-latest.json"
+)
 
 
 def compute_behavioral_surpass_evidence(
@@ -49,6 +52,7 @@ def compute_behavioral_surpass_evidence(
     base = Path(root) if root is not None else default_project_root(Path(__file__))
     path = _resolve_bundle_path(base, bundle_path)
     manifest_path = _resolve_manifest_path(base)
+    infrastructure_path = _resolve_infrastructure_status_path(base)
     current_time = now or datetime.now(UTC)
     checks: list[dict[str, Any]] = []
     errors: list[str] = []
@@ -280,12 +284,29 @@ def compute_behavioral_surpass_evidence(
     )
 
     ready = bool(checks) and all(bool(check["passed"]) for check in checks)
-    verdict = "surpassed" if ready else _failure_verdict(checks)
+    infrastructure = _infrastructure_status(
+        infrastructure_path,
+        current_time=current_time,
+        max_age_days=max_age_days,
+        active=not ready,
+    )
+    verdict = (
+        "surpassed"
+        if ready
+        else "infrastructure_blocked"
+        if infrastructure["active"]
+        else _failure_verdict(checks)
+    )
     next_actions = [
         str(check["next_action"])
         for check in checks
         if not check["passed"] and check.get("next_action")
     ]
+    if infrastructure["active"]:
+        next_actions.insert(
+            0,
+            "Restore model-provider availability, then resume the unscored behavioral run.",
+        )
     return {
         "schema": REPORT_SCHEMA,
         "ready": ready,
@@ -294,6 +315,7 @@ def compute_behavioral_surpass_evidence(
         "bundle_exists": path.exists(),
         "suite_manifest_path": str(manifest_path),
         "suite_manifest_sha256": manifest_digest,
+        "infrastructure": infrastructure,
         "generated_at": generated_at.isoformat() if generated_at else "",
         "age_days": round(age_days, 3) if age_days is not None else None,
         "max_age_days": max_age_days,
@@ -319,6 +341,62 @@ def _resolve_manifest_path(base: Path) -> Path:
     raw = os.environ.get("OCTOPUS_BEHAVIORAL_SUITE_MANIFEST") or DEFAULT_SUITE_MANIFEST_PATH
     path = Path(raw)
     return path if path.is_absolute() else base / path
+
+
+def _resolve_infrastructure_status_path(base: Path) -> Path:
+    raw = (
+        os.environ.get("OCTOPUS_BEHAVIORAL_INFRASTRUCTURE_STATUS")
+        or DEFAULT_INFRASTRUCTURE_STATUS_PATH
+    )
+    path = Path(raw)
+    return path if path.is_absolute() else base / path
+
+
+def _infrastructure_status(
+    path: Path,
+    *,
+    current_time: datetime,
+    max_age_days: int,
+    active: bool,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if path.is_file():
+        try:
+            candidate = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(candidate, dict):
+                payload = candidate
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+    generated_at = _parse_datetime(payload.get("generated_at"))
+    age_days = (
+        (current_time - generated_at).total_seconds() / 86_400
+        if generated_at is not None
+        else None
+    )
+    current = bool(
+        payload.get("schema") == "octopus.behavioral_infrastructure_failure.v1"
+        and payload.get("scored") is False
+        and age_days is not None
+        and -(5 / 1440) <= age_days <= max_age_days
+    )
+    failures = payload.get("failures")
+    safe_failures = [
+        {
+            "case_id": str(row.get("case_id") or ""),
+            "categories": [str(value) for value in row.get("categories") or []],
+        }
+        for row in failures or []
+        if isinstance(row, dict)
+    ]
+    return {
+        "active": bool(active and current),
+        "current": current,
+        "path": str(path),
+        "generated_at": generated_at.isoformat() if generated_at else "",
+        "age_days": round(age_days, 3) if age_days is not None else None,
+        "system_id": str(payload.get("system_id") or ""),
+        "failures": safe_failures,
+    }
 
 
 def _read_bundle(path: Path, errors: list[str]) -> dict[str, Any]:
@@ -390,7 +468,23 @@ def _manifest_signatures(
             errors.append(f"suite manifest case is invalid: index={index}, id={case_id!r}")
             valid = False
             continue
-        prompt_digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        phases = raw_case.get("phases")
+        phase_rows = phases if isinstance(phases, list) else []
+        if any(not isinstance(phase, str) or not phase.strip() for phase in phase_rows):
+            errors.append(f"suite manifest case has invalid phases: {case_id}")
+            valid = False
+            continue
+        prompt_source = (
+            json.dumps(
+                {"prompt": prompt, "phases": phase_rows},
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            if phase_rows
+            else prompt
+        )
+        prompt_digest = hashlib.sha256(prompt_source.encode("utf-8")).hexdigest()
         rubric_digest = hashlib.sha256(
             json.dumps(
                 rubric,

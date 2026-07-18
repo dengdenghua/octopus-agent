@@ -97,6 +97,23 @@ jobs:
       - name: pytest (with coverage)
         run: pytest --cov=runtime --cov=tools --cov-report=term --cov-fail-under=60
 
+      - name: Large-corpus replay latency gate
+        run: >-
+          python -m runtime.safety.evolution.replay_latency_budget
+          --corpus-size 2000
+          --candidate-count 16
+          --max-latency-ms 3000
+          --max-evaluation-us 250
+          --output test-results/replay-latency-budget.json
+
+      - name: Upload replay latency proof
+        if: always() && matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: replay-latency-proof
+          path: test-results/replay-latency-budget.json
+          if-no-files-found: error
+
       - name: Production readiness gate
         env:
           OCTOPUS_READINESS_HOME: ${{ runner.temp }}/octopus-readiness

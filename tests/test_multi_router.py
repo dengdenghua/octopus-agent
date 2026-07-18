@@ -25,6 +25,7 @@ from runtime.sensing.model_router import (
     ModelRequest,
     ModelResponse,
     ModelRouter,
+    ModelStreamEvent,
     MultiModelRouter,
 )
 
@@ -51,6 +52,46 @@ class _TaggedMockRouter(MockModelRouter):
     def __init__(self, *, default_model: str, response: str) -> None:
         super().__init__(response=response)
         self.default_model = default_model
+
+
+class _StreamingRouter(ModelRouter):
+    def __init__(
+        self,
+        outcomes: list[Exception | list[ModelStreamEvent]],
+        *,
+        default_model: str = "stream/default",
+    ) -> None:
+        self.outcomes = outcomes
+        self.default_model = default_model
+        self.call_count = 0
+        self.stream_count = 0
+        self.stream_requests: list[ModelRequest] = []
+
+    def call(self, request: ModelRequest) -> ModelResponse:
+        del request
+        self.call_count += 1
+        raise AssertionError("streaming route must not fall back to call()")
+
+    def call_stream(self, request: ModelRequest):
+        self.stream_requests.append(request)
+        outcome = self.outcomes[self.stream_count]
+        self.stream_count += 1
+        if isinstance(outcome, Exception):
+            raise outcome
+        yield from outcome
+
+
+def _stream_events(text: str, *, provider: str = "stream-provider") -> list[ModelStreamEvent]:
+    response = ModelResponse(
+        text=text,
+        model="stream/default",
+        provider=provider,
+        cost=CostEntry(usd=0.01),
+    )
+    return [
+        ModelStreamEvent(type="text_delta", delta=text),
+        ModelStreamEvent(type="done", final=response),
+    ]
 
 
 def _make_request(**kw) -> ModelRequest:
@@ -147,6 +188,114 @@ class TestFallback:
         mr = MultiModelRouter(primary=primary)
         with pytest.raises(RuntimeError):
             mr.call(_make_request())
+
+
+class TestStreamingRouting:
+    def test_uses_native_stream_instead_of_buffered_call(self):
+        primary = _StreamingRouter([_stream_events("hello")])
+        mr = MultiModelRouter(primary=primary)
+
+        stream = mr.call_stream(_make_request())
+        assert next(stream).delta == "hello"
+        remaining = list(stream)
+
+        assert remaining[-1].type == "done"
+        assert primary.call_count == 0
+        assert primary.stream_count == 1
+        assert mr.dispatch_log[-1].final_role == "primary"
+        assert mr.dispatch_log[-1].attempts[0].response_provider == "stream-provider"
+
+    def test_failure_before_first_event_falls_back_to_next_provider(self):
+        primary = _StreamingRouter([RuntimeError("permanent failure")])
+        fallback = _StreamingRouter([_stream_events("rescued")])
+        mr = MultiModelRouter(primary=primary, fallbacks=[fallback])
+
+        events = list(mr.call_stream(_make_request()))
+
+        assert events[0].delta == "rescued"
+        assert primary.stream_count == 1
+        assert fallback.stream_count == 1
+        assert [attempt.success for attempt in mr.dispatch_log[-1].attempts] == [
+            False,
+            True,
+        ]
+        assert mr.dispatch_log[-1].final_role == "fallback[0]"
+
+    def test_transient_failure_retries_same_streaming_provider(self, monkeypatch):
+        primary = _StreamingRouter(
+            [ConnectionError("connection reset"), _stream_events("retry ok")]
+        )
+        sleeps: list[float] = []
+        monkeypatch.setattr(
+            "runtime.sensing.model_router.multi_router.time.sleep",
+            sleeps.append,
+        )
+        mr = MultiModelRouter(
+            primary=primary,
+            retry_attempts=3,
+            retry_base_delay=0.1,
+        )
+
+        events = list(mr.call_stream(_make_request()))
+
+        assert events[0].delta == "retry ok"
+        assert primary.stream_count == 2
+        assert len(sleeps) == 1
+        assert 0.075 <= sleeps[0] <= 0.1
+        assert len(mr.dispatch_log[-1].attempts) == 1
+        assert mr.dispatch_log[-1].attempts[0].success is True
+
+    def test_failure_after_delta_is_not_replayed_on_fallback(self):
+        class _PartialRouter(_StreamingRouter):
+            def call_stream(self, request: ModelRequest):
+                self.stream_requests.append(request)
+                self.stream_count += 1
+                yield ModelStreamEvent(type="text_delta", delta="visible")
+                raise ConnectionError("stream broke")
+
+        primary = _PartialRouter([])
+        fallback = _StreamingRouter([_stream_events("must not appear")])
+        mr = MultiModelRouter(primary=primary, fallbacks=[fallback])
+        stream = mr.call_stream(_make_request())
+
+        assert next(stream).delta == "visible"
+        with pytest.raises(ConnectionError, match="stream broke"):
+            next(stream)
+
+        assert fallback.stream_count == 0
+        assert len(mr.dispatch_log[-1].attempts) == 1
+        assert mr.dispatch_log[-1].attempts[0].success is False
+
+    def test_empty_stream_is_not_recorded_as_success(self):
+        primary = _StreamingRouter([[]])
+        fallback = _StreamingRouter([_stream_events("non-empty")])
+        mr = MultiModelRouter(
+            primary=primary,
+            fallbacks=[fallback],
+            retry_attempts=1,
+        )
+
+        events = list(mr.call_stream(_make_request()))
+
+        assert events[0].delta == "non-empty"
+        assert [attempt.success for attempt in mr.dispatch_log[-1].attempts] == [
+            False,
+            True,
+        ]
+        assert "EmptyModelStreamError" in (mr.dispatch_log[-1].attempts[0].error or "")
+
+    def test_streaming_route_rewrites_model_for_strong_provider(self):
+        primary = _StreamingRouter([_stream_events("unused")])
+        strong = _StreamingRouter(
+            [_stream_events("strong")],
+            default_model="strong/stream-model",
+        )
+        mr = MultiModelRouter(primary=primary, strong=strong)
+
+        list(mr.call_stream(_make_request(model="caller-model", prefer_strength="strong")))
+
+        assert strong.stream_requests[0].model == "strong/stream-model"
+        assert primary.stream_count == 0
 
 
 # ═══════════════════════════════════════════════════════════

@@ -28,12 +28,13 @@ export function AgentWelcome({
   return (
     <div
       className={cn(
-        "mx-auto flex w-full flex-col items-center justify-center gap-3 px-5 py-5 text-center sm:px-8",
+        "mx-auto flex w-full flex-col items-center justify-center gap-4 px-5 py-6 text-center sm:px-8",
         className,
       )}
     >
       <div className="relative">
-        <div className="flex size-[72px] items-center justify-center overflow-hidden rounded-lg border border-border-default bg-card shadow-[var(--shadow-xs)]">
+        <div className="absolute -inset-3 rounded-2xl bg-gradient-to-br from-primary/20 via-primary/8 to-transparent blur-2xl" />
+        <div className="relative flex size-[80px] items-center justify-center overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-card to-muted/50 shadow-[var(--shadow-lg)]">
           {agent?.avatar_url ? (
             <img
               src={`${getBackendBaseURL()}${withAgentAvatarVersion(agent.avatar_url)}`}
@@ -41,25 +42,26 @@ export function AgentWelcome({
               className="h-full w-full object-cover"
             />
           ) : (
-            <span className="flex h-full w-full items-center justify-center bg-primary/10">
-              <BotIcon className="text-primary h-8 w-8" />
+            <span className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/15 to-primary/5">
+              <BotIcon className="text-primary h-9 w-9 drop-shadow-sm" strokeWidth={1.5} />
             </span>
           )}
         </div>
-        <span className="absolute -right-1 -bottom-1 flex h-5 items-center rounded-md border border-border bg-background px-1.5 text-[10px] font-medium text-muted-foreground shadow-[var(--shadow-xs)]">
+        <span className="absolute -right-1.5 -bottom-1.5 flex h-5.5 items-center gap-1 rounded-lg border border-border bg-background/95 px-2 text-[10px] font-semibold tracking-wide text-muted-foreground/90 shadow-[var(--shadow-sm)] backdrop-blur-sm">
+          <span className="size-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
           {typeBadge}
         </span>
       </div>
-      <div className="space-y-1.5">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+      <div className="space-y-2">
+        <h2 className="bg-gradient-to-r from-foreground via-foreground to-foreground/80 bg-clip-text text-[22px] font-bold tracking-tight text-transparent">
           {displayName}
         </h2>
         {description ? (
-          <p className="text-muted-foreground max-w-md text-sm leading-6">
+          <p className="text-muted-foreground/80 max-w-md text-[13px] leading-relaxed">
             {description}
           </p>
         ) : (
-          <p className="text-muted-foreground max-w-md text-sm leading-6">
+          <p className="text-muted-foreground/70 max-w-md text-[13px] leading-relaxed">
             Ready for the next turn.
           </p>
         )}

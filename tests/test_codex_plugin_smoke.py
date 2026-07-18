@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from runtime.platform.plugins.codex_discovery import discover_codex_plugins
+from runtime.platform.plugins.publisher_provenance import (
+    canonical_publisher_signature_payload,
+)
 from runtime.safety.auth import Identity, IdentityStore
 from runtime.safety.evolution.plugin_migration_readiness import (
     compute_plugin_migration_readiness,
@@ -26,12 +32,126 @@ def test_codex_plugin_discovery_includes_smoke_metadata(tmp_path: Path) -> None:
     assert smoke["surfaces"]["skills"] is True
     assert smoke["surfaces"]["mcp"] is True
     assert smoke["trust"]["level"] == "local_review_required"
+    assert smoke["content_provenance"]["schema"] == ("octopus.plugin_content_provenance.v1")
+    assert smoke["content_provenance"]["complete"] is True
+    assert len(smoke["content_provenance"]["digest"]) == 64
+    assert smoke["content_provenance"]["file_count"] == 3
     assert smoke["permission_resolution"]["status"] == "review_required"
     assert smoke["permission_resolution"]["permissions"] == [
         "mcp:execute:review_required",
         "ui:metadata:local",
     ]
     assert plugin_dir.name == "research"
+
+
+def test_plugin_content_provenance_changes_with_runtime_content(tmp_path: Path) -> None:
+    plugin_dir = _write_plugin(tmp_path)
+    first = discover_codex_plugins([tmp_path])[0]["smoke"]["content_provenance"]
+
+    (plugin_dir / "skills" / "brief" / "SKILL.md").write_text(
+        "# Brief\n\nChanged instructions.\n",
+        encoding="utf-8",
+    )
+    second = discover_codex_plugins([tmp_path])[0]["smoke"]["content_provenance"]
+
+    assert first["digest"] != second["digest"]
+    assert first["file_count"] == second["file_count"] == 3
+
+
+def test_plugin_content_provenance_rejects_symlink_escape(tmp_path: Path) -> None:
+    plugin_dir = _write_plugin(tmp_path)
+    outside = tmp_path / "outside.txt"
+    outside.write_text("secret", encoding="utf-8")
+    (plugin_dir / "outside-link.txt").symlink_to(outside)
+
+    smoke = discover_codex_plugins([tmp_path])[0]["smoke"]
+    provenance = smoke["content_provenance"]
+
+    assert provenance["complete"] is False
+    assert provenance["digest"] == ""
+    assert any("symlink file excluded" in issue for issue in provenance["issues"])
+    assert any("symlink file excluded" in warning for warning in smoke["warnings"])
+
+
+def test_plugin_publisher_signature_verifies_against_operator_trust_store(
+    tmp_path: Path,
+) -> None:
+    plugin_dir = _write_plugin(tmp_path, explicit_permissions=True)
+    trust_store = _sign_plugin(plugin_dir)
+
+    plugin = discover_codex_plugins(
+        [tmp_path],
+        publisher_trust_store_path=trust_store,
+    )[0]
+    smoke = plugin["smoke"]
+    publisher = smoke["publisher_provenance"]
+
+    assert smoke["ok"] is True
+    assert smoke["trust"]["level"] == "publisher_verified"
+    assert smoke["trust"]["signed"] is True
+    assert smoke["content_provenance"]["signed"] is True
+    assert smoke["content_provenance"]["file_count"] == 3
+    assert publisher["schema"] == "octopus.plugin_publisher_provenance.v1"
+    assert publisher["status"] == "verified"
+    assert publisher["verified"] is True
+    assert publisher["trusted"] is True
+    assert publisher["publisher_id"] == "acme"
+    assert publisher["key_id"] == "release-2026"
+    assert len(publisher["signature_digest"]) == 64
+
+
+def test_plugin_publisher_signature_blocks_runtime_tampering(tmp_path: Path) -> None:
+    plugin_dir = _write_plugin(tmp_path, explicit_permissions=True)
+    trust_store = _sign_plugin(plugin_dir)
+    (plugin_dir / "skills" / "brief" / "SKILL.md").write_text(
+        "# Brief\n\nTampered after signing.\n",
+        encoding="utf-8",
+    )
+
+    smoke = discover_codex_plugins(
+        [tmp_path],
+        publisher_trust_store_path=trust_store,
+    )[0]["smoke"]
+
+    assert smoke["ok"] is False
+    assert smoke["publisher_provenance"]["status"] == "tampered"
+    assert smoke["publisher_provenance"]["verified"] is False
+    assert any("content digest does not match" in issue for issue in smoke["issues"])
+
+
+def test_plugin_publisher_signature_blocks_revoked_key(tmp_path: Path) -> None:
+    plugin_dir = _write_plugin(tmp_path, explicit_permissions=True)
+    trust_store = _sign_plugin(plugin_dir, key_status="revoked")
+
+    smoke = discover_codex_plugins(
+        [tmp_path],
+        publisher_trust_store_path=trust_store,
+    )[0]["smoke"]
+
+    assert smoke["ok"] is False
+    assert smoke["publisher_provenance"]["status"] == "revoked"
+    assert any("key is not active" in issue for issue in smoke["issues"])
+
+
+def test_plugin_smoke_summary_reports_publisher_provenance(tmp_path: Path) -> None:
+    plugin_dir = _write_plugin(tmp_path, explicit_permissions=True)
+    trust_store = _sign_plugin(plugin_dir)
+    app = FastAPI()
+    app.include_router(
+        create_plugins_router(
+            plugin_roots=[tmp_path],
+            publisher_trust_store_path=trust_store,
+        )
+    )
+    client = TestClient(app)
+
+    data = client.get("/api/plugins/smoke-summary").json()
+
+    assert data["publisher_verified_count"] == 1
+    assert data["unsigned_count"] == 0
+    assert data["invalid_signature_count"] == 0
+    assert data["publisher_provenance"][0]["status"] == "verified"
+    assert data["review_required_count"] == 0
 
 
 def test_codex_plugin_smoke_endpoint(tmp_path: Path) -> None:
@@ -158,6 +278,10 @@ def test_plugin_migration_readiness_endpoint_marks_release_ready_plugin(
     assert data["plugins"][0]["blockers"] == []
     assert data["plugins"][0]["migration_contract"]["migration_notes_present"] is True
     assert data["plugins"][0]["migration_contract"]["regression_tests_present"] is True
+    provenance = data["plugins"][0]["migration_contract"]["content_provenance"]
+    assert provenance["complete"] is True
+    assert len(provenance["digest"]) == 64
+    assert provenance["signed"] is False
 
 
 def test_plugin_migration_readiness_accepts_central_contract_matrix(
@@ -320,21 +444,27 @@ def test_plugin_assets_are_public_read_only_when_auth_enabled(tmp_path: Path) ->
     assert asset.text == "logo"
 
 
-def _write_plugin(root: Path, *, include_migration_contract: bool = False) -> Path:
+def _write_plugin(
+    root: Path,
+    *,
+    include_migration_contract: bool = False,
+    explicit_permissions: bool = False,
+) -> Path:
     plugin_dir = root / "research"
     (plugin_dir / ".codex-plugin").mkdir(parents=True)
     (plugin_dir / "skills" / "brief").mkdir(parents=True)
+    manifest = {
+        "name": "research",
+        "version": "0.1.0",
+        "interface": {
+            "displayName": "Research",
+            "capabilities": [{"name": "brief", "type": "codex"}],
+        },
+    }
+    if explicit_permissions:
+        manifest["permissions"] = ["mcp:execute"]
     (plugin_dir / ".codex-plugin" / "plugin.json").write_text(
-        json.dumps(
-            {
-                "name": "research",
-                "version": "0.1.0",
-                "interface": {
-                    "displayName": "Research",
-                    "capabilities": [{"name": "brief", "type": "codex"}],
-                },
-            }
-        ),
+        json.dumps(manifest),
         encoding="utf-8",
     )
     (plugin_dir / "skills" / "brief" / "SKILL.md").write_text(
@@ -356,3 +486,57 @@ def _write_plugin(root: Path, *, include_migration_contract: bool = False) -> Pa
             encoding="utf-8",
         )
     return plugin_dir
+
+
+def _sign_plugin(plugin_dir: Path, *, key_status: str = "active") -> Path:
+    plugin = discover_codex_plugins([plugin_dir.parent])[0]
+    content_digest = plugin["smoke"]["content_provenance"]["digest"]
+    private_key = Ed25519PrivateKey.generate()
+    public_key = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    payload = canonical_publisher_signature_payload(
+        plugin_id="research",
+        version="0.1.0",
+        content_digest=content_digest,
+        publisher_id="acme",
+        key_id="release-2026",
+    )
+    envelope = {
+        "schema": "octopus.plugin_publisher_signature.v1",
+        "algorithm": "ed25519",
+        "plugin_id": "research",
+        "version": "0.1.0",
+        "content_digest": content_digest,
+        "publisher_id": "acme",
+        "key_id": "release-2026",
+        "signature": base64.b64encode(private_key.sign(payload)).decode("ascii"),
+    }
+    (plugin_dir / ".codex-plugin" / "provenance.json").write_text(
+        json.dumps(envelope),
+        encoding="utf-8",
+    )
+    trust_store_path = plugin_dir.parent / "publisher-trust.json"
+    trust_store_path.write_text(
+        json.dumps(
+            {
+                "schema": "octopus.plugin_publisher_trust_store.v1",
+                "publishers": [
+                    {
+                        "publisher_id": "acme",
+                        "keys": [
+                            {
+                                "key_id": "release-2026",
+                                "algorithm": "ed25519",
+                                "status": key_status,
+                                "public_key": base64.b64encode(public_key).decode("ascii"),
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return trust_store_path

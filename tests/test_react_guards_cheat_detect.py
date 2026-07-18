@@ -8,8 +8,11 @@ of edits and final answers.
 
 from __future__ import annotations
 
+import pytest
+
 from runtime.core.cerebrum.react_guards import (
     _broad_except_suppression_guard,
+    _code_mode_missing_write_guard,
     _commented_out_as_fix_guard,
     _false_verification_claim_guard,
 )
@@ -55,6 +58,9 @@ class TestFinalAnswerClaimsVerification:
         assert _final_answer_claims_verification("全部测试通过")
         assert _final_answer_claims_verification("已通过测试")
         assert _final_answer_claims_verification("测试已通过，无错误")
+
+    def test_numeric_pytest_summary(self) -> None:
+        assert _final_answer_claims_verification("pytest tests/ -v → 4 passed")
 
     def test_neutral_summary_no_claim(self) -> None:
         assert not _final_answer_claims_verification("Reformatted the imports.")
@@ -144,6 +150,84 @@ class TestFalseVerificationClaimGuard:
             is None
         )
 
+
+class TestCodeModeMissingWriteGuard:
+    def test_implementation_without_write_fires(self) -> None:
+        steps = [
+            _step(
+                1,
+                action='read_file({"path": "config.py"})',
+                observation='{"content":"max_turns = 8"}',
+            )
+        ]
+
+        msg = _code_mode_missing_write_guard(
+            steps,
+            "Implemented the requested rename.",
+            goal="Implement the configuration rename and update tests.",
+        )
+
+        assert msg is not None
+        assert "no successful file write" in msg
+
+    def test_failed_write_receipt_does_not_count(self) -> None:
+        step = _step(
+            1,
+            action='edit_file({"path": "config.py"})',
+            observation='{"error":"permission denied"}',
+        )
+        step.action_results = [
+            {
+                "tool_name": "edit_file",
+                "ok": False,
+                "observation": "permission denied",
+            }
+        ]
+
+        assert (
+            _code_mode_missing_write_guard(
+                [step],
+                "Done.",
+                goal="Fix config.py.",
+            )
+            is not None
+        )
+
+    def test_successful_write_receipt_allows_completion(self) -> None:
+        step = _step(
+            1,
+            action='edit_file({"path": "config.py"})',
+            observation='{"ok":true}',
+        )
+        step.action_results = [
+            {
+                "tool_name": "edit_file",
+                "ok": True,
+                "observation": "updated config.py",
+            }
+        ]
+
+        assert (
+            _code_mode_missing_write_guard(
+                [step],
+                "Done.",
+                goal="Fix config.py.",
+            )
+            is None
+        )
+
+    def test_read_only_review_does_not_require_write(self) -> None:
+        assert (
+            _code_mode_missing_write_guard(
+                [],
+                "Review complete.",
+                goal="Inspect the repository and report risks.",
+            )
+            is None
+        )
+
+
+class TestFalseVerificationClaimGuardOutcomes:
     def test_claim_with_failed_verifier_fires(self) -> None:
         steps = [
             _step(
@@ -492,3 +576,105 @@ class TestBroadExceptSuppressionGuard:
             )
             is None
         )
+
+
+# ─── browser-mode scoping of the evidence guards ──────────────────────
+
+
+class TestEvidenceGuardsBrowserScope:
+    """Browser turns prove work via browser-action evidence, not file
+    writes. A CRUD-style browser goal ("create/edit/delete …") matches the
+    mutation markers, so without the browser_operation_mode skip the write
+    guard derails the model into writing throwaway files (observed live:
+    browser.dynamic-crud burned 25+ iterations appeasing it)."""
+
+    def _browser_ctx(self, **overrides):
+        from runtime.core.cerebrum.react_guards import GuardContext
+        from runtime.core.cerebrum.react_types import ReActStep
+
+        defaults = dict(
+            steps=[
+                ReActStep(
+                    iteration=1,
+                    action='browser_navigate({"url": "http://127.0.0.1:8123/"})',
+                    observation="page loaded",
+                )
+            ],
+            final_answer="Created, edited and deleted the plan through the UI.",
+            is_code_mode=True,
+            tools_active=True,
+            goal="Use the browser UI to create, edit and delete a plan entry.",
+            browser_operation_mode=True,
+        )
+        defaults.update(overrides)
+        return GuardContext(**defaults)
+
+    def test_write_guard_skips_browser_mode(self) -> None:
+        from runtime.core.cerebrum.react_guards import _invoke_missing_write
+
+        assert _invoke_missing_write(self._browser_ctx()) is None
+
+    def test_inspection_guard_skips_browser_mode(self) -> None:
+        from runtime.core.cerebrum.react_guards import _invoke_missing_inspection
+
+        assert _invoke_missing_inspection(self._browser_ctx()) is None
+
+    def test_write_guard_still_fires_for_plain_code_mode(self) -> None:
+        from runtime.core.cerebrum.react_guards import _invoke_missing_write
+
+        ctx = self._browser_ctx(
+            browser_operation_mode=False,
+            goal="Fix the cache implementation and verify it.",
+            final_answer="Implemented the fix and verified it.",
+        )
+        assert _invoke_missing_write(ctx) is not None
+
+    def test_write_guard_still_fires_for_mixed_browser_and_code_task(self) -> None:
+        from runtime.core.cerebrum.react_guards import _invoke_missing_write
+
+        ctx = self._browser_ctx(
+            goal=(
+                "Use the browser UI to reproduce the bug, then fix the source code and run tests."
+            ),
+            final_answer="Reproduced the bug, implemented the fix, and ran tests.",
+        )
+        assert _invoke_missing_write(ctx) is not None
+
+    def test_inspection_guard_still_fires_for_mixed_browser_and_code_task(self) -> None:
+        from runtime.core.cerebrum.react_guards import _invoke_missing_inspection
+
+        ctx = self._browser_ctx(
+            goal=(
+                "Use the browser UI to reproduce the bug, then inspect the project files "
+                "and fix the source code."
+            ),
+            final_answer="Inspected the project and fixed the source code.",
+            file_inspection_tools_visible=True,
+        )
+        assert _invoke_missing_inspection(ctx) is not None
+
+    @pytest.mark.parametrize(
+        "goal",
+        [
+            "Reproduce it in the browser, patch repo, and verify with pytest.",
+            "Use the UI to confirm the issue; update the backend module and run tests.",
+            "先在浏览器界面复现，再修改代码仓库里的实现并运行测试。",
+        ],
+    )
+    def test_common_mixed_task_phrasings_are_not_ui_only(self, goal: str) -> None:
+        from runtime.core.cerebrum.react_guards import _browser_goal_is_ui_only
+
+        assert _browser_goal_is_ui_only(goal) is False
+
+    @pytest.mark.parametrize(
+        "goal",
+        [
+            "Use the browser UI to upload a file and test the form.",
+            "In the browser, edit the repository settings and save them.",
+            "通过 UI 编辑项目计划并下载文件。",
+        ],
+    )
+    def test_browser_entities_and_uploaded_files_remain_ui_only(self, goal: str) -> None:
+        from runtime.core.cerebrum.react_guards import _browser_goal_is_ui_only
+
+        assert _browser_goal_is_ui_only(goal) is True

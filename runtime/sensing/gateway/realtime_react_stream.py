@@ -32,6 +32,7 @@ from runtime.sensing.gateway.realtime_event_bridge import _ReactBridgeState
 from runtime.sensing.gateway.realtime_gateway import EventEmitter
 from runtime.sensing.gateway.realtime_turn_input import (
     _conversation_messages_from_params,
+    _input_metadata,
     _reflex_response_to_text,
     _resume_task_id_from_intent,
     _turn_mode,
@@ -134,10 +135,12 @@ def _should_use_native_tool_loop(
     *,
     planning_mode: bool,
 ) -> bool:
-    """Whether this turn should use protocol-native tool calls first."""
+    """Whether this turn should use protocol-native tool calls first.
 
-    if planning_mode:
-        return False
+    ``planning_mode`` is a plan-first prompt nudge, not a plan-only execution
+    tier.  Since 2026-05-31 it deliberately leaves tools enabled, so it must
+    not downgrade capable models to the legacy text-parsed ReAct path.
+    """
     flag = os.environ.get("OCTOPUS_NATIVE_TOOL_LOOP", "1").strip().lower()
     if flag in {"0", "false", "off", "no"}:
         return False
@@ -219,6 +222,26 @@ def _should_use_reflection_fast_path(
     if router is None:
         return False
     mode = _turn_mode(params)
+    metadata = _input_metadata(params)
+    context = metadata.get("context")
+    context_payload = context if isinstance(context, dict) else {}
+    capability_mode = str(
+        context_payload.get("capability_mode") or metadata.get("capability_mode") or ""
+    ).strip()
+    # Capability-bearing turns must reach an agentic driver.  The direct
+    # reflection path cannot inspect a workspace, invoke browser tools, edit
+    # files, or produce verifiable side effects.  Previously ``mode=code``
+    # fell through to the broad final return below and silently became a
+    # text-only answer.
+    if capability_mode or mode in {
+        "browser",
+        "chrome",
+        "code",
+        "deep",
+        "research",
+        "swarm",
+    }:
+        return False
     from runtime.sensing.gateway.realtime_turn_routing import (
         looks_like_contextual_tool_followup,
         looks_like_plain_chat,
@@ -231,7 +254,7 @@ def _should_use_reflection_fast_path(
         return False
     if mode in {"", "react"}:
         return looks_like_plain_chat(text)
-    return mode not in {"deep", "swarm"}
+    return True
 
 
 async def _drive_reflection_fast_path(
@@ -560,6 +583,7 @@ async def _drive_react(
                         runtime._stack,
                         intent,
                         agent,
+                        model=model,
                     ):
                         evt = _agentic_stream_event_to_react_event(
                             kind,
