@@ -190,6 +190,93 @@ describe("MessageList process trace lifecycle", () => {
     );
   });
 
+  test("shows one avatar across adjacent process and answer groups from the same agent", () => {
+    const thread = mockThread({
+      messages: [
+        message("user-1", "human", "检查两个文件"),
+        {
+          id: "assistant-progress",
+          type: "ai",
+          content: "我先核对两个文件。",
+          additional_kwargs: {
+            public_progress: true,
+            agent_id: "general",
+            agent_display_name: "Eve",
+          },
+        } as AIMessage,
+        {
+          id: "assistant-final",
+          type: "ai",
+          content: "两个文件的字段定义一致。",
+          additional_kwargs: {
+            agent_id: "general",
+            agent_display_name: "Eve",
+          },
+        } as AIMessage,
+      ],
+    });
+
+    renderMessageList({
+      thread,
+      currentAgent: {
+        name: "general",
+        display_name: "Eve",
+        avatar_url: "/api/agents/general/avatar",
+      },
+    });
+
+    expect(screen.getAllByAltText("Eve")).toHaveLength(1);
+    expect(screen.getByText("我先核对两个文件。")).toBeInTheDocument();
+    expect(screen.getByText("两个文件的字段定义一致。")).toBeInTheDocument();
+  });
+
+  test("shows a new avatar when the speaking agent changes within a turn", () => {
+    const thread = mockThread({
+      messages: [
+        message("user-1", "human", "协作检查"),
+        {
+          id: "assistant-progress",
+          type: "ai",
+          content: "Eve 正在核对。",
+          additional_kwargs: {
+            public_progress: true,
+            agent_id: "general",
+            agent_display_name: "Eve",
+          },
+        } as AIMessage,
+        {
+          id: "assistant-final",
+          type: "ai",
+          content: "Coder 已完成复核。",
+          additional_kwargs: {
+            agent_id: "coder",
+            agent_display_name: "Coder",
+          },
+        } as AIMessage,
+      ],
+    });
+
+    renderMessageList({
+      thread,
+      showSenderName: true,
+      agentRoster: [
+        {
+          name: "general",
+          display_name: "Eve",
+          avatar_url: "/api/agents/general/avatar",
+        },
+        {
+          name: "coder",
+          display_name: "Coder",
+          avatar_url: "/api/agents/coder/avatar",
+        },
+      ],
+    });
+
+    expect(screen.getByAltText("Eve")).toBeInTheDocument();
+    expect(screen.getByAltText("Coder")).toBeInTheDocument();
+  });
+
   test("does not render a completed process trace block in chat answers", () => {
     const messages = [
       message("user-1", "human", "What is NAS?"),

@@ -476,6 +476,7 @@ const MemoizedGroup = memo(
     deferGroupOutputs,
     groupAuditNotice,
     groupFailure,
+    showAssistantAvatar,
     renderGroupContent,
   }: {
     group: CoreMessageGroup;
@@ -491,6 +492,7 @@ const MemoizedGroup = memo(
       message: string;
       kind?: "error" | "network" | "verification";
     } | null;
+    showAssistantAvatar: boolean;
     renderGroupContent: (
       group: CoreMessageGroup,
       beforeAssistantContent?: ReactNode,
@@ -502,6 +504,7 @@ const MemoizedGroup = memo(
         message: string;
         kind?: "error" | "network" | "verification";
       } | null,
+      showAssistantAvatar?: boolean,
     ) => ReactNode;
   }) {
     return (
@@ -510,6 +513,10 @@ const MemoizedGroup = memo(
         className={cn(
           index === 0 ? "pt-1" : undefined,
           group.type === "human" ? "scroll-mt-6" : undefined,
+          !showAssistantAvatar &&
+            (group.type === "assistant" ||
+              group.type === "assistant:processing") &&
+            "-mt-2",
         )}
       >
         {renderGroupContent(
@@ -520,6 +527,7 @@ const MemoizedGroup = memo(
           deferGroupOutputs,
           groupAuditNotice,
           groupFailure,
+          showAssistantAvatar,
         )}
       </div>
     );
@@ -535,7 +543,8 @@ const MemoizedGroup = memo(
     prev.enableClarificationActions === next.enableClarificationActions &&
     prev.deferGroupOutputs === next.deferGroupOutputs &&
     prev.groupAuditNotice === next.groupAuditNotice &&
-    prev.groupFailure === next.groupFailure,
+    prev.groupFailure === next.groupFailure &&
+    prev.showAssistantAvatar === next.showAssistantAvatar,
 );
 
 /**
@@ -1159,6 +1168,28 @@ export function MessageList({
     );
   };
 
+  const renderMessageContent = (
+    msg: (typeof messages)[number],
+    keyPrefix: string | undefined,
+    beforeContent?: ReactNode,
+  ) => {
+    const key = `${keyPrefix}/${msg.id}`;
+    return (
+      <div key={key}>
+        {beforeContent}
+        <MessageListItem
+          message={msg}
+          isLoading={thread.isLoading && msg.id === thread.streamingMessage?.id}
+          chatFontSize={settings.display.chat_font_size}
+          suppressReasoningPanel={Boolean(beforeContent)}
+          enableClarificationActions={
+            !thread.isLoading && messages[messages.length - 1] === msg
+          }
+        />
+      </div>
+    );
+  };
+
   const renderMessageWithHeader = (
     msg: (typeof messages)[number],
     keyPrefix: string | undefined,
@@ -1197,6 +1228,7 @@ export function MessageList({
     group: (typeof groupedMessages)[number],
     enableClarificationActions = false,
     keepOpen = false,
+    showAssistantAvatar = true,
   ) => {
     if (!hasVisibleMessageGroupContent(group.messages, t)) return null;
     const aiMessage = group.messages.find(
@@ -1223,6 +1255,9 @@ export function MessageList({
         }
       />
     );
+    if (!showAssistantAvatar) {
+      return <div className="ml-11 w-auto">{content}</div>;
+    }
     if (!agentName) return content;
     return renderAssistantFrame({
       key: `agent-frame/${group.id ?? agentName}`,
@@ -1245,21 +1280,29 @@ export function MessageList({
       message: string;
       kind?: "error" | "network" | "verification";
     } | null = null,
+    showAssistantAvatar = true,
   ) => {
     if (group.type === "human" || group.type === "assistant") {
       let injectedBeforeContent = false;
+      const renderedMessages = group.messages.map((msg) => {
+        const beforeContent =
+          beforeAssistantContent &&
+          msg.type === "ai" &&
+          !injectedBeforeContent
+            ? beforeAssistantContent
+            : undefined;
+        if (beforeContent) injectedBeforeContent = true;
+        return showAssistantAvatar || msg.type !== "ai"
+          ? renderMessageWithHeader(msg, group.id, beforeContent)
+          : renderMessageContent(msg, group.id, beforeContent);
+      });
       return (
         <>
-          {group.messages.map((msg) => {
-            const beforeContent =
-              beforeAssistantContent &&
-              msg.type === "ai" &&
-              !injectedBeforeContent
-                ? beforeAssistantContent
-                : undefined;
-            if (beforeContent) injectedBeforeContent = true;
-            return renderMessageWithHeader(msg, group.id, beforeContent);
-          })}
+          {group.type === "assistant" && !showAssistantAvatar ? (
+            <div className="ml-11 w-auto">{renderedMessages}</div>
+          ) : (
+            renderedMessages
+          )}
           {group.type === "assistant" && !deferOutputs && (
             <MessageOutputSummary
               auditNotice={auditNotice}
@@ -1391,7 +1434,30 @@ export function MessageList({
       return <div className="relative z-1 flex flex-col gap-2">{results}</div>;
     }
     // Default: assistant:processing renders as MessageGroup.
-    return renderGroupHeader(group, enableClarificationActions, keepOpen);
+    return renderGroupHeader(
+      group,
+      enableClarificationActions,
+      keepOpen,
+      showAssistantAvatar,
+    );
+  };
+
+  const assistantFrameIdentity = (
+    group: (typeof groupedMessages)[number],
+  ): string | null => {
+    if (
+      group.type !== "assistant" &&
+      group.type !== "assistant:processing"
+    ) {
+      return null;
+    }
+    const aiMessage = group.messages.find(
+      (message): message is AIMessage => message.type === "ai",
+    );
+    const identity = resolveAgentIdentity(aiMessage);
+    return [identity.id, identity.name, identity.avatar, identity.icon]
+      .map((value) => value ?? "")
+      .join("|");
   };
 
   if (thread.isThreadLoading && messages.length === 0) {
@@ -1478,6 +1544,19 @@ export function MessageList({
                   isLatestGroup &&
                   group.type === "human" &&
                   thread.isLoading;
+                const turnGroupPosition = turn.groupIndexes.indexOf(index);
+                const assistantIdentity = assistantFrameIdentity(group);
+                const previousAssistantIdentity = [...turn.groupIndexes]
+                  .slice(0, turnGroupPosition)
+                  .reverse()
+                  .map((groupIndex) =>
+                    assistantFrameIdentity(groupedMessages[groupIndex]!),
+                  )
+                  .find((identity): identity is string => identity !== null);
+                const showAssistantAvatar =
+                  assistantIdentity === null ||
+                  previousAssistantIdentity === undefined ||
+                  previousAssistantIdentity !== assistantIdentity;
 
                 return (
                   <Fragment key={groupKey}>
@@ -1495,6 +1574,7 @@ export function MessageList({
                       groupFailure={groupFailure}
                       groupAuditNotice={groupAuditNotice}
                       renderGroupContent={renderGroupContent}
+                      showAssistantAvatar={showAssistantAvatar}
                     />
                     {showActivityPulse && (
                       <PublicThinkingStatus
