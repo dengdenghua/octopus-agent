@@ -44,6 +44,7 @@ JournalEventType = Literal[
     "node_started",
     "task_checkpoint",
     "react_checkpoint",
+    "tool_effect_intent",
     "task_paused",
     "task_resumed",
     "token_usage",
@@ -191,6 +192,24 @@ class ReactCheckpointEvent(JournalEvent):
     working_set_snapshot: list[dict[str, Any]] = Field(default_factory=list)
     progress_summary: str = ""
     current_phase: str = ""
+
+
+class ToolEffectIntentEvent(JournalEvent):
+    """Durable write-ahead marker for one tool invocation.
+
+    The marker is appended immediately before entering a handler. If the
+    process dies before its :class:`StepEvent` is written, recovery knows the
+    side effect is indeterminate and must not blindly execute it again.
+    """
+
+    event_type: Literal["tool_effect_intent"] = "tool_effect_intent"
+    effect_key: str
+    call_id: str
+    step_id: int = 0
+    node_id: str = ""
+    sucker_id: str = ""
+    args_fingerprint: str = ""
+    side_effecting: bool = False
 
 
 class TaskPausedEvent(JournalEvent):
@@ -731,6 +750,37 @@ class Journal:
                 conversation_id=current_conversation_id(),
             )
         )
+
+    def write_tool_effect_intent(
+        self,
+        task_id: TaskId,
+        arm_id: ArmId,
+        *,
+        effect_key: str,
+        call_id: str,
+        step_id: int,
+        node_id: str,
+        sucker_id: str,
+        args_fingerprint: str,
+        side_effecting: bool,
+        actor: str | None = None,
+    ) -> ToolEffectIntentEvent:
+        event = ToolEffectIntentEvent(
+            task_id=task_id,
+            arm_id=arm_id,
+            actor=actor,
+            effect_key=effect_key,
+            call_id=call_id,
+            step_id=step_id,
+            node_id=node_id,
+            sucker_id=sucker_id,
+            args_fingerprint=args_fingerprint,
+            side_effecting=side_effecting,
+            agent_id=current_agent_id(),
+            conversation_id=current_conversation_id(),
+        )
+        self.write(event)
+        return event
 
     def write_task_paused(
         self,
@@ -1504,6 +1554,7 @@ _EVENT_CLASSES: dict[str, type[JournalEvent]] = {
     "node_started": NodeStartedEvent,
     "task_checkpoint": TaskCheckpointEvent,
     "react_checkpoint": ReactCheckpointEvent,
+    "tool_effect_intent": ToolEffectIntentEvent,
     "task_paused": TaskPausedEvent,
     "task_resumed": TaskResumedEvent,
     "token_usage": TokenUsageEvent,

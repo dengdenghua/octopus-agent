@@ -22,6 +22,12 @@ from runtime.execution.misc.file_write_leases import (
     verify_file_unchanged_since_read,
 )
 from runtime.execution.suckers import Skill, SkillRegistry
+from runtime.execution.tool_engine.effect_receipts import (
+    EffectResolution,
+    ToolEffectReceiptIndex,
+    indeterminate_step,
+    is_side_effecting,
+)
 from runtime.execution.tool_engine.skill_gate import (
     antigen_for,
     canonical_tool_path,
@@ -162,11 +168,13 @@ def _is_transient_tool_exception(exc: BaseException) -> bool:
 def _call_handler_with_transient_retry(
     handler: Any,
     args: dict[str, Any],
+    *,
+    allow_retry: bool = True,
 ) -> tuple[Any, list[str]]:
     try:
         return handler(**args), []
     except Exception as exc:  # noqa: BLE001 - retry classifier needs arbitrary skill exceptions
-        if not _is_transient_tool_exception(exc):
+        if not allow_retry or not _is_transient_tool_exception(exc):
             raise
         retry_tag = f"transient_retry:{type(exc).__name__}"
         return handler(**args), [retry_tag]
@@ -503,6 +511,13 @@ class ToolExecutor:
         self.registry = registry
         self.immunity = immunity
         self.journal = journal if journal is not None else InMemoryJournal()
+        self._effect_receipts = (
+            ToolEffectReceiptIndex(self.journal)
+            if hasattr(self.journal, "read_all")
+            and hasattr(self.journal, "write_tool_effect_intent")
+            else None
+        )
+        self._effect_receipts_journal = self.journal
         self.hooks = hooks  # Implementation note.
         # Session-level cumulative budget tracker (Round 18 primitive).
         # When provided, every successful step's cost is recorded into
@@ -510,6 +525,19 @@ class ToolExecutor:
         # ``None`` (default) preserves prior behaviour — no session-level
         # tracking, only per-task ``Budget`` accounting.
         self._budget_tracker = budget_tracker
+
+    def _current_effect_receipts(self) -> ToolEffectReceiptIndex | None:
+        """Keep the receipt index aligned when a test/runtime swaps journals."""
+
+        if self._effect_receipts_journal is not self.journal:
+            self._effect_receipts_journal = self.journal
+            self._effect_receipts = (
+                ToolEffectReceiptIndex(self.journal)
+                if hasattr(self.journal, "read_all")
+                and hasattr(self.journal, "write_tool_effect_intent")
+                else None
+            )
+        return self._effect_receipts
 
     def execute_step(
         self,
@@ -855,6 +883,8 @@ class ToolExecutor:
                 span.set_attribute("octopus.hook.cancelled", hook_cancel)
                 return step
 
+            _effect_resolution: EffectResolution | None = None
+            _effect_receipt_index = self._current_effect_receipts()
             if pre_result is not None:
                 output = pre_result.output
                 status = pre_result.status
@@ -894,6 +924,38 @@ class ToolExecutor:
                                 f"write skill {sucker_id!r} blocked by "
                                 f"file-safety: {_fs_verdict.reason}"
                             )
+                    _effect_side = is_side_effecting(list(skill.affinity or []))
+                    if caller == "react_loop" and _effect_receipt_index is not None:
+                        _effect_resolution = _effect_receipt_index.begin(
+                            task_id=task_id,
+                            step_id=step_id,
+                            sucker_id=sucker_id,
+                            args=args,
+                            side_effecting=_effect_side,
+                        )
+                        if _effect_resolution.kind != "execute":
+                            budget.commit(reservation, CostEntry())
+                            self.journal.write_budget(
+                                "budget_commit",
+                                task_id=task_id,
+                                actor=actor,
+                                cost=CostEntry(),
+                            )
+                            if _effect_resolution.kind == "replay":
+                                assert _effect_resolution.step is not None
+                                replayed = _effect_resolution.step
+                                self.journal.write_step(task_id, arm_id, replayed, actor=actor)
+                                span.set_attribute("octopus.effect.replayed", True)
+                                return replayed
+                            uncertain = indeterminate_step(
+                                step_id=step_id,
+                                node_id=node_id,
+                                call=call,
+                                reason=_effect_resolution.reason,
+                            )
+                            self.journal.write_step(task_id, arm_id, uncertain, actor=actor)
+                            span.set_attribute("octopus.effect.indeterminate", True)
+                            return uncertain
                     _lease_target = _file_write_lease_target(skill, args)
                     if _lease_target is not None:
                         from runtime.platform.process.session import current_session
@@ -912,6 +974,21 @@ class ToolExecutor:
                                 caller=caller,
                             ),
                         )
+                    if _effect_resolution is not None:
+                        assert _effect_receipt_index is not None
+                        intent_event = self.journal.write_tool_effect_intent(
+                            task_id,
+                            arm_id,
+                            effect_key=_effect_resolution.key,
+                            call_id=str(call.call_id),
+                            step_id=step_id,
+                            node_id=node_id,
+                            sucker_id=str(sucker_id),
+                            args_fingerprint=_effect_resolution.args_fingerprint,
+                            side_effecting=_effect_side,
+                            actor=actor,
+                        )
+                        _effect_receipt_index.mark_intent(intent_event)
                     # Bind the runtime TrustEngine as the ambient engine for
                     # the handler call. A meta-skill (use_capability / forged
                     # composite) dispatches to an inner handler DIRECTLY,
@@ -922,6 +999,7 @@ class ToolExecutor:
                         output, retry_tags = _call_handler_with_transient_retry(
                             skill.handler,
                             args,
+                            allow_retry=not _effect_side,
                         )
                     status: ExecutionStatus = "success"
                     error_type: str | None = None
@@ -1311,6 +1389,8 @@ class ToolExecutor:
                         step = step.model_copy(update={"result": result})
 
             self.journal.write_step(task_id, arm_id, step, actor=actor)
+            if _effect_resolution is not None and _effect_receipt_index is not None:
+                _effect_receipt_index.finish(_effect_resolution, step)
 
             span.set_attribute("octopus.execution.status", status)
             span.set_attribute("octopus.execution.latency_ms", latency_ms)

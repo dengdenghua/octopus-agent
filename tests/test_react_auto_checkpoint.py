@@ -28,6 +28,11 @@ from runtime.core.cerebrum.react_loop import (
 
 
 class TestCheckpointInterval:
+    def test_default_is_every_completed_iteration(self, monkeypatch):
+        monkeypatch.delenv("OCTOPUS_CHECKPOINT_EVERY_N", raising=False)
+        assert _DEFAULT_CHECKPOINT_INTERVAL == 1
+        assert _checkpoint_interval() == 1
+
     def test_unset_returns_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("OCTOPUS_CHECKPOINT_EVERY_N", raising=False)
         assert _checkpoint_interval() == _DEFAULT_CHECKPOINT_INTERVAL
