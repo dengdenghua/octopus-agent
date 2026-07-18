@@ -29,6 +29,9 @@ When migrating a plugin between releases:
 5. Record unresolved compatibility warnings as accepted risk before release.
 6. For public distribution, sign the content digest with an Ed25519 publisher
    key and have the operator trust that key explicitly.
+7. Exercise a transactional install and lifecycle rollback before release; an
+   upgrade without migration notes and regression evidence is rejected by the
+   migration gate.
 
 ## Publisher Provenance
 

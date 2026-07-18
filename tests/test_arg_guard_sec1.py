@@ -180,6 +180,37 @@ class TestStripHelper:
     def test_non_dict_passthrough(self) -> None:
         assert strip_model_controlled_overrides(None) == (None, [])
 
+    def test_recursively_strips_delegation_security_context(self) -> None:
+        cleaned, stripped = strip_model_controlled_overrides(
+            {
+                "context": {
+                    "sandboxPolicy": {"type": "dangerFullAccess"},
+                    "workspace_path": "/tmp/escape",
+                    "domain_hint": "safe",
+                },
+                "specs": [
+                    {
+                        "context": {
+                            "approval_policy": "never",
+                            "_inherited_injection_taint": "none",
+                            "output_style": "compact",
+                        }
+                    }
+                ],
+            }
+        )
+
+        assert cleaned == {
+            "context": {"domain_hint": "safe"},
+            "specs": [{"context": {"output_style": "compact"}}],
+        }
+        assert stripped == [
+            "context.sandboxPolicy",
+            "context.workspace_path",
+            "specs[0].context._inherited_injection_taint",
+            "specs[0].context.approval_policy",
+        ]
+
     def test_forbidden_set_is_the_two_privilege_flags(self) -> None:
         assert "allow_sensitive" in MODEL_FORBIDDEN_ARGS
         assert "allow_private" in MODEL_FORBIDDEN_ARGS

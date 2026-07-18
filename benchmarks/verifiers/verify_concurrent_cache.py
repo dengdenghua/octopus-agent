@@ -10,6 +10,36 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
+_EXPECTED_PYPROJECT = '[tool.pytest.ini_options]\ntestpaths = ["tests"]\n'
+_ALLOWED_FILES = {
+    "cache.py",
+    "pyproject.toml",
+    "tests/.gitkeep",
+    "tests/test_cache.py",
+}
+
+
+def _assert_no_unrelated_diff(workspace: Path) -> None:
+    unexpected: list[str] = []
+    for path in workspace.rglob("*"):
+        if not path.is_file():
+            continue
+        relative_path = path.relative_to(workspace)
+        relative = relative_path.as_posix()
+        if set(relative_path.parts) & {
+            "__pycache__",
+            ".pytest_cache",
+            ".ruff_cache",
+            ".mypy_cache",
+        }:
+            continue
+        if relative not in _ALLOWED_FILES:
+            unexpected.append(relative)
+    if unexpected:
+        raise AssertionError(f"unrelated files changed or added: {sorted(unexpected)}")
+    if (workspace / "pyproject.toml").read_text(encoding="utf-8") != _EXPECTED_PYPROJECT:
+        raise AssertionError("unrelated pyproject.toml was modified")
+
 
 def _load_module(workspace: Path):
     spec = importlib.util.spec_from_file_location("candidate_cache", workspace / "cache.py")
@@ -21,9 +51,10 @@ def _load_module(workspace: Path):
 
 
 def _run(workspace: Path) -> dict[str, object]:
+    _assert_no_unrelated_diff(workspace)
     module = _load_module(workspace)
     cache_type = module.TTLCache
-    checks: list[str] = []
+    checks: list[str] = ["no unrelated diff"]
     signature = inspect.signature(cache_type.get_or_load)
     if list(signature.parameters) != ["self", "key", "loader"]:
         raise AssertionError("TTLCache.get_or_load public signature changed")

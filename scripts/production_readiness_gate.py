@@ -29,6 +29,7 @@ from runtime.safety.evolution.digital_employee_quality import (
 from runtime.safety.evolution.e2e_surpass_certification import (
     compute_e2e_surpass_certification,
 )
+from runtime.safety.evolution.ecosystem_readiness import compute_ecosystem_readiness
 from runtime.safety.evolution.permission_sandbox_quality import (
     compute_permission_sandbox_quality,
 )
@@ -200,6 +201,7 @@ def run_gate(
         compute_agent_loop_quality(),
         compute_digital_employee_quality(),
         compute_browser_desktop_quality(review_queue_path=review_queue_path),
+        compute_ecosystem_readiness(),
     ]
 
     scorecard_score = _nested_int(scorecard, "overall", "octopus")

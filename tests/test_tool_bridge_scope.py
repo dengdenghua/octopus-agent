@@ -1180,6 +1180,119 @@ def test_agentic_double_green_converges_through_todo_without_redundant_probe():
     assert events[-1] == ("done", "", "done")
 
 
+def test_agentic_concurrency_semantic_guard_forces_repair_before_verification():
+    registry = SkillRegistry()
+    for name, affinity in (
+        ("write_text_file", ["file", "write"]),
+        ("edit_file", ["file", "edit"]),
+        ("run_tests", ["quality", "test"]),
+        ("lint_check", ["quality", "lint"]),
+    ):
+        registry.register(
+            Skill(
+                name=name,
+                description=name,
+                affinity=affinity,
+                trusted_source=f"skill://public/{name}",
+                handler=lambda **_kwargs: {"success": True, "exit_code": 0},
+            ),
+            verify_tests=False,
+        )
+
+    bad = """\
+pending = self._pending.get(key)
+if pending is not None:
+    event, result, exc = pending
+    event.wait()
+    finished = self._pending.get(key, pending)
+    return finished[1]
+event = threading.Event()
+self._pending[key] = (event, None, None)
+value = loader()
+self._pending[key] = (event, value, None)
+event.set()
+del self._pending[key]
+"""
+    good = """\
+pending = self._pending.get(key)
+is_leader = pending is None
+if is_leader:
+    pending = Pending()
+    self._pending[key] = pending
+if not is_leader:
+    pending.event.wait()
+    return pending.result
+value = loader()
+pending.result = value
+pending.event.set()
+"""
+
+    class Router:
+        def __init__(self):
+            self.calls = 0
+            self.requests = []
+
+        def call_stream(self, request):
+            self.calls += 1
+            self.requests.append(request)
+            if self.calls == 1:
+                call = ToolCall(
+                    id="bad-write",
+                    name="write_text_file",
+                    input={"path": "cache.py", "content": bad},
+                )
+                yield ModelStreamEvent(type="tool_use", tool_call=call)
+            elif self.calls == 2:
+                call = ToolCall(
+                    id="repair",
+                    name="edit_file",
+                    input={"path": "cache.py", "old_string": bad, "new_string": good},
+                )
+                yield ModelStreamEvent(type="tool_use", tool_call=call)
+            elif self.calls == 3:
+                yield ModelStreamEvent(
+                    type="tool_use",
+                    tool_call=ToolCall(id="tests", name="run_tests", input={}),
+                )
+            elif self.calls == 4:
+                yield ModelStreamEvent(
+                    type="tool_use",
+                    tool_call=ToolCall(id="lint", name="lint_check", input={}),
+                )
+            else:
+                yield ModelStreamEvent(type="text_delta", delta="fixed")
+            yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+
+    router = Router()
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=router, planner_model="mock"),
+    )
+    intent = ParsedIntent(
+        raw="implement the concurrent cache and verify it",
+        intent_type="task",
+        normalized_goal="implement the concurrent cache and verify it",
+        user_context={"conversation_id": "semantic-repair", "metadata": {"mode": "code"}},
+    )
+    agent = SimpleNamespace(
+        agent_id="coder",
+        capabilities={"code_mode_unlock": True},
+        extra_skills=["write_text_file", "edit_file", "run_tests", "lint_check"],
+        soul="",
+    )
+
+    events = list(stream_agentic_fallback(stack, intent, agent))
+
+    repair_request = "\n".join(
+        str(message.content) for message in router.requests[1].messages if message.role == "user"
+    )
+    assert "immutable pending tuple" in repair_request
+    assert "concurrency semantic repair required" in repair_request
+    assert router.requests[1].require_tool_use is True
+    assert router.requests[-1].tools == []
+    assert events[-1] == ("done", "", "fixed")
+
+
 def test_agentic_code_change_cannot_finalize_without_any_mutation():
     registry = SkillRegistry()
     registry.register(

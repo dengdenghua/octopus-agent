@@ -6,6 +6,7 @@
       "id": "coding.concurrent-cache",
       "domain": "general_runtime_and_coding",
       "execution_mode": "real_provider",
+      "allowed_write_paths": ["cache.py", "tests/test_cache.py"],
       "prompt": "In the supplied repository, implement the missing concurrent TTL cache behavior. Preserve the public API, coalesce simultaneous loads for one key, avoid caching exceptions, add focused tests, and leave unrelated files unchanged.",
       "rubric": {"grader": "fixture_tests", "checks": ["all hidden cache tests pass", "public API unchanged", "no unrelated diff"]}
     },

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   BoxesIcon,
   ChevronLeft,
+  Download,
   Plus,
   Puzzle,
   Search,
@@ -35,11 +36,13 @@ import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   listPlugins,
+  fetchPluginRegistryUpdates,
   hubListPlugins,
   hubGetPluginConfig,
   hubUpdatePluginConfig,
+  installPluginFromRegistry,
 } from "@/core/plugins/api";
-import type { PluginInfo } from "@/core/plugins/types";
+import type { PluginInfo, PluginRegistryUpdates } from "@/core/plugins/types";
 import type { HubPluginInfo } from "@/core/plugins/types";
 import { getBackendBaseURL } from "@/core/config";
 import { LocalSkillDirectoryPanel } from "@/components/store/unified-store";
@@ -329,6 +332,10 @@ export default function PluginsPage() {
   const [skillView, setSkillView] = useState<SkillView>(initialState.skillView);
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [hubPlugins, setHubPlugins] = useState<HubPluginInfo[]>([]);
+  const [registryUpdates, setRegistryUpdates] =
+    useState<PluginRegistryUpdates | null>(null);
+  const [registryBusy, setRegistryBusy] = useState<string | null>(null);
+  const [registryMessage, setRegistryMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [configTarget, setConfigTarget] = useState<HubPluginInfo | null>(null);
   const [pluginQuery, setPluginQuery] = useState("");
@@ -368,18 +375,41 @@ export default function PluginsPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [legacy, hub] = await Promise.all([
+      const [legacy, hub, registry] = await Promise.all([
         listPlugins().catch(() => [] as PluginInfo[]),
         hubListPlugins().catch(() => [] as HubPluginInfo[]),
+        fetchPluginRegistryUpdates().catch(() => null),
       ]);
       setPlugins(legacy);
       setHubPlugins(hub);
+      setRegistryUpdates(registry);
     } catch (e) {
       swallow(e);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const installRegistryEntry = useCallback(
+    async (pluginId: string) => {
+      setRegistryBusy(pluginId);
+      setRegistryMessage(null);
+      try {
+        const result = await installPluginFromRegistry(pluginId);
+        setRegistryMessage(
+          `${result.plugin_id} ${result.version} 已通过签名/摘要、权限与迁移门禁安装。`,
+        );
+        await loadData();
+      } catch (error) {
+        setRegistryMessage(
+          error instanceof Error ? error.message : String(error),
+        );
+      } finally {
+        setRegistryBusy(null);
+      }
+    },
+    [loadData],
+  );
 
   useEffect(() => {
     loadData();
@@ -493,6 +523,63 @@ export default function PluginsPage() {
       {/* ── Plugins tab content ── */}
       <TabsContent value="plugins" className="mt-0">
         <section className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+          {registryUpdates && registryUpdates.plugins.length > 0 ? (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold">可信插件更新</h2>
+                  <p className="text-xs text-muted-foreground">
+                    registry fixture 已校验内容摘要、发布者策略与 App/MCP
+                    能力面。
+                  </p>
+                </div>
+                <Badge variant="outline">
+                  {registryUpdates.update_count + registryUpdates.install_count}{" "}
+                  可安装
+                </Badge>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {registryUpdates.plugins.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center justify-between gap-3 rounded-md border bg-background px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {entry.id} · {entry.version}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {entry.surfaces.join(" / ") || "plugin"}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={
+                        !entry.one_click_install || registryBusy !== null
+                      }
+                      aria-label={`Install verified registry plugin ${entry.id}`}
+                      onClick={() => void installRegistryEntry(entry.id)}
+                    >
+                      <Download className="mr-1.5 size-3.5" />
+                      {registryBusy === entry.id
+                        ? "安装中"
+                        : entry.status === "update_available"
+                          ? "升级"
+                          : entry.status === "current"
+                            ? "已是最新"
+                            : "安装"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              {registryMessage ? (
+                <p className="mt-2 text-xs text-muted-foreground" role="status">
+                  {registryMessage}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-center">
             <div className="relative w-full lg:max-w-[560px]">
               <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

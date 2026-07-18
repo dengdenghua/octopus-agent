@@ -54,10 +54,12 @@ const api = vi.hoisted(() => ({
   queueLatestBrowserSessionReplayCase: vi.fn(),
   queueRepairRoutePromotionCandidates: vi.fn(),
   rejectStaleBrowserDesktopReplayArtifacts: vi.fn(),
+  rerunBrowserDesktopRepairRecipeEvidenceBatch: vi.fn(),
   takeoverTaskRun: vi.fn(),
 }));
 
 const pluginApi = vi.hoisted(() => ({
+  fetchPluginLifecycleHistory: vi.fn(),
   fetchPluginPublisherTrust: vi.fn(),
   fetchPluginSmokeSummary: vi.fn(),
   revokePluginPublisherKey: vi.fn(),
@@ -1142,6 +1144,23 @@ describe("<AgentOperatorPanel />", () => {
         next_actions: ["Fix plugins with failed local smoke checks."],
       },
     });
+    pluginApi.fetchPluginLifecycleHistory.mockResolvedValue({
+      schema: "octopus.plugin_lifecycle_history.v1",
+      total: 1,
+      items: [
+        {
+          schema: "octopus.plugin_lifecycle_transaction.v1",
+          ts: "2026-07-18T00:00:00Z",
+          transaction_id: "tx-1",
+          plugin_id: "research",
+          operation: "upgrade",
+          status: "committed",
+          previous_version: "1.0.0",
+          version: "1.1.0",
+          rollback_available: true,
+        },
+      ],
+    });
     pluginApi.fetchPluginPublisherTrust.mockResolvedValue({
       schema: "octopus.plugin_publisher_trust_report.v1",
       path: "/tmp/plugin-publishers.json",
@@ -1301,6 +1320,13 @@ describe("<AgentOperatorPanel />", () => {
       rejected: [],
       archived_recipes: [],
     });
+    api.rerunBrowserDesktopRepairRecipeEvidenceBatch.mockResolvedValue({
+      schema: "octopus.browser_desktop_repair_recipe_rerun_batch.v1",
+      attempted: 1,
+      passed: 1,
+      failed: 0,
+      results: [],
+    });
     api.queueComputerActivityReplayCase.mockResolvedValue({
       ok: true,
       schema: "octopus.computer_activity_replay_case_queue.v1",
@@ -1411,6 +1437,11 @@ describe("<AgentOperatorPanel />", () => {
     expect(
       await screen.findByText(/1 recipe\(s\) need rerun evidence/),
     ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", {
+        name: "Rerun blocked browser and desktop repair evidence",
+      }),
+    ).toBeEnabled();
     expect(
       await screen.findByText(
         "IDE and product experience gap 1 vs effective target",
@@ -1531,6 +1562,11 @@ describe("<AgentOperatorPanel />", () => {
       ),
     ).toBeInTheDocument();
     expect(await screen.findByText("Plugin health")).toBeInTheDocument();
+    expect(await screen.findByText("Lifecycle history")).toBeInTheDocument();
+    expect(
+      await screen.findByText("upgrade research · committed"),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("1 tx")).toBeInTheDocument();
     expect(await screen.findByText("1/2 ok")).toBeInTheDocument();
     expect(await screen.findByText("compat fail")).toBeInTheDocument();
     expect(
@@ -1629,6 +1665,25 @@ describe("<AgentOperatorPanel />", () => {
     expect(
       await screen.findByText(
         "Queued 1 browser/desktop repair recipe item(s).",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Rerun blocked browser and desktop repair evidence",
+      }),
+    );
+    await waitFor(() => {
+      expect(
+        api.rerunBrowserDesktopRepairRecipeEvidenceBatch,
+      ).toHaveBeenCalledWith({
+        promoteSourceCases: false,
+        actor: "operator_panel",
+      });
+    });
+    expect(
+      await screen.findByText(
+        "Reran 1 browser/desktop repair recipe(s): 1 passed, 0 failed. Source cases remain operator-gated.",
       ),
     ).toBeInTheDocument();
 
@@ -1934,6 +1989,41 @@ describe("<AgentOperatorPanel />", () => {
             "Retired from operator panel using subagent fitness route evidence.",
         },
       );
+    });
+  });
+
+  it("revokes a publisher key from the audited operator control", async () => {
+    pluginApi.revokePluginPublisherKey.mockResolvedValueOnce({
+      status: "revoked",
+      trust: {
+        schema: "octopus.plugin_publisher_trust_report.v1",
+        path: "/tmp/plugin-publishers.json",
+        exists: true,
+        publisher_count: 1,
+        key_count: 1,
+        active_key_count: 0,
+        revoked_key_count: 1,
+        rotation_due_count: 0,
+        ready: false,
+        publishers: [],
+        next_actions: ["Register an active key for acme."],
+      },
+    });
+    renderWithProviders(<AgentOperatorPanel />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Revoke" }));
+    fireEvent.change(screen.getByLabelText("Reason"), {
+      target: { value: "key compromise drill" },
+    });
+    const revokeButtons = screen.getAllByRole("button", { name: "Revoke" });
+    fireEvent.click(revokeButtons[revokeButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(pluginApi.revokePluginPublisherKey).toHaveBeenCalledWith({
+        publisher_id: "acme",
+        key_id: "release-2026",
+        reason: "key compromise drill",
+      });
     });
   });
 });

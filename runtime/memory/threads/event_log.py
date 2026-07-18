@@ -59,6 +59,13 @@ from runtime.protocol.items import (
     WorkbenchSnapshotV2,
     WorkspaceFocus,
 )
+from runtime.protocol.text_limits import (
+    MAX_AGGREGATED_OUTPUT,
+    MAX_STREAM_ITEM_CONTENT,
+    OUTPUT_TRUNCATION_MARK,
+    STREAM_CONTENT_TRUNCATION_MARK,
+    append_capped_text,
+)
 
 EventKind = Literal[
     "thread_started",
@@ -614,17 +621,37 @@ def _merge_delta(item: Item, kind: str | None, delta: Any) -> None:
     codebase doesn't have to know how a given subtype accumulates.
     """
     if kind == "agentMessage" and isinstance(item, AgentMessageItem) and isinstance(delta, str):
-        item.text += delta
+        item.text = append_capped_text(
+            item.text,
+            delta,
+            cap=MAX_STREAM_ITEM_CONTENT,
+            marker=STREAM_CONTENT_TRUNCATION_MARK,
+        )
     elif kind == "reasoning" and isinstance(item, ReasoningItem) and isinstance(delta, str):
-        item.content += delta
+        item.content = append_capped_text(
+            item.content,
+            delta,
+            cap=MAX_STREAM_ITEM_CONTENT,
+            marker=STREAM_CONTENT_TRUNCATION_MARK,
+        )
     elif kind == "plan" and isinstance(item, PlanItem) and isinstance(delta, str):
-        item.text += delta
+        item.text = append_capped_text(
+            item.text,
+            delta,
+            cap=MAX_STREAM_ITEM_CONTENT,
+            marker=STREAM_CONTENT_TRUNCATION_MARK,
+        )
     elif (
         kind == "commandOutput"
         and isinstance(item, CommandExecutionItem)
         and isinstance(delta, str)
     ):
-        item.aggregated_output += delta
+        item.aggregated_output = append_capped_text(
+            item.aggregated_output,
+            delta,
+            cap=MAX_AGGREGATED_OUTPUT,
+            marker=OUTPUT_TRUNCATION_MARK,
+        )
     elif (
         kind == "mcpToolProgress" and isinstance(item, McpToolCallItem) and isinstance(delta, dict)
     ):

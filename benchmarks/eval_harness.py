@@ -127,9 +127,7 @@ class Trajectory:
             started_at=float(raw.get("started_at") or time.time()),
             ended_at=float(ended_at) if ended_at is not None else None,
             error=str(error) if error is not None else None,
-            failure_category=(
-                str(failure_category) if failure_category is not None else None
-            ),
+            failure_category=(str(failure_category) if failure_category is not None else None),
         )
 
 
@@ -215,8 +213,7 @@ class CaseResult:
     @property
     def has_infrastructure_failure(self) -> bool:
         return any(
-            trajectory.failure_category == "infrastructure"
-            for trajectory in self.trajectories
+            trajectory.failure_category == "infrastructure" for trajectory in self.trajectories
         )
 
 
@@ -291,6 +288,7 @@ class SuiteReport:
             ],
         }
 
+
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> SuiteReport:
         case_rows = raw.get("cases")
@@ -341,6 +339,37 @@ class SuiteReport:
         )
 
 
+def resumable_report(report: SuiteReport) -> SuiteReport:
+    """Return checkpoint-safe completed trials, dropping only infra trials.
+
+    A transport failure on trial N must not erase healthy trials 0..N-1 from
+    the same case.  The previous case-level filter did exactly that, defeating
+    trial-atomic checkpoints during the outages they are meant to survive.
+    """
+
+    cases: list[CaseResult] = []
+    for case in report.cases:
+        healthy = [
+            (trajectory, verdict)
+            for trajectory, verdict in zip(case.trajectories, case.verdicts, strict=True)
+            if trajectory.failure_category != "infrastructure"
+        ]
+        if not healthy:
+            continue
+        trajectories = [trajectory for trajectory, _verdict in healthy]
+        verdicts = [verdict for _trajectory, verdict in healthy]
+        cases.append(
+            CaseResult(
+                case_id=case.case_id,
+                k=case.k,
+                passes=sum(verdict.passed for verdict in verdicts),
+                trajectories=trajectories,
+                verdicts=verdicts,
+            )
+        )
+    return SuiteReport(cases=cases, started_at=report.started_at)
+
+
 def write_behavioral_system_evidence(
     report: SuiteReport,
     cases: Sequence[EvalCase],
@@ -361,9 +390,7 @@ def write_behavioral_system_evidence(
     base = Path(root).resolve()
     if report.infrastructure_failures:
         failed = ", ".join(case.case_id for case in report.infrastructure_failures)
-        raise ValueError(
-            "behavioral evidence cannot score infrastructure failures: " + failed
-        )
+        raise ValueError("behavioral evidence cannot score infrastructure failures: " + failed)
     output_dir = (base / Path(artifact_dir)).resolve()
     try:
         output_dir.relative_to(base)
@@ -505,10 +532,20 @@ def run_case(
     *,
     runner: TrialRunner,
     k: int = 3,
+    initial_result: CaseResult | None = None,
+    trial_complete: Callable[[CaseResult], None] | None = None,
 ) -> CaseResult:
-    """Execute one case ``k`` times under the supplied runner."""
-    result = CaseResult(case_id=case.id, k=k, passes=0)
-    for trial_idx in range(k):
+    """Execute one case ``k`` times, optionally resuming completed trials."""
+    result = initial_result or CaseResult(case_id=case.id, k=k, passes=0)
+    if (
+        result.case_id != case.id
+        or result.k != k
+        or len(result.trajectories) != len(result.verdicts)
+        or len(result.trajectories) > k
+        or result.passes != sum(verdict.passed for verdict in result.verdicts)
+    ):
+        raise ValueError(f"invalid partial case result: {case.id}")
+    for trial_idx in range(len(result.trajectories), k):
         trial_id = f"{case.id}.{trial_idx}.{uuid.uuid4().hex[:6]}"
         traj = Trajectory(trial_id=trial_id, case_id=case.id)
 
@@ -525,6 +562,8 @@ def run_case(
                         traj.append("teardown_error", message=str(teardown_exc))
                 result.trajectories.append(traj)
                 result.verdicts.append(Verdict(passed=False, reason=traj.error))
+                if trial_complete is not None:
+                    trial_complete(result)
                 continue
 
         try:
@@ -578,6 +617,8 @@ def run_case(
             result.passes += 1
         result.trajectories.append(traj)
         result.verdicts.append(verdict)
+        if trial_complete is not None:
+            trial_complete(result)
 
     return result
 
@@ -618,9 +659,10 @@ def run_suite_by_case(
                 raise ValueError(f"duplicate checkpoint case: {result.case_id}")
             if (
                 result.k != k
-                or len(result.trajectories) != k
-                or len(result.verdicts) != k
+                or not 0 < len(result.trajectories) <= k
+                or len(result.trajectories) != len(result.verdicts)
                 or not 0 <= result.passes <= k
+                or result.passes != sum(verdict.passed for verdict in result.verdicts)
                 or result.has_infrastructure_failure
             ):
                 raise ValueError(f"non-resumable checkpoint case: {result.case_id}")
@@ -630,11 +672,18 @@ def run_suite_by_case(
     )
     for case in cases:
         result = initial_by_id.pop(case.id, None)
-        if result is None:
-            result = run_case(case, runner=runner_factory(case), k=k)
+        if result is None or len(result.trajectories) < k:
+            result = result or CaseResult(case_id=case.id, k=k, passes=0)
             report.add(result)
-            if case_complete is not None:
-                case_complete(report)
+            run_case(
+                case,
+                runner=runner_factory(case),
+                k=k,
+                initial_result=result,
+                trial_complete=(
+                    (lambda _result: case_complete(report)) if case_complete is not None else None
+                ),
+            )
         else:
             report.add(result)
     if initial_by_id:
@@ -654,6 +703,7 @@ __all__ = [
     "TrialRunner",
     "Verdict",
     "run_case",
+    "resumable_report",
     "run_suite",
     "run_suite_by_case",
     "write_behavioral_bundle",

@@ -62,6 +62,49 @@ REQUIRED_TOPICS: tuple[ReadinessTopic, ...] = (
             "governance audit",
         ),
     ),
+    ReadinessTopic(
+        id="plugin_transaction_lifecycle",
+        title="Plugin transaction lifecycle",
+        path="docs/guide/operator-readiness.md",
+        required_terms=(
+            "transactional install",
+            "migration gate",
+            "automatic restore",
+            "lifecycle rollback",
+            "plugin_lifecycle_install",
+        ),
+    ),
+    ReadinessTopic(
+        id="registry_update_discovery",
+        title="Registry-backed update discovery",
+        path="runtime/platform/plugins/plugin_registry.py",
+        required_terms=(
+            "octopus.plugin_registry.v1",
+            "content_digest",
+            "publisher_signature_required",
+            "one_click_install",
+        ),
+    ),
+    ReadinessTopic(
+        id="registry_install_surface",
+        title="Verified registry install surface",
+        path="frontend/src/app/plugins/page.tsx",
+        required_terms=(
+            "fetchPluginRegistryUpdates",
+            "installPluginFromRegistry",
+            "Install verified registry plugin",
+        ),
+    ),
+    ReadinessTopic(
+        id="registry_contract_tests",
+        title="Registry compatibility contract tests",
+        path="tests/test_plugin_registry.py",
+        required_terms=(
+            "fixture_verified",
+            "trusted publisher signature is required",
+            "plugin_registry_install",
+        ),
+    ),
 )
 
 

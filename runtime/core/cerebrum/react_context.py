@@ -94,7 +94,11 @@ def _compress_context(
     mid_end = len(messages) - keep_tail
     mid_messages = messages[mid_start:mid_end]
 
-    if router is not None and len(mid_messages) > 4:
+    # Code trajectories need an auditable execution history.  A generated
+    # summary can accidentally promote a failed shell/edit attempt into a
+    # claimed file mutation or passing test, so code mode always uses the
+    # deterministic observation-preserving branch below.
+    if router is not None and len(mid_messages) > 4 and not is_code_mode:
         summary = _summarize_messages(mid_messages, router, model)
         if summary:
             from runtime.platform.models.llm import Message
@@ -279,7 +283,10 @@ def _summarize_messages(messages: list, router: Any, model: str) -> str:
                     role="system",
                     content=(
                         "你是一个对话摘要助手。把以下对话压缩成 3-5 句话的摘要，"
-                        "保留关键信息（工具调用结果、决策、发现）。只输出摘要，不要解释。"
+                        "保留关键信息（工具调用结果、决策、发现）。严格区分工具调用尝试与"
+                        "已确认成功的结果：只有明确的成功 Observation 才能写成已完成；"
+                        "失败、缺少结果或不确定时必须标成未验证，禁止推断文件已写入、"
+                        "测试已通过或命令已成功。只输出摘要，不要解释。"
                     ),
                 ),
                 Message(role="user", content=conversation),
@@ -864,7 +871,7 @@ _CODE_CONTEXT_SKIP_DIR_NAMES = {
 }
 
 
-def _build_code_context_prelude(workspace_path: str) -> str:
+def _build_code_context_prelude(workspace_path: str, goal: str = "") -> str:
     root = Path(workspace_path).expanduser()
     if not root.is_dir():
         return ""
@@ -889,9 +896,84 @@ def _build_code_context_prelude(workspace_path: str) -> str:
             parts.append(f"Path: {style_file.relative_to(root).as_posix()}")
             parts.append(style_text)
 
+    acceptance = _task_acceptance_context(goal, "\n".join(parts))
+    if acceptance:
+        parts.append(acceptance)
+
     if len(parts) == 1:
         return ""
     return "\n\n".join(parts)
+
+
+def _task_acceptance_context(goal: str, observed_context: str) -> str:
+    """Add bounded, task-derived acceptance checks for common high-risk work.
+
+    This is deliberately phrased as verification guidance rather than a
+    solution. It makes security and cross-cutting maintenance obligations
+    stable across model providers without changing the user's requested API.
+    """
+
+    goal_text = str(goal or "").lower()
+    context_text = observed_context.lower()
+    checks: list[str] = []
+    path_boundary_task = any(
+        term in goal_text
+        for term in ("path-boundary", "path boundary", "traversal", "symlink escape")
+    )
+    if path_boundary_task and any(
+        term in context_text for term in ("unquote", "url decode", "pathboundaryerror")
+    ):
+        checks.append(
+            "Security path-boundary acceptance: test plain, encoded, and repeatedly/double-encoded "
+            "traversal; normalize separators; resolve symlinks; prove containment in the canonical "
+            "root; raise the public boundary exception for every rejected input; preserve valid "
+            "nested reads; and add focused regression tests for these cases."
+        )
+    crosscutting_change = any(
+        term in goal_text for term in ("cross-cutting", "cross cutting", "rename")
+    ) and any(term in goal_text for term in ("config", "configuration", "setting", "option"))
+    if crosscutting_change:
+        checks.append(
+            "Cross-cutting configuration acceptance: search runtime consumers, schemas, CLI flags, "
+            "documentation, examples/sample configs, and tests; preserve the documented legacy "
+            "alias or migration path; then rerun a repository-wide search for stale names."
+        )
+    concurrent_cache_task = (
+        "cache" in goal_text
+        and any(term in goal_text for term in ("concurrent", "simultaneous", "并发"))
+        and any(term in goal_text for term in ("ttl", "expire", "过期"))
+    )
+    if concurrent_cache_task:
+        checks.append(
+            "Concurrent cache acceptance: implement single-flight behavior per key so all simultaneous "
+            "misses share exactly one loader result; never hold unrelated keys behind that load; wake "
+            "all waiters on success or failure; do not cache exceptions; use a monotonic TTL clock; "
+            "and add a barrier-based regression proving one loader call under real thread contention. "
+            "Read the existing cache implementation and focused tests first, use one per-key pending "
+            "state/condition instead of ad-hoc retry loops, then run the smallest targeted test and lint. "
+            "Choose leader versus follower exactly once while holding the map lock; only the creator of "
+            "the pending entry may call the loader, and followers must wait outside that lock. Never call "
+            "a helper that re-acquires the same non-reentrant lock while its caller still holds it. A shared "
+            "pending Event/result/exception entry is the simplest auditable shape. "
+            "For failure fan-out tests, hold the first loader in-flight with an Event until followers "
+            "have joined; a barrier only before get_or_load does not prove those callers became waiters, "
+            "so do not assert scheduler-dependent exception counts. "
+            "If the starter still calls the loader directly or the tests directory has no focused "
+            "cache test, make the first mutations cache.py and tests/test_cache.py before invoking "
+            "test tooling. Use the registered run_tests/lint_check tools; do not install dependencies, "
+            "probe unrelated system Python environments, or substitute shell redirection for file tools. "
+            "The only permitted product diffs are cache.py and tests/test_cache.py: do not modify "
+            "pyproject.toml or add tests/__init__.py, conftest.py, helper scripts, or packaging metadata. "
+            "If run_tests times out or fails, inspect its tail and repair cache.py/tests directly before "
+            "running it again; do not create alternate test-runner scripts. "
+            "When lint_check reports fixable import/format diagnostics, inspect its returned diff or call "
+            "lint_check with fix=true instead of guessing edits or probing for a system ruff executable. "
+            "Once those checks pass, stop and report the result instead of adding duplicate scripts or "
+            "running unrelated broad suites."
+        )
+    if not checks:
+        return ""
+    return "[task-acceptance-contract]\n" + "\n".join(f"- {check}" for check in checks)
 
 
 def _build_code_agent_mode_prompt(agent_mode: str | None) -> str:

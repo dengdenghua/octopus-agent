@@ -18,6 +18,7 @@ from runtime.safety.evolution.browser_desktop_quality import (
 from runtime.safety.evolution.digital_employee_quality import (
     compute_digital_employee_quality,
 )
+from runtime.safety.evolution.ecosystem_readiness import compute_ecosystem_readiness
 from runtime.safety.evolution.permission_sandbox_quality import (
     compute_permission_sandbox_quality,
 )
@@ -35,6 +36,7 @@ QUALITY_REPORTS = (
     compute_agent_loop_quality,
     compute_digital_employee_quality,
     compute_browser_desktop_quality,
+    compute_ecosystem_readiness,
 )
 
 
@@ -106,6 +108,7 @@ REQUIRED_COVERAGE_DOMAINS: tuple[E2ECoverageDomain, ...] = (
         id="extensions_ecosystem",
         title="Extensions, hooks, and ecosystem maturity",
         scorecard_dimension_ids=("extensions_hooks", "ecosystem_maturity"),
+        quality_schemas=("octopus.ecosystem_readiness.v1",),
     ),
 )
 

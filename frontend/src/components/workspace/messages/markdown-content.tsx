@@ -84,128 +84,146 @@ export type MarkdownContentProps = {
  * only the props that affect output: content, isLoading, prose size,
  * and component overrides.
  */
-export const MarkdownContent = memo(function MarkdownContent({
-  content,
-  isLoading,
-  rehypePlugins,
-  className,
-  remarkPlugins,
-  components: componentsFromProps,
-  chatFontSize: chatFontSizeProp,
-}: MarkdownContentProps) {
-  const [settings] = useLocalSettings();
-  const streamdownPlugins = useStreamdownPlugins();
-  const resolvedRemarkPlugins =
-    remarkPlugins ?? streamdownPlugins.remarkPlugins;
-  const proseSizeClass =
-    CHAT_PROSE_SIZE[chatFontSizeProp ?? settings.display.chat_font_size];
-  const components = useMemo(() => {
-    return {
-      a: (props: AnchorHTMLAttributes<HTMLAnchorElement>) => {
-        if (typeof props.children === "string") {
-          const match = /^citation:(.+)$/.exec(props.children);
-          if (match) {
-            const [, text] = match;
-            return <CitationLink {...props}>{text}</CitationLink>;
+export const MarkdownContent = memo(
+  function MarkdownContent({
+    content,
+    isLoading,
+    rehypePlugins,
+    className,
+    remarkPlugins,
+    components: componentsFromProps,
+    chatFontSize: chatFontSizeProp,
+  }: MarkdownContentProps) {
+    const [settings] = useLocalSettings();
+    const streamdownPlugins = useStreamdownPlugins();
+    const resolvedRemarkPlugins =
+      remarkPlugins ?? streamdownPlugins.remarkPlugins;
+    const proseSizeClass =
+      CHAT_PROSE_SIZE[chatFontSizeProp ?? settings.display.chat_font_size];
+    const components = useMemo(() => {
+      return {
+        a: (props: AnchorHTMLAttributes<HTMLAnchorElement>) => {
+          if (typeof props.children === "string") {
+            const match = /^citation:(.+)$/.exec(props.children);
+            if (match) {
+              const [, text] = match;
+              return <CitationLink {...props}>{text}</CitationLink>;
+            }
           }
-        }
-        const { className, target, rel, ...rest } = props;
-        const external = isExternalUrl(props.href);
-        return (
-          <a
-            {...rest}
-            className={cn(
-              "text-primary decoration-primary/30 hover:decoration-primary/60 underline underline-offset-2 transition-colors",
-              className,
-            )}
-            target={target ?? (external ? "_blank" : undefined)}
-            rel={rel ?? (external ? "noopener noreferrer" : undefined)}
-          />
-        );
-      },
-      pre: (
-        props: HTMLAttributes<HTMLPreElement> & { children?: React.ReactNode },
-      ) => {
-        const codeChild = Array.isArray(props.children)
-          ? props.children.find(
-              (
-                c,
-              ): c is ReactElement<{
-                className?: string;
-                children?: React.ReactNode;
-              }> => c?.props?.className?.includes("language-"),
-            )
-          : (props.children as
-              | ReactElement<{ className?: string; children?: React.ReactNode }>
-              | undefined);
+          const { className, target, rel, ...rest } = props;
+          const external = isExternalUrl(props.href);
+          return (
+            <a
+              {...rest}
+              className={cn(
+                "text-primary decoration-primary/30 hover:decoration-primary/60 underline underline-offset-2 transition-colors",
+                className,
+              )}
+              target={target ?? (external ? "_blank" : undefined)}
+              rel={rel ?? (external ? "noopener noreferrer" : undefined)}
+            />
+          );
+        },
+        pre: (
+          props: HTMLAttributes<HTMLPreElement> & {
+            children?: React.ReactNode;
+          },
+        ) => {
+          const codeChild = Array.isArray(props.children)
+            ? props.children.find(
+                (
+                  c,
+                ): c is ReactElement<{
+                  className?: string;
+                  children?: React.ReactNode;
+                }> => c?.props?.className?.includes("language-"),
+              )
+            : (props.children as
+                | ReactElement<{
+                    className?: string;
+                    children?: React.ReactNode;
+                  }>
+                | undefined);
 
-        if (codeChild?.props) {
-          const className = codeChild.props.className || "";
-          const langMatch = className.match(/language-([\w-]+)/);
-          const language = langMatch?.[1] ?? "text";
-          const code = codeChild.props.children || "";
+          if (codeChild?.props) {
+            const className = codeChild.props.className || "";
+            const langMatch = className.match(/language-([\w-]+)/);
+            const language = langMatch?.[1] ?? "text";
+            const code = codeChild.props.children || "";
 
-          if (typeof code === "string") {
-            const normalizedLanguage = language.toLowerCase();
-            if (
-              normalizedLanguage === "mermaid" ||
-              normalizedLanguage === "mmd"
-            ) {
+            if (typeof code === "string") {
+              const normalizedLanguage = language.toLowerCase();
+              if (
+                normalizedLanguage === "mermaid" ||
+                normalizedLanguage === "mmd"
+              ) {
+                return (
+                  <MermaidBlock
+                    code={code}
+                    isStreaming={isLoading}
+                    className="my-3"
+                  />
+                );
+              }
+
               return (
-                <MermaidBlock
+                <CodeBlock
                   code={code}
+                  language={language as BundledLanguage}
                   isStreaming={isLoading}
+                  showLineNumbers={code.split("\n").length > 3}
                   className="my-3"
-                />
+                >
+                  <CodeBlockCopyButton />
+                </CodeBlock>
               );
             }
-
-            return (
-              <CodeBlock
-                code={code}
-                language={language as BundledLanguage}
-                isStreaming={isLoading}
-                showLineNumbers={code.split("\n").length > 3}
-                className="my-3"
-              >
-                <CodeBlockCopyButton />
-              </CodeBlock>
-            );
           }
-        }
 
-        return <pre {...props} />;
-      },
-      // File citation. The rehypeFileReferences plugin has
-      // transformed inline `path.ext:12-34` code into a <file-ref> element
-      // carrying path + lines as data attributes; we render it as a chip.
-      "file-ref": (props: { path?: string; lines?: string }) => {
-        if (!props.path) return null;
-        return <FileReferenceChip path={props.path} lines={props.lines} />;
-      },
-      ...componentsFromProps,
-    };
-  }, [componentsFromProps, isLoading]);
+          return <pre {...props} />;
+        },
+        // File citation. The rehypeFileReferences plugin has
+        // transformed inline `path.ext:12-34` code into a <file-ref> element
+        // carrying path + lines as data attributes; we render it as a chip.
+        "file-ref": (props: { path?: string; lines?: string }) => {
+          if (!props.path) return null;
+          return <FileReferenceChip path={props.path} lines={props.lines} />;
+        },
+        ...componentsFromProps,
+      };
+    }, [componentsFromProps, isLoading]);
 
-  if (!content) return null;
-  const publicContent = stripLeakedControlMarkup(content);
-  if (!publicContent) return null;
+    if (!content) return null;
+    const publicContent = stripLeakedControlMarkup(content);
+    if (!publicContent) return null;
 
-  // Pass the prose-size variant *into* MessageResponse's className rather
-  // than wrapping in an outer <div>. MessageResponse forwards the class
-  // onto Streamdown's root prose container, so the cascade inside — h1/h2/
-  // p/ul/blockquote — stays relative to prose's baseline.
-  return (
-    <MessageResponse
-      key={isLoading ? "streaming" : "settled"}
-      className={cn(proseSizeClass, className)}
-      remarkPlugins={resolvedRemarkPlugins}
-      rehypePlugins={rehypePlugins}
-      components={components}
-      isAnimating={isLoading}
-      aria-busy={isLoading || undefined}
-    >
-      {publicContent}
-    </MessageResponse>
-  );
-});
+    // Pass the prose-size variant *into* MessageResponse's className rather
+    // than wrapping in an outer <div>. MessageResponse forwards the class
+    // onto Streamdown's root prose container, so the cascade inside — h1/h2/
+    // p/ul/blockquote — stays relative to prose's baseline.
+    return (
+      <MessageResponse
+        key={isLoading ? "streaming" : "settled"}
+        className={cn(proseSizeClass, className)}
+        remarkPlugins={resolvedRemarkPlugins}
+        rehypePlugins={rehypePlugins}
+        components={components}
+        isAnimating={isLoading}
+        aria-busy={isLoading || undefined}
+      >
+        {publicContent}
+      </MessageResponse>
+    );
+  },
+  (prev, next) => {
+    return (
+      prev.content === next.content &&
+      prev.isLoading === next.isLoading &&
+      prev.className === next.className &&
+      prev.chatFontSize === next.chatFontSize &&
+      prev.remarkPlugins === next.remarkPlugins &&
+      prev.rehypePlugins === next.rehypePlugins &&
+      prev.components === next.components
+    );
+  },
+);

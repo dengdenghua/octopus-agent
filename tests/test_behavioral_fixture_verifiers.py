@@ -70,6 +70,17 @@ class TTLCache:
     assert result["passed"] is True, result
 
 
+def test_concurrent_cache_verifier_rejects_unrelated_diff(tmp_path) -> None:
+    workspace = tmp_path / "cache"
+    shutil.copytree(REPO_ROOT / "benchmarks" / "fixtures" / "coding.concurrent-cache", workspace)
+    (workspace / "conftest.py").write_text("# unrelated\n", encoding="utf-8")
+
+    result = _verify("verify_concurrent_cache.py", workspace)
+
+    assert result["passed"] is False
+    assert "unrelated files" in str(result["reason"])
+
+
 def test_path_boundary_fixture_has_a_satisfiable_hidden_verifier(tmp_path) -> None:
     workspace = tmp_path / "paths"
     shutil.copytree(REPO_ROOT / "benchmarks" / "fixtures" / "coding.path-boundary", workspace)

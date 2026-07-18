@@ -259,6 +259,7 @@ async def test_realtime_trial_runner_applies_context_overrides_without_changing_
             context_overrides={
                 "mode": "browser",
                 "capability_mode": "browser",
+                "allowed_write_paths": ["cache.py", "tests/test_cache.py"],
                 "workspace_path": "/tmp/not-the-trial",
                 "workspace_scope": "global",
             },
@@ -270,6 +271,7 @@ async def test_realtime_trial_runner_applies_context_overrides_without_changing_
     assert context == {
         "mode": "browser",
         "capability_mode": "browser",
+        "allowed_write_paths": ["cache.py", "tests/test_cache.py"],
         "workspace_scope": "project",
         "workspace_path": str(tmp_path.resolve()),
     }
@@ -334,3 +336,26 @@ async def test_realtime_trial_runner_preserves_events_on_timeout() -> None:
     assert events[-1]["error"]["type"] == "timeout"
     assert events[-1]["error"]["event_count_before_error"] == 1
     assert observed == events
+
+
+@pytest.mark.asyncio
+async def test_realtime_trial_runner_classifies_handshake_timeout_as_infrastructure() -> None:
+    async def stalled_handshake(_reader, writer) -> None:
+        try:
+            await asyncio.sleep(1)
+        finally:
+            writer.close()
+
+    server = await asyncio.start_server(stalled_handshake, "127.0.0.1", 0)
+    try:
+        port = server.sockets[0].getsockname()[1]
+        events = await RealtimeTrialRunner(
+            url=f"ws://127.0.0.1:{port}/api/realtime",
+            timeout_seconds=0.05,
+        ).run("run")
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    assert events[-1]["kind"] == "infrastructure_error"
+    assert events[-1]["error"]["category"] == "timeout"

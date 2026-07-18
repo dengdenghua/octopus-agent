@@ -123,7 +123,8 @@ def test_step_from_tool_calls_single() -> None:
     )
     assert step.actions == ['read_file({"path": "x.py"})']
     assert step.action == 'read_file({"path": "x.py"})'
-    assert step.thought == "reading"
+    assert step.thought == ""
+    assert step.public_update == "reading"
 
 
 def test_step_from_tool_calls_parallel() -> None:

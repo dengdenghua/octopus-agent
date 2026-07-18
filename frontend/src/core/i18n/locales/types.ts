@@ -512,6 +512,13 @@ export interface Translations {
     clarifyTaskDirection: string;
     synthesizeFindings: string;
     planNextStep: string;
+    progressOrient: string;
+    progressInvestigate: string;
+    progressImplement: string;
+    progressVerify: string;
+    progressPivot: string;
+    progressSynthesize: string;
+    progressRecover: string;
   };
 
   // Trace generator (swarm simulation label bag)

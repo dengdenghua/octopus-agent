@@ -9,6 +9,7 @@ from runtime.protocol import ItemStatus, VerificationItem
 from runtime.safety.evolution.auto_verifier_metrics import (
     explain_verification_ranking,
     rank_verification_commands,
+    record_auto_verifier_batch,
     record_auto_verifier_decision,
     record_auto_verifier_metric,
 )
@@ -20,6 +21,66 @@ from runtime.safety.sandboxing.sandbox import (
 
 _OUTPUT_CAP = 4000
 _TIMEOUT_S = 45.0
+_MAX_COMMANDS = 3
+_MAX_REPAIR_ATTEMPTS = 2
+
+
+def run_verification_plan(
+    plan: dict[str, Any],
+    *,
+    sandbox_policy: dict[str, Any] | None,
+    max_commands: int = _MAX_COMMANDS,
+) -> list[VerificationItem]:
+    """Run a bounded verifier batch, stopping at the first failure.
+
+    A code change often needs more than one kind of evidence (for example,
+    lint plus a targeted test).  The former single-command fallback could
+    declare success after lint alone.  This batch keeps the ranking policy,
+    runs at most ``max_commands`` distinct safe commands, and never hides a
+    failing check behind later successes.
+    """
+
+    if not _sandbox_allows_auto_verification(sandbox_policy):
+        return []
+    workspace = _workspace(plan)
+    if workspace is None:
+        return []
+    commands = plan.get("commands")
+    if not isinstance(commands, list):
+        return []
+    candidates = [item for item in commands if isinstance(item, dict)]
+    ranking = explain_verification_ranking(candidates)
+    limit = max(1, min(int(max_commands), _MAX_COMMANDS))
+    items: list[VerificationItem] = []
+    seen: set[str] = set()
+    for command in rank_verification_commands(candidates):
+        raw = str(command.get("command") or "").strip()
+        if not raw or raw in seen:
+            continue
+        seen.add(raw)
+        item = _run_command(command, workspace, sandbox_policy or {})
+        if item is None:
+            continue
+        _record_decision(ranking, item.command)
+        items.append(item)
+        if item.status != ItemStatus.COMPLETED or len(items) >= limit:
+            break
+    if items:
+        passed_count = sum(item.status == ItemStatus.COMPLETED for item in items)
+        stop_reason = (
+            "failed"
+            if passed_count != len(items)
+            else "limit_reached"
+            if len(items) >= limit
+            else "exhausted"
+        )
+        record_auto_verifier_batch(
+            candidate_count=len(candidates),
+            commands=[item.command for item in items],
+            passed_count=passed_count,
+            stop_reason=stop_reason,
+        )
+    return items
 
 
 def run_highest_priority_verification(
@@ -27,22 +88,64 @@ def run_highest_priority_verification(
     *,
     sandbox_policy: dict[str, Any] | None,
 ) -> VerificationItem | None:
-    if not _sandbox_allows_auto_verification(sandbox_policy):
-        return None
-    workspace = _workspace(plan)
-    if workspace is None:
-        return None
-    commands = plan.get("commands")
-    if not isinstance(commands, list):
-        return None
-    candidates = [item for item in commands if isinstance(item, dict)]
-    ranking = explain_verification_ranking(candidates)
-    for command in rank_verification_commands(candidates):
-        item = _run_command(command, workspace, sandbox_policy or {})
-        if item is not None:
-            _record_decision(ranking, item.command)
-            return item
-    return None
+    items = run_verification_plan(
+        plan,
+        sandbox_policy=sandbox_policy,
+        max_commands=1,
+    )
+    return items[0] if items else None
+
+
+def build_verification_repair_request(
+    plan: dict[str, Any],
+    items: list[VerificationItem],
+    *,
+    attempt: int,
+    max_attempts: int = _MAX_REPAIR_ATTEMPTS,
+) -> dict[str, Any]:
+    """Build bounded, evidence-carrying input for a model repair round."""
+
+    bounded_max = max(1, min(int(max_attempts), _MAX_REPAIR_ATTEMPTS))
+    bounded_attempt = max(1, min(int(attempt), bounded_max))
+    failures = [
+        {
+            "command": item.command,
+            "kind": item.kind,
+            "exit_code": item.exit_code,
+            "summary": item.summary,
+            "stdout_tail": (item.stdout_tail or "")[-_OUTPUT_CAP:],
+            "stderr_tail": (item.stderr_tail or "")[-_OUTPUT_CAP:],
+            "related_files": list(item.related_files),
+        }
+        for item in items
+        if item.status != ItemStatus.COMPLETED
+    ]
+    evidence_lines: list[str] = []
+    for failure in failures:
+        evidence_lines.append(
+            f"- {failure['command']} (exit={failure['exit_code']}): {failure['summary']}"
+        )
+        tail = str(failure.get("stderr_tail") or failure.get("stdout_tail") or "").strip()
+        if tail:
+            evidence_lines.append(f"  evidence: {tail[-1200:]}")
+    prompt = "\n".join(
+        [
+            f"Verification repair attempt {bounded_attempt}/{bounded_max}.",
+            "The previous verifier batch failed. Diagnose the evidence, make the smallest safe code repair, and do not claim success.",
+            "After this repair round the runtime will rerun the verifier commands and require fresh passing evidence.",
+            *evidence_lines,
+        ]
+    )
+    return {
+        "schema": "octopus.verification_repair_request.v1",
+        "attempt": bounded_attempt,
+        "max_attempts": bounded_max,
+        "workspace": str(plan.get("workspace") or ""),
+        "targets": [str(target) for target in plan.get("targets") or []],
+        "failures": failures,
+        "fresh_evidence_required": True,
+        "prompt": prompt,
+    }
 
 
 def _sandbox_allows_auto_verification(policy: dict[str, Any] | None) -> bool:
@@ -221,4 +324,8 @@ def _record_decision(ranking: list[dict[str, Any]], selected_command: str) -> No
         return
 
 
-__all__ = ["run_highest_priority_verification"]
+__all__ = [
+    "build_verification_repair_request",
+    "run_highest_priority_verification",
+    "run_verification_plan",
+]

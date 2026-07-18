@@ -8,19 +8,33 @@ of edits and final answers.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from runtime.core.cerebrum.react_guards import (
+    _ambiguous_inflight_leader_election_guard,
     _broad_except_suppression_guard,
     _code_mode_missing_write_guard,
     _commented_out_as_fix_guard,
+    _concurrency_semantic_followup_guard,
+    _destructive_waiter_result_guard,
     _false_verification_claim_guard,
+    _loader_barrier_deadlock_guard,
+    _stale_immutable_waiter_snapshot_guard,
+    _terminal_pending_entry_leak_guard,
 )
 from runtime.core.cerebrum.react_parsing import (
     _final_answer_claims_verification,
     _has_successful_verification_observation,
+    _payload_has_ambiguous_inflight_leader_election,
     _payload_has_broad_except_suppression,
+    _payload_has_destructive_waiter_result_pop,
     _payload_has_executable_python,
+    _payload_has_inflight_identity_comparison,
+    _payload_has_loader_barrier_deadlock,
+    _payload_has_stale_immutable_waiter_snapshot,
+    _payload_has_terminal_pending_entry_leak,
     _step_introduces_broad_except_suppression,
     _step_replaced_code_with_comment,
 )
@@ -226,6 +240,20 @@ class TestCodeModeMissingWriteGuard:
             is None
         )
 
+    @pytest.mark.parametrize(
+        "goal",
+        [
+            "分析当前代码架构，不要修改任何文件。",
+            "调研市场趋势；无需写入本地文件，最终输出报告。",
+            "Inspect the repository but do not modify files.",
+            "Analyze the event flow without changing any code.",
+        ],
+    )
+    def test_explicit_no_write_request_does_not_trigger_write_guard(
+        self, goal: str
+    ) -> None:
+        assert _code_mode_missing_write_guard([], "Report complete.", goal=goal) is None
+
 
 class TestFalseVerificationClaimGuardOutcomes:
     def test_claim_with_failed_verifier_fires(self) -> None:
@@ -285,6 +313,118 @@ class TestPayloadHasExecutablePython:
     def test_function_def(self) -> None:
         assert _payload_has_executable_python("def hello():\n    pass\n")
 
+
+class TestSingleFlightLeaderElectionGuard:
+    BAD = """\
+with self._lock:
+    pending = self._pending.get(key)
+    if pending is None:
+        pending = Pending()
+        self._pending[key] = pending
+if self._pending.get(key) is not pending:
+    pending.event.wait()
+else:
+    value = loader()
+"""
+
+    GOOD = """\
+with self._lock:
+    pending = self._pending.get(key)
+    is_leader = pending is None
+    if pending is None:
+        pending = Pending()
+        self._pending[key] = pending
+if not is_leader:
+    pending.event.wait()
+else:
+    value = loader()
+"""
+
+    def test_detector_flags_post_lock_identity_election(self) -> None:
+        assert _payload_has_ambiguous_inflight_leader_election(self.BAD)
+        assert not _payload_has_ambiguous_inflight_leader_election(self.GOOD)
+        assert _payload_has_inflight_identity_comparison(
+            "if self._pending.get(key) is not pending:\n    wait()"
+        )
+
+    def test_completion_guard_rejects_ambiguous_election(self) -> None:
+        steps = [
+            _step(
+                1,
+                action=(
+                    'edit_file({"path":"cache.py","old_string":"old",'
+                    f'"new_string":{json.dumps(self.BAD)}}})'
+                ),
+            )
+        ]
+
+        message = _ambiguous_inflight_leader_election_guard(
+            steps,
+            "All tests pass.",
+            is_code_mode=True,
+        )
+
+        assert message is not None
+        assert "explicit leader boolean" in message
+
+    def test_later_replacement_clears_guard(self) -> None:
+        steps = [
+            _step(
+                1,
+                action=(
+                    'edit_file({"path":"cache.py","old_string":"old",'
+                    f'"new_string":{json.dumps(self.BAD)}}})'
+                ),
+            ),
+            _step(
+                2,
+                action=(
+                    'edit_file({"path":"cache.py",'
+                    f'"old_string":{json.dumps(self.BAD)},'
+                    f'"new_string":{json.dumps(self.GOOD)}}})'
+                ),
+            ),
+        ]
+
+        assert (
+            _ambiguous_inflight_leader_election_guard(
+                steps,
+                "All tests pass.",
+                is_code_mode=True,
+            )
+            is None
+        )
+
+    def test_surgical_identity_replacement_clears_guard(self) -> None:
+        steps = [
+            _step(
+                1,
+                action=(
+                    'edit_file({"path":"cache.py","old_string":"old",'
+                    f'"new_string":{json.dumps(self.BAD)}}})'
+                ),
+            ),
+            _step(
+                2,
+                action=(
+                    'edit_file({"path":"cache.py",'
+                    '"old_string":"if self._pending.get(key) is not pending:",'
+                    '"new_string":"if not is_leader:"})'
+                ),
+            ),
+        ]
+
+        assert (
+            _ambiguous_inflight_leader_election_guard(
+                steps,
+                "All tests pass.",
+                is_code_mode=True,
+            )
+            is None
+        )
+
+
+class TestPayloadHasExecutablePythonContinued:
     def test_assert(self) -> None:
         assert _payload_has_executable_python("    assert x > 0\n")
 
@@ -300,6 +440,377 @@ class TestPayloadHasExecutablePython:
     def test_empty_false(self) -> None:
         assert not _payload_has_executable_python("")
         assert not _payload_has_executable_python(None)
+
+
+class TestDestructiveWaiterResultGuard:
+    BAD = """\
+with self._cv:
+    self._cv.wait_for(lambda: self._state.get(key) is None)
+    result = self._results.pop(key, None)
+    if result is not None:
+        return result
+"""
+
+    def test_detector_and_completion_guard(self) -> None:
+        assert _payload_has_destructive_waiter_result_pop(self.BAD)
+        steps = [
+            _step(
+                1,
+                action=(
+                    'edit_file({"path":"cache.py","old_string":"old",'
+                    f'"new_string":{json.dumps(self.BAD)}}})'
+                ),
+            )
+        ]
+
+        message = _destructive_waiter_result_guard(
+            steps,
+            "All tests pass.",
+            is_code_mode=True,
+        )
+
+        assert message is not None
+        assert "first follower consumes" in message
+
+    def test_midflight_guard_surfaces_before_verification(self) -> None:
+        steps = [
+            _step(
+                1,
+                action=(
+                    'write_text_file({"path":"cache.py",'
+                    f'"content":{json.dumps(self.BAD)}}})'
+                ),
+            )
+        ]
+
+        message = _concurrency_semantic_followup_guard(steps, is_code_mode=True)
+
+        assert message is not None
+        assert message.startswith("Before verification:")
+
+    def test_surgical_pop_to_get_clears_guard(self) -> None:
+        steps = [
+            _step(
+                1,
+                action=(
+                    'edit_file({"path":"cache.py","old_string":"old",'
+                    f'"new_string":{json.dumps(self.BAD)}}})'
+                ),
+            ),
+            _step(
+                2,
+                action=(
+                    'edit_file({"path":"cache.py",'
+                    '"old_string":"self._results.pop(key, None)",'
+                    '"new_string":"self._results.get(key)"})'
+                ),
+            ),
+        ]
+
+        assert (
+            _destructive_waiter_result_guard(
+                steps,
+                "All tests pass.",
+                is_code_mode=True,
+            )
+            is None
+        )
+
+
+class TestStaleImmutableWaiterSnapshotGuard:
+    BAD = """\
+with self._lock:
+    pending = self._pending.get(key)
+    if pending is not None:
+        event, result, exc = pending
+        self._lock.release()
+        event.wait()
+        self._lock.acquire()
+        finished = self._pending.get(key, pending)
+        _event, result, exc = finished
+        return result
+    event = threading.Event()
+    self._pending[key] = (event, None, None)
+value = loader()
+with self._lock:
+    self._pending[key] = (event, value, None)
+    event.set()
+    del self._pending[key]
+"""
+
+    GOOD = """\
+with self._lock:
+    pending = self._pending.get(key)
+    is_leader = pending is None
+    if is_leader:
+        pending = Pending()
+        self._pending[key] = pending
+if not is_leader:
+    pending.event.wait()
+    if pending.exception is not None:
+        raise pending.exception
+    return pending.result
+value = loader()
+pending.result = value
+pending.event.set()
+"""
+    DIRECT_DELETED_READ = """\
+with self._lock:
+    if key in self._pending:
+        event = self._pending[key][0]
+        is_leader = False
+    else:
+        event = threading.Event()
+        self._pending[key] = (event, None, None)
+        is_leader = True
+if is_leader:
+    value = loader()
+    with self._lock:
+        self._pending[key] = (event, value, None)
+        event.set()
+        del self._pending[key]
+else:
+    event.wait()
+    with self._lock:
+        _, result, exc = self._pending[key]
+        return result
+"""
+
+    def test_detector_flags_stale_tuple_fallback(self) -> None:
+        assert _payload_has_stale_immutable_waiter_snapshot(self.BAD)
+        assert _payload_has_stale_immutable_waiter_snapshot(self.DIRECT_DELETED_READ)
+        assert not _payload_has_stale_immutable_waiter_snapshot(self.GOOD)
+
+    def test_completion_and_midflight_guards_reject_snapshot(self) -> None:
+        steps = [
+            _step(
+                1,
+                action=(
+                    'write_text_file({"path":"cache.py",'
+                    f'"content":{json.dumps(self.BAD)}}})'
+                ),
+            )
+        ]
+
+        message = _stale_immutable_waiter_snapshot_guard(
+            steps,
+            "All tests pass.",
+            is_code_mode=True,
+        )
+        followup = _concurrency_semantic_followup_guard(steps, is_code_mode=True)
+
+        assert message is not None and "immutable pending tuple" in message
+        assert followup is not None and followup.startswith("Before verification:")
+
+    def test_clean_full_rewrite_clears_guard(self) -> None:
+        steps = [
+            _step(
+                1,
+                action=(
+                    'write_text_file({"path":"cache.py",'
+                    f'"content":{json.dumps(self.BAD)}}})'
+                ),
+            ),
+            _step(
+                2,
+                action=(
+                    'write_text_file({"path":"cache.py",'
+                    f'"content":{json.dumps(self.GOOD)}}})'
+                ),
+            ),
+        ]
+
+        assert (
+            _stale_immutable_waiter_snapshot_guard(
+                steps,
+                "All tests pass.",
+                is_code_mode=True,
+            )
+            is None
+        )
+
+
+class TestTerminalPendingEntryLeakGuard:
+    BAD = """\
+with self._lock:
+    pending = self._pending.get(key)
+    if pending is not None:
+        event, result, exc = pending
+        event.wait()
+        return result
+    event = threading.Event()
+    self._pending[key] = (event, None, None)
+try:
+    value = loader()
+except BaseException as exc:
+    with self._lock:
+        self._pending[key] = (event, None, exc)
+        event.set()
+    raise
+with self._lock:
+    self._pending[key] = (event, value, None)
+    event.set()
+return value
+"""
+    GOOD = """\
+with self._lock:
+    pending = self._pending.get(key)
+    is_leader = pending is None
+    if is_leader:
+        pending = Pending()
+        self._pending[key] = pending
+if not is_leader:
+    pending.event.wait()
+    if pending.exception is not None:
+        raise pending.exception
+    return pending.result
+try:
+    value = loader()
+except BaseException as exc:
+    pending.exception = exc
+    pending.event.set()
+    with self._lock:
+        self._pending.pop(key, None)
+    raise
+pending.result = value
+pending.event.set()
+with self._lock:
+    self._pending.pop(key, None)
+return value
+"""
+
+    def test_detector_flags_terminal_pending_entry_leak(self) -> None:
+        assert _payload_has_terminal_pending_entry_leak(self.BAD)
+        assert not _payload_has_terminal_pending_entry_leak(self.GOOD)
+
+    def test_completion_and_midflight_guards_reject_leak(self) -> None:
+        steps = [
+            _step(
+                1,
+                action=(
+                    'write_text_file({"path":"cache.py",'
+                    f'"content":{json.dumps(self.BAD)}}})'
+                ),
+            )
+        ]
+
+        message = _terminal_pending_entry_leak_guard(
+            steps,
+            "All tests pass.",
+            is_code_mode=True,
+        )
+        followup = _concurrency_semantic_followup_guard(steps, is_code_mode=True)
+
+        assert message is not None and "expired TTL value" in message
+        assert followup is not None and followup.startswith("Before verification:")
+
+    def test_clean_full_rewrite_clears_guard(self) -> None:
+        steps = [
+            _step(
+                1,
+                action=(
+                    'write_text_file({"path":"cache.py",'
+                    f'"content":{json.dumps(self.BAD)}}})'
+                ),
+            ),
+            _step(
+                2,
+                action=(
+                    'write_text_file({"path":"cache.py",'
+                    f'"content":{json.dumps(self.GOOD)}}})'
+                ),
+            ),
+        ]
+
+        assert (
+            _terminal_pending_entry_leak_guard(
+                steps,
+                "All tests pass.",
+                is_code_mode=True,
+            )
+            is None
+        )
+
+
+class TestLoaderBarrierDeadlockGuard:
+    BAD = """\
+def test_single_flight():
+    cache = TTLCache(60)
+    all_followers_ready = threading.Barrier(5)
+
+    def loader():
+        all_followers_ready.wait()
+        return 99
+
+    def worker():
+        results.append(cache.get_or_load("key", loader))
+"""
+    GOOD = """\
+def test_single_flight():
+    cache = TTLCache(60)
+    callers_ready = threading.Barrier(5)
+    release_loader = threading.Event()
+
+    def loader():
+        release_loader.wait(timeout=2)
+        return 99
+
+    def worker():
+        callers_ready.wait()
+        results.append(cache.get_or_load("key", loader))
+"""
+
+    def test_detector_flags_loader_barrier_deadlock(self) -> None:
+        assert _payload_has_loader_barrier_deadlock(self.BAD)
+        assert not _payload_has_loader_barrier_deadlock(self.GOOD)
+
+    def test_completion_and_midflight_guards_reject_deadlock(self) -> None:
+        steps = [
+            _step(
+                1,
+                action=(
+                    'write_text_file({"path":"tests/test_cache.py",'
+                    f'"content":{json.dumps(self.BAD)}}})'
+                ),
+            )
+        ]
+
+        message = _loader_barrier_deadlock_guard(
+            steps,
+            "All tests pass.",
+            is_code_mode=True,
+        )
+        followup = _concurrency_semantic_followup_guard(steps, is_code_mode=True)
+
+        assert message is not None and "barrier can never fill" in message
+        assert followup is not None and followup.startswith("Before verification:")
+
+    def test_clean_full_rewrite_clears_guard(self) -> None:
+        steps = [
+            _step(
+                1,
+                action=(
+                    'write_text_file({"path":"tests/test_cache.py",'
+                    f'"content":{json.dumps(self.BAD)}}})'
+                ),
+            ),
+            _step(
+                2,
+                action=(
+                    'write_text_file({"path":"tests/test_cache.py",'
+                    f'"content":{json.dumps(self.GOOD)}}})'
+                ),
+            ),
+        ]
+
+        assert (
+            _loader_barrier_deadlock_guard(
+                steps,
+                "All tests pass.",
+                is_code_mode=True,
+            )
+            is None
+        )
 
 
 class TestStepReplacedCodeWithComment:

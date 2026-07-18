@@ -9056,6 +9056,129 @@
         ]
       }
     },
+    "/api/agent-trace/review-queue/promotions/audit/rotation": {
+      "get": {
+        "operationId": "api_agent_trace_governance_audit_rotation_status_api_agent_trace_review_queue_promotions_audit_rotation_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Trace Governance Audit Rotation Status Api Agent Trace Review Queue Promotions Audit Rotation Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Agent Trace Governance Audit Rotation Status",
+        "tags": [
+          "agent-trace"
+        ]
+      },
+      "post": {
+        "operationId": "api_agent_trace_governance_audit_rotation_configure_api_agent_trace_review_queue_promotions_audit_rotation_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Trace Governance Audit Rotation Configure Api Agent Trace Review Queue Promotions Audit Rotation Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Trace Governance Audit Rotation Configure",
+        "tags": [
+          "agent-trace"
+        ]
+      }
+    },
+    "/api/agent-trace/review-queue/promotions/audit/rotation/run": {
+      "post": {
+        "operationId": "api_agent_trace_governance_audit_rotation_run_api_agent_trace_review_queue_promotions_audit_rotation_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Trace Governance Audit Rotation Run Api Agent Trace Review Queue Promotions Audit Rotation Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Trace Governance Audit Rotation Run",
+        "tags": [
+          "agent-trace"
+        ]
+      }
+    },
     "/api/agent-trace/review-queue/promotions/audit/summary": {
       "get": {
         "operationId": "api_agent_trace_review_queue_promotion_audit_summary_api_agent_trace_review_queue_promotions_audit_summary_get",
@@ -13610,6 +13733,52 @@
         "summary": "Api Budget Summary",
         "tags": [
           "observability"
+        ]
+      }
+    },
+    "/api/capabilities/enable": {
+      "post": {
+        "description": "Hot-load a skill group that was excluded at startup.\n\nBody: ``{\"group\": \"web\"}`` — registers the named group into the\nlive ``SkillRegistry`` so subsequent tool calls succeed without a\nbackend restart. Triggered by the UI's one-click \"enable\" prompt\nwhen the model tries to call a config-disabled tool (e.g.\n``web_search`` under ``enable_web_skills=False``).",
+        "operationId": "api_capabilities_enable_api_capabilities_enable_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Capabilities Enable Api Capabilities Enable Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Capabilities Enable",
+        "tags": [
+          "health"
         ]
       }
     },
@@ -27793,6 +27962,153 @@
         ]
       }
     },
+    "/api/plugins/lifecycle/history": {
+      "get": {
+        "operationId": "_plugin_lifecycle_history_api_plugins_lifecycle_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response  Plugin Lifecycle History Api Plugins Lifecycle History Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": " Plugin Lifecycle History",
+        "tags": [
+          "plugins"
+        ]
+      }
+    },
+    "/api/plugins/lifecycle/install": {
+      "post": {
+        "operationId": "_plugin_lifecycle_install_api_plugins_lifecycle_install_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response  Plugin Lifecycle Install Api Plugins Lifecycle Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": " Plugin Lifecycle Install",
+        "tags": [
+          "plugins"
+        ]
+      }
+    },
+    "/api/plugins/lifecycle/rollback": {
+      "post": {
+        "operationId": "_plugin_lifecycle_rollback_api_plugins_lifecycle_rollback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response  Plugin Lifecycle Rollback Api Plugins Lifecycle Rollback Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": " Plugin Lifecycle Rollback",
+        "tags": [
+          "plugins"
+        ]
+      }
+    },
     "/api/plugins/migration-readiness": {
       "get": {
         "operationId": "_plugin_migration_readiness_api_plugins_migration_readiness_get",
@@ -27885,6 +28201,205 @@
           }
         },
         "summary": " Plugin Permission Rule Draft Install",
+        "tags": [
+          "plugins"
+        ]
+      }
+    },
+    "/api/plugins/publisher-trust": {
+      "get": {
+        "operationId": "_plugin_publisher_trust_api_plugins_publisher_trust_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response  Plugin Publisher Trust Api Plugins Publisher Trust Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": " Plugin Publisher Trust",
+        "tags": [
+          "plugins"
+        ]
+      }
+    },
+    "/api/plugins/publisher-trust/revoke": {
+      "post": {
+        "operationId": "_plugin_publisher_key_revoke_api_plugins_publisher_trust_revoke_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response  Plugin Publisher Key Revoke Api Plugins Publisher Trust Revoke Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": " Plugin Publisher Key Revoke",
+        "tags": [
+          "plugins"
+        ]
+      }
+    },
+    "/api/plugins/publisher-trust/rotate": {
+      "post": {
+        "operationId": "_plugin_publisher_key_rotate_api_plugins_publisher_trust_rotate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response  Plugin Publisher Key Rotate Api Plugins Publisher Trust Rotate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": " Plugin Publisher Key Rotate",
+        "tags": [
+          "plugins"
+        ]
+      }
+    },
+    "/api/plugins/registry/install": {
+      "post": {
+        "operationId": "_plugin_registry_install_api_plugins_registry_install_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response  Plugin Registry Install Api Plugins Registry Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": " Plugin Registry Install",
+        "tags": [
+          "plugins"
+        ]
+      }
+    },
+    "/api/plugins/registry/updates": {
+      "get": {
+        "operationId": "_plugin_registry_updates_api_plugins_registry_updates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response  Plugin Registry Updates Api Plugins Registry Updates Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": " Plugin Registry Updates",
         "tags": [
           "plugins"
         ]
@@ -32135,6 +32650,108 @@
         "summary": "Resume Task",
         "tags": [
           "agents"
+        ]
+      }
+    },
+    "/api/tasks/{task_id}/rewind/apply": {
+      "post": {
+        "description": "Rewind ``task_id`` to the checkpoint at ``iteration``.\n\nRequest body:\n    {\"iteration\": 3, \"project_root\": \"/abs/path\", \"dry_run\": false}\n\n``dry_run=true`` previews the rollback without touching disk.",
+        "operationId": "api_task_rewind_apply_api_tasks__task_id__rewind_apply_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Task Rewind Apply Api Tasks  Task Id  Rewind Apply Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Task Rewind Apply",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/tasks/{task_id}/rewind/points": {
+      "get": {
+        "description": "List every ``react_checkpoint`` anchor for ``task_id``.\n\nEach entry is a valid rewind target. The last one is the\ncurrent state.",
+        "operationId": "api_task_rewind_points_api_tasks__task_id__rewind_points_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Task Rewind Points Api Tasks  Task Id  Rewind Points Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Task Rewind Points",
+        "tags": [
+          "observability"
         ]
       }
     },

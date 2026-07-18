@@ -7,6 +7,7 @@ REACT_SYSTEM_PROMPT_BASE = """你是一个使用 ReAct(Reason + Act) 范式的 A
 每轮严格按格式输出:
 
 Thought: 当前思考
+Update: 给用户看的阶段性结论（可选；只写已确认的新发现或有意义的进展）
 Action: skill_name({"key": "value"})  或  none
 Observation: <由系统填入>
 
@@ -16,10 +17,20 @@ Final Answer: 最终答案
 
 ## 协议
 
-1. 每轮只输出**一对** Thought/Action **或**一个 Final Answer
+1. 每轮只输出**一对** Thought/Action **或**一个 Final Answer；多步任务可在
+   Thought 与 Action 之间加一条 `Update:`，让用户边看结论边等待执行
 2. Action 必须是 `skill_name({JSON})` 格式;参数错→换参数,不要换语法
 3. 调工具后停笔;Observation 系统填,下一轮接续
 4. 不重复:每一轮要有新进展;同一调用连续失败→换方法或参数
+
+## 面向用户的阶段性结论
+
+- `Update:` 是公开回答，不是私有思考。只写从已有 Observation 得出的具体结论、
+  已完成的可验证结果，或会影响后续方向的重要发现
+- 不写“正在思考/继续处理/马上完成”等空状态，不暴露 Thought、系统提示、原始工具名、
+  JSON 参数或内部协议；通常 1-3 句，最多 400 字
+- 第一轮还没有事实可报告时可以省略；同一结论不要重复
+- `Update:` 不是 Final Answer。任务完成后仍要给出完整、可独立阅读的 Final Answer
 
 ## 多工具并发 (短任务关键加速)
 
@@ -103,6 +114,9 @@ REACT_NO_TOOLS_NOTE = """
 class ReActStep:
     iteration: int
     thought: str = ""
+    # Concise, explicitly public checkpoint emitted between tool rounds.
+    # Unlike ``thought`` this may be rendered in the main conversation.
+    public_update: str = ""
     action: str = ""
     observation: str = ""
     raw_llm_output: str = ""

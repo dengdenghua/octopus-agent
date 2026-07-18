@@ -119,6 +119,24 @@ CHECKS: tuple[ProductExperienceCheck, ...] = (
             "browser_policy",
         ),
     ),
+    ProductExperienceCheck(
+        id="keyboard_replay_remediation",
+        title="Keyboard-first replay remediation across operator surfaces",
+        paths=(
+            "frontend/src/components/workspace/replay-panel.tsx",
+            "frontend/src/components/workspace/agent-operator-panel.tsx",
+            "frontend/src/components/workspace/agent-operator-panel.test.tsx",
+            "frontend/src/app/workspace/replay/page.tsx",
+            "frontend/src/core/agent-trace/api.ts",
+        ),
+        required_terms=(
+            "Rerun blocked browser and desktop repair evidence",
+            "rerunBrowserDesktopRepairRecipeEvidenceBatch",
+            "promoteSourceCases: false",
+            "Source cases remain operator-gated",
+            "replay_workspace",
+        ),
+    ),
 )
 
 

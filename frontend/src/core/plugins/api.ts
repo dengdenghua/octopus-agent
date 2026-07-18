@@ -5,7 +5,9 @@ import type {
   CapabilityInfo,
   PluginMigrationReadiness,
   PluginInfo,
+  PluginLifecycleHistory,
   PluginRuntimeProfile,
+  PluginRegistryUpdates,
   PluginSmokeSummary,
   PluginPublisherTrustReport,
 } from "./types";
@@ -70,13 +72,65 @@ export async function fetchPluginMigrationReadiness(): Promise<PluginMigrationRe
 }
 
 export async function fetchPluginPublisherTrust(): Promise<PluginPublisherTrustReport> {
-  const res = await fetch(`${getBackendBaseURL()}/api/plugins/publisher-trust`, {
-    headers: authHeaders(),
-  });
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/plugins/publisher-trust`,
+    {
+      headers: authHeaders(),
+    },
+  );
   if (!res.ok) {
     throw new Error(`Failed to get publisher trust: ${res.statusText}`);
   }
   return (await res.json()) as PluginPublisherTrustReport;
+}
+
+export async function fetchPluginLifecycleHistory(): Promise<PluginLifecycleHistory> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/plugins/lifecycle/history`,
+    {
+      headers: authHeaders(),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(
+      `Failed to get plugin lifecycle history: ${res.statusText}`,
+    );
+  }
+  return (await res.json()) as PluginLifecycleHistory;
+}
+
+export async function fetchPluginRegistryUpdates(): Promise<PluginRegistryUpdates> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/plugins/registry/updates`,
+    {
+      headers: authHeaders(),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to get plugin registry updates: ${res.statusText}`);
+  }
+  return (await res.json()) as PluginRegistryUpdates;
+}
+
+export async function installPluginFromRegistry(
+  pluginId: string,
+): Promise<{ plugin_id: string; status: string; version: string }> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/plugins/registry/install`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({ plugin_id: pluginId, confirm_install: true }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to install registry plugin: ${res.statusText}`);
+  }
+  return res.json() as Promise<{
+    plugin_id: string;
+    status: string;
+    version: string;
+  }>;
 }
 
 export async function rotatePluginPublisherKey(input: {
@@ -94,7 +148,8 @@ export async function rotatePluginPublisherKey(input: {
       body: JSON.stringify({ ...input, confirm_rotation: true }),
     },
   );
-  if (!res.ok) throw new Error(`Failed to rotate publisher key: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to rotate publisher key: ${res.statusText}`);
   return res.json() as Promise<{
     status: string;
     trust: PluginPublisherTrustReport;
@@ -114,7 +169,8 @@ export async function revokePluginPublisherKey(input: {
       body: JSON.stringify({ ...input, confirm_revocation: true }),
     },
   );
-  if (!res.ok) throw new Error(`Failed to revoke publisher key: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to revoke publisher key: ${res.statusText}`);
   return res.json() as Promise<{
     status: string;
     trust: PluginPublisherTrustReport;

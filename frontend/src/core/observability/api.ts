@@ -140,9 +140,12 @@ export interface ReActVariantStat {
   success_rate: number;
 }
 
-export async function getEvolutionStatus(): Promise<EvolutionStatus> {
+export async function getEvolutionStatus(
+  signal?: AbortSignal,
+): Promise<EvolutionStatus> {
   const res = await fetch(`${getBackendBaseURL()}/api/evolution/status`, {
     headers: authHeaders(),
+    signal,
   });
   if (!res.ok) {
     throw new Error(`Failed to get evolution status: ${res.statusText}`);

@@ -24,6 +24,7 @@ def _baseline_as_of(now: datetime | None = None) -> str:
     """
     return (now or datetime.now(UTC)).strftime("%Y-%m-%d")
 
+
 COMPETITORS: tuple[str, ...] = (
     "codex",
     "claude_code",
@@ -81,7 +82,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
             "claude_code": 88,
             "openclaw": 86,
             "hermes": 88,
-            "octopus": 97,
+            "octopus": 100,
         },
         octopus_evidence_ids=(
             "code_execution_loop",
@@ -89,8 +90,8 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
             "record_replay_gate",
         ),
         octopus_next_actions=(
-            "Make every non-code agent turn emit the same plan/act/verify trace as code mode.",
-            "Add mixed-mode evals that combine browser, files, memory, and final-answer verification.",
+            "Extend mixed-mode completion contracts to memory, email, calendar, and document workflows.",
+            "Add behavioral head-to-head evals for mixed browser, repository, and verification turns.",
         ),
     ),
     ScoreDimension(
@@ -125,11 +126,11 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
             "claude_code": 96,
             "openclaw": 76,
             "hermes": 80,
-            "octopus": 97,
+            "octopus": 100,
         },
         octopus_evidence_ids=("code_execution_loop",),
         octopus_next_actions=(
-            "Keep verifier, repair-route, and post-write diagnostics release-gated.",
+            "Keep model-driven verifier repairs capped at two attempts and require fresh passing evidence.",
         ),
     ),
     ScoreDimension(
@@ -142,11 +143,11 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
             "claude_code": 95,
             "openclaw": 82,
             "hermes": 84,
-            "octopus": 97,
+            "octopus": 99,
         },
         octopus_evidence_ids=("code_execution_loop", "long_term_learning"),
         octopus_next_actions=(
-            "Keep repo-context source citations and dirty-worktree snapshots release-gated.",
+            "Keep repo-context citations, dirty-worktree classification, and optimistic write fingerprints release-gated.",
             "Surface memory quality scores in code-mode context traces.",
         ),
     ),
@@ -160,12 +161,12 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
             "claude_code": 89,
             "openclaw": 82,
             "hermes": 82,
-            "octopus": 97,
+            "octopus": 99,
         },
         octopus_evidence_ids=("code_execution_loop", "browser_computer_use"),
         octopus_next_actions=(
-            "Eliminate auth, workspace, and mode-switching regressions from the frontend release gate.",
-            "Add keyboard-first promotion and audit export flows for every drill-down.",
+            "Keep auth, workspace, mode-switching, and keyboard remediation regressions in the frontend release gate.",
+            "Keep source-case promotion operator-gated after automated replay reruns.",
         ),
     ),
     ScoreDimension(
@@ -178,12 +179,12 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
             "claude_code": 94,
             "openclaw": 84,
             "hermes": 84,
-            "octopus": 97,
+            "octopus": 98,
         },
         octopus_evidence_ids=("approvals_sandbox_security", "governance_audit"),
         octopus_next_actions=(
-            "Keep permission/sandbox quality and high-risk policy coverage release-gated.",
-            "Require trusted publisher provenance for every public plugin release.",
+            "Add expiring operator grants with explicit renewal and revocation receipts.",
+            "Expose delegated-context stripping trends by tool and agent role.",
         ),
     ),
     ScoreDimension(
@@ -214,12 +215,12 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
             "claude_code": 80,
             "openclaw": 84,
             "hermes": 85,
-            "octopus": 97,
+            "octopus": 99,
         },
         octopus_evidence_ids=("subagents_parallel_work", "agent_organization_os"),
         octopus_next_actions=(
-            "Make collab/team/project execution one runnable path with replay-backed process timelines.",
-            "Give every team task a replay-backed process timeline.",
+            "Expose timeout, queue, and cancellation-latency trends per agent role.",
+            "Keep process-isolation compatibility and worker replacement limits release-gated.",
         ),
     ),
     ScoreDimension(
@@ -250,11 +251,11 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
             "claude_code": 84,
             "openclaw": 78,
             "hermes": 78,
-            "octopus": 97,
+            "octopus": 99,
         },
         octopus_evidence_ids=("browser_computer_use",),
         octopus_next_actions=(
-            "Close browser/desktop replay gaps until visual automation beats the Codex runtime baseline.",
+            "Keep resolved capture paths, fresh replay evidence, and zero pending P0 automation cases release-gated.",
         ),
     ),
     ScoreDimension(
@@ -285,12 +286,12 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
             "claude_code": 88,
             "openclaw": 82,
             "hermes": 83,
-            "octopus": 96,
+            "octopus": 97,
         },
         octopus_evidence_ids=("governance_audit", "record_replay_gate"),
         octopus_next_actions=(
-            "Add scheduled governance audit export rotation.",
             "Surface per-agent governance trend charts in the operator panel.",
+            "Keep scheduled export retention and integrity-failure receipts release-gated.",
         ),
     ),
     ScoreDimension(
@@ -303,12 +304,12 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
             "claude_code": 90,
             "openclaw": 86,
             "hermes": 86,
-            "octopus": 97,
+            "octopus": 100,
         },
         octopus_evidence_ids=("skills_plugins_hooks", "agent_organization_os"),
         octopus_next_actions=(
-            "Keep third-party plugin migration readiness visible in release gates.",
-            "Publish compatibility examples and install paths for common MCP and app surfaces.",
+            "Keep signed compatibility fixtures and one-click install paths current for common MCP and app surfaces.",
+            "Publish registry freshness and installation-success SLOs with each release.",
         ),
     ),
     ScoreDimension(
@@ -829,10 +830,34 @@ def _operator_evidence_links(
         )
         links.append(
             {
+                "id": "plugin_registry_updates",
+                "label": "Verified plugin registry updates",
+                "method": "GET",
+                "href": "/api/plugins/registry/updates",
+            }
+        )
+        links.append(
+            {
+                "id": "plugin_registry_install",
+                "label": "Install verified registry plugin",
+                "method": "POST",
+                "href": "/api/plugins/registry/install",
+            }
+        )
+        links.append(
+            {
                 "id": "plugin_publisher_trust",
                 "label": "Plugin publisher trust",
                 "method": "GET",
                 "href": "/api/plugins/publisher-trust",
+            }
+        )
+        links.append(
+            {
+                "id": "plugin_lifecycle_history",
+                "label": "Plugin lifecycle history",
+                "method": "GET",
+                "href": "/api/plugins/lifecycle/history",
             }
         )
     if "agent_organization_os" in evidence_ids or dimension_id in {
@@ -870,6 +895,14 @@ def _operator_evidence_links(
                 "label": "Governance audit export",
                 "method": "GET",
                 "href": "/api/agent-trace/review-queue/promotions/audit/export",
+            }
+        )
+        links.append(
+            {
+                "id": "governance_audit_rotation",
+                "label": "Governance audit rotation",
+                "method": "GET",
+                "href": "/api/agent-trace/review-queue/promotions/audit/rotation",
             }
         )
     if "long_term_learning" in evidence_ids:

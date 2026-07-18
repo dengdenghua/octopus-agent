@@ -96,6 +96,11 @@ class TaskResult(BaseModel):
     duration_seconds: float | None = None
     subagent_name: str = "general-purpose"
     work_contract: WorkContract | None = None
+    worker_generation: int | None = None
+    worker_state: str = "pending"
+    replacement_generation: int | None = None
+    late_result_ignored_at: str | None = None
+    worker_isolation: str = "thread"
 
 
 class BatchStreamEvent(BaseModel):
@@ -141,6 +146,7 @@ class BatchResult(BaseModel):
     completion_receipt: dict[str, object] = Field(default_factory=dict)
     file_write_observability: dict[str, object] = Field(default_factory=dict)
     coordination_summary: dict[str, object] = Field(default_factory=dict)
+    worker_observability: dict[str, object] = Field(default_factory=dict)
 
 
 class BatchRecoveryTask(BaseModel):
@@ -155,12 +161,19 @@ class BatchRecoveryTask(BaseModel):
     description_preview: str | None = None
     result_preview: str | None = None
     error: str | None = None
+    submitted_at: str | None = None
+    cancel_requested_at: str | None = None
     started_at: str | None = None
     completed_at: str | None = None
     duration_seconds: float | None = None
     artifact_paths: list[str] = Field(default_factory=list)
     work_contract: WorkContract | None = None
     route_decision: dict[str, Any] = Field(default_factory=dict)
+    worker_generation: int | None = None
+    worker_state: str = "pending"
+    replacement_generation: int | None = None
+    late_result_ignored_at: str | None = None
+    worker_isolation: str = "thread"
 
 
 class BatchRecoverySnapshot(BaseModel):
@@ -195,6 +208,7 @@ class BatchRecoverySnapshot(BaseModel):
     completion_receipt: dict[str, object] = Field(default_factory=dict)
     file_write_observability: dict[str, object] = Field(default_factory=dict)
     coordination_summary: dict[str, object] = Field(default_factory=dict)
+    worker_observability: dict[str, object] = Field(default_factory=dict)
     recovery_hints: dict[str, object] = Field(default_factory=dict)
     safety: dict[str, object] = Field(default_factory=dict)
 
@@ -207,6 +221,9 @@ class OrchestratorStatus(BaseModel):
     cancelled_count: int = 0
     max_concurrency: int = 0
     batches: dict[str, str] = Field(default_factory=dict)  # batch_id → status
+    worker_generation: int = 0
+    worker_replacement_count: int = 0
+    retired_worker_generation_count: int = 0
 
 
 class SplitTask(BaseModel):

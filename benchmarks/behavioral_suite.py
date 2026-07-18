@@ -78,6 +78,26 @@ def load_behavioral_suite(
         if any(not isinstance(phase, str) or not phase.strip() for phase in phase_rows):
             raise ValueError(f"suite case {case_id} has invalid phases")
         prompt_digest = _prompt_digest(prompt, phase_rows)
+        allowed_write_paths = raw_case.get("allowed_write_paths")
+        if allowed_write_paths is not None and (
+            not isinstance(allowed_write_paths, list)
+            or not allowed_write_paths
+            or any(not isinstance(path, str) or not path.strip() for path in allowed_write_paths)
+        ):
+            raise ValueError(f"suite case {case_id} has invalid allowed_write_paths")
+        case_metadata = {
+            "domain": domain,
+            "execution_mode": execution_mode,
+            "outcome_grader": True,
+            "isolated_state": True,
+            "rubric_digest": rubric_digest,
+            "prompt_digest": prompt_digest,
+            "phases": list(phase_rows),
+            "suite_id": str(payload.get("suite_id") or ""),
+            "grader_id": grader_id,
+        }
+        if isinstance(allowed_write_paths, list):
+            case_metadata["allowed_write_paths"] = [path.strip() for path in allowed_write_paths]
         cases.append(
             EvalCase(
                 id=case_id,
@@ -85,17 +105,7 @@ def load_behavioral_suite(
                 grader=factory(case_id, rubric),
                 setup=setups.get(case_id),
                 teardown=teardowns.get(case_id),
-                metadata={
-                    "domain": domain,
-                    "execution_mode": execution_mode,
-                    "outcome_grader": True,
-                    "isolated_state": True,
-                    "rubric_digest": rubric_digest,
-                    "prompt_digest": prompt_digest,
-                    "phases": list(phase_rows),
-                    "suite_id": str(payload.get("suite_id") or ""),
-                    "grader_id": grader_id,
-                },
+                metadata=case_metadata,
             )
         )
     if case_ids is not None:

@@ -570,6 +570,13 @@ export const zhCN: Translations = {
     clarifyTaskDirection: "确认任务方向",
     synthesizeFindings: "整理调研结果",
     planNextStep: "规划下一步",
+    progressOrient: "定向",
+    progressInvestigate: "调查",
+    progressImplement: "实施",
+    progressVerify: "验证",
+    progressPivot: "转向",
+    progressSynthesize: "收束",
+    progressRecover: "恢复",
   },
 
   // Trace generator labels

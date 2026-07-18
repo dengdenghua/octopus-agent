@@ -30,6 +30,7 @@ from runtime.core.cerebrum.react_loop import (
     _build_workflow_preset_prompt,
     _code_mode_completion_guard,
     _code_task_iteration_limit,
+    _deduplicate_actions,
     _dispatch_parallel_actions,
     _ensure_browser_operation_skills,
     _escape_md_brackets,
@@ -2659,6 +2660,33 @@ def test_execute_action_via_beak_success() -> None:
     assert step is not None  # Implementation note.
 
 
+def test_identical_failed_tool_call_is_not_executed_a_third_time() -> None:
+    router = _ScriptedRouter(
+        [
+            "Thought: try once\nAction: bomb()",
+            "Thought: try twice\nAction: bomb()",
+            "Thought: try a third time\nAction: bomb()",
+            "Final Answer: the repeated failing action was stopped",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+
+    events, result = _drain(
+        stream_react_loop(stack, _intent("diagnose the failing tool"), agent=None)
+    )
+
+    bomb_starts = [
+        event
+        for event in events
+        if event.get("type") == "tool_start" and event.get("tool_name") == "bomb"
+    ]
+    assert len(bomb_starts) == 2
+    assert result is not None
+    assert any(
+        "repeated-failing-tool-skipped" in step.observation for step in result.steps
+    )
+
+
 def test_execute_action_treats_structured_error_output_as_failure() -> None:
     registry = SkillRegistry()
     registry.register(
@@ -3160,6 +3188,56 @@ def test_two_clean_verifier_rounds_suppress_redundant_probe(tmp_path: Any) -> No
     )
 
 
+def test_todo_final_guard_preserves_green_convergence(tmp_path: Any) -> None:
+    """A stale checklist must not erase already-valid terminal evidence."""
+    target = tmp_path / "cache.py"
+    target.write_text("value = 0\n", encoding="utf-8")
+    router = _ScriptedRouter(
+        [
+            (
+                "Thought: plan\n"
+                'Action: todo_write({"todos": [{"title": "implement cache", '
+                '"status": "in_progress"}]})'
+            ),
+            f'Thought: inspect\nAction: read_file({{"path": "{target.as_posix()}"}})',
+            (
+                "Thought: write\n"
+                f'Action: write_text_file({{"path": "{target.as_posix()}", '
+                '"content": "value = 1\\n", "overwrite": true})'
+            ),
+            'Thought: test\nAction: exec_shell({"command": "python -m pytest tests"})',
+            'Thought: lint\nAction: exec_shell({"command": "ruff check cache.py"})',
+            "Final Answer: implementation complete",
+            (
+                "Thought: finish checklist\n"
+                'Action: todo_write({"todos": [{"title": "implement cache", '
+                '"status": "completed"}]})'
+            ),
+            'Thought: redundant probe\nAction: exec_shell({"command": "python -m pytest tests"})',
+            "Final Answer: implementation complete",
+            "Final Answer: implementation complete",
+            "Final Answer: implementation complete",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("implement and verify cache.py")
+    intent.user_context.update({"mode": "code", "auto_approve": True})
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=11))
+
+    assert result is not None and result.success
+    shell_starts = [
+        event
+        for event in events
+        if event.get("type") == "tool_start" and event.get("tool_name") == "exec_shell"
+    ]
+    assert len(shell_starts) == 2, "\n---\n".join(
+        f"{step.iteration}: {step.action}\n{step.observation}" for step in result.steps
+    )
+    assert any("todo-protocol guard" in step.observation for step in result.steps)
+    assert any("redundant-tool-skipped" in step.observation for step in result.steps)
+
+
 def test_semantic_completion_guard_reopens_tools_after_green_convergence(tmp_path: Any) -> None:
     target = tmp_path / "cache.py"
     target.write_text("value = 0\n", encoding="utf-8")
@@ -3211,6 +3289,11 @@ def test_semantic_completion_guard_reopens_tools_after_green_convergence(tmp_pat
             ),
             'Thought: retest\nAction: exec_shell({"command": "python -m pytest tests"})',
             'Thought: relint\nAction: exec_shell({"command": "ruff check cache.py"})',
+            (
+                "Thought: refresh checklist after repair\n"
+                'Action: todo_write({"todos": [{"title": "repair cache", '
+                '"status": "completed"}]})'
+            ),
             "Final Answer: implementation complete; all tests pass",
             "Final Answer: implementation complete; all tests pass",
             "Final Answer: implementation complete; all tests pass",
@@ -3221,7 +3304,7 @@ def test_semantic_completion_guard_reopens_tools_after_green_convergence(tmp_pat
     intent = _intent("fix the concurrent cache implementation and verify it")
     intent.user_context.update({"mode": "code", "auto_approve": True})
 
-    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=14))
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=15))
 
     assert result is not None
     assert result.success, "\n---\n".join(
@@ -3234,9 +3317,98 @@ def test_semantic_completion_guard_reopens_tools_after_green_convergence(tmp_pat
         if event.get("type") == "tool_start" and event.get("tool_name") == "write_text_file"
     ]
     assert len(write_starts) == 2
-    assert any(
-        "single-flight leader-election guard" in step.observation for step in result.steps
+    assert any("semantic-repair-tool-skipped" in step.observation for step in result.steps)
+
+
+def test_concurrency_semantic_guard_blocks_verifier_until_source_repair(tmp_path: Any) -> None:
+    target = tmp_path / "cache.py"
+    test_target = tmp_path / "tests" / "test_cache.py"
+    test_target.parent.mkdir()
+    target.write_text("value = 0\n", encoding="utf-8")
+    bad = """\
+with self._lock:
+    pending = self._pending.get(key)
+    if pending is not None:
+        event, result, exc = pending
+        event.wait()
+        return result
+    event = threading.Event()
+    self._pending[key] = (event, None, None)
+value = loader()
+with self._lock:
+    self._pending[key] = (event, value, None)
+    event.set()
+return value
+"""
+    good = """\
+with self._lock:
+    pending = self._pending.get(key)
+    is_leader = pending is None
+    if is_leader:
+        pending = Pending()
+        self._pending[key] = pending
+if not is_leader:
+    pending.event.wait()
+    return pending.result
+value = loader()
+pending.result = value
+pending.event.set()
+with self._lock:
+    self._pending.pop(key, None)
+return value
+"""
+    router = _ScriptedRouter(
+        [
+            (
+                "Thought: plan\n"
+                'Action: todo_write({"todos": [{"title": "repair concurrency", '
+                '"status": "in_progress"}]})'
+            ),
+            (
+                "Thought: write first attempt\n"
+                f'Action: write_text_file({{"path": "{target.as_posix()}", '
+                f'"content": {__import__("json").dumps(bad)}, "overwrite": true}})'
+            ),
+            'Thought: test too early\nAction: exec_shell({"command": "python -m pytest tests"})',
+            (
+                "Thought: repair source\n"
+                f'Action: write_text_file({{"path": "{target.as_posix()}", '
+                f'"content": {__import__("json").dumps(good)}, "overwrite": true}})'
+            ),
+            (
+                "Thought: add regression\n"
+                f'Action: write_text_file({{"path": "{test_target.as_posix()}", '
+                '"content": "def test_reload():\\n    assert reload_cache() == 2\\n", '
+                '"overwrite": true})'
+            ),
+            'Thought: test\nAction: exec_shell({"command": "python -m pytest tests"})',
+            'Thought: lint\nAction: exec_shell({"command": "ruff check cache.py"})',
+            (
+                "Thought: finish checklist\n"
+                'Action: todo_write({"todos": [{"title": "repair concurrency", '
+                '"status": "completed"}]})'
+            ),
+            "Final Answer: repair complete; tests and lint pass",
+            "Final Answer: repair complete; tests and lint pass",
+            "Final Answer: repair complete; tests and lint pass",
+        ]
     )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("repair concurrency implementation")
+    intent.user_context.update({"mode": "code", "auto_approve": True})
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=11))
+
+    assert result is not None and result.success
+    shell_starts = [
+        event
+        for event in events
+        if event.get("type") == "tool_start" and event.get("tool_name") == "exec_shell"
+    ]
+    assert len(shell_starts) == 2, "\n---\n".join(
+        f"{step.iteration}: {step.action}\n{step.observation}" for step in result.steps
+    )
+    assert any("semantic-repair-tool-skipped" in step.observation for step in result.steps)
 
 
 def test_write_and_two_verifiers_in_one_batch_trigger_convergence(tmp_path: Any) -> None:
@@ -5148,6 +5320,20 @@ def test_repeated_action_labels_are_not_dispatched_as_tools() -> None:
         'read_file({"path": "cache.py"})',
         'read_file({"path": "tests/test_cache.py"})',
     ]
+
+
+def test_identical_tool_calls_in_one_round_are_collapsed() -> None:
+    actions = [
+        'read_file({"path": "tests/test_cache.py"})',
+        'read_file({"path":"tests/test_cache.py"})',
+        'read_file({"path": "cache.py"})',
+        'read_file({"path": "tests/test_cache.py"})',
+    ]
+
+    unique, duplicates = _deduplicate_actions(actions)
+
+    assert unique == [actions[0], actions[2]]
+    assert duplicates == 2
 
 
 def test_single_line_action_keeps_one_element_actions_list() -> None:

@@ -1170,7 +1170,7 @@ export function ChatInputBox({
           className="min-h-[52px] w-full resize-none bg-transparent px-3 py-2.5 text-[13px] leading-snug outline-none placeholder:text-muted-foreground/75 disabled:opacity-60 sm:min-h-0 sm:py-1.5"
         />
         {isDeepResearchMode && researchConfigOpen && (
-          <div className="absolute bottom-11 left-2 right-2 z-30 max-h-[min(70vh,560px)] overflow-y-auto rounded-lg border border-border-default bg-popover px-3 py-3 shadow-[var(--shadow-[var(--shadow-xs)])]">
+          <div className="absolute bottom-11 left-2 right-2 z-30 max-h-[min(70vh,560px)] overflow-y-auto rounded-lg border border-border-default bg-popover px-3 py-3 shadow-[var(--shadow-xs)]">
             <div className="mb-2 flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2 text-[12px] font-medium text-foreground">
                 <SearchIcon className="size-4 text-primary" />
@@ -1392,7 +1392,7 @@ export function ChatInputBox({
           }}
         />
         <div className="composer-footer flex items-center justify-between gap-2 border-t border-transparent px-2 py-1 transition-colors group-hover:border-border-subtle">
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -1511,7 +1511,7 @@ export function ChatInputBox({
               />
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {showInspirationToggle && (
               <button
                 type="button"
@@ -1607,7 +1607,7 @@ export function ChatInputBox({
         </div>
       </div>
       {showWorkDirSelector && showStatusStrip && (
-        <div className="flex min-h-7 flex-wrap items-center gap-2 px-2 pt-1 text-[11px] text-muted-foreground">
+        <div className="flex min-h-7 flex-wrap items-center gap-2 border-t border-border-subtle/60 px-2 pt-1.5 text-[11px] text-muted-foreground">
           <div
             className={cn(
               "inline-flex max-w-full items-center gap-1.5",

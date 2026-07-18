@@ -134,6 +134,26 @@ CHECKS: tuple[PermissionSandboxCheck, ...] = (
             "use_capability",
         ),
     ),
+    PermissionSandboxCheck(
+        id="monotonic_delegation_context",
+        title="Monotonic delegated permission context",
+        paths=(
+            "runtime/safety/auth/arg_guard.py",
+            "runtime/execution/suckers/delegation_skills.py",
+            "runtime/execution/tool_engine/executor.py",
+            "tests/test_arg_guard_sec1.py",
+            "tests/test_call_agent_parallel_partial.py",
+        ),
+        required_terms=(
+            "octopus.delegation_context_policy.v1",
+            "is_model_protected_context_key",
+            "_strip_delegation_context_overrides",
+            "monotonic",
+            "sandboxPolicy",
+            "_inherited_injection_taint",
+            "stripped_keys",
+        ),
+    ),
 )
 
 

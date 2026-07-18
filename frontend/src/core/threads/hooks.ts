@@ -78,6 +78,16 @@ function recordValue(value: unknown): Record<string, unknown> | undefined {
   return undefined;
 }
 
+function parseCapabilityDisabled(
+  value: unknown,
+): { group: string; config_flag: string } | undefined {
+  if (!isRecord(value)) return undefined;
+  const group = stringValue(value.group);
+  const configFlag = stringValue(value.config_flag) ?? stringValue(value.configFlag);
+  if (!group || !configFlag) return undefined;
+  return { group, config_flag: configFlag };
+}
+
 function terminalToolStatus(value: unknown): LiveToolEvent["status"] {
   if (value === true) return "error";
   const normalized = typeof value === "string" ? value.toLowerCase() : "";
@@ -152,6 +162,7 @@ export function normalizeCustomToolEvent(
       stringValue(event.sub_agent_role) ?? stringValue(event.subAgentRole),
     thought: stringValue(event.thought),
     observation: stringValue(event.observation),
+    capabilityDisabled: parseCapabilityDisabled(event.capability_disabled),
   };
 }
 

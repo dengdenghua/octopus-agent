@@ -121,6 +121,39 @@ def create_health_router(
             frontend_proxy_target=frontend_proxy_target,
         )
 
+    @router.post("/api/capabilities/enable")
+    def api_capabilities_enable(payload: dict[str, Any]) -> dict[str, Any]:
+        """Hot-load a skill group that was excluded at startup.
+
+        Body: ``{"group": "web"}`` — registers the named group into the
+        live ``SkillRegistry`` so subsequent tool calls succeed without a
+        backend restart. Triggered by the UI's one-click "enable" prompt
+        when the model tries to call a config-disabled tool (e.g.
+        ``web_search`` under ``enable_web_skills=False``).
+        """
+        from fastapi import HTTPException
+
+        from runtime.execution.all_skills import WEB_ONLY_GROUPS, register_group
+
+        group = str(payload.get("group") or "").strip()
+        if not group:
+            raise HTTPException(status_code=400, detail="missing 'group' field")
+        if group not in WEB_ONLY_GROUPS:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"group '{group}' is not a toggleable web-only group; "
+                    f"allowed: {sorted(WEB_ONLY_GROUPS)}"
+                ),
+            )
+        newly = register_group(state.registry, group)
+        return {
+            "ok": True,
+            "group": group,
+            "newly_registered": newly,
+            "skill_count": len(state.registry),
+        }
+
     return router
 
 

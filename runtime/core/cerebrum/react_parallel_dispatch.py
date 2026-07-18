@@ -113,10 +113,21 @@ def _dispatch_parallel_actions(
     # source)? Used to order the serial batch so untrusted tools run before
     # risky ones (see below).
     untrusted_flags: list[bool] = []
+    # Per-action capability-disabled info: when a tool is recognized by the
+    # catalog but its group is excluded by ``enable_web_skills=False``, we
+    # populate this dict so (a) the model gets an actionable observation
+    # explaining *why* the tool is unavailable and (b) the ``tool_end``
+    # event carries the info for the UI to render a one-click enable prompt.
+    disabled_infos: list[dict[str, str] | None] = []
+    try:
+        from runtime.execution.all_skills import is_known_but_disabled_tool
+    except ImportError:  # pragma: no cover — defensive
+        is_known_but_disabled_tool = lambda _n: (False, None)  # noqa: E731
     for p in parsed_pairs:
         if p is None:
             resolved_names.append(None)
             untrusted_flags.append(False)
+            disabled_infos.append(None)
             has_unregistered = True
             continue
         name = p[0]
@@ -125,8 +136,18 @@ def _dispatch_parallel_actions(
             resolved_names.append(None)
             untrusted_flags.append(False)
             has_unregistered = True
+            # Distinguish "known but config-disabled" from "completely unknown"
+            # so the model and UI get actionable context instead of a generic
+            # "unregistered" message that invites 7 retries.
+            _hit, _group = is_known_but_disabled_tool(name)
+            disabled_infos.append(
+                {"group": _group, "config_flag": "enable_web_skills"}
+                if _hit and _group
+                else None
+            )
         else:
             resolved_names.append(name)
+            disabled_infos.append(None)
             try:
                 _aff = registry.get(name).affinity
             except (KeyError, AttributeError):
@@ -146,7 +167,7 @@ def _dispatch_parallel_actions(
     # Emit tool_start for every action up-front so the UI shows them
     # in parallel even if we end up running serially below.
     for idx in range(len(actions)):
-        name = resolved_names[idx] or "unknown"
+        name = resolved_names[idx] or (parsed_pairs[idx][0] if parsed_pairs[idx] else "unknown")
         _input_preview = parsed_pairs[idx][1] if parsed_pairs[idx] else None
         yield tool_lifecycle_event_to_react_event(
             normalize_tool_lifecycle_event(
@@ -167,8 +188,23 @@ def _dispatch_parallel_actions(
     def _run_one(idx: int) -> tuple[str | None, Any]:
         # Skip dispatch for unregistered tools — the single-action
         # path's "(tool not registered)" message is reproduced here
-        # so the model gets a uniform observation.
+        # so the model gets a uniform observation. When the tool is
+        # recognized as config-disabled (e.g. web_search under
+        # enable_web_skills=False), augment the message with the reason
+        # and the remediation path so the model stops retrying and can
+        # inform the user.
         if resolved_names[idx] is None:
+            _di = disabled_infos[idx]
+            if _di is not None:
+                _tool_name = parsed_pairs[idx][0] if parsed_pairs[idx] else "unknown"
+                return (
+                    f"(工具未注册) {_tool_name} 所属组 '{_di['group']}' 被配置关闭"
+                    f"({_di['config_flag']}=false)。如需启用:在 config.local.yaml "
+                    f"设置 {_di['config_flag']}: true 并重启后端,或调用 "
+                    f"POST /api/capabilities/enable 临时启用。当前请改用其他工具"
+                    f"或告知用户该能力不可用。",
+                    None,
+                )
             return (
                 f"(工具未注册或无法解析) action: {actions[idx][:200]}",
                 None,
@@ -240,7 +276,7 @@ def _dispatch_parallel_actions(
     for idx in range(n):
         obs = observations[idx]
         bk = beak_steps[idx]
-        name = resolved_names[idx] or "unknown"
+        name = resolved_names[idx] or (parsed_pairs[idx][0] if parsed_pairs[idx] else "unknown")
         _ok = not (
             obs is not None
             and isinstance(obs, str)
@@ -282,21 +318,27 @@ def _dispatch_parallel_actions(
                         _scan.severity,
                         ",".join(_scan.labels),
                     )
+        _end_payload = {
+            "tool_name": name,
+            "tool_call_id": call_ids[idx],
+            "iteration": iteration,
+            "status": "success" if _ok else "error",
+            "output_preview": (
+                _summarize_observation(obs) if isinstance(obs, str) and obs else obs
+            ),
+            "duration_ms": _duration_ms,
+            "parallel_batch_size": n,
+            **_tool_event_extras_from_beak_step(bk, name),
+        }
+        # Attach capability-disabled metadata so the UI can render a
+        # one-click "enable web_search" prompt instead of a bare error.
+        # Routed through ``extras`` by ``normalize_tool_lifecycle_event``.
+        if disabled_infos[idx] is not None:
+            _end_payload["capability_disabled"] = disabled_infos[idx]
         yield tool_lifecycle_event_to_react_event(
             normalize_tool_lifecycle_event(
                 "tool_end",
-                {
-                    "tool_name": name,
-                    "tool_call_id": call_ids[idx],
-                    "iteration": iteration,
-                    "status": "success" if _ok else "error",
-                    "output_preview": (
-                        _summarize_observation(obs) if isinstance(obs, str) and obs else obs
-                    ),
-                    "duration_ms": _duration_ms,
-                    "parallel_batch_size": n,
-                    **_tool_event_extras_from_beak_step(bk, name),
-                },
+                _end_payload,
                 origin="react_compat",
             )
         )

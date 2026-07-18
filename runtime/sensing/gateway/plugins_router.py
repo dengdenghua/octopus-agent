@@ -11,6 +11,15 @@ from runtime.platform.plugins.codex_discovery import (  # re-exported
     _string,
     discover_codex_plugins,
 )
+from runtime.platform.plugins.plugin_lifecycle import (
+    install_local_plugin,
+    plugin_lifecycle_history,
+    rollback_plugin_transaction,
+)
+from runtime.platform.plugins.plugin_registry import (
+    discover_plugin_registry_updates,
+    install_registry_plugin,
+)
 from runtime.platform.plugins.publisher_provenance import (
     resolve_publisher_trust_store_path,
 )
@@ -57,6 +66,7 @@ def create_plugins_router(
     approval_policy_path: Path | None = None,
     promotion_audit_path: Path | None = None,
     publisher_trust_store_path: Path | None = None,
+    plugin_registry_path: Path | None = None,
 ) -> APIRouter:
     def _discover() -> list[dict[str, Any]]:
         return discover_codex_plugins(
@@ -69,6 +79,14 @@ def create_plugins_router(
         if resolved is None:
             raise HTTPException(500, "publisher trust store path is unavailable")
         return resolved
+
+    def _writable_plugin_root() -> Path:
+        if plugin_roots:
+            return Path(plugin_roots[0])
+        return Path(__file__).resolve().parents[3] / ".octopus" / "plugins" / "codex"
+
+    def _registry_path() -> Path:
+        return plugin_registry_path or (_writable_plugin_root().parent / "registry.json")
 
     def _auth_dep(request: Request) -> None:
         path = str(getattr(getattr(request, "url", None), "path", "") or "")
@@ -247,6 +265,112 @@ def create_plugins_router(
             plugins=_discover(),
         )
 
+    @router.get("/api/plugins/lifecycle/history")
+    def _plugin_lifecycle_history(limit: int = 100) -> dict[str, Any]:
+        return plugin_lifecycle_history(
+            plugin_root=_writable_plugin_root(),
+            limit=limit,
+        )
+
+    @router.get("/api/plugins/registry/updates")
+    def _plugin_registry_updates() -> dict[str, Any]:
+        try:
+            return discover_plugin_registry_updates(
+                registry_path=_registry_path(),
+                plugin_root=_writable_plugin_root(),
+                publisher_trust_store_path=publisher_trust_store_path,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @router.post("/api/plugins/registry/install")
+    def _plugin_registry_install(
+        request: Request,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        body = payload or {}
+        try:
+            result = install_registry_plugin(
+                str(body.get("plugin_id") or ""),
+                registry_path=_registry_path(),
+                plugin_root=_writable_plugin_root(),
+                publisher_trust_store_path=publisher_trust_store_path,
+                confirm_install=body.get("confirm_install") is True,
+            )
+        except (OSError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from None
+        append_governance_audit_event(
+            event_type="plugin_registry_install",
+            target=str(result["plugin_id"]),
+            status=str(result["status"]),
+            artifact=result,
+            decision_context={
+                "schema": "octopus.plugin_registry_install_context.v1",
+                "actor": _actor_from_request(request),
+                "source": "plugins_router",
+            },
+            audit_path=promotion_audit_path or app_paths().promotion_audit_path,
+        )
+        return result
+
+    @router.post("/api/plugins/lifecycle/install")
+    def _plugin_lifecycle_install(
+        request: Request,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        body = payload or {}
+        try:
+            result = install_local_plugin(
+                str(body.get("source_path") or ""),
+                plugin_root=_writable_plugin_root(),
+                publisher_trust_store_path=publisher_trust_store_path,
+                confirm_install=body.get("confirm_install") is True,
+                allow_downgrade=body.get("allow_downgrade") is True,
+            )
+        except (OSError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from None
+        append_governance_audit_event(
+            event_type="plugin_lifecycle_install",
+            target=str(result["plugin_id"]),
+            status=str(result["status"]),
+            artifact=result,
+            decision_context={
+                "schema": "octopus.plugin_lifecycle_install_context.v1",
+                "actor": _actor_from_request(request),
+                "source": "plugins_router",
+            },
+            audit_path=promotion_audit_path or app_paths().promotion_audit_path,
+        )
+        return result
+
+    @router.post("/api/plugins/lifecycle/rollback")
+    def _plugin_lifecycle_rollback(
+        request: Request,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        body = payload or {}
+        try:
+            result = rollback_plugin_transaction(
+                str(body.get("transaction_id") or ""),
+                plugin_root=_writable_plugin_root(),
+                confirm_rollback=body.get("confirm_rollback") is True,
+            )
+        except (OSError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from None
+        append_governance_audit_event(
+            event_type="plugin_lifecycle_rollback",
+            target=str(result["plugin_id"]),
+            status=str(result["status"]),
+            artifact=result,
+            decision_context={
+                "schema": "octopus.plugin_lifecycle_rollback_context.v1",
+                "actor": _actor_from_request(request),
+                "source": "plugins_router",
+            },
+            audit_path=promotion_audit_path or app_paths().promotion_audit_path,
+        )
+        return result
+
     @router.get("/api/plugins/publisher-trust")
     def _plugin_publisher_trust() -> dict[str, Any]:
         try:
@@ -277,11 +401,7 @@ def create_plugins_router(
             event_type="plugin_publisher_key_rotation",
             target=str(result["publisher_id"]),
             status="rotated",
-            artifact={
-                key: value
-                for key, value in result.items()
-                if key != "trust"
-            },
+            artifact={key: value for key, value in result.items() if key != "trust"},
             decision_context={
                 "schema": "octopus.plugin_publisher_key_rotation_context.v1",
                 "actor": _actor_from_request(request),
@@ -312,11 +432,7 @@ def create_plugins_router(
             event_type="plugin_publisher_key_revocation",
             target=str(result["publisher_id"]),
             status="revoked",
-            artifact={
-                key: value
-                for key, value in result.items()
-                if key != "trust"
-            },
+            artifact={key: value for key, value in result.items() if key != "trust"},
             decision_context={
                 "schema": "octopus.plugin_publisher_key_revocation_context.v1",
                 "actor": _actor_from_request(request),

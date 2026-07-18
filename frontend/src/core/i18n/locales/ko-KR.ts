@@ -588,6 +588,13 @@ export const koKR: Translations = {
     clarifyTaskDirection: "작업 방향 확인",
     synthesizeFindings: "조사 결과 정리",
     planNextStep: "다음 단계 계획",
+    progressOrient: "방향 설정",
+    progressInvestigate: "조사",
+    progressImplement: "구현",
+    progressVerify: "검증",
+    progressPivot: "전환",
+    progressSynthesize: "정리",
+    progressRecover: "복구",
   },
 
   // Trace generator labels

@@ -591,6 +591,13 @@ export const jaJP: Translations = {
     clarifyTaskDirection: "タスクの方向性を確認",
     synthesizeFindings: "調査結果を整理",
     planNextStep: "次のステップを計画",
+    progressOrient: "方向付け",
+    progressInvestigate: "調査",
+    progressImplement: "実装",
+    progressVerify: "検証",
+    progressPivot: "転換",
+    progressSynthesize: "集約",
+    progressRecover: "復旧",
   },
 
   // Trace generator labels

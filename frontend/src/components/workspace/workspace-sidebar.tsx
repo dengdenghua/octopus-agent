@@ -357,7 +357,7 @@ function projectNameForThread(
 
   if (thread.mode === "team") {
     if (workspaceProject) return workspaceProject;
-    if (isGeneratedTeamProjectName(explicitProject)) return "";
+    if (isGeneratedTeamProjectName(explicitProject)) return personalSpaceLabel;
     return explicitProject;
   }
   if (explicitProject) return explicitProject;

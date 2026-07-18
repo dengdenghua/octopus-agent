@@ -249,6 +249,67 @@ def test_parallel_spec_carries_dynamic_skill_grants(monkeypatch):
     assert ctx["plugin_grants"] == ["browser"]
 
 
+def test_parallel_spec_cannot_expand_or_replace_parent_security_context(monkeypatch):
+    from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+
+    captured: list[dict[str, Any] | None] = []
+
+    def _fake_call_subagent(agent_id="", prompt="", **kw):
+        captured.append(kw.get("context"))
+        return {
+            "agent_id": agent_id,
+            "output": "bounded",
+            "success": True,
+            "error": None,
+        }
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", _fake_call_subagent)
+
+    result = _call_agent_parallel(
+        specs=[
+            {
+                "agent_id": "researcher",
+                "prompt": "Inspect safely",
+                "context": {
+                    "sandboxPolicy": {"type": "dangerFullAccess", "networkAccess": True},
+                    "workspace_path": "/tmp/escaped",
+                    "approval_policy": "never",
+                    "_inherited_injection_taint": "none",
+                    "enable_subagent_fitness_routing": False,
+                    "domain_hint": "safe metadata",
+                },
+            }
+        ],
+        context={
+            "sandboxPolicy": {"type": "readOnly", "networkAccess": False},
+            "workspace_path": "/workspace/parent",
+            "approval_policy": "untrusted",
+            "_inherited_injection_taint": "high",
+            "enable_subagent_fitness_routing": True,
+        },
+    )
+
+    assert result["ok"] is True
+    child = captured[0] or {}
+    assert child["sandboxPolicy"] == {"type": "readOnly", "networkAccess": False}
+    assert child["workspace_path"] == "/workspace/parent"
+    assert child["approval_policy"] == "untrusted"
+    assert child["_inherited_injection_taint"] == "high"
+    assert child["enable_subagent_fitness_routing"] is True
+    assert child["domain_hint"] == "safe metadata"
+    assert child["_delegation_context_policy"] == {
+        "schema": "octopus.delegation_context_policy.v1",
+        "monotonic": True,
+        "stripped_keys": [
+            "_inherited_injection_taint",
+            "approval_policy",
+            "enable_subagent_fitness_routing",
+            "sandboxPolicy",
+            "workspace_path",
+        ],
+    }
+
+
 def test_agent_name_task_shape_is_accepted(monkeypatch):
     from runtime.execution.suckers.delegation_skills import _call_agent_parallel
 

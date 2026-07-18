@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import contextvars
+import json
 import logging
 import os
 import queue
@@ -598,6 +599,34 @@ def _per_action_outcomes(
     # per-action receipts. Preserve the old one-round semantics rather than
     # inventing success for individual calls we cannot attribute.
     return [(step, default_ok)]
+
+
+def _action_fingerprint(action: str) -> str:
+    """Return a stable tool+arguments key for duplicate/retry control."""
+    parsed = _parse_action(action)
+    if parsed is None:
+        return " ".join(str(action or "").split())
+    name, args = parsed
+    try:
+        payload = json.dumps(args, ensure_ascii=False, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        payload = repr(args)
+    return f"{name}:{payload}"
+
+
+def _deduplicate_actions(actions: list[str]) -> tuple[list[str], int]:
+    """Collapse protocol/provider duplicate calls within one model round."""
+    unique: list[str] = []
+    seen: set[str] = set()
+    duplicates = 0
+    for action in actions:
+        fingerprint = _action_fingerprint(action)
+        if fingerprint in seen:
+            duplicates += 1
+            continue
+        seen.add(fingerprint)
+        unique.append(action)
+    return unique, duplicates
 
 
 # Affinity tags that mark a tool as having side effects, so a failed call must
@@ -2634,6 +2663,8 @@ def stream_react_loop(
     # a stable terminal state instead of cycling through verify/todo forever.
     _saw_successful_code_write = False
     _clean_verification_rounds_after_write = 0
+    _last_failed_action_fingerprint = ""
+    _consecutive_same_failed_actions = 0
     _model_timeout_recoveries = 0
     # Allow two consecutive zero-anchor rounds before bailing. The
     # first violation is often a model warming up — it dumps a chunk
@@ -3470,6 +3501,71 @@ def stream_react_loop(
         tool_action_requested = (
             tools_active and step.action and step.action.lower() not in {"none", "n/a", ""}
         )
+        _duplicate_action_count = 0
+        if tool_action_requested and len(step.actions) > 1:
+            step.actions, _duplicate_action_count = _deduplicate_actions(step.actions)
+            step.action = "; ".join(step.actions)
+            tool_action_requested = bool(step.actions)
+        _current_action_fingerprint = ""
+        _repeated_failure_skipped = False
+        if tool_action_requested and len(step.actions or [step.action]) == 1:
+            _current_action_fingerprint = _action_fingerprint(
+                (step.actions or [step.action])[0]
+            )
+            if (
+                _consecutive_same_failed_actions >= 2
+                and _current_action_fingerprint == _last_failed_action_fingerprint
+            ):
+                observation = (
+                    "[repeated-failing-tool-skipped] The same tool call with identical "
+                    "arguments already failed twice, so the runtime did not execute it a "
+                    "third time. Treat the prior failure as definitive. Choose a different "
+                    "action: for a missing file, create it with an allowed write tool; for "
+                    "invalid arguments, correct them; otherwise use a different evidence source."
+                )
+                step.observation = observation
+                step.action = ""
+                step.actions = []
+                tool_action_requested = False
+                maybe_final = None
+                _repeated_failure_skipped = True
+        if _is_code_mode and tool_action_requested:
+            # A deterministic source-level concurrency defect is stronger
+            # evidence than another green/red probe.  Do not let providers
+            # evade the repair instruction by cycling through pytest, lint,
+            # typecheck, or shell variants.  Reads and actual code writes stay
+            # available; a write+verify batch is also allowed because the
+            # ordered outcome tracker will evaluate the post-repair checks.
+            _semantic_repair = _concurrency_semantic_followup_guard(
+                steps,
+                is_code_mode=True,
+            )
+            if _semantic_repair:
+                _candidate_steps = [
+                    ReActStep(iteration=i + 1, action=_candidate)
+                    for _candidate in (step.actions or [step.action])
+                ]
+                _candidate_has_write = any(
+                    _is_code_write_step(_candidate_step)
+                    for _candidate_step in _candidate_steps
+                )
+                _candidate_has_verifier = any(
+                    _has_code_verification([_candidate_step])
+                    for _candidate_step in _candidate_steps
+                )
+                if _candidate_has_verifier and not _candidate_has_write:
+                    observation = (
+                        "[semantic-repair-tool-skipped] A deterministic concurrency defect "
+                        "is still present in the latest source edit, so the runtime did not "
+                        "execute another verifier or shell probe. Repair the source first.\n"
+                        + _semantic_repair
+                    )
+                    step.observation = observation
+                    step.action = ""
+                    step.actions = []
+                    tool_action_requested = False
+                    maybe_final = None
+                    _force_convergence_next = True
         if _green_verification_convergence_active and tool_action_requested:
             _candidate_actions = step.actions or [step.action]
             _candidate_names = []
@@ -3931,6 +4027,25 @@ def stream_react_loop(
                 observation = _placeholder_observation(step.action)
             step.observation = observation
 
+        if _duplicate_action_count and step.observation:
+            step.observation += (
+                "\n\n[duplicate-tools-collapsed] The provider emitted "
+                f"{_duplicate_action_count} duplicate call(s) with identical tool arguments "
+                "in one model round. The runtime executed each unique call once."
+            )
+        if tool_action_requested and _current_action_fingerprint:
+            if tool_ok:
+                _last_failed_action_fingerprint = ""
+                _consecutive_same_failed_actions = 0
+            elif _current_action_fingerprint == _last_failed_action_fingerprint:
+                _consecutive_same_failed_actions += 1
+            else:
+                _last_failed_action_fingerprint = _current_action_fingerprint
+                _consecutive_same_failed_actions = 1
+        elif not _repeated_failure_skipped and tool_action_requested:
+            _last_failed_action_fingerprint = ""
+            _consecutive_same_failed_actions = 0
+
         # Common single/parallel tool outlet. Keep terminal evidence here so
         # a model round that launches lint + tests together is counted exactly
         # like one that launches either verifier alone.
@@ -4171,11 +4286,16 @@ def stream_react_loop(
                 # after two superficially green verifier rounds. Re-open the
                 # tool path so the model can perform the demanded repair;
                 # otherwise the convergence gate would suppress every fix
-                # and turn a useful guard into an impasse.
-                _green_verification_convergence_active = False
-                _green_convergence_todo_used = False
-                _clean_verification_rounds_after_write = 0
-                _force_convergence_next = False
+                # and turn a useful guard into an impasse. The todo protocol
+                # is different: terminal evidence is still valid and the
+                # convergence state already allows exactly one checklist
+                # update. Clearing it here caused green agents to resume an
+                # unbounded test/lint cycle after that update.
+                if _guard_label != "todo-protocol guard":
+                    _green_verification_convergence_active = False
+                    _green_convergence_todo_used = False
+                    _clean_verification_rounds_after_write = 0
+                    _force_convergence_next = False
                 step.observation = (
                     (((step.observation or "") + "\n\n") if step.observation else "")
                     + f"[{_guard_label}]\n"

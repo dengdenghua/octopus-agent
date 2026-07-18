@@ -42,6 +42,21 @@ def test_agentic_tool_start_event_maps_to_react_shape():
     }
 
 
+def test_agentic_commentary_maps_to_public_timeline_event():
+    evt = _agentic_stream_event_to_react_event(
+        "commentary",
+        "已确认第一批资料，现在继续核对官方文档。",
+        None,
+    )
+
+    assert evt == {
+        "type": "commentary_delta",
+        "delta": "已确认第一批资料，现在继续核对官方文档。",
+        "progress_kind": "investigate",
+        "progress_source": "model",
+    }
+
+
 def test_agentic_tool_error_maps_to_failed_tool_end():
     evt = _agentic_stream_event_to_react_event(
         "tool_end",
@@ -270,6 +285,7 @@ def test_agentic_session_metadata_preserves_code_permission_context():
             "capability_mode": "code",
             "code_mode": "solo",
             "agent_mode": "architect",
+            "allowed_write_paths": ["cache.py", "tests/test_cache.py"],
             "project_signals": {"recommended_mode": "architect"},
         },
     )
@@ -285,6 +301,7 @@ def test_agentic_session_metadata_preserves_code_permission_context():
     assert metadata["capability_mode"] == "code"
     assert metadata["code_mode"] == "solo"
     assert metadata["agent_mode"] == "architect"
+    assert metadata["allowed_write_paths"] == ["cache.py", "tests/test_cache.py"]
     assert metadata["project_signals"] == {"recommended_mode": "architect"}
 
 

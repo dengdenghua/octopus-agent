@@ -1741,6 +1741,11 @@ def stream_agentic_fallback(
     _clean_code_verifier_rounds = 0
     _green_verification_convergence_active = False
     _green_convergence_todo_only = False
+    _code_semantic_steps: list[Any] = []
+    _code_semantic_repair_required = False
+    _code_semantic_repair_message = ""
+    _pending_code_semantic_nudge = ""
+    _code_semantic_guard_nudges = 0
     _code_completion_nudges = 0
     _code_no_action_stops = 0
     _quality_failovers = 0
@@ -1749,9 +1754,17 @@ def stream_agentic_fallback(
     _force_convergence_next = False
     _model_timeout_recoveries = 0
 
-    def _observe_code_tool_result(call: ToolCall, is_error: bool) -> None:
+    def _observe_code_tool_result(
+        call: ToolCall,
+        is_error: bool,
+        output: str,
+        iteration: int,
+    ) -> None:
         nonlocal _clean_code_verifier_rounds
         nonlocal _code_mutation_seen, _code_verification_state
+        nonlocal _code_semantic_guard_nudges
+        nonlocal _code_semantic_repair_message, _code_semantic_repair_required
+        nonlocal _pending_code_semantic_nudge
         nonlocal _green_convergence_todo_only
         nonlocal _green_verification_convergence_active
         if not _code_change_task:
@@ -1763,6 +1776,40 @@ def stream_agentic_fallback(
             _clean_code_verifier_rounds = 0
             _green_verification_convergence_active = False
             _green_convergence_todo_only = False
+        if not is_error:
+            from runtime.core.cerebrum.react_guards import (  # noqa: PLC0415
+                _concurrency_semantic_followup_guard,
+            )
+            from runtime.core.cerebrum.react_types import ReActStep  # noqa: PLC0415
+
+            try:
+                args_json = json.dumps(call.input or {}, ensure_ascii=False, default=str)
+            except (TypeError, ValueError):
+                args_json = "{}"
+            _code_semantic_steps.append(
+                ReActStep(
+                    iteration=iteration,
+                    action=f"{call.name}({args_json})",
+                    observation=output,
+                )
+            )
+            if call.name in _CODE_MUTATION_TOOLS or _is_shell_mutation(call):
+                semantic_message = _concurrency_semantic_followup_guard(
+                    _code_semantic_steps,
+                    is_code_mode=True,
+                )
+                _code_semantic_repair_required = semantic_message is not None
+                _code_semantic_repair_message = semantic_message or ""
+                if semantic_message:
+                    _pending_code_semantic_nudge = semantic_message
+                    _code_semantic_guard_nudges += 1
+                    _code_verification_state = None
+                    _clean_code_verifier_rounds = 0
+                    _green_verification_convergence_active = False
+                    _green_convergence_todo_only = False
+                else:
+                    _pending_code_semantic_nudge = ""
+                    _code_semantic_guard_nudges = 0
         if call.name in _CODE_VERIFICATION_TOOLS or _is_shell_verification(call):
             _code_verification_state = not is_error
         if (
@@ -1828,7 +1875,11 @@ def stream_agentic_fallback(
                 else (
                     (
                         _code_change_task
-                        and (not _code_mutation_seen or _code_verification_state is not True)
+                        and (
+                            not _code_mutation_seen
+                            or _code_verification_state is not True
+                            or _code_semantic_repair_required
+                        )
                     )
                     or bool(_browser_required_evidence - _browser_observed_evidence)
                 )
@@ -2033,6 +2084,26 @@ def stream_agentic_fallback(
                             )
                         )
                         continue
+            if (
+                not _round_convergence_mode
+                and _code_change_task
+                and _code_semantic_repair_required
+                and _code_semantic_guard_nudges < 4
+            ):
+                _code_semantic_guard_nudges += 1
+                accumulated_text = ""
+                messages.append(
+                    Message(
+                        role="user",
+                        content=(
+                            "[SYSTEM CHECK - concurrency semantic repair required]\n"
+                            + _code_semantic_repair_message
+                            + " Do not finalize or rerun equivalent verification yet. "
+                            "Inspect and repair the affected production implementation first."
+                        ),
+                    )
+                )
+                continue
             if not _round_convergence_mode and _todo_protocol_required and _has_todo_write:
                 _todo_guard_message: str | None = None
                 if not _todo_seen:
@@ -2252,7 +2323,7 @@ def stream_agentic_fallback(
                     call.id,
                     ("(no result)", True),
                 )
-                _observe_code_tool_result(call, is_error)
+                _observe_code_tool_result(call, is_error, output, round_i + 1)
                 if not is_error:
                     _browser_observed_evidence.update(_browser_action_evidence(call))
                 yield (
@@ -2303,7 +2374,7 @@ def stream_agentic_fallback(
                         None,
                     )
                     _current_session.reset(_call_session_token)
-                _observe_code_tool_result(call, is_error)
+                _observe_code_tool_result(call, is_error, output, round_i + 1)
                 if not is_error:
                     _browser_observed_evidence.update(_browser_action_evidence(call))
                 yield (
@@ -2345,7 +2416,21 @@ def stream_agentic_fallback(
             )
         )
 
-        if _green_verification_convergence_active:
+        if _pending_code_semantic_nudge:
+            messages.append(
+                Message(
+                    role="user",
+                    content=(
+                        "[SYSTEM CHECK - concurrency semantic repair required]\n"
+                        + _pending_code_semantic_nudge
+                        + " Repair the production implementation before running more "
+                        "verification or attempting the final answer."
+                    ),
+                )
+            )
+            _pending_code_semantic_nudge = ""
+
+        if _green_verification_convergence_active and not _code_semantic_repair_required:
             _todo_completed_this_round = any(
                 call.name == "todo_write" for call in round_tool_calls
             )

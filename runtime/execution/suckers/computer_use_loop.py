@@ -205,6 +205,7 @@ def _run_computer_use_loop(
     max_iterations: int,
     wait_between_ms: int,
     stop_on_error: bool,
+    capture_screen: Callable[..., dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     history: list[dict[str, Any]] = []
     screenshots_saved: list[str] = []
@@ -213,8 +214,11 @@ def _run_computer_use_loop(
     shot_dir.mkdir(parents=True, exist_ok=True)
 
     for iteration in range(max_iterations):
-        shot_path = str(shot_dir / f"iter_{iteration:03d}.png")
-        cap = _screen_capture(path=shot_path, sandbox_dir=sandbox_dir)
+        requested_shot_path = str(shot_dir / f"iter_{iteration:03d}.png")
+        cap = (capture_screen or _screen_capture)(
+            path=requested_shot_path,
+            sandbox_dir=sandbox_dir,
+        )
         if "error" in cap:
             return _final(
                 "error",
@@ -222,6 +226,24 @@ def _run_computer_use_loop(
                 history,
                 screenshots_saved,
                 reason=f"screenshot failed: {cap['error']}",
+                iterations=iteration,
+            )
+        # ``path_guard`` may resolve a relative request into a sandboxed,
+        # absolute destination. The capture result is authoritative: passing
+        # the original relative name to the vision planner made it look in the
+        # process cwd and fail with ``iter_000.png`` not found even though the
+        # screenshot had been saved successfully elsewhere.
+        shot_path = str(cap.get("path") or requested_shot_path)
+        if not Path(shot_path).is_file():
+            return _final(
+                "error",
+                goal,
+                history,
+                screenshots_saved,
+                reason=(
+                    "screenshot capture returned no readable artifact: "
+                    f"requested={requested_shot_path!r}, captured={shot_path!r}"
+                ),
                 iterations=iteration,
             )
         screenshots_saved.append(shot_path)

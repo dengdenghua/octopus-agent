@@ -15,7 +15,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from benchmarks.codex_cli_runner import CodexCliTrialRunner, codex_cli_version
-from benchmarks.eval_harness import SuiteReport, run_suite_by_case, write_behavioral_system_evidence
+from benchmarks.eval_harness import (
+    SuiteReport,
+    resumable_report,
+    run_suite_by_case,
+    write_behavioral_system_evidence,
+)
 from benchmarks.fixed_suite_fixtures import prepare_fixture_suite
 from benchmarks.multiphase_runner import MultiPhaseTrialRunner
 from benchmarks.realtime_runner import (
@@ -178,13 +183,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         def single_runner(case):
             multi_agent = case.metadata["domain"] == "multi_agent_digital_employee"
             approval_policy, approval_action = _approval_behavior(case.id)
+            context_overrides = _context_overrides(case.metadata["domain"])
+            allowed_write_paths = case.metadata.get("allowed_write_paths")
+            if isinstance(allowed_write_paths, list):
+                context_overrides["allowed_write_paths"] = list(allowed_write_paths)
             return RealtimeTrialRunner(
                 url=args.octopus_url,
                 token=octopus_token,
                 model=args.model,
                 topology_id="research_swarm_v1" if multi_agent else None,
                 workspace=lambda: prepared.workspace(case.id),
-                context_overrides=_context_overrides(case.metadata["domain"]),
+                context_overrides=context_overrides,
                 approval_policy=approval_policy,
                 approval_action=approval_action,
                 approval_responder=_approval_responder(case.id),
@@ -235,10 +244,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error(str(exc))
 
     def save_checkpoint(report: SuiteReport) -> None:
-        resumable = SuiteReport(
-            cases=[case for case in report.cases if not case.has_infrastructure_failure],
-            started_at=report.started_at,
-        )
+        resumable = resumable_report(report)
         _write_checkpoint(
             checkpoint_path,
             report=resumable,

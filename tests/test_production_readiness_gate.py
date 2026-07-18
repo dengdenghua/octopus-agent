@@ -17,31 +17,37 @@ def review_queue_path(tmp_path: Path) -> Path:
 
 
 def test_production_readiness_gate_requires_behavioral_release_evidence(
+    monkeypatch,
+    tmp_path: Path,
     review_queue_path: Path,
 ) -> None:
+    monkeypatch.setenv(
+        "OCTOPUS_BEHAVIORAL_INFRASTRUCTURE_STATUS",
+        str(tmp_path / "no-infrastructure-receipt.json"),
+    )
     result = gate.run_gate(review_queue_path=review_queue_path)
 
     assert result.failures
     assert any("e2e surpass certification is not ready" in item for item in result.failures)
-    assert result.scorecard_score == 97
+    assert result.scorecard_score == 98
     assert result.scorecard_evidence_adjusted_score >= gate.MIN_SCORE
     assert result.automation_score >= gate.MIN_SCORE
     assert result.e2e_ready is False
-    assert result.e2e_verdict == "needs_work"
-    assert result.e2e_summary["scorecard_octopus"] == 97
+    assert result.e2e_verdict == "needs_behavioral_evidence"
+    assert result.e2e_summary["scorecard_octopus"] == 98
     assert result.e2e_summary["scorecard_best_external"] == 97
     assert result.e2e_summary["automation_octopus"] == 96
-    assert result.e2e_summary["coverage_ready"] == 0
+    assert result.e2e_summary["coverage_ready"] == 7
     assert result.e2e_summary["coverage_total"] == 7
-    assert result.e2e_summary["coverage_gap_domains"] == 7
+    assert result.e2e_summary["coverage_gap_domains"] == 0
     assert result.e2e_summary["quality_ready"] == result.e2e_summary["quality_total"]
-    assert result.e2e_coverage["summary"]["ready_domains"] == 0
-    assert len(result.e2e_coverage["summary"]["gap_domain_ids"]) == 7
+    assert result.e2e_coverage["summary"]["ready_domains"] == 7
+    assert result.e2e_coverage["summary"]["gap_domain_ids"] == []
     assert "behavioral:bundle_present" in result.e2e_failed_checks
     assert result.e2e_behavioral["verdict"] == "missing_behavioral_evidence"
     assert result.e2e_summary_text == (
-        "e2e_scorecard=97, e2e_best_external=97, "
-        "e2e_automation=96, e2e_coverage=0/7, e2e_quality=6/6, "
+        "e2e_scorecard=98, e2e_best_external=97, "
+        "e2e_automation=96, e2e_coverage=7/7, e2e_quality=7/7, "
         "e2e_behavioral=missing"
     )
     assert "octopus.repo_context_quality.v1" in result.quality_summary
@@ -89,9 +95,8 @@ def test_production_readiness_gate_passes_verified_behavioral_evidence(
 
     result = gate.run_gate(review_queue_path=review_queue_path)
 
-    assert result.failures
+    assert result.failures == []
     assert not any("behavioral surpass evidence is not ready" in row for row in result.failures)
-    assert any("scorecard_all_dimensions_surpassed" in row for row in result.failures)
     assert result.e2e_ready is True
     assert result.e2e_verdict == "surpassed"
     assert result.e2e_behavioral["ready"] is True
@@ -135,9 +140,15 @@ def test_production_readiness_gate_prints_e2e_summary(
 
 
 def test_production_readiness_gate_can_emit_json_summary(
+    monkeypatch,
+    tmp_path: Path,
     capsys,
     review_queue_path: Path,
 ) -> None:
+    monkeypatch.setenv(
+        "OCTOPUS_BEHAVIORAL_INFRASTRUCTURE_STATUS",
+        str(tmp_path / "no-infrastructure-receipt.json"),
+    )
     code = gate.main(
         [
             "--review-queue-path",
@@ -153,13 +164,13 @@ def test_production_readiness_gate_can_emit_json_summary(
     assert data["schema"] == "octopus.production_readiness_gate.v1"
     assert data["ready"] is False
     assert data["failures"]
-    assert data["scorecard_score"] == 97
+    assert data["scorecard_score"] == 98
     assert data["automation_score"] == 96
     assert data["e2e"]["ready"] is False
-    assert data["e2e"]["verdict"] == "needs_work"
+    assert data["e2e"]["verdict"] == "needs_behavioral_evidence"
     assert data["e2e"]["summary"]["scorecard_best_external"] == 97
-    assert data["e2e"]["summary"]["coverage_ready"] == 0
-    assert len(data["e2e"]["coverage"]["summary"]["gap_domain_ids"]) == 7
+    assert data["e2e"]["summary"]["coverage_ready"] == 7
+    assert data["e2e"]["coverage"]["summary"]["gap_domain_ids"] == []
     assert "behavioral:bundle_present" in data["e2e"]["failed_checks"]
     assert data["e2e"]["behavioral"]["verdict"] == "missing_behavioral_evidence"
 
@@ -188,7 +199,7 @@ def test_production_readiness_gate_can_write_json_output(
     assert "production readiness gate failed" in captured.err
     assert data["schema"] == "octopus.production_readiness_gate.v1"
     assert data["ready"] is False
-    assert data["e2e"]["summary"]["coverage_ready"] == 0
+    assert data["e2e"]["summary"]["coverage_ready"] == 7
     assert data["e2e"]["coverage"]["summary"]["total_domains"] == 7
 
 

@@ -18,7 +18,9 @@ from __future__ import annotations
 
 from runtime.core.cerebrum.react_guards import (
     _completion_phrase_without_todo_guard,
+    _failed_verification_followup_guard,
     _looks_like_completion_phrase,
+    _redundant_green_verification_guard,
     _unverified_write_followup_guard,
 )
 from runtime.core.cerebrum.react_types import ReActStep
@@ -182,6 +184,45 @@ class TestUnverifiedWriteGuard:
         steps = [_step(i, action="read_file") for i in range(1, 10)]
         assert _unverified_write_followup_guard(steps, is_code_mode=True) is None
 
+
+class TestFailedVerificationFollowupGuard:
+    def test_red_dedicated_verifier_nudges_direct_repair(self) -> None:
+        steps = [
+            _step(1, action='write_text_file({"path": "cache.py", "content": "x"})'),
+            _step(
+                2,
+                action='run_tests({"cwd": "."})',
+                observation='{"error": "timeout after 60.0s", "timed_out": true}',
+            ),
+        ]
+
+        message = _failed_verification_followup_guard(steps, is_code_mode=True)
+
+        assert message is not None
+        assert "preserved tail diagnostic" in message
+        assert "ad-hoc runner scripts" in message
+        assert "deadlock" in message
+
+    def test_source_fix_after_red_silences_nudge_until_reverify(self) -> None:
+        steps = [
+            _step(1, action='run_tests({"cwd": "."})', observation="1 failed"),
+            _step(
+                2,
+                action=(
+                    'edit_file({"path": "cache.py", "old_string": "x", "new_string": "y"})'
+                ),
+            ),
+        ]
+
+        assert _failed_verification_followup_guard(steps, is_code_mode=True) is None
+
+    def test_green_verifier_is_silent(self) -> None:
+        steps = [_step(1, action='lint_check({"cwd": "."})', observation="All checks passed!")]
+
+        assert _failed_verification_followup_guard(steps, is_code_mode=True) is None
+
+
+class TestUnverifiedWriteGuardContinued:
     def test_recent_write_within_window_silent(self) -> None:
         # 3 steps ago — well within tolerance.
         steps = [
@@ -191,6 +232,36 @@ class TestUnverifiedWriteGuard:
             _step(4, action="read_file"),
         ]
         assert _unverified_write_followup_guard(steps, is_code_mode=True) is None
+
+
+class TestRedundantGreenVerificationGuard:
+    def test_two_green_rounds_force_final_convergence(self) -> None:
+        steps = [
+            _step(1, action='write_text_file({"path": "cache.py", "content": "x"})'),
+            _step(2, action='run_tests({"cwd": "."})', observation="6 passed in 0.4s"),
+            _step(3, action='lint_check({"cwd": "."})', observation="All checks passed!"),
+        ]
+
+        message = _redundant_green_verification_guard(steps, is_code_mode=True)
+
+        assert message is not None
+        assert "already green" in message
+        assert "Final Answer now" in message
+
+    def test_new_write_resets_green_round_count(self) -> None:
+        steps = [
+            _step(1, action='run_tests({"cwd": "."})', observation="6 passed"),
+            _step(2, action='lint_check({"cwd": "."})', observation="All checks passed!"),
+            _step(
+                3,
+                action=(
+                    'edit_file({"path": "cache.py", "old_string": "x", "new_string": "y"})'
+                ),
+            ),
+            _step(4, action='run_tests({"cwd": "."})', observation="6 passed"),
+        ]
+
+        assert _redundant_green_verification_guard(steps, is_code_mode=True) is None
 
     def test_old_write_no_verification_nudge(self) -> None:
         # 7 steps ago, no verification — nudge fires.

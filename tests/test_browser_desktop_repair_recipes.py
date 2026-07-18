@@ -547,6 +547,67 @@ def test_browser_desktop_repair_recipe_rerun_batch_reports_pass_and_fail(
     assert result["failed"] == 1
 
 
+def test_screenshot_path_failure_recipe_reruns_production_contract_and_promotes(
+    tmp_path: Path,
+) -> None:
+    queue_path = tmp_path / "review_queue.json"
+    queue = ReviewQueue(queue_path)
+    source = queue.upsert_item(
+        source="computer_use_loop_failure",
+        source_kind="browser_desktop_replay",
+        candidate_kind="computer_activity_replay_case",
+        priority="P0",
+        target_bucket="browser_desktop_replay",
+        title="Review computer-use loop failure",
+        text="Planner could not read the first captured screenshot.",
+        metadata={
+            "case_id": "culoop:planner_gave_up:fail:path-contract",
+            "fingerprint": "culoop:planner_gave_up:fail:path-contract",
+            "last_activity": {
+                "event": "planner_gave_up",
+                "action": {"action": "fail"},
+            },
+            "goal": "inspect a sandboxed desktop screenshot",
+            "reason": (
+                "screenshot read failed: [Errno 2] No such file or directory: 'iter_000.png'"
+            ),
+            "iterations": 1,
+        },
+        tags=["computer", "desktop", "failure"],
+    )["items"][0]
+
+    queued = queue_browser_desktop_repair_recipes(review_queue_path=queue_path)
+    recipe = queued["recipes"][0]
+    recipe_item = queued["items"][0]
+
+    assert recipe["verification_plan"]["api_checks"] == []
+    assert recipe["verification_plan"]["evidence_required"] == ["computer_screenshot_path_contract"]
+
+    result = rerun_browser_desktop_repair_recipe_evidence(
+        item_id=recipe_item["id"],
+        review_queue_path=queue_path,
+        promote_source_cases=True,
+        actor="regression_test",
+    )
+
+    assert result["passed"] is True
+    assert result["provided"] == ["computer_screenshot_path_contract"]
+    assert result["promoted_source_count"] == 1
+    artifact = result["artifacts"][0]
+    assert artifact["schema"] == "octopus.computer_screenshot_path_contract.v1"
+    assert artifact["captured_path_is_authoritative"] is True
+    assert artifact["screenshot_bytes"] > 8
+    assert len(artifact["screenshot_sha256"]) == 64
+    source_after = next(
+        item
+        for item in queue.items(target_bucket="browser_desktop_replay", limit=10)["items"]
+        if item["id"] == source["id"]
+    )
+    assert source_after["status"] == "promoted"
+    verification = result["attachment"]["verification"]
+    assert verification["status"] == "verified"
+
+
 def _png(width: int, height: int, pixels: list[tuple[int, int, int, int]]) -> bytes:
     rows = bytearray()
     for y in range(height):

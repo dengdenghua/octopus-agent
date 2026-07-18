@@ -2140,6 +2140,7 @@ def _run_tests(
     cwd: str = "",
     *,
     command: str = "",
+    paths: str | list[str] | None = None,
     sandbox_dir: str | None = None,
     **_kw: Any,
 ) -> dict[str, Any]:
@@ -2176,14 +2177,66 @@ def _run_tests(
         else:
             return {"error": "cannot auto-detect test runner; pass command explicitly"}
 
+    normalized_paths, path_error = _normalize_quality_paths(paths, resolved)
+    if path_error:
+        return {"error": path_error}
+    argv.extend(normalized_paths)
+
     return _run_quality_cmd(argv, resolved, sandbox_dir=sandbox_dir)
+
+
+def _normalize_quality_paths(
+    paths: str | list[str] | None,
+    cwd: Path,
+) -> tuple[list[str], str | None]:
+    """Normalize model-supplied quality paths without widening project scope.
+
+    Tool callers commonly send a single path as a JSON string even when the
+    generated schema previously described an array.  Iterating that string
+    character-by-character can accidentally pass ``/`` to Ruff and make it
+    scan the entire filesystem, so strings must be treated as one path.
+    """
+
+    if paths is None:
+        return [], None
+    if isinstance(paths, str):
+        # Preserve a real filename containing spaces. Otherwise accept the
+        # common model/CLI shape ``"a.py tests/test_a.py"`` as two paths.
+        literal = paths.strip()
+        if literal and (cwd / literal).exists():
+            candidates = [literal]
+        else:
+            try:
+                candidates = shlex.split(literal)
+            except ValueError as exc:
+                return [], f"invalid paths: {exc}"
+    else:
+        candidates = paths
+    if not isinstance(candidates, list):
+        return [], "paths must be a string or list of strings"
+
+    normalized: list[str] = []
+    root = cwd.resolve()
+    for raw_path in candidates:
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            return [], "paths must contain non-empty strings"
+        path = Path(raw_path)
+        if raw_path.startswith("-") or path.is_absolute() or ".." in path.parts:
+            return [], f"invalid path: {raw_path}"
+        try:
+            (root / path).resolve().relative_to(root)
+        except ValueError:
+            return [], f"path escapes cwd: {raw_path}"
+        normalized.append(raw_path)
+    return normalized, None
 
 
 def _lint_check(
     cwd: str = "",
     *,
     command: str = "",
-    paths: list[str] | None = None,
+    fix: bool = False,
+    paths: str | list[str] | None = None,
     sandbox_dir: str | None = None,
     **_kw: Any,
 ) -> dict[str, Any]:
@@ -2210,20 +2263,25 @@ def _lint_check(
                 "--no-cache",
                 "--output-format=concise",
             ]
+            # On a normal check, return Ruff's exact safe-fix diff so an
+            # agent does not have to guess import grouping or formatting.
+            # Callers may opt into applying Ruff's safe fixes explicitly.
+            argv.append("--fix" if fix else "--diff")
         elif (
             (p / ".eslintrc.js").exists()
             or (p / ".eslintrc.json").exists()
             or (p / "eslint.config.js").exists()
         ):
             argv = ["npx", "eslint", "--format=compact"]
+            if fix:
+                argv.append("--fix")
         else:
             return {"error": "cannot auto-detect linter; pass command explicitly"}
 
-    if paths:
-        for pt in paths:
-            if pt.startswith("-") or ".." in Path(pt).parts:
-                return {"error": f"invalid path: {pt}"}
-        argv.extend(paths)
+    normalized_paths, path_error = _normalize_quality_paths(paths, resolved)
+    if path_error:
+        return {"error": path_error}
+    argv.extend(normalized_paths)
 
     return _run_quality_cmd(argv, resolved, sandbox_dir=sandbox_dir)
 
@@ -2233,7 +2291,7 @@ def _format_code(
     *,
     command: str = "",
     check_only: bool = True,
-    paths: list[str] | None = None,
+    paths: str | list[str] | None = None,
     sandbox_dir: str | None = None,
     **_kw: Any,
 ) -> dict[str, Any]:
@@ -2263,11 +2321,10 @@ def _format_code(
         else:
             return {"error": "cannot auto-detect formatter; pass command explicitly"}
 
-    if paths:
-        for pt in paths:
-            if pt.startswith("-") or ".." in Path(pt).parts:
-                return {"error": f"invalid path: {pt}"}
-        argv.extend(paths)
+    normalized_paths, path_error = _normalize_quality_paths(paths, resolved)
+    if path_error:
+        return {"error": path_error}
+    argv.extend(normalized_paths)
 
     return _run_quality_cmd(argv, resolved, sandbox_dir=sandbox_dir)
 
@@ -2298,7 +2355,10 @@ def register_code_quality_skills(registry: SkillRegistry) -> int:
     registry.register(
         Skill(
             name="lint_check",
-            description="Run linter (auto-detects ruff/eslint). Returns diagnostics.",
+            description=(
+                "Run linter (auto-detects ruff/eslint). Returns diagnostics plus safe-fix diff; "
+                "pass fix=true to apply safe fixes."
+            ),
             affinity=["lint", "code", "quality"],
             cost_profile="low",
             trusted_source="skill://public/lint_check",

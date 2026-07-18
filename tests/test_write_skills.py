@@ -493,7 +493,76 @@ def test_python_quality_defaults_disable_tool_caches(
 
     assert commands[0][3:5] == ["-p", "no:cacheprovider"]
     assert "--no-cache" in commands[1]
+    assert "--diff" in commands[1]
     assert "--no-cache" in commands[2]
+
+    assert _lint_check(cwd=str(tmp_path), fix=True)["success"] is True
+    assert "--fix" in commands[3]
+    assert "--diff" not in commands[3]
+
+
+def test_quality_paths_accept_one_string_without_splitting(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+    (tmp_path / "sample.py").write_text("value = 1\n", encoding="utf-8")
+    commands: list[list[str]] = []
+
+    def fake_stream_run(command, **_kwargs):
+        commands.append(command)
+        return {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "timed_out": False,
+            "sandbox_backend": "direct",
+            "sandbox_hard": False,
+        }
+
+    monkeypatch.setattr("runtime.platform.process.streaming.stream_run", fake_stream_run)
+
+    assert _run_tests(cwd=str(tmp_path), paths="sample.py")["success"] is True
+    assert _lint_check(cwd=str(tmp_path), paths="sample.py")["success"] is True
+    assert _format_code(cwd=str(tmp_path), paths="sample.py")["success"] is True
+
+    assert all(command[-1:] == ["sample.py"] for command in commands)
+    assert all("/" not in command for command in commands)
+
+
+def test_quality_paths_accept_space_separated_string(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+    (tmp_path / "one.py").write_text("one = 1\n", encoding="utf-8")
+    (tmp_path / "two.py").write_text("two = 2\n", encoding="utf-8")
+    commands: list[list[str]] = []
+
+    def fake_stream_run(command, **_kwargs):
+        commands.append(command)
+        return {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "timed_out": False,
+            "sandbox_backend": "direct",
+            "sandbox_hard": False,
+        }
+
+    monkeypatch.setattr("runtime.platform.process.streaming.stream_run", fake_stream_run)
+
+    assert _lint_check(cwd=str(tmp_path), paths="one.py two.py")["success"] is True
+    assert commands[0][-2:] == ["one.py", "two.py"]
+
+
+@pytest.mark.parametrize("bad_path", ["../outside.py", "/tmp/outside.py", "--config"])
+def test_quality_paths_reject_scope_escape(tmp_path: Path, bad_path: str):
+    (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+
+    for quality_tool in (_run_tests, _lint_check, _format_code):
+        result = quality_tool(cwd=str(tmp_path), paths=bad_path)
+        assert result["error"] == f"invalid path: {bad_path}"
 
 
 # ═══════════════════════════════════════════════════════════

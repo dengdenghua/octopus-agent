@@ -13,6 +13,7 @@ from benchmarks.eval_harness import (
     SuiteReport,
     Trajectory,
     Verdict,
+    resumable_report,
     run_case,
     run_suite,
     run_suite_by_case,
@@ -281,7 +282,30 @@ def test_run_suite_by_case_resumes_only_complete_cases() -> None:
 
     assert [result.case_id for result in report.cases] == ["first", "second"]
     assert created == ["second"]
-    assert checkpoints == [2]
+    assert checkpoints == [2, 2]
+
+
+def test_run_suite_by_case_resumes_partial_case_trials() -> None:
+    case = EvalCase(
+        id="partial",
+        prompt="one",
+        grader=lambda trajectory: bool(trajectory.last_text()),
+    )
+    partial = run_case(case, runner=_mock_runner_echo, k=1)
+    partial.k = 3
+    checkpoints: list[int] = []
+
+    report = run_suite_by_case(
+        [case],
+        runner_factory=lambda _case: _mock_runner_echo,
+        k=3,
+        initial_report=SuiteReport(cases=[partial]),
+        case_complete=lambda current: checkpoints.append(len(current.cases[0].trajectories)),
+    )
+
+    assert report.cases[0].passes == 3
+    assert len(report.cases[0].trajectories) == 3
+    assert checkpoints == [2, 3]
 
 
 def test_run_suite_by_case_rejects_incomplete_checkpoint() -> None:
@@ -297,6 +321,36 @@ def test_run_suite_by_case_rejects_incomplete_checkpoint() -> None:
             k=2,
             initial_report=initial,
         )
+
+
+def test_resumable_report_keeps_healthy_trials_before_infrastructure_failure() -> None:
+    healthy = Trajectory(trial_id="case.0", case_id="case")
+    healthy.ended_at = healthy.started_at + 1
+    failed = Trajectory(
+        trial_id="case.1",
+        case_id="case",
+        error="transport failed",
+        failure_category="infrastructure",
+    )
+    failed.ended_at = failed.started_at + 1
+    report = SuiteReport(
+        cases=[
+            CaseResult(
+                case_id="case",
+                k=3,
+                passes=1,
+                trajectories=[healthy, failed],
+                verdicts=[Verdict(passed=True), Verdict(passed=False)],
+            )
+        ]
+    )
+
+    resumable = resumable_report(report)
+
+    assert len(resumable.cases) == 1
+    assert resumable.cases[0].passes == 1
+    assert [trial.trial_id for trial in resumable.cases[0].trajectories] == ["case.0"]
+    assert resumable.infrastructure_failures == []
 
 
 def test_writes_digest_verified_behavioral_system_evidence(tmp_path) -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import tempfile
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -549,7 +550,107 @@ def _produce_fresh_recipe_evidence(
             api_get=api_get,
             api_request=api_request,
         )
+    if kind == "computer_activity_replay_case":
+        return _produce_computer_activity_evidence(recipe)
     return []
+
+
+def _produce_computer_activity_evidence(
+    recipe: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Reproduce the resolved-screenshot contract for its exact failure cluster.
+
+    The historical P0 cluster failed before the planner could act because the
+    capture layer returned a sandbox-resolved path while the loop passed the
+    original relative path onward. This probe runs the production loop with a
+    capture adapter that deliberately returns a different readable path, then
+    requires the planner to read that authoritative artifact.
+    """
+
+    summary = _dict(recipe.get("evidence_summary"))
+    reason = str(summary.get("reason") or "")
+    if "screenshot read failed" not in reason.lower():
+        return []
+
+    from runtime.execution.suckers.computer_use_loop import _run_computer_use_loop
+
+    planner_paths: list[str] = []
+
+    class _PathContractPlanner:
+        def next_action(
+            self,
+            *,
+            goal: str,
+            screenshot_path: str,
+            history: list[dict[str, Any]],
+        ) -> dict[str, Any]:
+            del goal, history
+            planner_paths.append(screenshot_path)
+            image = Path(screenshot_path).read_bytes()
+            return {
+                "action": "done",
+                "summary": f"read {len(image)} screenshot bytes",
+            }
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="octopus-computer-replay-") as tmp:
+            root = Path(tmp)
+            captured = root / "sandbox" / "resolved" / "iter_000.png"
+            captured.parent.mkdir(parents=True)
+
+            def _capture(**_kwargs: Any) -> dict[str, Any]:
+                # Minimal valid PNG signature plus deterministic payload; the
+                # contract under test is durable path handoff, not pixel CV.
+                captured.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 256)
+                return {
+                    "path": str(captured),
+                    "size_bytes": captured.stat().st_size,
+                    "region": None,
+                }
+
+            result = _run_computer_use_loop(
+                goal="verify sandbox-resolved screenshot handoff",
+                planner=_PathContractPlanner(),
+                screenshot_dir=".",
+                sandbox_dir=str(root / "sandbox"),
+                max_iterations=1,
+                wait_between_ms=0,
+                stop_on_error=True,
+                capture_screen=_capture,
+            )
+            captured_bytes = captured.read_bytes()
+            used_path = planner_paths[0] if planner_paths else ""
+            ok = (
+                result.get("status") == "success"
+                and used_path == str(captured)
+                and result.get("screenshots") == [str(captured)]
+            )
+            return [
+                {
+                    "type": "computer_screenshot_capture_evidence",
+                    "schema": "octopus.computer_screenshot_path_contract.v1",
+                    "ok": ok,
+                    "historical_reason": reason,
+                    "requested_path": "iter_000.png",
+                    "captured_path": str(captured),
+                    "planner_path": used_path,
+                    "captured_path_is_authoritative": used_path == str(captured),
+                    "screenshot_bytes": len(captured_bytes),
+                    "screenshot_sha256": hashlib.sha256(captured_bytes).hexdigest(),
+                    "status": result.get("status"),
+                    "summary": result.get("summary"),
+                }
+            ]
+    except Exception as exc:  # noqa: BLE001 - failed probe is evidence
+        return [
+            {
+                "type": "computer_screenshot_capture_evidence",
+                "schema": "octopus.computer_screenshot_path_contract.v1",
+                "ok": False,
+                "historical_reason": reason,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        ]
 
 
 def _produce_browser_session_evidence(
@@ -962,6 +1063,8 @@ def _provided_evidence_from_artifact(artifact: dict[str, Any]) -> list[str]:
         return ["fresh_screenshot"]
     if artifact.get("type") == "pixel_comparison":
         return ["pixel_comparison"]
+    if artifact.get("type") == "computer_screenshot_capture_evidence":
+        return ["computer_screenshot_path_contract"]
     return []
 
 
@@ -1042,6 +1145,7 @@ def _evidence_summary(kind: str, metadata: dict[str, Any], occurrences: int) -> 
             "last_activity": _dict(metadata.get("last_activity")),
             "activity_count": metadata.get("activity_count"),
             "pending_count": metadata.get("pending_count"),
+            "reason": metadata.get("reason"),
         }
     return {"occurrences": occurrences}
 
@@ -1062,6 +1166,13 @@ def _recommended_steps(kind: str, metadata: dict[str, Any]) -> list[str]:
             "Attach the replay case and session health evidence before promotion.",
         ]
     if kind == "computer_activity_replay_case":
+        reason = str(metadata.get("reason") or "")
+        if "screenshot read failed" in reason.lower():
+            return [
+                "Re-run the production desktop loop with a capture path resolved inside the sandbox.",
+                "Verify the vision planner reads the capture result path instead of the original relative request.",
+                "Attach fresh screenshot-path contract evidence before promotion.",
+            ]
         return [
             "Re-run the desktop preview/execute sequence under the same lease owner.",
             "Verify the computer activity replay case is replay_ready.",
@@ -1091,6 +1202,16 @@ def _verification_plan(kind: str, metadata: dict[str, Any]) -> dict[str, Any]:
                 f"/api/browser/session/health?session_id={session_id}",
             ],
             "evidence_required": ["browser_session_replay_case", "session_health"],
+        }
+    if (
+        kind == "computer_activity_replay_case"
+        and "screenshot read failed" in str(metadata.get("reason") or "").lower()
+    ):
+        return {
+            "schema": "octopus.browser_desktop_recipe_verification.v1",
+            "commands": [],
+            "api_checks": [],
+            "evidence_required": ["computer_screenshot_path_contract"],
         }
     return {
         "schema": "octopus.browser_desktop_recipe_verification.v1",

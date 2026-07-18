@@ -29,7 +29,7 @@ export function EvolutionIndicator({
   const { t } = useI18n();
   const { data } = useQuery<EvolutionStatus, Error>({
     queryKey: ["evolution", "status"],
-    queryFn: getEvolutionStatus,
+    queryFn: ({ signal }) => getEvolutionStatus(signal),
     refetchInterval: 60_000, // 1 min
     retry: 1,
     staleTime: 30_000,

@@ -16,6 +16,8 @@ from collections.abc import Callable as _Callable
 from contextvars import ContextVar as _ContextVar
 from typing import Any
 
+from runtime.safety.auth.arg_guard import is_model_protected_context_key
+
 from .delegation_budget import (
     _PER_TURN_ABSOLUTE_LIMIT,
 )
@@ -344,8 +346,20 @@ def _skill_context_from_spec(
     if isinstance(base_context, dict):
         context.update(base_context)
     embedded = raw.get("context")
+    stripped_context_keys: list[str] = []
     if isinstance(embedded, dict):
-        context.update(embedded)
+        for key, value in embedded.items():
+            name = str(key)
+            if is_model_protected_context_key(name):
+                stripped_context_keys.append(name)
+                continue
+            context[name] = value
+    if stripped_context_keys:
+        context["_delegation_context_policy"] = {
+            "schema": "octopus.delegation_context_policy.v1",
+            "monotonic": True,
+            "stripped_keys": sorted(set(stripped_context_keys)),
+        }
 
     direct = _coerce_name_list(raw.get("skills"))
     direct.extend(_coerce_name_list(raw.get("tools")))
@@ -384,6 +398,8 @@ def _skill_context_from_spec(
         context["direct_skill_grants"] = _dedupe_names(direct)
 
     return context or None
+
+
 
 
 # ── Per-turn delegation budget (smart-budget, 2026-06) ──

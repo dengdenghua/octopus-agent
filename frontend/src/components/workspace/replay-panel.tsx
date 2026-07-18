@@ -4,6 +4,7 @@ import {
   GlobeIcon,
   ListChecksIcon,
   MonitorIcon,
+  RefreshCwIcon,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -163,10 +164,12 @@ export function BrowserDesktopReplayReviewCard({
   browserBusy,
   desktopBusy,
   recipeBusy,
+  rerunBusy,
   staleBusy,
   onQueueBrowser,
   onQueueDesktop,
   onQueueRepairRecipes,
+  onRerunBlocked,
   onRejectStale,
 }: {
   items: AgentTraceReviewQueueItem[];
@@ -177,10 +180,12 @@ export function BrowserDesktopReplayReviewCard({
   browserBusy: boolean;
   desktopBusy: boolean;
   recipeBusy: boolean;
+  rerunBusy: boolean;
   staleBusy: boolean;
   onQueueBrowser: () => void;
   onQueueDesktop: () => void;
   onQueueRepairRecipes: () => void;
+  onRerunBlocked: () => void;
   onRejectStale: () => void;
 }) {
   const topRecipe = repairRecipes.recipes[0];
@@ -265,6 +270,19 @@ export function BrowserDesktopReplayReviewCard({
               className={cn("mr-1.5 size-3", recipeBusy && "animate-spin")}
             />
             Queue recipes
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-[11px]"
+            disabled={rerunBusy || repairVerifications.blocked_count === 0}
+            onClick={onRerunBlocked}
+            aria-label="Rerun blocked browser and desktop repair evidence"
+          >
+            <RefreshCwIcon
+              className={cn("mr-1.5 size-3", rerunBusy && "animate-spin")}
+            />
+            Rerun blocked
           </Button>
           <Button
             variant="outline"

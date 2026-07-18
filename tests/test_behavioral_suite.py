@@ -20,6 +20,7 @@ def test_load_behavioral_suite_binds_outcome_grader(tmp_path) -> None:
                         "id": "exact",
                         "domain": "general_runtime_and_coding",
                         "execution_mode": "real_provider",
+                        "allowed_write_paths": ["answer.py", "tests/test_answer.py"],
                         "prompt": "say hello",
                         "rubric": {"grader": "exact_text", "expected": "hello"},
                     }
@@ -50,6 +51,10 @@ def test_load_behavioral_suite_binds_outcome_grader(tmp_path) -> None:
 
     assert report.aggregate_pass_pow_k == 1.0
     assert cases[0].metadata["outcome_grader"] is True
+    assert cases[0].metadata["allowed_write_paths"] == [
+        "answer.py",
+        "tests/test_answer.py",
+    ]
     assert len(cases[0].metadata["rubric_digest"]) == 64
 
 

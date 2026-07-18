@@ -33,34 +33,34 @@ graph LR
   adapters[adapters]
   platform[platform]
   sensing -- 89 --> platform
-  safety -- 79 --> platform
+  safety -- 81 --> platform
   execution -- 55 --> platform
   sensing -- 53 --> memory
   memory -- 49 --> platform
   sensing -- 49 --> execution
   sensing -- 44 --> safety
-  execution -- 39 --> safety
+  execution -- 40 --> safety
   sensing -- 34 --> adapters
   core -- 31 --> platform
   safety -- 21 --> memory
   execution -- 19 --> memory
   sensing -- 18 --> core
   sensing -- 17 --> protocol
+  platform -- 16 --> execution
+  core -- 15 --> execution
   execution -- 15 --> core
-  platform -- 15 --> execution
   core -- 14 --> safety
-  core -- 13 --> execution
-  platform -- 13 --> safety
-  safety -- 13 --> adapters
+  platform -- 14 --> safety
+  safety -- 14 --> adapters
   platform -- 12 --> sensing
   platform -- 11 --> memory
   core -- 10 --> memory
   platform -- 10 --> adapters
   platform -- 9 --> core
+  safety -- 8 --> execution
   execution -- 7 --> adapters
   memory -- 7 --> safety
   safety -- 7 --> core
-  safety -- 7 --> execution
   sensing -- 7 --> projectos
   adapters -- 6 --> platform
   cli.py -- 5 --> memory
@@ -70,13 +70,13 @@ graph LR
   cli_core.py -- 4 --> execution
   cli_run.py -- 4 --> execution
   cli_serve.py -- 4 --> adapters
+  cli_serve.py -- 4 --> safety
   platform -- 4 --> tentacle
   research -- 4 --> platform
   adapters -- 3 --> safety
   cli_reflect.py -- 3 --> platform
   cli_run.py -- 3 --> platform
   cli_serve.py -- 3 --> platform
-  cli_serve.py -- 3 --> safety
   memory -- 3 --> protocol
   tour.py -- 3 --> core
   tour.py -- 3 --> safety

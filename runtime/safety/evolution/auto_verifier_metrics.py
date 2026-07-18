@@ -12,6 +12,8 @@ from runtime.platform.process.paths import app_paths
 
 SCHEMA = "octopus.auto_verifier_metrics.v1"
 DECISION_SCHEMA = "octopus.auto_verifier_decision.v1"
+BATCH_SCHEMA = "octopus.auto_verifier_batch.v1"
+REPAIR_ATTEMPT_SCHEMA = "octopus.verification_repair_attempt.v1"
 DRIFT_REPAIR_QUEUE_SCHEMA = "octopus.verifier_drift_repair_queue.v1"
 DRIFT_REPAIR_ITEM_SCHEMA = "octopus.verifier_drift_repair_route.v1"
 _LOCK = threading.Lock()
@@ -85,6 +87,8 @@ def summarize_auto_verifier_metrics(
         "families": families,
         "alerts": _drift_alerts(families),
         "recent_decisions": recent_auto_verifier_decisions(limit=20),
+        "recent_batches": recent_auto_verifier_batches(limit=20),
+        "recent_repair_attempts": recent_auto_verifier_repair_attempts(limit=20),
         "top_failures": [
             {"command": command, "count": count}
             for command, count in Counter(
@@ -348,6 +352,58 @@ def record_auto_verifier_decision(
         fh.write(line)
 
 
+def record_auto_verifier_batch(
+    *,
+    candidate_count: int,
+    commands: list[str],
+    passed_count: int,
+    stop_reason: str,
+    path: str | Path | None = None,
+) -> None:
+    decision_path = Path(path) if path is not None else app_paths().auto_verifier_decisions_path
+    decision_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema": BATCH_SCHEMA,
+        "ts": datetime.now(UTC).isoformat(),
+        "candidate_count": max(0, int(candidate_count)),
+        "attempted_count": len(commands),
+        "passed_count": max(0, int(passed_count)),
+        "commands": commands,
+        "complete": bool(commands) and passed_count == len(commands) and stop_reason != "failed",
+        "stop_reason": stop_reason,
+    }
+    line = json.dumps(payload, ensure_ascii=False) + "\n"
+    with _LOCK, decision_path.open("a", encoding="utf-8") as fh:
+        fh.write(line)
+
+
+def record_auto_verifier_repair_attempt(
+    *,
+    attempt: int,
+    max_attempts: int,
+    status: str,
+    failed_commands: list[str],
+    fresh_evidence_commands: list[str] | None = None,
+    path: str | Path | None = None,
+) -> None:
+    decision_path = Path(path) if path is not None else app_paths().auto_verifier_decisions_path
+    decision_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema": REPAIR_ATTEMPT_SCHEMA,
+        "ts": datetime.now(UTC).isoformat(),
+        "attempt": max(1, int(attempt)),
+        "max_attempts": max(1, int(max_attempts)),
+        "status": str(status or "unknown"),
+        "failed_commands": [str(command) for command in failed_commands if str(command).strip()],
+        "fresh_evidence_commands": [
+            str(command) for command in (fresh_evidence_commands or []) if str(command).strip()
+        ],
+    }
+    line = json.dumps(payload, ensure_ascii=False) + "\n"
+    with _LOCK, decision_path.open("a", encoding="utf-8") as fh:
+        fh.write(line)
+
+
 def recent_auto_verifier_decisions(
     *,
     path: str | Path | None = None,
@@ -367,6 +423,52 @@ def recent_auto_verifier_decisions(
             except json.JSONDecodeError:
                 continue
             if isinstance(raw, dict) and raw.get("schema") == DECISION_SCHEMA:
+                rows.append(raw)
+    return rows[-max(1, int(limit)) :]
+
+
+def recent_auto_verifier_batches(
+    *,
+    path: str | Path | None = None,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    decision_path = Path(path) if path is not None else app_paths().auto_verifier_decisions_path
+    if not decision_path.is_file():
+        return []
+    rows: list[dict[str, Any]] = []
+    with _LOCK, decision_path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                raw = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(raw, dict) and raw.get("schema") == BATCH_SCHEMA:
+                rows.append(raw)
+    return rows[-max(1, int(limit)) :]
+
+
+def recent_auto_verifier_repair_attempts(
+    *,
+    path: str | Path | None = None,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    decision_path = Path(path) if path is not None else app_paths().auto_verifier_decisions_path
+    if not decision_path.is_file():
+        return []
+    rows: list[dict[str, Any]] = []
+    with _LOCK, decision_path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                raw = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(raw, dict) and raw.get("schema") == REPAIR_ATTEMPT_SCHEMA:
                 rows.append(raw)
     return rows[-max(1, int(limit)) :]
 
@@ -517,13 +619,19 @@ def _avg(values: Any) -> float:
 __all__ = [
     "SCHEMA",
     "DECISION_SCHEMA",
+    "BATCH_SCHEMA",
+    "REPAIR_ATTEMPT_SCHEMA",
     "AutoVerifierMetric",
     "command_family",
     "queue_verifier_drift_backlog",
     "explain_verification_ranking",
     "rank_verification_commands",
+    "recent_auto_verifier_batches",
     "recent_auto_verifier_decisions",
+    "recent_auto_verifier_repair_attempts",
+    "record_auto_verifier_batch",
     "record_auto_verifier_decision",
     "record_auto_verifier_metric",
+    "record_auto_verifier_repair_attempt",
     "summarize_auto_verifier_metrics",
 ]

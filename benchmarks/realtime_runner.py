@@ -182,6 +182,7 @@ class RealtimeTrialRunner:
         events: list[dict[str, Any]] = []
         text_delta_seen = False
         started_at = time.monotonic()
+        connected = False
         try:
             async with asyncio.timeout(self.timeout_seconds):
                 async with connect(
@@ -191,6 +192,7 @@ class RealtimeTrialRunner:
                     close_timeout=5.0,
                     max_size=16 * 1024 * 1024,
                 ) as websocket:
+                    connected = True
                     await websocket.send(json.dumps(request, ensure_ascii=False))
                     async for raw_message in websocket:
                         payload = json.loads(raw_message)
@@ -231,20 +233,23 @@ class RealtimeTrialRunner:
                             text_delta_seen = True
                         self._record(events, *mapped)
         except TimeoutError:
-            self._record(
-                events,
-                {
-                    "kind": "error",
-                    "error": {
-                        "type": "timeout",
-                        "message": f"turn exceeded {self.timeout_seconds:g}s",
-                        "timeout_seconds": self.timeout_seconds,
-                        "elapsed_seconds": round(time.monotonic() - started_at, 3),
-                        "event_count_before_error": len(events),
-                        "last_event_kind": events[-1]["kind"] if events else None,
+            if not connected:
+                self._record(events, _endpoint_error(TimeoutError()).to_event())
+            else:
+                self._record(
+                    events,
+                    {
+                        "kind": "error",
+                        "error": {
+                            "type": "timeout",
+                            "message": f"turn exceeded {self.timeout_seconds:g}s",
+                            "timeout_seconds": self.timeout_seconds,
+                            "elapsed_seconds": round(time.monotonic() - started_at, 3),
+                            "event_count_before_error": len(events),
+                            "last_event_kind": events[-1]["kind"] if events else None,
+                        },
                     },
-                },
-            )
+                )
         except Exception as exc:  # noqa: BLE001 - emit a score-safe transport event
             self._record(events, _endpoint_error(exc).to_event())
         return events

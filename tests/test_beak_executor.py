@@ -114,6 +114,141 @@ class TestHappyPath:
         assert step.success
         assert step.result.output == 5
 
+    def test_declared_write_scope_blocks_unrelated_file_and_allows_named_file(
+        self,
+        tmp_path,
+        immunity,
+        journal,
+        budget,
+    ):
+        write_registry = SkillRegistry()
+        write_registry.register(
+            Skill(
+                name="write_text_file",
+                description="write a test file",
+                affinity=["file", "write"],
+                trusted_source="skill://public/write_text_file",
+                handler=_write_text_file,
+            )
+        )
+        write_executor = ToolExecutor(
+            registry=write_registry,
+            immunity=immunity,
+            journal=journal,
+        )
+        session = Session(
+            metadata={
+                "mode": "code",
+                "workspace_path": str(tmp_path),
+                "allowed_write_paths": ["cache.py", "tests/test_cache.py"],
+            }
+        )
+
+        with session_scope(session):
+            denied = write_executor.execute_step(
+                step_id=0,
+                node_id="denied",
+                sucker_id=SkillId("write_text_file"),
+                args={"path": "tests/__init__.py", "content": ""},
+                caller="arms/code_arm",
+                task_id=budget.task_id,
+                arm_id=ArmId("code_arm"),
+                budget=budget,
+            )
+            allowed = write_executor.execute_step(
+                step_id=1,
+                node_id="allowed",
+                sucker_id=SkillId("write_text_file"),
+                args={"path": "tests/test_cache.py", "content": "def test_cache():\n    pass\n"},
+                caller="arms/code_arm",
+                task_id=budget.task_id,
+                arm_id=ArmId("code_arm"),
+                budget=budget,
+            )
+
+        assert denied.result.status == "failed"
+        assert denied.result.error_type == "PermissionError"
+        assert "[write-scope-denied]" in denied.result.stderr_tags[-1]
+        assert not (tmp_path / "tests" / "__init__.py").exists()
+        assert allowed.success
+        assert (tmp_path / "tests" / "test_cache.py").is_file()
+
+    def test_declared_write_scope_blocks_environment_creation_but_allows_pytest(
+        self,
+        tmp_path,
+        immunity,
+        journal,
+        budget,
+    ):
+        calls: list[str] = []
+        shell_registry = SkillRegistry()
+        shell_registry.register(
+            Skill(
+                name="exec_shell",
+                description="run a command",
+                affinity=["shell", "exec"],
+                trusted_source="skill://public/exec_shell",
+                handler=lambda command="", **_kwargs: calls.append(command) or {"exit_code": 0},
+            )
+        )
+        shell_registry.register(
+            Skill(
+                name="ipython",
+                description="run Python",
+                affinity=["shell", "exec"],
+                trusted_source="skill://public/ipython",
+                handler=lambda code="", **_kwargs: calls.append(code) or {"exit_code": 0},
+            )
+        )
+        shell_executor = ToolExecutor(shell_registry, immunity, journal)
+        session = Session(
+            metadata={
+                "mode": "code",
+                "workspace_path": str(tmp_path),
+                "allowed_write_paths": ["cache.py", "tests/test_cache.py"],
+            }
+        )
+
+        with session_scope(session):
+            denied = shell_executor.execute_step(
+                step_id=0,
+                node_id="uv",
+                sucker_id=SkillId("exec_shell"),
+                args={"command": "uv run pytest tests/test_cache.py"},
+                caller="arms/code_arm",
+                task_id=budget.task_id,
+                arm_id=ArmId("code_arm"),
+                budget=budget,
+            )
+            allowed = shell_executor.execute_step(
+                step_id=1,
+                node_id="pytest",
+                sucker_id=SkillId("exec_shell"),
+                args={"command": "python -m pytest tests/test_cache.py"},
+                caller="arms/code_arm",
+                task_id=budget.task_id,
+                arm_id=ArmId("code_arm"),
+                budget=budget,
+            )
+            denied_ipython = shell_executor.execute_step(
+                step_id=2,
+                node_id="ipython",
+                sucker_id=SkillId("ipython"),
+                args={"code": "from pathlib import Path; Path('uv.lock').touch()"},
+                caller="arms/code_arm",
+                task_id=budget.task_id,
+                arm_id=ArmId("code_arm"),
+                budget=budget,
+            )
+
+        assert denied.result.status == "failed"
+        assert denied.result.error_type == "PermissionError"
+        assert "environment, cache, or lockfile" in denied.result.stderr_tags[-1]
+        assert allowed.success
+        assert denied_ipython.result.status == "failed"
+        assert "arbitrary filesystem writes" in denied_ipython.result.stderr_tags[-1]
+        assert calls == ["python -m pytest tests/test_cache.py"]
+
     def test_task_capability_manifest_blocks_disabled_group(
         self,
         tmp_path,

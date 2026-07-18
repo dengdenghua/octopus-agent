@@ -30,11 +30,12 @@ const ARTIFACT_AREAS: WorkspaceOutputArea[] = [
 async function listWorkspaceOutputArea(
   threadId: string,
   area: WorkspaceOutputArea,
+  signal?: AbortSignal,
 ): Promise<WorkspaceOutputEntry[]> {
   const params = new URLSearchParams({ area });
   const response = await fetch(
     `${getBackendBaseURL()}/api/threads/${encodeURIComponent(threadId)}/outputs?${params.toString()}`,
-    { headers: authHeaders() },
+    { headers: authHeaders(), signal },
   );
   if (!response.ok) return [];
   const data = (await response.json()) as WorkspaceOutputsResponse;
@@ -43,9 +44,10 @@ async function listWorkspaceOutputArea(
 
 export async function listWorkspaceArtifactRefs(
   threadId: string,
+  signal?: AbortSignal,
 ): Promise<string[]> {
   const results = await Promise.allSettled(
-    ARTIFACT_AREAS.map((area) => listWorkspaceOutputArea(threadId, area)),
+    ARTIFACT_AREAS.map((area) => listWorkspaceOutputArea(threadId, area, signal)),
   );
   const refs: string[] = [];
   const seen = new Set<string>();

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import contextvars
 import os
+import queue
+import threading
 from typing import Any
 
 from .registry import Skill, SkillRegistry
@@ -421,6 +424,7 @@ def _web_fetch(
     client: Any = None,
     allow_private: bool = False,
     timeout_ms: int = 5000,
+    llm_timeout_ms: int = 30_000,
     _llm_caller: Any = None,
     _trafilatura_override: Any = "__unset__",
     **_kw: Any,
@@ -488,21 +492,47 @@ def _web_fetch(
             }
 
     user_msg = f"URL: {final_url}\nQuestion: {prompt}\n\nPage content:\n{extracted_text}"
+    result_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=1)
+    caller_context = contextvars.copy_context()
+
+    def _call_llm() -> None:
+        try:
+            result = caller.call(
+                system=_WEB_FETCH_SYSTEM,
+                user=user_msg,
+                model=cheap_model,
+                max_tokens=512,
+                temperature=0.1,
+            )
+        except Exception as exc:  # noqa: BLE001 — returned to the caller thread
+            result_queue.put(("error", exc))
+        else:
+            result_queue.put(("result", result))
+
+    worker = threading.Thread(
+        target=lambda: caller_context.run(_call_llm),
+        name="web-fetch-llm",
+        daemon=True,
+    )
+    worker.start()
     try:
-        answer_text, meta = caller.call(
-            system=_WEB_FETCH_SYSTEM,
-            user=user_msg,
-            model=cheap_model,
-            max_tokens=512,
-            temperature=0.1,
-        )
-    except Exception as exc:  # noqa: BLE001
+        kind, payload = result_queue.get(timeout=max(0.001, llm_timeout_ms / 1000))
+    except queue.Empty:
+        return {
+            "error": f"llm_timeout: no response within {llm_timeout_ms}ms",
+            "error_type": "llm_timeout",
+            "url": final_url,
+            "fallback_extract": extracted_text,
+        }
+    if kind == "error":
+        exc = payload
         return {
             "error": f"llm_failed: {type(exc).__name__}: {exc}",
             "error_type": "llm_failed",
             "url": final_url,
             "fallback_extract": extracted_text,
         }
+    answer_text, meta = payload
 
     if not answer_text or (isinstance(meta, dict) and meta.get("error")):
         return {

@@ -3,14 +3,20 @@ from __future__ import annotations
 import time
 from uuid import uuid4
 
+import pytest
+
 from runtime.core.cerebrum.checkpoint_integrity import validate_checkpoint_state
 from runtime.core.cerebrum.completion_receipt import build_completion_receipt
 from runtime.core.cerebrum.run_state import converge_run_state
 from runtime.execution.misc.file_write_leases import (
     FileWriteLeaseConflict,
+    WorkspaceContentDriftConflict,
     acquire_file_write_lease,
     authorize_file_write_handoff,
+    file_write_lease_snapshot,
+    record_file_read_snapshot,
     release_file_write_lease,
+    verify_file_unchanged_since_read,
 )
 from runtime.execution.misc.multiagent_contracts import validate_work_plan
 from runtime.execution.parallel_agents import DispatchTaskInput, ParallelAgentOrchestrator
@@ -129,6 +135,27 @@ def test_file_write_lease_allows_explicit_handoff_and_release(tmp_path) -> None:
 
     assert release_file_write_lease(session, target, owner="agent-b") is True
     assert session.metadata["_file_write_leases"] == {}
+
+
+def test_file_write_snapshot_detects_external_content_drift(tmp_path) -> None:
+    class _Session:
+        metadata: dict = {}
+
+    session = _Session()
+    target = tmp_path / "src" / "app.py"
+    target.parent.mkdir(parents=True)
+    target.write_text("observed\n", encoding="utf-8")
+
+    snapshot = record_file_read_snapshot(session, target)
+    target.write_text("changed elsewhere\n", encoding="utf-8")
+
+    assert snapshot is not None
+    assert snapshot["sha256"]
+    with pytest.raises(WorkspaceContentDriftConflict, match="re-read before writing"):
+        verify_file_unchanged_since_read(session, target)
+    observability = file_write_lease_snapshot(session.metadata)
+    assert observability["content_snapshot_count"] == 1
+    assert observability["external_drift_count"] == 1
 
 
 def test_approval_risk_promotes_destructive_shell_to_critical() -> None:

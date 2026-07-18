@@ -58,6 +58,24 @@ class TestSuccessfulObservation:
         steps = [_step(1, action=PYTEST, observation="13 passed in 0.5s")]
         assert _has_successful_verification_observation(steps)
 
+    def test_dedicated_verifier_needs_no_shell_marker(self) -> None:
+        steps = [
+            _step(1, action='run_tests({"cwd": "."})', observation="13 passed in 0.5s"),
+            _step(2, action='lint_check({"cwd": "."})', observation="All checks passed!"),
+        ]
+
+        assert _has_successful_verification_observation(steps)
+
+    def test_parallel_dedicated_verifier_is_detected(self) -> None:
+        step = _step(1, observation="1 failed")
+        step.actions = [
+            'run_tests({"cwd": "."})',
+            'lint_check({"cwd": "."})',
+        ]
+        step.action = "; ".join(step.actions)
+
+        assert _latest_verification_observation_is_red([step])
+
 
 class TestLatestObservation:
     def test_red_then_green_is_not_red(self) -> None:

@@ -252,4 +252,137 @@ describe("<MarkdownContent /> code block streaming", () => {
     renderMarkdown("```javascript\nfunction test() {", true);
     expect(screen.getByText(/function test\(\)/)).toBeInTheDocument();
   });
+
+  it("appends code content across streaming chunks", () => {
+    const view = renderMarkdown("```typescript\nconst x = 1;", true);
+    expect(screen.getByText(/const x = 1/)).toBeInTheDocument();
+
+    view.rerender(
+      <MarkdownContent
+        content="```typescript\nconst x = 1;\nconst y = 2;"
+        isLoading={true}
+        remarkPlugins={[]}
+        rehypePlugins={[]}
+      />,
+    );
+    expect(screen.getByText(/const x = 1/)).toBeInTheDocument();
+    expect(screen.getByText(/const y = 2/)).toBeInTheDocument();
+
+    view.rerender(
+      <MarkdownContent
+        content="```typescript\nconst x = 1;\nconst y = 2;\n```"
+        isLoading={false}
+        remarkPlugins={[]}
+        rehypePlugins={[]}
+      />,
+    );
+    expect(screen.getByText(/const x = 1/)).toBeInTheDocument();
+    expect(screen.getByText(/const y = 2/)).toBeInTheDocument();
+  });
+
+  it("preserves code block from streaming to completion without remount flicker", () => {
+    const content = "```python\ndef hello():\n    print('world')\n```";
+    const view = renderMarkdown(content, true);
+    const firstCode = screen.getByText(/print\('world'\)/);
+    expect(firstCode).toBeInTheDocument();
+
+    view.rerender(
+      <MarkdownContent
+        content={content}
+        isLoading={false}
+        remarkPlugins={[]}
+        rehypePlugins={[]}
+      />,
+    );
+    expect(screen.getByText(/print\('world'\)/)).toBeInTheDocument();
+  });
+});
+
+describe("<MarkdownContent /> streaming edge cases", () => {
+  it("handles only whitespace content", () => {
+    const { container } = renderMarkdown("   \n\n  ", true);
+    expect(container.firstChild).not.toBeNull();
+    const el = container.querySelector('[data-is-animating="true"]');
+    expect(el).toBeInTheDocument();
+  });
+
+  it("handles content that grows from empty to full", () => {
+    const view = renderMarkdown("", true);
+    expect(view.container.firstChild).toBeNull();
+
+    view.rerender(
+      <MarkdownContent
+        content="Hello"
+        isLoading={true}
+        remarkPlugins={[]}
+        rehypePlugins={[]}
+      />,
+    );
+    expect(screen.getByText("Hello")).toBeInTheDocument();
+
+    view.rerender(
+      <MarkdownContent
+        content="Hello world"
+        isLoading={false}
+        remarkPlugins={[]}
+        rehypePlugins={[]}
+      />,
+    );
+    expect(screen.getByText("Hello world")).toBeInTheDocument();
+    expect(screen.getByText("Hello world")).toHaveAttribute(
+      "data-is-animating",
+      "false",
+    );
+  });
+
+  it("maintains streaming state across multiple rapid updates", () => {
+    const view = renderMarkdown("Line 1", true);
+    expect(screen.getByText("Line 1")).toHaveAttribute(
+      "data-is-animating",
+      "true",
+    );
+
+    view.rerender(
+      <MarkdownContent
+        content="Line 1\nLine 2"
+        isLoading={true}
+        remarkPlugins={[]}
+        rehypePlugins={[]}
+      />,
+    );
+    expect(screen.getByText(/Line 1/)).toBeInTheDocument();
+    expect(screen.getByText(/Line 2/)).toBeInTheDocument();
+
+    view.rerender(
+      <MarkdownContent
+        content="Line 1\nLine 2\nLine 3"
+        isLoading={true}
+        remarkPlugins={[]}
+        rehypePlugins={[]}
+      />,
+    );
+    expect(screen.getByText(/Line 3/)).toBeInTheDocument();
+    expect(screen.getByText(/Line 3/)).toHaveAttribute(
+      "data-is-animating",
+      "true",
+    );
+  });
+
+  it("transitions from streaming aria-busy to settled cleanly", () => {
+    const view = renderMarkdown("Loading...", true);
+    const el = screen.getByText("Loading...");
+    expect(el).toHaveAttribute("aria-busy", "true");
+
+    view.rerender(
+      <MarkdownContent
+        content="Loading..."
+        isLoading={false}
+        remarkPlugins={[]}
+        rehypePlugins={[]}
+      />,
+    );
+    const settled = screen.getByText("Loading...");
+    expect(settled).not.toHaveAttribute("aria-busy");
+    expect(settled).toHaveAttribute("data-is-animating", "false");
+  });
 });

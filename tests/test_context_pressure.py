@@ -202,6 +202,40 @@ def test_code_mode_compression_hard_caps_large_file_observations() -> None:
     assert compressed[-1].content == "next step"
 
 
+def test_code_mode_compression_never_uses_generative_summary() -> None:
+    class _SummaryRouter:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def call(self, request: Any) -> Any:
+            self.calls += 1
+            return type("Response", (), {"text": "hallucinated: files written and tests passed"})()
+
+    router = _SummaryRouter()
+    messages = [
+        _Msg(role="system", content="system prompt"),
+        *[
+            _Msg(
+                role="user" if i % 2 else "assistant",
+                content=("Observation: failed write" if i % 2 else "attempt write") + ("x" * 200),
+            )
+            for i in range(12)
+        ],
+        _Msg(role="assistant", content="next step"),
+    ]
+
+    compressed = _compress_context(
+        messages,
+        max_tokens=400,
+        router=router,
+        model="test-model",
+        is_code_mode=True,
+    )
+
+    assert router.calls == 0
+    assert all("hallucinated" not in str(message.content) for message in compressed)
+
+
 def test_compress_context_trims_oversized_chinese_tail() -> None:
     messages = [
         _Msg(role="system", content="system prompt"),

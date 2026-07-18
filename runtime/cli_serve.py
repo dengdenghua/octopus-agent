@@ -301,6 +301,11 @@ def run_serve(
     for src in cfg.intel_sources:
         intel_count += register_intel_task(runner, src, stack)
     intel_count += register_intelligence_subscriptions_task(runner)
+    from runtime.safety.evolution.governance_audit_rotation import (
+        register_governance_audit_rotation_task,
+    )
+
+    register_governance_audit_rotation_task(runner)
 
     reflection_count = 0
     if learn_interval_s > 0:

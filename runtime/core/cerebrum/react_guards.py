@@ -84,8 +84,10 @@ from runtime.core.cerebrum.react_parsing import (
     _path_language,
     _payload_has_ambiguous_inflight_leader_election,
     _payload_has_destructive_waiter_result_pop,
-    _payload_has_stale_immutable_waiter_snapshot,
     _payload_has_inflight_identity_comparison,
+    _payload_has_loader_barrier_deadlock,
+    _payload_has_stale_immutable_waiter_snapshot,
+    _payload_has_terminal_pending_entry_leak,
     _step_changed_public_signature,
     _step_command_text,
     _step_deleted_test_functions,
@@ -2295,6 +2297,99 @@ def _stale_immutable_waiter_snapshot_guard(
     )
 
 
+def _terminal_pending_entry_leak_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    is_code_mode: bool,
+) -> str | None:
+    """Reject completed in-flight entries that permanently shadow TTL reloads."""
+    if not is_code_mode or not steps or _final_answer_requests_user_help(final_answer):
+        return None
+    affected: set[str] = set()
+    for step in steps:
+        if not _is_code_write_step(step):
+            continue
+        parsed = _parse_action(step.action)
+        if parsed is None:
+            continue
+        tool_name, args = parsed
+        path = args.get("path") or args.get("file") or args.get("file_path")
+        if not isinstance(path, str) or _is_test_path(path):
+            continue
+        new_text, old_text = _extract_step_payloads(step)
+        old_hit = _payload_has_terminal_pending_entry_leak(old_text)
+        new_hit = _payload_has_terminal_pending_entry_leak(new_text)
+        full_clean_rewrite = (
+            tool_name in {"write_text_file", "write_file", "create_file"}
+            and path in affected
+            and bool(new_text)
+            and not new_hit
+        )
+        if (old_hit or full_clean_rewrite) and not new_hit:
+            affected.discard(path)
+        elif new_hit:
+            affected.add(path)
+    if not affected:
+        return None
+    preview = ", ".join(sorted(affected)[:3])
+    return (
+        "Cannot finish yet: the completed single-flight entry in "
+        f"{preview} remains in the pending/in-flight map after the event is signalled. Future "
+        "calls therefore keep taking the follower branch; an expired TTL value can never reload "
+        "and a failed load can poison every retry. Publish result/exception on a mutable flight "
+        "object retained by existing waiters, then remove the key from the in-flight map before "
+        "returning. Add a regression that loads, advances the clock past TTL, and proves a new "
+        "loader invocation occurs."
+    )
+
+
+def _loader_barrier_deadlock_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    is_code_mode: bool,
+) -> str | None:
+    """Reject concurrency tests whose loader can never clear its barrier."""
+    if not is_code_mode or not steps or _final_answer_requests_user_help(final_answer):
+        return None
+    affected: set[str] = set()
+    for step in steps:
+        if not _is_code_write_step(step):
+            continue
+        parsed = _parse_action(step.action)
+        if parsed is None:
+            continue
+        tool_name, args = parsed
+        path = args.get("path") or args.get("file") or args.get("file_path")
+        if not isinstance(path, str) or not _is_test_path(path):
+            continue
+        new_text, old_text = _extract_step_payloads(step)
+        old_hit = _payload_has_loader_barrier_deadlock(old_text)
+        new_hit = _payload_has_loader_barrier_deadlock(new_text)
+        full_clean_rewrite = (
+            tool_name in {"write_text_file", "write_file", "create_file"}
+            and path in affected
+            and bool(new_text)
+            and not new_hit
+        )
+        if (old_hit or full_clean_rewrite) and not new_hit:
+            affected.discard(path)
+        elif new_hit:
+            affected.add(path)
+    if not affected:
+        return None
+    preview = ", ".join(sorted(affected)[:3])
+    return (
+        "Cannot finish yet: the single-flight test in "
+        f"{preview} waits on a threading.Barrier inside the loader, but only the elected leader "
+        "enters that loader; followers wait on the flight event, so the barrier can never fill. "
+        "Move the barrier to each worker immediately before get_or_load. If the loader must stay "
+        "in flight, have it wait on a separate Event that the test thread releases after callers "
+        "have started, and use bounded waits/joins."
+    )
+
+
 def _concurrency_semantic_followup_guard(
     steps: list[ReActStep],
     *,
@@ -2305,6 +2400,8 @@ def _concurrency_semantic_followup_guard(
         _ambiguous_inflight_leader_election_guard,
         _destructive_waiter_result_guard,
         _stale_immutable_waiter_snapshot_guard,
+        _terminal_pending_entry_leak_guard,
+        _loader_barrier_deadlock_guard,
     ):
         message = guard(steps, "implementation complete", is_code_mode=is_code_mode)
         if message is not None:
@@ -3568,6 +3665,16 @@ GUARD_REGISTRY: list[GuardSpec] = [
         "single-flight immutable-snapshot guard",
         "code-smell",
         _stale_immutable_waiter_snapshot_guard,
+    ),
+    _spec_code_mode(
+        "single-flight terminal-pending guard",
+        "code-smell",
+        _terminal_pending_entry_leak_guard,
+    ),
+    _spec_code_mode(
+        "single-flight test-barrier guard",
+        "test-quality",
+        _loader_barrier_deadlock_guard,
     ),
     _spec_code_mode("print-in-prod guard", "code-smell", _print_in_production_guard),
     _spec_code_mode("hardcoded-path guard", "code-smell", _hardcoded_personal_path_guard),

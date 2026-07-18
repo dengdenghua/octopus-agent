@@ -31,7 +31,7 @@ const ChatBox: React.FC<{
   const threadIdRef = useRef(threadId);
   const { data: workspaceArtifacts = EMPTY_ARTIFACTS } = useQuery({
     queryKey: ["workspace-artifacts", threadId],
-    queryFn: () => listWorkspaceArtifactRefs(threadId),
+    queryFn: ({ signal }) => listWorkspaceArtifactRefs(threadId, signal),
     enabled: Boolean(threadId && threadId !== "new"),
     refetchInterval: 5000,
     staleTime: 3000,

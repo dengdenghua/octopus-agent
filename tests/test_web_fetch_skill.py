@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import pytest
@@ -228,6 +229,27 @@ class TestWebFetchLLMFailure:
         )
         assert result.get("error_type") == "llm_failed"
         assert "fallback_extract" in result
+
+    def test_llm_timeout_returns_extract_without_blocking_turn(self) -> None:
+        class _SlowLLMCaller(_StubLLMCaller):
+            def call(self, **kwargs: Any) -> tuple[str, dict[str, Any]]:
+                time.sleep(0.2)
+                return super().call(**kwargs)
+
+        client = _MockClient(get_response=_MockResponse(status_code=200, text=_SAMPLE_HTML))
+        started = time.monotonic()
+        result = _web_fetch(
+            url="https://example.com/",
+            prompt="anything",
+            client=client,
+            _llm_caller=_SlowLLMCaller(),
+            llm_timeout_ms=20,
+        )
+
+        assert time.monotonic() - started < 0.15
+        assert result.get("error_type") == "llm_timeout"
+        assert "fallback_extract" in result
+        assert "1000 requests per minute" in result["fallback_extract"]
 
 
 @pytest.mark.skipif(not HTTPX_AVAILABLE, reason="httpx not installed")

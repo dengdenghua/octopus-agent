@@ -2,13 +2,8 @@ import {
   CheckCircle2Icon,
   ChevronDownIcon,
   CircleIcon,
-  FileTextIcon,
-  GlobeIcon,
   Loader2Icon,
   Minimize2Icon,
-  MonitorIcon,
-  SearchIcon,
-  TerminalIcon,
   WifiOffIcon,
   XCircleIcon,
 } from "lucide-react";
@@ -19,7 +14,6 @@ import type { LiveToolEvent } from "./live-tool-timeline";
 import {
   normalizeEventsForSettledDisplay,
   pickCurrentWorkBlock,
-  type WorkBlock,
 } from "./work-blocks";
 import { useI18n } from "@/core/i18n/hooks";
 import type { StreamVitals } from "@/core/realtime";
@@ -110,20 +104,6 @@ function StatusIcon({
   return <CheckCircle2Icon className="size-4 shrink-0 text-emerald-500" />;
 }
 
-function WorkBlockIcon({ block }: { block: WorkBlock }) {
-  const Icon =
-    block.kind === "terminal"
-      ? TerminalIcon
-      : block.kind === "browser"
-        ? GlobeIcon
-        : block.kind === "search"
-          ? SearchIcon
-          : block.kind === "file" || block.kind === "read"
-            ? FileTextIcon
-            : MonitorIcon;
-  return <Icon className="size-3.5 shrink-0 text-muted-foreground" />;
-}
-
 function phaseWindow<T>(
   phases: T[],
   currentIndex: number,
@@ -150,6 +130,7 @@ export function AgentProgressPill({
   className,
   progressScopeKey,
   vitals,
+  workbenchVisible,
 }: {
   events: LiveToolEvent[];
   hasAnswer?: boolean;
@@ -164,11 +145,16 @@ export function AgentProgressPill({
    * driven by the model's actual liveness (working vs. slow/stalled)
    * instead of a blind elapsed-time heuristic. */
   vitals?: StreamVitals;
+  /** When the right-side workbench panel is open, the pill auto-minimizes
+   * into a small bead to avoid duplicating progress info that the workbench
+   * already shows. The user can still expand it manually. */
+  workbenchVisible?: boolean;
 }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [loadingAgeMs, setLoadingAgeMs] = useState(0);
+  const [enablingCapability, setEnablingCapability] = useState(false);
   const displayEvents = useMemo(
     () =>
       normalizeEventsForSettledDisplay(events, {
@@ -190,6 +176,7 @@ export function AgentProgressPill({
     [displayEvents, hasAnswer, runSettled, runFailed, paused],
   );
   const autoMinimizedRunRef = useRef<string | null>(null);
+  const workbenchAutoMinimizedRef = useRef(false);
   const displayPhase = currentPhase;
   const progress = displayPhase
     ? progressForPhases(phases, displayPhase)
@@ -198,6 +185,35 @@ export function AgentProgressPill({
     ? phases.findIndex((phase) => phase.id === displayPhase.id)
     : -1;
   const currentBlock = useMemo(() => pickCurrentWorkBlock(blocks), [blocks]);
+  // Detect tools that failed because their group is config-disabled (e.g.
+  // web_search under enable_web_skills=false). We surface a one-click
+  // "enable" prompt so the user doesn't have to find the config file.
+  const capabilityDisabledInfo = useMemo(() => {
+    for (const evt of displayEvents) {
+      if (evt.capabilityDisabled && evt.status === "error") {
+        return { toolName: evt.name, ...evt.capabilityDisabled };
+      }
+    }
+    return null;
+  }, [displayEvents]);
+  const handleEnableCapability = async () => {
+    if (!capabilityDisabledInfo || enablingCapability) return;
+    setEnablingCapability(true);
+    try {
+      const resp = await fetch("/api/capabilities/enable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group: capabilityDisabledInfo.group }),
+      });
+      if (resp.ok) {
+        window.location.reload();
+      }
+    } catch {
+      // best-effort — user can still restart the backend manually
+    } finally {
+      setEnablingCapability(false);
+    }
+  };
   const planFingerprint = useMemo(
     () => planFingerprintForPhases(phases),
     [phases],
@@ -268,6 +284,20 @@ export function AgentProgressPill({
     runSettled,
     running,
   ]);
+
+  // When the right-side workbench panel opens, collapse the pill into a bead
+  // so progress info isn't duplicated in two places. Restore when it closes,
+  // but only if we were the ones who minimized it (not a user action).
+  useEffect(() => {
+    if (workbenchVisible && !minimized) {
+      workbenchAutoMinimizedRef.current = true;
+      setMinimized(true);
+      setExpanded(false);
+    } else if (!workbenchVisible && workbenchAutoMinimizedRef.current) {
+      workbenchAutoMinimizedRef.current = false;
+      setMinimized(false);
+    }
+  }, [workbenchVisible, minimized]);
 
   if (!displayPhase || phases.length === 0 || blocks.length === 0) {
     if (!isLoading) return null;
@@ -382,8 +412,8 @@ export function AgentProgressPill({
       className={cn("relative z-20 flex w-full flex-col", className)}
     >
       {expanded ? (
-        <div className="rounded-t-lg border border-b-0 border-border-default bg-background/95 p-2.5 shadow-[var(--shadow-md)] shadow-black/5 backdrop-blur-xl">
-          <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
+        <div className="rounded-t-lg border border-b-0 border-border-default bg-background/95 p-2 shadow-[var(--shadow-md)] shadow-black/5 backdrop-blur-xl">
+          <div className="max-h-44 space-y-0.5 overflow-y-auto pr-1">
             {visiblePhases.map((phase) => {
               const active = phase.id === displayPhase.id;
               return (
@@ -392,14 +422,14 @@ export function AgentProgressPill({
                   className={cn(
                     "flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-xs",
                     active
-                      ? "bg-primary/10 text-foreground"
+                      ? "bg-primary/8 text-foreground"
                       : "text-muted-foreground",
                   )}
                 >
                   <StatusIcon status={phase.status} />
                   <span className="min-w-0 flex-1 truncate">{phase.title}</span>
                   {active ? (
-                    <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-primary">
                       {progress.current}/{progress.total}
                     </span>
                   ) : null}
@@ -408,8 +438,19 @@ export function AgentProgressPill({
             })}
           </div>
           {currentBlock ? (
-            <div className="mt-2 flex min-w-0 items-center gap-2 border-t border-border-subtle pt-2 text-xs">
-              <WorkBlockIcon block={currentBlock} />
+            <div className="mt-1.5 flex min-w-0 items-center gap-2 border-t border-border-subtle pt-1.5 text-xs">
+              <span
+                className={cn(
+                  "size-1.5 shrink-0 rounded-full",
+                  currentBlock.status === "running"
+                    ? "bg-primary"
+                    : currentBlock.status === "error"
+                      ? "bg-destructive"
+                      : currentBlock.status === "waiting_approval"
+                        ? "bg-amber-500"
+                        : "bg-emerald-500",
+                )}
+              />
               <span className="min-w-0 flex-1 truncate text-foreground/85">
                 {currentBlock.title}
               </span>
@@ -433,7 +474,7 @@ export function AgentProgressPill({
       ) : null}
       <div
         className={cn(
-          "group flex w-full items-center gap-1.5 border border-border-default bg-background/95 px-3 py-1.5 text-left shadow-[var(--shadow-md)] shadow-black/5 backdrop-blur-xl transition-colors hover:bg-muted/45",
+          "group flex w-full items-center gap-2 border border-border-default bg-background/95 px-3 py-2 text-left shadow-[var(--shadow-md)] shadow-black/5 backdrop-blur-xl transition-colors hover:bg-muted/40",
           expanded ? "border-b-0" : "rounded-t-lg border-b-0",
         )}
       >
@@ -443,25 +484,21 @@ export function AgentProgressPill({
             setExpanded((value) => !value);
           }}
           aria-expanded={expanded}
-          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
-          <MonitorIcon className="size-3.5 shrink-0 text-muted-foreground" />
+          <StatusIcon status={displayPhase.status} />
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-1.5 text-[13px] leading-5">
-              <span className="hidden shrink-0 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline">
-                {t.agentWorkbenchPanel.mainComputer}
-              </span>
-              <span className="shrink-0 font-medium text-foreground">
-                {progressLabel}
-              </span>
-              <StatusIcon status={displayPhase.status} />
+            <div className="flex min-w-0 items-center gap-2 text-[13px] leading-5">
               <span
                 className={cn(
                   "min-w-0 flex-1 truncate",
-                  running ? "text-foreground" : "text-muted-foreground",
+                  running ? "text-foreground" : "text-foreground/80",
                 )}
               >
                 {displayPhase.title}
+              </span>
+              <span className="shrink-0 rounded-full bg-muted/70 px-2 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+                {progressLabel}
               </span>
               <ChevronDownIcon
                 className={cn(
@@ -470,13 +507,50 @@ export function AgentProgressPill({
                 )}
               />
             </div>
-            <div className="mt-1 h-0.5 overflow-hidden rounded-full bg-muted">
+            {currentBlock && currentBlock.event.name !== "todo_write" ? (
+              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span
+                  className={cn(
+                    "size-1.5 shrink-0 rounded-full",
+                    currentBlock.status === "running"
+                      ? "bg-primary"
+                      : currentBlock.status === "error"
+                        ? "bg-destructive"
+                        : currentBlock.status === "waiting_approval"
+                          ? "bg-amber-500"
+                          : "bg-emerald-500",
+                  )}
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  {currentBlock.title}
+                </span>
+              </div>
+            ) : null}
+            {capabilityDisabledInfo ? (
+              <div className="mt-1.5 flex items-center gap-1.5 rounded-md bg-amber-500/10 px-2 py-1 text-[11px] text-amber-700">
+                <WifiOffIcon className="size-3 shrink-0" />
+                <span className="min-w-0 flex-1 truncate">
+                  {capabilityDisabledInfo.toolName} 被配置关闭
+                </span>
+                <button
+                  type="button"
+                  onClick={handleEnableCapability}
+                  disabled={enablingCapability}
+                  className="shrink-0 rounded bg-amber-600 px-1.5 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {enablingCapability ? "启用中…" : "启用"}
+                </button>
+              </div>
+            ) : null}
+            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
               <div
                 className={cn(
-                  "h-full transition-colors duration-300",
+                  "h-full rounded-full transition-all duration-300",
                   displayPhase.status === "error"
                     ? "bg-destructive"
-                    : "bg-foreground/55",
+                    : displayPhase.status === "running"
+                      ? "bg-primary"
+                      : "bg-emerald-500",
                 )}
                 style={{ width: `${percent}%` }}
               />

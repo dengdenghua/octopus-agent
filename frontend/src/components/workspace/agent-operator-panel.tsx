@@ -63,6 +63,7 @@ import {
   queueLatestBrowserSessionReplayCase,
   queueRepairRoutePromotionCandidates,
   rejectStaleBrowserDesktopReplayArtifacts,
+  rerunBrowserDesktopRepairRecipeEvidenceBatch,
   takeoverTaskRun,
   type AgentCompetitorScorecard,
   type AgentTraceProcessTimeline,
@@ -90,12 +91,14 @@ import {
   type SubagentFitnessReport,
 } from "@/core/agent-trace/api";
 import {
+  fetchPluginLifecycleHistory,
   fetchPluginPublisherTrust,
   fetchPluginSmokeSummary,
   revokePluginPublisherKey,
   rotatePluginPublisherKey,
 } from "@/core/plugins/api";
 import type {
+  PluginLifecycleHistory,
   PluginPublisherTrustReport,
   PluginSmokeSummary,
 } from "@/core/plugins/types";
@@ -341,6 +344,12 @@ const EMPTY_PLUGIN_PUBLISHER_TRUST: PluginPublisherTrustReport = {
   next_actions: [],
 };
 
+const EMPTY_PLUGIN_LIFECYCLE_HISTORY: PluginLifecycleHistory = {
+  schema: "octopus.plugin_lifecycle_history.v1",
+  total: 0,
+  items: [],
+};
+
 const EMPTY_TRUST_DENIAL_SUMMARY: AgentTraceTrustDenialSummary = {
   schema: "octopus.trust_denial_summary.v1",
   total: 0,
@@ -458,6 +467,8 @@ export function AgentOperatorPanel() {
     useState<PluginSmokeSummary>(EMPTY_PLUGIN_SMOKE_SUMMARY);
   const [pluginPublisherTrust, setPluginPublisherTrust] =
     useState<PluginPublisherTrustReport>(EMPTY_PLUGIN_PUBLISHER_TRUST);
+  const [pluginLifecycleHistory, setPluginLifecycleHistory] =
+    useState<PluginLifecycleHistory>(EMPTY_PLUGIN_LIFECYCLE_HISTORY);
   const [trustDenialSummary, setTrustDenialSummary] =
     useState<AgentTraceTrustDenialSummary>(EMPTY_TRUST_DENIAL_SUMMARY);
   const [policyRuleDrafts, setPolicyRuleDrafts] =
@@ -505,6 +516,7 @@ export function AgentOperatorPanel() {
       browserRepairVerifications,
       repairRoutes,
       pluginSmoke,
+      pluginLifecycle,
       publisherTrust,
       trustDenials,
       ruleDrafts,
@@ -537,6 +549,7 @@ export function AgentOperatorPanel() {
       fetchBrowserDesktopRepairRecipeVerifications(),
       fetchRepairRouteQuality(),
       fetchPluginSmokeSummary(),
+      fetchPluginLifecycleHistory(),
       fetchPluginPublisherTrust(),
       fetchAgentTraceTrustDenialSummary(),
       fetchAgentTracePolicyReviewRuleDrafts(),
@@ -582,6 +595,7 @@ export function AgentOperatorPanel() {
     setBrowserDesktopRepairVerifications(browserRepairVerifications);
     setRepairRouteQuality(repairRoutes);
     setPluginSmokeSummary(pluginSmoke);
+    setPluginLifecycleHistory(pluginLifecycle);
     setPluginPublisherTrust(publisherTrust);
     setTrustDenialSummary(trustDenials);
     setPolicyRuleDrafts(ruleDrafts);
@@ -817,6 +831,27 @@ export function AgentOperatorPanel() {
         `Rejected ${result.rejected_count} stale replay item(s); archived ${
           result.archived_recipe_count ?? 0
         } repair recipe item(s).`,
+      );
+      await refreshQueue();
+      setError(null);
+      setErrorReplayEvidence(null);
+    } catch (err) {
+      swallow(err);
+      setError(readRequestErrorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onRerunBlockedBrowserDesktopRepairRecipes = async () => {
+    setBusyId("rerun-browser-desktop-repair-recipes");
+    try {
+      const result = await rerunBrowserDesktopRepairRecipeEvidenceBatch({
+        promoteSourceCases: false,
+        actor: "operator_panel",
+      });
+      setLastApplyResult(
+        `Reran ${result.attempted} browser/desktop repair recipe(s): ${result.passed} passed, ${result.failed} failed. Source cases remain operator-gated.`,
       );
       await refreshQueue();
       setError(null);
@@ -1076,10 +1111,12 @@ export function AgentOperatorPanel() {
         browserBusy={busyId === "queue-browser-desktop-replay"}
         desktopBusy={busyId === "queue-desktop-desktop-replay"}
         recipeBusy={busyId === "queue-browser-desktop-repair-recipes"}
+        rerunBusy={busyId === "rerun-browser-desktop-repair-recipes"}
         staleBusy={busyId === "reject-stale-browser-desktop-replay-artifacts"}
         onQueueBrowser={() => void onQueueBrowserDesktopReplay("browser")}
         onQueueDesktop={() => void onQueueBrowserDesktopReplay("desktop")}
         onQueueRepairRecipes={() => void onQueueBrowserDesktopRepairRecipes()}
+        onRerunBlocked={() => void onRerunBlockedBrowserDesktopRepairRecipes()}
         onRejectStale={() => void onRejectStaleBrowserDesktopReplayArtifacts()}
       />
       <PromotionAuditSummaryCard summary={auditSummary} />
@@ -1090,7 +1127,10 @@ export function AgentOperatorPanel() {
         queueBusy={busyId === "queue-repair-route-promotions"}
         onQueueRepairRoutes={() => void onQueueRepairRoutePromotions()}
       />
-      <PluginHealthCard summary={pluginSmokeSummary} />
+      <PluginHealthCard
+        summary={pluginSmokeSummary}
+        lifecycle={pluginLifecycleHistory}
+      />
       <PublisherTrustCard
         report={pluginPublisherTrust}
         onChanged={setPluginPublisherTrust}
@@ -2514,7 +2554,13 @@ function AutoVerifierCard({
   );
 }
 
-function PluginHealthCard({ summary }: { summary: PluginSmokeSummary }) {
+function PluginHealthCard({
+  summary,
+  lifecycle,
+}: {
+  summary: PluginSmokeSummary;
+  lifecycle: PluginLifecycleHistory;
+}) {
   const risky =
     summary.failed_count > 0 ||
     summary.warning_count > 0 ||
@@ -2526,6 +2572,7 @@ function PluginHealthCard({ summary }: { summary: PluginSmokeSummary }) {
       : summary.review_required.length > 0
         ? summary.review_required
         : summary.warnings;
+  const latestLifecycle = lifecycle.items.at(-1);
   return (
     <div
       className={cn(
@@ -2574,7 +2621,10 @@ function PluginHealthCard({ summary }: { summary: PluginSmokeSummary }) {
           <GateStat label="ok" value={summary.ok_count} />
           <GateStat label="fail" value={summary.failed_count} />
           <GateStat label="warn" value={summary.warning_count} />
-          <GateStat label="signed" value={summary.publisher_verified_count ?? 0} />
+          <GateStat
+            label="signed"
+            value={summary.publisher_verified_count ?? 0}
+          />
           {compatibility && (
             <GateStat label="compat" value={compatibility.passed} />
           )}
@@ -2585,6 +2635,17 @@ function PluginHealthCard({ summary }: { summary: PluginSmokeSummary }) {
           {compatibility.next_actions[0]}
         </div>
       )}
+      <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-background/70 bg-background/60 px-2 py-1.5 text-[11px]">
+        <span className="font-medium">Lifecycle history</span>
+        <span className="min-w-0 truncate text-muted-foreground">
+          {latestLifecycle
+            ? `${latestLifecycle.operation} ${latestLifecycle.plugin_id} · ${latestLifecycle.status}`
+            : "No install, upgrade, or rollback transactions"}
+        </span>
+        <Badge variant="outline" className="shrink-0 text-[10px]">
+          {lifecycle.total} tx
+        </Badge>
+      </div>
       {rows.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {rows.slice(0, 4).map((item, index) => (
@@ -2738,7 +2799,9 @@ function PublisherTrustCard({
                       size="sm"
                       variant="ghost"
                       className="text-destructive"
-                      onClick={() => openRevoke(publisher.publisher_id, key.key_id)}
+                      onClick={() =>
+                        openRevoke(publisher.publisher_id, key.key_id)
+                      }
                     >
                       Revoke
                     </Button>
@@ -2755,11 +2818,16 @@ function PublisherTrustCard({
         )}
       </div>
 
-      <Dialog open={mode !== null} onOpenChange={(open) => !open && setMode(null)}>
+      <Dialog
+        open={mode !== null}
+        onOpenChange={(open) => !open && setMode(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {mode === "rotate" ? "Rotate publisher key" : "Revoke publisher key"}
+              {mode === "rotate"
+                ? "Rotate publisher key"
+                : "Revoke publisher key"}
             </DialogTitle>
             <DialogDescription>
               {mode === "rotate"
@@ -2809,7 +2877,11 @@ function PublisherTrustCard({
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setMode(null)} disabled={busy}>
+            <Button
+              variant="outline"
+              onClick={() => setMode(null)}
+              disabled={busy}
+            >
               Cancel
             </Button>
             <Button

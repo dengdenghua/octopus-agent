@@ -135,8 +135,9 @@ def step_from_tool_calls(
     the dispatch's ``_parse_action`` already parses — so the existing
     single/parallel dispatch path runs unchanged. ``json.dumps`` →
     ``json.loads`` round-trips the args with no regex and no lossy
-    formatting. The model's prose (``text``) is preserved as the step
-    thought for observability; ``thinking`` is the extended-thinking trace.
+    formatting. The model's prose (``text``) is explicitly public and becomes
+    a progress checkpoint; ``thinking`` remains the private extended-thinking
+    trace.
     """
     actions: list[str] = []
     for call in tool_calls:
@@ -151,10 +152,11 @@ def step_from_tool_calls(
             arg_json = "{}"
         actions.append(f"{name}({arg_json})")
 
-    thought = (thinking or text or "").strip()
+    thought = (thinking or "").strip()
     return ReActStep(
         iteration=iteration,
         thought=thought,
+        public_update=(text or "").strip(),
         action="; ".join(actions),
         observation="",
         raw_llm_output=text or "",

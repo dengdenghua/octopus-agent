@@ -117,6 +117,72 @@ class TestMockPlanner:
 
 
 class TestLoop:
+    def test_planner_uses_authoritative_resolved_capture_path(
+        self,
+        fake_pyautogui,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        from runtime.execution.suckers import computer_use_loop
+
+        captured = tmp_path / "sandbox" / "iter_000.png"
+        captured.parent.mkdir()
+
+        def resolved_capture(**_kwargs: Any) -> dict[str, Any]:
+            captured.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 200)
+            return {
+                "path": str(captured),
+                "size_bytes": captured.stat().st_size,
+                "region": None,
+            }
+
+        monkeypatch.setattr(computer_use_loop, "_screen_capture", resolved_capture)
+        planner = MockVisionPlanner(actions=[{"action": "done", "summary": "ok"}])
+
+        result = _run_computer_use_loop(
+            goal="inspect the captured screen",
+            planner=planner,
+            screenshot_dir=".",
+            sandbox_dir=str(captured.parent),
+            max_iterations=1,
+            wait_between_ms=0,
+            stop_on_error=False,
+        )
+
+        assert result["status"] == "success"
+        assert result["screenshots"] == [str(captured)]
+        assert planner.calls[0]["screenshot_path"] == str(captured)
+
+    def test_missing_resolved_capture_artifact_fails_before_planning(
+        self,
+        fake_pyautogui,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        from runtime.execution.suckers import computer_use_loop
+
+        missing = tmp_path / "missing.png"
+        monkeypatch.setattr(
+            computer_use_loop,
+            "_screen_capture",
+            lambda **_kwargs: {"path": str(missing), "size_bytes": 0},
+        )
+        planner = MockVisionPlanner(actions=[{"action": "done", "summary": "never"}])
+
+        result = _run_computer_use_loop(
+            goal="inspect the captured screen",
+            planner=planner,
+            screenshot_dir=".",
+            sandbox_dir=str(tmp_path),
+            max_iterations=1,
+            wait_between_ms=0,
+            stop_on_error=False,
+        )
+
+        assert result["status"] == "error"
+        assert "no readable artifact" in result["reason"]
+        assert planner.calls == []
+
     def test_done_exits_success(self, fake_pyautogui, tmp_path: Path):
         planner = MockVisionPlanner(
             actions=[

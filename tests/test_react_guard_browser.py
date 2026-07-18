@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from runtime.core.cerebrum.react_guards import GuardContext, evaluate_guards
+from runtime.core.cerebrum.react_guards import (
+    GuardContext,
+    _mixed_mode_completion_guard,
+    evaluate_guards,
+)
 from runtime.core.cerebrum.react_types import ReActStep
-
 
 GOAL = (
     "Using the browser UI, complete onboarding with a native select, a rich-text "
@@ -72,3 +75,47 @@ def test_browser_completion_guard_never_requests_second_submit() -> None:
     assert hit is not None
     assert "do not click Submit again" in hit[1]
     assert "browser_get(wait_ms=300)" in hit[1]
+
+
+MIXED_GOAL = "Use the browser UI to reproduce the bug, patch the source code, and run tests."
+
+
+def _mixed_context(steps: list[ReActStep]) -> GuardContext:
+    return GuardContext(
+        steps=steps,
+        final_answer="Reproduced, fixed, and verified.",
+        goal=MIXED_GOAL,
+        browser_operation_mode=True,
+        tools_active=True,
+        is_code_mode=True,
+    )
+
+
+def test_mixed_mode_guard_requires_browser_code_and_verification_lanes() -> None:
+    browser_only = [_step(1, 'browser_navigate({"url":"http://localhost"})', "loaded")]
+    message = _mixed_mode_completion_guard(_mixed_context(browser_only))
+
+    assert message is not None
+    assert "workspace code edit" in message
+    assert "code verification command" in message
+
+
+def test_mixed_mode_guard_requires_browser_evidence_even_when_code_passes() -> None:
+    code_only = [
+        _step(1, 'edit_file({"path":"src/app.py","old_string":"x","new_string":"y"})', "ok"),
+        _step(2, 'exec_shell({"command":"python -m pytest tests/test_app.py -q"})', "1 passed"),
+    ]
+    message = _mixed_mode_completion_guard(_mixed_context(code_only))
+
+    assert message is not None
+    assert "executed browser reproduction or inspection" in message
+
+
+def test_mixed_mode_guard_accepts_evidence_from_all_requested_lanes() -> None:
+    steps = [
+        _step(1, 'browser_navigate({"url":"http://localhost"})', "loaded"),
+        _step(2, 'edit_file({"path":"src/app.py","old_string":"x","new_string":"y"})', "ok"),
+        _step(3, 'exec_shell({"command":"python -m pytest tests/test_app.py -q"})', "1 passed"),
+    ]
+
+    assert _mixed_mode_completion_guard(_mixed_context(steps)) is None

@@ -16,8 +16,10 @@ except ImportError:  # pragma: no cover
     TestClient = None  # type: ignore[assignment]
 
 from runtime.protocol import (
+    ItemStatus,
     JsonRpcRequest,
     JsonRpcResponse,
+    VerificationItem,
     decode_message,
     encode_message,
 )
@@ -155,6 +157,12 @@ def test_code_file_change_auto_runs_safe_verification(
     src = tmp_path / "src"
     src.mkdir()
     (src / "foo.py").write_text("value = 1\n", encoding="utf-8")
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_foo.py").write_text(
+        "def test_foo():\n    assert True\n",
+        encoding="utf-8",
+    )
     diff = "--- a/src/foo.py\n+++ b/src/foo.py\n@@ -1,1 +1,1 @@\n-value = 0\n+value = 1\n"
     _set_script(
         [
@@ -191,18 +199,173 @@ def test_code_file_change_auto_runs_safe_verification(
     turn = out["response"].result["turn"]
     assert turn["status"] == "completed"
     verification_items = [it for it in turn["items"] if it["type"] == "verification"]
-    assert len(verification_items) == 1
+    assert len(verification_items) == 2
     assert verification_items[0]["command"] == "python -m ruff check src/foo.py"
     assert verification_items[0]["kind"] == "lint"
     assert verification_items[0]["status"] == "completed"
     assert verification_items[0]["relatedFiles"] == ["src/foo.py"]
+    assert verification_items[1]["command"] == ("python -m pytest tests/test_foo.py -q")
+    assert verification_items[1]["kind"] == "test"
+    assert verification_items[1]["status"] == "completed"
 
     metrics = (data_dir / "auto_verifier_metrics.jsonl").read_text(encoding="utf-8")
     assert '"family": "ruff"' in metrics
+    assert '"family": "pytest"' in metrics
     assert '"ok": true' in metrics
     decisions = (data_dir / "auto_verifier_decisions.jsonl").read_text(encoding="utf-8")
     assert '"selected_command": "python -m ruff check src/foo.py"' in decisions
+    assert '"selected_command": "python -m pytest tests/test_foo.py -q"' in decisions
     assert "no history for ruff" in decisions
+
+
+def test_failed_auto_verifier_gets_bounded_model_repair_and_fresh_evidence(
+    gateway: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.safety.evolution import auto_verifier
+    from tests.realtime_cerebrum import _helpers
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
+    calls = 0
+
+    def fake_verification_plan(*_args: Any, **_kwargs: Any) -> list[VerificationItem]:
+        nonlocal calls
+        calls += 1
+        passed = calls > 1
+        return [
+            VerificationItem(
+                command="python -m pytest tests/test_foo.py -q",
+                kind="test",
+                status=ItemStatus.COMPLETED if passed else ItemStatus.FAILED,
+                exit_code=0 if passed else 1,
+                summary="fresh pass" if passed else "assertion failed",
+                stdout_tail="1 passed" if passed else "1 failed",
+                related_files=["src/foo.py"],
+            )
+        ]
+
+    monkeypatch.setattr(auto_verifier, "run_verification_plan", fake_verification_plan)
+    client, _logs_root = gateway
+    diff = "--- a/src/foo.py\n+++ b/src/foo.py\n@@ -1,1 +1,1 @@\n-old\n+new\n"
+    _set_script(
+        [
+            {
+                "type": "tool_start",
+                "tool_name": "edit_file",
+                "tool_call_id": "call-edit",
+            },
+            {
+                "type": "tool_end",
+                "tool_name": "edit_file",
+                "tool_call_id": "call-edit",
+                "iteration": 1,
+                "status": "success",
+                "output_preview": "ok",
+                "duration_ms": 1,
+                "diff": diff,
+            },
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th_bounded_verification_repair",
+                "cwd": str(tmp_path),
+                "input": [{"type": "text", "text": "edit and verify"}],
+                "approvalPolicy": "never",
+                "sandboxPolicy": {"type": "workspaceWrite", "networkAccess": False},
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    verification_items = [item for item in turn["items"] if item["type"] == "verification"]
+    assert turn["status"] == "completed"
+    assert calls == 2
+    assert [item["status"] for item in verification_items] == ["failed", "completed"]
+    repair_intent = _helpers._LAST_STREAM_ARGS["args"][1]
+    repair = repair_intent.user_context["verification_repair"]
+    assert repair["schema"] == "octopus.verification_repair_request.v1"
+    assert repair["attempt"] == 1
+    assert repair["fresh_evidence_required"] is True
+    decisions = (data_dir / "auto_verifier_decisions.jsonl").read_text(encoding="utf-8")
+    assert '"status": "requested"' in decisions
+    assert '"status": "passed"' in decisions
+
+
+def test_verification_repair_stops_after_two_failed_model_rounds(
+    gateway: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.safety.evolution import auto_verifier
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
+    calls = 0
+
+    def always_failing(*_args: Any, **_kwargs: Any) -> list[VerificationItem]:
+        nonlocal calls
+        calls += 1
+        return [
+            VerificationItem(
+                command="python -m pytest tests/test_foo.py -q",
+                kind="test",
+                status=ItemStatus.FAILED,
+                exit_code=1,
+                summary="still failing",
+                related_files=["src/foo.py"],
+            )
+        ]
+
+    monkeypatch.setattr(auto_verifier, "run_verification_plan", always_failing)
+    client, _logs_root = gateway
+    diff = "--- a/src/foo.py\n+++ b/src/foo.py\n@@ -1,1 +1,1 @@\n-old\n+new\n"
+    _set_script(
+        [
+            {
+                "type": "tool_start",
+                "tool_name": "edit_file",
+                "tool_call_id": "call-edit",
+            },
+            {
+                "type": "tool_end",
+                "tool_name": "edit_file",
+                "tool_call_id": "call-edit",
+                "iteration": 1,
+                "status": "success",
+                "output_preview": "ok",
+                "duration_ms": 1,
+                "diff": diff,
+            },
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th_exhausted_verification_repair",
+                "cwd": str(tmp_path),
+                "input": [{"type": "text", "text": "edit and verify"}],
+                "approvalPolicy": "never",
+                "sandboxPolicy": {"type": "workspaceWrite", "networkAccess": False},
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "failed"
+    assert calls == 3
+    decisions = (data_dir / "auto_verifier_decisions.jsonl").read_text(encoding="utf-8")
+    assert decisions.count('"status": "requested"') == 2
+    assert decisions.count('"status": "failed"') == 2
 
 
 def test_code_file_change_with_successful_verification_can_complete(gateway: Any) -> None:

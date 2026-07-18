@@ -20,7 +20,7 @@ export function useTasks(status?: "paused" | "pending" | "active" | "all") {
   const statusValue = status ?? "all";
   return useQuery({
     queryKey: [...TASKS_KEY, statusValue],
-    queryFn: () => listTasks(statusValue),
+    queryFn: ({ signal }) => listTasks(statusValue, signal),
     refetchInterval: tasksRefetchInterval,
     refetchIntervalInBackground: true,
     staleTime: 2000,

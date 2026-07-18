@@ -442,6 +442,35 @@ LOCAL_SKILL_GROUPS: frozenset[str] = frozenset(
 )
 
 
+# Groups excluded from ``LOCAL_SKILL_GROUPS`` — i.e., only registered when
+# ``enable_web_skills=True``. The ReAct dispatcher uses this to distinguish
+# "tool is known but disabled by config" from "tool is completely unknown",
+# so the model gets actionable feedback instead of a generic "unregistered"
+# message and the UI can surface a one-click enable prompt.
+WEB_ONLY_GROUPS: frozenset[str] = frozenset(set(_GROUP_REGISTRARS) - set(LOCAL_SKILL_GROUPS))
+
+
+def is_known_but_disabled_tool(name: str) -> tuple[bool, str | None]:
+    """Check if a tool name belongs to a known but currently-disabled group.
+
+    Returns ``(True, group_name)`` if the tool is recognized by the catalog
+    but its group is excluded from local/offline mode (i.e., it would be
+    registered under ``enable_web_skills=True``). Returns ``(False, None)``
+    otherwise — either the tool is completely unknown, or its group is
+    already registered and the failure lies elsewhere.
+
+    Called from the ReAct dispatcher's unregistered-tool branch, so the
+    caller already knows the tool is not in the registry; this function
+    explains *why* — config-disabled vs. genuinely unknown.
+    """
+    group = skill_group(name)
+    if group is None:
+        return False, None
+    if group in WEB_ONLY_GROUPS:
+        return True, group
+    return False, None
+
+
 def _register_groups(registry: SkillRegistry, groups: set[str] | frozenset[str]) -> None:
     from runtime.platform import capabilities as _caps_mod
 
@@ -552,6 +581,38 @@ def register_subset(
             )
 
 
+def register_group(registry: SkillRegistry, group: str) -> list[str]:
+    """Register a single skill group into ``registry``.
+
+    Used by the ``POST /api/capabilities/enable`` endpoint to hot-load
+    a group that was excluded at startup by ``enable_web_skills=False``.
+    Returns the list of skill names newly added (empty if the group was
+    already registered, unknown, or failed to register).
+    """
+    import contextlib
+
+    fn = _GROUP_REGISTRARS.get(group)
+    if fn is None:
+        return []
+    before: set[str] = set()
+    with contextlib.suppress(Exception):
+        before = set(registry.all_names())
+    try:
+        fn(registry)
+    except Exception as exc:  # noqa: BLE001
+        _log.warning(
+            "register_group: group %r failed (%s: %s)",
+            group,
+            type(exc).__name__,
+            exc,
+        )
+        return []
+    after: set[str] = set()
+    with contextlib.suppress(Exception):
+        after = set(registry.all_names())
+    return sorted(after - before)
+
+
 # ═══════════════════════════════════════════════════════════
 # Skill kind classification · system / automation / domain
 # ═══════════════════════════════════════════════════════════
@@ -640,4 +701,7 @@ __all__ = [
     "register_all",
     "register_base",
     "register_subset",
+    "register_group",
+    "WEB_ONLY_GROUPS",
+    "is_known_but_disabled_tool",
 ]

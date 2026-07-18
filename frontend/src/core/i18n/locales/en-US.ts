@@ -593,6 +593,13 @@ export const enUS: Translations = {
     clarifyTaskDirection: "Clarify task direction",
     synthesizeFindings: "Synthesize findings",
     planNextStep: "Plan next step",
+    progressOrient: "Orient",
+    progressInvestigate: "Investigate",
+    progressImplement: "Implement",
+    progressVerify: "Verify",
+    progressPivot: "Pivot",
+    progressSynthesize: "Synthesize",
+    progressRecover: "Recover",
   },
 
   // Trace generator labels

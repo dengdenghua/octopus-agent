@@ -97,6 +97,21 @@ CHECKS: tuple[AgentLoopCheck, ...] = (
             "fetchAgentCompetitorScorecard",
         ),
     ),
+    AgentLoopCheck(
+        id="mixed_mode_completion",
+        title="Mixed browser and code completion evidence",
+        paths=(
+            "runtime/core/cerebrum/react_guards.py",
+            "tests/test_react_guard_browser.py",
+        ),
+        required_terms=(
+            "mixed-mode completion guard",
+            "_mixed_mode_completion_guard",
+            "_has_successful_browser_action",
+            "workspace code edit",
+            "code verification command",
+        ),
+    ),
 )
 
 

@@ -61,10 +61,12 @@ export interface ResumeTaskResponse {
 
 export async function listTasks(
   status?: "paused" | "pending" | "active" | "all",
+  signal?: AbortSignal,
 ): Promise<TasksListResponse> {
   const qs = status ? `?status=${status}` : "";
   const res = await fetch(`${getBackendBaseURL()}/api/tasks${qs}`, {
     headers: authHeaders(),
+    signal,
   });
   if (!res.ok) throw new Error(`Failed to list tasks: ${res.statusText}`);
   return (await res.json()) as TasksListResponse;

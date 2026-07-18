@@ -1,4 +1,8 @@
-import { RefreshCwIcon, PlayCircleIcon, ClipboardCheckIcon } from "lucide-react";
+import {
+  RefreshCwIcon,
+  PlayCircleIcon,
+  ClipboardCheckIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +33,7 @@ import {
   queueLatestBrowserSessionReplayCase,
   queueReplayEvidenceHint,
   rejectStaleBrowserDesktopReplayArtifacts,
+  rerunBrowserDesktopRepairRecipeEvidenceBatch,
   type AgentTraceReplayCase,
   type AgentTraceReplayEvaluation,
   type AgentTraceReplayGate,
@@ -122,6 +127,7 @@ export default function ReplayPage() {
   const [browserBusy, setBrowserBusy] = useState(false);
   const [desktopBusy, setDesktopBusy] = useState(false);
   const [recipeBusy, setRecipeBusy] = useState(false);
+  const [rerunBusy, setRerunBusy] = useState(false);
   const [staleBusy, setStaleBusy] = useState(false);
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -223,6 +229,25 @@ export default function ReplayPage() {
     }
   }, [refresh]);
 
+  const handleRerunBlocked = useCallback(async () => {
+    setRerunBusy(true);
+    try {
+      const result = await rerunBrowserDesktopRepairRecipeEvidenceBatch({
+        promoteSourceCases: false,
+        actor: "replay_workspace",
+      });
+      setLastApplyResult(
+        `重跑 ${result.attempted} 个修复配方：${result.passed} 个通过，${result.failed} 个失败；源案例仍需人工审核。`,
+      );
+      await refresh();
+    } catch (err: unknown) {
+      swallow(err);
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRerunBusy(false);
+    }
+  }, [refresh]);
+
   const handleQueueEvidence = useCallback(async () => {
     if (!replayEvidence) return;
     setEvidenceBusy(true);
@@ -278,7 +303,8 @@ export default function ReplayPage() {
                     {t.sidebar.navReplay}
                   </h1>
                   <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                    回放门禁、浏览器/桌面回放评审与 task-run 回放用例的集中视图。
+                    回放门禁、浏览器/桌面回放评审与 task-run
+                    回放用例的集中视图。
                   </p>
                 </div>
               </div>
@@ -337,10 +363,12 @@ export default function ReplayPage() {
               browserBusy={browserBusy}
               desktopBusy={desktopBusy}
               recipeBusy={recipeBusy}
+              rerunBusy={rerunBusy}
               staleBusy={staleBusy}
               onQueueBrowser={() => void handleQueueBrowser()}
               onQueueDesktop={() => void handleQueueDesktop()}
               onQueueRepairRecipes={() => void handleQueueRecipes()}
+              onRerunBlocked={() => void handleRerunBlocked()}
               onRejectStale={() => void handleRejectStale()}
             />
           </section>

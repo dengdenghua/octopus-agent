@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import ipaddress
+import shlex
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -14,7 +15,11 @@ if TYPE_CHECKING:
 from runtime.adapters.instrumentation import trace_stage
 from runtime.execution.misc.file_write_leases import (
     FileWriteLeaseConflict,
+    WorkspaceContentDriftConflict,
     acquire_file_write_lease,
+    record_file_read_snapshot,
+    record_file_write_snapshot,
+    verify_file_unchanged_since_read,
 )
 from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.tool_engine.skill_gate import (
@@ -99,14 +104,11 @@ def _restore_trusted_browser_loopback_access(
         return args
     surfaces = metadata.get("runtime_surfaces")
     surface_names = (
-        {str(item).strip().lower() for item in surfaces}
-        if isinstance(surfaces, list)
-        else set()
+        {str(item).strip().lower() for item in surfaces} if isinstance(surfaces, list) else set()
     )
     explicit_browser = bool(
         metadata.get("browser_operation_mode") is True
-        or str(metadata.get("browser_surface") or "").strip().lower()
-        in {"browser", "chrome"}
+        or str(metadata.get("browser_surface") or "").strip().lower() in {"browser", "chrome"}
         or {"browser", "chrome"} & surface_names
     )
     if not explicit_browser:
@@ -303,6 +305,163 @@ def _prepare_scoped_args(
                 "with the correct workspace selected."
             )
     return args
+
+
+def _declared_write_scope_violation(
+    skill: Skill,
+    sucker_id: SkillId,
+    args: dict[str, Any],
+) -> str | None:
+    """Enforce an optional task-level allowlist for concrete file writes.
+
+    The normal execution scope confines writes to a workspace.  Some tasks
+    need a narrower contract (for example, an evaluation that permits edits
+    to two named files only).  ``allowed_write_paths`` is trusted session
+    metadata, never a model argument, and contains workspace-relative paths.
+    Existing sessions without the field retain the normal workspace policy.
+    """
+    try:
+        from runtime.platform.process.session import current_session
+
+        session = current_session()
+        metadata = getattr(session, "metadata", None) if session is not None else None
+    except (AttributeError, ImportError):
+        metadata = None
+    if not isinstance(metadata, dict) or "allowed_write_paths" not in metadata:
+        return None
+
+    declared = metadata.get("allowed_write_paths")
+    if not isinstance(declared, list) or not declared:
+        return (
+            f"[write-scope-denied] {sucker_id}: task write allowlist is empty or invalid; "
+            "no file writes are permitted"
+        )
+    command_violation = _declared_scope_command_violation(str(sucker_id), args)
+    if command_violation is not None:
+        return (
+            f"[write-scope-denied] {sucker_id}: {command_violation}; "
+            f"permitted paths: {declared!r}. Use the dedicated read/test/lint tools "
+            "without creating environments, lockfiles, caches, or package metadata."
+        )
+
+    affinity = set(skill.affinity or [])
+    if "file" not in affinity or not affinity & {"write", "edit", "delete", "dangerous"}:
+        return None
+    workspace_value = metadata.get("workspace_path")
+    if not isinstance(workspace_value, str) or not workspace_value.strip():
+        return (
+            f"[write-scope-denied] {sucker_id}: task write allowlist requires an absolute "
+            "workspace_path"
+        )
+    workspace = Path(workspace_value).expanduser()
+    if not workspace.is_absolute():
+        return (
+            f"[write-scope-denied] {sucker_id}: task write allowlist requires an absolute "
+            "workspace_path"
+        )
+    workspace = workspace.resolve(strict=False)
+
+    raw_target = _extract_path(args, None)
+    if not raw_target:
+        return (
+            f"[write-scope-denied] {sucker_id}: could not determine the target file; "
+            f"permitted paths: {declared!r}"
+        )
+    target = Path(raw_target).expanduser()
+    if not target.is_absolute():
+        target = workspace / target
+    target = target.resolve(strict=False)
+    try:
+        target.relative_to(workspace)
+    except ValueError:
+        return (
+            f"[write-scope-denied] {sucker_id}: {raw_target!r} escapes the task workspace; "
+            f"permitted paths: {declared!r}"
+        )
+
+    allowed_targets: set[Path] = set()
+    for item in declared:
+        if not isinstance(item, str) or not item.strip():
+            continue
+        relative = Path(item.strip())
+        if relative.is_absolute() or relative == Path(".") or ".." in relative.parts:
+            continue
+        candidate = (workspace / relative).resolve(strict=False)
+        try:
+            candidate.relative_to(workspace)
+        except ValueError:
+            continue
+        allowed_targets.add(candidate)
+    if target in allowed_targets:
+        return None
+    return (
+        f"[write-scope-denied] {sucker_id}: {raw_target!r} is outside the task's declared "
+        f"file set; permitted paths: {declared!r}. Do not create helper/package files."
+    )
+
+
+def _declared_scope_command_violation(
+    skill_name: str,
+    args: dict[str, Any],
+) -> str | None:
+    """Reject environment/package creation under a task file allowlist.
+
+    Workspace confinement alone cannot stop a shell command from creating
+    ``.venv``, lockfiles, or package-manager caches beside the two files a
+    task explicitly permits.  Under a trusted task-level allowlist, package
+    and environment management is outside scope; normal focused pytest/lint
+    commands remain available.
+    """
+    if skill_name not in {
+        "exec_shell",
+        "background_exec",
+        "ipython",
+        "run_tests",
+        "lint_check",
+        "format_code",
+    }:
+        return None
+    if skill_name == "ipython":
+        return "ipython can perform arbitrary filesystem writes outside the declared file set"
+    raw = args.get("command")
+    if not raw:
+        return None
+    if isinstance(raw, list):
+        tokens = [str(value) for value in raw]
+    elif isinstance(raw, str):
+        try:
+            tokens = shlex.split(raw)
+        except ValueError:
+            return "command could not be parsed safely"
+    else:
+        return "command must be a string or argv list"
+    if not tokens:
+        return None
+    program = Path(tokens[0]).name.lower()
+    lowered = [token.lower() for token in tokens[1:]]
+    if program in {"uv", "uvx", "pip", "pip3", "virtualenv", "conda", "mamba", "poetry", "pdm"}:
+        return f"{program!r} may create an environment, cache, or lockfile outside the declared file set"
+    if (
+        program.startswith("python")
+        and len(lowered) >= 2
+        and lowered[0] == "-m"
+        and lowered[1] in {"pip", "venv", "virtualenv", "ensurepip"}
+    ):
+        return f"python -m {lowered[1]} may create files outside the declared file set"
+    if program.startswith("python") and any(token in {"-c", "-"} for token in lowered[:2]):
+        return "inline Python can perform arbitrary filesystem writes outside the declared file set"
+    if program in {"npm", "pnpm", "yarn", "bun"} and any(
+        token in {"add", "install", "update", "upgrade", "link", "init"}
+        for token in lowered[:2]
+    ):
+        return f"{program!r} package mutation is outside the declared file set"
+    if program == "cargo" and any(token in {"add", "install", "update"} for token in lowered[:2]):
+        return "cargo package mutation is outside the declared file set"
+    if program == "go" and lowered and lowered[0] in {"get", "mod", "work"}:
+        return "Go module/workspace mutation is outside the declared file set"
+    if program in {"mkdir", "touch", "mktemp", "cp", "mv", "rm", "rmdir"}:
+        return f"{program!r} cannot prove that every filesystem mutation stays in the declared file set"
+    return None
 
 
 class StepExecutionError(RuntimeError):
@@ -708,6 +867,13 @@ class ToolExecutor:
                     # so scope escapes map to the same except branch as
                     # every other file-safety denial.
                     args = _prepare_scoped_args(skill, sucker_id, args)
+                    _write_scope_reason = _declared_write_scope_violation(
+                        skill,
+                        sucker_id,
+                        args,
+                    )
+                    if _write_scope_reason is not None:
+                        raise PermissionError(_write_scope_reason)
                     _read_guard_reason = _read_before_write_violation(
                         str(sucker_id),
                         args,
@@ -732,8 +898,13 @@ class ToolExecutor:
                     if _lease_target is not None:
                         from runtime.platform.process.session import current_session
 
+                        _write_session = current_session()
+                        verify_file_unchanged_since_read(
+                            _write_session,
+                            _lease_target,
+                        )
                         acquire_file_write_lease(
-                            current_session(),
+                            _write_session,
                             _lease_target,
                             owner=_file_write_lease_owner(
                                 actor=actor,
@@ -755,6 +926,13 @@ class ToolExecutor:
                     status: ExecutionStatus = "success"
                     error_type: str | None = None
                     stderr_tags: list[str] = retry_tags
+                    if _lease_target is not None and not (
+                        isinstance(output, dict) and output.get("error")
+                    ):
+                        record_file_write_snapshot(
+                            _write_session,
+                            _lease_target,
+                        )
                     _record_successful_read(str(sucker_id), args, output)
                     # Taint the turn (chokepoint) if this tool's output is
                     # external/untrusted and carries injection markers, so a
@@ -796,6 +974,11 @@ class ToolExecutor:
                     status = "failed"
                     error_type = "FileWriteLeaseConflict"
                     stderr_tags = ["file_write_lease_conflict", str(e)]
+                except WorkspaceContentDriftConflict as e:
+                    output = {"error": str(e)}
+                    status = "failed"
+                    error_type = "WorkspaceContentDriftConflict"
+                    stderr_tags = ["workspace_content_drift", str(e)]
                 except TimeoutError:
                     output = None
                     status = "timeout"
@@ -1275,6 +1458,7 @@ def _record_successful_read(
         if key not in known:
             read_paths.append(key)
             known.add(key)
+        record_file_read_snapshot(session, path)
 
 
 def _path_key(path: Path) -> str:

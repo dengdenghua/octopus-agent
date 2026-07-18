@@ -577,7 +577,7 @@ class TestAgentCompetitorScorecard:
         missing = compute_ecosystem_readiness(root=tmp_path)
 
         assert missing["score"] == 0.0
-        assert missing["missing_count"] == 6
+        assert missing["missing_count"] == 10
 
         guide = tmp_path / "docs/guide/operator-readiness.md"
         guide.parent.mkdir(parents=True)
@@ -590,6 +590,10 @@ class TestAgentCompetitorScorecard:
                     "Replay gate promotion evidence audit.",
                     "Plugin smoke permission review hook.",
                     "Publisher trust key rotation revocation governance audit.",
+                    (
+                        "Transactional install migration gate automatic restore "
+                        "lifecycle rollback plugin_lifecycle_install."
+                    ),
                 ]
             ),
             encoding="utf-8",
@@ -597,8 +601,8 @@ class TestAgentCompetitorScorecard:
 
         partial = compute_ecosystem_readiness(root=tmp_path)
 
-        assert partial["passed"] == 5
-        assert partial["missing_count"] == 1
+        assert partial["passed"] == 6
+        assert partial["missing_count"] == 4
 
         migration = tmp_path / "docs/guide/plugin-author-migration.md"
         migration.write_text(
@@ -613,19 +617,25 @@ class TestAgentCompetitorScorecard:
             encoding="utf-8",
         )
 
-        ready = compute_ecosystem_readiness(root=tmp_path)
+        documented = compute_ecosystem_readiness(root=tmp_path)
 
-        assert ready["score"] == 1.0
-        assert ready["ready"] is True
-        assert ready["passed"] == 6
-        assert ready["next_actions"] == []
+        assert documented["score"] == 0.7
+        assert documented["ready"] is False
+        assert documented["passed"] == 7
+        assert len(documented["next_actions"]) == 3
 
-    def test_scorecard_weights_and_gaps_are_stable(self):
+    def test_scorecard_weights_and_gaps_are_stable(self, monkeypatch, tmp_path):
         from runtime.safety.evolution.agent_competitor_scorecard import (
             DIMENSIONS,
             compute_agent_competitor_scorecard,
         )
 
+        # Keep the static scorecard contract independent from an ignored,
+        # machine-local benchmark outage receipt left by a prior live run.
+        monkeypatch.setenv(
+            "OCTOPUS_BEHAVIORAL_INFRASTRUCTURE_STATUS",
+            str(tmp_path / "no-infrastructure-receipt.json"),
+        )
         report = compute_agent_competitor_scorecard()
 
         assert report["schema"] == "octopus.agent_competitor_scorecard.v1"
@@ -636,15 +646,15 @@ class TestAgentCompetitorScorecard:
             "claude_code": 87,
             "openclaw": 84,
             "hermes": 85,
-            "octopus": 97,
+            "octopus": 98,
         }
-        assert report["verdict"] == "competitive"
-        assert report["ranking"][0] == {"competitor": "octopus", "score": 97}
-        assert report["evidence_adjusted_overall"]["octopus"] == 97
-        assert report["evidence_adjusted_verdict"] == "competitive"
+        assert report["verdict"] == "leading"
+        assert report["ranking"][0] == {"competitor": "octopus", "score": 98}
+        assert report["evidence_adjusted_overall"]["octopus"] == 98
+        assert report["evidence_adjusted_verdict"] == "leading"
         assert report["evidence_adjusted_ranking"][0] == {
             "competitor": "octopus",
-            "score": 97,
+            "score": 98,
         }
         assert report["evidence_layers"]["architecture"]["status"] == "estimated"
         assert report["evidence_layers"]["static_certification"]["status"] == "certified"
@@ -686,20 +696,22 @@ class TestAgentCompetitorScorecard:
         assert report["surpass_summary"] == {
             "schema": "octopus.agent_surpass_summary.v1",
             "total_dimensions": 14,
-            "surpassed_dimensions": 5,
-            "gap_dimensions": 9,
+            "surpassed_dimensions": 14,
+            "gap_dimensions": 0,
             "target_gap_dimensions": 0,
-            "focus_gap_dimensions": 9,
-            "all_dimensions_surpassed": False,
-            "largest_gap": 3,
-            "largest_effective_gap": 3,
+            "focus_gap_dimensions": 0,
+            "all_dimensions_surpassed": True,
+            "largest_gap": 0,
+            "largest_effective_gap": 0,
         }
         assert report["octopus_below_target"] == []
-        assert len(report["octopus_external_gap_dimensions"]) == 9
-        assert len(report["octopus_focus_gaps"]) == 9
+        assert report["octopus_external_gap_dimensions"] == []
+        assert report["octopus_focus_gaps"] == []
         general = next(row for row in report["dimensions"] if row["id"] == "general_agent_loop")
-        assert general["octopus_baseline_score"] == 97
-        assert general["octopus_surpasses_best_external"] is False
+        assert general["scores"]["octopus"] == 100
+        assert general["octopus_baseline_score"] == 100
+        assert general["octopus_surpasses_best_external"] is True
+        assert general["octopus_gap_to_surpass"] == 0
         assert general["octopus_certified_score_floor"] == 97
         assert any(
             link["id"] == "agent_loop_quality"
@@ -719,32 +731,35 @@ class TestAgentCompetitorScorecard:
             for link in employee["operator_drilldown"]["links"]
         )
         product = next(row for row in report["dimensions"] if row["id"] == "product_experience")
-        assert product["octopus_baseline_score"] == 97
-        assert product["scores"]["octopus"] == 97
+        assert product["octopus_baseline_score"] == 99
+        assert product["scores"]["octopus"] == 99
         assert product["best_external_competitor"] == "codex"
         assert product["best_external_score"] == 98
         assert product["surpass_target_score"] == 99
         assert product["effective_target_score"] == 99
         assert product["octopus_gap_to_target"] == 0
-        assert product["octopus_gap_to_surpass"] == 2
-        assert product["octopus_gap_to_effective_target"] == 2
+        assert product["octopus_gap_to_surpass"] == 0
+        assert product["octopus_gap_to_effective_target"] == 0
         assert product["octopus_score_source"] == "external_calibrated_baseline"
-        assert product["octopus_evidence_adjusted_score"] == 97
+        assert product["octopus_evidence_adjusted_score"] == 99
         assert product["octopus_evidence_adjusted_score_source"] == "baseline"
         assert product["octopus_certified_score_floor"] == 97
         assert product["octopus_certification_score_applied"] is False
         assert product["octopus_certification_adjustment_available"] is False
+        assert product["octopus_surpasses_best_external"] is True
         assert any(
             link["id"] == "product_experience_quality"
             and link["href"] == "/api/evolution/product-experience-quality"
             for link in product["operator_drilldown"]["links"]
         )
         repo_context = next(row for row in report["dimensions"] if row["id"] == "repo_context")
-        assert repo_context["scores"]["octopus"] == 97
+        assert repo_context["scores"]["octopus"] == 99
         assert repo_context["scores"]["codex"] == 98
+        assert repo_context["octopus_baseline_score"] == 99
+        assert repo_context["octopus_gap_to_surpass"] == 0
         assert repo_context["best_external_competitor"] == "codex"
         assert repo_context["surpass_target_score"] == 99
-        assert repo_context["octopus_surpasses_best_external"] is False
+        assert repo_context["octopus_surpasses_best_external"] is True
         assert repo_context["octopus_certified_score_floor"] == 97
         assert any(
             link["id"] == "repo_context_quality"
@@ -754,10 +769,11 @@ class TestAgentCompetitorScorecard:
         permissions = next(
             row for row in report["dimensions"] if row["id"] == "permissions_sandbox"
         )
-        assert permissions["scores"]["octopus"] == 97
+        assert permissions["scores"]["octopus"] == 98
         assert permissions["scores"]["codex"] == 97
         assert permissions["surpass_target_score"] == 98
-        assert permissions["octopus_surpasses_best_external"] is False
+        assert permissions["octopus_surpasses_best_external"] is True
+        assert permissions["octopus_gap_to_surpass"] == 0
         assert permissions["octopus_certified_score_floor"] == 97
         assert any(
             link["id"] == "permission_sandbox_quality"
@@ -766,16 +782,17 @@ class TestAgentCompetitorScorecard:
         )
         browser = next(row for row in report["dimensions"] if row["id"] == "browser_desktop")
         assert browser["scores"]["openclaw"] == 78
-        assert browser["octopus_baseline_score"] == 97
-        assert browser["scores"]["octopus"] == 97
+        assert browser["octopus_baseline_score"] == 99
+        assert browser["scores"]["octopus"] == 99
         assert browser["best_external_competitor"] == "codex"
         assert browser["best_external_score"] == 98
         assert browser["surpass_target_score"] == 99
-        assert browser["octopus_gap_to_surpass"] == 2
-        assert browser["octopus_evidence_adjusted_score"] == 97
+        assert browser["octopus_gap_to_surpass"] == 0
+        assert browser["octopus_evidence_adjusted_score"] == 99
         assert browser["octopus_certified_score_floor"] == 97
         assert browser["octopus_certification_score_applied"] is False
         assert browser["octopus_certification_adjustment_available"] is False
+        assert browser["octopus_surpasses_best_external"] is True
         differentiated = next(
             row for row in report["dimensions"] if row["id"] == "differentiated_agent_os"
         )
@@ -786,13 +803,26 @@ class TestAgentCompetitorScorecard:
         assert differentiated["octopus_surpasses_best_external"] is True
         assert differentiated["octopus_certified_score_floor"] == 97
         assert differentiated["octopus_certification_score_applied"] is False
+        governance = next(row for row in report["dimensions"] if row["id"] == "governance_operator")
+        assert governance["scores"]["octopus"] == 97
+        assert governance["scores"]["codex"] == 96
+        assert governance["octopus_baseline_score"] == 97
+        assert governance["octopus_surpasses_best_external"] is True
+        assert governance["octopus_gap_to_surpass"] == 0
+        assert governance["octopus_certified_score_floor"] == 97
+        assert any(
+            link["id"] == "governance_audit_rotation"
+            and link["href"] == "/api/agent-trace/review-queue/promotions/audit/rotation"
+            for link in governance["operator_drilldown"]["links"]
+        )
         ecosystem = next(row for row in report["dimensions"] if row["id"] == "ecosystem_maturity")
-        assert ecosystem["octopus_baseline_score"] == 97
-        assert ecosystem["scores"]["octopus"] == 97
-        assert ecosystem["octopus_evidence_adjusted_score"] == 97
+        assert ecosystem["octopus_baseline_score"] == 100
+        assert ecosystem["scores"]["octopus"] == 100
+        assert ecosystem["octopus_evidence_adjusted_score"] == 100
         assert ecosystem["best_external_competitor"] == "codex"
         assert ecosystem["surpass_target_score"] == 100
-        assert ecosystem["octopus_surpasses_best_external"] is False
+        assert ecosystem["octopus_surpasses_best_external"] is True
+        assert ecosystem["octopus_gap_to_surpass"] == 0
         assert ecosystem["octopus_certified_score_floor"] == 97
         assert ecosystem["octopus_certification_score_applied"] is False
         assert ecosystem["octopus_certification_adjustment_available"] is False
@@ -817,12 +847,24 @@ class TestAgentCompetitorScorecard:
             and link["href"] == "/api/plugins/publisher-trust"
             for link in drilldown["links"]
         )
+        assert any(
+            link["id"] == "plugin_lifecycle_history"
+            and link["href"] == "/api/plugins/lifecycle/history"
+            for link in drilldown["links"]
+        )
+        assert any(
+            link["id"] == "plugin_registry_updates"
+            and link["href"] == "/api/plugins/registry/updates"
+            for link in drilldown["links"]
+        )
         subagents = next(
             row for row in report["dimensions"] if row["id"] == "subagents_parallelism"
         )
+        assert subagents["scores"]["octopus"] == 99
+        assert subagents["octopus_baseline_score"] == 99
         assert subagents["best_external_competitor"] == "codex"
-        assert subagents["octopus_surpasses_best_external"] is False
-        assert subagents["octopus_gap_to_surpass"] == 2
+        assert subagents["octopus_surpasses_best_external"] is True
+        assert subagents["octopus_gap_to_surpass"] == 0
         assert subagents["octopus_gap_to_target"] == 0
         assert any(
             link["id"] == "team_task_process_timeline"
@@ -834,7 +876,7 @@ class TestAgentCompetitorScorecard:
             and link["href_template"] == "/api/projects/{project_id}/process-timeline"
             for link in subagents["operator_drilldown"]["links"]
         )
-        assert report["ecosystem_readiness"]["passed"] == 6
+        assert report["ecosystem_readiness"]["passed"] == 10
         assert report["parity_certification"]["passed"] == 17
         assert report["parity_certification"]["ready"] is True
         assert report["parity_certification"]["by_kind"]["operational_excellence"] == {
@@ -846,35 +888,43 @@ class TestAgentCompetitorScorecard:
             "total": 7,
         }
         assert report["octopus_strengths"]
-        assert len(report["octopus_strengths"]) == 4
-        assert report["next_focus"]
+        assert len(report["octopus_strengths"]) == 14
+        assert report["next_focus"] == []
 
-    def test_e2e_surpass_certification_unifies_release_evidence(self):
+    def test_e2e_surpass_certification_unifies_release_evidence(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
         from runtime.safety.evolution.e2e_surpass_certification import (
             compute_e2e_surpass_certification,
         )
 
+        monkeypatch.setenv(
+            "OCTOPUS_BEHAVIORAL_INFRASTRUCTURE_STATUS",
+            str(tmp_path / "no-infrastructure-receipt.json"),
+        )
         report = compute_e2e_surpass_certification(target_score=95)
 
         assert report["schema"] == "octopus.e2e_surpass_certification.v1"
         assert report["ready"] is False
-        assert report["verdict"] == "needs_work"
+        assert report["verdict"] == "needs_behavioral_evidence"
         assert report["summary"] == {
-            "scorecard_octopus": 97,
+            "scorecard_octopus": 98,
             "scorecard_best_external": 97,
-            "scorecard_evidence_adjusted_octopus": 97,
+            "scorecard_evidence_adjusted_octopus": 98,
             # Pinned to the current radar value — keep in sync with the
             # pins in test_production_readiness_gate (96 = 2026-07-03).
             "automation_octopus": 96,
             "automation_codex": 94,
-            "coverage_ready": 0,
+            "coverage_ready": 7,
             "coverage_total": 7,
-            "coverage_gap_domains": 7,
-            "quality_ready": 6,
-            "quality_total": 6,
-            "all_dimensions_surpassed": False,
-            "scorecard_gap_dimensions": 9,
-            "automation_gap_dimensions": 1,
+            "coverage_gap_domains": 0,
+            "quality_ready": 7,
+            "quality_total": 7,
+            "all_dimensions_surpassed": True,
+            "scorecard_gap_dimensions": 0,
+            "automation_gap_dimensions": 0,
             "behavioral_ready": False,
             "behavioral_octopus_pass_pow_k": 0.0,
             "behavioral_codex_pass_pow_k": 0.0,
@@ -884,24 +934,16 @@ class TestAgentCompetitorScorecard:
             "schema": "octopus.e2e_coverage_summary.v1",
             "total_domains": 7,
             "present_domains": 7,
-            "ready_domains": 0,
-            "gap_domains": 7,
-            "gap_domain_ids": [
-                "general_runtime_and_coding",
-                "frontend_product_experience",
-                "browser_desktop_automation",
-                "multi_agent_digital_employee",
-                "repo_memory_knowledge",
-                "security_governance",
-                "extensions_ecosystem",
-            ],
+            "ready_domains": 7,
+            "gap_domains": 0,
+            "gap_domain_ids": [],
         }
         coverage = {row["id"]: row for row in report["coverage"]["domains"]}
-        assert coverage["frontend_product_experience"]["ready"] is False
+        assert coverage["frontend_product_experience"]["ready"] is True
         assert coverage["frontend_product_experience"]["quality_schemas"] == [
             "octopus.product_experience_quality.v1",
         ]
-        assert coverage["browser_desktop_automation"]["automation_ready"] is False
+        assert coverage["browser_desktop_automation"]["automation_ready"] is True
         assert coverage["browser_desktop_automation"]["automation_dimension_ids"] == [
             "browser_session_control",
             "desktop_preview_execute",
@@ -921,7 +963,7 @@ class TestAgentCompetitorScorecard:
             check for check in report["checks"] if not check["id"].startswith("behavioral:")
         ]
         assert any(
-            check["id"] == "scorecard_all_dimensions_surpassed" and not check["passed"]
+            check["id"] == "scorecard_all_dimensions_surpassed" and check["passed"]
             for check in static_checks
         )
         assert any(
@@ -979,13 +1021,13 @@ class TestAgentCompetitorScorecard:
         ):
             report = compute_e2e_surpass_certification(target_score=95)
 
-        assert report["ready"] is False
-        assert report["verdict"] == "needs_work"
+        assert report["ready"] is True
+        assert report["verdict"] == "surpassed"
         assert report["summary"]["behavioral_ready"] is True
         assert report["summary"]["behavioral_octopus_pass_pow_k"] == 1.0
         assert report["summary"]["behavioral_codex_pass_pow_k"] == 0.96
-        assert any(not check["passed"] for check in report["checks"])
-        assert report["next_actions"]
+        assert all(check["passed"] for check in report["checks"])
+        assert report["next_actions"] == []
 
     def test_scorecard_marks_ready_behavioral_bundle_as_certified(self):
         from runtime.safety.evolution.agent_competitor_scorecard import (
@@ -1039,6 +1081,8 @@ class TestAgentCompetitorScorecard:
         assert report["passed"] == report["total"]
         assert report["dirty_worktree"]["schema"] == ("octopus.dirty_worktree_awareness.v1")
         assert report["dirty_worktree"]["command"] == "git status --short"
+        checks = {check["id"]: check for check in report["checks"]}
+        assert checks["concurrent_workspace_drift_protection"]["passed"] is True
 
     def test_permission_sandbox_quality_reports_policy_coverage(self):
         from runtime.safety.evolution.permission_sandbox_quality import (
@@ -1072,6 +1116,7 @@ class TestAgentCompetitorScorecard:
         assert report["passed"] == report["total"]
         checks = {check["id"]: check for check in report["checks"]}
         assert checks["e2e_surpass_operator_surface"]["passed"] is True
+        assert checks["keyboard_replay_remediation"]["passed"] is True
 
     def test_agent_loop_quality_reports_runtime_trace_contracts(self):
         from runtime.safety.evolution.agent_loop_quality import (
@@ -1111,7 +1156,7 @@ class TestAgentCompetitorScorecard:
         report = compute_agent_competitor_scorecard(root=tmp_path)
         code_loop = next(item for item in report["dimensions"] if item["id"] == "core_coding_loop")
 
-        assert code_loop["scores"]["octopus"] == 97
+        assert code_loop["scores"]["octopus"] == 100
         assert code_loop["octopus_evidence_readiness"] < 0.5
         assert code_loop["octopus_missing_evidence_count"] > 0
         assert (

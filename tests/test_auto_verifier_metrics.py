@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from runtime.safety.evolution.auto_verifier_metrics import (
+    BATCH_SCHEMA,
     DECISION_SCHEMA,
     DRIFT_REPAIR_ITEM_SCHEMA,
     DRIFT_REPAIR_QUEUE_SCHEMA,
@@ -11,7 +12,9 @@ from runtime.safety.evolution.auto_verifier_metrics import (
     explain_verification_ranking,
     queue_verifier_drift_backlog,
     rank_verification_commands,
+    recent_auto_verifier_batches,
     recent_auto_verifier_decisions,
+    record_auto_verifier_batch,
     record_auto_verifier_decision,
     record_auto_verifier_metric,
     summarize_auto_verifier_metrics,
@@ -265,3 +268,23 @@ def test_recent_auto_verifier_decisions_round_trip(tmp_path: Path) -> None:
     assert decisions[0]["schema"] == DECISION_SCHEMA
     assert decisions[0]["selected_command"] == "python -m ruff check src/foo.py"
     assert decisions[0]["candidates"] == candidates
+
+
+def test_recent_auto_verifier_batches_round_trip(tmp_path: Path) -> None:
+    path = tmp_path / "auto_verifier_decisions.jsonl"
+
+    record_auto_verifier_batch(
+        candidate_count=3,
+        commands=["python -m ruff check src/foo.py", "python -m pytest tests/test_foo.py -q"],
+        passed_count=2,
+        stop_reason="exhausted",
+        path=path,
+    )
+
+    batches = recent_auto_verifier_batches(path=path)
+    assert batches[0]["schema"] == BATCH_SCHEMA
+    assert batches[0]["candidate_count"] == 3
+    assert batches[0]["attempted_count"] == 2
+    assert batches[0]["passed_count"] == 2
+    assert batches[0]["complete"] is True
+    assert batches[0]["stop_reason"] == "exhausted"

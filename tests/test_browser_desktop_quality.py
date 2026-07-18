@@ -31,6 +31,8 @@ def test_browser_desktop_quality_reports_all_local_checks() -> None:
         "thread_native_external_chrome_activation",
         "desktop_preview_execute_lease",
         "desktop_uia_grounding",
+        "desktop_capture_path_repair",
+        "browser_session_recovery_rerun",
         "operator_visibility",
     }
 
@@ -139,7 +141,7 @@ def test_automation_radar_reports_browser_desktop_advantage() -> None:
     assert report["schema"] == "octopus.automation_radar.v1"
     assert report["scope"] == "browser_desktop_visual_automation"
     assert report["overall"]["octopus"] == 96
-    assert report["overall"]["codex"] == 93
+    assert report["overall"]["codex"] == 94
     assert report["verdict"] == "leading"
     assert report["browser_desktop_quality"]["ready"] is True
     assert report["parity_certification"]["ready"] is True
@@ -153,11 +155,11 @@ def test_automation_radar_reports_browser_desktop_advantage() -> None:
     session_control = next(
         row for row in report["dimensions"] if row["id"] == "browser_session_control"
     )
-    assert session_control["scores"]["octopus"] > session_control["scores"]["codex"]
+    assert session_control["scores"]["octopus"] == 99
+    assert session_control["scores"]["codex"] == 98
     safety = next(row for row in report["dimensions"] if row["id"] == "automation_safety")
     assert safety["scores"]["octopus"] > safety["scores"]["codex"]
     assert {row["id"] for row in report["octopus_strengths"]} >= {
-        "browser_session_control",
         "desktop_preview_execute",
         "visual_replay_validation",
         "repair_recipe_learning",

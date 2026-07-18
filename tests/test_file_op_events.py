@@ -291,6 +291,70 @@ class TestBeakAutoEmitsFileOp:
         file_ops = [e for e in journal.read_all() if isinstance(e, FileOpEvent)]
         assert len(file_ops) == 2
 
+    def test_file_write_rejects_external_change_after_read(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        target = tmp_path / "state.txt"
+        target.write_text("observed\n", encoding="utf-8")
+        calls: list[str] = []
+
+        def _write(path: str, content: str) -> dict:
+            calls.append(content)
+            Path(path).write_text(content, encoding="utf-8")
+            return {}
+
+        executor, journal, registry = _make_executor(file_write_handler=_write)
+        registry.register(
+            Skill(
+                name="read_file",
+                description="read",
+                trusted_source="builtin://read_file",
+                affinity=["file", "read"],
+                handler=lambda path: {"content": Path(path).read_text(encoding="utf-8")},
+            ),
+            verify_tests=False,
+        )
+        session = Session(
+            thread_id="t1",
+            turn_id="turn-drift",
+            metadata={"workspace_path": str(tmp_path)},
+        )
+
+        with session_scope(session):
+            read_step = executor.execute_step(
+                step_id=1,
+                node_id="n0",
+                sucker_id=SkillId("read_file"),
+                args={"path": str(target)},
+                caller="t",
+                task_id=TaskId(uuid4()),
+                arm_id=ArmId("a1"),
+                budget=_mk_budget(),
+                actor="agent-a",
+            )
+            target.write_text("changed by another process\n", encoding="utf-8")
+            step = executor.execute_step(
+                step_id=2,
+                node_id="n0",
+                sucker_id=SkillId("write_text_file"),
+                args={"path": str(target), "content": "agent write\n"},
+                caller="t",
+                task_id=TaskId(uuid4()),
+                arm_id=ArmId("a1"),
+                budget=_mk_budget(),
+                actor="agent-a",
+            )
+
+        assert read_step.result.status == "success"
+        assert step.result.status == "failed"
+        assert step.result.error_type == "WorkspaceContentDriftConflict"
+        assert "workspace_content_drift" in step.result.stderr_tags
+        assert calls == []
+        assert target.read_text(encoding="utf-8") == "changed by another process\n"
+        assert [e for e in journal.read_all() if isinstance(e, FileOpEvent)] == []
+        assert session.metadata["_file_write_lease_history"][-1]["event"] == "external_drift"
+
     def test_file_write_lease_allows_explicit_owner_handoff(
         self,
         tmp_path: Path,

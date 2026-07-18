@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import threading
 import time
 from dataclasses import dataclass
@@ -9,11 +10,16 @@ from typing import Any
 _LEASE_METADATA_KEY = "_file_write_leases"
 _HANDOFF_METADATA_KEY = "_file_write_lease_handoffs"
 _HISTORY_METADATA_KEY = "_file_write_lease_history"
+_SNAPSHOT_METADATA_KEY = "_file_read_snapshots"
 _LOCK = threading.RLock()
 
 
 class FileWriteLeaseConflict(PermissionError):
     """Raised when another owner already controls a file for this turn."""
+
+
+class WorkspaceContentDriftConflict(PermissionError):
+    """Raised when a file changed after the agent inspected it."""
 
 
 @dataclass(frozen=True)
@@ -126,6 +132,74 @@ def acquire_file_write_lease(
         return lease
 
 
+def record_file_read_snapshot(
+    session: Any,
+    path: str | Path | None,
+) -> dict[str, Any] | None:
+    """Remember the exact file content observed by a successful read.
+
+    The snapshot becomes an optimistic-concurrency token for later writes in
+    the same turn.  It complements owner leases: leases stop two Octopus
+    agents from writing simultaneously, while this token detects edits made
+    by an IDE, hook, script, or other process outside the lease table.
+    """
+
+    return _record_content_snapshot(session, path, event="read_snapshot")
+
+
+def record_file_write_snapshot(
+    session: Any,
+    path: str | Path | None,
+) -> dict[str, Any] | None:
+    """Advance the optimistic-concurrency token after a successful write."""
+
+    return _record_content_snapshot(session, path, event="write_snapshot")
+
+
+def verify_file_unchanged_since_read(
+    session: Any,
+    path: str | Path | None,
+) -> bool:
+    """Reject a write when current content differs from the last snapshot.
+
+    Missing snapshots remain compatible with internal/legacy callers.  The
+    executor's read-before-write guard ensures normal writes to existing
+    files have a snapshot; new files legitimately have none.
+    """
+
+    if session is None or path is None:
+        return True
+    metadata = getattr(session, "metadata", None)
+    if not isinstance(metadata, dict):
+        return True
+    path_key = canonical_write_path_key(path)
+    snapshots = metadata.get(_SNAPSHOT_METADATA_KEY)
+    if not path_key or not isinstance(snapshots, dict):
+        return True
+    expected = snapshots.get(path_key)
+    if not isinstance(expected, dict):
+        return True
+
+    current = _content_fingerprint(path)
+    if _same_content_fingerprint(expected, current):
+        return True
+
+    with _LOCK:
+        _append_history(
+            metadata,
+            event="external_drift",
+            path=path_key,
+            owner=str(expected.get("owner") or "workspace"),
+            expected_sha256=expected.get("sha256"),
+            current_sha256=current.get("sha256"),
+            expected_exists=expected.get("exists"),
+            current_exists=current.get("exists"),
+        )
+    raise WorkspaceContentDriftConflict(
+        f"workspace_content_drift:{path_key}:content changed after read; re-read before writing"
+    )
+
+
 def canonical_write_path_key(path: str | Path) -> str:
     raw = Path(path).expanduser()
     try:
@@ -215,6 +289,7 @@ def file_write_lease_snapshot(metadata: dict[str, Any] | None) -> dict[str, Any]
     leases_raw = metadata.get(_LEASE_METADATA_KEY)
     handoffs_raw = metadata.get(_HANDOFF_METADATA_KEY)
     history_raw = metadata.get(_HISTORY_METADATA_KEY)
+    snapshots_raw = metadata.get(_SNAPSHOT_METADATA_KEY)
     leases = _dict_values(leases_raw)
     handoffs = _dict_values(handoffs_raw)
     history = [
@@ -229,10 +304,104 @@ def file_write_lease_snapshot(metadata: dict[str, Any] | None) -> dict[str, Any]
             1 for item in history if str(item.get("event") or "").startswith("handoff_")
         ),
         "conflict_count": sum(1 for item in history if item.get("event") == "conflict"),
+        "external_drift_count": sum(1 for item in history if item.get("event") == "external_drift"),
+        "content_snapshot_count": len(_dict_values(snapshots_raw)),
         "leases": leases,
         "pending_handoffs": handoffs,
         "history": history,
     }
+
+
+def _record_content_snapshot(
+    session: Any,
+    path: str | Path | None,
+    *,
+    event: str,
+) -> dict[str, Any] | None:
+    if session is None or path is None:
+        return None
+    metadata = getattr(session, "metadata", None)
+    if not isinstance(metadata, dict):
+        return None
+    path_key = canonical_write_path_key(path)
+    if not path_key:
+        return None
+    fingerprint = _content_fingerprint(path)
+    fingerprint["path"] = path_key
+    fingerprint["captured_at"] = time.time()
+    with _LOCK:
+        snapshots = metadata.get(_SNAPSHOT_METADATA_KEY)
+        if not isinstance(snapshots, dict):
+            snapshots = {}
+            metadata[_SNAPSHOT_METADATA_KEY] = snapshots
+        snapshots[path_key] = fingerprint
+        _append_history(
+            metadata,
+            event=event,
+            path=path_key,
+            owner="workspace",
+            sha256=fingerprint.get("sha256"),
+            exists=fingerprint.get("exists"),
+        )
+    return dict(fingerprint)
+
+
+def _content_fingerprint(path: str | Path) -> dict[str, Any]:
+    target = Path(path).expanduser()
+    try:
+        stat = target.stat()
+    except FileNotFoundError:
+        return {"exists": False, "kind": "missing", "size": 0, "sha256": None}
+    except OSError as exc:
+        return {
+            "exists": True,
+            "kind": "unreadable",
+            "size": None,
+            "sha256": None,
+            "error": type(exc).__name__,
+        }
+    if not target.is_file():
+        return {
+            "exists": True,
+            "kind": "non_file",
+            "size": stat.st_size,
+            "mtime_ns": stat.st_mtime_ns,
+            "sha256": None,
+        }
+    digest = hashlib.sha256()
+    try:
+        with target.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        final_stat = target.stat()
+    except OSError as exc:
+        return {
+            "exists": True,
+            "kind": "unreadable",
+            "size": stat.st_size,
+            "sha256": None,
+            "error": type(exc).__name__,
+        }
+    return {
+        "exists": True,
+        "kind": "file",
+        "size": final_stat.st_size,
+        "mtime_ns": final_stat.st_mtime_ns,
+        "sha256": digest.hexdigest(),
+        "stable": (stat.st_size, stat.st_mtime_ns) == (final_stat.st_size, final_stat.st_mtime_ns),
+    }
+
+
+def _same_content_fingerprint(
+    expected: dict[str, Any],
+    current: dict[str, Any],
+) -> bool:
+    comparable = ("exists", "kind", "size", "sha256")
+    return (
+        bool(expected.get("stable", True))
+        and bool(current.get("stable", True))
+        and all(expected.get(key) == current.get(key) for key in comparable)
+    )
 
 
 def _consume_handoff(
@@ -288,9 +457,13 @@ def _dict_values(value: Any) -> list[dict[str, Any]]:
 __all__ = [
     "FileWriteLease",
     "FileWriteLeaseConflict",
+    "WorkspaceContentDriftConflict",
     "acquire_file_write_lease",
     "authorize_file_write_handoff",
     "canonical_write_path_key",
     "file_write_lease_snapshot",
+    "record_file_read_snapshot",
+    "record_file_write_snapshot",
     "release_file_write_lease",
+    "verify_file_unchanged_since_read",
 ]

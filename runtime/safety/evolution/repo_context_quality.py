@@ -82,7 +82,29 @@ CHECKS: tuple[RepoContextCheck, ...] = (
             "dirty_worktree",
             "git status --short",
             "uncommitted",
+            "conflicted_count",
+            "staged_count",
+            "preservation_required",
             "operator_drilldown",
+        ),
+    ),
+    RepoContextCheck(
+        id="concurrent_workspace_drift_protection",
+        title="Concurrent workspace drift protection",
+        paths=(
+            "runtime/execution/misc/file_write_leases.py",
+            "runtime/execution/tool_engine/executor.py",
+            "tests/test_runtime_hardening.py",
+            "tests/test_file_op_events.py",
+        ),
+        required_terms=(
+            "WorkspaceContentDriftConflict",
+            "record_file_read_snapshot",
+            "verify_file_unchanged_since_read",
+            "record_file_write_snapshot",
+            "workspace_content_drift",
+            "external_drift_count",
+            "re-read before writing",
         ),
     ),
     RepoContextCheck(
@@ -160,17 +182,64 @@ def _dirty_worktree(base: Path) -> dict[str, Any]:
             "available": False,
             "uncommitted_count": 0,
             "status_sample": [],
+            **classify_dirty_worktree([]),
+            "preservation_required": False,
+            "safe_to_auto_edit": False,
             "error": f"{type(exc).__name__}: {exc}",
         }
     lines = [line for line in result.stdout.splitlines() if line.strip()]
+    classification = classify_dirty_worktree(lines)
     return {
         "schema": "octopus.dirty_worktree_awareness.v1",
         "available": result.returncode == 0,
         "uncommitted_count": len(lines),
         "status_sample": lines[:25],
+        **classification,
+        "preservation_required": bool(lines),
+        "safe_to_auto_edit": result.returncode == 0 and classification["conflicted_count"] == 0,
         "command": "git status --short",
         "error": result.stderr.strip(),
     }
+
+
+def classify_dirty_worktree(lines: list[str]) -> dict[str, Any]:
+    """Classify porcelain short-status rows without losing overlapping risks."""
+
+    conflict_codes = {"DD", "AU", "UD", "UA", "DU", "AA", "UU"}
+    files: list[dict[str, Any]] = []
+    counts = {
+        "staged_count": 0,
+        "unstaged_count": 0,
+        "untracked_count": 0,
+        "conflicted_count": 0,
+        "deleted_count": 0,
+        "renamed_count": 0,
+    }
+    for line in lines:
+        if len(line) < 3:
+            continue
+        index_status, worktree_status = line[0], line[1]
+        code = f"{index_status}{worktree_status}"
+        path = line[3:].strip()
+        conflicted = code in conflict_codes or "U" in code
+        untracked = code == "??"
+        staged = not conflicted and not untracked and index_status not in {" ", "?"}
+        unstaged = not conflicted and not untracked and worktree_status not in {" ", "?"}
+        deleted = "D" in code
+        renamed = "R" in code or "C" in code
+        flags = {
+            "staged": staged,
+            "unstaged": unstaged,
+            "untracked": untracked,
+            "conflicted": conflicted,
+            "deleted": deleted,
+            "renamed": renamed,
+        }
+        for name, enabled in flags.items():
+            if enabled:
+                counts[f"{name}_count"] += 1
+        files.append({"path": path, "status": code, **flags})
+    return {**counts, "files": files[:50]}
 
 
 def _read_text(path: Path) -> str:
@@ -183,5 +252,6 @@ def _read_text(path: Path) -> str:
 __all__ = [
     "CHECKS",
     "RepoContextCheck",
+    "classify_dirty_worktree",
     "compute_repo_context_quality",
 ]

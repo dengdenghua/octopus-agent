@@ -20,6 +20,23 @@ from runtime.sensing.gateway.parallel_agents_router import (
     create_parallel_agents_router,
 )
 
+
+def _isolated_process_runner(
+    description,
+    *,
+    subagent_name,
+    context=None,
+    cancel_event=None,
+):
+    if description == "stuck-process":
+        time.sleep(5)
+        return "must never arrive"
+    emitter = (context or {}).get("emit_tool_event")
+    if callable(emitter):
+        emitter(tool_name="process_probe", status="completed", message="child event")
+    return "isolated-healthy-result"
+
+
 # ═══════════════════════════════════════════════════════════════
 # fixtures
 # ═══════════════════════════════════════════════════════════════
@@ -957,6 +974,244 @@ class TestSSE:
 # ═══════════════════════════════════════════════════════════════
 # Implementation note.
 # ═══════════════════════════════════════════════════════════════
+
+
+def test_running_task_timeout_closes_batch_and_ignores_late_result() -> None:
+    release = threading.Event()
+
+    def runner(description, *, subagent_name, context=None, cancel_event=None):
+        release.wait(timeout=2)
+        return "late success"
+
+    orchestrator = ParallelAgentOrchestrator(max_concurrency=1, task_runner=runner)
+    try:
+        batch = orchestrator.dispatch(
+            [DispatchTaskInput(task_id="stuck", description="stuck")],
+            context={"subagent_task_timeout_s": 0.04},
+        )
+        for _ in range(100):
+            snapshot = orchestrator.get_batch(batch.batch_id)
+            assert snapshot is not None
+            if snapshot.status == "failed":
+                break
+            time.sleep(0.01)
+
+        assert snapshot.status == "failed"
+        assert snapshot.results[0].status == "timed_out"
+        assert snapshot.results[0].error == "runner_timeout"
+        assert snapshot.completed_at is not None
+        recovery = orchestrator.recovery_snapshot(batch.batch_id)
+        assert recovery is not None
+        assert recovery.tasks[0].submitted_at is not None
+        assert recovery.recovery_hints["timeout_policy"] == {
+            "task_timeout_s": 0.04,
+            "queue_timeout_s": 60.0,
+            "cancel_grace_s": 5.0,
+            "worker_replacement_limit": 8.0,
+        }
+        assert recovery.safety["late_terminal_results_ignored"] is True
+        assert recovery.safety["stuck_worker_generations_replaced"] is True
+        assert recovery.worker_observability["replacement_count"] == 1
+        assert recovery.worker_observability["quarantined_task_ids"] == ["stuck"]
+
+        release.set()
+        time.sleep(0.03)
+        settled = orchestrator.get_batch(batch.batch_id)
+        assert settled is not None
+        assert settled.results[0].status == "timed_out"
+        assert settled.results[0].result is None
+        assert settled.results[0].late_result_ignored_at is not None
+        assert settled.worker_observability["late_result_ignored_count"] == 1
+    finally:
+        release.set()
+        orchestrator.shutdown(wait=False)
+
+
+def test_stuck_worker_replacement_migrates_queued_work_to_fresh_capacity() -> None:
+    stuck_started = threading.Event()
+    release_stuck = threading.Event()
+    healthy_completed = threading.Event()
+
+    def runner(description, *, subagent_name, context=None, cancel_event=None):
+        if description == "stuck":
+            stuck_started.set()
+            release_stuck.wait(timeout=2)
+            return "late-stuck-result"
+        healthy_completed.set()
+        return "healthy-result"
+
+    orchestrator = ParallelAgentOrchestrator(max_concurrency=1, task_runner=runner)
+    try:
+        batch = orchestrator.dispatch(
+            [
+                DispatchTaskInput(task_id="stuck", description="stuck", priority=10),
+                DispatchTaskInput(task_id="healthy", description="healthy"),
+            ],
+            context={
+                "subagent_task_timeout_s": 0.05,
+                "subagent_queue_timeout_s": 1.0,
+                "subagent_worker_replacement_limit": 2,
+            },
+        )
+        assert stuck_started.wait(timeout=1)
+        assert healthy_completed.wait(timeout=1), (
+            "queued work must move to replacement capacity before the stuck runner exits"
+        )
+        for _ in range(100):
+            snapshot = orchestrator.get_batch(batch.batch_id)
+            assert snapshot is not None
+            if snapshot.completed_at is not None:
+                break
+            time.sleep(0.01)
+
+        by_id = {item.task_id: item for item in snapshot.results}
+        assert by_id["stuck"].status == "timed_out"
+        assert by_id["stuck"].worker_state == "quarantined"
+        assert by_id["stuck"].replacement_generation == 1
+        assert by_id["healthy"].status == "completed"
+        assert by_id["healthy"].result == "healthy-result"
+        assert by_id["healthy"].worker_generation == 1
+        workers = snapshot.worker_observability
+        assert workers["replacement_count"] == 1
+        assert workers["migrated_task_ids"] == ["healthy"]
+        assert workers["quarantined_task_ids"] == ["stuck"]
+        assert workers["replacement_limit"] == 2
+        status = orchestrator.status()
+        assert status.worker_generation == 1
+        assert status.worker_replacement_count == 1
+        assert status.retired_worker_generation_count == 1
+    finally:
+        release_stuck.set()
+        orchestrator.shutdown(wait=False)
+
+
+def test_process_isolation_hard_terminates_stuck_runner_and_reuses_capacity() -> None:
+    orchestrator = ParallelAgentOrchestrator(
+        max_concurrency=1,
+        task_runner=_isolated_process_runner,
+    )
+    try:
+        batch = orchestrator.dispatch(
+            [
+                DispatchTaskInput(
+                    task_id="stuck-process",
+                    description="stuck-process",
+                    priority=10,
+                ),
+                DispatchTaskInput(task_id="healthy-process", description="healthy-process"),
+            ],
+            context={
+                "subagent_worker_isolation": "process",
+                "subagent_task_timeout_s": 1.0,
+                "subagent_queue_timeout_s": 3.0,
+            },
+        )
+        for _ in range(400):
+            snapshot = orchestrator.get_batch(batch.batch_id)
+            assert snapshot is not None
+            if snapshot.completed_at is not None:
+                break
+            time.sleep(0.01)
+
+        assert snapshot.completed_at is not None
+        by_id = {item.task_id: item for item in snapshot.results}
+        assert by_id["stuck-process"].status == "timed_out"
+        assert by_id["stuck-process"].worker_isolation == "process"
+        assert by_id["stuck-process"].worker_state == "process_terminated"
+        assert by_id["healthy-process"].status == "completed"
+        assert by_id["healthy-process"].result == "isolated-healthy-result"
+        assert by_id["healthy-process"].worker_isolation == "process"
+        workers = snapshot.worker_observability
+        assert workers["replacement_count"] == 1
+        assert workers["process_termination_count"] == 1
+        assert workers["generation_replacement_count"] == 0
+        assert workers["quarantined_task_ids"] == ["stuck-process"]
+        assert orchestrator.status().retired_worker_generation_count == 0
+        assert any(
+            event.type == "tool_call" and event.tool_name == "process_probe"
+            for event in snapshot.event_log
+        )
+    finally:
+        orchestrator.shutdown(wait=False)
+
+
+def test_cancel_grace_closes_batch_when_runner_ignores_signal() -> None:
+    started = threading.Event()
+    release = threading.Event()
+
+    def runner(description, *, subagent_name, context=None, cancel_event=None):
+        started.set()
+        release.wait(timeout=2)
+        return "ignored cancellation"
+
+    orchestrator = ParallelAgentOrchestrator(max_concurrency=1, task_runner=runner)
+    try:
+        batch = orchestrator.dispatch(
+            [DispatchTaskInput(task_id="stuck", description="stuck")],
+            context={"subagent_cancel_grace_s": 0.03},
+        )
+        assert started.wait(timeout=1)
+        assert orchestrator.cancel_task("stuck") is True
+        for _ in range(100):
+            snapshot = orchestrator.get_batch(batch.batch_id)
+            assert snapshot is not None
+            if snapshot.status == "cancelled":
+                break
+            time.sleep(0.01)
+
+        assert snapshot.status == "cancelled"
+        assert snapshot.results[0].status == "cancelled"
+        assert snapshot.results[0].error == "cancel_grace_exceeded"
+        recovery = orchestrator.recovery_snapshot(batch.batch_id)
+        assert recovery is not None
+        assert recovery.tasks[0].cancel_requested_at is not None
+        release.set()
+        time.sleep(0.03)
+        settled = orchestrator.get_batch(batch.batch_id)
+        assert settled is not None
+        assert settled.results[0].status == "cancelled"
+    finally:
+        release.set()
+        orchestrator.shutdown(wait=False)
+
+
+def test_timeout_propagates_to_dependent_task_without_starting_it() -> None:
+    release = threading.Event()
+    calls: list[str] = []
+
+    def runner(description, *, subagent_name, context=None, cancel_event=None):
+        calls.append(description)
+        release.wait(timeout=2)
+        return "late"
+
+    orchestrator = ParallelAgentOrchestrator(max_concurrency=2, task_runner=runner)
+    try:
+        batch = orchestrator.dispatch(
+            [
+                DispatchTaskInput(task_id="upstream", description="upstream"),
+                DispatchTaskInput(
+                    task_id="downstream",
+                    description="downstream",
+                    depends_on=["upstream"],
+                ),
+            ],
+            context={"subagent_task_timeout_s": 0.04},
+        )
+        for _ in range(100):
+            snapshot = orchestrator.get_batch(batch.batch_id)
+            assert snapshot is not None
+            if snapshot.completed_at is not None:
+                break
+            time.sleep(0.01)
+
+        by_id = {item.task_id: item for item in snapshot.results}
+        assert by_id["upstream"].status == "timed_out"
+        assert by_id["downstream"].status == "cancelled"
+        assert by_id["downstream"].error == "dependency_failed"
+        assert calls == ["upstream"]
+    finally:
+        release.set()
+        orchestrator.shutdown(wait=False)
 
 
 class TestCreateAppDefaultOrchestrator:

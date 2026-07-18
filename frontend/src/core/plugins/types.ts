@@ -174,6 +174,55 @@ export interface PluginPublisherTrustReport {
   next_actions: string[];
 }
 
+export interface PluginLifecycleTransaction {
+  schema: "octopus.plugin_lifecycle_transaction.v1" | string;
+  ts: string;
+  transaction_id: string;
+  plugin_id: string;
+  operation: "install" | "upgrade" | "rollback" | string;
+  status: "committed" | "rolled_back" | string;
+  previous_version?: string;
+  version?: string;
+  restored_version?: string;
+  removed_version?: string;
+  rollback_available?: boolean;
+}
+
+export interface PluginLifecycleHistory {
+  schema: "octopus.plugin_lifecycle_history.v1" | string;
+  total: number;
+  items: PluginLifecycleTransaction[];
+}
+
+export interface PluginRegistryEntry {
+  id: string;
+  version: string;
+  installed_version: string;
+  status:
+    | "not_installed"
+    | "update_available"
+    | "current"
+    | "installed_newer"
+    | string;
+  surfaces: string[];
+  content_digest: string;
+  publisher_verified: boolean;
+  fixture_verified: boolean;
+  installable: boolean;
+  one_click_install: boolean;
+  blockers: string[];
+}
+
+export interface PluginRegistryUpdates {
+  schema: "octopus.plugin_registry_updates.v1" | string;
+  total: number;
+  update_count: number;
+  install_count: number;
+  blocked_count: number;
+  ready: boolean;
+  plugins: PluginRegistryEntry[];
+}
+
 export interface PluginRuntimeProfile {
   schema: "octopus.codex_plugin_runtime.v1" | string;
   plugin_id: string;

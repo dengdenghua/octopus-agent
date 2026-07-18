@@ -866,9 +866,9 @@ def _payload_has_ambiguous_inflight_leader_election(text: str) -> bool:
     return False
 
 
-_WAITER_RESULT_POP_RE = re.compile(
-    r"(?:\.wait(?:_for)?\s*\([^\n]*\)|\.wait\s*\(\s*\))"
-    r"[\s\S]{0,1200}?\.pop\(\s*(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))"
+_WAITER_CALL_RE = re.compile(r"\.wait(?:_for)?\s*\([^\n]*\)|\.wait\s*\(\s*\)")
+_MAPPING_POP_RE = re.compile(
+    r"\.(?:pop)\(\s*(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))"
 )
 
 
@@ -876,7 +876,18 @@ def _payload_has_destructive_waiter_result_pop(text: str) -> bool:
     """Whether followers destructively consume one shared load result."""
     if not text or ".pop(" not in text or ".wait" not in text:
         return False
-    return bool(_WAITER_RESULT_POP_RE.search(text))
+    for wait_match in _WAITER_CALL_RE.finditer(text):
+        # Inspect only the follower's post-wait return path.  A later leader
+        # branch may legitimately remove the in-flight map entry *after* it
+        # publishes result/exception on a mutable object; the old unbounded
+        # regex crossed that return boundary and misclassified safe cleanup.
+        segment = text[wait_match.end() : wait_match.end() + 1200]
+        terminal = re.search(r"\b(?:return|raise)\b", segment)
+        if terminal is not None:
+            segment = segment[: terminal.end()]
+        if _MAPPING_POP_RE.search(segment):
+            return True
+    return False
 
 
 _STALE_IMMUTABLE_WAITER_FALLBACK_RE = re.compile(
@@ -885,6 +896,12 @@ _STALE_IMMUTABLE_WAITER_FALLBACK_RE = re.compile(
     r"(?P<map>(?:self\.)?[A-Za-z_][A-Za-z0-9_]*)\.get\(\s*"
     r"(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*,\s*"
     r"(?P<snapshot>[A-Za-z_][A-Za-z0-9_]*)\s*\)"
+)
+_DELETED_PENDING_WAITER_READ_RE = re.compile(
+    r"\.wait(?:_for)?\s*\([^\n]*\)"
+    r"[\s\S]{0,1600}?"
+    r"(?P<map>(?:self\.)?[A-Za-z_][A-Za-z0-9_]*)\[\s*"
+    r"(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*\]"
 )
 
 
@@ -898,7 +915,7 @@ def _payload_has_stale_immutable_waiter_snapshot(text: str) -> bool:
     Mutable pending objects are safe because the captured object itself is
     updated before the event is signalled.
     """
-    if not text or ".wait" not in text or ".get(" not in text or "del " not in text:
+    if not text or ".wait" not in text or "del " not in text:
         return False
     for match in _STALE_IMMUTABLE_WAITER_FALLBACK_RE.finditer(text):
         map_name = re.escape(match.group("map"))
@@ -919,6 +936,122 @@ def _payload_has_stale_immutable_waiter_snapshot(text: str) -> bool:
         )
         if tuple_snapshot and tuple_replacement and deletes_entry:
             return True
+    for match in _DELETED_PENDING_WAITER_READ_RE.finditer(text):
+        map_name = re.escape(match.group("map"))
+        key_name = re.escape(match.group("key"))
+        tuple_replacement = re.search(
+            rf"{map_name}\[\s*{key_name}\s*\]\s*=\s*\(",
+            text,
+        )
+        deletes_entry = re.search(
+            rf"del\s+{map_name}\[\s*{key_name}\s*\]",
+            text,
+        )
+        if tuple_replacement and deletes_entry:
+            return True
+    return False
+
+
+_TERMINAL_PENDING_TUPLE_RE = re.compile(
+    r"(?P<map>(?:self\.)?[A-Za-z_][A-Za-z0-9_]*(?:pending|inflight)[A-Za-z0-9_]*)"
+    r"\[\s*(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*\]\s*=\s*\("
+    r"(?P<body>[^\n)]{1,500})\)",
+    re.IGNORECASE,
+)
+
+
+def _payload_has_terminal_pending_entry_leak(text: str) -> bool:
+    """Detect a completed in-flight tuple that is never removed.
+
+    Keeping a terminal ``pending[key] = (event, value, error)`` entry makes
+    every later caller look like a follower.  In a TTL cache that means an
+    expired key can keep returning the old completed flight forever; a failed
+    flight can likewise poison every retry.  Waiters may retain a mutable
+    per-flight object, but the key must leave the *in-flight map* once the
+    leader has published terminal state.
+    """
+    if (
+        not text
+        or ".wait" not in text
+        or ".set(" not in text
+        or "loader(" not in text
+    ):
+        return False
+    assignments = list(_TERMINAL_PENDING_TUPLE_RE.finditer(text))
+    if len(assignments) < 2:
+        return False
+    by_slot: dict[tuple[str, str], list[re.Match[str]]] = {}
+    for match in assignments:
+        slot = (match.group("map"), match.group("key"))
+        by_slot.setdefault(slot, []).append(match)
+    for (map_name, key_name), slot_assignments in by_slot.items():
+        bodies = [match.group("body") for match in slot_assignments]
+        has_initial_state = any(body.count("None") >= 2 for body in bodies)
+        has_terminal_state = any(body.count("None") < 2 for body in bodies)
+        if not (has_initial_state and has_terminal_state):
+            continue
+        escaped_map = re.escape(map_name)
+        escaped_key = re.escape(key_name)
+        removes_slot = re.search(
+            rf"(?:del\s+{escaped_map}\[\s*{escaped_key}\s*\]"
+            rf"|{escaped_map}\.pop\(\s*{escaped_key}\b)",
+            text,
+        )
+        if not removes_slot:
+            return True
+    return False
+
+
+def _payload_has_loader_barrier_deadlock(text: str) -> bool:
+    """Detect a test loader waiting alone on a ``threading.Barrier``.
+
+    In a single-flight test only the elected leader enters ``loader``;
+    followers wait on the flight event.  A barrier placed inside that loader
+    can therefore never collect the follower threads and deadlocks the test.
+    Synchronising workers *before* ``get_or_load`` is the valid pattern.
+    """
+    if not text or "Barrier(" not in text or "get_or_load" not in text:
+        return False
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        definition = re.match(
+            r"^(?P<indent>[ \t]+)def\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*loader[A-Za-z0-9_]*)\s*\(",
+            line,
+            re.IGNORECASE,
+        )
+        if definition is None:
+            continue
+        indent_width = len(definition.group("indent").expandtabs(4))
+        body_lines: list[str] = []
+        for candidate in lines[index + 1 :]:
+            if not candidate.strip():
+                body_lines.append(candidate)
+                continue
+            candidate_indent = len(candidate) - len(candidate.lstrip(" \t"))
+            if candidate_indent <= indent_width:
+                break
+            body_lines.append(candidate)
+        body = "\n".join(body_lines)
+        for wait in re.finditer(
+            r"(?P<barrier>[A-Za-z_][A-Za-z0-9_]*)\.wait\s*\(",
+            body,
+        ):
+            barrier = wait.group("barrier")
+            if not re.search(
+                rf"\b{re.escape(barrier)}\s*=\s*(?:threading\.)?Barrier\s*\(",
+                text,
+            ):
+                continue
+            total_waits = len(
+                re.findall(rf"\b{re.escape(barrier)}\.wait\s*\(", text)
+            )
+            loader_name = re.escape(definition.group("name"))
+            passed_to_cache = re.search(
+                rf"get_or_load\s*\([^\n]{{0,300}}\b{loader_name}\b",
+                text,
+            )
+            if total_waits == 1 and passed_to_cache:
+                return True
     return False
 
 
