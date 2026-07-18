@@ -229,6 +229,25 @@ describe("liveToolEventsFromConversation", () => {
     });
   });
 
+  it("renders a user-redirected tool as a neutral finished event", () => {
+    const events = liveToolEventsFromConversation(
+      makeConversation([
+        makeTurn([
+          commandItem({
+            status: "interrupted",
+            aggregatedOutput: "cancelled after live steering",
+          }),
+        ]),
+      ]),
+    );
+
+    expect(events[0]).toMatchObject({
+      id: "cmd-1",
+      status: "done",
+      output: "cancelled after live steering",
+    });
+  });
+
   it("surfaces MCP progress without changing completed result shape when absent", () => {
     const conv = makeConversation([
       makeTurn([

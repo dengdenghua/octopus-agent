@@ -93,6 +93,30 @@ def test_agentic_tool_error_maps_to_failed_tool_end():
     }
 
 
+def test_agentic_redirected_tool_maps_to_cancelled_tool_end():
+    evt = _agentic_stream_event_to_react_event(
+        "tool_end",
+        {
+            "id": "call_redirected",
+            "name": "exec_shell",
+            "output": "cancelled",
+            "is_error": True,
+            "status": "cancelled",
+            "iteration": 2,
+        },
+        None,
+    )
+
+    assert evt == {
+        "type": "tool_end",
+        "tool_call_id": "call_redirected",
+        "tool_name": "exec_shell",
+        "status": "cancelled",
+        "output_preview": "cancelled",
+        "iteration": 2,
+    }
+
+
 def test_react_tool_event_records_normalized_trace_payload():
     recorded: list[dict] = []
 

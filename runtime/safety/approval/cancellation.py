@@ -107,12 +107,14 @@ class CancellationToken:
 
     # ── callbacks ──────────────────────────────────────────
 
-    def on_cancelled(self, callback: Callable[[str], None]) -> None:
+    def on_cancelled(self, callback: Callable[[str], None]) -> Callable[[], None]:
         """Register a callback fired when the token is tripped.
 
         If already tripped, the callback runs synchronously now.
         Callback exceptions are logged and swallowed so one bad
-        listener can't break others.
+        listener can't break others. The returned function unregisters a
+        still-pending callback, allowing short-lived child scopes to detach
+        from a long-running parent without accumulating listeners.
         """
         fire_now = False
         with self._source._lock:
@@ -122,6 +124,15 @@ class CancellationToken:
                 self._source._callbacks.append(callback)
         if fire_now:
             self._safe_fire(callback, self._source._reason)
+
+        def _unsubscribe() -> None:
+            with self._source._lock:
+                try:
+                    self._source._callbacks.remove(callback)
+                except ValueError:
+                    return
+
+        return _unsubscribe
 
     # ── linked tokens ──────────────────────────────────────
 
@@ -136,9 +147,10 @@ class CancellationToken:
             child.cancel(reason=self._source._reason or "parent cancelled")
             return child
         # Otherwise, relay any future cancellation to the child.
-        self.on_cancelled(
+        unlink = self.on_cancelled(
             lambda reason: child.cancel(reason=reason or "parent cancelled"),
         )
+        child.token.on_cancelled(lambda _reason: unlink())
         return child
 
     # ── helpers ────────────────────────────────────────────
@@ -225,7 +237,7 @@ class CancellationSource:
 
         if self._is_cancelled:
             return True
-        self.token.on_cancelled(_callback)
+        unsubscribe = self.token.on_cancelled(_callback)
 
         try:
             if timeout is not None:
@@ -233,6 +245,8 @@ class CancellationSource:
             return await fut
         except TimeoutError:
             return False
+        finally:
+            unsubscribe()
 
 
 # ── Never-cancelled singleton ───────────────────────────────

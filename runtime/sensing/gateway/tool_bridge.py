@@ -74,7 +74,7 @@ import re
 import threading
 import time
 from collections.abc import Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from typing import Any
 from uuid import uuid4
 
@@ -171,6 +171,7 @@ def _native_model_round_timeout_s() -> float:
 
 
 _NATIVE_STREAM_DEADLINE = object()
+_NATIVE_STREAM_REDIRECTED = object()
 
 
 def _iter_native_model_stream_with_deadline(
@@ -179,6 +180,7 @@ def _iter_native_model_stream_with_deadline(
     timeout_s: float,
     *,
     visible_started: Any = None,
+    redirect_probe: Callable[[], bool] | None = None,
 ) -> Iterator[Any]:
     """Pump a blocking native model stream through a hard deadline.
 
@@ -192,11 +194,18 @@ def _iter_native_model_stream_with_deadline(
     stop_event = threading.Event()
     caller_context = contextvars.copy_context()
     try:
-        from runtime.safety.approval.cancellation import (
-            current_cancellation_token as _current_cancellation_token,
-        )
+        from runtime.safety.approval import cancellation as _cancellation
     except ImportError:  # pragma: no cover - optional subsystem
-        _current_cancellation_token = None
+        _cancellation = None
+
+    stream_cancel_source = None
+    if _cancellation is not None:
+        parent_token = _cancellation.current_cancellation_token()
+        stream_cancel_source = (
+            _cancellation.CancellationSource()
+            if parent_token is _cancellation.CancellationToken.none()
+            else parent_token.link()
+        )
 
     def _put(kind: str, value: Any) -> None:
         while not stop_event.is_set():
@@ -208,10 +217,16 @@ def _iter_native_model_stream_with_deadline(
 
     def _consume() -> None:
         try:
-            for event in router.call_stream(request):
-                if stop_event.is_set():
-                    break
-                _put("event", event)
+            scope = (
+                _cancellation.scoped_cancellation(stream_cancel_source.token)
+                if _cancellation is not None and stream_cancel_source is not None
+                else contextlib.nullcontext()
+            )
+            with scope:
+                for event in router.call_stream(request):
+                    if stop_event.is_set():
+                        break
+                    _put("event", event)
         except Exception as exc:  # pragma: no cover - reraised below
             _put("error", exc)
         finally:
@@ -228,8 +243,13 @@ def _iter_native_model_stream_with_deadline(
     visible_mode = False
     try:
         while True:
-            token = _current_cancellation_token() if _current_cancellation_token else None
+            token = _cancellation.current_cancellation_token() if _cancellation else None
             if token is not None and token.is_cancelled:
+                return
+            if redirect_probe is not None and redirect_probe():
+                if stream_cancel_source is not None:
+                    stream_cancel_source.cancel(reason="user redirected model stream")
+                yield _NATIVE_STREAM_REDIRECTED
                 return
             if callable(visible_started) and visible_started() and not visible_mode:
                 visible_mode = True
@@ -252,6 +272,8 @@ def _iter_native_model_stream_with_deadline(
                 return
     finally:
         stop_event.set()
+        if stream_cancel_source is not None:
+            stream_cancel_source.cancel(reason="model stream pump closed")
 
 
 def _native_public_checkpoint(text: str) -> str:
@@ -1904,6 +1926,40 @@ def stream_agentic_fallback(
     _browser_guard_nudges = 0
     _force_convergence_next = False
     _model_timeout_recoveries = 0
+    _pending_steering: list[str] = []
+    _last_steering_probe_at = 0.0
+
+    def _capture_steering(*, force: bool = False) -> bool:
+        """Collect live user input without exposing it to two rounds.
+
+        Native provider streams and tools are synchronous from this
+        generator's point of view. Polling here gives them a cooperative
+        redirect boundary while the durable queue remains the single source
+        of delivery and idempotency.
+        """
+        nonlocal _last_steering_probe_at
+        if steering_drain is None:
+            return False
+        now = time.monotonic()
+        if not force and now - _last_steering_probe_at < 0.1:
+            return False
+        _last_steering_probe_at = now
+        try:
+            captured = [str(text).strip() for text in steering_drain()]
+        except Exception:  # noqa: BLE001 — steering must not break execution
+            _logger.warning("live steering poll failed", exc_info=True)
+            return False
+        captured = [text for text in captured if text]
+        if not captured:
+            return False
+        _pending_steering.extend(captured)
+        return True
+
+    def _append_pending_steering() -> None:
+        if not _pending_steering:
+            return
+        messages.extend(Message(role="user", content=text) for text in _pending_steering)
+        _pending_steering.clear()
 
     def _observe_code_tool_result(
         call: ToolCall,
@@ -1981,11 +2037,10 @@ def stream_agentic_fallback(
 
     for round_i in range(MAX_TOOL_ROUNDS):
         # User follow-ups accepted by turn/steer become real user messages at
-        # the next safe model boundary. We never mutate a request already in
-        # flight or interrupt a tool halfway through its side effect.
-        if steering_drain is not None:
-            for steering_text in steering_drain():
-                messages.append(Message(role="user", content=steering_text))
+        # the next model boundary. The stream/tool probes below can now create
+        # that boundary by cancelling only the current operation scope.
+        _capture_steering(force=True)
+        _append_pending_steering()
         # Soft reflection · at every REFLECTION_INTERVAL boundary
         # (after rounds 10, 20, …) drop a one-line system check-in
         # so the model can decide whether to wrap up or keep going.
@@ -2041,6 +2096,7 @@ def stream_agentic_fallback(
         round_tool_calls: list[ToolCall] = []
         _round_commentary_emitted = False
         _round_timed_out = False
+        _round_redirected = False
 
         _round_stream_event_seen = False
         try:
@@ -2048,6 +2104,7 @@ def stream_agentic_fallback(
                 router,
                 req,
                 _native_model_round_timeout_s(),
+                redirect_probe=_capture_steering,
             ):
                 if event is _NATIVE_STREAM_DEADLINE:
                     _round_timed_out = True
@@ -2056,6 +2113,9 @@ def stream_agentic_fallback(
                         round_i + 1,
                         _native_model_round_timeout_s(),
                     )
+                    break
+                if event is _NATIVE_STREAM_REDIRECTED:
+                    _round_redirected = True
                     break
                 _round_stream_event_seen = True
                 etype = event.type
@@ -2133,6 +2193,11 @@ def stream_agentic_fallback(
             break
 
         round_text = "".join(round_text_chunks)
+        if _round_redirected and not round_tool_calls:
+            if round_text.strip():
+                messages.append(Message(role="assistant", content=round_text))
+            _append_pending_steering()
+            continue
         if _round_timed_out and not round_tool_calls:
             _model_timeout_recoveries += 1
             if _model_timeout_recoveries >= 2:
@@ -2217,11 +2282,11 @@ def stream_agentic_fallback(
             # producing what would otherwise become its final answer. Treat
             # that text as an intermediate assistant message and give the
             # newly arrived user correction the next word.
-            late_steering = steering_drain() if steering_drain is not None else []
-            if late_steering:
+            _capture_steering(force=True)
+            if _pending_steering:
                 if round_text.strip():
                     messages.append(Message(role="assistant", content=round_text))
-                messages.extend(Message(role="user", content=text) for text in late_steering)
+                _append_pending_steering()
                 continue
             _missing_browser_evidence = _browser_required_evidence - _browser_observed_evidence
             if (
@@ -2450,6 +2515,24 @@ def stream_agentic_fallback(
                 )
             )
         )
+        from runtime.safety.approval.cancellation import (  # noqa: PLC0415
+            CancellationSource,
+            CancellationToken,
+            current_cancellation_token,
+            scoped_cancellation,
+        )
+
+        _parent_cancellation = current_cancellation_token()
+        _tool_batch_source = (
+            CancellationSource()
+            if _parent_cancellation is CancellationToken.none()
+            else _parent_cancellation.link()
+        )
+        _tool_batch_redirected = _round_redirected
+        _redirected_tool_ids: set[str] = set()
+        if _tool_batch_redirected:
+            _redirected_tool_ids.update(call.id for call in round_tool_calls)
+            _tool_batch_source.cancel(reason="user redirected before tool execution")
 
         if _parallel_enabled:
             # Each call must see the same parent-tool-use-id
@@ -2462,9 +2545,11 @@ def stream_agentic_fallback(
             # each install a different list and lose another worker's proof.
             _session_obj.metadata.setdefault("_read_file_paths_this_turn", [])
             _outputs: dict[str, tuple[str, bool]] = {}
-            _outputs_lock = threading.Lock()
 
-            def _run_one(call: ToolCall) -> tuple[str, tuple[str, bool]]:
+            def _run_one(
+                call: ToolCall,
+                tool_batch_source: Any = _tool_batch_source,
+            ) -> tuple[str, tuple[str, bool]]:
                 # ContextVars do not propagate into ThreadPoolExecutor
                 # workers.  Bind the parent Session explicitly; otherwise
                 # scope-aware skills resolve relative paths against the
@@ -2476,31 +2561,68 @@ def stream_agentic_fallback(
                 _call_session_token = _current_session.set(_session_obj)
                 _session_obj.metadata["_active_parent_tool_use_id"] = call.id
                 try:
-                    out, err = _execute_tool_call(stack, call)
+                    with scoped_cancellation(tool_batch_source.token):
+                        if tool_batch_source.is_cancelled:
+                            out, err = (
+                                f"(cancelled before execution: {tool_batch_source.token.reason})",
+                                True,
+                            )
+                        else:
+                            out, err = _execute_tool_call(stack, call)
                 finally:
                     _current_session.reset(_call_session_token)
                 return call.id, (out, err)
 
-            with ThreadPoolExecutor(
-                max_workers=min(
-                    PARALLEL_TOOL_USE_MAX_WORKERS,
-                    len(round_tool_calls),
-                ),
-                thread_name_prefix="tool-bridge-parallel",
-            ) as pool:
-                futures = [pool.submit(_run_one, call) for call in round_tool_calls]
-                for fut in futures:
-                    try:
-                        cid, (out, err) = fut.result()
-                    except Exception as exc:  # noqa: BLE001 — surface as tool failure
-                        _outputs[""] = (f"(parallel exec error: {exc})", True)
-                        _logger.warning(
-                            "parallel tool exec future failed: %s",
-                            exc,
+            if _tool_batch_redirected:
+                _outputs.update(
+                    {
+                        call.id: (
+                            "(cancelled before execution: user redirected active work)",
+                            True,
                         )
-                        continue
-                    with _outputs_lock:
-                        _outputs[cid] = (out, err)
+                        for call in round_tool_calls
+                    }
+                )
+            else:
+                with ThreadPoolExecutor(
+                    max_workers=min(
+                        PARALLEL_TOOL_USE_MAX_WORKERS,
+                        len(round_tool_calls),
+                    ),
+                    thread_name_prefix="tool-bridge-parallel",
+                ) as pool:
+                    future_calls = {
+                        pool.submit(
+                            contextvars.copy_context().run,
+                            _run_one,
+                            call,
+                        ): call
+                        for call in round_tool_calls
+                    }
+                    pending = set(future_calls)
+                    while pending:
+                        done, pending = wait(
+                            pending,
+                            timeout=0.1,
+                            return_when=FIRST_COMPLETED,
+                        )
+                        for future in done:
+                            call = future_calls[future]
+                            try:
+                                cid, (out, err) = future.result()
+                            except Exception as exc:  # noqa: BLE001 — surface as tool failure
+                                cid, out, err = call.id, f"(parallel exec error: {exc})", True
+                                _logger.warning(
+                                    "parallel tool exec future failed: %s",
+                                    exc,
+                                )
+                            _outputs[cid] = (out, err)
+                        if pending and _capture_steering():
+                            _tool_batch_redirected = True
+                            _redirected_tool_ids.update(
+                                future_calls[future].id for future in pending
+                            )
+                            _tool_batch_source.cancel(reason="user redirected active tool batch")
 
             # Cleanup the contextvar marker the parent set.
             _session_obj.metadata.pop("_active_parent_tool_use_id", None)
@@ -2518,6 +2640,8 @@ def stream_agentic_fallback(
                     call.id,
                     ("(no result)", True),
                 )
+                if call.id in _redirected_tool_ids:
+                    is_error = True
                 _observe_code_tool_result(call, is_error, output, round_i + 1)
                 if not is_error:
                     _browser_observed_evidence.update(_browser_action_evidence(call))
@@ -2528,6 +2652,7 @@ def stream_agentic_fallback(
                         "name": call.name,
                         "output": output[:200],
                         "is_error": is_error,
+                        **({"status": "cancelled"} if call.id in _redirected_tool_ids else {}),
                         "iteration": round_i + 1,
                         "parallel": True,
                     },
@@ -2548,51 +2673,103 @@ def stream_agentic_fallback(
             #   - todo_write / exit_plan_mode / soul ops in the round
             #   - PARALLEL_TOOL_USE_DEFAULT=False
             #   - stack.metadata['parallel_tool_use']=False
-            for call in round_tool_calls:
-                if call.name == "todo_write":
-                    _todo_seen = True
-                    _tool_work_since_todo = False
-                else:
-                    _tool_work_since_todo = True
-                # Expose the currently-running parent tool_use id so
-                # sub-agents spawned inside this handler (call_agent /
-                # call_agent_parallel) can tag their tool events with
-                # a ``parent_tool_use_id``. Cleared after the handler
-                # returns so no other call inherits it.
+            def _run_serial_one(
+                call: ToolCall,
+                tool_batch_source: Any = _tool_batch_source,
+            ) -> tuple[str, bool]:
                 _call_session_token = _current_session.set(_session_obj)
                 _session_obj.metadata["_active_parent_tool_use_id"] = call.id
                 try:
-                    output, is_error = _execute_tool_call(stack, call)
+                    with scoped_cancellation(tool_batch_source.token):
+                        if tool_batch_source.is_cancelled:
+                            return (
+                                f"(cancelled before execution: {tool_batch_source.token.reason})",
+                                True,
+                            )
+                        return _execute_tool_call(stack, call)
                 finally:
                     _session_obj.metadata.pop(
                         "_active_parent_tool_use_id",
                         None,
                     )
                     _current_session.reset(_call_session_token)
-                _observe_code_tool_result(call, is_error, output, round_i + 1)
-                if not is_error:
-                    _browser_observed_evidence.update(_browser_action_evidence(call))
-                yield (
-                    "tool_end",
-                    {
-                        "id": call.id,
-                        "name": call.name,
-                        "output": output[:200],
-                        "is_error": is_error,
-                        "iteration": round_i + 1,
-                    },
-                    None,
-                )
-                block: dict[str, Any] = {
-                    "type": "tool_result",
-                    "tool_use_id": call.id,
-                    "content": output,
-                }
-                if is_error:
-                    block["is_error"] = True
-                    _tool_error_count += 1
-                tool_result_blocks.append(block)
 
+            # Only realtime turns need the worker hop: it leaves this
+            # generator free to poll steering while a synchronous handler is
+            # running. Batch/CLI callers without steering keep the zero-cost
+            # direct path.
+            serial_pool = (
+                ThreadPoolExecutor(max_workers=1, thread_name_prefix="tool-bridge-steerable")
+                if steering_drain is not None and not _tool_batch_redirected
+                else None
+            )
+            try:
+                for call_index, call in enumerate(round_tool_calls):
+                    if call.name == "todo_write":
+                        _todo_seen = True
+                        _tool_work_since_todo = False
+                    else:
+                        _tool_work_since_todo = True
+                    if _tool_batch_redirected:
+                        output, is_error = (
+                            "(cancelled before execution: user redirected active work)",
+                            True,
+                        )
+                    elif serial_pool is None:
+                        output, is_error = _run_serial_one(call)
+                    else:
+                        future = serial_pool.submit(
+                            contextvars.copy_context().run,
+                            _run_serial_one,
+                            call,
+                        )
+                        while not future.done():
+                            wait((future,), timeout=0.1)
+                            if not future.done() and _capture_steering():
+                                _tool_batch_redirected = True
+                                _redirected_tool_ids.update(
+                                    pending_call.id
+                                    for pending_call in round_tool_calls[call_index:]
+                                )
+                                _tool_batch_source.cancel(
+                                    reason="user redirected active tool batch"
+                                )
+                        try:
+                            output, is_error = future.result()
+                        except Exception as exc:  # noqa: BLE001 — surface as tool failure
+                            output, is_error = f"(serial exec error: {exc})", True
+                            _logger.warning("serial tool exec future failed: %s", exc)
+                    if call.id in _redirected_tool_ids:
+                        is_error = True
+                    _observe_code_tool_result(call, is_error, output, round_i + 1)
+                    if not is_error:
+                        _browser_observed_evidence.update(_browser_action_evidence(call))
+                    yield (
+                        "tool_end",
+                        {
+                            "id": call.id,
+                            "name": call.name,
+                            "output": output[:200],
+                            "is_error": is_error,
+                            **({"status": "cancelled"} if call.id in _redirected_tool_ids else {}),
+                            "iteration": round_i + 1,
+                        },
+                        None,
+                    )
+                    block: dict[str, Any] = {
+                        "type": "tool_result",
+                        "tool_use_id": call.id,
+                        "content": output,
+                    }
+                    if is_error:
+                        block["is_error"] = True
+                        _tool_error_count += 1
+                    tool_result_blocks.append(block)
+            finally:
+                if serial_pool is not None:
+                    serial_pool.shutdown(wait=True, cancel_futures=True)
+
+        _tool_batch_source.cancel(reason="tool batch closed")
         _completed_tool_count += len(round_tool_calls)
 
         messages.append(
@@ -2601,6 +2778,9 @@ def stream_agentic_fallback(
                 content=tool_result_blocks,
             )
         )
+        if _tool_batch_redirected:
+            _append_pending_steering()
+            continue
 
         meaningful_batch = any(
             call.name not in {"todo_write", "write_todos", "exit_plan_mode"}

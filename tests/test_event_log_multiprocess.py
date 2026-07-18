@@ -79,3 +79,32 @@ def test_timeline_allocator_recovers_from_the_append_only_log(tmp_path: Path) ->
     restarted = EventLog(path)
     assert restarted.reserve_timeline_sequence(turn.id) == 2
     assert EventLog(path).reserve_timeline_sequence(turn.id) == 3
+
+
+def test_event_log_tail_reads_only_new_complete_events(tmp_path: Path) -> None:
+    path = tmp_path / "tail.jsonl"
+    log = EventLog(path)
+    log.append(
+        LoggedEvent(
+            event="thread_started",
+            eventId="first",
+            threadId="thread-tail",
+        )
+    )
+
+    first, offset = log.tail_events(0)
+    assert [event.event_id for event in first] == ["first"]
+    assert offset == path.stat().st_size
+
+    log.append(
+        LoggedEvent(
+            event="turn_updated",
+            eventId="second",
+            threadId="thread-tail",
+            turnId="turn-tail",
+        )
+    )
+    second, next_offset = log.tail_events(offset)
+    assert [event.event_id for event in second] == ["second"]
+    assert next_offset > offset
+    assert log.tail_events(next_offset) == ([], next_offset)

@@ -17,6 +17,8 @@ agent message round, rather than serially. These tests pin:
 
 from __future__ import annotations
 
+import sys
+import threading
 import time
 from types import SimpleNamespace
 
@@ -25,6 +27,8 @@ from runtime.execution.suckers.builtins import _list_cwd, _read_file
 from runtime.execution.suckers.registry import Skill, SkillRegistry
 from runtime.execution.tool_engine.executor import ToolExecutor
 from runtime.platform.models import ParsedIntent
+from runtime.platform.process.streaming import stream_run
+from runtime.safety.approval.cancellation import current_cancellation_token
 from runtime.safety.auth import TrustEngine
 from runtime.sensing.gateway.tool_bridge import stream_agentic_fallback
 from runtime.sensing.model_router.models import (
@@ -159,6 +163,369 @@ def test_late_steering_supersedes_a_provisional_final_answer() -> None:
     )
     assert "old answer" not in "".join(str(event[1]) for event in events if event[0] == "text")
     assert "corrected answer" in "".join(str(event[1]) for event in events if event[0] == "text")
+
+
+def test_steering_cancels_a_cooperative_tool_and_continues_the_same_turn() -> None:
+    started = threading.Event()
+    cancelled = threading.Event()
+
+    def wait_for_signal(a: int = 0, b: int = 0, sleep_ms: int = 0) -> dict:
+        started.set()
+        token = current_cancellation_token()
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline and not token.is_cancelled:
+            time.sleep(0.01)
+        if token.is_cancelled:
+            cancelled.set()
+            return {"error": token.reason}
+        return {"ok": True}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="slow_sum",
+            description="Wait until redirected.",
+            affinity=["io"],
+            trusted_source="skill://public/slow_sum",
+            handler=wait_for_signal,
+        ),
+        verify_tests=False,
+    )
+    registry.register(
+        Skill(
+            name="todo_write",
+            description="Update todo list.",
+            affinity=["meta"],
+            trusted_source="skill://public/todo_write",
+            handler=lambda **_kwargs: {"ok": True},
+        ),
+        verify_tests=False,
+    )
+
+    class Router:
+        def __init__(self) -> None:
+            self.requests = []
+
+        def call_stream(self, req):
+            self.requests.append(req)
+            if len(self.requests) == 1:
+                yield ModelStreamEvent(
+                    type="tool_use",
+                    tool_call=ToolCall(id="wait-1", name="slow_sum", input={}),
+                )
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            yield ModelStreamEvent(type="text_delta", delta="已按新要求继续")
+            yield ModelStreamEvent(type="done", final=ModelResponse(text="已按新要求继续"))
+
+    router = Router()
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=router, planner_model="mock"),
+        metadata={},
+    )
+    sent = False
+
+    def steering_drain() -> list[str]:
+        nonlocal sent
+        if started.is_set() and not sent:
+            sent = True
+            return ["停止等待，直接给出当前结论"]
+        return []
+
+    intent = ParsedIntent(
+        raw="wait for the result",
+        intent_type="task",
+        normalized_goal="wait for the result",
+        user_context={"conversation_id": "thread-live-redirect"},
+    )
+    began = time.monotonic()
+    events = list(
+        stream_agentic_fallback(
+            stack,
+            intent,
+            _agent(),
+            steering_drain=steering_drain,
+        )
+    )
+
+    assert time.monotonic() - began < 1.0
+    assert cancelled.is_set()
+    assert len(router.requests) == 2
+    assert any(
+        message.role == "user" and message.content == "停止等待，直接给出当前结论"
+        for message in router.requests[1].messages
+    )
+    tool_end = next(event for event in events if event[0] == "tool_end")
+    assert tool_end[1]["is_error"] is True
+    assert tool_end[1]["status"] == "cancelled"
+    assert "已按新要求继续" in "".join(str(event[1]) for event in events if event[0] == "text")
+
+
+def test_steering_terminates_a_real_subprocess_tree() -> None:
+    started = threading.Event()
+
+    def long_command(a: int = 0, b: int = 0, sleep_ms: int = 0) -> dict:
+        started.set()
+        return stream_run(
+            [sys.executable, "-c", "import time; time.sleep(10); print('too late')"],
+            timeout=15,
+        )
+
+    registry = SkillRegistry()
+    for skill in (
+        Skill(
+            name="slow_sum",
+            description="Run a long cancellable command.",
+            affinity=["shell"],
+            trusted_source="skill://public/slow_sum",
+            handler=long_command,
+        ),
+        Skill(
+            name="todo_write",
+            description="Update todo list.",
+            affinity=["meta"],
+            trusted_source="skill://public/todo_write",
+            handler=lambda **_kwargs: {"ok": True},
+        ),
+    ):
+        registry.register(skill, verify_tests=False)
+    router = _RouterEmitting(
+        [ToolCall(id="process-1", name="slow_sum", input={})],
+    )
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=router, planner_model="mock"),
+        metadata={},
+    )
+    sent = False
+
+    def steering_drain() -> list[str]:
+        nonlocal sent
+        if started.is_set() and not sent:
+            sent = True
+            return ["停止这个命令，直接继续"]
+        return []
+
+    began = time.monotonic()
+    events = list(
+        stream_agentic_fallback(
+            stack,
+            _intent(),
+            _agent(),
+            steering_drain=steering_drain,
+        )
+    )
+
+    assert time.monotonic() - began < 2.0
+    tool_end = next(event for event in events if event[0] == "tool_end")
+    assert tool_end[1]["status"] == "cancelled"
+    assert "too late" not in tool_end[1]["output"]
+
+
+def test_steering_cancels_every_running_parallel_tool() -> None:
+    started: set[str] = set()
+    cancelled: set[str] = set()
+    state_lock = threading.Lock()
+
+    def cooperative_sum(label: str = "") -> dict:
+        with state_lock:
+            started.add(label)
+        token = current_cancellation_token()
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline and not token.is_cancelled:
+            time.sleep(0.01)
+        if token.is_cancelled:
+            with state_lock:
+                cancelled.add(label)
+            return {"error": token.reason}
+        return {"ok": True}
+
+    registry = SkillRegistry()
+    for skill in (
+        Skill(
+            name="slow_sum",
+            description="Run cancellable parallel work.",
+            affinity=["math"],
+            trusted_source="skill://public/slow_sum",
+            handler=cooperative_sum,
+        ),
+        Skill(
+            name="todo_write",
+            description="Update todo list.",
+            affinity=["meta"],
+            trusted_source="skill://public/todo_write",
+            handler=lambda **_kwargs: {"ok": True},
+        ),
+    ):
+        registry.register(skill, verify_tests=False)
+
+    calls = [
+        ToolCall(id=f"parallel-{label}", name="slow_sum", input={"label": label})
+        for label in ("a", "b", "c")
+    ]
+    router = _RouterEmitting(calls)
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=router, planner_model="mock"),
+        metadata={},
+    )
+    sent = False
+
+    def steering_drain() -> list[str]:
+        nonlocal sent
+        with state_lock:
+            all_started = len(started) == 3
+        if all_started and not sent:
+            sent = True
+            return ["停止这一批并行操作"]
+        return []
+
+    events = list(
+        stream_agentic_fallback(
+            stack,
+            _intent(),
+            _agent(),
+            steering_drain=steering_drain,
+        )
+    )
+
+    assert cancelled == {"a", "b", "c"}
+    tool_ends = [event for event in events if event[0] == "tool_end"]
+    assert len(tool_ends) == 3
+    assert all(event[1]["parallel"] is True for event in tool_ends)
+    assert all(event[1]["is_error"] is True for event in tool_ends)
+    assert all(event[1]["status"] == "cancelled" for event in tool_ends)
+
+
+def test_steering_prevents_queued_serial_tools_from_starting() -> None:
+    started: list[str] = []
+    first_started = threading.Event()
+
+    def serial_work(label: str = "") -> dict:
+        started.append(label)
+        if label == "first":
+            first_started.set()
+        token = current_cancellation_token()
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline and not token.is_cancelled:
+            time.sleep(0.01)
+        return {"error": token.reason} if token.is_cancelled else {"ok": True}
+
+    registry = SkillRegistry()
+    for skill in (
+        Skill(
+            name="slow_sum",
+            description="Run cancellable serial work.",
+            affinity=["math"],
+            trusted_source="skill://public/slow_sum",
+            handler=serial_work,
+        ),
+        Skill(
+            name="todo_write",
+            description="Update todo list.",
+            affinity=["meta"],
+            trusted_source="skill://public/todo_write",
+            handler=lambda **_kwargs: {"ok": True},
+        ),
+    ):
+        registry.register(skill, verify_tests=False)
+    router = _RouterEmitting(
+        [
+            ToolCall(id=f"serial-{label}", name="slow_sum", input={"label": label})
+            for label in ("first", "second", "third")
+        ]
+    )
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=router, planner_model="mock"),
+        metadata={"parallel_tool_use": False},
+    )
+    sent = False
+
+    def steering_drain() -> list[str]:
+        nonlocal sent
+        if first_started.is_set() and not sent:
+            sent = True
+            return ["后面的操作都不要执行"]
+        return []
+
+    events = list(
+        stream_agentic_fallback(
+            stack,
+            _intent(),
+            _agent(),
+            steering_drain=steering_drain,
+        )
+    )
+
+    assert started == ["first"]
+    tool_ends = [event for event in events if event[0] == "tool_end"]
+    assert len(tool_ends) == 3
+    assert all(event[1]["is_error"] is True for event in tool_ends)
+    assert all(event[1]["status"] == "cancelled" for event in tool_ends)
+
+
+def test_steering_abandons_an_idle_model_stream_without_waiting_for_timeout() -> None:
+    stream_started = threading.Event()
+    stream_cancelled = threading.Event()
+
+    class Router:
+        def __init__(self) -> None:
+            self.requests = []
+
+        def call_stream(self, req):
+            self.requests.append(req)
+            if len(self.requests) == 1:
+                stream_started.set()
+                token = current_cancellation_token()
+                deadline = time.monotonic() + 2.0
+                while time.monotonic() < deadline and not token.is_cancelled:
+                    time.sleep(0.01)
+                if token.is_cancelled:
+                    stream_cancelled.set()
+                    return
+                yield ModelStreamEvent(type="text_delta", delta="stale answer")
+                return
+            yield ModelStreamEvent(type="text_delta", delta="fresh answer")
+            yield ModelStreamEvent(type="done", final=ModelResponse(text="fresh answer"))
+
+    router = Router()
+    sent = False
+
+    def steering_drain() -> list[str]:
+        nonlocal sent
+        if stream_started.is_set() and not sent:
+            sent = True
+            return ["不要再等，换一个方向回答"]
+        return []
+
+    began = time.monotonic()
+    intent = ParsedIntent(
+        raw="answer when ready",
+        intent_type="task",
+        normalized_goal="answer when ready",
+        user_context={"conversation_id": "thread-model-redirect"},
+    )
+    events = list(
+        stream_agentic_fallback(
+            _make_stack(router),
+            intent,
+            _agent(),
+            steering_drain=steering_drain,
+        )
+    )
+
+    assert time.monotonic() - began < 1.0
+    assert stream_cancelled.wait(timeout=0.2)
+    assert len(router.requests) == 2
+    assert any(
+        message.role == "user" and message.content == "不要再等，换一个方向回答"
+        for message in router.requests[1].messages
+    )
+    visible = "".join(str(event[1]) for event in events if event[0] == "text")
+    assert "stale answer" not in visible
+    assert "fresh answer" in visible
 
 
 def test_quality_tools_are_scope_sensitive() -> None:

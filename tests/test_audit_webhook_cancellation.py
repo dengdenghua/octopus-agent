@@ -545,6 +545,16 @@ class TestCancellation:
         src.token.on_cancelled(lambda r: calls.append(r))
         assert calls == ["late"]
 
+    def test_on_cancelled_listener_can_unsubscribe(self):
+        from runtime.safety.approval.cancellation import CancellationSource
+
+        src = CancellationSource()
+        calls: list[str] = []
+        unsubscribe = src.token.on_cancelled(lambda reason: calls.append(reason))
+        unsubscribe()
+        src.cancel(reason="detached")
+        assert calls == []
+
     def test_broken_callback_does_not_stop_others(self):
         from runtime.safety.approval.cancellation import CancellationSource
 
@@ -579,6 +589,7 @@ class TestCancellation:
         child = parent.token.link()
         child.cancel(reason="child only")
         assert parent.token.is_cancelled is False
+        assert parent._callbacks == []
 
     def test_none_token_never_cancels(self):
         from runtime.safety.approval.cancellation import CancellationToken

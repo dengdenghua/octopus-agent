@@ -598,6 +598,7 @@ class CerebrumRuntime:
         self._turn_steering_seen: dict[str, set[str]] = {}
         self._turn_steering_notified: dict[str, set[str]] = {}
         self._turn_steering_last_sync: dict[str, float] = {}
+        self._turn_steering_log_offsets: dict[str, int] = {}
         self._turn_steering_lock = threading.Lock()
         self._turn_steering_accepting: dict[str, bool] = {}
         self._turn_timeline: dict[str, tuple[int, str | None]] = {}
@@ -656,6 +657,10 @@ class CerebrumRuntime:
         }
         self._turn_steering_notified[turn.id] = set(self._turn_steering_seen[turn.id])
         self._turn_steering_last_sync[turn.id] = 0.0
+        try:
+            self._turn_steering_log_offsets[turn.id] = log.path.stat().st_size
+        except OSError:
+            self._turn_steering_log_offsets[turn.id] = 0
         self._turn_steering_accepting[turn.id] = True
         previous = max(
             (item for item in turn.items if item.timeline_sequence is not None),
@@ -684,6 +689,7 @@ class CerebrumRuntime:
         self._turn_steering_seen.pop(turn_id, None)
         self._turn_steering_notified.pop(turn_id, None)
         self._turn_steering_last_sync.pop(turn_id, None)
+        self._turn_steering_log_offsets.pop(turn_id, None)
         self._turn_steering_accepting.pop(turn_id, None)
         self._turn_timeline.pop(turn_id, None)
         task = self._active_turn_lease_tasks.pop(turn_id, None)
@@ -787,23 +793,38 @@ class CerebrumRuntime:
             if not force and now - last_sync < 0.1:
                 return []
             self._turn_steering_last_sync[turn_id] = now
-        replayed = next((item for item in log.replay() if item.id == turn_id), None)
-        if replayed is None:
-            return []
+        with self._turn_steering_lock:
+            offset = self._turn_steering_log_offsets.get(turn_id, 0)
+            events, next_offset = log.tail_events(offset)
+            self._turn_steering_log_offsets[turn_id] = next_offset
         discovered: list[SteeringUserMessageItem] = []
         pending = self._turn_steering.get(turn_id)
         if pending is None:
             return []
+        incoming: list[SteeringUserMessageItem] = []
+        for event in events:
+            if event.event != "item_completed" or event.turn_id != turn_id:
+                continue
+            raw_item = event.payload.get("item")
+            if not isinstance(raw_item, dict) or raw_item.get("type") != "steeringUserMessage":
+                continue
+            try:
+                incoming.append(SteeringUserMessageItem.model_validate(raw_item))
+            except (TypeError, ValueError):
+                continue
         with self._turn_steering_lock:
             seen = self._turn_steering_seen.setdefault(turn_id, set())
-            live_ids = {item.id for item in turn.items}
-            for item in replayed.items:
-                if not isinstance(item, SteeringUserMessageItem) or item.id in seen:
+            live_indexes = {item.id: index for index, item in enumerate(turn.items)}
+            for item in incoming:
+                existing_index = live_indexes.get(item.id)
+                if existing_index is None:
+                    turn.items.append(item)
+                    live_indexes[item.id] = len(turn.items) - 1
+                else:
+                    turn.items[existing_index] = item
+                if item.id in seen:
                     continue
                 seen.add(item.id)
-                if item.id not in live_ids:
-                    turn.items.append(item)
-                    live_ids.add(item.id)
                 sequence = item.timeline_sequence
                 if sequence is None:
                     sequence = log.reserve_timeline_sequence(turn_id)

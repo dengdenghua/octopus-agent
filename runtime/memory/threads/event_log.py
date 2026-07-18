@@ -482,6 +482,50 @@ class EventLog:
             stream_id=stream_id,
         )
 
+    def tail_events(self, after_offset: int) -> tuple[list[LoggedEvent], int]:
+        """Decode only complete events appended after a byte offset.
+
+        Unlike the public replay cursor, this private polling cursor is a byte
+        coordinate. It lets an active runtime notice cross-process steering
+        several times per second without rereading a large conversation from
+        byte zero. A truncated/replaced log safely falls back to the start;
+        an incomplete trailing line remains pending for the next call.
+        """
+        if not self._path.exists():
+            return [], 0
+        with self._path.open("rb") as stream:
+            stream.seek(0, 2)
+            boundary = stream.tell()
+            offset = max(0, int(after_offset))
+            if offset > boundary:
+                offset = 0
+            stream.seek(offset)
+            raw = stream.read(boundary - offset)
+        complete_length = raw.rfind(b"\n") + 1
+        if complete_length <= 0:
+            return [], offset
+
+        events: list[LoggedEvent] = []
+        seen_event_ids: set[str] = set()
+        for raw_line in raw[:complete_length].splitlines(keepends=True):
+            try:
+                line = raw_line.decode("utf-8").strip()
+                if not line:
+                    continue
+                event = LoggedEvent.model_validate(json.loads(line))
+            except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+                continue
+            event_id = event.event_id or (
+                "legacy:" + hashlib.sha256(raw_line.removesuffix(b"\n")).hexdigest()[:24]
+            )
+            if event_id in seen_event_ids:
+                continue
+            seen_event_ids.add(event_id)
+            if event.event_id is None:
+                event = event.model_copy(update={"event_id": event_id})
+            events.append(event)
+        return events, offset + complete_length
+
     def iter_events_with_sequence(self) -> Iterator[tuple[int, LoggedEvent]]:
         """Yield ``(cursor, event)`` pairs in append order.
 

@@ -164,7 +164,7 @@ function toOptionalMillis(
 
 function liveStatus(status: Item["status"]): LiveToolEvent["status"] {
   if (status === "inProgress") return "running";
-  if (status === "completed") return "done";
+  if (status === "completed" || status === "interrupted") return "done";
   return "error";
 }
 

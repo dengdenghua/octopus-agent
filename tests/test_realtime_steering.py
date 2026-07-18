@@ -64,6 +64,7 @@ async def test_turn_steer_is_persisted_and_queued_for_the_active_model(tmp_path:
 @pytest.mark.asyncio
 async def test_turn_steer_crosses_runtime_instances_and_reaches_the_active_client(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     logs_root = tmp_path / "threads"
     active_runtime = CerebrumRuntime(stack=object(), logs_root=str(logs_root))
@@ -99,8 +100,16 @@ async def test_turn_steer_crosses_runtime_instances_and_reaches_the_active_clien
 
         # The owner process discovers the durable item, feeds it to the model,
         # and mirrors it onto the original tab without an in-memory signal.
-        await active_runtime._publish_discovered_steering(turn, active_emitter)
-        assert active_runtime._drain_turn_steering(turn.id) == ["第二个标签页要求先验证再修改"]
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                log,
+                "replay",
+                lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                    AssertionError("live steering must tail the log, not replay it")
+                ),
+            )
+            await active_runtime._publish_discovered_steering(turn, active_emitter)
+            assert active_runtime._drain_turn_steering(turn.id) == ["第二个标签页要求先验证再修改"]
         assert any(
             method == "item/completed" and params["item"]["id"] == "itm_from_second_tab"
             for method, params in active_emitter.notifications
