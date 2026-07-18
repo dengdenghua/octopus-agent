@@ -160,6 +160,19 @@ function renderMessageList(args: {
 }
 
 describe("MessageList process trace lifecycle", () => {
+  test("keeps hidden user actions out of the document flow", () => {
+    const thread = mockThread({
+      messages: [message("user-1", "human", "继续")],
+    });
+
+    renderMessageList({ thread });
+
+    const editButton = screen.getByRole("button", {
+      name: "Edit and resend",
+    });
+    expect(editButton.parentElement).toHaveClass("absolute", "top-full");
+  });
+
   test("uses team roster avatars for assistant messages without avatar metadata", () => {
     const thread = mockThread({
       messages: [

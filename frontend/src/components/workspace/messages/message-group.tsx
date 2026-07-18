@@ -736,7 +736,7 @@ export function MessageGroup({
                 view: isThinking ? "summary" : "trace",
               })
             }
-            className="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-[11px] leading-4 text-muted-foreground/55 transition-colors hover:text-muted-foreground"
+            className="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs leading-[18px] text-muted-foreground/60 transition-colors hover:text-muted-foreground"
             data-process-event-id={workbenchEventId}
             data-process-event-kind={isThinking ? "thinking" : "execution"}
             data-process-event-status={state}
@@ -757,10 +757,14 @@ export function MessageGroup({
                 )}
               />
             </span>
-            <span className="min-w-0 flex-1 truncate">{summary}</span>
-            {count > 1 && (
-              <span className="shrink-0 tabular-nums opacity-60">{count}</span>
-            )}
+            <span className="flex min-w-0 flex-1 items-center gap-1">
+              <span className="truncate">{summary}</span>
+              {count > 1 && (
+                <span className="shrink-0 tabular-nums opacity-60">
+                  ×{count}
+                </span>
+              )}
+            </span>
             <PanelRightOpenIcon className="size-3 shrink-0 opacity-0 transition-opacity group-hover/process-row:opacity-50" />
             {isLastOverall && isLiveTimeline && codeMode && (
               <span className="sr-only" data-testid="live-process-strip" />

@@ -1476,7 +1476,7 @@ export function MessageList({
     >
       <ConversationContent
         scrollClassName={TURN_SCROLL_VIEWPORT_CLASS}
-        className="mx-auto w-full max-w-(--container-width-md) gap-4 px-4 pt-2"
+        className="mx-auto w-full max-w-(--container-width-md) gap-7 px-4 pt-2"
       >
         {header}
         {messageTurns.map((turn, turnIndex) => {
@@ -1495,7 +1495,7 @@ export function MessageList({
                 }
               }}
               className={cn(
-                "message-turn flex flex-col gap-4",
+                "message-turn flex flex-col gap-3",
                 !isLatestTurn && "message-turn-history",
               )}
               data-message-turn={turn.key}
@@ -1705,7 +1705,7 @@ function TurnLocatorRail({
   return (
     <nav
       aria-label={t.message.turnLocator}
-      className="absolute top-1/2 left-0 z-20 block -translate-y-1/2"
+      className="group/turn-rail absolute top-1/2 left-0 z-20 hidden -translate-y-1/2 md:block"
     >
       <div className="relative flex max-h-[82vh] flex-col items-center gap-1 overflow-hidden px-1 py-1.5">
         <TurnLocatorLimitButton
@@ -1731,7 +1731,9 @@ function TurnLocatorRail({
               className={cn(
                 "group relative flex w-6 items-center justify-center rounded-full transition-all duration-150",
                 "focus-visible:ring-ring/50 outline-none focus-visible:ring-2",
-                "opacity-70 hover:bg-muted/45 hover:opacity-100",
+                active
+                  ? "opacity-100"
+                  : "opacity-0 hover:bg-muted/45 hover:opacity-100 focus-visible:opacity-100 group-hover/turn-rail:opacity-70",
                 marker.kind === "phase" ? "h-8" : "h-2.5",
               )}
               onClick={() => onSelect(marker.key)}

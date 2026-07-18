@@ -154,8 +154,7 @@ describe("MessageList scroll-to-latest affordance", () => {
     const rail = screen.getByRole("navigation", {
       name: "Turn locator",
     });
-    expect(rail).toHaveClass("block");
-    expect(rail).not.toHaveClass("hidden");
+    expect(rail).toHaveClass("hidden", "md:block");
     expect(
       within(rail).getByRole("button", { name: /Turn 1/ }),
     ).toHaveAccessibleName(/first request/);

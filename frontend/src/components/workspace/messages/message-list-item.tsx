@@ -341,10 +341,10 @@ export const MessageListItem = memo(function MessageListItem({
       {!isLoading && (
         <div
           className={cn(
-            "mt-2 flex w-full items-center gap-1.5 text-muted-foreground",
-            isHuman && "justify-end",
-            isHuman &&
-              "opacity-0 pointer-events-none transition-opacity group-hover/conversation-message:opacity-100 group-hover/conversation-message:pointer-events-auto",
+            "flex items-center gap-1.5 text-muted-foreground",
+            isHuman
+              ? "pointer-events-none absolute top-full right-0 z-20 mt-0.5 w-auto justify-end rounded-lg bg-background/90 px-1 py-0.5 opacity-0 shadow-[var(--shadow-xs)] backdrop-blur-sm transition-opacity group-hover/conversation-message:pointer-events-auto group-hover/conversation-message:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"
+              : "mt-2 w-full",
           )}
         >
           {message.type === "ai" && (
