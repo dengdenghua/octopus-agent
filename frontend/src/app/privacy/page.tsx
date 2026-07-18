@@ -37,7 +37,7 @@ export default function PrivacyPage() {
           </Link>
         </Button>
 
-        <article className="rounded-lg border border-border bg-white px-6 py-7 shadow-[var(--shadow-xs)]">
+        <article className="bg-card text-card-foreground rounded-2xl border border-border-default px-6 py-7 shadow-[var(--shadow-card)]">
           <p className="text-xs font-medium uppercase text-muted-foreground">
             Octopus Agent OS
           </p>

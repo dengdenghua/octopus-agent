@@ -63,7 +63,7 @@ export function WorkspaceHeader({
   return (
     <header
       className={cn(
-        "workspace-panel-subtle top-0 right-0 left-0 z-20 mt-3 flex h-16 shrink-0 items-center justify-between gap-2 rounded-lg px-1 transition-[width,height] ease-out group-has-data-[collapsible=icon]/sidebar-wrapper:h-12",
+        "workspace-panel-subtle top-0 right-0 left-0 z-20 mt-3 flex h-16 shrink-0 items-center justify-between gap-2 rounded-2xl px-1 transition-[width,height] ease-out group-has-data-[collapsible=icon]/sidebar-wrapper:h-12",
         className,
       )}
       {...props}
