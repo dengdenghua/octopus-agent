@@ -211,6 +211,114 @@ describe("conversationToAgentThreadState · userMessage", () => {
 });
 
 describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
+  it("preserves public commentary as distinct non-terminal messages", () => {
+    const firstCommentary: AgentMessageItem = {
+      ...agentMsg("首轮扫描确认事件桥负责三类流。", "p1"),
+      messageKind: "commentary",
+      progressKind: "orient",
+      phaseId: "turn-1:progress:1",
+      progressSequence: 1,
+    };
+    const secondCommentary: AgentMessageItem = {
+      ...agentMsg("本地分析进一步确认工具结果会先完成再进入下一轮。", "p2"),
+      messageKind: "commentary",
+      progressKind: "verify",
+      phaseId: "turn-1:progress:2",
+      parentItemId: "c1",
+      progressSequence: 2,
+    };
+    const state = conversationToAgentThreadState(
+      makeConv([
+        makeTurn([
+          userMsg("analyze"),
+          reasoning("inspect bridge", "r1"),
+          firstCommentary,
+          cmd("read_file", "c1"),
+          reasoning("compare reducer", "r2"),
+          secondCommentary,
+          cmd("typecheck", "c2"),
+          agentMsg("最终汇总", "a-final"),
+        ]),
+      ]),
+    );
+
+    expect(state.messages.map((message) => message.content)).toEqual([
+      "analyze",
+      "首轮扫描确认事件桥负责三类流。",
+      "本地分析进一步确认工具结果会先完成再进入下一轮。",
+      "最终汇总",
+    ]);
+    const first = state.messages[1] as AIMessage;
+    const second = state.messages[2] as AIMessage;
+    expect(first.additional_kwargs?.public_progress).toBe(true);
+    expect(second.additional_kwargs?.public_progress).toBe(true);
+    expect(first.additional_kwargs?.progress_kind).toBe("orient");
+    expect(second.additional_kwargs?.progress_kind).toBe("verify");
+    expect(first.additional_kwargs?.phase_id).toBe("turn-1:progress:1");
+    expect(first.additional_kwargs?.progress_sequence).toBe(1);
+    expect(second.additional_kwargs?.phase_id).toBe("turn-1:progress:2");
+    expect(second.additional_kwargs?.parent_item_id).toBe("c1");
+    expect(second.additional_kwargs?.progress_sequence).toBe(2);
+    expect(second.tool_calls?.[0]?.id).toBe("c1");
+    expect((state.messages[3] as AIMessage).tool_calls?.[0]?.id).toBe("c2");
+  });
+
+  it("does not dedupe a final answer against an identical public checkpoint", () => {
+    const repeated = "已确认事件顺序正确，并且所有相关测试均已通过。";
+    const checkpoint: AgentMessageItem = {
+      ...agentMsg(repeated, "progress"),
+      messageKind: "commentary",
+    };
+    const state = conversationToAgentThreadState(
+      makeConv([
+        makeTurn([userMsg("verify"), checkpoint, agentMsg(repeated, "final")]),
+      ]),
+    );
+
+    expect(state.messages).toHaveLength(3);
+    expect(state.messages[1]?.additional_kwargs?.public_progress).toBe(true);
+    expect(state.messages[2]?.additional_kwargs?.public_progress).not.toBe(
+      true,
+    );
+  });
+
+  it("keeps the answer when completion-like reasoning follows commentary", () => {
+    const checkpoint: AgentMessageItem = {
+      ...agentMsg(
+        "已读取官方来源，接下来提取与问题直接相关的结论。",
+        "progress",
+      ),
+      messageKind: "commentary",
+    };
+    const finalAnswer =
+      "根据官方 issue，按 Esc 追加提示词会暂停当前活动目标；来源：https://github.com/openai/codex/issues/31218";
+    const state = conversationToAgentThreadState(
+      makeConv([
+        makeTurn([
+          userMsg("读取 issue 后给一句结论"),
+          cmd("fetch_url", "fetch-1"),
+          reasoning("官方页面已读取，证据足够。", "r1"),
+          checkpoint,
+          reasoning(
+            "现在需要给 Final Answer。问题已经结束，不需要更多工具调用。",
+            "r2",
+          ),
+          agentMsg(finalAnswer, "final"),
+        ]),
+      ]),
+    );
+
+    expect(state.messages.map((message) => message.content)).toEqual([
+      "读取 issue 后给一句结论",
+      "已读取官方来源，接下来提取与问题直接相关的结论。",
+      finalAnswer,
+    ]);
+    expect(state.messages[1]?.additional_kwargs?.public_progress).toBe(true);
+    expect(state.messages[2]?.additional_kwargs?.public_progress).not.toBe(
+      true,
+    );
+  });
+
   it("collapses reasoning before agentMessage into reasoning_content", () => {
     const state = conversationToAgentThreadState(
       makeConv([
@@ -279,6 +387,36 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     };
     expect(ai.type).toBe("ai");
     expect(ai.additional_kwargs?.grounding).toEqual(grounding);
+  });
+
+  it("anchors grounding before synthesis when a public narrative exists", () => {
+    const grounding = [
+      { kind: "source" as const, title: "items.py", path: "runtime/items.py" },
+    ];
+    const orient: AgentMessageItem = {
+      ...agentMsg("我先核对字段定义。", "p-orient"),
+      messageKind: "commentary",
+      progressKind: "orient",
+    };
+    const synthesis: AgentMessageItem = {
+      ...agentMsg("证据已齐，开始收束。", "p-synthesis"),
+      messageKind: "commentary",
+      progressKind: "synthesize",
+    };
+    const turn: Turn = {
+      ...makeTurn([
+        userMsg("q"),
+        orient,
+        synthesis,
+        agentMsg("grounded answer", "answer"),
+      ]),
+      grounding,
+    };
+
+    const state = conversationToAgentThreadState(makeConv([turn]));
+    expect(state.messages[1]?.additional_kwargs?.grounding).toEqual(grounding);
+    expect(state.messages[2]?.additional_kwargs?.grounding).toBeUndefined();
+    expect(state.messages[3]?.additional_kwargs?.grounding).toBeUndefined();
   });
 
   it("dedupes repeated final answers emitted in the same turn", () => {

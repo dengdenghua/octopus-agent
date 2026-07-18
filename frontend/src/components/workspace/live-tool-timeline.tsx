@@ -153,6 +153,11 @@ export interface LiveToolEvent {
    * (see core/threads/report-deliverable.ts). Precomputed at mapping
    * time so per-frame render never stringifies payloads. */
   isReportLike?: boolean;
+  /** When the tool is recognized by the catalog but its group is
+   * excluded by config (e.g. web_search under enable_web_skills=false),
+   * this carries {group, config_flag} so the UI can render a one-click
+   * "enable" prompt instead of a bare error. */
+  capabilityDisabled?: { group: string; config_flag: string };
 }
 
 function workflowEvents(events: LiveToolEvent[]): LiveToolEvent[] {

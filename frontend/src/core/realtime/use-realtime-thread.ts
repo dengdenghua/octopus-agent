@@ -178,6 +178,18 @@ export function useRealtimeThread(
 
   const applyEvent = useCallback((evt: ConversationEvent) => {
     setState((prev) => {
+      // Second line of defense: reject events that belong to a different
+      // thread than the one currently held in state. This guards against
+      // any in-flight notifications from a previous thread's WebSocket
+      // that slip through between cleanup and the socket actually closing.
+      const eventThreadId =
+        "threadId" in evt.params ? evt.params.threadId : evt.params.thread.id;
+      if (
+        typeof eventThreadId === "string" &&
+        eventThreadId !== prev.threadId
+      ) {
+        return prev;
+      }
       const { next } = reduce(prev, evt);
       stateRef.current = next;
       return next;
@@ -283,6 +295,22 @@ export function useRealtimeThread(
               // Live events landed before this resume response. Keep
               // those optimistic turns, but carry the server's older-page
               // flag so loadOlderTurns() still works.
+              // Guard: only preserve if the live turns actually belong to
+              // this thread — otherwise a stale notification from a
+              // previous thread could keep its turns pinned here.
+              if (
+                result.thread?.id &&
+                prev.threadId !== result.thread.id
+              ) {
+                const next: Conversation = {
+                  ...prev,
+                  turns: result.turns ?? [],
+                  resumeState: "resumed",
+                  hasMoreTurns: result.hasMore === true,
+                };
+                stateRef.current = next;
+                return next;
+              }
               const next: Conversation = {
                 ...prev,
                 resumeState: "resumed",
@@ -316,6 +344,7 @@ export function useRealtimeThread(
       method: string;
       params: Record<string, unknown>;
     }): void => {
+      if (cancelled) return;
       const belongsToThread = note.params?.threadId === args.threadId;
       // Record liveness telemetry before the reducer runs. Cheap, pure,
       // ref-mutating — never triggers a render on its own.

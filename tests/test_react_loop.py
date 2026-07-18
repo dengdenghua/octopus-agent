@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
+import pytest
+
 from runtime.core.cerebrum.react_guards import (
     _completion_phrase_without_todo_guard,
+    _goal_requests_code_mutation,
+    _goal_requests_project_inspection,
+    _goal_requires_file_content,
     _unverified_write_followup_guard,
 )
 from runtime.core.cerebrum.react_loop import (
@@ -28,19 +34,30 @@ from runtime.core.cerebrum.react_loop import (
     _ensure_browser_operation_skills,
     _escape_md_brackets,
     _execute_action_via_beak,
+    _explicit_read_only_goal,
+    _fallback_tool_checkpoint,
+    _fallback_tool_result_checkpoint,
     _format_skill_catalog,
+    _initial_public_checkpoint,
     _long_task_budget_limits,
     _looks_like_special_tool_envelope,
+    _looks_like_unfinished_work,
+    _narrow_research_iteration_limit,
     _native_tool_calls_missing_required_args,
     _normalized_tool_call_from_react_action,
     _parse_action,
     _parse_reasoning_action_fallback,
     _parse_step,
     _placeholder_observation,
+    _public_action_phase,
+    _public_update_kind,
     _reset_kg_throttle_for_tests,
     _reset_react_variants_for_tests,
+    _result_checkpoint_is_meaningful,
     _safe_for_streamdown,
+    _safe_public_update,
     _should_auto_checkpoint,
+    _unfinished_implementation_recovery_needed,
     get_react_variant_stats,
     pick_react_variant,
     record_react_variant_result,
@@ -75,11 +92,116 @@ def test_parse_step_without_final_keeps_triplet() -> None:
     assert final is None
 
 
+def test_parse_step_captures_public_update_between_thought_and_action() -> None:
+    text = (
+        "Thought: compare the evidence\n"
+        "Update: 两个来源都确认新版默认启用流式输出，差异集中在超时策略。\n"
+        'Action: echo({"text": "verify timeout"})'
+    )
+
+    step, final = _parse_step(text, iteration=3)
+
+    assert step.thought == "compare the evidence"
+    assert step.public_update.startswith("两个来源都确认")
+    assert step.action.startswith("echo(")
+    assert final is None
+
+
+def test_safe_public_update_rejects_private_protocol_and_empty_status() -> None:
+    assert _safe_public_update("Update: 已确认构建和类型检查都通过。") == (
+        "已确认构建和类型检查都通过。"
+    )
+    assert _safe_public_update('Action: echo({"text": "secret"})') == ""
+    assert _safe_public_update("正在处理。") == ""
+
+
+def test_fallback_tool_checkpoints_are_concrete_and_bounded() -> None:
+    action = 'fetch_url({"url": "https://github.com/openai/codex/issues/31218"})'
+
+    assert _fallback_tool_checkpoint([action]) == (
+        "我先读取目标来源（github.com），确认页面里的原始信息。"
+    )
+    assert _fallback_tool_result_checkpoint([action], succeeded=True) == (
+        "来源已经拿到；我接下来只提取与问题直接相关、能够核对的结论。"
+    )
+    assert "没有得到可用结果" in _fallback_tool_result_checkpoint(
+        [action], succeeded=False
+    )
+
+
+def test_public_progress_semantics_separate_phases_from_tool_names() -> None:
+    read = 'read_file({"path": "runtime/core/cerebrum/react_loop.py"})'
+    write = 'edit_file({"path": "frontend/src/app.tsx"})'
+    verify = 'exec_shell({"cmd": "pnpm typecheck"})'
+
+    assert _public_action_phase([read]) == "investigate"
+    assert _public_action_phase([write]) == "implement"
+    assert _public_action_phase([verify]) == "verify"
+    assert _public_update_kind("这条路线不通，我改用事件日志核对。") == "pivot"
+    assert _public_update_kind("测试已通过。", actions=[verify]) == "verify"
+    assert _public_update_kind("没有拿到结果。", succeeded=False) == "recover"
+    assert not _result_checkpoint_is_meaningful([read], succeeded=True)
+    assert _result_checkpoint_is_meaningful([write], succeeded=True)
+    assert _result_checkpoint_is_meaningful([verify], succeeded=True)
+    assert _result_checkpoint_is_meaningful([read], succeeded=False)
+
+
+def test_initial_public_checkpoint_names_requested_files() -> None:
+    checkpoint = _initial_public_checkpoint(
+        "只读分析 frontend/src/core/threads/realtime-adapter.ts、"
+        "frontend/src/components/workspace/messages/message-group.tsx 和 "
+        "runtime/core/cerebrum/react_loop.py，不要修改文件。"
+    )
+
+    assert checkpoint == (
+        "我先只读核对 realtime-adapter.ts、message-group.tsx 和 react_loop.py "
+        "的实际实现，再把证据按调用顺序串起来。"
+    )
+    assert _initial_public_checkpoint(
+        "打开 https://raw.githubusercontent.com/openai/codex/main/README.md"
+    ) == (
+        "我先核对你指定的原始来源（raw.githubusercontent.com），"
+        "再给出可追溯的结论。"
+    )
+
+
 def test_parse_step_only_final_answer() -> None:
     text = "Final Answer: 直接答复,无需推理"
     step, final = _parse_step(text, iteration=1)
     assert final == "直接答复,无需推理"
     assert step.thought == ""
+
+
+@pytest.mark.parametrize(
+    ("label", "expected"),
+    [
+        ("**Final Answer**\n\n缓存测试全部通过。", "缓存测试全部通过。"),
+        ("__Final Answer:__ result", "result"),
+        ("## Final Answer\nfinished", "finished"),
+        ("Final Answer\n\n实现和验证均已完成。", "实现和验证均已完成。"),
+    ],
+)
+def test_parse_step_accepts_markdown_final_answer_labels(label: str, expected: str) -> None:
+    step, final = _parse_step(label, iteration=1)
+
+    assert step.action == ""
+    assert final == expected
+
+
+def test_parse_step_accepts_provider_xml_final_answer() -> None:
+    step, final = _parse_step(
+        "<final_answer>缓存实现与并发回归测试均已完成。</final_answer>",
+        iteration=1,
+    )
+
+    assert step.action == ""
+    assert final == "缓存实现与并发回归测试均已完成。"
+
+
+def test_unfinished_work_detection_is_narrow_and_action_oriented() -> None:
+    assert _looks_like_unfinished_work("Leader 会进入 wait 导致死锁，需要立即修复。")
+    assert _looks_like_unfinished_work("The implementation still needs to run focused tests.")
+    assert not _looks_like_unfinished_work("修复已完成，所有聚焦测试通过。")
 
 
 def test_reasoning_only_fallback_uses_last_valid_action_candidate() -> None:
@@ -181,9 +303,7 @@ def test_explicit_browser_surface_registers_dependency_available_browser_group(
 def test_browser_operation_requested_accepts_surface_and_nested_metadata() -> None:
     assert _browser_operation_requested({"browser_surface": "Browser"})
     assert _browser_operation_requested({"runtime_surfaces": ["browser"]})
-    assert _browser_operation_requested(
-        {"metadata": {"chrome_operation_mode": True}}
-    )
+    assert _browser_operation_requested({"metadata": {"chrome_operation_mode": True}})
     assert not _browser_operation_requested({"mode": "code"})
 
 
@@ -191,6 +311,65 @@ def test_explicit_browser_turn_gets_stateful_iteration_floor() -> None:
     assert _browser_task_iteration_limit(5, browser_operation_mode=True) == 30
     assert _browser_task_iteration_limit(60, browser_operation_mode=True) == 60
     assert _browser_task_iteration_limit(5, browser_operation_mode=False) == 5
+
+
+def test_narrow_research_overrides_broad_research_and_browser_floors() -> None:
+    goal = "只做网页调研：搜索一个官方来源，然后给出一句结论和来源。"
+
+    assert _narrow_research_iteration_limit(goal, 100) == 8
+    assert _narrow_research_iteration_limit(goal, 5) == 5
+
+
+def test_narrow_research_limit_preserves_real_long_research() -> None:
+    goal = "调研并比较八个可靠来源，形成完整行业报告"
+
+    assert _narrow_research_iteration_limit(goal, 100) == 100
+
+
+def test_research_bug_report_is_not_unfinished_implementation() -> None:
+    research_goal = (
+        "只做网页调研：读取一个官方来源，用一句结论说明当前行为。不要修改或创建任何本地文件。"
+    )
+    evidence = "The issue proposes a fix because the current behavior should change."
+
+    assert not _unfinished_implementation_recovery_needed(
+        evidence,
+        research_goal,
+        is_code_mode=True,
+    )
+    assert _unfinished_implementation_recovery_needed(
+        "The implementation still needs to run focused tests.",
+        "Fix the streaming implementation and run focused tests.",
+        is_code_mode=True,
+    )
+
+
+def test_code_mode_completion_skips_missing_todo_when_protocol_is_optional() -> None:
+    steps = [ReActStep(iteration=i, action="web_search", observation="ok") for i in range(1, 4)]
+
+    assert (
+        _code_mode_completion_guard(
+            steps,
+            "Research complete.",
+            todo_protocol_required=False,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "goal",
+    [
+        "不要读取、查看、修改或创建任何本地文件，只做网页调研。",
+        "Do not read, inspect, modify, or create local project files; only research the web.",
+    ],
+)
+def test_compound_negative_clause_is_not_a_code_mutation_request(goal: str) -> None:
+    assert not _goal_requests_code_mutation(goal)
+
+
+def test_positive_code_mutation_request_is_still_detected() -> None:
+    assert _goal_requests_code_mutation("读取现有实现，然后修改代码并运行测试")
 
 
 def test_placeholder_observation_none_returns_na() -> None:
@@ -495,6 +674,62 @@ def test_code_context_prelude_reads_task_and_html_fixture(tmp_path) -> None:
     assert 'read_file("index.html")' in prelude
 
 
+def test_code_context_prelude_adds_path_boundary_acceptance_contract(tmp_path) -> None:
+    (tmp_path / "file_service.py").write_text(
+        "from urllib.parse import unquote\nclass PathBoundaryError(ValueError): pass\n",
+        encoding="utf-8",
+    )
+
+    prelude = _build_code_context_prelude(
+        str(tmp_path),
+        "Fix encoded traversal and symlink escape in the path-boundary service",
+    )
+
+    assert "task-acceptance-contract" in prelude
+    assert "repeatedly/double-encoded traversal" in prelude
+    assert "public boundary exception" in prelude
+
+
+def test_code_context_prelude_adds_crosscutting_config_contract(tmp_path) -> None:
+    (tmp_path / "config.py").write_text("OLD_NAME = 'legacy'\n", encoding="utf-8")
+
+    prelude = _build_code_context_prelude(
+        str(tmp_path),
+        "Implement a cross-cutting configuration rename",
+    )
+
+    assert "examples/sample configs" in prelude
+    assert "repository-wide search for stale names" in prelude
+
+
+def test_code_context_prelude_adds_concurrent_cache_contract(tmp_path) -> None:
+    (tmp_path / "cache.py").write_text("class TTLCache: pass\n", encoding="utf-8")
+
+    prelude = _build_code_context_prelude(
+        str(tmp_path),
+        "Implement concurrent TTL cache behavior for simultaneous loads",
+    )
+
+    assert "single-flight behavior per key" in prelude
+    assert "wake all waiters on success or failure" in prelude
+    assert "barrier-based regression" in prelude
+    assert "one per-key pending state/condition" in prelude
+    assert "only the creator of the pending entry may call the loader" in prelude
+    assert "followers must wait outside that lock" in prelude
+    assert "re-acquires the same non-reentrant lock" in prelude
+    assert "smallest targeted test and lint" in prelude
+    assert "does not prove those callers became waiters" in prelude
+    assert "scheduler-dependent exception counts" in prelude
+    assert "first mutations cache.py and tests/test_cache.py" in prelude
+    assert "registered run_tests/lint_check tools" in prelude
+    assert "do not install dependencies" in prelude
+    assert "do not create alternate test-runner scripts" in prelude
+    assert "lint_check with fix=true" in prelude
+    assert "only permitted product diffs are cache.py and tests/test_cache.py" in prelude
+    assert "do not modify pyproject.toml" in prelude
+    assert "stop and report the result" in prelude
+
+
 def test_code_mode_injects_startup_context_before_current_goal(tmp_path) -> None:
     (tmp_path / "README.md").write_text("Project conventions", encoding="utf-8")
     (tmp_path / "app.py").write_text("print('style sample')", encoding="utf-8")
@@ -765,6 +1000,427 @@ def test_budget_usage_accounting_does_not_auto_pause_by_default() -> None:
     assert not any(event["type"] == "react_paused" for event in events)
 
 
+def test_public_update_is_emitted_before_its_tool_execution() -> None:
+    router = _ScriptedRouter(
+        [
+            (
+                "Thought: evidence is now concrete\n"
+                "Update: 已定位到消息桥接层，下一步核对事件顺序。\n"
+                'Action: echo({"text": "check ordering"})'
+            ),
+            "Final Answer: ordering verified",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("inspect event ordering")
+    intent.user_context["mode"] = "react"
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=3))
+
+    assert result is not None and result.final_answer == "ordering verified"
+    event_types = [event["type"] for event in events]
+    assert event_types.index("commentary_delta") < event_types.index("tool_start")
+    commentary = next(event for event in events if event["type"] == "commentary_delta")
+    assert commentary["delta"] == "已定位到消息桥接层，下一步核对事件顺序。"
+
+
+def test_missing_public_update_gets_one_bounded_phase_checkpoint() -> None:
+    router = _ScriptedRouter(
+        [
+            'Thought: inspect source\nAction: echo({"text": "evidence"})',
+            "Final Answer: evidence verified",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("inspect source")
+    intent.user_context["mode"] = "react"
+
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=3)
+    )
+
+    assert result is not None and result.final_answer == "evidence verified"
+    commentary = [
+        event["delta"] for event in events if event["type"] == "commentary_delta"
+    ]
+    assert commentary == [
+        "我先完成这一步必要操作，再根据结果继续判断。",
+        "现有信息已经够了；我现在把关键点收束成最终回答。",
+    ]
+    checkpoint = next(event for event in events if event["type"] == "commentary_delta")
+    assert checkpoint["progress_kind"] == "investigate"
+    assert checkpoint["progress_source"] == "runtime"
+    event_types = [event["type"] for event in events]
+    assert event_types.index("commentary_delta") < event_types.index("tool_start")
+
+
+def test_tool_checkpoint_with_synthesis_words_stays_in_action_phase() -> None:
+    router = _ScriptedRouter(
+        [
+            (
+                "Update: 我先并行核对两处实现，拿到结果后再整理结论。\n"
+                'Action: echo({"text": "evidence"})'
+            ),
+            "Final Answer: evidence verified",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("inspect two supplied definitions")
+    intent.user_context["mode"] = "react"
+
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=3)
+    )
+
+    assert result is not None and result.final_answer == "evidence verified"
+    first_checkpoint = next(
+        event for event in events if event["type"] == "commentary_delta"
+    )
+    assert first_checkpoint["progress_kind"] == "investigate"
+
+
+def test_opening_checkpoint_is_followed_by_synthesis_before_buffered_final() -> None:
+    router = _ScriptedRouter(["Final Answer: concise comparison"])
+    intent = _intent(
+        "只读比较 runtime/core/cerebrum/react_loop.py 和 "
+        "frontend/src/components/workspace/messages/message-group.tsx"
+    )
+    intent.user_context["mode"] = "react"
+
+    events, result = _drain(
+        stream_react_loop(_FakeStack(router), intent, agent=None, max_iterations=2)
+    )
+
+    assert result is not None and result.final_answer == "concise comparison"
+    visible = [
+        (event["type"], event.get("progress_kind"))
+        for event in events
+        if event["type"] in {"commentary_delta", "text_delta"}
+    ]
+    assert visible == [
+        ("commentary_delta", "orient"),
+        ("commentary_delta", "synthesize"),
+        ("text_delta", None),
+    ]
+
+
+def test_code_chat_placeholder_final_must_continue_to_file_evidence(tmp_path) -> None:
+    placeholder = (
+        "我先 grep 确认这三个字段在两端的具体定义，接下来会读取两个文件，"
+        "然后再整理差异；现在只是准备开始检查，还没有给出用户要求的结论。"
+    )
+    assert len(placeholder) >= 60
+    router = _ScriptedRouter(
+        [
+            placeholder,
+            (
+                "Thought: inspect backend definition\n"
+                'Action: read_file({"path":"runtime/protocol/items.py"})'
+            ),
+            (
+                "Thought: inspect frontend definition\n"
+                'Action: read_file({"path":"frontend/src/core/realtime/items.ts"})'
+            ),
+            (
+                "Thought: record completed inspection after both reads\n"
+                'Action: todo_write({"todos":[{"title":"Compare named files","status":"completed"}]})'
+            ),
+            (
+                "Final Answer: 结论：两端都定义 phaseId、parentItemId 和 "
+                "progressSequence，字段命名一致。"
+            ),
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent(
+        "只读比较 runtime/protocol/items.py 与 "
+        "frontend/src/core/realtime/items.ts 中的三个阶段字段"
+    )
+    intent.user_context.update(
+        {
+            "mode": "code",
+            "workspace_path": str(tmp_path),
+        }
+    )
+
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=6)
+    )
+
+    assert result is not None and result.success
+    assert result.final_answer.startswith("结论：两端都定义")
+    assert router.calls == 5
+    visible_answer = "".join(
+        event["delta"] for event in events if event["type"] == "text_delta"
+    )
+    assert placeholder not in visible_answer
+    assert visible_answer == result.final_answer
+
+
+def test_research_placeholder_continues_to_fetched_source_and_grounded_answer() -> None:
+    placeholder = (
+        "我先搜索并核对官方资料，接下来再整理关键变化；当前只是准备开始调研，"
+        "还没有形成可以交付的结论，所以这段文字不能作为最终回答。"
+    )
+    premature_final = "证据找到了，我先直接回答，清单稍后再补。"
+    router = _ScriptedRouter(
+        [
+            placeholder,
+            (
+                "Thought: fetch the primary source before answering\n"
+                'Action: web_search({"q":"Octopus agent streaming architecture"})'
+            ),
+            f"Final Answer: {premature_final}",
+            (
+                "Thought: close the visible research checklist after evidence collection\n"
+                'Action: todo_write({"todos":[{"title":"Research primary source",'
+                '"status":"completed"}]})'
+            ),
+            (
+                "Final Answer: 调研结论：事件流采用显式阶段与因果序号，"
+                "可从[官方说明](https://example.com/octopus-streaming)继续核对。"
+            ),
+        ]
+    )
+    intent = _intent("调研 Octopus agent 的流式架构并给出有来源的结论")
+    intent.user_context["mode"] = "react"
+    stack = _build_stack_with_executor(router)
+    stack.executor.registry.register(
+        Skill(
+            name="web_search",
+            description="Search an external source.",
+            trusted_source="builtin://web_search",
+            handler=lambda q="": {
+                "query": q,
+                "results": [
+                    {
+                        "title": "Octopus streaming architecture",
+                        "url": "https://example.com/octopus-streaming",
+                        "snippet": "Explicit phases and causal progress sequence.",
+                    }
+                ],
+            },
+        ),
+        verify_tests=False,
+    )
+
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=6)
+    )
+
+    assert result is not None and result.success
+    assert router.calls == 5
+    visible_answer = "".join(
+        event["delta"] for event in events if event["type"] == "text_delta"
+    )
+    assert placeholder not in visible_answer
+    assert premature_final not in visible_answer
+    assert visible_answer == result.final_answer
+    assert "https://example.com/octopus-streaming" in result.final_answer
+    assert any(
+        event.get("progress_kind") == "investigate"
+        for event in events
+        if event["type"] == "commentary_delta"
+    )
+    assert any(
+        event.get("progress_kind") == "synthesize"
+        for event in events
+        if event["type"] == "commentary_delta"
+    )
+
+
+def test_same_phase_fallback_updates_are_throttled() -> None:
+    router = _ScriptedRouter(
+        [
+            'Thought: inspect one\nAction: echo({"text": "one"})',
+            'Thought: inspect two\nAction: echo({"text": "two"})',
+            'Thought: inspect three\nAction: echo({"text": "three"})',
+            'Thought: inspect four\nAction: echo({"text": "four"})',
+            "Final Answer: 调查已经完成，四项信息已纳入结论。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("summarize four supplied items")
+    intent.user_context["mode"] = "react"
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=6))
+
+    assert result is not None and "调查已经完成" in result.final_answer
+    commentary = [event for event in events if event["type"] == "commentary_delta"]
+    assert [event["progress_kind"] for event in commentary] == [
+        "investigate",
+        "synthesize",
+    ]
+
+
+def test_explicit_read_only_turn_injects_non_mutation_contract() -> None:
+    assert _explicit_read_only_goal("只读调研 coding agent，严禁修改任何文件")
+    assert _explicit_read_only_goal("Research this read-only; do not create files")
+    assert not _explicit_read_only_goal("Implement and test the coding agent UI")
+
+    router = _CapturingRouter(["Final Answer: read-only report complete"])
+    intent = _intent("只读调研 coding agent，严禁修改任何文件")
+    intent.user_context["mode"] = "react"
+
+    _, result = _drain(stream_react_loop(_FakeStack(router), intent, agent=None, max_iterations=2))
+
+    assert result is not None and result.success
+    request_text = "\n".join(str(message.content) for message in router.requests[0].messages)
+    assert "<read-only-contract>" in request_text
+    assert "including for a report artifact" in request_text
+
+
+def test_read_only_research_is_not_misclassified_as_project_inspection() -> None:
+    research_goal = "只读调研 Codex、Claude Code、OpenCode；不要修改、创建或写入任何本地文件。"
+    assert not _goal_requests_project_inspection(research_goal)
+    assert not _goal_requires_file_content(research_goal)
+
+    web_read_goal = (
+        "只做网页调研：读取一个官方来源 https://github.com/openai/codex/issues/31218，"
+        "用一句结论说明结果。不要读取、查看、修改或创建任何本地文件。"
+    )
+    assert not _goal_requests_project_inspection(web_read_goal)
+    assert not _goal_requires_file_content(web_read_goal)
+
+    inspection_goal = "只读检查当前项目的 config 文件并解释设置，不要修改文件。"
+    assert _goal_requests_project_inspection(inspection_goal)
+    assert _goal_requires_file_content(inspection_goal)
+
+
+def test_hidden_reasoning_timeout_retries_once_without_extended_thinking(monkeypatch) -> None:
+    from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
+
+    class StallingThenConvergingRouter:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.requests: list[Any] = []
+
+        def call_stream(self, request: Any):
+            self.calls += 1
+            self.requests.append(request)
+            if self.calls == 1:
+                for _ in range(10):
+                    time.sleep(0.01)
+                    yield ModelStreamEvent(type="thinking_delta", delta="private deliberation")
+                return
+            text = "Final Answer: recovered from the stalled reasoning round"
+            yield ModelStreamEvent(type="text_delta", delta=text)
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(text=text, model="reasoning-model"),
+            )
+
+    monkeypatch.setattr(
+        "runtime.core.cerebrum.react_loop._model_iteration_timeout_s",
+        lambda: 0.025,
+    )
+    router = StallingThenConvergingRouter()
+    intent = _intent("perform a long analysis")
+    intent.user_context["mode"] = "react"
+
+    events, result = _drain(
+        stream_react_loop(_FakeStack(router), intent, agent=None, max_iterations=3)
+    )
+
+    assert result is not None
+    assert result.final_answer == "recovered from the stalled reasoning round"
+    assert router.calls == 2
+    assert router.requests[1].enable_thinking is False
+    assert router.requests[1].thinking_budget == 1024
+    assert any(event["type"] == "commentary_delta" for event in events)
+
+
+def test_silent_model_stream_is_interrupted_by_wall_clock_deadline(monkeypatch) -> None:
+    from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
+
+    class SilentThenConvergingRouter:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def call_stream(self, request: Any):  # noqa: ARG002
+            self.calls += 1
+            if self.calls == 1:
+                time.sleep(0.2)
+                return
+            text = "Final Answer: recovered after a silent provider stream"
+            yield ModelStreamEvent(type="text_delta", delta=text)
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(text=text, model="reasoning-model"),
+            )
+
+    monkeypatch.setattr(
+        "runtime.core.cerebrum.react_loop._model_iteration_timeout_s",
+        lambda: 0.025,
+    )
+    router = SilentThenConvergingRouter()
+    intent = _intent("perform a long analysis")
+    intent.user_context["mode"] = "react"
+
+    started_at = time.monotonic()
+    events, result = _drain(
+        stream_react_loop(_FakeStack(router), intent, agent=None, max_iterations=3)
+    )
+
+    assert time.monotonic() - started_at < 0.15
+    assert result is not None
+    assert result.final_answer == "recovered after a silent provider stream"
+    assert router.calls == 2
+    assert any(event["type"] == "commentary_delta" for event in events)
+
+
+def test_repeated_hidden_reasoning_timeout_is_reported_as_failure(monkeypatch) -> None:
+    from runtime.sensing.model_router.models import ModelStreamEvent
+
+    class AlwaysStallingRouter:
+        def call_stream(self, request: Any):  # noqa: ARG002
+            yield ModelStreamEvent(type="thinking_delta", delta="private deliberation")
+
+    monkeypatch.setattr(
+        "runtime.core.cerebrum.react_loop._model_iteration_timeout_s",
+        lambda: 0.0,
+    )
+    intent = _intent("perform a long analysis")
+    intent.user_context["mode"] = "react"
+
+    events, result = _drain(
+        stream_react_loop(
+            _FakeStack(AlwaysStallingRouter()),
+            intent,
+            agent=None,
+            max_iterations=3,
+        )
+    )
+
+    completed = next(event for event in events if event["type"] == "react_completed")
+    assert result is not None
+    assert result.terminated_reason == "model_stall"
+    assert result.success is False
+    assert completed["success"] is False
+
+
+def test_forced_convergence_salvages_plain_report_without_protocol_label() -> None:
+    plain_report = (
+        "## 架构结论\n\n事件桥按消息、思考和执行三类数据维护稳定顺序。"
+        "\n\n## 风险\n\n最终汇总必须有独立的停滞边界。"
+    )
+    router = _ScriptedRouter(
+        [
+            'Thought: inspect once\nAction: echo({"text": "evidence"})',
+            plain_report,
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("echo once")
+    intent.user_context["mode"] = "react"
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=1))
+
+    assert result is not None
+    assert result.final_answer == plain_report
+    assert any(event["type"] == "text_delta" and event["delta"] == plain_report for event in events)
+
+
 def test_react_loop_injects_relevant_memory_hub_records(
     tmp_path,
     monkeypatch,
@@ -939,6 +1595,27 @@ def test_react_loop_continues_length_limited_final_answer() -> None:
     assert "todo_write" in router.requests[1].messages[-1].content
 
 
+def test_code_mode_length_limit_forces_bounded_action_recovery() -> None:
+    router = _CapturingRouter(
+        [
+            "Thought: " + ("analyze concurrency ownership in detail " * 200),
+            'Action: echo({"text": "repair"})',
+            "Final Answer: repaired and verified",
+        ],
+        finish_reasons=["length", "stop", "stop"],
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("Implement the cache fix")
+    intent.user_context["mode"] = "code"
+
+    run_react_loop(stack, intent, agent=None, max_iterations=2)
+
+    recovery_request = router.requests[1]
+    assert recovery_request.enable_thinking is False
+    assert "Do not continue or repeat the prose analysis" in recovery_request.messages[-1].content
+    assert "Emit exactly one concrete next Action" in recovery_request.messages[-1].content
+
+
 def test_react_loop_router_missing_returns_none() -> None:
     result = run_react_loop(_FakeStack(None), _intent(), agent=None)
     assert result is None
@@ -1058,6 +1735,20 @@ def test_observation_plain_long_text_truncated() -> None:
     out = _summarize_observation("abc " * 300)  # 1200 chars
     assert len(out) < 350
     assert out.endswith("(已截断)")
+
+
+def test_observation_failure_preserves_head_and_tail() -> None:
+    from runtime.core.cerebrum.react_loop import _summarize_observation
+
+    observation = (
+        '(tool failed) {"stdout": "' + ("progress\\n" * 100) + 'AssertionError: loader_calls == 1"}'
+    )
+
+    out = _summarize_observation(observation)
+
+    assert out.startswith("(tool failed)")
+    assert "中间已截断" in out
+    assert "AssertionError: loader_calls == 1" in out
 
 
 def test_observation_short_unchanged() -> None:
@@ -1333,6 +2024,27 @@ def test_parse_step_recovers_multiple_mimo_parameter_tool_calls() -> None:
     assert step.action == "; ".join(step.actions)
 
 
+def test_parse_step_recovers_multiple_invoke_parameter_tool_calls() -> None:
+    text = (
+        "<tool_calls>"
+        '<invoke name="todo_write">'
+        '<parameter name="items">[{"text":"patch cache","status":"in_progress"}]</parameter>'
+        "</invoke>"
+        '<invoke name="read_file">'
+        '<parameter name="path">cache.py</parameter>'
+        "</invoke>"
+        "</tool_calls>"
+    )
+
+    step, final = _parse_step(text, iteration=1)
+
+    assert final is None
+    assert [_parse_action(action) for action in step.actions] == [
+        ("todo_write", {"items": [{"text": "patch cache", "status": "in_progress"}]}),
+        ("read_file", {"path": "cache.py"}),
+    ]
+
+
 def test_parse_step_recovers_function_type_params_tool_containers() -> None:
     text = (
         "<tool_calls>\n"
@@ -1430,8 +2142,8 @@ def test_bare_named_tool_tag_ignores_prose_xml() -> None:
     # must all stay prose — the bare-tag recovery has no container marker,
     # so these gates are what keeps XML examples in answers inert.
     for text in (
-        "<summary>\n{\"path\": \"a\"}\n</summary>",  # no underscore
-        "<write_text_file>\n{\"path\": \"a\"}\n",  # unclosed
+        '<summary>\n{"path": "a"}\n</summary>',  # no underscore
+        '<write_text_file>\n{"path": "a"}\n',  # unclosed
         "<write_text_file>\nnot json\n</write_text_file>",  # not a JSON object
         '<Write_Text_File>\n{"path": "a"}\n</Write_Text_File>',  # not lowercase
     ):
@@ -1947,6 +2659,33 @@ def test_execute_action_via_beak_success() -> None:
     assert step is not None  # Implementation note.
 
 
+def test_execute_action_treats_structured_error_output_as_failure() -> None:
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="missing_read",
+            description="Return a structured missing-file error.",
+            trusted_source="builtin://missing_read",
+            handler=lambda **_kwargs: {"error": "not found: runtime/missing.py"},
+        ),
+        verify_tests=False,
+    )
+    stack = _FakeStack(None)
+    stack.executor = ToolExecutor(registry, TrustEngine())
+
+    observation, step = _execute_action_via_beak(
+        stack,
+        'missing_read({"path": "runtime/missing.py"})',
+        react_task_id=TaskId(uuid4()),
+        react_step_counter=1,
+    )
+
+    assert step is not None
+    assert observation is not None
+    assert observation.startswith("(工具失败)")
+    assert "real tool execution succeeded" not in observation
+
+
 def test_execute_action_preserves_code_permission_context_in_fallback_session() -> None:
     from runtime.platform.process.session import current_session
 
@@ -2369,6 +3108,296 @@ def test_stream_shell_verification_carries_metadata() -> None:
     assert tool_ends[0]["verification"]["stdout_tail"] == "ok"
 
 
+def test_two_clean_verifier_rounds_suppress_redundant_probe(tmp_path: Any) -> None:
+    target = tmp_path / "cache.py"
+    target.write_text("value = 0\n", encoding="utf-8")
+    router = _ScriptedRouter(
+        [
+            (
+                "Thought: plan\n"
+                'Action: todo_write({"items": [{"content": "implement cache", '
+                '"status": "in_progress"}]})'
+            ),
+            f'Thought: inspect\nAction: read_file({{"path": "{target.as_posix()}"}})',
+            (
+                "Thought: write implementation\n"
+                f'Action: write_text_file({{"path": "{target.as_posix()}", '
+                '"content": "value = 1\\n", "overwrite": true})'
+            ),
+            'Thought: test\nAction: exec_shell({"command": "python -m pytest tests"})',
+            (
+                "Thought: lint and smoke\nAction:\n"
+                'exec_shell({"command": "ruff check cache.py"})\n'
+                'exec_shell({"command": "python -m pytest tests/test_cache.py"})'
+            ),
+            (
+                "Thought: finish checklist\n"
+                'Action: todo_write({"items": [{"content": "implement cache", '
+                '"status": "completed"}]})'
+            ),
+            'Thought: probe again\nAction: exec_shell({"command": "python -m pytest tests"})',
+            "Final Answer: implementation complete",
+            "Final Answer: implementation complete",
+            "Final Answer: implementation complete",
+            "Final Answer: implementation complete",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("implement and verify cache.py")
+    intent.user_context.update({"mode": "code", "auto_approve": True})
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=9))
+
+    assert result is not None and result.final_answer == "implementation complete"
+    shell_starts = [
+        event
+        for event in events
+        if event.get("type") == "tool_start" and event.get("tool_name") == "exec_shell"
+    ]
+    assert len(shell_starts) == 3
+    assert any(
+        "redundant-tool-skipped" in step.observation for step in result.steps
+    )
+
+
+def test_semantic_completion_guard_reopens_tools_after_green_convergence(tmp_path: Any) -> None:
+    target = tmp_path / "cache.py"
+    target.write_text("value = 0\n", encoding="utf-8")
+    bad = (
+        "with self._lock:\n"
+        "    pending = self._pending.get(key)\n"
+        "    if pending is None:\n"
+        "        pending = Pending()\n"
+        "        self._pending[key] = pending\n"
+        "if self._pending.get(key) is not pending:\n"
+        "    pending.event.wait()\n"
+        "else:\n"
+        "    value = loader()\n"
+    )
+    good = bad.replace(
+        "if self._pending.get(key) is not pending:",
+        "if not is_leader:",
+    ).replace(
+        "    pending = self._pending.get(key)\n    if pending is None:",
+        "    pending = self._pending.get(key)\n"
+        "    is_leader = pending is None\n"
+        "    if pending is None:",
+    )
+    router = _ScriptedRouter(
+        [
+                (
+                    "Thought: plan\n"
+                    'Action: todo_write({"todos": [{"title": "repair cache", '
+                    '"status": "in_progress"}]})'
+            ),
+            f'Thought: inspect\nAction: read_file({{"path": "{target.as_posix()}"}})',
+            (
+                "Thought: write\n"
+                f'Action: write_text_file({{"path": "{target.as_posix()}", '
+                f'"content": {__import__("json").dumps(bad)}, "overwrite": true}})'
+            ),
+            'Thought: test\nAction: exec_shell({"command": "python -m pytest tests"})',
+            'Thought: lint\nAction: exec_shell({"command": "ruff check cache.py"})',
+            (
+                "Thought: finish checklist\n"
+                'Action: todo_write({"todos": [{"title": "repair cache", '
+                '"status": "completed"}]})'
+            ),
+            "Final Answer: implementation complete; all tests pass",
+            (
+                "Thought: fix leader election\n"
+                f'Action: write_text_file({{"path": "{target.as_posix()}", '
+                f'"content": {__import__("json").dumps(good)}, "overwrite": true}})'
+            ),
+            'Thought: retest\nAction: exec_shell({"command": "python -m pytest tests"})',
+            'Thought: relint\nAction: exec_shell({"command": "ruff check cache.py"})',
+            "Final Answer: implementation complete; all tests pass",
+            "Final Answer: implementation complete; all tests pass",
+            "Final Answer: implementation complete; all tests pass",
+            "Final Answer: implementation complete; all tests pass",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("fix the concurrent cache implementation and verify it")
+    intent.user_context.update({"mode": "code", "auto_approve": True})
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=14))
+
+    assert result is not None
+    assert result.success, "\n---\n".join(
+        f"{step.iteration}: {step.action}\n{step.observation}" for step in result.steps
+    )
+    assert "if not is_leader:" in target.read_text(encoding="utf-8")
+    write_starts = [
+        event
+        for event in events
+        if event.get("type") == "tool_start" and event.get("tool_name") == "write_text_file"
+    ]
+    assert len(write_starts) == 2
+    assert any(
+        "single-flight leader-election guard" in step.observation for step in result.steps
+    )
+
+
+def test_write_and_two_verifiers_in_one_batch_trigger_convergence(tmp_path: Any) -> None:
+    target = tmp_path / "cache.py"
+    target.write_text("value = 0\n", encoding="utf-8")
+    router = _ScriptedRouter(
+        [
+            (
+                "Thought: plan\n"
+                'Action: todo_write({"todos": [{"title": "implement cache", '
+                '"status": "in_progress"}]})'
+            ),
+            f'Thought: inspect\nAction: read_file({{"path": "{target.as_posix()}"}})',
+            (
+                "Thought: write and verify\nAction:\n"
+                f'write_text_file({{"path": "{target.as_posix()}", '
+                '"content": "value = 1\\n", "overwrite": true})\n'
+                'exec_shell({"command": "python -m pytest tests"})\n'
+                'exec_shell({"command": "ruff check cache.py"})'
+            ),
+            (
+                "Thought: finish checklist\n"
+                'Action: todo_write({"todos": [{"title": "implement cache", '
+                '"status": "completed"}]})'
+            ),
+            'Thought: redundant probe\nAction: exec_shell({"command": "python -m pytest tests"})',
+            "Final Answer: implementation complete; all tests pass",
+            "Final Answer: implementation complete; all tests pass",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("implement and verify cache.py")
+    intent.user_context.update({"mode": "code", "auto_approve": True})
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=7))
+
+    assert result is not None and result.success
+    shell_starts = [
+        event
+        for event in events
+        if event.get("type") == "tool_start" and event.get("tool_name") == "exec_shell"
+    ]
+    assert len(shell_starts) == 2
+    assert any("redundant-tool-skipped" in step.observation for step in result.steps)
+
+
+def test_native_write_and_two_verifiers_share_convergence_state(tmp_path: Any) -> None:
+    """Structured tool calls must use the same ordered write/verify state machine."""
+    from runtime.platform.models.llm import ToolCall
+    from runtime.sensing.model_router.models import (
+        CostEntry,
+        ModelResponse,
+        ModelStreamEvent,
+    )
+
+    class _Caps:
+        supports_tool_use = True
+
+    class _NativeBatchRouter:
+        capabilities = _Caps()
+
+        def __init__(self, turns: list[tuple[str, list[ToolCall]]]) -> None:
+            self.turns = turns
+            self.calls = 0
+
+        def call(self, req: Any) -> ModelResponse:  # noqa: ARG002
+            text, tool_calls = self.turns[self.calls]
+            self.calls += 1
+            return ModelResponse(
+                text=text,
+                model="test-model",
+                tool_calls=tool_calls,
+                finish_reason="stop",
+                cost=CostEntry(),
+            )
+
+        def call_stream(self, req: Any):
+            response = self.call(req)
+            if response.text:
+                yield ModelStreamEvent(type="text_delta", delta=response.text)
+            yield ModelStreamEvent(type="done", final=response)
+
+    target = tmp_path / "cache.py"
+    target.write_text("value = 0\n", encoding="utf-8")
+    router = _NativeBatchRouter(
+        [
+            (
+                "",
+                [
+                    ToolCall(
+                        id="todo-start",
+                        name="todo_write",
+                        input={"todos": [{"title": "implement cache", "status": "in_progress"}]},
+                    )
+                ],
+            ),
+            ("", [ToolCall(id="read", name="read_file", input={"path": str(target)})]),
+            (
+                "",
+                [
+                    ToolCall(
+                        id="write",
+                        name="write_text_file",
+                        input={
+                            "path": str(target),
+                            "content": "value = 1\n",
+                            "overwrite": True,
+                        },
+                    ),
+                    ToolCall(
+                        id="tests",
+                        name="exec_shell",
+                        input={"command": "python -m pytest tests"},
+                    ),
+                    ToolCall(
+                        id="lint",
+                        name="exec_shell",
+                        input={"command": "ruff check cache.py"},
+                    ),
+                ],
+            ),
+            (
+                "",
+                [
+                    ToolCall(
+                        id="todo-done",
+                        name="todo_write",
+                        input={"todos": [{"title": "implement cache", "status": "completed"}]},
+                    )
+                ],
+            ),
+            (
+                "",
+                [
+                    ToolCall(
+                        id="redundant",
+                        name="exec_shell",
+                        input={"command": "python -m pytest tests"},
+                    )
+                ],
+            ),
+            ("Final Answer: implementation complete; all tests pass", []),
+        ]
+    )
+    stack = _build_stack_with_executor(router)  # type: ignore[arg-type]
+    intent = _intent("implement and verify cache.py")
+    intent.user_context.update({"mode": "code", "auto_approve": True})
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=7))
+
+    assert result is not None and result.success
+    assert target.read_text(encoding="utf-8") == "value = 1\n"
+    shell_starts = [
+        event
+        for event in events
+        if event.get("type") == "tool_start" and event.get("tool_name") == "exec_shell"
+    ]
+    assert len(shell_starts) == 2
+    assert any("redundant-tool-skipped" in step.observation for step in result.steps)
+
+
 def test_stream_shell_verification_failure_marks_tool_and_result_failed() -> None:
     stack = _build_stack_with_executor(
         _ScriptedRouter(
@@ -2419,8 +3448,10 @@ def test_zero_anchor_response_is_salvaged_as_text_delta() -> None:
     stack = _build_stack_with_executor(
         _ScriptedRouter([plain_markdown_reply, plain_markdown_reply])
     )
-    gen = stream_react_loop(stack, _intent("光通讯调研"), agent=None, max_iterations=3)
-    events, _ = _drain(gen)
+    # Keep this a plain chat-style overview. Long research turns intentionally
+    # require their visible checklist before salvage can become final.
+    gen = stream_react_loop(stack, _intent("光通讯概览"), agent=None, max_iterations=3)
+    events, result = _drain(gen)
     text_deltas = [e for e in events if e["type"] == "text_delta"]
     # Must surface the model's output even though it broke ReAct format.
     assert text_deltas, (
@@ -2429,6 +3460,30 @@ def test_zero_anchor_response_is_salvaged_as_text_delta() -> None:
     combined = "".join(e["delta"] for e in text_deltas)
     assert "深度调研报告" in combined
     assert "Coherent" in combined
+    assert result is not None and result.success
+    assert result.final_answer == plain_markdown_reply
+
+
+def test_zero_anchor_unfinished_diagnosis_forces_action_instead_of_bailing() -> None:
+    stack = _build_stack_with_executor(
+        _ScriptedRouter(
+            [
+                "Leader 路径会进入 wait 导致死锁，需要立即修复。",
+                "实现尚未完成，必须修改后运行验证。",
+                'Thought: apply the repair\nAction: echo({"text": "repair applied"})',
+                "Final Answer: repair verified",
+            ]
+        )
+    )
+
+    events, result = _drain(
+        stream_react_loop(stack, _intent("perform the workflow"), agent=None, max_iterations=4)
+    )
+
+    assert result is not None and result.success
+    assert result.final_answer == "repair verified"
+    assert any(event["type"] == "tool_start" for event in events)
+    assert sum(event["type"] == "commentary_delta" for event in events) >= 2
 
 
 def test_stream_executes_xml_tool_call_without_showing_fake_tool_text() -> None:
@@ -2455,6 +3510,32 @@ def test_stream_executes_xml_tool_call_without_showing_fake_tool_text() -> None:
     assert "<tool_call>" not in visible_text
     assert "我直接执行" not in visible_text
     assert visible_text == "done"
+
+
+def test_stream_executes_invoke_xml_without_showing_provider_envelope() -> None:
+    stack = _build_stack_with_executor(
+        _ScriptedRouter(
+            [
+                (
+                    "<tool_calls>"
+                    '<invoke name="echo">'
+                    '<parameter name="text">hi</parameter>'
+                    "</invoke>"
+                    "</tool_calls>"
+                ),
+                "<final_answer>done</final_answer>",
+            ]
+        )
+    )
+
+    events, result = _drain(stream_react_loop(stack, _intent("hi"), agent=None, max_iterations=3))
+
+    assert result is not None and result.success
+    assert [event["tool_name"] for event in events if event["type"] == "tool_start"] == ["echo"]
+    visible_text = "".join(event["delta"] for event in events if event["type"] == "text_delta")
+    assert visible_text == "done"
+    assert "<invoke" not in visible_text
+    assert "<final_answer>" not in visible_text
 
 
 class _RejectingApprovalProvider:
@@ -2724,6 +3805,49 @@ def test_stream_emits_forced_final_answer_after_max_iterations() -> None:
     assert completed
     assert completed[-1]["completion_receipt"]["ready"] is False
     assert "terminated:max_iter" in completed[-1]["completion_receipt"]["warnings"]
+
+
+def test_forced_convergence_timeout_preserves_public_stage_updates(
+    monkeypatch: Any,
+) -> None:
+    from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
+
+    class _SlowConvergenceRouter(_ScriptedRouter):
+        def call_stream(self, req: Any):
+            if self.calls == 0:
+                yield from super().call_stream(req)
+                return
+            time.sleep(0.2)
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(text="Final Answer: too late", model="test-model"),
+            )
+
+    monkeypatch.setattr(
+        "runtime.core.cerebrum.react_loop._model_iteration_timeout_s",
+        lambda: 0.03,
+    )
+    stack = _build_stack_with_executor(
+        _SlowConvergenceRouter(
+            [
+                "Thought: verify evidence\n"
+                "Update: 已确认两个官方来源对交互中断机制的描述一致。\n"
+                'Action: echo({"text": "verified"})\n',
+            ]
+        )
+    )
+
+    events, result = _drain(
+        stream_react_loop(stack, _intent("research comparison"), agent=None, max_iterations=1)
+    )
+
+    assert result is not None
+    assert result.success is False
+    assert result.terminated_reason == "model_stall"
+    assert "已确认两个官方来源" in (result.final_answer or "")
+    assert any(
+        event["type"] == "text_delta" and "这不是完整最终报告" in event["delta"] for event in events
+    )
 
 
 def test_stream_pause_returns_without_force_final_answer() -> None:
@@ -3109,6 +4233,16 @@ def test_chat_style_zero_anchor_streams_live_after_120_chars() -> None:
     assert len(deltas) >= 2, deltas
     # No double-yield: the joined deltas equal the full body once.
     assert "".join(deltas) == full
+    synthesis_index = next(
+        index
+        for index, event in enumerate(events)
+        if event["type"] == "commentary_delta"
+        and event.get("progress_kind") == "synthesize"
+    )
+    first_text_index = next(
+        index for index, event in enumerate(events) if event["type"] == "text_delta"
+    )
+    assert synthesis_index < first_text_index
 
 
 def test_observation_echo_does_not_complete_or_stream_as_answer() -> None:
@@ -4000,6 +5134,22 @@ def test_parses_multi_line_action_block_into_actions_list() -> None:
     assert step.action.count("read_file") == 3
 
 
+def test_repeated_action_labels_are_not_dispatched_as_tools() -> None:
+    step, final = _parse_step(
+        "Action:\n"
+        'read_file({"path": "cache.py"})\n'
+        "Action:\n"
+        'read_file({"path": "tests/test_cache.py"})',
+        iteration=1,
+    )
+
+    assert final is None
+    assert step.actions == [
+        'read_file({"path": "cache.py"})',
+        'read_file({"path": "tests/test_cache.py"})',
+    ]
+
+
 def test_single_line_action_keeps_one_element_actions_list() -> None:
     """Backward-compat: single Action: line populates `actions` with
     one entry so the dispatcher can treat both shapes uniformly."""
@@ -4840,9 +5990,7 @@ def test_guard_impasse_resets_when_new_actions_land() -> None:
     assert _note_guard_impasse(state, "implementation-write guard", steps) is False
     # The model executed another real action before its next attempt —
     # that is progress, so the counter starts over.
-    steps.append(
-        ReActStep(iteration=2, action='write_text_file({"path": "b", "content": "y"})')
-    )
+    steps.append(ReActStep(iteration=2, action='write_text_file({"path": "b", "content": "y"})'))
     assert _note_guard_impasse(state, "implementation-write guard", steps) is False
     assert _note_guard_impasse(state, "implementation-write guard", steps) is False
     assert _note_guard_impasse(state, "implementation-write guard", steps) is True
@@ -4856,3 +6004,135 @@ def test_guard_impasse_resets_on_different_guard() -> None:
     assert _note_guard_impasse(state, "implementation-write guard", steps) is False
     assert _note_guard_impasse(state, "inspection-evidence guard", steps) is False
     assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+
+
+# ─────────────────────────────────────────────────────────────────
+# Capability-disabled detection · when enable_web_skills=False the
+# model may still hallucinate web_search; the dispatcher should
+# (a) tell the model WHY the tool is unavailable and (b) attach
+# ``capability_disabled`` metadata to the tool_end event so the UI
+# can render a one-click enable prompt.
+# ─────────────────────────────────────────────────────────────────
+
+
+def test_is_known_but_disabled_tool_classifies_web_group() -> None:
+    """web_search / fetch_url / web_fetch belong to the 'web' group,
+    which is excluded from LOCAL_SKILL_GROUPS — so they should be
+    flagged as 'known but disabled'."""
+    from runtime.execution.all_skills import is_known_but_disabled_tool
+
+    for name in ("web_search", "fetch_url", "web_fetch"):
+        hit, group = is_known_but_disabled_tool(name)
+        assert hit is True, f"{name} should be known-but-disabled"
+        assert group == "web", f"{name} group should be 'web', got {group!r}"
+
+
+def test_is_known_but_disabled_tool_returns_false_for_local_tools() -> None:
+    """read_file / list_cwd are in LOCAL_SKILL_GROUPS, so they are
+    NOT 'known but disabled' — they should always be registered."""
+    from runtime.execution.all_skills import is_known_but_disabled_tool
+
+    for name in ("read_file", "list_cwd", "glob_files", "grep_text"):
+        hit, group = is_known_but_disabled_tool(name)
+        assert hit is False, f"{name} should not be flagged as disabled"
+        assert group is None, f"{name} group should be None, got {group!r}"
+
+
+def test_is_known_but_disabled_tool_returns_false_for_unknown() -> None:
+    """A completely unknown tool name should return (False, None),
+    not be mistaken for a config-disabled tool."""
+    from runtime.execution.all_skills import is_known_but_disabled_tool
+
+    hit, group = is_known_but_disabled_tool("totally_made_up_tool_xyz")
+    assert hit is False
+    assert group is None
+
+
+def test_dispatch_attaches_capability_disabled_for_web_search() -> None:
+    """When the model calls web_search but the 'web' group is not
+    registered, the tool_end event must carry ``capability_disabled``
+    metadata and the observation must mention the config flag."""
+    from runtime.core.cerebrum.react_parallel_dispatch import _dispatch_parallel_actions
+
+    stack = _build_stack_with_executor(_ScriptedRouter([]))
+    # The default test registry does NOT register web_search, so this
+    # exercises the unregistered-tool path.
+    gen = _dispatch_parallel_actions(
+        ['web_search({"query": "test"})'],
+        stack=stack,
+        executor=stack.executor,
+        iteration=1,
+        react_task_id=TaskId(__import__("uuid").uuid4()),
+        agent=None,
+        intent=_intent("search the web"),
+    )
+    events, result = _drain(gen)
+    observation, results = result
+
+    # The tool_end event should have capability_disabled metadata
+    end_events = [e for e in events if e.get("type") == "tool_end"]
+    assert len(end_events) == 1
+    end_evt = end_events[0]
+    assert end_evt["tool_name"] == "web_search"
+    assert end_evt["status"] == "error"
+    cap_disabled = end_evt.get("capability_disabled")
+    assert cap_disabled is not None, "tool_end must carry capability_disabled"
+    assert cap_disabled["group"] == "web"
+    assert cap_disabled["config_flag"] == "enable_web_skills"
+
+    # The observation fed back to the model must mention the config flag
+    # so the model can inform the user instead of retrying blindly.
+    assert "enable_web_skills" in observation
+    assert "web" in observation
+
+
+def test_dispatch_does_not_attach_capability_disabled_for_unknown_tool() -> None:
+    """A completely unknown tool should NOT get capability_disabled
+    metadata — only the generic 'unregistered' message."""
+    from runtime.core.cerebrum.react_parallel_dispatch import _dispatch_parallel_actions
+
+    stack = _build_stack_with_executor(_ScriptedRouter([]))
+    gen = _dispatch_parallel_actions(
+        ['totally_unknown_xyz({"x": 1})'],
+        stack=stack,
+        executor=stack.executor,
+        iteration=1,
+        react_task_id=TaskId(__import__("uuid").uuid4()),
+        agent=None,
+        intent=_intent("test"),
+    )
+    events, result = _drain(gen)
+    observation, _ = result
+
+    end_events = [e for e in events if e.get("type") == "tool_end"]
+    assert len(end_events) == 1
+    assert end_events[0].get("capability_disabled") is None
+    assert "工具未注册或无法解析" in observation
+
+
+def test_register_group_hot_loads_web_skills() -> None:
+    """``register_group(registry, 'web')`` should incrementally add
+    web_search/fetch_url/web_fetch to an existing registry without
+    requiring a full restart."""
+    from runtime.execution.all_skills import register_group
+    from runtime.execution.suckers import SkillRegistry
+
+    reg = SkillRegistry()
+    # Start empty — simulate enable_web_skills=False at startup
+    assert not reg.has("web_search")
+
+    newly = register_group(reg, "web")
+    # httpx is available in the venv, so web skills should register
+    assert "web_search" in newly or reg.has("web_search")
+    assert "fetch_url" in newly or reg.has("fetch_url")
+
+
+def test_register_group_returns_empty_for_unknown_group() -> None:
+    """Asking for a non-existent group should return [] silently
+    rather than raising."""
+    from runtime.execution.all_skills import register_group
+    from runtime.execution.suckers import SkillRegistry
+
+    reg = SkillRegistry()
+    newly = register_group(reg, "nonexistent_group_xyz")
+    assert newly == []

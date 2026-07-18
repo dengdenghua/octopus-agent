@@ -309,6 +309,13 @@ class TestIsWireContractTestPath:
 
 
 class TestStepEditsWireSchema:
+    def test_protocol_items_read_is_not_an_edit(self) -> None:
+        step = _step(
+            1,
+            action='read_file({"path": "runtime/protocol/items.py"})',
+        )
+        assert not _step_edits_wire_schema(step)
+
     def test_anthropic_compat_edit(self) -> None:
         step = _step(
             1,
@@ -524,6 +531,10 @@ class TestStepIntroducesThirdPartyImports:
 
 
 class TestStepWritesDepManifest:
+    def test_reading_manifest_is_not_writing_manifest(self) -> None:
+        step = _step(1, action='read_file({"path": "pyproject.toml"})')
+        assert not _step_writes_dep_manifest(step)
+
     def test_pyproject(self) -> None:
         step = _step(1, action='write_text_file({"path": "pyproject.toml", "content": "x"})')
         assert _step_writes_dep_manifest(step)

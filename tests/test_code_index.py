@@ -110,6 +110,46 @@ def test_sink_captures_chosen_chunks_faithfully(tmp_path: Path) -> None:
     assert sink[0]["path"] in out  # faithful: the cited path is in the prompt
 
 
+def test_explicit_cross_stack_paths_are_always_grounded(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("OCTOPUS_GROUNDING_HOPS", "0")
+    _make_src(
+        tmp_path,
+        {
+            "runtime/protocol/items.py": (
+                "class Item:\n"
+                "    phase_id: str | None\n"
+                "    parent_item_id: str | None\n"
+                "    progress_sequence: int | None\n"
+            ),
+            "frontend/src/core/realtime/items.ts": (
+                "export type Item = {\n"
+                "  phaseId?: string;\n"
+                "  parentItemId?: string;\n"
+                "  progressSequence?: number;\n"
+                "};\n"
+            ),
+            "runtime/unrelated.py": "def phase_id_parent_item_id_progress_sequence(): pass\n",
+        },
+    )
+    sink: list[dict[str, str]] = []
+
+    out = retrieve_code_context(
+        "只读比较 runtime/protocol/items.py 与 frontend/src/core/realtime/items.ts，"
+        "用一句话回答。",
+        root=tmp_path,
+        max_chunks=2,
+        _sink=sink,
+    )
+
+    assert out is not None
+    assert {entry["path"].split(":", 1)[0] for entry in sink} == {
+        "runtime/protocol/items.py",
+        "frontend/src/core/realtime/items.ts",
+    }
+    assert "phase_id" in out
+    assert "phaseId" in out
+
+
 # ── semantic fusion (reuses the persisted KB index, gated to the workspace) ──
 
 

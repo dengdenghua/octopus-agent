@@ -110,6 +110,23 @@ def _execute_action_via_beak(
 
     registry = getattr(executor, "registry", None)
     if registry is None or not registry.has(skill_name):
+        # Distinguish "known but config-disabled" (e.g. web_search under
+        # enable_web_skills=False) from "completely unknown" so the model
+        # gets an actionable reason and stops retrying.
+        try:
+            from runtime.execution.all_skills import is_known_but_disabled_tool
+
+            _hit, _group = is_known_but_disabled_tool(skill_name)
+        except ImportError:  # pragma: no cover — defensive
+            _hit, _group = False, None
+        if _hit and _group:
+            return (
+                f"(工具未注册) {skill_name} 所属组 '{_group}' 被配置关闭"
+                f"(enable_web_skills=false)。如需启用:在 config.local.yaml "
+                f"设置 enable_web_skills: true 并重启后端,或调用 "
+                f"POST /api/capabilities/enable 临时启用。当前请改用其他工具"
+                f"或告知用户该能力不可用。"
+            ), None
         return (
             f"(工具未注册) 不存在名为 '{skill_name}' 的 skill。"
             "可用工具请参见 system prompt 顶部的目录 · "
@@ -206,13 +223,6 @@ def _execute_action_via_beak(
     )
     status = normalized_result.status
     output = normalized_result.output
-    if status != "success":
-        err = normalized_result.error_type or status
-        return (
-            f"(工具失败) status={status} error={err}\n"
-            "请在下一轮 Thought 中分析失败原因，然后换一种方式重试 · "
-            "例如：换不同参数、换另一个工具、或直接用已有信息给出 Final Answer。"
-        ), step
     if skill_name in _VERIFY_SKILLS and _output_indicates_command_failure(output):
         command_result = normalize_tool_result(
             call,
@@ -227,6 +237,15 @@ def _execute_action_via_beak(
             "(tool failed) status=command_failed error=non_zero_exit\n"
             f"{command_result.rendered}\n"
             "Analyze the failure next, then fix it, change commands, or report the verification blocker."
+        ), step
+    if status != "success" or normalized_result.is_error:
+        err = normalized_result.error_type or (
+            "structured_error" if normalized_result.is_error and status == "success" else status
+        )
+        return (
+            f"(工具失败) status={status} error={err}\n"
+            "请在下一轮 Thought 中分析失败原因，然后换一种方式重试 · "
+            "例如：换不同参数、换另一个工具、或直接用已有信息给出 Final Answer。"
         ), step
     return (f"(real tool execution succeeded) {skill_name}\n{normalized_result.rendered}"), step
 

@@ -29,30 +29,30 @@ export function GroundingChip({ message }: { message: Message }) {
     String(sources.length),
   );
   return (
-    <div className="mb-2">
+    <div className="mb-1" data-grounding-evidence="true">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border-default bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className="inline-flex max-w-full items-center gap-1.5 bg-transparent px-0 py-0.5 text-[11px] leading-4 text-muted-foreground/55 transition-colors hover:text-muted-foreground"
       >
-        <BookOpenIcon className="size-3.5 shrink-0" />
+        <BookOpenIcon className="size-3 shrink-0 opacity-60" />
         <span className="truncate">{label}</span>
         <ChevronDownIcon
           className={cn(
-            "size-3 shrink-0 transition-transform",
+            "size-2.5 shrink-0 opacity-50 transition-transform",
             open && "rotate-180",
           )}
         />
       </button>
       {open && (
-        <ul className="mt-1.5 flex max-w-md flex-col gap-1 rounded-md border border-border-default bg-muted/20 p-2 text-xs">
+        <ul className="mt-1 flex max-w-md flex-col gap-1 bg-transparent py-1 pl-4 text-[11px] leading-4">
           {sources.map((source, index) => (
             <li
               key={`${source.path}-${index}`}
               className="flex min-w-0 items-center gap-2"
             >
-              <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <span className="shrink-0 text-[9px] uppercase tracking-wide text-muted-foreground/50">
                 {source.kind === "doc"
                   ? t.message.grounding.doc
                   : t.message.grounding.source}

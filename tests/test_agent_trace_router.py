@@ -816,6 +816,52 @@ def test_trace_promotion_audit_export_includes_verified_chain(
     assert body["audit"]["records"][0]["event_type"] == "topology_policy_block"
 
 
+def test_trace_governance_audit_rotation_configures_and_exports(
+    tmp_path: Path,
+) -> None:
+    client = _client_with_trace(tmp_path)
+    base = "/api/agent-trace/review-queue/promotions/audit/rotation"
+
+    initial = client.get(base)
+    missing_confirm = client.post(
+        base,
+        json={"enabled": True, "cron_expression": "0 2 * * *"},
+    )
+    configured = client.post(
+        base,
+        json={
+            "enabled": True,
+            "cron_expression": "0 2 * * *",
+            "retention_count": 2,
+            "confirm_rotation": True,
+        },
+    )
+    missing_export_confirm = client.post(f"{base}/run", json={"force": True})
+    exported = client.post(
+        f"{base}/run",
+        json={"force": True, "confirm_export": True},
+    )
+
+    assert initial.status_code == 200
+    assert initial.json()["enabled"] is False
+    assert missing_confirm.status_code == 400
+    assert missing_confirm.json()["detail"] == "confirm_rotation=true is required"
+    assert configured.status_code == 200
+    assert configured.json()["config"]["enabled"] is True
+    assert configured.json()["config"]["retention_count"] == 2
+    assert configured.json()["status"]["next_run_at"] is not None
+    assert missing_export_confirm.status_code == 400
+    assert missing_export_confirm.json()["detail"] == "confirm_export=true is required"
+    assert exported.status_code == 200
+    assert exported.json()["status"] == "exported"
+    assert Path(exported.json()["export_path"]).is_file()
+    audit = json.loads((tmp_path / "promotion_audit.json").read_text(encoding="utf-8"))
+    assert [row["event_type"] for row in audit["records"]] == [
+        "governance_audit_rotation_config",
+        "governance_audit_export_rotation",
+    ]
+
+
 def test_trace_task_run_process_timeline_merges_review_and_ledger(
     tmp_path: Path,
 ) -> None:

@@ -8,6 +8,7 @@ import { SubtasksProvider } from "@/core/tasks/context";
 import { renderWithProviders } from "@/test/harness";
 
 import type { LiveToolEvent } from "../live-tool-timeline";
+import { AGENT_WORKBENCH_OPEN_EVENT } from "../agent-workbench-events";
 import { ThreadProviders } from "./context";
 import {
   MESSAGE_LIST_TIMEOUT_WARNING_MS,
@@ -258,19 +259,19 @@ describe("MessageList process trace lifecycle", () => {
 
     const savedStepToggles = screen.getAllByText("View 2 saved steps");
     expect(savedStepToggles).toHaveLength(2);
-    expect(screen.queryByText(/old market query/)).not.toBeInTheDocument();
+    expect(screen.getByText(/old market query/)).toBeInTheDocument();
     expect(
       screen.queryByText("Inspect the old market request."),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText(/latest market query/)).not.toBeInTheDocument();
+    expect(screen.getByText(/latest market query/)).toBeInTheDocument();
     expect(
       screen.queryByText("Inspect the latest market request."),
     ).not.toBeInTheDocument();
 
     fireEvent.click(savedStepToggles[0]!);
 
-    expect(screen.getByText(/old market query/)).toBeInTheDocument();
-    expect(screen.queryByText(/latest market query/)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/old market query/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/latest market query/)).toBeInTheDocument();
   });
 
   test("expands only the actively streaming process trace", () => {
@@ -319,9 +320,13 @@ describe("MessageList process trace lifecycle", () => {
     renderMessageList({ thread });
 
     expect(screen.getByText("View 2 saved steps")).toBeInTheDocument();
-    expect(screen.getByTestId("live-process-strip")).toBeInTheDocument();
-    expect(screen.queryByText(/old market query/)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/active market query/).length).toBe(2);
+    expect(
+      screen.getAllByTestId("process-timeline-event-execution").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText(/old market query/)).toBeInTheDocument();
+    expect(screen.getAllByText(/active market query/).length).toBeGreaterThan(
+      0,
+    );
     expect(
       screen.queryByText("Inspect the actively streaming market request."),
     ).not.toBeInTheDocument();
@@ -519,6 +524,24 @@ describe("MessageList reasoning privacy", () => {
     expect(screen.getByText(/\u601d\u8003\u8fc7\u7a0b/)).toBeInTheDocument();
     expect(screen.getByText(publicSummary)).toBeInTheDocument();
     expect(screen.queryByText(/SOUL\.md/)).not.toBeInTheDocument();
+
+    const opened: CustomEvent[] = [];
+    const handleOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+    const thinkingEvent = screen.getByTestId("assistant-thinking-event");
+    expect(thinkingEvent.className).not.toMatch(/\b(?:border|rounded|bg-)/);
+    expect(thinkingEvent).toHaveAttribute(
+      "data-process-event-id",
+      "assistant-public-summary",
+    );
+    fireEvent.click(thinkingEvent);
+    expect(opened.at(-1)?.detail).toEqual({
+      tab: "agent",
+      eventId: "assistant-public-summary",
+      eventKind: "thinking",
+      view: "summary",
+    });
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });
 });
 

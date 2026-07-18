@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { AIMessage, Message } from "@/core/api/types";
 import { renderWithProviders } from "@/test/harness";
 
+import { groupMessages } from "@/core/messages/utils";
+
+import { AGENT_WORKBENCH_OPEN_EVENT } from "../agent-workbench-events";
 import { hasVisibleMessageGroupContent, MessageGroup } from "./message-group";
 
 vi.mock("../artifacts", () => ({
@@ -89,7 +92,7 @@ describe("MessageGroup todo_write rendering", () => {
       screen.queryByText(/verification required/i),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("View 1 saved steps"));
+    fireEvent.click(screen.getByTitle("View 1 saved steps"));
 
     expect(screen.queryByText(/verification/i)).not.toBeInTheDocument();
     expect(
@@ -134,6 +137,85 @@ describe("MessageGroup todo_write rendering", () => {
 });
 
 describe("MessageGroup reasoning grouping", () => {
+  it("renders public checkpoints inline between thinking and execution", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "progress-1",
+        type: "ai",
+        content: "已确认流事件按消息、思考和执行三条通道归一化。",
+        additional_kwargs: {
+          public_progress: true,
+          progress_kind: "orient",
+          reasoning_content: "inspect the bridge",
+          grounding: [
+            {
+              kind: "source",
+              title: "realtime_event_bridge.py",
+              path: "runtime/sensing/gateway/realtime_event_bridge.py",
+            },
+          ],
+        },
+      },
+      {
+        id: "progress-2",
+        type: "ai",
+        content: "进一步确认执行完成后才会开启下一轮公开结论。",
+        additional_kwargs: {
+          public_progress: true,
+          progress_kind: "verify",
+          phase_id: "turn-1:progress:2",
+          parent_item_id: "read-bridge",
+          progress_sequence: 2,
+          reasoning_content: "inspect the reducer",
+        },
+        tool_calls: [
+          {
+            id: "read-bridge",
+            name: "read_file",
+            args: { path: "realtime_event_bridge.py" },
+          },
+        ],
+      },
+    ];
+
+    const groups = groupMessages(messages, (group) => group);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.type).toBe("assistant:processing");
+
+    renderWithProviders(<MessageGroup messages={messages} isLoading />, {
+      locale: "zh-CN",
+    });
+
+    const checkpoints = screen.getAllByTestId("public-progress-event");
+    expect(checkpoints).toHaveLength(2);
+    expect(checkpoints[0]).toHaveAttribute("data-progress-kind", "orient");
+    expect(checkpoints[1]).toHaveAttribute("data-progress-kind", "verify");
+    expect(checkpoints[1]).toHaveAttribute(
+      "data-phase-id",
+      "turn-1:progress:2",
+    );
+    expect(checkpoints[1]).toHaveAttribute(
+      "data-parent-item-id",
+      "read-bridge",
+    );
+    expect(checkpoints[1]).toHaveAttribute("data-progress-sequence", "2");
+    const groundingTrigger = screen.getByRole("button", {
+      name: "查阅了 1 处项目资料",
+    });
+    expect(checkpoints[0]).toContainElement(groundingTrigger);
+    expect(screen.getByText("定向")).toBeInTheDocument();
+    expect(screen.getByText("验证")).toBeInTheDocument();
+    expect(
+      screen.getByText("已确认流事件按消息、思考和执行三条通道归一化。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("进一步确认执行完成后才会开启下一轮公开结论。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("process-timeline-event-execution"),
+    ).toBeInTheDocument();
+  });
+
   it("keeps only the latest thinking step visible while streaming", () => {
     const messages: AIMessage[] = [
       {
@@ -155,28 +237,22 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    expect(screen.getByText("思考中")).toBeInTheDocument();
-    const replayToggle = screen.getByText("过程回放 1 步");
+    expect(
+      screen.getByTestId("process-timeline-event-thinking"),
+    ).toBeInTheDocument();
+    const replayToggle = screen.getByTitle("过程回放 1 步");
     const currentFrame = screen.getByText("再整理成可执行步骤");
     expect(replayToggle).toBeInTheDocument();
     expect(currentFrame).toBeInTheDocument();
-    expect(
-      replayToggle.compareDocumentPosition(currentFrame) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
     expect(screen.queryByText("先扫一遍上下文")).not.toBeInTheDocument();
     expect(screen.queryByText("01")).not.toBeInTheDocument();
     expect(screen.queryByText("02")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("过程回放 1 步"));
+    fireEvent.click(screen.getByTitle("过程回放 1 步"));
 
-    expect(screen.getByText("收起过程回放")).toBeInTheDocument();
+    expect(screen.getByTitle("收起过程回放")).toBeInTheDocument();
     const previousFrame = screen.getByText("先扫一遍上下文");
     expect(previousFrame).toBeInTheDocument();
-    expect(
-      previousFrame.compareDocumentPosition(currentFrame) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
   });
 
   it("keeps kept-open traces on the current frame and replays prior steps on demand", () => {
@@ -198,7 +274,7 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    expect(screen.getByText("Replay 3 previous steps")).toBeInTheDocument();
+    expect(screen.getByTitle("Replay 3 previous steps")).toBeInTheDocument();
     expect(screen.queryByText("01")).not.toBeInTheDocument();
     expect(screen.queryByText("03")).not.toBeInTheDocument();
     expect(
@@ -206,9 +282,9 @@ describe("MessageGroup reasoning grouping", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByText("Latest trace thought 4.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("Replay 3 previous steps"));
+    fireEvent.click(screen.getByTitle("Replay 3 previous steps"));
 
-    expect(screen.getByText("Hide process replay")).toBeInTheDocument();
+    expect(screen.getByTitle("Hide process replay")).toBeInTheDocument();
     expect(
       screen.getAllByText("Latest trace thought 1.").length,
     ).toBeGreaterThan(0);
@@ -232,20 +308,22 @@ describe("MessageGroup reasoning grouping", () => {
       locale: "en-US",
     });
 
-    expect(screen.getByText("Searching")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("process-timeline-event-execution"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Thought")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Let me search for more specific data on this."),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("Replay 1 previous steps"));
+    fireEvent.click(screen.getByTitle("Replay 1 previous steps"));
 
     expect(
       screen.queryByText("Let me search for more specific data on this."),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText("Search sources: AI Agent SMB opportunity"),
-    ).toBeInTheDocument();
+      screen.getAllByText("Search sources: AI Agent SMB opportunity").length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText(/web_search/)).not.toBeInTheDocument();
   });
 
@@ -278,16 +356,13 @@ describe("MessageGroup reasoning grouping", () => {
       locale: "en-US",
     });
 
-    fireEvent.click(screen.getByText("View 2 saved steps"));
+    fireEvent.click(screen.getByTitle("View 2 saved steps"));
 
     expect(screen.getByText("01")).toBeInTheDocument();
     expect(screen.getByText("02")).toBeInTheDocument();
     expect(screen.queryByText(new RegExp(hiddenTail))).not.toBeInTheDocument();
 
-    const [, nestedSummary] = screen.getAllByText(
-      /First I will inspect the request/,
-    );
-    fireEvent.click(nestedSummary!);
+    fireEvent.click(screen.getByText(/First I will inspect the request/));
 
     expect(screen.getByText(new RegExp(hiddenTail))).toBeInTheDocument();
   });
@@ -320,17 +395,19 @@ describe("MessageGroup reasoning grouping", () => {
       locale: "en-US",
     });
 
-    expect(screen.getByText("View 2 saved steps")).toBeInTheDocument();
+    expect(screen.getByTitle("View 2 saved steps")).toBeInTheDocument();
     expect(screen.queryByText("01")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(/laser engraving market 2025/),
-    ).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByText("View 2 saved steps"));
-
-    expect(screen.getByText("Hide saved steps")).toBeInTheDocument();
-    expect(screen.getByText("Clarify task direction")).toBeInTheDocument();
     expect(screen.getByText(/laser engraving market 2025/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle("View 2 saved steps"));
+
+    expect(screen.getByTitle("Hide saved steps")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Clarify task direction").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/laser engraving market 2025/).length,
+    ).toBeGreaterThan(0);
   });
 
   it("keeps completed code-mode traces behind the saved-steps disclosure", () => {
@@ -364,7 +441,7 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    expect(screen.getByText("View 2 saved steps")).toBeInTheDocument();
+    expect(screen.getByTitle("View 2 saved steps")).toBeInTheDocument();
     expect(
       screen.queryByText("Inspect the user request before editing."),
     ).not.toBeInTheDocument();
@@ -373,7 +450,7 @@ describe("MessageGroup reasoning grouping", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("collapses a live code-mode trace when the same turn becomes historical", () => {
+  it("keeps a live code-mode trace compact when the same turn becomes historical", () => {
     const messages: AIMessage[] = [
       {
         id: "ai-1",
@@ -404,20 +481,20 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    expect(screen.getByText("Hide process replay")).toBeInTheDocument();
-    expect(screen.getByText("Clarify task direction")).toBeInTheDocument();
+    expect(screen.getByTitle("Replay 1 previous steps")).toBeInTheDocument();
+    expect(screen.getByText(/frontend route structure/)).toBeInTheDocument();
 
     rerender(<MessageGroup codeMode messages={messages as never} />);
 
-    expect(screen.getByText("View 2 saved steps")).toBeInTheDocument();
-    expect(screen.queryByText("Hide saved steps")).not.toBeInTheDocument();
+    expect(screen.getByTitle("View 2 saved steps")).toBeInTheDocument();
+    expect(screen.queryByTitle("Hide saved steps")).not.toBeInTheDocument();
+    expect(screen.getByText("Clarify task direction")).toBeInTheDocument();
     expect(
-      screen.queryByText("Clarify task direction"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByTestId("live-process-strip")).not.toBeInTheDocument();
+      screen.getByTestId("interleaved-process-timeline"),
+    ).toBeInTheDocument();
   });
 
-  it("auto-expands code-mode traces while the turn is live", () => {
+  it("keeps code-mode traces compact while the turn is live", () => {
     const messages: AIMessage[] = [
       {
         id: "ai-1",
@@ -451,13 +528,12 @@ describe("MessageGroup reasoning grouping", () => {
     expect(
       screen.queryByText("Inspect the user request before editing."),
     ).not.toBeInTheDocument();
-    expect(screen.getByTestId("live-process-strip")).toBeInTheDocument();
-    expect(screen.getByText("Live process")).toBeInTheDocument();
-    expect(screen.getByText("Running")).toBeInTheDocument();
-    expect(screen.getByText("1 replay step")).toBeInTheDocument();
-    expect(screen.getByText("Hide process replay")).toBeInTheDocument();
-    expect(screen.getByText("Clarify task direction")).toBeInTheDocument();
-    expect(screen.getAllByText(/frontend route structure/).length).toBe(2);
+    expect(
+      screen.getByTestId("interleaved-process-timeline"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Live process")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Replay 1 previous steps")).toBeInTheDocument();
+    expect(screen.getByText(/frontend route structure/)).toBeInTheDocument();
   });
 
   it("shows the current action in chat mode without duplicating the code process strip", () => {
@@ -481,13 +557,15 @@ describe("MessageGroup reasoning grouping", () => {
       { locale: "zh-CN" },
     );
 
-    expect(screen.queryByTestId("live-process-strip")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("interleaved-process-timeline"),
+    ).toBeInTheDocument();
     expect(
       screen.getAllByText(/conversational streaming rhythm/).length,
     ).toBeGreaterThan(0);
   });
 
-  it("marks the live code process strip as waiting when user confirmation is needed", () => {
+  it("keeps a confirmation action compact in the live code timeline", () => {
     const messages: AIMessage[] = [
       {
         id: "ai-1",
@@ -510,10 +588,13 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    expect(screen.getByTestId("live-process-strip")).toBeInTheDocument();
-    expect(screen.getByText("实时进程")).toBeInTheDocument();
-    expect(screen.getByText("待确认")).toBeInTheDocument();
-    expect(screen.getByText("需要你的帮助")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("interleaved-process-timeline"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("process-timeline-event-execution"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("实时进程")).not.toBeInTheDocument();
   });
 
   it("keeps only the current frame visible when latest trace is kept open", () => {
@@ -547,16 +628,18 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    expect(screen.queryByText("View 2 saved steps")).not.toBeInTheDocument();
-    expect(screen.getByText("Replay 1 previous steps")).toBeInTheDocument();
+    expect(screen.queryByTitle("View 2 saved steps")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Replay 1 previous steps")).toBeInTheDocument();
     expect(
       screen.queryByText("First inspect the request."),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/laser engraving market 2025/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("Replay 1 previous steps"));
+    fireEvent.click(screen.getByTitle("Replay 1 previous steps"));
 
-    expect(screen.getByText("Clarify task direction")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Clarify task direction").length,
+    ).toBeGreaterThan(0);
   });
 
   it("keeps the lead-in before Phase 1 visible during live streaming", () => {
@@ -592,7 +675,7 @@ describe("MessageGroup reasoning grouping", () => {
     expect(
       screen.getByText("Phase 1: 先拆分候选细分赛道。"),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/过程回放/)).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/过程回放/)).not.toBeInTheDocument();
   });
 
   it("does not open a questionnaire for ordinary clarification text inside reasoning steps", () => {
@@ -650,13 +733,17 @@ describe("MessageGroup reasoning grouping", () => {
       locale: "zh-CN",
     });
 
-    expect(screen.getByText("过程回放 1 步")).toBeInTheDocument();
-    expect(screen.getByText("正在搜索")).toBeInTheDocument();
+    expect(screen.getByTitle("过程回放 1 步")).toBeInTheDocument();
+    expect(
+      screen.getAllByTestId("process-timeline-event-execution").length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText("思考中")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("过程回放 1 步"));
+    fireEvent.click(screen.getByTitle("过程回放 1 步"));
 
-    expect(screen.getByText("\u641c\u7d22\u8d44\u6599")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("\u641c\u7d22\u8d44\u6599").length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText("思考中")).not.toBeInTheDocument();
   });
 
@@ -683,11 +770,13 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    expect(screen.getByText("正在搜索")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("process-timeline-event-execution"),
+    ).toBeInTheDocument();
     expect(screen.getByText(/laser engraving market 2025/)).toBeInTheDocument();
   });
 
-  it("shows search results under each web search action", () => {
+  it("keeps search results out of the compact main timeline", () => {
     const messages: AIMessage[] = [
       {
         id: "ai-1",
@@ -724,9 +813,12 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    expect(screen.getByText("已搜索到 2 个网页")).toBeInTheDocument();
-    expect(screen.getByText("OpenClaw GitHub repo")).toBeInTheDocument();
-    expect(screen.getByText("OpenClaw docs")).toBeInTheDocument();
+    expect(screen.queryByText("已搜索到 2 个网页")).not.toBeInTheDocument();
+    expect(screen.queryByText("OpenClaw GitHub repo")).not.toBeInTheDocument();
+    expect(screen.queryByText("OpenClaw docs")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("process-timeline-event-execution"),
+    ).toBeInTheDocument();
   });
 
   it("keeps Action callback text out of thinking groups", () => {
@@ -754,10 +846,12 @@ describe("MessageGroup reasoning grouping", () => {
     expect(screen.queryByText("继续检查输出文件。")).not.toBeInTheDocument();
     expect(screen.getByText("执行动作")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("过程回放 1 步"));
+    fireEvent.click(screen.getByTitle("过程回放 1 步"));
 
-    expect(screen.getByText("整理调研结果")).toBeInTheDocument();
-    expect(screen.getByText("\u6267\u884c\u52a8\u4f5c")).toBeInTheDocument();
+    expect(screen.getAllByText("整理调研结果").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("\u6267\u884c\u52a8\u4f5c").length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText(/ipython/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Action:/)).not.toBeInTheDocument();
     expect(screen.queryByText("执行中")).not.toBeInTheDocument();
@@ -798,9 +892,11 @@ describe("MessageGroup reasoning grouping", () => {
 
     expect(screen.queryByText("已浏览目录")).not.toBeInTheDocument();
     expect(screen.queryByText("已读取")).not.toBeInTheDocument();
-    expect(screen.getByText("正在写入文件")).toBeInTheDocument();
+    expect(
+      screen.getAllByTestId("process-timeline-event-execution"),
+    ).toHaveLength(3);
 
-    fireEvent.click(screen.getByText("过程回放 2 步"));
+    fireEvent.click(screen.getByTitle("过程回放 2 步"));
 
     expect(screen.getByText("已浏览目录")).toBeInTheDocument();
     expect(screen.getByText("已读取")).toBeInTheDocument();
@@ -808,6 +904,108 @@ describe("MessageGroup reasoning grouping", () => {
 });
 
 describe("MessageGroup streaming lifecycle", () => {
+  it("interleaves thinking, answer, and execution as quiet timeline rows", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-thinking",
+        type: "ai",
+        content: [{ type: "thinking", thinking: "先确认需求和现有上下文" }],
+      },
+      {
+        id: "ai-answer-and-tool",
+        type: "ai",
+        content: "我先给你一个方向，同时继续检查实现。",
+        tool_calls: [
+          {
+            id: "read-1",
+            name: "read_file",
+            args: { path: "src/chat.tsx" },
+          },
+        ],
+      },
+    ];
+    const opened: CustomEvent[] = [];
+    const handleOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+
+    renderWithProviders(
+      <MessageGroup messages={messages as never} isLoading />,
+      { locale: "zh-CN" },
+    );
+
+    const thinking = screen.getByTestId("process-timeline-event-thinking");
+    const answer = screen.getByText("我先给你一个方向，同时继续检查实现。");
+    const execution = screen.getByTestId("process-timeline-event-execution");
+
+    expect(
+      thinking.compareDocumentPosition(answer) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      answer.compareDocumentPosition(execution) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(thinking.className).not.toMatch(/\b(?:border|rounded|bg-)/);
+    expect(execution.className).not.toMatch(/\b(?:border|rounded|bg-)/);
+    expect(thinking).toHaveAttribute("data-process-event-id", "ai-thinking");
+    expect(execution).toHaveAttribute("data-process-event-id", "read-1");
+
+    fireEvent.click(thinking);
+    expect(opened.at(-1)?.detail).toEqual({
+      tab: "agent",
+      eventId: "ai-thinking",
+      eventKind: "thinking",
+      view: "summary",
+    });
+    fireEvent.click(execution);
+    expect(opened.at(-1)?.detail).toEqual({
+      tab: "agent",
+      eventId: "read-1",
+      eventKind: "execution",
+      view: "trace",
+    });
+
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+  });
+
+  it("keeps a thinking checkpoint visible during a long tool run", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-thinking-anchor",
+        type: "ai",
+        content: [{ type: "thinking", thinking: "先梳理架构边界" }],
+      },
+      {
+        id: "ai-long-tool-run",
+        type: "ai",
+        content: "",
+        tool_calls: Array.from({ length: 8 }, (_, index) => ({
+          id: `read-${index}`,
+          name: "read_file",
+          args: { path: `src/file-${index}.ts` },
+        })),
+      },
+    ];
+
+    renderWithProviders(
+      <MessageGroup messages={messages as never} isLoading />,
+      { locale: "zh-CN" },
+    );
+
+    expect(
+      screen.getByTestId("process-timeline-event-thinking"),
+    ).toHaveAttribute("data-process-event-id", "ai-thinking-anchor");
+    const visibleExecutions = screen.getAllByTestId(
+      "process-timeline-event-execution",
+    );
+    expect(visibleExecutions).toHaveLength(3);
+    expect(
+      visibleExecutions.map((element) =>
+        element.getAttribute("data-process-event-id"),
+      ),
+    ).toEqual(["read-5", "read-6", "read-7"]);
+  });
+
   it("transitions from streaming to completed without losing tool calls", () => {
     const messages: AIMessage[] = [
       {
@@ -820,6 +1018,11 @@ describe("MessageGroup streaming lifecycle", () => {
             name: "web_search",
             args: { query: "test query" },
           },
+          {
+            id: "read-1",
+            name: "read_file",
+            args: { path: "notes.md" },
+          },
         ],
       },
       {
@@ -828,6 +1031,12 @@ describe("MessageGroup streaming lifecycle", () => {
         content: "search results here",
         tool_call_id: "search-1",
       },
+      {
+        id: "tool-2",
+        type: "tool",
+        content: "file content here",
+        tool_call_id: "read-1",
+      },
     ];
 
     const { rerender } = renderWithProviders(
@@ -835,13 +1044,14 @@ describe("MessageGroup streaming lifecycle", () => {
       { locale: "en-US" },
     );
 
-    expect(screen.getByText(/test query/)).toBeInTheDocument();
+    expect(screen.getAllByText(/notes\.md/).length).toBeGreaterThan(0);
 
     rerender(<MessageGroup messages={messages as never} />);
 
-    expect(screen.getByText("View 2 saved steps")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("View 2 saved steps"));
-    expect(screen.getByText(/test query/)).toBeInTheDocument();
+    expect(screen.getByTitle("View 2 saved steps")).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("View 2 saved steps"));
+    expect(screen.getAllByText(/test query/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/notes\.md/).length).toBeGreaterThan(0);
   });
 
   it("keeps reasoning content stable when streaming tokens arrive", () => {
@@ -855,7 +1065,10 @@ describe("MessageGroup streaming lifecycle", () => {
     ];
 
     const { rerender } = renderWithProviders(
-      <MessageGroup messages={makeMessages("Thinking about phase one")} isLoading />,
+      <MessageGroup
+        messages={makeMessages("Thinking about phase one")}
+        isLoading
+      />,
       { locale: "en-US" },
     );
 
@@ -935,67 +1148,85 @@ describe("MessageGroup streaming lifecycle", () => {
       { locale: "en-US" },
     );
 
-    expect(screen.getByTestId("live-process-strip")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("interleaved-process-timeline"),
+    ).toBeInTheDocument();
 
     rerender(<MessageGroup codeMode messages={messages as never} />);
 
-    expect(screen.queryByTestId("live-process-strip")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("interleaved-process-timeline"),
+    ).toBeInTheDocument();
   });
 
   it("preserves user-opened reasoning groups across streaming updates", () => {
-    const makeMessages = (reasoning: string): AIMessage[] => [
+    const makeMessages = (extraText: string): AIMessage[] => [
       {
         id: "ai-1",
         type: "ai",
-        content: "",
-        additional_kwargs: {
-          reasoning_content: [
-            "Reasoning step 1 with enough text to trigger nesting. ".repeat(12),
-            reasoning,
-          ].join("\n\n"),
-        },
+        content: [
+          {
+            type: "thinking",
+            thinking: "First thinking step that is visible.",
+          },
+        ],
       },
       {
         id: "ai-2",
         type: "ai",
-        content: "",
-        additional_kwargs: { reasoning_content: "Reasoning step 3" },
+        content: [
+          { type: "thinking", thinking: `Second thinking step. ${extraText}` },
+        ],
       },
     ];
 
     const { rerender } = renderWithProviders(
-      <MessageGroup messages={makeMessages("Reasoning step 2")} keepOpen />,
+      <MessageGroup messages={makeMessages("Initial")} keepOpen />,
       { locale: "en-US" },
     );
 
-    fireEvent.click(screen.getByText(/Replay \d+ previous steps/));
-    expect(screen.getByText(/Reasoning step 1/)).toBeInTheDocument();
-
-    const nestedTriggers = screen.getAllByText(/Reasoning step 1/);
-    const nestedTrigger = nestedTriggers.find(
-      (el) => el.closest("[data-state]") !== null,
+    expect(screen.getAllByText(/Second thinking step/).length).toBeGreaterThan(
+      0,
     );
-    if (nestedTrigger) {
-      fireEvent.click(nestedTrigger);
-      expect(screen.getByText(/Reasoning step 2/)).toBeInTheDocument();
-    }
+    fireEvent.click(screen.getByText(/Replay \d+ previous steps/));
+    expect(screen.getByText(/First thinking step/)).toBeInTheDocument();
+    expect(screen.getByText(/Hide process replay/)).toBeInTheDocument();
 
     rerender(
       <MessageGroup
-        messages={makeMessages("Reasoning step 2 extended")}
+        messages={makeMessages("Updated with more content")}
         keepOpen
       />,
     );
 
-    expect(screen.getByText(/Replay \d+ previous steps/)).toBeInTheDocument();
-    expect(screen.getByText(/Reasoning step 3/)).toBeInTheDocument();
+    expect(screen.getByText(/Hide process replay/)).toBeInTheDocument();
+    expect(screen.getByText(/First thinking step/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Second thinking step/).length).toBeGreaterThan(
+      0,
+    );
   });
 
-  it("handles mixed content + tool calls in the same AI message", () => {
+  it("groups mixed content + tool calls into processing + assistant groups", () => {
+    const longAnswer = [
+      "# Summary of findings",
+      "",
+      "Here is a detailed analysis that exceeds the final-answer threshold.",
+      "",
+      "1. First point about the research",
+      "2. Second point about the data",
+      "3. Third point about the conclusion",
+      "4. Fourth point with additional context",
+      "",
+      "This paragraph adds enough length to cross the 320-character threshold ",
+      "so the message is treated as a final answer rather than a preamble. ",
+      "The distinction matters because final answers render as standalone ",
+      "assistant content, while short preambles fold into the process timeline.",
+    ].join("\n");
+
     const message: AIMessage = {
       id: "ai-mixed",
       type: "ai",
-      content: "Let me look this up for you.",
+      content: longAnswer,
       tool_calls: [
         {
           id: "search-1",
@@ -1005,11 +1236,20 @@ describe("MessageGroup streaming lifecycle", () => {
       ],
     };
 
-    renderWithProviders(<MessageGroup messages={[message]} isLoading />, {
-      locale: "en-US",
-    });
+    const groups = groupMessages([message], (g) => g);
+    expect(groups.length).toBe(2);
+    expect(groups[0]?.type).toBe("assistant:processing");
+    expect(groups[1]?.type).toBe("assistant");
+    expect(groups[0]?.messages).toContain(message);
+    expect(groups[1]?.messages).toContain(message);
+
+    renderWithProviders(
+      <MessageGroup messages={groups[0]!.messages} isLoading />,
+      {
+        locale: "en-US",
+      },
+    );
 
     expect(screen.getByText(/reference docs/)).toBeInTheDocument();
-    expect(screen.getByText(/Let me look this up/)).toBeInTheDocument();
   });
 });

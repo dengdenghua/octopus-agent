@@ -420,6 +420,22 @@ function turnToMessages(turn: Turn): Message[] {
         if (am.agentIcon) {
           kwargs.agent_icon = am.agentIcon;
         }
+        if (am.phaseId) {
+          kwargs.phase_id = am.phaseId;
+        }
+        if (am.parentItemId) {
+          kwargs.parent_item_id = am.parentItemId;
+        }
+        if (typeof am.progressSequence === "number") {
+          kwargs.progress_sequence = am.progressSequence;
+        }
+        if (am.messageKind === "commentary") {
+          kwargs.public_progress = true;
+          kwargs.message_kind = "commentary";
+          if (am.progressKind) {
+            kwargs.progress_kind = am.progressKind;
+          }
+        }
         const ai: AIMessage = {
           type: "ai",
           id: am.id,
@@ -519,34 +535,45 @@ function turnToMessages(turn: Turn): Message[] {
   }
 
   flushPendingAsTrailingAi();
-  attachGroundingToLastAi(out, turn.grounding);
+  attachGroundingToNarrativeAnchor(out, turn.grounding);
   return out;
 }
 
 // Fold the turn's codebase grounding (project docs/chunks it was grounded on)
-// onto the final AI reply's ``additional_kwargs.grounding`` — the one channel
-// the chat actually renders — so message-list-item can show a grounding chip.
-// Attached once, to the last AI message (the final answer bubble).
-function attachGroundingToLastAi(
+// onto the latest investigation checkpoint before synthesis. That preserves
+// the causal order users actually experienced: orient/investigate → consulted
+// sources → synthesize → answer. Turns without public progress keep the legacy
+// fallback of attaching it to the final AI reply.
+function attachGroundingToNarrativeAnchor(
   messages: Message[],
   grounding: GroundingSource[] | undefined,
 ): void {
   if (!grounding || grounding.length === 0) return;
+  let fallbackIndex = -1;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (!message || message.type !== "ai") continue;
-    // Copy-on-write: the message object may be an identity-cached one
-    // shared with a previous mapping; mutating it in place would both
-    // corrupt that older snapshot and hide the change from React.memo.
-    messages[index] = {
-      ...message,
-      additional_kwargs: {
-        ...(message.additional_kwargs ?? {}),
-        grounding,
-      },
-    };
-    return;
+    if (fallbackIndex < 0) fallbackIndex = index;
+    const isNarrativeAnchor =
+      message.additional_kwargs?.public_progress === true &&
+      message.additional_kwargs?.progress_kind !== "synthesize";
+    if (isNarrativeAnchor) {
+      fallbackIndex = index;
+      break;
+    }
   }
+  if (fallbackIndex < 0) return;
+  const anchor = messages[fallbackIndex];
+  if (!anchor || anchor.type !== "ai") return;
+  // Copy-on-write: the message object may be an identity-cached one shared
+  // with a previous mapping; mutating it would hide the change from React.memo.
+  messages[fallbackIndex] = {
+    ...anchor,
+    additional_kwargs: {
+      ...(anchor.additional_kwargs ?? {}),
+      grounding,
+    },
+  };
 }
 
 function mergePendingIntoLastAiAnswer(
@@ -561,6 +588,12 @@ function mergePendingIntoLastAiAnswer(
     const message = messages[index];
     if (!message || message.type === "human") break;
     if (message.type !== "ai") continue;
+    // Commentary is a process checkpoint, never the delivered answer. A
+    // completed turn can still have trailing private reasoning (providers
+    // sometimes finish the reasoning item after the answer item); attaching
+    // that tail to commentary makes the adapter treat the checkpoint as if it
+    // were the terminal response and can hide the real answer downstream.
+    if (message.additional_kwargs?.public_progress === true) continue;
     if (!normalizeMessageTextForDedupe(message.content)) continue;
 
     const existing = message as AIMessage;
@@ -587,6 +620,7 @@ function isPostFinalStatusOnlyMessage(
     !out.some(
       (message) =>
         message.type === "ai" &&
+        message.additional_kwargs?.public_progress !== true &&
         normalizeMessageTextForDedupe(message.content).length >= 24,
     )
   ) {
@@ -643,11 +677,19 @@ function findDuplicateAiMessageIndex(
 ): number {
   const candidateText = normalizeMessageTextForDedupe(candidate.content);
   if (candidateText.length < 24) return -1;
+  const candidateIsProgress =
+    candidate.additional_kwargs?.public_progress === true;
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (!message || message.type === "human") break;
     if (message.type !== "ai") continue;
+    if (
+      (message.additional_kwargs?.public_progress === true) !==
+      candidateIsProgress
+    ) {
+      continue;
+    }
     const existingText = normalizeMessageTextForDedupe(message.content);
     if (!existingText) continue;
     if (existingText === candidateText) return index;

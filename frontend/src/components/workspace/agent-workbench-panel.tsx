@@ -14,6 +14,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
 import { TerminalPanel } from "@/components/workspace/terminal-panel";
+import type {
+  AgentWorkbenchEventView,
+  AgentWorkbenchProcessEventKind,
+} from "./agent-workbench-events";
 import type { LiveToolEvent } from "./live-tool-timeline";
 import {
   pickCurrentWorkBlock,
@@ -193,6 +197,10 @@ export function AgentWorkbenchPanel({
   focusedAgentId,
   focusedAgentView,
   focusedAgentNonce,
+  focusedEventId,
+  focusedEventKind,
+  focusedEventView,
+  focusedEventNonce,
   hasAnswer,
   isLoading,
   onSelectTab,
@@ -217,6 +225,11 @@ export function AgentWorkbenchPanel({
    * intent for the same agent (e.g. 查看过程 then 查看电脑 on one row) would be
    * swallowed by the consume-once guard below. */
   focusedAgentNonce?: number;
+  /** One-shot transcript navigation intent for an exact process event. */
+  focusedEventId?: string | null;
+  focusedEventKind?: AgentWorkbenchProcessEventKind | null;
+  focusedEventView?: AgentWorkbenchEventView | null;
+  focusedEventNonce?: number;
   hasAnswer?: boolean;
   /** A turn is in flight. The panel is otherwise driven purely by tool
    * events, so between "turn started" and "first tool ran" it has no
@@ -425,6 +438,52 @@ export function AgentWorkbenchPanel({
     setSelectedRosterSeatId(null);
     setActivityView(focusedAgentView ?? "screen");
   }, [focusedAgentId, focusedAgentView, focusedAgentNonce, agentTiles]);
+
+  // Transcript rows and workbench blocks share the tool-call event id. A
+  // click can therefore land on the exact replay frame instead of merely
+  // opening the panel. Thinking summaries intentionally have no private block
+  // payload, so they land on the public summary surface.
+  const consumedFocusedEventRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusedEventId && !focusedEventView) {
+      consumedFocusedEventRef.current = null;
+      return;
+    }
+    const intentKey = `${focusedEventNonce ?? 0}:${focusedEventKind ?? "event"}:${focusedEventId ?? "view"}:${focusedEventView ?? "summary"}`;
+    if (consumedFocusedEventRef.current === intentKey) return;
+
+    const targetBlock = focusedEventId
+      ? blocks.find(
+          (block) =>
+            block.id === focusedEventId || block.event.id === focusedEventId,
+        )
+      : null;
+    if (focusedEventKind === "execution" && focusedEventId && !targetBlock) {
+      // A tool-call message can render one frame before its workbench event.
+      // Keep the navigation intent pending until the shared event arrives.
+      return;
+    }
+
+    consumedFocusedEventRef.current = intentKey;
+    setSelectedRosterSeatId(null);
+    if (targetBlock) {
+      const targetAgent = agentTileForBlock(targetBlock, agentTiles);
+      setSelectedAgentId(targetAgent?.id ?? null);
+      setSelectedBlockId(targetBlock.id);
+      setManualBlockSelection(true);
+    } else {
+      setSelectedAgentId(null);
+      setManualBlockSelection(false);
+    }
+    setActivityView(focusedEventView ?? "summary");
+  }, [
+    agentTiles,
+    blocks,
+    focusedEventId,
+    focusedEventKind,
+    focusedEventNonce,
+    focusedEventView,
+  ]);
 
   const visibleRosterSeats = useMemo(() => {
     const runningAgentIds = new Set(
@@ -1053,7 +1112,10 @@ export function AgentWorkbenchPanel({
               <div className="relative mb-3.5">
                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent blur-lg" />
                 <div className="relative flex size-12 items-center justify-center rounded-2xl border border-border-default/50 bg-gradient-to-br from-card to-muted/20 shadow-[var(--shadow-xs)]">
-                  <MonitorIcon className="size-5 text-muted-foreground/50" strokeWidth={1.5} />
+                  <MonitorIcon
+                    className="size-5 text-muted-foreground/50"
+                    strokeWidth={1.5}
+                  />
                 </div>
               </div>
               <p className="text-sm font-medium text-muted-foreground/80">

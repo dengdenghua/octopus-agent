@@ -13,6 +13,7 @@ import {
   hasSubagent,
   hasToolCalls,
   isClarificationToolMessage,
+  isLikelyFinalAnswerContent,
   parseUploadedFiles,
   stripUploadedFilesTag,
 } from "./utils";
@@ -485,6 +486,93 @@ describe("message predicates", () => {
     ).toBe(true);
     expect(
       isClarificationToolMessage({ type: "tool", name: "search" } as Message),
+    ).toBe(false);
+  });
+});
+
+describe("isLikelyFinalAnswerContent", () => {
+  it("returns false for empty content", () => {
+    expect(
+      isLikelyFinalAnswerContent({ type: "ai", content: "" } as Message),
+    ).toBe(false);
+  });
+
+  it("returns true for content longer than 320 chars", () => {
+    const longText = "a".repeat(321);
+    expect(
+      isLikelyFinalAnswerContent({ type: "ai", content: longText } as Message),
+    ).toBe(true);
+  });
+
+  it("returns true for content with markdown heading", () => {
+    expect(
+      isLikelyFinalAnswerContent({
+        type: "ai",
+        content: "# Summary\n\nSome text",
+      } as Message),
+    ).toBe(true);
+    expect(
+      isLikelyFinalAnswerContent({
+        type: "ai",
+        content: "## Section\n\nMore text",
+      } as Message),
+    ).toBe(true);
+    expect(
+      isLikelyFinalAnswerContent({
+        type: "ai",
+        content: "### Subsection\n\nDetails",
+      } as Message),
+    ).toBe(true);
+  });
+
+  it("returns false for short plain text", () => {
+    expect(
+      isLikelyFinalAnswerContent({ type: "ai", content: "Hello" } as Message),
+    ).toBe(false);
+  });
+
+  it("returns true for Chinese numbered lists", () => {
+    expect(
+      isLikelyFinalAnswerContent({
+        type: "ai",
+        content: "一、第一项\n二、第二项\n三、第三项\n四、第四项",
+      } as Message),
+    ).toBe(true);
+  });
+
+  it("returns true for numbered lists with 4+ lines", () => {
+    expect(
+      isLikelyFinalAnswerContent({
+        type: "ai",
+        content: "1. First\n2. Second\n3. Third\n4. Fourth",
+      } as Message),
+    ).toBe(true);
+  });
+
+  it("returns false for numbered lists with fewer than 4 lines", () => {
+    expect(
+      isLikelyFinalAnswerContent({
+        type: "ai",
+        content: "1. First\n2. Second\n3. Third",
+      } as Message),
+    ).toBe(false);
+  });
+
+  it("returns true for markdown tables", () => {
+    expect(
+      isLikelyFinalAnswerContent({
+        type: "ai",
+        content: "| Name | Value |\n|------|-------|\n| A    | 1     |",
+      } as Message),
+    ).toBe(true);
+  });
+
+  it("returns false for pipe characters without table separator", () => {
+    expect(
+      isLikelyFinalAnswerContent({
+        type: "ai",
+        content: "a | b | c",
+      } as Message),
     ).toBe(false);
   });
 });

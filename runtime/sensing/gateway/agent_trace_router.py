@@ -795,6 +795,67 @@ def create_agent_trace_router(
             audit_path=promotion_audit_path or _default_promotion_audit_path(),
         )
 
+    @router.get("/api/agent-trace/review-queue/promotions/audit/rotation")
+    def api_agent_trace_governance_audit_rotation_status(
+        request: Request,
+    ) -> dict[str, Any]:
+        _auth(request, force=True)
+        from runtime.safety.evolution.governance_audit_rotation import (
+            governance_audit_rotation_status,
+        )
+
+        return governance_audit_rotation_status(
+            audit_path=promotion_audit_path or _default_promotion_audit_path(),
+        )
+
+    @router.post("/api/agent-trace/review-queue/promotions/audit/rotation")
+    def api_agent_trace_governance_audit_rotation_configure(
+        request: Request,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        actor = _auth(request, force=True) or "local_operator"
+        body = payload or {}
+        if body.get("confirm_rotation") is not True:
+            raise HTTPException(400, "confirm_rotation=true is required")
+        from runtime.safety.evolution.governance_audit_rotation import (
+            configure_governance_audit_rotation,
+            governance_audit_rotation_status,
+        )
+
+        try:
+            config = configure_governance_audit_rotation(
+                enabled=body.get("enabled") is True,
+                cron_expression=str(body.get("cron_expression") or "0 2 * * *"),
+                retention_count=int(body.get("retention_count") or 30),
+                actor=actor,
+                audit_path=promotion_audit_path or _default_promotion_audit_path(),
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from None
+        status = governance_audit_rotation_status(
+            audit_path=promotion_audit_path or _default_promotion_audit_path(),
+        )
+        return {"ok": True, "config": config, "status": status}
+
+    @router.post("/api/agent-trace/review-queue/promotions/audit/rotation/run")
+    def api_agent_trace_governance_audit_rotation_run(
+        request: Request,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        actor = _auth(request, force=True) or "local_operator"
+        body = payload or {}
+        if body.get("confirm_export") is not True:
+            raise HTTPException(400, "confirm_export=true is required")
+        from runtime.safety.evolution.governance_audit_rotation import (
+            run_due_governance_audit_rotation,
+        )
+
+        return run_due_governance_audit_rotation(
+            force=body.get("force") is True,
+            actor=actor,
+            audit_path=promotion_audit_path or _default_promotion_audit_path(),
+        )
+
     @router.get("/api/agent-trace/approvals")
     def api_agent_trace_approvals(
         thread_id: str | None = Query(default=None),

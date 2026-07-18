@@ -81,6 +81,16 @@ def _agentic_stream_event_to_react_event(
 
     if kind == "text":
         return {"type": "text_delta", "delta": str(delta or "")}
+    if kind == "commentary":
+        from runtime.core.cerebrum.react_loop import _public_update_kind
+
+        text = str(delta or "")
+        return {
+            "type": "commentary_delta",
+            "delta": text,
+            "progress_kind": _public_update_kind(text),
+            "progress_source": "model",
+        }
     if kind == "reasoning":
         return {"type": "thinking_delta", "delta": str(delta or "")}
     if kind == "tool_start" and isinstance(delta, dict):
@@ -642,6 +652,7 @@ async def _drive_react(
             return
 
     watcher = asyncio.create_task(_interrupt_watcher())
+    saw_terminal_event = False
     try:
         loop_started = time.monotonic()
         while True:
@@ -659,6 +670,13 @@ async def _drive_react(
                 continue
             if evt is None:
                 break
+            if evt.get("type") in {
+                "react_completed",
+                "react_cancelled",
+                "react_paused",
+                "react_error",
+            }:
+                saw_terminal_event = True
             if emitter.is_turn_interrupted(turn.id):
                 if not cancel_source.is_cancelled:
                     cancel_source.cancel(reason="user interrupted turn")
@@ -696,6 +714,43 @@ async def _drive_react(
 
     # Finalize anything still open. Wrapped in suppress so a torn-
     # down ws doesn't take the whole turn-completion path with it.
+    if not saw_terminal_event and turn.status == TurnStatus.IN_PROGRESS:
+        answer_text = (
+            str(state.agent_message.text or "").strip() if state.agent_message is not None else ""
+        )
+        if answer_text:
+            # Some provider adapters finish after yielding the complete
+            # text_delta stream but omit the trailing react_completed event.
+            # The answer item is already user-visible and is stronger terminal
+            # evidence than the generator's empty return value; finalize it as
+            # success instead of appending a contradictory error card.
+            await runtime._apply_react_event(
+                turn,
+                log,
+                emitter,
+                state,
+                {"type": "react_completed", "recovered_from_text": True},
+            )
+        else:
+            # A generator that returns ``None`` without a terminal event used
+            # to make any earlier tool/commentary item count as a successful
+            # turn, leaving the user with progress fragments and no final
+            # answer. Fail explicitly while preserving those fragments for a
+            # later Continue.
+            await runtime._apply_react_event(
+                turn,
+                log,
+                emitter,
+                state,
+                {
+                    "type": "react_error",
+                    "kind": "missing_terminal_answer",
+                    "message": (
+                        "模型执行已结束，但没有生成可确认的最终答案。阶段进度已保留；"
+                        "请点击继续重新收敛，或切换模型后重试。"
+                    ),
+                },
+            )
     with contextlib.suppress(Exception):
         await state.flush(turn, log, emitter)
     if turn.status == TurnStatus.IN_PROGRESS:
@@ -726,7 +781,30 @@ async def _apply_react_event(
     runtime._record_react_trace_event(turn, evt)
     kind = evt.get("type")
     if kind == "text_delta":
+        # Transport-level narrative invariant: once a turn has shown public
+        # progress, the polished answer must not appear as an abrupt jump from
+        # the last investigation/execution checkpoint. Some provider paths
+        # (notably pre-grounded, non-tool final responses) bypass the loop's
+        # synthesis emitter, so close that semantic gap here before the first
+        # answer token reaches the client.
+        if state.public_narrative_started and not state.synthesis_seen:
+            await state.append_commentary(
+                turn,
+                log,
+                emitter,
+                "现有信息已经够了；我现在把关键点收束成最终回答。",
+                progress_kind="synthesize",
+            )
         await state.append_agent_message(turn, log, emitter, evt.get("delta", ""))
+        return
+    if kind == "commentary_delta":
+        await state.append_commentary(
+            turn,
+            log,
+            emitter,
+            evt.get("delta", ""),
+            progress_kind=evt.get("progress_kind"),
+        )
         return
     if kind == "thinking_delta":
         await state.append_reasoning(turn, log, emitter, evt.get("delta", ""))

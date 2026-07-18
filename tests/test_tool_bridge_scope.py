@@ -1,5 +1,7 @@
 import contextvars
 import json
+import threading
+import time
 from types import SimpleNamespace
 
 import runtime.sensing.gateway.tool_bridge as tool_bridge
@@ -1025,9 +1027,7 @@ def test_agentic_code_change_cannot_finalize_after_failed_verification():
     assert router.requests[0].require_tool_use is True
     assert router.requests[-1].require_tool_use is False
     retry_prompt = "\n".join(
-        str(message.content)
-        for message in router.requests[3].messages
-        if message.role == "user"
+        str(message.content) for message in router.requests[3].messages if message.role == "user"
     )
     assert "implementation not verified" in retry_prompt
     assert "latest verification failed" in retry_prompt.lower()
@@ -1099,6 +1099,85 @@ def test_agentic_code_change_does_not_treat_lint_as_behavior_verification():
     assert router.requests[-1].require_tool_use is False
     assert "lint passed" not in "".join(event[1] for event in events if event[0] == "text")
     assert events[-1] == ("done", "", "verified")
+
+
+def test_agentic_double_green_converges_through_todo_without_redundant_probe():
+    registry = SkillRegistry()
+    for name, affinity in (
+        ("todo_write", ["meta"]),
+        ("edit_file", ["file", "edit"]),
+        ("run_tests", ["quality", "test"]),
+        ("lint_check", ["quality", "lint"]),
+    ):
+        registry.register(
+            Skill(
+                name=name,
+                description=name,
+                affinity=affinity,
+                trusted_source=f"skill://public/{name}",
+                handler=lambda **_kwargs: {"success": True, "exit_code": 0},
+            ),
+            verify_tests=False,
+        )
+
+    class Router:
+        def __init__(self):
+            self.calls = 0
+            self.requests = []
+
+        def call_stream(self, request):
+            self.calls += 1
+            self.requests.append(request)
+            if self.calls == 1:
+                call = ToolCall(id="todo-start", name="todo_write", input={"items": []})
+                yield ModelStreamEvent(type="tool_use", tool_call=call)
+            elif self.calls == 2:
+                call = ToolCall(id="edit", name="edit_file", input={"path": "cache.py"})
+                yield ModelStreamEvent(type="tool_use", tool_call=call)
+            elif self.calls == 3:
+                call = ToolCall(id="tests", name="run_tests", input={})
+                yield ModelStreamEvent(type="tool_use", tool_call=call)
+            elif self.calls == 4:
+                call = ToolCall(id="lint", name="lint_check", input={})
+                yield ModelStreamEvent(type="tool_use", tool_call=call)
+            elif self.calls == 5:
+                allowed = [tool.name for tool in request.tools]
+                if allowed == ["todo_write"]:
+                    call = ToolCall(id="todo-done", name="todo_write", input={"items": []})
+                else:  # Regression shape: the old loop allowed another test probe.
+                    call = ToolCall(id="redundant-tests", name="run_tests", input={})
+                yield ModelStreamEvent(type="tool_use", tool_call=call)
+            else:
+                yield ModelStreamEvent(type="text_delta", delta="done")
+            yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+
+    router = Router()
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=router, planner_model="mock"),
+    )
+    intent = ParsedIntent(
+        raw="implement and verify the cache behavior",
+        intent_type="task",
+        normalized_goal="implement and verify the cache behavior",
+        user_context={"conversation_id": "green-convergence", "metadata": {"mode": "code"}},
+    )
+    agent = SimpleNamespace(
+        agent_id="coder",
+        capabilities={"code_mode_unlock": True},
+        extra_skills=["todo_write", "edit_file", "run_tests", "lint_check"],
+        soul="",
+    )
+
+    events = list(stream_agentic_fallback(stack, intent, agent))
+
+    started = [event[1]["name"] for event in events if event[0] == "tool_start"]
+    assert started == ["todo_write", "edit_file", "run_tests", "lint_check", "todo_write"]
+    assert [tool.name for tool in router.requests[4].tools] == ["todo_write"]
+    assert router.requests[4].require_tool_use is True
+    assert router.requests[5].tools == []
+    assert router.requests[5].require_tool_use is False
+    assert events[-1] == ("done", "", "done")
 
 
 def test_agentic_code_change_cannot_finalize_without_any_mutation():
@@ -1204,9 +1283,7 @@ def test_agentic_code_change_cannot_finalize_without_any_mutation():
     assert router.calls == 6
     assert events[-1] == ("done", "", "done")
     retry_prompt = "\n".join(
-        str(message.content)
-        for message in router.requests[2].messages
-        if message.role == "user"
+        str(message.content) for message in router.requests[2].messages if message.role == "user"
     )
     assert "No successful source or regression-test mutation" in retry_prompt
 
@@ -1266,9 +1343,7 @@ def test_agentic_code_change_switches_model_after_two_no_action_stops(monkeypatc
     monkeypatch.setattr(
         tool_bridge,
         "_next_custom_model_fallback",
-        lambda _current, attempted: (
-            "deepseek-chat" if "deepseek-chat" not in attempted else None
-        ),
+        lambda _current, attempted: "deepseek-chat" if "deepseek-chat" not in attempted else None,
     )
     router = Router()
     stack = SimpleNamespace(
@@ -1350,9 +1425,7 @@ def test_agentic_code_prompt_asserts_real_tool_availability():
     list(stream_agentic_fallback(stack, intent, agent, model="mock"))
 
     system_text = "\n".join(
-        str(message.content)
-        for message in router.requests[0].messages
-        if message.role == "system"
+        str(message.content) for message in router.requests[0].messages if message.role == "system"
     )
     assert "These tools are enabled in this turn" in system_text
     assert "`read_file`" in system_text
@@ -1422,3 +1495,288 @@ def test_agentic_stream_prompts_for_user_decision_at_round_cap(monkeypatch):
         "",
         "Reached the work limit. Reply `继续` or `生成报告`.",
     )
+
+
+def test_narrow_remote_research_forces_final_after_soft_budget(monkeypatch):
+    monkeypatch.setattr(tool_bridge, "NARROW_WEB_RESEARCH_ROUND_BUDGET", 2)
+
+    class Router:
+        def __init__(self):
+            self.requests = []
+
+        def call_stream(self, request):
+            self.requests.append(request)
+            if request.tools:
+                yield ModelStreamEvent(
+                    type="tool_use",
+                    tool_call=ToolCall(
+                        id=f"web-{len(self.requests)}",
+                        name="web_search",
+                        input={"query": "Codex CLI interrupt official source"},
+                    ),
+                )
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            yield ModelStreamEvent(
+                type="text_delta",
+                delta="Press Esc to interrupt the current task. Source: OpenAI docs.",
+            )
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(
+                    text="Press Esc to interrupt the current task. Source: OpenAI docs."
+                ),
+            )
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="web_search",
+            description="Search the web.",
+            trusted_source="skill://public/web_search",
+            handler=lambda **_kwargs: {
+                "title": "Codex CLI features",
+                "url": "https://developers.openai.com/codex/cli/features",
+            },
+        ),
+        verify_tests=False,
+    )
+    router = Router()
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=router, planner_model="mock"),
+    )
+    goal = (
+        "Find one official source and answer in one sentence. "
+        "Do not read local project files or execute local commands."
+    )
+    intent = ParsedIntent(
+        raw=goal,
+        intent_type="task",
+        normalized_goal=goal,
+        user_context={"conversation_id": "narrow-web-budget"},
+    )
+
+    web_agent = SimpleNamespace(
+        agent_id="researcher",
+        capabilities={"code_mode_unlock": True},
+        extra_skills=["web_search"],
+        soul="",
+    )
+    events = list(stream_agentic_fallback(stack, intent, web_agent))
+
+    assert len(router.requests) == 3
+    assert router.requests[0].tools
+    assert router.requests[1].tools
+    assert router.requests[2].tools == []
+    assert any(
+        "evidence budget reached" in str(message.content)
+        for message in router.requests[2].messages
+        if message.role == "user"
+    )
+    assert any(event[0] == "commentary" and "证据收集预算" in event[1] for event in events)
+    assert events[-1] == (
+        "done",
+        "",
+        "Press Esc to interrupt the current task. Source: OpenAI docs.",
+    )
+
+
+def test_native_tool_round_budget_preserves_more_room_for_long_work():
+    narrow = tool_bridge._native_tool_round_budget(
+        "Find one official source and give a brief conclusion",
+        workspace_contract="no_local_access",
+        code_change_task=False,
+    )
+    research = tool_bridge._native_tool_round_budget(
+        "Research and compare eight reliable web sources",
+        workspace_contract="no_local_access",
+        code_change_task=False,
+    )
+    code = tool_bridge._native_tool_round_budget(
+        "Implement the change and verify it",
+        workspace_contract=None,
+        code_change_task=True,
+    )
+
+    assert narrow < research < code < tool_bridge.MAX_TOOL_ROUNDS
+
+
+def test_native_model_stream_deadline_recovers_from_silent_provider():
+    release = threading.Event()
+
+    class Router:
+        def call_stream(self, _request):
+            release.wait(timeout=2)
+            yield ModelStreamEvent(type="done", final=ModelResponse(text="late"))
+
+    started = time.monotonic()
+    events = list(
+        tool_bridge._iter_native_model_stream_with_deadline(
+            Router(),
+            object(),
+            0.03,
+        )
+    )
+    elapsed = time.monotonic() - started
+    release.set()
+
+    assert events == [tool_bridge._NATIVE_STREAM_DEADLINE]
+    assert elapsed < 0.5
+
+
+def test_agentic_timeout_emits_public_recovery_then_forces_final(monkeypatch):
+    monkeypatch.setattr(tool_bridge, "_native_model_round_timeout_s", lambda: 0.03)
+
+    class Router:
+        def call_stream(self, request):
+            if request.tools:
+                threading.Event().wait(timeout=1)
+                return
+            yield ModelStreamEvent(type="text_delta", delta="Final from saved evidence.")
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(text="Final from saved evidence."),
+            )
+
+    intent = ParsedIntent(
+        raw="research the interaction",
+        intent_type="task",
+        normalized_goal="research the interaction",
+        user_context={"conversation_id": "timeout-thread"},
+    )
+
+    events = list(stream_agentic_fallback(_stack(Router()), intent, _agent()))
+
+    commentary_index = next(i for i, event in enumerate(events) if event[0] == "commentary")
+    text_index = next(i for i, event in enumerate(events) if event[0] == "text")
+    assert commentary_index < text_index
+    assert "超过单轮时限" in events[commentary_index][1]
+    assert events[-1] == ("done", "", "Final from saved evidence.")
+
+
+def test_agentic_tool_preamble_becomes_commentary_before_execution():
+    class Router:
+        def __init__(self):
+            self.round = 0
+
+        def call_stream(self, _request):
+            self.round += 1
+            if self.round == 1:
+                yield ModelStreamEvent(
+                    type="text_delta",
+                    delta="I confirmed the scope; now I will inspect the directory.",
+                )
+                yield ModelStreamEvent(
+                    type="tool_use",
+                    tool_call=ToolCall(
+                        id="tool-1",
+                        name="list_cwd",
+                        input={"path": "."},
+                    ),
+                )
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            yield ModelStreamEvent(type="text_delta", delta="Inspection complete.")
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(text="Inspection complete."),
+            )
+
+    intent = ParsedIntent(
+        raw="inspect the directory",
+        intent_type="task",
+        normalized_goal="inspect the directory",
+        user_context={"conversation_id": "commentary-thread"},
+    )
+
+    events = list(stream_agentic_fallback(_stack(Router()), intent, _agent()))
+
+    commentary_index = next(i for i, event in enumerate(events) if event[0] == "commentary")
+    tool_index = next(i for i, event in enumerate(events) if event[0] == "tool_start")
+    synthesis_index = next(
+        i
+        for i, event in enumerate(events)
+        if event[0] == "commentary" and "收束成最终回答" in event[1]
+    )
+    text_index = next(i for i, event in enumerate(events) if event[0] == "text")
+    assert commentary_index < tool_index
+    assert tool_index < synthesis_index < text_index
+    assert "confirmed the scope" in events[commentary_index][1]
+
+
+def test_native_result_checkpoint_extracts_real_source_titles():
+    calls = [
+        ToolCall(
+            id="search-1",
+            name="web_search",
+            input={"query": "Codex interrupt interaction"},
+        )
+    ]
+    blocks = [
+        {
+            "type": "tool_result",
+            "tool_use_id": "search-1",
+            "content": json.dumps(
+                {
+                    "results": [
+                        {"title": "Codex CLI features and interaction"},
+                        {"title": "Claude Code interactive mode"},
+                    ]
+                }
+            ),
+        }
+    ]
+
+    checkpoint = tool_bridge._native_result_checkpoint(calls, blocks)
+
+    assert "《Codex CLI features and interaction》" in checkpoint
+    assert "《Claude Code interactive mode》" in checkpoint
+    assert "真实工具结果" in checkpoint
+
+
+def test_no_local_access_contract_removes_local_and_delegation_tools():
+    specs = [
+        SimpleNamespace(name="web_search"),
+        SimpleNamespace(name="web_fetch"),
+        SimpleNamespace(name="todo_write"),
+        SimpleNamespace(name="list_cwd"),
+        SimpleNamespace(name="read_file"),
+        SimpleNamespace(name="exec_shell"),
+        SimpleNamespace(name="call_agent"),
+        SimpleNamespace(name="write_text_file"),
+    ]
+
+    filtered, contract = tool_bridge._filter_tool_specs_for_workspace_contract(
+        specs,
+        "只做网页调研，不要读取、修改或创建任何本地文件。",
+    )
+
+    assert contract == "no_local_access"
+    assert {spec.name for spec in filtered} == {
+        "web_search",
+        "web_fetch",
+        "todo_write",
+    }
+
+
+def test_read_only_contract_keeps_inspection_but_removes_mutation_tools():
+    specs = [
+        SimpleNamespace(name="list_cwd"),
+        SimpleNamespace(name="read_file"),
+        SimpleNamespace(name="web_search"),
+        SimpleNamespace(name="edit_file"),
+        SimpleNamespace(name="exec_shell"),
+    ]
+
+    filtered, contract = tool_bridge._filter_tool_specs_for_workspace_contract(
+        specs,
+        "只读分析当前仓库，不要修改任何文件。",
+    )
+
+    assert contract == "read_only"
+    assert {spec.name for spec in filtered} == {
+        "list_cwd",
+        "read_file",
+        "web_search",
+    }

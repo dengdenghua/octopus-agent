@@ -3,6 +3,7 @@ import "katex/dist/katex.min.css";
 import {
   FileIcon,
   Loader2Icon,
+  PanelRightOpenIcon,
   PencilIcon,
   RefreshCwIcon,
   ThumbsDownIcon,
@@ -15,7 +16,6 @@ import {
   useMemo,
   type ComponentProps,
   type ImgHTMLAttributes,
-  type ReactNode,
 } from "react";
 import { toast } from "sonner";
 
@@ -25,12 +25,6 @@ import {
   MessageContent as AIElementMessageContent,
   MessageResponse as AIElementMessageResponse,
 } from "@/components/ai-elements/message";
-import {
-  Reasoning,
-  ReasoningTrigger,
-  useReasoning,
-} from "@/components/ai-elements/reasoning";
-import { CollapsibleContent } from "@/components/ui/collapsible";
 import { Task, TaskTrigger } from "@/components/ai-elements/task";
 import { Badge } from "@/components/ui/badge";
 import { resolveArtifactURL } from "@/core/artifacts/utils";
@@ -50,6 +44,7 @@ import { useHumanMessagePlugins } from "@/core/streamdown";
 import { cn } from "@/lib/utils";
 
 import { CopyButton } from "../copy-button";
+import { emitOpenAgentWorkbench } from "../agent-workbench-events";
 import {
   ExecutionPlanReview,
   isExecutionPlanMessage,
@@ -206,84 +201,52 @@ type MarkdownRenderProps = Pick<
   "components" | "rehypePlugins" | "chatFontSize"
 >;
 
-function ReasoningMarkdown({
-  content,
-  isLoading,
-  rehypePlugins,
-  components,
-  chatFontSize,
-}: MarkdownRenderProps & {
-  content: string;
-  isLoading: boolean;
-}) {
-  return (
-    <MarkdownContent
-      content={content}
-      isLoading={isLoading}
-      rehypePlugins={rehypePlugins}
-      components={components}
-      chatFontSize={chatFontSize}
-      className="my-0 text-sm"
-    />
-  );
-}
-
 function SegmentedReasoningPanel({
   publicThinkingSummary,
   isLoading,
-  rehypePlugins,
-  components,
-  chatFontSize,
+  messageId,
 }: MarkdownRenderProps & {
   publicThinkingSummary?: string | null;
   isLoading: boolean;
+  messageId?: string;
 }) {
   const { t } = useI18n();
   const replyThinking = publicThinkingSummary?.trim() || null;
   if (!replyThinking) return null;
+  const summary = replyThinking.replace(/\s+/g, " ").trim();
 
   return (
-    <Reasoning
-      isStreaming={isLoading}
-      defaultOpen={isLoading}
-      className="mb-4 rounded-lg bg-transparent px-1 py-1"
+    <button
+      type="button"
+      onClick={() =>
+        emitOpenAgentWorkbench({
+          tab: "agent",
+          eventId: messageId,
+          eventKind: "thinking",
+          view: "summary",
+        })
+      }
+      className="group/thinking-row mb-1 flex w-full min-w-0 items-center gap-1.5 py-0.5 text-left text-[11px] leading-4 text-muted-foreground/55 transition-colors hover:text-muted-foreground"
+      data-process-event-id={messageId}
+      data-process-event-kind="thinking"
+      data-testid="assistant-thinking-event"
+      aria-label={`${t.message.thinkingProcess}: ${summary}`}
     >
-      <ReasoningTrigger
-        className="px-2 py-1.5"
-        getThinkingMessage={() => <span>{t.message.thinkingProcess}</span>}
+      <span
+        className={cn(
+          "inline-flex size-1.5 shrink-0 rounded-full bg-muted-foreground/35",
+          isLoading && "animate-pulse bg-primary/55",
+        )}
       />
-      <SegmentedReasoningContent>
-        <div className="space-y-2">
-          {replyThinking && (
-            <div className="px-2 py-1">
-              <ReasoningMarkdown
-                content={replyThinking}
-                isLoading={isLoading}
-                rehypePlugins={rehypePlugins}
-                components={components}
-                chatFontSize={chatFontSize}
-              />
-            </div>
-          )}
-        </div>
-      </SegmentedReasoningContent>
-    </Reasoning>
-  );
-}
-
-function SegmentedReasoningContent({ children }: { children: ReactNode }) {
-  const { isStreaming } = useReasoning();
-
-  return (
-    <CollapsibleContent
-      className={cn(
-        "mt-1 overflow-hidden rounded-md py-1 text-sm",
-        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 data-[state=closed]:animate-out data-[state=open]:animate-in outline-none",
-        isStreaming && "shadow-[inset_2px_0_0_0_var(--primary)]",
-      )}
-    >
-      {children}
-    </CollapsibleContent>
+      <span className="shrink-0 font-medium text-muted-foreground/70">
+        {t.message.thinkingProcess}
+      </span>
+      <span aria-hidden="true" className="shrink-0 opacity-35">
+        ·
+      </span>
+      <span className="min-w-0 flex-1 truncate">{summary}</span>
+      <PanelRightOpenIcon className="size-3 shrink-0 opacity-0 transition-opacity group-hover/thinking-row:opacity-50" />
+    </button>
   );
 }
 
@@ -699,6 +662,7 @@ function MessageContent_({
         <SegmentedReasoningPanel
           publicThinkingSummary={publicThinkingSummary}
           isLoading={isLoading}
+          messageId={message.id}
           rehypePlugins={allRehypePlugins}
           components={components}
           chatFontSize={chatFontSize}
@@ -721,6 +685,7 @@ function MessageContent_({
       <SegmentedReasoningPanel
         publicThinkingSummary={publicThinkingSummary}
         isLoading={isLoading}
+        messageId={message.id}
         rehypePlugins={allRehypePlugins}
         components={components}
         chatFontSize={chatFontSize}

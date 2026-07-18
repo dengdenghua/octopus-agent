@@ -44,7 +44,9 @@ describe("MessageGroup labelled ReAct trace rendering", () => {
       locale: "en-US",
     });
 
-    expect(screen.getByText("Searching")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("process-timeline-event-execution"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Search sources")).toBeInTheDocument();
     expect(screen.queryByText(/web_search/)).not.toBeInTheDocument();
     expect(screen.queryByText(/fetch_url/)).not.toBeInTheDocument();
@@ -53,7 +55,7 @@ describe("MessageGroup labelled ReAct trace rendering", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText(new RegExp(hiddenTail))).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("Replay 2 previous steps"));
+    fireEvent.click(screen.getByTitle("Replay 2 previous steps"));
 
     expect(
       screen.getAllByText("Search sources: silver economy market").length,

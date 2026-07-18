@@ -261,6 +261,197 @@ def test_text_delta_maps_to_agent_message(gateway: Any) -> None:
     assert agent_items[0]["status"] == "completed"
 
 
+def test_commentary_delta_maps_to_non_terminal_agent_message(gateway: Any) -> None:
+    client, _ = gateway
+    _set_script(
+        [
+            {"type": "thinking_delta", "delta": "private"},
+            {
+                "type": "commentary_delta",
+                "delta": "已确认第一组数据一致。",
+                "progress_kind": "verify",
+            },
+            {
+                "type": "tool_start",
+                "tool_name": "echo",
+                "tool_call_id": "commentary-tool",
+                "iteration": 1,
+            },
+            {
+                "type": "tool_end",
+                "tool_name": "echo",
+                "tool_call_id": "commentary-tool",
+                "iteration": 1,
+                "status": "success",
+            },
+            {"type": "text_delta", "delta": "最终答案"},
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-commentary",
+                "input": [{"type": "text", "text": "long task"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    messages = [item for item in turn["items"] if item["type"] == "agentMessage"]
+    assert [item["text"] for item in messages] == [
+        "已确认第一组数据一致。",
+        "现有信息已经够了；我现在把关键点收束成最终回答。",
+        "最终答案",
+    ]
+    assert messages[0]["messageKind"] == "commentary"
+    assert messages[0]["progressKind"] == "verify"
+    assert messages[1]["progressKind"] == "synthesize"
+    tool_item = next(item for item in turn["items"] if item["type"] == "commandExecution")
+    assert messages[1]["parentItemId"] == tool_item["id"]
+    assert messages[2]["messageKind"] == "answer"
+    assert all(item["status"] == "completed" for item in messages)
+
+
+def test_commentary_phase_change_starts_a_new_timeline_item(gateway: Any) -> None:
+    client, _ = gateway
+    _set_script(
+        [
+            {
+                "type": "commentary_delta",
+                "delta": "我先核对关键文件。",
+                "progress_kind": "orient",
+            },
+            {
+                "type": "commentary_delta",
+                "delta": "证据已经够了，开始收束。",
+                "progress_kind": "synthesize",
+            },
+            {"type": "text_delta", "delta": "最终答案"},
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-commentary-phases",
+                "input": [{"type": "text", "text": "compare two files"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    messages = [
+        item for item in out["response"].result["turn"]["items"]
+        if item["type"] == "agentMessage"
+    ]
+    assert [(item["text"], item.get("progressKind")) for item in messages] == [
+        ("我先核对关键文件。", "orient"),
+        ("证据已经够了，开始收束。", "synthesize"),
+        ("最终答案", None),
+    ]
+    assert messages[0]["progressSequence"] == 1
+    assert messages[0]["phaseId"].endswith(":progress:1")
+    assert messages[0]["parentItemId"] is None
+    assert messages[1]["progressSequence"] == 2
+    assert messages[1]["phaseId"].endswith(":progress:2")
+    assert messages[1]["parentItemId"] == messages[0]["id"]
+    assert messages[2]["parentItemId"] == messages[1]["id"]
+
+
+def test_final_answer_closes_public_narrative_with_synthesis(gateway: Any) -> None:
+    client, _ = gateway
+    _set_script(
+        [
+            {
+                "type": "commentary_delta",
+                "delta": "我先核对关键文件。",
+                "progress_kind": "orient",
+            },
+            {"type": "text_delta", "delta": "最终答案"},
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-commentary-auto-synthesis",
+                "input": [{"type": "text", "text": "compare two files"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    messages = [
+        item for item in out["response"].result["turn"]["items"]
+        if item["type"] == "agentMessage"
+    ]
+    assert [(item["text"], item.get("progressKind")) for item in messages] == [
+        ("我先核对关键文件。", "orient"),
+        ("现有信息已经够了；我现在把关键点收束成最终回答。", "synthesize"),
+        ("最终答案", None),
+    ]
+
+
+def test_commentary_without_terminal_event_fails_instead_of_completing(gateway: Any) -> None:
+    client, _ = gateway
+    _set_script(
+        [
+            {"type": "commentary_delta", "delta": "阶段结果已保留。"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-commentary-no-final",
+                "input": [{"type": "text", "text": "long task"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "failed"
+    errors = [item for item in turn["items"] if item["type"] == "error"]
+    assert errors
+    assert "最终答案" in errors[0]["message"]
+
+
+def test_complete_answer_without_terminal_event_is_recovered(gateway: Any) -> None:
+    client, _ = gateway
+    _set_script(
+        [
+            {"type": "thinking_delta", "delta": "整理证据"},
+            {"type": "text_delta", "delta": "这是已经生成的完整答案。"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-answer-no-terminal",
+                "input": [{"type": "text", "text": "research"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "completed"
+    answers = [
+        item
+        for item in turn["items"]
+        if item["type"] == "agentMessage" and item.get("messageKind") == "answer"
+    ]
+    assert [item["text"] for item in answers] == ["这是已经生成的完整答案。"]
+    assert not [item for item in turn["items"] if item["type"] == "error"]
+
+
 def test_empty_react_completion_becomes_visible_error(gateway: Any) -> None:
     client, _ = gateway
     _set_script([{"type": "react_completed"}])
@@ -1836,6 +2027,24 @@ def test_explicit_chat_turn_does_not_inherit_personal_code_metadata(tmp_path: Pa
     assert "code_mode" not in metadata
     assert "workspace_scope" not in metadata
     assert "personal_workspace_enabled" not in metadata
+
+
+def test_turn_metadata_preserves_declared_write_scope(tmp_path: Path) -> None:
+    from runtime.sensing.gateway.turn_session import build_turn_metadata
+
+    metadata = build_turn_metadata(
+        thread_id="th-declared-write-scope",
+        body={
+            "context": {
+                "mode": "code",
+                "workspace_path": str(tmp_path),
+                "allowed_write_paths": [" cache.py ", "tests/test_cache.py", ""],
+            }
+        },
+        store=None,
+    )
+
+    assert metadata["allowed_write_paths"] == ["cache.py", "tests/test_cache.py"]
 
 
 def test_tool_question_keeps_react_path_when_router_exists(tmp_path: Path) -> None:

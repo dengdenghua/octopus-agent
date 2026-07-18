@@ -140,6 +140,25 @@ class TestIsFrontendPathOutsideTsconfig:
 
 
 class TestFrontendOutsideTsconfigGuard:
+    def test_read_outside_include_is_not_an_edit(
+        self, fake_repo_with_tsconfig: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(fake_repo_with_tsconfig)
+        steps = [
+            _step(
+                1,
+                action='read_file({"path": "frontend/src/utils/lonely.ts"})',
+            ),
+        ]
+        assert (
+            _frontend_outside_tsconfig_include_guard(
+                steps,
+                "read-only report complete",
+                is_code_mode=True,
+            )
+            is None
+        )
+
     def test_non_code_mode_silent(
         self, fake_repo_with_tsconfig: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

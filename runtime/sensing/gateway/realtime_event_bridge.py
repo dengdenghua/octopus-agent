@@ -33,6 +33,21 @@ from runtime.protocol import (
 )
 from runtime.protocol.diff_parser import parse_unified_diff
 from runtime.protocol.items import diff_is_truncated
+from runtime.protocol.text_limits import (
+    MAX_AGGREGATED_OUTPUT as _MAX_AGGREGATED_OUTPUT,
+)
+from runtime.protocol.text_limits import (
+    MAX_STREAM_ITEM_CONTENT as _MAX_STREAM_ITEM_CONTENT,
+)
+from runtime.protocol.text_limits import (
+    OUTPUT_TRUNCATION_MARK as _OUTPUT_TRUNCATION_MARK,
+)
+from runtime.protocol.text_limits import (
+    STREAM_CONTENT_TRUNCATION_MARK as _STREAM_CONTENT_TRUNCATION_MARK,
+)
+from runtime.protocol.text_limits import (
+    append_capped_text as _append_capped_text,
+)
 from runtime.sensing.gateway.realtime_gateway import EventEmitter
 from runtime.sensing.gateway.realtime_workbench import (
     _phases_from_todo_preview,
@@ -63,10 +78,6 @@ def _safe_list_remove(bucket: list[Any], item: Any) -> None:
 # 16 MiB message ceiling and the socket is dropped with code 1009 — which
 # also took down mid-run backends. 256 KiB is far more than any rendered log
 # needs and keeps a whole turn's items well under the frame limit.
-_MAX_AGGREGATED_OUTPUT = 256 * 1024
-_OUTPUT_TRUNCATION_MARK = "\n…(输出已截断,超过单条命令保留上限)"
-
-
 def _append_capped_output(existing: str, delta: str) -> str:
     """Append ``delta`` to ``existing`` but never grow past the cap.
 
@@ -74,14 +85,23 @@ def _append_capped_output(existing: str, delta: str) -> str:
     still delivers subsequent chunks), so this is also O(cap) per delta
     instead of the O(n) string rebuild the unbounded ``+=`` incurred.
     """
-    # A buffer longer than the cap can only be one we already truncated
-    # (the marker pushes it past the cap), so this is the "frozen" sentinel.
-    if len(existing) > _MAX_AGGREGATED_OUTPUT:
-        return existing
-    combined = existing + delta
-    if len(combined) <= _MAX_AGGREGATED_OUTPUT:
-        return combined
-    return combined[:_MAX_AGGREGATED_OUTPUT] + _OUTPUT_TRUNCATION_MARK
+    return _append_capped_text(
+        existing,
+        delta,
+        cap=_MAX_AGGREGATED_OUTPUT,
+        marker=_OUTPUT_TRUNCATION_MARK,
+    )
+
+
+def _append_capped_stream_content(existing: str, delta: str) -> str:
+    """Bound reasoning/message snapshots without dropping live deltas."""
+
+    return _append_capped_text(
+        existing,
+        delta,
+        cap=_MAX_STREAM_ITEM_CONTENT,
+        marker=_STREAM_CONTENT_TRUNCATION_MARK,
+    )
 
 
 # ── Bridge state — open agentMessage / reasoning / tool items ─
@@ -111,6 +131,11 @@ class _ReactBridgeState:
         on_background_task_start: Callable[[asyncio.Task[None]], None] | None = None,
     ) -> None:
         self.agent_message: AgentMessageItem | None = None
+        self.commentary_message: AgentMessageItem | None = None
+        self.public_narrative_started = False
+        self.synthesis_seen = False
+        self.progress_sequence = 0
+        self.last_timeline_item_id: str | None = None
         self.reasoning: ReasoningItem | None = None
         self.tools: dict[str, CommandExecutionItem] = {}
         self.phases: list[AgentPhaseSnapshot] = []
@@ -184,10 +209,17 @@ class _ReactBridgeState:
             return
         first = self.agent_message is None
         if first:
-            self.agent_message = AgentMessageItem(text="")
+            self.agent_message = AgentMessageItem(
+                text="",
+                parent_item_id=self.last_timeline_item_id,
+            )
             turn.items.append(self.agent_message)
             await self._emit_started(turn, log, emitter, self.agent_message)
-        self.agent_message.text += delta
+            self.last_timeline_item_id = self.agent_message.id
+        self.agent_message.text = _append_capped_stream_content(
+            self.agent_message.text,
+            delta,
+        )
         await self._buffer_delta(
             turn,
             log,
@@ -211,12 +243,70 @@ class _ReactBridgeState:
             self.reasoning = ReasoningItem(content="")
             turn.items.append(self.reasoning)
             await self._emit_started(turn, log, emitter, self.reasoning)
-        self.reasoning.content += delta
+        self.reasoning.content = _append_capped_stream_content(
+            self.reasoning.content,
+            delta,
+        )
         await self._buffer_delta(
             turn,
             log,
             emitter,
             "reasoning",
+            delta,
+            flush_now=first,
+        )
+
+    async def append_commentary(
+        self,
+        turn: Turn,
+        log: EventLog,
+        emitter: EventEmitter,
+        delta: str,
+        *,
+        progress_kind: str | None = None,
+    ) -> None:
+        if not delta:
+            return
+        self.public_narrative_started = True
+        if progress_kind == "synthesize":
+            self.synthesis_seen = True
+        # A commentary item represents one public semantic phase. Reusing the
+        # same item across ``orient → synthesize`` keeps the first progressKind
+        # forever and makes the final checkpoint visually disappear into the
+        # opening prose. Close the old item when the phase changes so the
+        # frontend receives a real ordered timeline rather than one text blob.
+        if (
+            self.commentary_message is not None
+            and progress_kind
+            and self.commentary_message.progress_kind != progress_kind
+        ):
+            await self._flush_pending_delta()
+            self.commentary_message.status = ItemStatus.COMPLETED
+            await self._emit_completed(turn, log, emitter, self.commentary_message)
+            self.commentary_message = None
+        first = self.commentary_message is None
+        if first:
+            self.progress_sequence += 1
+            self.commentary_message = AgentMessageItem(
+                text="",
+                message_kind="commentary",
+                progress_kind=progress_kind,
+                phase_id=f"{turn.id}:progress:{self.progress_sequence}",
+                parent_item_id=self.last_timeline_item_id,
+                progress_sequence=self.progress_sequence,
+            )
+            turn.items.append(self.commentary_message)
+            await self._emit_started(turn, log, emitter, self.commentary_message)
+            self.last_timeline_item_id = self.commentary_message.id
+        self.commentary_message.text = _append_capped_stream_content(
+            self.commentary_message.text,
+            delta,
+        )
+        await self._buffer_delta(
+            turn,
+            log,
+            emitter,
+            "commentary",
             delta,
             flush_now=first,
         )
@@ -267,6 +357,18 @@ class _ReactBridgeState:
             turn, log, emitter = self._delta_ctx
             if kind == "agentMessage" and self.agent_message is not None:
                 item_id = self.agent_message.id
+                log.item_delta(turn.thread_id, turn.id, item_id, "agentMessage", combined)
+                await emitter.notify(
+                    ServerMethod.ITEM_AGENT_MESSAGE_DELTA,
+                    {
+                        "threadId": turn.thread_id,
+                        "turnId": turn.id,
+                        "itemId": item_id,
+                        "delta": combined,
+                    },
+                )
+            elif kind == "commentary" and self.commentary_message is not None:
+                item_id = self.commentary_message.id
                 log.item_delta(turn.thread_id, turn.id, item_id, "agentMessage", combined)
                 await emitter.notify(
                     ServerMethod.ITEM_AGENT_MESSAGE_DELTA,
@@ -508,6 +610,7 @@ class _ReactBridgeState:
             # detail, so overwriting would regress the live view.
             item.aggregated_output = _append_capped_output("", evt["output_preview"])
         await self._emit_completed(turn, log, emitter, item)
+        self.last_timeline_item_id = item.id
 
         # Apply-patch first-class item: when a file-editing tool ran
         # successfully and surfaced a unified diff, promote it to a
@@ -577,6 +680,10 @@ class _ReactBridgeState:
             self.agent_message.status = ItemStatus.COMPLETED
             await self._emit_completed(turn, log, emitter, self.agent_message)
             self.agent_message = None
+        if self.commentary_message is not None:
+            self.commentary_message.status = ItemStatus.COMPLETED
+            await self._emit_completed(turn, log, emitter, self.commentary_message)
+            self.commentary_message = None
         if self.reasoning is not None:
             self.reasoning.status = ItemStatus.COMPLETED
             await self._emit_completed(turn, log, emitter, self.reasoning)

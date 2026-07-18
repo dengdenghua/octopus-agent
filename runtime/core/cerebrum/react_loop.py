@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import logging
+import os
+import queue
 import re
+import threading
 import time
 import uuid
 from collections.abc import Callable, Generator
@@ -56,6 +60,11 @@ from runtime.core.cerebrum.react_execution import (
 from runtime.core.cerebrum.react_guards import (
     _code_mode_completion_guard,
     _completion_phrase_without_todo_guard,
+    _concurrency_semantic_followup_guard,
+    _failed_verification_followup_guard,
+    _goal_requests_code_mutation,
+    _incomplete_final_answer_guard,
+    _redundant_green_verification_guard,
     _unverified_write_followup_guard,
 )
 from runtime.core.cerebrum.react_loop_controls import (
@@ -86,8 +95,13 @@ from runtime.core.cerebrum.react_parsing import (
     _detect_shell_injection_in_payload,
     _detect_unsafe_deser_in_payload,
     _escape_md_brackets,
+    _extract_final_answer,
+    _has_code_verification,
+    _has_successful_verification_observation,
+    _is_code_write_step,
     _is_format_violation,
     _looks_like_special_tool_envelope,
+    _looks_like_unfinished_work,
     _parse_action,
     _parse_reasoning_action_fallback,
     _parse_step,
@@ -135,6 +149,398 @@ _LENGTH_LIMITED_FINISH_REASONS = frozenset(
     {"length", "max_tokens", "max_output_tokens", "output_limit", "token_limit"}
 )
 
+_PUBLIC_UPDATE_PROTOCOL_RE = re.compile(
+    r"(?:^|\n)\s*(?:Thought|Action|Observation|Final\s*Answer)\s*:",
+    re.IGNORECASE,
+)
+_PUBLIC_UPDATE_TOOL_CALL_RE = re.compile(
+    r"(?:<tool_call\b|<function=|[A-Za-z_][A-Za-z0-9_./:-]*\s*\(\s*\{)",
+    re.IGNORECASE,
+)
+_PUBLIC_UPDATE_BOILERPLATE_RE = re.compile(
+    r"^(?:(?:我|我们)?(?:还在|正在|继续|接着|马上|即将)"
+    r"(?:思考|处理|执行|整理|分析|工作)|(?:still|currently|continuing to|about to)\s+"
+    r"(?:think|work|process|analy[sz]e|execute))[。.!！\s]*$",
+    re.IGNORECASE,
+)
+
+_FINAL_SYNTHESIS_UPDATE = "现有信息已经够了；我现在把关键点收束成最终回答。"
+
+
+def _safe_public_update(value: str | None) -> str:
+    """Return a bounded checkpoint safe for the main conversation lane."""
+    if not isinstance(value, str):
+        return ""
+    cleaned = re.sub(
+        r"^\s*(?:Update|Progress)\s*:\s*",
+        "",
+        value,
+        flags=re.IGNORECASE,
+    ).strip()
+    if not cleaned or _PUBLIC_UPDATE_PROTOCOL_RE.search(cleaned):
+        return ""
+    if _PUBLIC_UPDATE_TOOL_CALL_RE.search(cleaned) or _looks_like_special_tool_envelope(cleaned):
+        return ""
+    if _PUBLIC_UPDATE_BOILERPLATE_RE.fullmatch(cleaned):
+        return ""
+    return cleaned[:1200].rstrip()
+
+
+def _public_tool_target(args: dict[str, Any]) -> str:
+    """Return a short, non-sensitive subject for a public tool checkpoint."""
+    for key in ("path", "file_path", "filepath", "filename"):
+        value = args.get(key)
+        if isinstance(value, str) and value.strip():
+            return os.path.basename(value.strip())[:80]
+    url = args.get("url")
+    if isinstance(url, str) and url.strip():
+        match = re.match(r"https?://([^/]+)", url.strip(), re.IGNORECASE)
+        return (match.group(1) if match else "目标网页")[:80]
+    query = args.get("query")
+    if isinstance(query, str) and query.strip():
+        return query.strip()[:60]
+    return ""
+
+
+def _fallback_tool_checkpoint(actions: list[str]) -> str:
+    """Synthesize a concise public pre-tool update when the model omitted one."""
+    parsed = [entry for action in actions if (entry := _parse_action(action))]
+    if not parsed:
+        return ""
+    if len(parsed) > 1:
+        return f"我先并行核对 {len(parsed)} 项关键信息，拿到结果后再交叉整理。"
+
+    name, args = parsed[0]
+    target = _public_tool_target(args if isinstance(args, dict) else {})
+    target_text = f"（{target}）" if target else ""
+    lowered = name.lower()
+    if lowered == "todo_write":
+        return "我先更新任务清单，确保当前进度和剩余事项准确。"
+    if lowered in {"fetch_url", "browser_open", "browser_get_content"}:
+        return f"我先读取目标来源{target_text}，确认页面里的原始信息。"
+    if "search" in lowered:
+        return f"我先检索相关来源{target_text}，补齐可核对的证据。"
+    if lowered in {"read_file", "read_text_file", "list_cwd", "glob", "grep"}:
+        return f"我先查看相关实现{target_text}，确认当前结构和调用关系。"
+    if lowered in _WRITE_TOOLS or any(
+        token in lowered for token in ("write", "edit", "patch")
+    ):
+        return f"修改点已经明确，我现在写入这处改动{target_text}。"
+    if lowered in {"exec_shell", "shell", "run_command"}:
+        return "我先运行一次针对性检查，确认当前结果是否可靠。"
+    return f"我先完成这一步必要操作{target_text}，再根据结果继续判断。"
+
+
+def _fallback_tool_result_checkpoint(actions: list[str], *, succeeded: bool) -> str:
+    """Synthesize a factual post-tool checkpoint without exposing tool output."""
+    parsed = [entry for action in actions if (entry := _parse_action(action))]
+    if not parsed:
+        return ""
+    if not succeeded:
+        return "这一步没有得到可用结果；我会依据错误信息调整方法，不把失败当作证据。"
+    if len(parsed) > 1:
+        return f"{len(parsed)} 项并行操作已经完成；我正在对照结果，筛出一致结论和差异。"
+
+    name = parsed[0][0].lower()
+    if name == "todo_write":
+        return "任务清单已经更新；我会按当前状态继续执行或收敛交付。"
+    if name in {"fetch_url", "browser_open", "browser_get_content"} or "search" in name:
+        return "来源已经拿到；我接下来只提取与问题直接相关、能够核对的结论。"
+    if name in {"read_file", "read_text_file", "list_cwd", "glob", "grep"}:
+        return "实现细节已经确认；我接下来沿调用链收敛到具体差异。"
+    if name in _WRITE_TOOLS or any(token in name for token in ("write", "edit", "patch")):
+        return "改动已经写入；下一步用针对性测试确认行为没有回退。"
+    if name in {"exec_shell", "shell", "run_command"}:
+        return "检查已经完成；我接下来根据结果决定继续修正还是整理交付。"
+    return "这一步已经完成；我正在把结果并入当前判断，再继续下一步。"
+
+
+def _public_action_phase(actions: list[str]) -> str:
+    """Collapse concrete tools into a stable user-facing work phase."""
+    parsed = [entry for action in actions if (entry := _parse_action(action))]
+    if not parsed:
+        return "investigate"
+    names = [name.lower() for name, _args in parsed]
+    if names and all(name == "todo_write" for name in names):
+        return "investigate"
+    if any(
+        name in _WRITE_TOOLS
+        or any(token in name for token in ("write", "edit", "patch", "replace"))
+        for name in names
+    ):
+        return "implement"
+    if any(name in {"exec_shell", "shell", "run_command"} for name in names):
+        return "verify"
+    return "investigate"
+
+
+def _public_update_kind(
+    value: str,
+    *,
+    actions: list[str] | None = None,
+    succeeded: bool | None = None,
+    opening: bool = False,
+) -> str:
+    """Classify a safe public checkpoint without exposing private reasoning."""
+    if opening:
+        return "orient"
+    lowered = value.casefold()
+    if succeeded is False:
+        return "recover"
+    if re.search(r"超时|时限|失败|拒绝|中断|timeout|failed|rejected|interrupted", lowered):
+        return "recover"
+    if re.search(r"调整|改用|换一种|转向|重新|pivot|adjust|switch|instead", lowered):
+        return "pivot"
+    # A checkpoint attached to concrete tool calls describes the work that is
+    # happening now. Classify it from those calls before broad prose cues such
+    # as “整理” or “结论” can incorrectly make an inspection look like final
+    # synthesis in the timeline.
+    if actions:
+        return _public_action_phase(actions)
+    if re.search(r"验证|测试|检查|核验|通过|verify|test|check|lint|build", lowered):
+        return "verify"
+    if re.search(
+        r"收敛|整理|总结|归纳|结论|停止扩展|完成回答|"
+        r"synthesi[sz]|summari[sz]|conclusion|wrap up",
+        lowered,
+    ):
+        return "synthesize"
+    if re.search(r"写入|修改|实现|改动|implement|edit|write|patch", lowered):
+        return "implement"
+    return "investigate"
+
+
+def _result_checkpoint_is_meaningful(
+    actions: list[str],
+    *,
+    succeeded: bool,
+) -> bool:
+    """Keep milestones and recovery visible while suppressing read-by-read noise."""
+    if not succeeded or len(actions) > 1:
+        return True
+    parsed = [entry for action in actions if (entry := _parse_action(action))]
+    if not parsed:
+        return False
+    name = parsed[0][0].lower()
+    return (
+        _public_action_phase(actions) in {"implement", "verify"}
+        or "search" in name
+        or name in {"fetch_url", "browser_open", "browser_get_content"}
+    )
+
+
+def _initial_public_checkpoint(goal: str | None) -> str:
+    """Build one task-specific opening checkpoint for non-trivial turns."""
+    text = str(goal or "").strip()
+    if not text:
+        return ""
+    urls = re.findall(r"https?://[^\s)\]}>，。]+", text, re.IGNORECASE)
+    if urls:
+        targets = []
+        for url in urls[:2]:
+            match = re.match(r"https?://([^/]+)", url, re.IGNORECASE)
+            if match and match.group(1) not in targets:
+                targets.append(match.group(1))
+        suffix = f"（{'、'.join(targets)}）" if targets else ""
+        return f"我先核对你指定的原始来源{suffix}，再给出可追溯的结论。"
+    file_refs = re.findall(
+        r"(?:[\w.@+-]+/)+(?:[\w.@+-]+\.)[A-Za-z0-9]+",
+        text,
+    )
+    if file_refs:
+        names = list(dict.fromkeys(os.path.basename(path) for path in file_refs))[:3]
+        if len(names) == 1:
+            subject = names[0]
+        elif len(names) == 2:
+            subject = f"{names[0]} 和 {names[1]}"
+        else:
+            subject = f"{names[0]}、{names[1]} 和 {names[2]}"
+        return f"我先只读核对 {subject} 的实际实现，再把证据按调用顺序串起来。"
+    lowered = text.lower()
+    if any(token in lowered for token in ("调研", "research", "对比", "compare", "分析")):
+        return "我先确认问题边界和可核对证据，再逐步收敛到结论。"
+    return ""
+
+
+def _explicit_read_only_goal(value: str | None) -> bool:
+    """Whether the current user turn explicitly forbids workspace mutation."""
+    text = str(value or "").lower()
+    return bool(
+        re.search(r"\bread[- ]only\b", text)
+        or re.search(
+            r"\b(?:do\s+not|don't|must\s+not|never)\s+"
+            r"(?:modify|change|edit|write|create|update|add|remove|delete|patch)",
+            text,
+        )
+        or re.search(r"\bwithout\s+(?:modifying|changing|editing|writing|creating)", text)
+        or re.search(
+            r"(?:只读|(?:不要|严禁|禁止|不得|不可|不允许)\s*"
+            r"(?:修改|改动|更改|编辑|写入|创建|新增|添加|删除|提交))",
+            text,
+        )
+    )
+
+
+def _model_iteration_timeout_s() -> float:
+    """Wall-clock ceiling for one hidden model-thinking iteration.
+
+    Provider read timeouts only fire when no bytes arrive. A reasoning model
+    can keep sending private thinking forever, so the loop needs its own bound.
+    Operators may tune it without a deploy; invalid values fall back safely.
+    """
+    raw = os.environ.get("OCTOPUS_REACT_MODEL_ITERATION_TIMEOUT_S", "120")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return 120.0
+    return max(10.0, min(value, 900.0))
+
+
+_MODEL_STREAM_DEADLINE = object()
+
+
+def _iter_model_stream_with_deadline(
+    router: Any,
+    request: Any,
+    timeout_s: float,
+    visible_started: Callable[[], bool],
+) -> Generator[Any, None, None]:
+    """Pump a blocking model iterator through a hard wall-clock deadline.
+
+    Checking elapsed time inside ``for evt in call_stream(...)`` cannot stop a
+    provider that sends no bytes at all: control never returns to the loop.
+    A daemon pump keeps the synchronous router contract while the ReAct thread
+    waits on a bounded queue.  The copied context preserves actor/tracing data.
+    """
+    event_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=64)
+    stop_event = threading.Event()
+    caller_context = contextvars.copy_context()
+    try:
+        from runtime.safety.approval.cancellation import (
+            current_cancellation_token as _current_cancellation_token,
+        )
+    except ImportError:  # pragma: no cover - optional subsystem
+        _current_cancellation_token = None
+
+    def _put(kind: str, value: Any) -> None:
+        while not stop_event.is_set():
+            try:
+                event_queue.put((kind, value), timeout=0.1)
+                return
+            except queue.Full:
+                continue
+
+    def _consume() -> None:
+        try:
+            for event in router.call_stream(request):
+                if stop_event.is_set():
+                    break
+                _put("event", event)
+        except Exception as exc:  # pragma: no cover - re-raised in caller
+            _put("error", exc)
+        finally:
+            _put("done", None)
+
+    worker = threading.Thread(
+        target=lambda: caller_context.run(_consume),
+        name="react-model-stream-pump",
+        daemon=True,
+    )
+    worker.start()
+    timeout_s = max(0.0, timeout_s)
+    deadline = time.monotonic() + timeout_s
+    visible_mode = False
+    try:
+        while True:
+            token = _current_cancellation_token() if _current_cancellation_token else None
+            if token is not None and token.is_cancelled:
+                return
+            if visible_started() and not visible_mode:
+                # Once an answer is visibly streaming, switch from a hard
+                # thinking ceiling to an inactivity deadline. Long reports
+                # may legitimately exceed the thinking ceiling as long as
+                # user-visible tokens continue to arrive.
+                visible_mode = True
+                deadline = time.monotonic() + timeout_s
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                yield _MODEL_STREAM_DEADLINE
+                return
+            try:
+                kind, value = event_queue.get(timeout=min(0.25, remaining))
+            except queue.Empty:
+                continue
+            if kind == "event":
+                if visible_mode:
+                    deadline = time.monotonic() + timeout_s
+                yield value
+            elif kind == "error":
+                raise value
+            else:
+                return
+    finally:
+        stop_event.set()
+
+
+def _collect_model_stream_text_with_deadline(
+    router: Any,
+    request: Any,
+    timeout_s: float,
+) -> tuple[str, Any] | object:
+    """Collect a tools-disabled synthesis stream without an unbounded call.
+
+    The main ReAct rounds already use the guarded streaming path, but the
+    post-loop convergence pass historically fell back to ``router.call``.
+    A provider that only hangs on that non-streaming endpoint could therefore
+    strand an otherwise completed long task after its final tool.  Reuse the
+    same deadline here and switch to an inactivity deadline after answer text
+    begins, so long reports can finish while silent/private reasoning cannot
+    run forever.
+    """
+    text_parts: list[str] = []
+    final_response = None
+    visible_state = {"started": False}
+    for event in _iter_model_stream_with_deadline(
+        router,
+        request,
+        timeout_s,
+        lambda state=visible_state: state["started"],
+    ):
+        if event is _MODEL_STREAM_DEADLINE:
+            return _MODEL_STREAM_DEADLINE
+        if getattr(event, "type", "") == "text_delta":
+            delta = str(getattr(event, "delta", "") or "")
+            if delta:
+                text_parts.append(delta)
+                visible_state["started"] = True
+        elif getattr(event, "type", "") in {"done", "response_end"}:
+            final_response = getattr(event, "final", None) or getattr(event, "response", None)
+    text = "".join(text_parts).strip()
+    if not text and final_response is not None:
+        text = str(getattr(final_response, "text", "") or "").strip()
+    return text, final_response
+
+
+def _stage_update_timeout_fallback(steps: list[ReActStep]) -> str:
+    """Return a truthful visible handoff when final synthesis times out."""
+    updates: list[str] = []
+    for step in steps:
+        update = (step.public_update or "").strip()
+        if update and update not in updates:
+            updates.append(update)
+    if not updates:
+        return (
+            "最终汇总模型在收尾时超过了单轮时限。已完成的工具结果和来源仍保留在"
+            "过程记录中，但这次无法可靠生成最终答复；点击继续即可从现有进度重新收敛。"
+        )
+    joined = "\n\n".join(updates[-6:])
+    return (
+        "最终汇总模型在收尾时超过了单轮时限。以下阶段结论已经在执行过程中确认，"
+        "相关来源和工具结果仍保留在过程记录中；这不是完整最终报告，点击继续可直接"
+        "从现有进度重新收敛。\n\n"
+        f"{joined}"
+    )
+
 
 def _finish_reason_is_length_limited(reason: str | None) -> bool:
     """True when ``finish_reason`` signals the model was cut off by the output
@@ -152,6 +558,46 @@ def _tool_call_succeeded(observation: str | None, beak_step: Step | None) -> boo
     return not (
         observation is not None and observation.startswith(("(工具失败)", "(工具执行异常)"))
     )
+
+
+def _per_action_outcomes(
+    step: ReActStep,
+    *,
+    default_ok: bool,
+) -> list[tuple[ReActStep, bool]]:
+    """Split a multi-tool model round into ordered evidence outcomes."""
+    actions = step.actions or ([step.action] if step.action else [])
+    if not actions:
+        return []
+    if len(step.action_results) == len(actions):
+        outcomes: list[tuple[ReActStep, bool]] = []
+        for action, result in zip(actions, step.action_results, strict=True):
+            outcomes.append(
+                (
+                    ReActStep(
+                        iteration=step.iteration,
+                        action=action,
+                        observation=str(result.get("observation") or ""),
+                    ),
+                    result.get("ok") is True,
+                )
+            )
+        return outcomes
+    if len(actions) == 1:
+        return [
+            (
+                ReActStep(
+                    iteration=step.iteration,
+                    action=actions[0],
+                    observation=step.observation,
+                ),
+                default_ok,
+            )
+        ]
+    # Legacy providers occasionally return a merged observation without
+    # per-action receipts. Preserve the old one-round semantics rather than
+    # inventing success for individual calls we cannot attribute.
+    return [(step, default_ok)]
 
 
 # Affinity tags that mark a tool as having side effects, so a failed call must
@@ -234,6 +680,50 @@ def _browser_task_iteration_limit(
     return max_iterations
 
 
+def _narrow_research_iteration_limit(goal: str, max_iterations: int) -> int:
+    """Keep single-source fact lookups from inheriting deep-research budgets."""
+    text = " ".join(str(goal or "").strip().split()).lower()
+    source_marker = bool(
+        re.search(r"(?:一个|1\s*个)\s*(?:官方|可靠)?\s*(?:来源|网页|页面)", text)
+        or re.search(r"\b(?:one|single)\s+(?:official\s+)?source\b", text)
+    )
+    concise_marker = bool(
+        re.search(r"(?:一句|一段|简短|一句话|结论)", text)
+        or re.search(r"\b(?:one sentence|brief|concise|short conclusion)\b", text)
+    )
+    if source_marker and concise_marker:
+        return min(max_iterations, 8)
+    return max_iterations
+
+
+def _unfinished_implementation_recovery_needed(
+    text: str,
+    goal: str,
+    *,
+    is_code_mode: bool,
+) -> bool:
+    """Limit implementation recovery to turns that actually mutate code.
+
+    Research evidence often describes bugs, expected behavior, or proposed
+    fixes. Those phrases can look like unfinished implementation work even
+    though the user's requested work is already complete.
+    """
+
+    if not _looks_like_unfinished_work(text):
+        return False
+    if _goal_requests_code_mutation(goal):
+        return True
+    goal_text = str(goal or "").lower()
+    non_implementation_turn = _explicit_read_only_goal(goal) or bool(
+        re.search(
+            r"(?:网页调研|调研|官方来源|网页|来源)|"
+            r"\b(?:web research|research|official source|source|https?://)\b",
+            goal_text,
+        )
+    )
+    return not non_implementation_turn
+
+
 def _record_rejected_step(
     steps: list,
     messages: list,
@@ -285,6 +775,14 @@ def _final_answer_needs_pre_emit_guard(
     body = text or ""
     if not body:
         return False
+    # A plain chat-style stream can itself be a preparatory placeholder
+    # ("I will search...", "我先检查...").  Buffer that shape until the
+    # iteration ends so the completeness guard can reject it without first
+    # leaking the placeholder into the visible answer channel.  As soon as
+    # the same response contains a concrete conclusion this predicate clears
+    # and normal token streaming resumes.
+    if _incomplete_final_answer_guard(body) is not None:
+        return True
     lower = body.lower()
     if (
         "```" in body
@@ -321,6 +819,7 @@ def _evaluate_final_answer_guards(
     tools_active: bool,
     goal: str,
     browser_operation_mode: bool = False,
+    grounded_source_paths: frozenset[str] = frozenset(),
     categories: frozenset[str] | set[str] | None = None,
 ) -> tuple[str, str] | None:
     """Run the final-answer guard registry for regular and salvage paths."""
@@ -340,6 +839,7 @@ def _evaluate_final_answer_guards(
             tools_active=tools_active,
             goal=goal,
             browser_operation_mode=browser_operation_mode,
+            grounded_source_paths=grounded_source_paths,
         ),
         recorder=_guard_hit_recorder(),
         disabled_labels=_disabled_guard_labels(),
@@ -377,14 +877,34 @@ def _guard_impasse_final_answer(label: str, message: str) -> str:
     """The honest terminal answer for a guard impasse — shared by every
     in-loop guard-rejection site so the wording (and the truth it tells)
     can't drift between them."""
+    user_reason = _guard_reason_for_user(label, message)
     return (
         "任务未能完成:我连续多次尝试收尾,但始终无法满足"
         f"「{label}」要求的执行证据,期间也没有任何新的工具执行成功。"
         "为避免空转,我停止了重试。\n\n"
-        f"最后一次拦截原因:\n{message}\n\n"
+        f"最后一次拦截原因:\n{user_reason}\n\n"
         "这通常意味着模型输出的工具调用格式未被执行层识别,"
         "或任务所需的能力/权限当前不可用。请检查上面的原因后重试。"
     )
+
+
+def _guard_reason_for_user(label: str, message: str) -> str:
+    """Avoid reflecting rejected security payloads into the transcript.
+
+    Security guard diagnostics intentionally name the exact dangerous token
+    or credential shape for the model's next repair attempt.  Reusing that
+    diagnostic verbatim in a terminal user message can re-expose the content
+    that the guard just prevented from streaming.
+    """
+    if label in {
+        "secret-leak guard",
+        "destructive-call guard",
+        "dynamic-exec guard",
+        "shell-injection guard",
+        "unsafe-deser guard",
+    }:
+        return "安全检查拒绝了候选答复；具体片段已隐藏，避免再次暴露。"
+    return message
 
 
 def _build_resume_context_prompt(resume_intent: Any) -> str:
@@ -611,6 +1131,7 @@ def _compute_resume_state(
             ReActStep(
                 iteration=s.get("iteration", 0),
                 thought=s.get("thought", ""),
+                public_update=s.get("public_update", ""),
                 action=s.get("action", ""),
                 observation=s.get("observation", ""),
             )
@@ -979,6 +1500,18 @@ def stream_react_loop(
         volatile_parts.append(_resume_context_prompt)
     _is_goal_mode = _wm.is_goal
     _is_code_mode = _wm.is_code
+    _read_only_turn = _explicit_read_only_goal(str(intent.normalized_goal or intent.raw or ""))
+    if _read_only_turn:
+        system_parts.append(
+            "\n<read-only-contract>\n"
+            "The user explicitly requires a read-only turn. Do not call file-write, "
+            "edit, patch, create, delete, rename, commit, or other workspace-mutating "
+            "tools, including for a report artifact. Internal todo tracking is allowed. "
+            "Use read/search/list/web/status tools only and deliver the report directly "
+            "in the conversational Final Answer. If read access is blocked, explain the "
+            "exact blocker instead of attempting a write-based workaround.\n"
+            "</read-only-contract>"
+        )
     # Codebase grounding for code/project chats: the same wiki + source
     # retrieval the planner uses, so interactive chat is grounded the same way
     # planned turns are (previously only plan() got this). Volatile (goal-
@@ -997,6 +1530,22 @@ def stream_react_loop(
                 volatile_parts.append(_cb)
         except Exception:  # noqa: BLE001 — grounding must never break the loop
             _grounding_sources = []
+    _grounded_source_paths = frozenset(
+        str(source.get("path") or "")
+        for source in _grounding_sources
+        if source.get("kind") == "source" and source.get("path")
+    )
+    if _read_only_turn and _grounded_source_paths:
+        volatile_parts.append(
+            "<grounded-source-contract>\n"
+            "The RELEVANT SOURCE chunks below were deterministically read from "
+            "the repository before this model call; they are real source evidence, "
+            "not wiki summaries. For a read-only comparison, if those chunks contain "
+            "the requested definitions, answer from them directly and do not call "
+            "read_file merely to prove the same read again. Use a file tool only when "
+            "the injected chunk genuinely omits information needed for the answer.\n"
+            "</grounded-source-contract>"
+        )
     _browser_regression_enabled = bool(
         _uc.get("browser_regression_enabled") or _metadata.get("browser_regression_enabled")
     )
@@ -1104,6 +1653,14 @@ def stream_react_loop(
     # to compose from.
     if _is_research_mode and max_iterations < 100:
         max_iterations = 100
+    # A phrase such as "只做网页调研" activates research mode, but a request
+    # for one official source and one concise conclusion is still a small fact
+    # lookup. Apply this after browser/research lifts so those broad mode floors
+    # cannot turn a one-sentence answer into a 100-round crawl.
+    max_iterations = _narrow_research_iteration_limit(
+        _goal_for_mode,
+        max_iterations,
+    )
     # Goal mode is an objective contract, not permission to run an
     # unbounded inner ReAct loop. Keep the caller-provided iteration
     # cap; continuation belongs to the outer goal/run layer via
@@ -1820,7 +2377,10 @@ def stream_react_loop(
         and _effective_wp.strip()
         and resume_task_id is None
     ):
-        startup_context = _build_code_context_prelude(_effective_wp.strip())
+        startup_context = _build_code_context_prelude(
+            _effective_wp.strip(),
+            str(intent.normalized_goal or intent.raw or ""),
+        )
         if startup_context:
             messages.append(Message(role="user", content=startup_context))
     messages.append(
@@ -2046,6 +2606,35 @@ def stream_react_loop(
 
     consecutive_format_violations = 0
     consecutive_llm_errors = 0
+    _last_public_update_key = ""
+    _public_narrative_started = False
+    _synthesis_update_emitted = False
+    _last_fallback_phase = ""
+    _same_phase_tool_rounds = 0
+    if resume_from_iter == 0:
+        _opening_update = _initial_public_checkpoint(intent.normalized_goal)
+        if _opening_update:
+            _public_narrative_started = True
+            yield {
+                "type": "commentary_delta",
+                "delta": _opening_update,
+                "progress_kind": _public_update_kind(_opening_update, opening=True),
+                "iteration": 1,
+            }
+            _last_public_update_key = re.sub(
+                r"\s+", " ", _opening_update
+            ).strip().casefold()
+    _force_convergence_next = False
+    _green_verification_convergence_active = False
+    _green_convergence_todo_used = False
+    # Persistent execution-state evidence. Recomputing green rounds from the
+    # whole trajectory is useful as a fallback, but long turns can decorate
+    # old observations with recovery nudges. Track clean verifier rounds at
+    # the point tools actually finish so a red→fixed→green trajectory reaches
+    # a stable terminal state instead of cycling through verify/todo forever.
+    _saw_successful_code_write = False
+    _clean_verification_rounds_after_write = 0
+    _model_timeout_recoveries = 0
     # Allow two consecutive zero-anchor rounds before bailing. The
     # first violation is often a model warming up — it dumps a chunk
     # of plain markdown / JSON before remembering to use the
@@ -2135,6 +2724,7 @@ def stream_react_loop(
                             {
                                 "iteration": s.iteration,
                                 "thought": s.thought,
+                                "public_update": s.public_update,
                                 "action": s.action,
                                 "observation": s.observation,
                             }
@@ -2166,16 +2756,26 @@ def stream_react_loop(
 
         # ── PHASE 6b · LLM call + Final-Answer anchor stream ───────────
         try:
+            _iteration_recovery_mode = _force_convergence_next
+            _force_convergence_next = False
             req = ModelRequest(
                 model=effective_model,
                 messages=list(messages),
-                max_tokens=_max_tokens_per_iter,
+                max_tokens=(
+                    min(_max_tokens_per_iter, 4000)
+                    if _iteration_recovery_mode
+                    else _max_tokens_per_iter
+                ),
                 temperature=temperature,
-                enable_thinking=_wants_thinking,
+                enable_thinking=_wants_thinking and not _iteration_recovery_mode,
                 reasoning_effort=_reasoning_effort,
-                thinking_budget=thinking_budget_for_effort(
-                    _reasoning_effort,
-                    _max_tokens_per_iter,
+                thinking_budget=(
+                    1024
+                    if _iteration_recovery_mode
+                    else thinking_budget_for_effort(
+                        _reasoning_effort,
+                        _max_tokens_per_iter,
+                    )
                 ),
                 tools=_native_tool_specs if _native_mode else [],
             )
@@ -2188,8 +2788,12 @@ def stream_react_loop(
             # response time. Pre-anchor chunks must stay buffered because
             # they may contain Thought:/Action: prose that must not leak.
             _final_stream_started = False
+            _visible_stream_state = {"started": False}
             _streamed_final_chars = 0
             _final_stream_guarded = False
+            _final_delta_emitted_this_iteration = False
+            _iteration_soft_timed_out = False
+            _iteration_timeout = _model_iteration_timeout_s()
 
             def _maybe_emit_throughput(chars: int) -> dict[str, Any] | None:
                 nonlocal _throughput_last_emit
@@ -2205,7 +2809,21 @@ def stream_react_loop(
                     "chars_per_sec": (chars / _elapsed if _elapsed > 0 else 0.0),
                 }
 
-            for evt in router.call_stream(req):
+            for evt in _iter_model_stream_with_deadline(
+                router,
+                req,
+                _iteration_timeout,
+                lambda state=_visible_stream_state: state["started"],
+            ):
+                if evt is _MODEL_STREAM_DEADLINE:
+                    _iteration_soft_timed_out = True
+                    _logger.warning(
+                        "react_loop iter %d model stream exceeded %.1fs before "
+                        "a visible final answer; switching to convergence mode",
+                        i + 1,
+                        _iteration_timeout,
+                    )
+                    break
                 # Check cancellation between SSE chunks so the
                 # interrupt button can break us out of a slow /
                 # hung upstream without waiting for the read timeout.
@@ -2234,6 +2852,7 @@ def stream_react_loop(
                                 "delta": evt.delta,
                                 "iteration": i + 1,
                             }
+                            _final_delta_emitted_this_iteration = True
                             _streamed_final_chars += len(evt.delta)
                             _throughput_chars += len(evt.delta)
                             _tp = _maybe_emit_throughput(_throughput_chars)
@@ -2268,24 +2887,38 @@ def stream_react_loop(
                                 # safe to surface.
                                 pass
                             elif answer_so_far:
-                                if _final_answer_needs_pre_emit_guard(
-                                    answer_so_far,
-                                    is_code_mode=_is_code_mode,
-                                    browser_operation_mode=_browser_operation_mode,
+                                if (
+                                    (_todo_protocol_required and _todo_protocol_visible)
+                                    or _final_answer_needs_pre_emit_guard(
+                                        answer_so_far,
+                                        is_code_mode=_is_code_mode,
+                                        browser_operation_mode=_browser_operation_mode,
+                                    )
                                 ):
                                     _final_stream_guarded = True
                                     continue
+                                if _public_narrative_started and not _synthesis_update_emitted:
+                                    yield {
+                                        "type": "commentary_delta",
+                                        "delta": _FINAL_SYNTHESIS_UPDATE,
+                                        "progress_kind": "synthesize",
+                                        "progress_source": "runtime",
+                                        "iteration": i + 1,
+                                    }
+                                    _synthesis_update_emitted = True
                                 yield {
                                     "type": "text_delta",
                                     "delta": answer_so_far,
                                     "iteration": i + 1,
                                 }
+                                _final_delta_emitted_this_iteration = True
                                 _streamed_final_chars = len(answer_so_far)
                                 _throughput_chars += len(answer_so_far)
                                 _tp = _maybe_emit_throughput(_throughput_chars)
                                 if _tp is not None:
                                     yield _tp
                                 _final_stream_started = True
+                                _visible_stream_state["started"] = True
                         elif (
                             len(joined) >= 120
                             and not _THOUGHT_RE.search(joined)
@@ -2295,6 +2928,7 @@ def stream_react_loop(
                             and "<tool_invocation" not in joined
                             and "<function=" not in joined
                             and not _looks_like_special_tool_envelope(joined)
+                            and "<final_answer" not in joined.lower()
                         ):
                             # Zero-anchor chat-style answer: model is
                             # writing plain markdown (no Thought/Action/
@@ -2305,24 +2939,38 @@ def stream_react_loop(
                             # consecutive rounds to bail). With it, the
                             # user sees text streaming the moment it's
                             # clear ReAct format isn't coming.
-                            if _final_answer_needs_pre_emit_guard(
-                                joined,
-                                is_code_mode=_is_code_mode,
-                                browser_operation_mode=_browser_operation_mode,
+                            if (
+                                (_todo_protocol_required and _todo_protocol_visible)
+                                or _final_answer_needs_pre_emit_guard(
+                                    joined,
+                                    is_code_mode=_is_code_mode,
+                                    browser_operation_mode=_browser_operation_mode,
+                                )
                             ):
                                 _final_stream_guarded = True
                                 continue
+                            if _public_narrative_started and not _synthesis_update_emitted:
+                                yield {
+                                    "type": "commentary_delta",
+                                    "delta": _FINAL_SYNTHESIS_UPDATE,
+                                    "progress_kind": "synthesize",
+                                    "progress_source": "runtime",
+                                    "iteration": i + 1,
+                                }
+                                _synthesis_update_emitted = True
                             yield {
                                 "type": "text_delta",
                                 "delta": joined,
                                 "iteration": i + 1,
                             }
+                            _final_delta_emitted_this_iteration = True
                             _streamed_final_chars = len(joined)
                             _throughput_chars += len(joined)
                             _tp = _maybe_emit_throughput(_throughput_chars)
                             if _tp is not None:
                                 yield _tp
                             _final_stream_started = True
+                            _visible_stream_state["started"] = True
                 elif evt.type == "thinking_delta":
                     thinking_parts.append(evt.delta)
                     yield {
@@ -2545,12 +3193,51 @@ def stream_react_loop(
             and maybe_final is None
         ):
             step.observation = text
+        if _iteration_soft_timed_out and not step.action and maybe_final is None:
+            _model_timeout_recoveries += 1
+            if _model_timeout_recoveries >= 2:
+                final_answer = (
+                    "模型连续两次在单轮推理时限内未能给出下一步操作或最终答案。"
+                    "前面已完成的工具结果仍保留在执行记录中，但这次无法可靠完成最终汇总。"
+                    "你可以点击继续，系统会从已保存的进度重新收敛。"
+                )
+                yield {
+                    "type": "text_delta",
+                    "delta": final_answer,
+                    "iteration": i + 1,
+                }
+                step.observation = "[model-iteration-timeout] convergence retry also timed out"
+                steps.append(step)
+                final_answer_emitted = True
+                terminated_reason = "model_stall"
+                break
+            recovery_update = (
+                "这一轮深度推理超过了单轮时限；已保留前面的有效结果，"
+                "下一轮会关闭扩展思考，直接收敛为阶段结论、必要操作或最终答案。"
+            )
+            yield {
+                "type": "commentary_delta",
+                "delta": recovery_update,
+                "iteration": i + 1,
+            }
+            step.public_update = recovery_update
+            step.observation = (
+                "[model-iteration-timeout] The previous model stream kept producing "
+                "private reasoning without a usable Action or Final Answer. Preserve "
+                "all completed tool results. On the next turn, do not deliberate at "
+                "length: emit one concrete Update plus the next necessary Action, or "
+                "emit the complete Final Answer directly."
+            )
+            _force_convergence_next = True
+        elif step.action or maybe_final is not None:
+            _model_timeout_recoveries = 0
         _finish_reason = (getattr(resp, "finish_reason", "") or "").strip().lower()
         _length_limited = _finish_reason_is_length_limited(_finish_reason)
         _length_limit_should_continue = False
         if (
             maybe_final
             and not _final_stream_started
+            and not (_todo_protocol_required and _todo_protocol_visible)
             and not _final_answer_needs_pre_emit_guard(
                 maybe_final,
                 is_code_mode=_is_code_mode,
@@ -2562,11 +3249,21 @@ def stream_react_loop(
             # parsed final once. When _final_stream_started is true the
             # user has already seen these tokens live, so skip to avoid
             # duplicate text in the transcript.
+            if _public_narrative_started and not _synthesis_update_emitted:
+                yield {
+                    "type": "commentary_delta",
+                    "delta": _FINAL_SYNTHESIS_UPDATE,
+                    "progress_kind": "synthesize",
+                    "progress_source": "runtime",
+                    "iteration": i + 1,
+                }
+                _synthesis_update_emitted = True
             yield {
                 "type": "text_delta",
                 "delta": maybe_final,
                 "iteration": i + 1,
             }
+            _final_delta_emitted_this_iteration = True
 
         # Chat-style answer recovery: the model produced plain
         # markdown without any ReAct anchor BUT we already streamed
@@ -2582,6 +3279,7 @@ def stream_react_loop(
             and step.action.lower() in {"none", "n/a", ""}
             and not _looks_like_observation_echo(text)
             and not _FINAL_RE.search(text)
+            and not _looks_like_unfinished_work(text)
         ):
             _guard_hit = _evaluate_final_answer_guards(
                 steps=steps,
@@ -2594,7 +3292,12 @@ def stream_react_loop(
                 tools_active=tools_active,
                 goal=intent.normalized_goal,
                 browser_operation_mode=_browser_operation_mode,
-                categories=None if _browser_operation_mode else frozenset({"security"}),
+                grounded_source_paths=_grounded_source_paths,
+                categories=(
+                    None
+                    if (_browser_operation_mode or _is_code_mode)
+                    else frozenset({"security", "protocol", "research"})
+                ),
             )
             if _guard_hit is not None:
                 _guard_label, _guard_message = _guard_hit
@@ -2645,6 +3348,30 @@ def stream_react_loop(
                         "iteration": i + 1,
                     }
                 consecutive_format_violations = 0
+            elif _unfinished_implementation_recovery_needed(
+                text,
+                intent.normalized_goal,
+                is_code_mode=_is_code_mode,
+            ):
+                # Free-form implementation diagnosis is not a final answer.
+                # Providers sometimes narrate the exact remaining defect but
+                # omit the ReAct Action anchor; the old two-strike fallback
+                # terminated at that point and left knowingly broken code.
+                # Preserve the diagnosis as an observation and make the next
+                # round a bounded, no-extended-thinking convergence attempt.
+                consecutive_format_violations = 0
+                _final_stream_started = False
+                step.observation = (
+                    "[unfinished-work-recovery] Your previous prose explicitly says work remains. "
+                    "Do not restate the diagnosis. Execute the next necessary tool call now using "
+                    "Action: skill_name({JSON}); after focused verification passes, emit Final Answer."
+                )
+                _force_convergence_next = True
+                yield {
+                    "type": "commentary_delta",
+                    "delta": "检测到尚未完成的实现诊断；已保留结论，下一轮直接执行修复。",
+                    "iteration": i + 1,
+                }
             else:
                 consecutive_format_violations += 1
                 _logger.warning(
@@ -2680,7 +3407,12 @@ def stream_react_loop(
                             tools_active=tools_active,
                             goal=intent.normalized_goal,
                             browser_operation_mode=_browser_operation_mode,
-                            categories=None if _browser_operation_mode else frozenset({"security"}),
+                            grounded_source_paths=_grounded_source_paths,
+                            categories=(
+                                None
+                                if (_browser_operation_mode or _is_code_mode)
+                                else frozenset({"security", "protocol", "research"})
+                            ),
                         )
                     if _guard_hit is not None:
                         _guard_label, _guard_message = _guard_hit
@@ -2690,15 +3422,26 @@ def stream_react_loop(
                             + f"[{_guard_label}]\n"
                             + _guard_message
                         )
-                    elif text and not maybe_final and not _final_stream_started:
-                        yield {
-                            "type": "text_delta",
-                            "delta": text,
-                            "iteration": i + 1,
-                        }
                     if _guard_hit is not None:
                         consecutive_format_violations = 0
                         maybe_final = None
+                    elif text and not maybe_final:
+                        # Guarded plain prose is a valid final answer even when
+                        # the provider omitted the literal ReAct label. The old
+                        # path surfaced the text and then returned ``None``, so
+                        # the gateway still marked a visibly complete reply as
+                        # interrupted. Finish the turn normally instead.
+                        if not _final_stream_started:
+                            yield {
+                                "type": "text_delta",
+                                "delta": text,
+                                "iteration": i + 1,
+                            }
+                        final_answer = text
+                        final_answer_emitted = True
+                        terminated_reason = "final_answer"
+                        steps.append(step)
+                        break
                     else:
                         _persist_react_trajectory(
                             stack,
@@ -2727,6 +3470,79 @@ def stream_react_loop(
         tool_action_requested = (
             tools_active and step.action and step.action.lower() not in {"none", "n/a", ""}
         )
+        if _green_verification_convergence_active and tool_action_requested:
+            _candidate_actions = step.actions or [step.action]
+            _candidate_names = []
+            for _candidate_action in _candidate_actions:
+                _candidate_parsed = _parse_action(_candidate_action)
+                if _candidate_parsed is not None:
+                    _candidate_names.append(_candidate_parsed[0])
+            _allow_one_todo = (
+                bool(_candidate_names)
+                and all(name == "todo_write" for name in _candidate_names)
+                and not _green_convergence_todo_used
+            )
+            if _allow_one_todo:
+                _green_convergence_todo_used = True
+            else:
+                # Two independent green verification rounds after the latest
+                # write are sufficient evidence. Re-running read/test/lint or
+                # shell probes only burns the turn budget and can turn a valid
+                # implementation into a timeout. Suppress those actions while
+                # preserving one checklist-finalization opportunity.
+                observation = (
+                    "[redundant-tool-skipped] Two separate verification rounds are already green "
+                    "and no code changed afterward. This tool call was not executed. Do not call "
+                    "another tool. Emit `Final Answer:` now with the recorded test/lint evidence."
+                )
+                step.observation = observation
+                step.action = ""
+                step.actions = []
+                tool_action_requested = False
+                maybe_final = None
+                _force_convergence_next = True
+
+        # ``Update:`` is the explicit public checkpoint channel. Emit only
+        # after the whole model turn has parsed, immediately before the tool
+        # starts, so a partial ``Action:`` can never leak into conversation.
+        # De-duplicate retries that repeat the same checkpoint verbatim.
+        step.public_update = _safe_public_update(step.public_update)
+        _checkpoint_actions = step.actions or [step.action]
+        _model_supplied_update = bool(step.public_update)
+        if tool_action_requested and maybe_final is None and not step.public_update:
+            _fallback_phase = _public_action_phase(_checkpoint_actions)
+            if _fallback_phase == _last_fallback_phase:
+                _same_phase_tool_rounds += 1
+            else:
+                _last_fallback_phase = _fallback_phase
+                _same_phase_tool_rounds = 0
+            # Narrate phase changes immediately. During long same-phase runs,
+            # add one bounded heartbeat only after three silent tool rounds.
+            if _same_phase_tool_rounds == 0 or _same_phase_tool_rounds >= 3:
+                step.public_update = _fallback_tool_checkpoint(_checkpoint_actions)
+                _same_phase_tool_rounds = 0
+        _public_update_key = re.sub(r"\s+", " ", step.public_update).strip().casefold()
+        if (
+            step.public_update
+            and tool_action_requested
+            and maybe_final is None
+            and _public_update_key != _last_public_update_key
+        ):
+            _public_narrative_started = True
+            _public_update_kind_value = _public_update_kind(
+                step.public_update,
+                actions=_checkpoint_actions,
+            )
+            yield {
+                "type": "commentary_delta",
+                "delta": step.public_update,
+                "progress_kind": _public_update_kind_value,
+                "progress_source": "model" if _model_supplied_update else "runtime",
+                "iteration": i + 1,
+            }
+            if _public_update_kind_value == "synthesize":
+                _synthesis_update_emitted = True
+            _last_public_update_key = _public_update_key
 
         if tool_action_requested:
             observation = None
@@ -3115,6 +3931,87 @@ def stream_react_loop(
                 observation = _placeholder_observation(step.action)
             step.observation = observation
 
+        # Common single/parallel tool outlet. Keep terminal evidence here so
+        # a model round that launches lint + tests together is counted exactly
+        # like one that launches either verifier alone.
+        if _is_code_mode and tool_action_requested:
+            _ordered_outcomes = _per_action_outcomes(step, default_ok=tool_ok)
+            _last_successful_write_idx = -1
+            for _outcome_idx, (_outcome_step, _outcome_ok) in enumerate(
+                _ordered_outcomes
+            ):
+                if _outcome_ok and _is_code_write_step(_outcome_step):
+                    _last_successful_write_idx = _outcome_idx
+
+            if _last_successful_write_idx >= 0:
+                _saw_successful_code_write = True
+                _clean_verification_rounds_after_write = 0
+                _verification_outcomes = _ordered_outcomes[
+                    _last_successful_write_idx + 1 :
+                ]
+            else:
+                _verification_outcomes = _ordered_outcomes
+
+            if _saw_successful_code_write:
+                for _outcome_step, _outcome_ok in _verification_outcomes:
+                    if not _has_code_verification([_outcome_step]):
+                        continue
+                    if _outcome_ok and _has_successful_verification_observation(
+                        [_outcome_step]
+                    ):
+                        # Separate verifier calls in one serial multi-action
+                        # batch are independent evidence rounds. Counting the
+                        # whole batch once caused green code agents to run the
+                        # same suite a dozen more times before convergence.
+                        _clean_verification_rounds_after_write += 1
+                    else:
+                        _clean_verification_rounds_after_write = 0
+
+            if (
+                _clean_verification_rounds_after_write >= 2
+                and not _green_verification_convergence_active
+            ):
+                _green_verification_convergence_active = True
+                _force_convergence_next = True
+                step.observation = (step.observation or observation or "") + (
+                    "\n\n[green-verification-convergence]\n"
+                    "Two clean verifier rounds completed after the latest successful code "
+                    "write. The runtime has recorded terminal-quality evidence. Do not run "
+                    "another verifier or shell probe. Update todo_write once if needed, then "
+                    "emit Final Answer."
+                )
+
+        if (
+            tool_action_requested
+            and observation
+            and _result_checkpoint_is_meaningful(
+                step.actions or [step.action],
+                succeeded=tool_ok,
+            )
+        ):
+            _result_update = _fallback_tool_result_checkpoint(
+                step.actions or [step.action],
+                succeeded=tool_ok,
+            )
+            _result_update_key = re.sub(r"\s+", " ", _result_update).strip().casefold()
+            if _result_update and _result_update_key != _last_public_update_key:
+                _result_update_kind = _public_update_kind(
+                    _result_update,
+                    actions=step.actions or [step.action],
+                    succeeded=tool_ok,
+                )
+                _public_narrative_started = True
+                yield {
+                    "type": "commentary_delta",
+                    "delta": _result_update,
+                    "progress_kind": _result_update_kind,
+                    "progress_source": "runtime",
+                    "iteration": i + 1,
+                }
+                if _result_update_kind == "synthesize":
+                    _synthesis_update_emitted = True
+                _last_public_update_key = _result_update_key
+
         if _is_code_mode and observation and _current_phase in ("execute", "verify"):
             _write_tools = frozenset(
                 {
@@ -3194,6 +4091,28 @@ def stream_react_loop(
         )
         if _verify_nudge:
             _midflight_nudges.append(f"[verification-tracker]\n{_verify_nudge}")
+        _red_verify_nudge = _failed_verification_followup_guard(
+            _steps_with_current,
+            is_code_mode=_is_code_mode,
+        )
+        if _red_verify_nudge:
+            _midflight_nudges.append(f"[red-verification-recovery]\n{_red_verify_nudge}")
+        _concurrency_nudge = _concurrency_semantic_followup_guard(
+            _steps_with_current,
+            is_code_mode=_is_code_mode,
+        )
+        if _concurrency_nudge:
+            _midflight_nudges.append(
+                f"[concurrency-semantic-repair]\n{_concurrency_nudge}"
+            )
+        _green_verify_nudge = _redundant_green_verification_guard(
+            _steps_with_current,
+            is_code_mode=_is_code_mode,
+        )
+        if _green_verify_nudge:
+            _midflight_nudges.append(f"[green-verification-convergence]\n{_green_verify_nudge}")
+            _green_verification_convergence_active = True
+            _force_convergence_next = True
         # Context-pressure signal — fires once per turn when the rolling
         # message list approaches the model's context budget. Gives the
         # model a chance to write a "resume state" hand-off paragraph
@@ -3209,10 +4128,13 @@ def stream_react_loop(
             ) + "\n\n".join(_midflight_nudges)
 
         if maybe_final:
-            _deferred_final_emit = not _final_stream_started and _final_answer_needs_pre_emit_guard(
-                maybe_final,
-                is_code_mode=_is_code_mode,
-                browser_operation_mode=_browser_operation_mode,
+            _deferred_final_emit = not _final_stream_started and (
+                (_todo_protocol_required and _todo_protocol_visible)
+                or _final_answer_needs_pre_emit_guard(
+                    maybe_final,
+                    is_code_mode=_is_code_mode,
+                    browser_operation_mode=_browser_operation_mode,
+                )
             )
             _guard_hit = _evaluate_final_answer_guards(
                 steps=steps,
@@ -3225,6 +4147,7 @@ def stream_react_loop(
                 tools_active=tools_active,
                 goal=intent.normalized_goal,
                 browser_operation_mode=_browser_operation_mode,
+                grounded_source_paths=_grounded_source_paths,
             )
             if _guard_hit is not None:
                 _guard_label, _guard_message = _guard_hit
@@ -3244,12 +4167,30 @@ def stream_react_loop(
                     steps.append(step)
                     break
                 maybe_final = None
+                # A completion guard may discover a semantic defect even
+                # after two superficially green verifier rounds. Re-open the
+                # tool path so the model can perform the demanded repair;
+                # otherwise the convergence gate would suppress every fix
+                # and turn a useful guard into an impasse.
+                _green_verification_convergence_active = False
+                _green_convergence_todo_used = False
+                _clean_verification_rounds_after_write = 0
+                _force_convergence_next = False
                 step.observation = (
                     (((step.observation or "") + "\n\n") if step.observation else "")
                     + f"[{_guard_label}]\n"
                     + _guard_message
                 )
             elif _deferred_final_emit:
+                if _public_narrative_started and not _synthesis_update_emitted:
+                    yield {
+                        "type": "commentary_delta",
+                        "delta": _FINAL_SYNTHESIS_UPDATE,
+                        "progress_kind": "synthesize",
+                        "progress_source": "runtime",
+                        "iteration": i + 1,
+                    }
+                    _synthesis_update_emitted = True
                 _delta = (
                     maybe_final[_streamed_final_chars:] if _streamed_final_chars else maybe_final
                 )
@@ -3258,6 +4199,7 @@ def stream_react_loop(
                     "delta": _delta,
                     "iteration": i + 1,
                 }
+                _final_delta_emitted_this_iteration = True
 
         _public_progress_summary = (
             _progress_summary if _is_code_mode else _build_research_progress_summary(steps + [step])
@@ -3267,6 +4209,7 @@ def stream_react_loop(
             "type": "react_step_complete",
             "iteration": step.iteration,
             "thought": step.thought,
+            "public_update": step.public_update,
             "action": step.action,
             "observation": step.observation,
             "task_id": str(react_task_id),
@@ -3294,6 +4237,7 @@ def stream_react_loop(
                     {
                         "iteration": s.iteration,
                         "thought": s.thought,
+                        "public_update": s.public_update,
                         "action": s.action,
                         "observation": s.observation,
                     }
@@ -3417,6 +4361,7 @@ def stream_react_loop(
                             {
                                 "iteration": s.iteration,
                                 "thought": s.thought,
+                                "public_update": s.public_update,
                                 "action": s.action,
                                 "observation": s.observation,
                             }
@@ -3440,11 +4385,10 @@ def stream_react_loop(
                 final_answer_segments.clear()
             else:
                 final_answer = maybe_final
-            # The normal final-answer path has already streamed the model
-            # text above. Forced convergence / pause paths synthesize a
-            # final answer later via ``router.call`` and need an explicit
-            # realtime delta before the generator returns.
-            final_answer_emitted = True
+            # A guarded long-task answer may have been intentionally buffered
+            # until every completion gate passed.  Only suppress the final
+            # emitter when this iteration actually yielded answer text.
+            final_answer_emitted = _final_delta_emitted_this_iteration
             terminated_reason = "final_answer"
             break
 
@@ -3491,18 +4435,30 @@ def stream_react_loop(
         # reports, code files, plans) can finish across multiple
         # iterations without the user seeing a half-finished doc.
         if _length_limit_should_continue:
+            _code_action_recovery = _is_code_mode and not final_answer_segments
+            if _code_action_recovery:
+                _force_convergence_next = True
+                _length_recovery_prompt = (
+                    "Your previous code-task response hit the output limit before producing an "
+                    "executable action. Do not continue or repeat the prose analysis. Extended "
+                    "thinking is disabled for this recovery round. Emit exactly one concrete next "
+                    "Action: skill_name({JSON}) now; prefer the required source/test mutation, or "
+                    "the smallest targeted verifier if the implementation is already written."
+                )
+            else:
+                _length_recovery_prompt = (
+                    "Your previous response was cut off by the output "
+                    "length limit. Continue exactly where it stopped — "
+                    "do NOT repeat earlier text, do NOT restart the "
+                    "report, do NOT switch to writing a summary or "
+                    "calling todo_write. Resume from the exact "
+                    "character you stopped at and finish every "
+                    "remaining section."
+                )
             messages.append(
                 Message(
                     role="user",
-                    content=(
-                        "Your previous response was cut off by the output "
-                        "length limit. Continue exactly where it stopped — "
-                        "do NOT repeat earlier text, do NOT restart the "
-                        "report, do NOT switch to writing a summary or "
-                        "calling todo_write. Resume from the exact "
-                        "character you stopped at and finish every "
-                        "remaining section."
-                    ),
+                    content=_length_recovery_prompt,
                 )
             )
             _logger.info(
@@ -3613,18 +4569,66 @@ def stream_react_loop(
                         ),
                     )
                 )
-            resp = router.call(
-                ModelRequest(
-                    model=effective_model,
-                    messages=messages,
-                    max_tokens=5000 if (_is_research_mode or _is_swarm_mode) else 400,
-                    temperature=0.2,
-                )
+            convergence_request = ModelRequest(
+                model=effective_model,
+                messages=messages,
+                max_tokens=5000 if (_is_research_mode or _is_swarm_mode) else 400,
+                temperature=0.2,
             )
-            text = (resp.text or "").strip()
-            final_m = _FINAL_RE.search(text)
-            if final_m:
-                final_answer = final_m.group(1).strip()
+            convergence_result = _collect_model_stream_text_with_deadline(
+                router,
+                convergence_request,
+                _model_iteration_timeout_s(),
+            )
+            if convergence_result is _MODEL_STREAM_DEADLINE:
+                final_answer = _stage_update_timeout_fallback(steps)
+                terminated_reason = "model_stall"
+                _logger.warning(
+                    "react_loop forced convergence stream exceeded deadline; "
+                    "preserving public stage conclusions",
+                )
+            else:
+                text, _convergence_response = convergence_result
+            text = "" if final_answer is not None else text.strip()
+            convergence_final = _extract_final_answer(text)
+            if final_answer is not None:
+                pass
+            elif convergence_final:
+                final_answer = convergence_final
+            elif (
+                text
+                and not _ACTION_RE.search(text)
+                and not _looks_like_observation_echo(text)
+                and not _looks_like_special_tool_envelope(text)
+                and "<tool_call>" not in text
+                and "<tool_invocation" not in text
+                and "<function=" not in text
+            ):
+                # Forced convergence is a direct, tools-disabled synthesis
+                # call. Several compatible providers obey the content request
+                # but omit the literal ``Final Answer:`` label. Treat that
+                # plain report exactly like the main loop's zero-anchor chat
+                # recovery instead of silently dropping a complete answer.
+                final_answer = text
+                _logger.info(
+                    "react_loop forced convergence salvaged plain final · chars=%d",
+                    len(text),
+                )
+            else:
+                _logger.warning(
+                    "react_loop 强制收敛未得安全 Final Answer · raw head=%r",
+                    text[:200],
+                )
+                _persist_react_trajectory(
+                    stack,
+                    react_task_id=react_task_id,
+                    beak_steps=executed_beak_steps,
+                    success=False,
+                )
+                _pause.unregister_active(str(react_task_id))
+                return None
+
+            if final_answer and terminated_reason != "model_stall":
                 _forced_step = ReActStep(
                     iteration=(steps[-1].iteration + 1) if steps else 1,
                     action="none",
@@ -3640,27 +4644,16 @@ def stream_react_loop(
                     tools_active=tools_active,
                     goal=intent.normalized_goal,
                     browser_operation_mode=_browser_operation_mode,
+                    grounded_source_paths=_grounded_source_paths,
                 )
                 if _guard_hit is not None:
                     _guard_label, _guard_message = _guard_hit
+                    _user_guard_message = _guard_reason_for_user(_guard_label, _guard_message)
                     final_answer = (
                         "我还不能把这个任务标记为完成。\n\n"
-                        f"[{_guard_label}]\n{_guard_message}\n\n"
+                        f"[{_guard_label}]\n{_user_guard_message}\n\n"
                         "请点击继续让我接着执行, 或提供必要的权限/登录/信息后我再继续。"
                     )
-            else:
-                _logger.warning(
-                    "react_loop 强制收敛未得 Final Answer · raw head=%r",
-                    text[:200],
-                )
-                _persist_react_trajectory(
-                    stack,
-                    react_task_id=react_task_id,
-                    beak_steps=executed_beak_steps,
-                    success=False,
-                )
-                _pause.unregister_active(str(react_task_id))
-                return None
         except (AttributeError, TypeError, ValueError) as exc:
             _logger.warning("react_loop 强制收敛失败 (%s): %s", type(exc).__name__, exc)
             _persist_react_trajectory(
@@ -3682,12 +4675,13 @@ def stream_react_loop(
         final_answer_emitted = True
 
     any_step_failed = any(not _beak_step_effective_success(s) for s in executed_beak_steps)
-    effective_success = not any_step_failed
+    effective_success = not any_step_failed and terminated_reason != "model_stall"
     final_success = effective_success and terminated_reason not in {
         "paused",
         "cancelled",
         "error",
         "guard_impasse",
+        "model_stall",
     }
     _persist_react_trajectory(
         stack,

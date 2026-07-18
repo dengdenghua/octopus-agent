@@ -1055,6 +1055,41 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.getByText("writer.md")).toBeInTheDocument();
   });
 
+  test("focuses the exact workbench block selected from the transcript", async () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        focusedEventId="write-2"
+        focusedEventKind="execution"
+        focusedEventView="trace"
+        focusedEventNonce={1}
+        events={[
+          event({
+            id: "read-1",
+            name: "read_file",
+            input: { path: "src/old.ts" },
+          }),
+          event({
+            id: "write-2",
+            name: "write_file",
+            input: { path: "src/selected.ts" },
+            startedAt: 2000,
+          }),
+        ]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "活动轨迹" })).toHaveClass(
+        "border-foreground/70",
+      );
+    });
+    const selectedRow = screen.getByText("src/selected.ts").closest("button");
+    expect(selectedRow).toHaveClass("border-l-primary");
+    expect(screen.getByText("src/old.ts").closest("button")).not.toHaveClass(
+      "border-l-primary",
+    );
+  });
+
   test("keeps a manually selected replay frame while the snapshot updates", async () => {
     const baseEvents = [
       event({

@@ -124,6 +124,18 @@ def build_turn_metadata(
         if clean_surfaces:
             metadata["runtime_surfaces"] = clean_surfaces
 
+    allowed_write_paths = ctx.get("allowed_write_paths")
+    if allowed_write_paths is None and not explicit_conversation_mode:
+        allowed_write_paths = stored_meta.get("allowed_write_paths")
+    if isinstance(allowed_write_paths, list):
+        clean_write_paths = [
+            item.strip()
+            for item in allowed_write_paths
+            if isinstance(item, str) and item.strip()
+        ]
+        if clean_write_paths:
+            metadata["allowed_write_paths"] = clean_write_paths
+
     project_signals = ctx.get("project_signals") or stored_meta.get("project_signals")
     if isinstance(project_signals, dict):
         metadata["project_signals"] = project_signals

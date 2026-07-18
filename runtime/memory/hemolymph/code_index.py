@@ -27,9 +27,17 @@ from typing import Any
 from runtime.memory.hemolymph.repo_context import _bm25, _tokenize
 from runtime.memory.hemolymph.semantic_code_index import search_persisted
 
-# v1 indexes Python source; the chunker is language-agnostic, so extending the
-# extension set later needs no other change.
-_CODE_EXTS = frozenset({".py"})
+# The chunker is language-agnostic (Python merely gets AST-aware boundaries),
+# so index the source formats used by the workspace instead of silently
+# dropping the frontend half of cross-stack questions.
+_CODE_EXTS = frozenset(
+    {".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java", ".kt", ".swift"}
+)
+_EXPLICIT_QUERY_PATH_RE = re.compile(
+    r"(?<![\w./-])(?:[A-Za-z0-9_@.-]+/)+[A-Za-z0-9_@.-]+"
+    r"\.(?:py|ts|tsx|js|jsx|go|rs|java|kt|swift)\b",
+    re.IGNORECASE,
+)
 _SKIP_DIRS = frozenset(
     {
         ".git",
@@ -218,6 +226,17 @@ def _default_root() -> Path:
     return Path.cwd()
 
 
+def _explicit_query_paths(query: str) -> list[str]:
+    """Return de-duplicated repo-relative source paths named in a query."""
+
+    return list(
+        dict.fromkeys(
+            match.group(0).replace("\\", "/").strip("/")
+            for match in _EXPLICIT_QUERY_PATH_RE.finditer(query or "")
+        )
+    )
+
+
 def reciprocal_rank_fusion(rankings: list[list[str]], *, k: int = 60) -> list[str]:
     """Fuse several ranked key-lists into one order by Reciprocal Rank Fusion.
 
@@ -347,13 +366,41 @@ def retrieve_code_context(
         return None
 
     base = Path(root) if root is not None else _default_root()
+    explicit_paths = _explicit_query_paths(query)
+    path_terms = set(_tokenize(" ".join(explicit_paths)))
+    content_query_terms = set(q_terms) - path_terms or set(q_terms)
+    exact_chunks: list[dict[str, Any]] = []
+    for requested in explicit_paths:
+        candidate = (base / requested).resolve()
+        try:
+            in_root = candidate.is_relative_to(base.resolve())
+        except (OSError, RuntimeError):
+            in_root = False
+        if not in_root or not candidate.is_file() or candidate.suffix not in _CODE_EXTS:
+            continue
+        chunks = _chunk_file(candidate, requested)
+        if not chunks:
+            continue
+        # A large named file may have many chunks. Pick the one with the
+        # strongest identifier overlap (then the earliest line) while still
+        # guaranteeing that every explicitly named file wins a slot even when
+        # the global index hit its file cap before reaching that path.
+        rel, line, body = max(
+            chunks,
+            key=lambda chunk: (
+                len(content_query_terms & set(_tokenize(chunk[2]))),
+                -int(chunk[1]),
+            ),
+        )
+        exact_chunks.append({"path": rel, "line": line, "body": body})
+
     idx = _get_index(base, ttl=ttl)
-    if not idx["pages"]:
+    if not idx["pages"] and not exact_chunks:
         return None
 
     scored = [(_bm25(q_terms, p, idx), p) for p in idx["pages"]]
     scored = [(s, p) for s, p in scored if s > 0]
-    if not scored:
+    if not scored and not exact_chunks:
         return None
     scored.sort(key=lambda sp: (-sp[0], sp[1]["path"], sp[1]["line"]))
     bm25_chunks = [chunk for _s, chunk in scored]
@@ -380,20 +427,33 @@ def retrieve_code_context(
         fused = reciprocal_rank_fusion(
             [[str(c["path"]) for c in bm25_chunks], [str(r["path"]) for r in semantic]]
         )
-        chosen: list[dict[str, Any]] = []
+        ranked_chosen: list[dict[str, Any]] = []
         for path in fused:
             if path in first_chunk:
                 c = first_chunk[path]
-                chosen.append({"path": path, "line": c["line"], "body": c["body"]})
+                ranked_chosen.append({"path": path, "line": c["line"], "body": c["body"]})
             elif sem_snippet.get(path, "").strip():
-                chosen.append({"path": path, "line": None, "body": sem_snippet[path]})
-            if len(chosen) >= max_chunks:
+                ranked_chosen.append({"path": path, "line": None, "body": sem_snippet[path]})
+            if len(ranked_chosen) >= max_chunks:
                 break
     else:
-        chosen = [
+        ranked_chosen = [
             {"path": str(c["path"]), "line": c["line"], "body": c["body"]}
             for c in bm25_chunks[:max_chunks]
         ]
+
+    chosen: list[dict[str, Any]] = []
+    chosen_paths: set[str] = set()
+    for item in [*exact_chunks, *ranked_chosen]:
+        path = str(item["path"])
+        if path in chosen_paths:
+            continue
+        chosen_paths.add(path)
+        chosen.append(
+            {"path": path, "line": item.get("line"), "body": str(item.get("body") or "")}
+        )
+        if len(chosen) >= max_chunks:
+            break
 
     # ── Hop 2 · follow the code graph one step ─────────────────────────
     # The round-0 chunks USE symbols whose definitions usually live in OTHER

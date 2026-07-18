@@ -108,6 +108,31 @@ class SteeringUserMessageItem(_ItemBase):
 class AgentMessageItem(_ItemBase):
     type: Literal[ItemType.AGENT_MESSAGE] = ItemType.AGENT_MESSAGE
     text: str = ""
+    # A commentary message is a concrete user-facing checkpoint between tool
+    # rounds, not the terminal answer. It reuses the normal message transport.
+    message_kind: Literal["answer", "commentary"] = Field(
+        default="answer",
+        alias="messageKind",
+    )
+    # Public progress carries a small semantic phase so clients can render a
+    # human task narrative (orient → investigate → implement → verify) rather
+    # than treating every checkpoint as identical assistant prose.
+    progress_kind: Literal[
+        "orient",
+        "investigate",
+        "implement",
+        "verify",
+        "pivot",
+        "synthesize",
+        "recover",
+    ] | None = Field(default=None, alias="progressKind")
+    # Stable public-timeline coordinates. ``phase_id`` groups the visible
+    # checkpoint, ``parent_item_id`` links it to the preceding evidence/tool
+    # item, and ``progress_sequence`` preserves causal order even if transport
+    # frames are coalesced or replayed later.
+    phase_id: str | None = Field(default=None, alias="phaseId")
+    parent_item_id: str | None = Field(default=None, alias="parentItemId")
+    progress_sequence: int | None = Field(default=None, alias="progressSequence")
     # Per-message speaker identity. Set in group/team rooms so each bubble
     # renders the ACTUAL author's avatar + name (not the turn leader's). The
     # frontend reads these off the message's additional_kwargs; when unset it

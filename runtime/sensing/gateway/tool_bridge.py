@@ -65,7 +65,12 @@ ReAct path is still the tool mechanism for everyone else.
 from __future__ import annotations
 
 import contextlib
+import contextvars
+import json
 import logging
+import os
+import queue
+import re
 import threading
 import time
 from collections.abc import Iterator
@@ -108,6 +113,16 @@ _logger = logging.getLogger("octopus.agentic")
 # continue or synthesize a report from the collected evidence.
 MAX_TOOL_ROUNDS = 300
 
+# Production turns should almost never approach the hard ceiling above.  Give
+# each task a smaller evidence-gathering budget, then force one tools-disabled
+# synthesis round.  The high ceiling remains as an emergency guard for truly
+# unusual workflows and for backwards-compatible explicit overrides.
+NARROW_WEB_RESEARCH_ROUND_BUDGET = 8
+WEB_RESEARCH_ROUND_BUDGET = 48
+READ_ONLY_ROUND_BUDGET = 80
+DEFAULT_TOOL_ROUND_BUDGET = 96
+CODE_CHANGE_ROUND_BUDGET = 160
+
 # Soft reflection cadence · every N rounds we inject a one-line
 # system message asking the model "are you still making progress, or
 # lets us keep MAX_TOOL_ROUNDS high without burning budget on agents
@@ -120,6 +135,192 @@ REFLECTION_INTERVAL = 10
 # medium-sized observations. Keep a bound so runaway tools cannot fill
 # the context, but leave enough room for useful file/search payloads.
 TOOL_OUTPUT_MAX_CHARS = 16000
+
+
+def _native_model_round_timeout_s() -> float:
+    """Wall-clock ceiling for one native tool-loop model round."""
+    raw = os.environ.get(
+        "OCTOPUS_NATIVE_MODEL_ROUND_TIMEOUT_S",
+        os.environ.get("OCTOPUS_REACT_MODEL_ITERATION_TIMEOUT_S", "120"),
+    )
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return 120.0
+    return max(10.0, min(value, 900.0))
+
+
+_NATIVE_STREAM_DEADLINE = object()
+
+
+def _iter_native_model_stream_with_deadline(
+    router: Any,
+    request: ModelRequest,
+    timeout_s: float,
+    *,
+    visible_started: Any = None,
+) -> Iterator[Any]:
+    """Pump a blocking native model stream through a hard deadline.
+
+    Provider read timeouts cannot help when an upstream keeps a stream open
+    without producing a usable event.  The daemon pump lets the agent loop
+    regain control, preserve completed tool results, and converge truthfully.
+    Once a final answer is visibly streaming, the wall-clock ceiling becomes
+    an inactivity deadline so long reports are not cut off mid-sentence.
+    """
+    event_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=64)
+    stop_event = threading.Event()
+    caller_context = contextvars.copy_context()
+    try:
+        from runtime.safety.approval.cancellation import (
+            current_cancellation_token as _current_cancellation_token,
+        )
+    except ImportError:  # pragma: no cover - optional subsystem
+        _current_cancellation_token = None
+
+    def _put(kind: str, value: Any) -> None:
+        while not stop_event.is_set():
+            try:
+                event_queue.put((kind, value), timeout=0.1)
+                return
+            except queue.Full:
+                continue
+
+    def _consume() -> None:
+        try:
+            for event in router.call_stream(request):
+                if stop_event.is_set():
+                    break
+                _put("event", event)
+        except Exception as exc:  # pragma: no cover - reraised below
+            _put("error", exc)
+        finally:
+            _put("done", None)
+
+    worker = threading.Thread(
+        target=lambda: caller_context.run(_consume),
+        name="native-model-stream-pump",
+        daemon=True,
+    )
+    worker.start()
+    timeout_s = max(0.0, timeout_s)
+    deadline = time.monotonic() + timeout_s
+    visible_mode = False
+    try:
+        while True:
+            token = _current_cancellation_token() if _current_cancellation_token else None
+            if token is not None and token.is_cancelled:
+                return
+            if callable(visible_started) and visible_started() and not visible_mode:
+                visible_mode = True
+                deadline = time.monotonic() + timeout_s
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                yield _NATIVE_STREAM_DEADLINE
+                return
+            try:
+                kind, value = event_queue.get(timeout=min(0.25, remaining))
+            except queue.Empty:
+                continue
+            if kind == "event":
+                if visible_mode:
+                    deadline = time.monotonic() + timeout_s
+                yield value
+            elif kind == "error":
+                raise value
+            else:
+                return
+    finally:
+        stop_event.set()
+
+
+def _native_public_checkpoint(text: str) -> str:
+    """Return a compact tool-round preamble safe for the main timeline."""
+    value = " ".join(str(text or "").strip().split())
+    if not value or len(value) < 8:
+        return ""
+    lowered = value.lower()
+    if any(
+        marker in lowered
+        for marker in (
+            "<tool_",
+            "<function",
+            "tool_use_id",
+            "```json",
+        )
+    ):
+        return ""
+    return value[:800].rstrip()
+
+
+def _native_result_checkpoint(
+    calls: list[ToolCall],
+    result_blocks: list[dict[str, Any]],
+) -> str:
+    """Build a factual public checkpoint from completed tool results.
+
+    Some native-tool models emit protocol calls with zero surrounding prose.
+    In that case the UI would otherwise show only execution rows.  Extracting
+    source titles from the actual observations gives the user a concise,
+    evidence-backed stage result without inventing model reasoning.
+    """
+    successful: list[tuple[ToolCall, str]] = []
+    for call, block in zip(calls, result_blocks, strict=False):
+        if block.get("is_error") or call.name == "todo_write":
+            continue
+        successful.append((call, str(block.get("content") or "")))
+    if not successful:
+        return ""
+
+    titles: list[str] = []
+
+    def _collect(value: Any) -> None:
+        if len(titles) >= 3:
+            return
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                if str(key).lower() in {"title", "page_title", "name"} and isinstance(nested, str):
+                    candidate = " ".join(nested.split()).strip()
+                    if 8 <= len(candidate) <= 140 and candidate not in titles:
+                        titles.append(candidate)
+                else:
+                    _collect(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                _collect(nested)
+
+    for _call, output in successful:
+        try:
+            _collect(json.loads(output))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            for match in re.finditer(
+                r"(?:title|page_title)['\"\s:=]+([^\n\r]{8,140})",
+                output,
+                flags=re.IGNORECASE,
+            ):
+                candidate = match.group(1).strip(" '\",}")
+                if candidate and candidate not in titles:
+                    titles.append(candidate)
+                if len(titles) >= 3:
+                    break
+
+    names = {call.name for call, _output in successful}
+    if titles:
+        rendered = "、".join(f"《{title}》" for title in titles[:3])
+        return (
+            f"本轮已从真实工具结果中拿到 {rendered} 等资料；"
+            "下一步会继续读取正文并交叉核对关键交互差异。"
+        )
+    if names & {"web_fetch", "fetch_url", "read_url", "browser_read"}:
+        return (
+            f"本轮已成功读取 {len(successful)} 份网页正文；下一步会基于正文证据提炼差异并补齐来源。"
+        )
+    if names & {"web_search", "search_web", "browser_search"}:
+        return (
+            f"本轮已完成 {len(successful)} 项资料检索并取得可用结果；"
+            "下一步会打开可靠来源正文进行核验。"
+        )
+    return ""
 
 
 # Single-turn tool concurrency (octopus optimisation, lane B).
@@ -183,6 +384,141 @@ _CODE_MUTATION_TOOLS = frozenset(
     }
 )
 _CODE_VERIFICATION_TOOLS = frozenset({"run_tests"})
+_CODE_TERMINAL_VERIFIER_TOOLS = frozenset({"run_tests", "lint_check"})
+
+_NO_LOCAL_ACCESS_SAFE_TOOLS = frozenset(
+    {
+        "todo_read",
+        "todo_write",
+        "search_skills",
+        "query_skill",
+        "web_search",
+        "search_web",
+        "web_fetch",
+        "fetch_url",
+        "read_url",
+    }
+)
+
+_READ_ONLY_BLOCKED_TOOLS = frozenset(
+    {
+        "write_text_file",
+        "append_text_file",
+        "edit_text_file",
+        "edit_file",
+        "multi_edit_file",
+        "format_code",
+        "exec_shell",
+        "run_tests",
+        "update_soul",
+        "revert_soul",
+        "remember",
+        "note_user",
+        "diary_write",
+    }
+)
+
+
+def _goal_forbids_local_workspace_access(value: str) -> bool:
+    """Whether the user explicitly prohibited even reading local files."""
+    text = " ".join(str(value or "").strip().split()).lower()
+    return bool(
+        re.search(
+            r"(?:不要|禁止|不得|不可|严禁|不允许)\s*"
+            r"(?:读取|访问|查看|检查|分析)"
+            r"[^。；;\n]{0,48}(?:本地|项目|仓库|工作区)"
+            r"[^。；;\n]{0,24}(?:文件|代码|目录)",
+            text,
+        )
+        or re.search(
+            r"\b(?:do\s+not|don't|never|must\s+not)\s+"
+            r"(?:read|access|inspect|analy[sz]e)\b"
+            r"[^.\n]{0,64}\b(?:local|workspace|repository|repo|project)\b"
+            r"[^.\n]{0,32}\b(?:files?|code|director(?:y|ies))\b",
+            text,
+        )
+    )
+
+
+def _goal_is_read_only(value: str) -> bool:
+    text = str(value or "").lower()
+    return bool(
+        re.search(r"\bread[- ]only\b", text)
+        or re.search(
+            r"\b(?:do\s+not|don't|must\s+not|never)\s+"
+            r"(?:modify|change|edit|write|create|update|add|remove|delete|patch)",
+            text,
+        )
+        or re.search(
+            r"(?:只读|(?:不要|严禁|禁止|不得|不可|不允许)\s*"
+            r"(?:修改|改动|更改|编辑|写入|创建|新增|添加|删除|提交))",
+            text,
+        )
+    )
+
+
+def _goal_is_narrow_single_source_research(value: str) -> bool:
+    """Whether the request asks for one small remote fact and one source."""
+    text = " ".join(str(value or "").strip().split()).lower()
+    source_marker = bool(
+        re.search(r"(?:一个|1\s*个)\s*(?:官方|可靠)?\s*(?:来源|网页|页面)", text)
+        or re.search(r"\b(?:one|single)\s+(?:official\s+)?source\b", text)
+    )
+    concise_marker = bool(
+        re.search(r"(?:一句|一段|简短|一句话|结论)", text)
+        or re.search(r"\b(?:one sentence|brief|concise|short conclusion)\b", text)
+    )
+    return source_marker and concise_marker
+
+
+def _native_tool_round_budget(
+    goal: str,
+    *,
+    workspace_contract: str | None,
+    code_change_task: bool,
+) -> int:
+    """Choose a bounded tool budget before a tools-disabled synthesis pass."""
+    raw_override = os.environ.get("OCTOPUS_NATIVE_TOOL_ROUND_BUDGET", "").strip()
+    if raw_override:
+        try:
+            return max(1, min(int(raw_override), MAX_TOOL_ROUNDS))
+        except ValueError:
+            pass
+
+    if _goal_is_narrow_single_source_research(goal):
+        budget = NARROW_WEB_RESEARCH_ROUND_BUDGET
+    elif code_change_task:
+        budget = CODE_CHANGE_ROUND_BUDGET
+    elif workspace_contract == "no_local_access":
+        budget = WEB_RESEARCH_ROUND_BUDGET
+    elif workspace_contract == "read_only":
+        budget = READ_ONLY_ROUND_BUDGET
+    else:
+        budget = DEFAULT_TOOL_ROUND_BUDGET
+    return max(1, min(budget, MAX_TOOL_ROUNDS))
+
+
+def _filter_tool_specs_for_workspace_contract(
+    tool_specs: list[Any],
+    goal: str,
+) -> tuple[list[Any], str | None]:
+    """Enforce user local-workspace restrictions at the capability boundary."""
+    if _goal_forbids_local_workspace_access(goal):
+        allowed = [
+            spec
+            for spec in tool_specs
+            if str(getattr(spec, "name", "")) in _NO_LOCAL_ACCESS_SAFE_TOOLS
+            or str(getattr(spec, "name", "")).startswith("browser_")
+        ]
+        return allowed, "no_local_access"
+    if _goal_is_read_only(goal):
+        allowed = [
+            spec
+            for spec in tool_specs
+            if str(getattr(spec, "name", "")) not in _READ_ONLY_BLOCKED_TOOLS
+        ]
+        return allowed, "read_only"
+    return tool_specs, None
 
 
 def _is_code_change_task(intent: ParsedIntent) -> bool:
@@ -264,6 +600,29 @@ def _is_shell_verification(call: ToolCall) -> bool:
             "cargo test",
             "go test",
             "dotnet test",
+        )
+    )
+
+
+def _is_shell_terminal_verifier(call: ToolCall) -> bool:
+    """Whether a shell call contributes independent terminal code evidence."""
+    if _is_shell_verification(call):
+        return True
+    if call.name != "exec_shell":
+        return False
+    command = _shell_command_text(call)
+    return any(
+        marker in command
+        for marker in (
+            "ruff ",
+            "pylint ",
+            "pyright ",
+            "basedpyright ",
+            "mypy ",
+            "eslint ",
+            "tsc ",
+            "cargo clippy",
+            "go vet",
         )
     )
 
@@ -469,6 +828,7 @@ def _session_metadata_from_intent(intent: ParsedIntent) -> dict[str, Any]:
             "browser_track_preference",
             "browser_permission_policy",
             "browser_evidence_policy",
+            "allowed_write_paths",
         ):
             value = nested.get(key)
             if value is not None:
@@ -498,6 +858,7 @@ def _session_metadata_from_intent(intent: ParsedIntent) -> dict[str, Any]:
         "browser_track_preference",
         "browser_permission_policy",
         "browser_evidence_policy",
+        "allowed_write_paths",
     ):
         value = user_context.get(key)
         if value is not None:
@@ -611,7 +972,9 @@ def _required_browser_action_evidence(goal: str) -> set[str]:
     """Return minimum UI-action evidence implied by a mutating browser goal."""
     text = str(goal or "").lower()
     required: set[str] = set()
-    if any(term in text for term in ("create", "add", "edit", "update", "创建", "新增", "编辑", "修改")):
+    if any(
+        term in text for term in ("create", "add", "edit", "update", "创建", "新增", "编辑", "修改")
+    ):
         required.update(("type", "click"))
     if any(term in text for term in ("verify", "验证", "校验")):
         required.add("verify")
@@ -1094,9 +1457,7 @@ def stream_agentic_fallback(
     )
     _browser_prompt = _browser_operation_guidance(_intent_user_context)
     _browser_required_evidence = (
-        _required_browser_action_evidence(intent.normalized_goal)
-        if _browser_prompt
-        else set()
+        _required_browser_action_evidence(intent.normalized_goal) if _browser_prompt else set()
     )
     if _browser_prompt:
         messages.insert(0, Message(role="system", content=_browser_prompt))
@@ -1229,6 +1590,25 @@ def stream_agentic_fallback(
             ),
         )
 
+    messages.insert(
+        0,
+        Message(
+            role="system",
+            content=(
+                "REALTIME INTERACTION CONTRACT:\n"
+                "- During a multi-step task, accompany each meaningful tool "
+                "batch with one short ordinary-text checkpoint before the tool "
+                "call. State the conclusion just established and what you are "
+                "doing next; do not expose private chain-of-thought.\n"
+                "- Keep checkpoints concrete and user-facing. Avoid generic "
+                "phrases such as 'working on it' when a verified finding is "
+                "available.\n"
+                "- After the last tool result, produce the complete answer "
+                "directly instead of another process-only checkpoint.\n"
+            ),
+        ),
+    )
+
     # Bind the agent into a Session for the duration of this stream
     # so memory skills (`remember`, `recall`, `note_user`,
     # `diary_write`) can resolve the active agent_id via
@@ -1273,6 +1653,62 @@ def stream_agentic_fallback(
         user_context=_intent_user_context,
         goal=intent.normalized_goal,
     )
+    tool_specs, workspace_contract = _filter_tool_specs_for_workspace_contract(
+        tool_specs,
+        intent.normalized_goal,
+    )
+    _tool_round_budget = _native_tool_round_budget(
+        intent.normalized_goal,
+        workspace_contract=workspace_contract,
+        code_change_task=_code_change_task,
+    )
+    if _tool_round_budget < MAX_TOOL_ROUNDS:
+        messages.insert(
+            0,
+            Message(
+                role="system",
+                content=(
+                    "TOOL-ROUND BUDGET:\n"
+                    f"You have at most {_tool_round_budget} evidence-gathering "
+                    "rounds before tools are disabled for synthesis. Prefer "
+                    "the strongest available evidence, avoid retrying equivalent "
+                    "URLs or searches, and answer as soon as the request is "
+                    "supported. The final synthesis round must produce the best "
+                    "complete answer from collected evidence."
+                ),
+            ),
+        )
+    if workspace_contract == "no_local_access":
+        messages.insert(
+            0,
+            Message(
+                role="system",
+                content=(
+                    "LOCAL WORKSPACE ACCESS IS FORBIDDEN FOR THIS TURN:\n"
+                    "The user explicitly prohibited reading, inspecting, "
+                    "modifying, or creating local files. Local filesystem, "
+                    "shell, memory-write, delegation, and artifact tools have "
+                    "therefore been removed from the tool list. Use only remote "
+                    "research/browser tools and the live checklist. Do not claim "
+                    "that local inspection is required and do not ask another "
+                    "agent to perform it."
+                ),
+            ),
+        )
+    elif workspace_contract == "read_only":
+        messages.insert(
+            0,
+            Message(
+                role="system",
+                content=(
+                    "READ-ONLY WORKSPACE CONTRACT:\n"
+                    "The user permitted inspection but prohibited mutation. "
+                    "File-write, edit, shell, test, formatting, memory-write, "
+                    "and self-modification tools have been removed. Do not "
+                    "create or modify local files."
+                ),
+            ),
+        )
     if not tool_specs:
         # Registry is empty or broken · degrade to direct LLM.
         _logger.warning(
@@ -1297,26 +1733,51 @@ def stream_agentic_fallback(
     # full credit, any errors → partial). Bumped in the tool_result
     # building loop below.
     _tool_error_count = 0
+    _completed_tool_count = 0
     _attempted_models = {effective_model}
     _provider_failovers = 0
     _code_mutation_seen = False
     _code_verification_state: bool | None = None
+    _clean_code_verifier_rounds = 0
+    _green_verification_convergence_active = False
+    _green_convergence_todo_only = False
     _code_completion_nudges = 0
     _code_no_action_stops = 0
     _quality_failovers = 0
     _browser_observed_evidence: set[str] = set()
     _browser_guard_nudges = 0
+    _force_convergence_next = False
+    _model_timeout_recoveries = 0
 
     def _observe_code_tool_result(call: ToolCall, is_error: bool) -> None:
+        nonlocal _clean_code_verifier_rounds
         nonlocal _code_mutation_seen, _code_verification_state
+        nonlocal _green_convergence_todo_only
+        nonlocal _green_verification_convergence_active
         if not _code_change_task:
             return
         if (call.name in _CODE_MUTATION_TOOLS or _is_shell_mutation(call)) and not is_error:
             _code_mutation_seen = True
             # Any later mutation invalidates proof from an earlier test run.
             _code_verification_state = None
+            _clean_code_verifier_rounds = 0
+            _green_verification_convergence_active = False
+            _green_convergence_todo_only = False
         if call.name in _CODE_VERIFICATION_TOOLS or _is_shell_verification(call):
             _code_verification_state = not is_error
+        if (
+            call.name in _CODE_TERMINAL_VERIFIER_TOOLS
+            or _is_shell_terminal_verifier(call)
+        ):
+            if _code_mutation_seen and not is_error:
+                _clean_code_verifier_rounds += 1
+            elif is_error:
+                _clean_code_verifier_rounds = 0
+            if (
+                _code_verification_state is True
+                and _clean_code_verifier_rounds >= 2
+            ):
+                _green_verification_convergence_active = True
 
     # Realtime generators can be resumed by different worker contexts after
     # every yielded SSE event.  A ContextVar set once for the generator is
@@ -1340,34 +1801,60 @@ def stream_agentic_fallback(
                     role="user",
                     content=_reflection_checkpoint_message(
                         round_i,
-                        MAX_TOOL_ROUNDS,
+                        _tool_round_budget,
                     ),
                 )
             )
+        _round_todo_only_mode = _green_convergence_todo_only
+        _round_convergence_mode = _force_convergence_next
+        _force_convergence_next = False
+        if _round_todo_only_mode:
+            _active_tool_specs = [spec for spec in tool_specs if spec.name == "todo_write"]
+        elif _round_convergence_mode:
+            _active_tool_specs = []
+        else:
+            _active_tool_specs = tool_specs
         req = ModelRequest(
             model=effective_model,
             messages=messages,
             max_tokens=4096,
             temperature=1.0,
-            tools=tool_specs,
+            tools=_active_tool_specs,
             require_tool_use=(
-                (
-                    _code_change_task
-                    and (
-                        not _code_mutation_seen
-                        or _code_verification_state is not True
+                True
+                if _round_todo_only_mode
+                else False
+                if _round_convergence_mode
+                else (
+                    (
+                        _code_change_task
+                        and (not _code_mutation_seen or _code_verification_state is not True)
                     )
+                    or bool(_browser_required_evidence - _browser_observed_evidence)
                 )
-                or bool(_browser_required_evidence - _browser_observed_evidence)
             ),
         )
 
         round_text_chunks: list[str] = []
         round_tool_calls: list[ToolCall] = []
+        _round_commentary_emitted = False
+        _round_timed_out = False
 
         _round_stream_event_seen = False
         try:
-            for event in router.call_stream(req):
+            for event in _iter_native_model_stream_with_deadline(
+                router,
+                req,
+                _native_model_round_timeout_s(),
+            ):
+                if event is _NATIVE_STREAM_DEADLINE:
+                    _round_timed_out = True
+                    _logger.warning(
+                        "agentic round %d exceeded %.1fs; switching to convergence",
+                        round_i + 1,
+                        _native_model_round_timeout_s(),
+                    )
+                    break
                 _round_stream_event_seen = True
                 etype = event.type
                 if etype == "text_delta":
@@ -1381,6 +1868,13 @@ def stream_agentic_fallback(
                 elif etype == "tool_use":
                     if event.tool_call is not None:
                         round_tool_calls.append(event.tool_call)
+                        if not _round_commentary_emitted:
+                            checkpoint = _native_public_checkpoint(
+                                "".join(round_text_chunks),
+                            )
+                            if checkpoint:
+                                yield ("commentary", checkpoint, None)
+                                _round_commentary_emitted = True
                         yield (
                             "tool_start",
                             {
@@ -1436,17 +1930,59 @@ def stream_agentic_fallback(
             break
 
         round_text = "".join(round_text_chunks)
-        if not round_tool_calls:
+        if _round_timed_out and not round_tool_calls:
+            _model_timeout_recoveries += 1
+            if _model_timeout_recoveries >= 2:
+                final_text = (
+                    "模型连续两次未能在单轮时限内给出可用的下一步或最终答案。"
+                    "已经完成的工具结果仍保留在过程记录中，但这次无法可靠完成汇总；"
+                    "可以点击继续，从现有进度重新收敛。"
+                )
+                yield ("text", final_text, None)
+                yield ("done", "", final_text)
+                return
+            recovery_update = (
+                "这一轮推理超过单轮时限；已保留前面的有效结果，"
+                "现在关闭扩展工具调用，直接收敛阶段结论或最终答案。"
+            )
+            yield ("commentary", recovery_update, None)
+            messages.append(
+                Message(
+                    role="user",
+                    content=(
+                        "[SYSTEM CHECK - model round timeout]\n"
+                        "The previous native-tool model stream exceeded its "
+                        "wall-clock deadline without a usable tool call or final "
+                        "answer. Preserve every completed tool result. Do not call "
+                        "more tools and do not deliberate at length. Produce the "
+                        "best complete final answer supported by the evidence now; "
+                        "if evidence is insufficient, name the exact gap truthfully."
+                    ),
+                )
+            )
+            _force_convergence_next = True
+            continue
+        if round_tool_calls:
+            _model_timeout_recoveries = 0
+        if not round_tool_calls and not _round_convergence_mode:
             round_tool_calls = _recover_named_xml_tool_calls(
                 round_text,
-                allowed_names={spec.name for spec in tool_specs},
+                allowed_names={spec.name for spec in _active_tool_specs},
             )
 
+        if round_tool_calls and not _round_commentary_emitted:
+            checkpoint = _native_public_checkpoint(round_text)
+            if checkpoint:
+                yield ("commentary", checkpoint, None)
+                _round_commentary_emitted = True
+
         if not round_tool_calls:
-            _missing_browser_evidence = (
-                _browser_required_evidence - _browser_observed_evidence
-            )
-            if _missing_browser_evidence and _browser_guard_nudges < 3:
+            _missing_browser_evidence = _browser_required_evidence - _browser_observed_evidence
+            if (
+                not _round_convergence_mode
+                and _missing_browser_evidence
+                and _browser_guard_nudges < 3
+            ):
                 _browser_guard_nudges += 1
                 accumulated_text = ""
                 messages.append(
@@ -1464,7 +2000,7 @@ def stream_agentic_fallback(
                     )
                 )
                 continue
-            if _code_change_task and not _code_mutation_seen:
+            if not _round_convergence_mode and _code_change_task and not _code_mutation_seen:
                 _code_no_action_stops += 1
                 if _code_no_action_stops >= 2 and _quality_failovers < 2:
                     fallback_model = _next_custom_model_fallback(
@@ -1497,7 +2033,7 @@ def stream_agentic_fallback(
                             )
                         )
                         continue
-            if _todo_protocol_required and _has_todo_write:
+            if not _round_convergence_mode and _todo_protocol_required and _has_todo_write:
                 _todo_guard_message: str | None = None
                 if not _todo_seen:
                     _todo_guard_message = (
@@ -1526,11 +2062,9 @@ def stream_agentic_fallback(
                     )
                     continue
             if (
-                _code_change_task
-                and (
-                    not _code_mutation_seen
-                    or _code_verification_state is not True
-                )
+                not _round_convergence_mode
+                and _code_change_task
+                and (not _code_mutation_seen or _code_verification_state is not True)
                 and _code_completion_nudges < 2
             ):
                 _code_completion_nudges += 1
@@ -1556,6 +2090,12 @@ def stream_agentic_fallback(
                 )
                 continue
             # Model replied with pure text · conversation is done.
+            if _completed_tool_count > 0:
+                yield (
+                    "commentary",
+                    "证据已经收齐；我现在把关键信息收束成最终回答。",
+                    None,
+                )
             accumulated_text += round_text
             for chunk in round_text_chunks:
                 yield ("text", chunk, None)
@@ -1714,9 +2254,7 @@ def stream_agentic_fallback(
                 )
                 _observe_code_tool_result(call, is_error)
                 if not is_error:
-                    _browser_observed_evidence.update(
-                        _browser_action_evidence(call)
-                    )
+                    _browser_observed_evidence.update(_browser_action_evidence(call))
                 yield (
                     "tool_end",
                     {
@@ -1767,9 +2305,7 @@ def stream_agentic_fallback(
                     _current_session.reset(_call_session_token)
                 _observe_code_tool_result(call, is_error)
                 if not is_error:
-                    _browser_observed_evidence.update(
-                        _browser_action_evidence(call)
-                    )
+                    _browser_observed_evidence.update(_browser_action_evidence(call))
                 yield (
                     "tool_end",
                     {
@@ -1791,12 +2327,92 @@ def stream_agentic_fallback(
                     _tool_error_count += 1
                 tool_result_blocks.append(block)
 
+        if not _round_commentary_emitted:
+            checkpoint = _native_result_checkpoint(
+                round_tool_calls,
+                tool_result_blocks,
+            )
+            if checkpoint:
+                yield ("commentary", checkpoint, None)
+                _round_commentary_emitted = True
+
+        _completed_tool_count += len(round_tool_calls)
+
         messages.append(
             Message(
                 role="user",
                 content=tool_result_blocks,
             )
         )
+
+        if _green_verification_convergence_active:
+            _todo_completed_this_round = any(
+                call.name == "todo_write" for call in round_tool_calls
+            )
+            if _green_convergence_todo_only and _todo_completed_this_round:
+                _green_convergence_todo_only = False
+                _force_convergence_next = True
+                messages.append(
+                    Message(
+                        role="user",
+                        content=(
+                            "[SYSTEM CHECK - green verification convergence]\n"
+                            "The final checklist update is recorded. Do not call or "
+                            "request any more tools. Produce the concise final answer "
+                            "from the completed implementation and verification evidence."
+                        ),
+                    )
+                )
+            elif not _green_convergence_todo_only:
+                if _todo_protocol_required and _has_todo_write and _tool_work_since_todo:
+                    _green_convergence_todo_only = True
+                    messages.append(
+                        Message(
+                            role="user",
+                            content=(
+                                "[SYSTEM CHECK - green verification convergence]\n"
+                                "Two independent clean verifier calls succeeded after "
+                                "the latest code mutation. Terminal evidence is complete. "
+                                "Do not run another test, lint, shell, read, or environment "
+                                "probe. Call `todo_write` once now to record the final "
+                                "checklist state; that is the only remaining tool action."
+                            ),
+                        )
+                    )
+                else:
+                    _force_convergence_next = True
+                    messages.append(
+                        Message(
+                            role="user",
+                            content=(
+                                "[SYSTEM CHECK - green verification convergence]\n"
+                                "Two independent clean verifier calls succeeded after "
+                                "the latest code mutation. Do not call or request any "
+                                "more tools. Produce the concise final answer now."
+                            ),
+                        )
+                    )
+
+        if round_i + 1 >= _tool_round_budget and _tool_round_budget < MAX_TOOL_ROUNDS:
+            yield (
+                "commentary",
+                "已达到本轮证据收集预算；现在停止扩展检索，直接用现有结果完成回答。",
+                None,
+            )
+            messages.append(
+                Message(
+                    role="user",
+                    content=(
+                        "[SYSTEM CHECK - evidence budget reached]\n"
+                        f"The task used its {_tool_round_budget} tool rounds. "
+                        "Do not call, request, or describe any more tools. "
+                        "Using only the completed observations above, produce "
+                        "the best complete final answer now. Be concise and "
+                        "truthful about any remaining evidence gap."
+                    ),
+                )
+            )
+            _force_convergence_next = True
 
     # Exceeded max rounds. Pause instead of pretending the turn is
     # complete: ask the user whether to spend another work budget or
@@ -1829,11 +2445,24 @@ def stream_agentic_fallback(
         temperature=0.7,
         tools=[],
     )
+    checkpoint_visible = {"started": False}
     try:
-        for event in router.call_stream(checkpoint_req):
+        for event in _iter_native_model_stream_with_deadline(
+            router,
+            checkpoint_req,
+            _native_model_round_timeout_s(),
+            visible_started=lambda state=checkpoint_visible: state["started"],
+        ):
+            if event is _NATIVE_STREAM_DEADLINE:
+                _logger.warning(
+                    "agentic checkpoint synthesis exceeded %.1fs",
+                    _native_model_round_timeout_s(),
+                )
+                break
             etype = event.type
             if etype == "text_delta":
                 checkpoint_chunks.append(event.delta)
+                checkpoint_visible["started"] = True
                 yield ("text", event.delta, None)
             elif etype == "thinking_delta":
                 accumulated_reasoning += event.delta

@@ -642,16 +642,91 @@ async def _start_turn(
             runtime._snapshot_to_thread_store(thread_id, log, intent)
             return turn
 
+        repair_attempt = 0
+        requested_sandbox = params.get("sandboxPolicy")
+        repair_limit = (
+            2
+            if turn_driver == "react"
+            and isinstance(requested_sandbox, dict)
+            and str(requested_sandbox.get("type") or "") == "workspaceWrite"
+            and isinstance(validated.sandbox_policy, dict)
+            and str(validated.sandbox_policy.get("type") or "") == "workspaceWrite"
+            else 0
+        )
         if _turn_has_failed_code_verification(turn):
-            turn.status = TurnStatus.FAILED
-            log.turn_completed(thread_id, turn.id, turn.status)
-            runtime._record_failed_turn_proposal(
-                turn,
-                intent=intent,
-                failure_source="verification_failed",
-            )
-            runtime._snapshot_to_thread_store(thread_id, log, intent)
-            return turn
+            failed_items = [
+                item
+                for item in turn.items
+                if isinstance(item, VerificationItem) and item.status == ItemStatus.FAILED
+            ]
+            if repair_limit:
+                from runtime.safety.evolution.auto_verifier import (
+                    build_verification_repair_request,
+                )
+
+                verification_plan = _verification_plan_for_code_paths(
+                    _code_change_paths(turn),
+                    intent,
+                )
+                repair_attempt = 1
+                repair_request = build_verification_repair_request(
+                    verification_plan,
+                    failed_items,
+                    attempt=repair_attempt,
+                    max_attempts=repair_limit,
+                )
+                with contextlib.suppress(Exception):
+                    from runtime.safety.evolution.auto_verifier_metrics import (
+                        record_auto_verifier_repair_attempt,
+                    )
+
+                    record_auto_verifier_repair_attempt(
+                        attempt=repair_attempt,
+                        max_attempts=repair_limit,
+                        status="requested",
+                        failed_commands=[item.command for item in failed_items],
+                    )
+                repair_context = dict(intent.user_context or {})
+                repair_context["verification_repair"] = repair_request
+                repair_intent = intent.model_copy(
+                    update={
+                        "raw": repair_request["prompt"],
+                        "normalized_goal": repair_request["prompt"],
+                        "user_context": repair_context,
+                    }
+                )
+                await runtime._drive_react(
+                    turn,
+                    log,
+                    emitter,
+                    repair_intent,
+                    provider,
+                    agent,
+                    model=validated.model,
+                )
+                if turn.status == TurnStatus.INTERRUPTED:
+                    log.turn_completed(thread_id, turn.id, turn.status)
+                    runtime._snapshot_to_thread_store(thread_id, log, intent)
+                    return turn
+                if turn.status == TurnStatus.FAILED:
+                    log.turn_completed(thread_id, turn.id, turn.status)
+                    runtime._record_failed_turn_proposal(
+                        turn,
+                        intent=intent,
+                        failure_source="verification_repair_failed",
+                    )
+                    runtime._snapshot_to_thread_store(thread_id, log, intent)
+                    return turn
+            else:
+                turn.status = TurnStatus.FAILED
+                log.turn_completed(thread_id, turn.id, turn.status)
+                runtime._record_failed_turn_proposal(
+                    turn,
+                    intent=intent,
+                    failure_source="verification_failed",
+                )
+                runtime._snapshot_to_thread_store(thread_id, log, intent)
+                return turn
 
         if _turn_has_unverified_code_changes(turn):
             code_change_paths = _code_change_paths(turn)
@@ -659,28 +734,102 @@ async def _start_turn(
                 code_change_paths,
                 intent,
             )
-            try:
-                from runtime.safety.evolution.auto_verifier import (
-                    run_highest_priority_verification,
-                )
+            auto_items: list[VerificationItem] = []
+            while True:
+                try:
+                    from runtime.safety.evolution.auto_verifier import (
+                        build_verification_repair_request,
+                        run_verification_plan,
+                    )
 
-                auto_item = run_highest_priority_verification(
-                    verification_plan,
-                    sandbox_policy=validated.sandbox_policy,
-                )
-            except Exception:  # noqa: BLE001 - auto verification is best-effort
-                auto_item = None
-            if auto_item is not None:
-                turn.items.append(auto_item)
-                await runtime._emit_item_started(turn, log, emitter, auto_item)
-                await runtime._emit_item_completed(turn, log, emitter, auto_item)
-                if auto_item.status == ItemStatus.COMPLETED:
+                    auto_items = run_verification_plan(
+                        verification_plan,
+                        sandbox_policy=validated.sandbox_policy,
+                    )
+                except Exception:  # noqa: BLE001 - auto verification is best-effort
+                    auto_items = []
+                for auto_item in auto_items:
+                    turn.items.append(auto_item)
+                    await runtime._emit_item_started(turn, log, emitter, auto_item)
+                    await runtime._emit_item_completed(turn, log, emitter, auto_item)
+                if repair_attempt:
+                    with contextlib.suppress(Exception):
+                        from runtime.safety.evolution.auto_verifier_metrics import (
+                            record_auto_verifier_repair_attempt,
+                        )
+
+                        record_auto_verifier_repair_attempt(
+                            attempt=repair_attempt,
+                            max_attempts=repair_limit,
+                            status=(
+                                "passed"
+                                if auto_items
+                                and all(item.status == ItemStatus.COMPLETED for item in auto_items)
+                                else "failed"
+                                if auto_items
+                                else "no_evidence"
+                            ),
+                            failed_commands=[],
+                            fresh_evidence_commands=[item.command for item in auto_items],
+                        )
+                if all(item.status == ItemStatus.COMPLETED for item in auto_items):
+                    if not auto_items:
+                        break
                     turn.status = TurnStatus.COMPLETED
                     log.turn_completed(thread_id, turn.id, turn.status)
                     runtime._record_successful_turn_example(turn, intent=intent)
                     await runtime._maybe_compact(thread_id, log, emitter)
                     runtime._snapshot_to_thread_store(thread_id, log, intent)
                     return turn
+                if not auto_items or repair_attempt >= repair_limit:
+                    break
+
+                repair_attempt += 1
+                repair_request = build_verification_repair_request(
+                    verification_plan,
+                    auto_items,
+                    attempt=repair_attempt,
+                    max_attempts=repair_limit,
+                )
+                with contextlib.suppress(Exception):
+                    from runtime.safety.evolution.auto_verifier_metrics import (
+                        record_auto_verifier_repair_attempt,
+                    )
+
+                    record_auto_verifier_repair_attempt(
+                        attempt=repair_attempt,
+                        max_attempts=repair_limit,
+                        status="requested",
+                        failed_commands=[item.command for item in auto_items],
+                    )
+                repair_context = dict(intent.user_context or {})
+                repair_context["verification_repair"] = repair_request
+                repair_intent = intent.model_copy(
+                    update={
+                        "raw": repair_request["prompt"],
+                        "normalized_goal": repair_request["prompt"],
+                        "user_context": repair_context,
+                    }
+                )
+                await runtime._drive_react(
+                    turn,
+                    log,
+                    emitter,
+                    repair_intent,
+                    provider,
+                    agent,
+                    model=validated.model,
+                )
+                if turn.status == TurnStatus.INTERRUPTED:
+                    log.turn_completed(thread_id, turn.id, turn.status)
+                    runtime._snapshot_to_thread_store(thread_id, log, intent)
+                    return turn
+                verification_plan = _verification_plan_for_code_paths(
+                    _code_change_paths(turn),
+                    intent,
+                )
+
+            if auto_items:
                 turn.status = TurnStatus.FAILED
                 log.turn_completed(thread_id, turn.id, turn.status)
                 runtime._record_failed_turn_proposal(

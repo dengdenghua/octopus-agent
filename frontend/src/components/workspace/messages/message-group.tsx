@@ -9,6 +9,7 @@ import {
   ListTodoIcon,
   MessageCircleQuestionMarkIcon,
   NotebookPenIcon,
+  PanelRightOpenIcon,
   SearchIcon,
   ShieldAlertIcon,
   SquareTerminalIcon,
@@ -33,14 +34,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Button } from "@/components/ui/button";
 import {
   isApprovalRequest,
   ToolApprovalCard,
 } from "@/components/workspace/tool-approval-card";
 import {
   type AgentRunState,
-  agentRunBadgeClass,
   agentRunStatusLightClass,
   agentRunStatusLightPulseClass,
 } from "../agent-run-status";
@@ -53,6 +52,7 @@ import {
   extractContentFromMessage,
   extractReasoningContentFromMessage,
   findToolCallResult,
+  hasToolCalls,
   isLikelyFinalAnswerContent,
 } from "@/core/messages/utils";
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
@@ -60,11 +60,13 @@ import { extractTitleFromMarkdown } from "@/core/utils/markdown";
 import { cn } from "@/lib/utils";
 
 import { useArtifacts } from "../artifacts";
+import { emitOpenAgentWorkbench } from "../agent-workbench-events";
 import { FlipDisplay } from "../flip-display";
 import { isAutoVerificationToolName } from "../process-trace-events";
 import { Tooltip } from "../tooltip";
 
 import { ClarificationChoiceCard } from "./clarification-choice-card";
+import { GroundingChip } from "./grounding-chip";
 import { MarkdownContent } from "./markdown-content";
 import { stripTraceLabelPrefixes } from "./trace-labels";
 import {
@@ -353,6 +355,38 @@ function dedupeTimelineChunks(chunks: string[]): string[] {
   return result;
 }
 
+function isPublicProgressKind(value: unknown): value is PublicProgressKind {
+  return (
+    typeof value === "string" &&
+    [
+      "orient",
+      "investigate",
+      "implement",
+      "verify",
+      "pivot",
+      "synthesize",
+      "recover",
+    ].includes(value)
+  );
+}
+
+function publicProgressLabel(
+  kind: PublicProgressKind | undefined,
+  t: ReturnType<typeof useI18n>["t"],
+): string | null {
+  if (!kind) return null;
+  const labels: Record<PublicProgressKind, string> = {
+    orient: t.messageGrouping.progressOrient,
+    investigate: t.messageGrouping.progressInvestigate,
+    implement: t.messageGrouping.progressImplement,
+    verify: t.messageGrouping.progressVerify,
+    pivot: t.messageGrouping.progressPivot,
+    synthesize: t.messageGrouping.progressSynthesize,
+    recover: t.messageGrouping.progressRecover,
+  };
+  return labels[kind];
+}
+
 export function MessageGroup({
   className,
   enableClarificationActions = false,
@@ -374,7 +408,7 @@ export function MessageGroup({
   // Keep the live turn focused on the current frame. Older steps move behind
   // a replay disclosure so streaming never becomes a long historical pile.
   const isLiveTimeline = isLoading || keepOpen;
-  const [showSteps, setShowSteps] = useState(codeMode && isLiveTimeline);
+  const [showSteps, setShowSteps] = useState(false);
   const [savedStepsOpen, setSavedStepsOpen] = useState(false);
   const [openReasoningGroups, setOpenReasoningGroups] = useState<
     Record<string, boolean>
@@ -382,7 +416,10 @@ export function MessageGroup({
   const [openActionGroups, setOpenActionGroups] = useState<
     Record<string, boolean>
   >({});
-  const steps = useMemo(() => convertToSteps(messages, t), [messages, t]);
+  const steps = useMemo(
+    () => convertToSteps(messages, t, isLoading),
+    [messages, t, isLoading],
+  );
   const clarificationContent = useMemo(
     () =>
       steps
@@ -445,6 +482,20 @@ export function MessageGroup({
     const last = steps[steps.length - 1];
     return last?.iteration ?? 1;
   }, [steps]);
+  // A tool-carrying AI message can also contain the answer currently being
+  // streamed. Keep that text in the conversation lane instead of burying it
+  // inside the process replay.
+  const streamingAnswerText = useMemo(() => {
+    if (!isLoading) return null;
+    for (const msg of messages) {
+      if (msg.type !== "ai" || !hasToolCalls(msg)) continue;
+      if (msg.additional_kwargs?.public_progress === true) continue;
+      if (isLikelyFinalAnswerContent(msg)) continue;
+      const text = extractContentFromMessage(msg);
+      if (text && text.trim()) return text;
+    }
+    return null;
+  }, [messages, isLoading]);
   const rehypePlugins = useRehypeSplitWordsIntoSpans(isLoading);
   const replayStepCount = isLiveTimeline
     ? replayOnlySteps.length
@@ -463,21 +514,12 @@ export function MessageGroup({
       : useCompactToggleLabel
         ? t.messageGrouping.viewProcessSummary
         : t.messageGrouping.viewNSavedSteps(steps.length);
-  const liveProcessState = currentStep
-    ? runStateForCurrentStep(currentStep, isLoading)
-    : "pending";
-  const showLiveProcessStrip = codeMode && isLoading && Boolean(currentStep);
-  const liveProcessSummary = currentStep
-    ? summarizeCurrentStep(currentStep, t)
-    : t.messageGrouping.reasoningFallback;
-  const liveProcessStatusLabel = runStateLabel(liveProcessState, t);
-
   useEffect(() => {
-    setShowSteps(codeMode && isLiveTimeline);
+    setShowSteps(false);
     setSavedStepsOpen(false);
     setOpenReasoningGroups({});
     setOpenActionGroups({});
-  }, [isLiveTimeline, stepsFingerprint, codeMode]);
+  }, [isLiveTimeline, stepsFingerprint]);
 
   if (steps.length === 0) {
     return null;
@@ -521,6 +563,37 @@ export function MessageGroup({
     const prevStep = prevItem ? lastTimelineStep(prevItem) : undefined;
     const isLast =
       isCurrentFrame || (!isHistoryReplay && idx === items.length - 1);
+    if (item.type === "commentary") {
+      const progressLabel = publicProgressLabel(item.step.progressKind, t);
+      return (
+        <div
+          key={item.id}
+          className="my-1.5 flex min-w-0 items-start gap-2 text-[13px] leading-5 text-foreground/85"
+          data-testid="public-progress-event"
+          data-progress-kind={item.step.progressKind}
+          data-phase-id={item.step.phaseId}
+          data-parent-item-id={item.step.parentItemId}
+          data-progress-sequence={item.step.progressSequence}
+        >
+          {renderIterationDivider(prevStep, item.step)}
+          {progressLabel && (
+            <span className="mt-0.5 shrink-0 text-[10px] font-medium tracking-wide text-muted-foreground/45">
+              {progressLabel}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <MarkdownContent
+              content={item.step.commentary}
+              isLoading={itemIsLoading}
+              rehypePlugins={rehypePlugins}
+            />
+            {item.step.groundingMessage && (
+              <GroundingChip message={item.step.groundingMessage} />
+            )}
+          </div>
+        </div>
+      );
+    }
     if (item.type === "reasoningGroup") {
       const open =
         isCurrentFrame ||
@@ -600,131 +673,204 @@ export function MessageGroup({
     );
   }
 
+  // Keep process events on the same chronological lane as the answer while
+  // letting the answer retain visual priority. The main transcript shows only
+  // compact public summaries; complete event payloads live in the workbench.
+  const compactTimelineItems = selectCompactTimelineItems(timelineItems, 4);
+  const hasPublicCommentary = compactTimelineItems.some(
+    (item) => item.type === "commentary",
+  );
+  const firstExecutionIndex = compactTimelineItems.findIndex(
+    (item) => item.type !== "reasoningGroup",
+  );
+  // New public checkpoints carry real answer-like interleaving, so a terminal
+  // answer follows the whole process lane. Legacy streams without commentary
+  // retain their familiar thinking → answer → execution composition.
+  const compactItemsBeforeAnswer =
+    streamingAnswerText && !hasPublicCommentary && firstExecutionIndex >= 0
+      ? compactTimelineItems.slice(0, firstExecutionIndex)
+      : compactTimelineItems;
+  const compactItemsAfterAnswer =
+    streamingAnswerText && !hasPublicCommentary && firstExecutionIndex >= 0
+      ? compactTimelineItems.slice(firstExecutionIndex)
+      : [];
+
+  function renderCompactTimelineItems(
+    items: TimelineItem[],
+    keyPrefix: string,
+  ) {
+    return items.map((item) => {
+      const step = lastTimelineStep(item);
+      const isLastOverall =
+        item === compactTimelineItems[compactTimelineItems.length - 1];
+      const state = runStateForCurrentStep(
+        step,
+        isLiveTimeline && isLastOverall && isLoading,
+      );
+      if (item.type === "commentary") {
+        const progressLabel = publicProgressLabel(item.step.progressKind, t);
+        return (
+          <div
+            key={`${keyPrefix}-${item.id}`}
+            className="my-1.5 flex min-w-0 items-start gap-2 text-[13px] leading-5 text-foreground/85"
+            data-testid="public-progress-event"
+            data-progress-kind={item.step.progressKind}
+            data-phase-id={item.step.phaseId}
+            data-parent-item-id={item.step.parentItemId}
+            data-progress-sequence={item.step.progressSequence}
+          >
+            {progressLabel && (
+              <span className="mt-0.5 shrink-0 text-[10px] font-medium tracking-wide text-muted-foreground/45">
+                {progressLabel}
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <MarkdownContent
+                content={item.step.commentary}
+                isLoading={isLiveTimeline && isLastOverall && isLoading}
+                rehypePlugins={rehypePlugins}
+              />
+              {item.step.groundingMessage && (
+                <GroundingChip message={item.step.groundingMessage} />
+              )}
+            </div>
+          </div>
+        );
+      }
+      const isThinking = item.type === "reasoningGroup";
+      const summary =
+        item.type === "reasoningGroup"
+          ? summarizeReasoningGroup(item, t)
+          : item.type === "actionCallbackGroup"
+            ? summarizeActionGroup(item, t)
+            : summarizeCurrentStep(item.step, t);
+      const count = item.type === "toolCall" ? 1 : item.steps.length;
+      const workbenchEventId =
+        item.type === "toolCall" ? item.step.id : step.messageId;
+
+      return (
+        <div
+          key={`${keyPrefix}-${item.id}`}
+          className="group/process-row flex min-w-0 items-center gap-0.5"
+        >
+          <button
+            type="button"
+            onClick={() =>
+              emitOpenAgentWorkbench({
+                tab: "agent",
+                eventId: workbenchEventId,
+                eventKind: isThinking ? "thinking" : "execution",
+                view: isThinking ? "summary" : "trace",
+              })
+            }
+            className="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-[11px] leading-4 text-muted-foreground/55 transition-colors hover:text-muted-foreground"
+            data-process-event-id={workbenchEventId}
+            data-process-event-kind={isThinking ? "thinking" : "execution"}
+            data-process-event-status={state}
+            data-testid={`process-timeline-event-${isThinking ? "thinking" : "execution"}`}
+          >
+            <span className="relative flex size-1.5 shrink-0 items-center justify-center">
+              <span
+                className={cn(
+                  "absolute inline-flex size-1.5 rounded-full opacity-25",
+                  agentRunStatusLightClass(state),
+                  agentRunStatusLightPulseClass(state),
+                )}
+              />
+              <span
+                className={cn(
+                  "relative inline-flex size-1 rounded-full",
+                  agentRunStatusLightClass(state),
+                )}
+              />
+            </span>
+            <span className="shrink-0 font-medium text-muted-foreground/70">
+              {isThinking ? t.message.thinkingProcess : t.message.execution}
+            </span>
+            <span aria-hidden="true" className="shrink-0 opacity-35">
+              ·
+            </span>
+            <span className="min-w-0 flex-1 truncate">{summary}</span>
+            {count > 1 && (
+              <span className="shrink-0 tabular-nums opacity-60">{count}</span>
+            )}
+            <PanelRightOpenIcon className="size-3 shrink-0 opacity-0 transition-opacity group-hover/process-row:opacity-50" />
+            {isLastOverall && isLiveTimeline && codeMode && (
+              <span className="sr-only" data-testid="live-process-strip" />
+            )}
+          </button>
+          {isLastOverall && showTimelineToggle && (
+            <button
+              type="button"
+              onClick={() => {
+                if (isLiveTimeline) {
+                  setShowSteps((value) => !value);
+                } else {
+                  setSavedStepsOpen((value) => !value);
+                }
+              }}
+              className="p-0.5 text-muted-foreground/35 transition-colors hover:text-muted-foreground"
+              aria-label={timelineToggleLabel}
+              title={timelineToggleLabel}
+            >
+              <span className="sr-only">{timelineToggleLabel}</span>
+              <ChevronUp
+                className={cn(
+                  "size-3 transition-transform duration-200",
+                  timelineExpanded ? "rotate-180" : "",
+                )}
+              />
+            </button>
+          )}
+        </div>
+      );
+    });
+  }
+
   return (
     <ChainOfThought
       defaultOpen
-      className={cn(
-        "w-full gap-1",
-        // Code mode: render the work-log as a distinct, bounded "process lane"
-        // (faint panel) so it reads as its own region, not noise above the
-        // answer. Other modes keep the lighter left-rule treatment.
-        codeMode
-          ? "rounded-lg border border-border-default bg-muted/20 px-3 py-2"
-          : "border-l border-border-default pl-4",
-        className,
-      )}
+      className={cn("w-full gap-0", className)}
       open={true}
+      data-process-mode={codeMode ? "code" : "chat"}
     >
-      {leadInTimelineItems.length > 0 && (
-        <ChainOfThoughtContent className="px-0 pb-1.5">
+      {compactItemsBeforeAnswer.length > 0 && (
+        <div className="space-y-0.5" data-testid="interleaved-process-timeline">
+          {renderCompactTimelineItems(compactItemsBeforeAnswer, "before")}
+        </div>
+      )}
+      {streamingAnswerText && (
+        <MarkdownContent
+          content={streamingAnswerText}
+          isLoading={isLoading}
+          rehypePlugins={rehypePlugins}
+          className="kimi-streaming-tail"
+        />
+      )}
+      {compactItemsAfterAnswer.length > 0 && (
+        <div
+          className="mt-0.5 space-y-0.5"
+          data-testid="interleaved-process-timeline"
+        >
+          {renderCompactTimelineItems(compactItemsAfterAnswer, "after")}
+        </div>
+      )}
+      {timelineExpanded && leadInTimelineItems.length > 0 && (
+        <ChainOfThoughtContent className="px-0 pb-1 opacity-60">
           {leadInTimelineItems.map((item, idx) =>
             renderTimelineItem(item, idx, leadInTimelineItems),
           )}
         </ChainOfThoughtContent>
       )}
-      {showLiveProcessStrip && (
-        <div
-          role="status"
-          aria-live="polite"
-          data-testid="live-process-strip"
-          className={cn(
-            "mb-2 min-w-0 rounded-xl border px-3 py-2 text-[11px]",
-            "bg-background/80 text-muted-foreground shadow-[var(--shadow-xs)] shadow-black/[0.025] backdrop-blur",
-            liveProcessState === "running" &&
-              "border-emerald-500/20 bg-emerald-500/[0.045]",
-            liveProcessState === "waiting" &&
-              "border-amber-500/25 bg-amber-500/[0.055]",
-            liveProcessState === "error" &&
-              "border-destructive/25 bg-destructive/[0.055]",
-          )}
-        >
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="relative flex size-2.5 shrink-0 items-center justify-center">
-              <span
-                className={cn(
-                  "absolute inline-flex size-2.5 rounded-full opacity-25",
-                  agentRunStatusLightClass(liveProcessState),
-                  agentRunStatusLightPulseClass(liveProcessState),
-                )}
-              />
-              <span
-                className={cn(
-                  "relative inline-flex size-1.5 rounded-full",
-                  agentRunStatusLightClass(liveProcessState),
-                )}
-              />
-            </span>
-            <span className="shrink-0 font-medium text-foreground/85">
-              {t.messageGrouping.liveProcess}
-            </span>
-            <span
-              className={cn(
-                "shrink-0 rounded-full px-1.5 py-0.5 leading-none",
-                agentRunBadgeClass(liveProcessState),
-              )}
-            >
-              {liveProcessStatusLabel}
-            </span>
-            <span className="min-w-0 flex-1 truncate">
-              {liveProcessSummary}
-            </span>
-          </div>
-          {/* The activity-trace / computer-view surfaces live in the
-              right-hand workbench panel, which owns them as real tabs.
-              Echoing those tab names here as inert chips duplicated the
-              panel's vocabulary without offering the feature — the strip
-              now carries only what's local to this card. */}
-          {replayStepCount > 0 && (
-            <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5 pl-4">
-              <span className="inline-flex min-w-0 items-center rounded-full bg-muted/55 px-2 py-0.5 text-muted-foreground/80">
-                {t.messageGrouping.liveProcessHistory(replayStepCount)}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-      {showTimelineToggle && (
-        <Button
-          key="timeline-toggle"
-          className="h-auto w-full items-start justify-start px-0 py-1.5 text-left hover:bg-transparent"
-          variant="ghost"
-          onClick={() => {
-            if (isLiveTimeline) {
-              setShowSteps((value) => !value);
-            } else {
-              setSavedStepsOpen((value) => !value);
-            }
-          }}
-        >
-          <ChainOfThoughtStep
-            label={<span className="opacity-60">{timelineToggleLabel}</span>}
-            icon={
-              <ChevronUp
-                className={cn(
-                  "size-4 opacity-60 transition-transform duration-200",
-                  timelineExpanded ? "rotate-180" : "",
-                )}
-              />
-            }
-          ></ChainOfThoughtStep>
-        </Button>
-      )}
       {timelineExpanded && replayTimelineItems.length > 0 && (
-        <ChainOfThoughtContent
-          className={cn(
-            "px-0 pb-1.5",
-            // Code mode keeps the log expanded — cap very long runs so the
-            // answer stays reachable; short runs render with no scrollbar.
-            codeMode && "max-h-[420px] overflow-y-auto pr-1",
-          )}
-        >
+        <ChainOfThoughtContent className="max-h-[320px] overflow-y-auto px-0 pb-1 opacity-60">
           {replayTimelineItems.map((item, idx) =>
             renderTimelineItem(item, idx, replayTimelineItems),
           )}
         </ChainOfThoughtContent>
       )}
-      {currentTimelineItem && (
-        <ChainOfThoughtContent className="px-0 pb-1.5">
+      {timelineExpanded && currentTimelineItem && (
+        <ChainOfThoughtContent className="px-0 pb-1 opacity-60">
           {renderTimelineItem(currentTimelineItem, 0, [currentTimelineItem], {
             current: true,
           })}
@@ -1779,6 +1925,9 @@ interface GenericCoTStep<T extends string = string> {
   messageId?: string;
   type: T;
   iteration?: number;
+  phaseId?: string;
+  parentItemId?: string;
+  progressSequence?: number;
 }
 
 interface CoTReasoningStep extends GenericCoTStep<"reasoning"> {
@@ -1789,13 +1938,32 @@ interface CoTActionCallbackStep extends GenericCoTStep<"actionCallback"> {
   actionText: string;
 }
 
+interface CoTCommentaryStep extends GenericCoTStep<"commentary"> {
+  commentary: string;
+  progressKind?: PublicProgressKind;
+  groundingMessage?: Message;
+}
+
+type PublicProgressKind =
+  | "orient"
+  | "investigate"
+  | "implement"
+  | "verify"
+  | "pivot"
+  | "synthesize"
+  | "recover";
+
 interface CoTToolCallStep extends GenericCoTStep<"toolCall"> {
   name: string;
   args: Record<string, unknown>;
   result?: string | Record<string, unknown> | unknown[];
 }
 
-type CoTStep = CoTReasoningStep | CoTActionCallbackStep | CoTToolCallStep;
+type CoTStep =
+  | CoTReasoningStep
+  | CoTActionCallbackStep
+  | CoTCommentaryStep
+  | CoTToolCallStep;
 
 interface ReasoningStepGroupItem {
   id: string;
@@ -1815,9 +1983,16 @@ interface ActionCallbackGroupItem {
   steps: CoTActionCallbackStep[];
 }
 
+interface CommentaryTimelineItem {
+  id: string;
+  type: "commentary";
+  step: CoTCommentaryStep;
+}
+
 type TimelineItem =
   | ReasoningStepGroupItem
   | ActionCallbackGroupItem
+  | CommentaryTimelineItem
   | ToolCallTimelineItem;
 
 export function hasVisibleMessageGroupContent(
@@ -1842,6 +2017,16 @@ function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
   };
 
   for (const step of steps) {
+    if (step.type === "commentary") {
+      flushReasoningGroup();
+      flushActionGroup();
+      items.push({
+        id: `${step.id ?? "commentary"}-${items.length}`,
+        type: "commentary",
+        step,
+      });
+      continue;
+    }
     if (step.type === "reasoning") {
       flushActionGroup();
       if (!currentGroup) {
@@ -1882,8 +2067,33 @@ function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
   return items;
 }
 
+function selectCompactTimelineItems(
+  items: TimelineItem[],
+  limit: number,
+): TimelineItem[] {
+  const processItems = items.filter((item) => item.type !== "commentary");
+  if (processItems.length <= limit) return items;
+  const tail = processItems.slice(-limit);
+  let compactProcess = tail;
+  if (!tail.some((item) => item.type === "reasoningGroup")) {
+    // Long tool runs used to push every thinking summary out of the
+    // transcript. Preserve the latest public thinking checkpoint as a quiet
+    // anchor while keeping execution density bounded.
+    const latestThinking = [...processItems]
+      .reverse()
+      .find((item) => item.type === "reasoningGroup");
+    if (latestThinking) {
+      compactProcess = [latestThinking, ...tail.slice(-(limit - 1))];
+    }
+  }
+  const selected = new Set(compactProcess);
+  return items.filter(
+    (item) => item.type === "commentary" || selected.has(item),
+  );
+}
+
 function lastTimelineStep(item: TimelineItem): CoTStep {
-  if (item.type === "toolCall") return item.step;
+  if (item.type === "toolCall" || item.type === "commentary") return item.step;
   return item.steps[item.steps.length - 1]!;
 }
 
@@ -1892,6 +2102,13 @@ function timelineItemFromStep(step: CoTStep, suffix: string): TimelineItem {
     return {
       id: `${step.messageId ?? step.id ?? "tool"}-${suffix}`,
       type: "toolCall",
+      step,
+    };
+  }
+  if (step.type === "commentary") {
+    return {
+      id: `${step.id ?? "commentary"}-${suffix}`,
+      type: "commentary",
       step,
     };
   }
@@ -1930,6 +2147,7 @@ function isFirstPhaseStep(step: CoTStep): boolean {
 function stepText(step: CoTStep): string {
   if (step.type === "reasoning") return step.reasoning ?? "";
   if (step.type === "actionCallback") return step.actionText;
+  if (step.type === "commentary") return step.commentary;
   const argsText = JSON.stringify(step.args ?? {});
   return `${step.name}\n${argsText}`;
 }
@@ -2005,6 +2223,9 @@ function summarizeCurrentStep(
       t,
     );
   }
+  if (step.type === "commentary") {
+    return compactReasoningSummary(step.commentary, 120, t);
+  }
   const publicAction = publicActionTextFromTraceTool(
     step.name,
     extractPathFromArgs(step.args) ?? extractTeamCallTarget(step.args),
@@ -2013,22 +2234,12 @@ function summarizeCurrentStep(
   return publicAction ?? t.toolCalls.useTool(step.name);
 }
 
-function runStateLabel(
-  state: AgentRunState,
-  t: ReturnType<typeof useI18n>["t"],
-): string {
-  if (state === "waiting") return t.messageGrouping.liveProcessWaiting;
-  if (state === "error") return t.messageGrouping.liveProcessError;
-  if (state === "done") return t.messageGrouping.liveProcessDone;
-  if (state === "pending") return t.messageGrouping.liveProcessPending;
-  return t.messageGrouping.liveProcessRunning;
-}
-
 function summarizeReasoningGroup(
   group: ReasoningStepGroupItem,
   t: ReturnType<typeof useI18n>["t"],
 ): string {
-  const text = group.steps
+  const text = [...group.steps]
+    .reverse()
     .map((step) => step.reasoning ?? "")
     .find((value) => value.trim());
   return compactReasoningSummary(stripTraceLabelPrefixes(text), 120, t);
@@ -2038,7 +2249,8 @@ function summarizeActionGroup(
   group: ActionCallbackGroupItem,
   t: ReturnType<typeof useI18n>["t"],
 ): string {
-  const text = group.steps
+  const text = [...group.steps]
+    .reverse()
     .map((step) => step.actionText)
     .find((value) => value.trim());
   return compactReasoningSummary(stripTraceLabelPrefixes(text), 96, t);
@@ -2062,6 +2274,7 @@ function compactReasoningSummary(
 function convertToSteps(
   messages: Message[],
   t?: ReturnType<typeof useI18n>["t"],
+  isLoading = false,
 ): CoTStep[] {
   const steps: CoTStep[] = [];
   let iteration = 1;
@@ -2128,11 +2341,16 @@ function convertToSteps(
       const reasoning = isInternalProgressText(rawReasoning)
         ? null
         : rawReasoning;
+      // When streaming, the text is already rendered as a bubble above the
+      // timeline by MessageGroup — don't also chop it into reasoning chunks
+      // or it will appear twice. Non-streaming (settled) turns keep the
+      // original behaviour so short preambles still show in the fold.
       const rawPublicPreamble =
         tc &&
         tc.length > 0 &&
         !reasoning &&
-        !isLikelyFinalAnswerContent(message)
+        !isLikelyFinalAnswerContent(message) &&
+        !isLoading
           ? extractContentFromMessage(message)
           : null;
       const publicPreamble = isInternalProgressText(rawPublicPreamble)
@@ -2150,6 +2368,57 @@ function convertToSteps(
               .filter((chunk): chunk is string => Boolean(chunk?.trim()))
           : [],
       );
+
+      const isPublicProgress =
+        message.additional_kwargs?.public_progress === true;
+      if (isPublicProgress) {
+        // A checkpoint follows the previous tool result and the current
+        // private reasoning. Preserve that real order instead of zipping the
+        // three channels by array index.
+        for (const toolCall of visibleToolCalls) {
+          steps.push(toToolCallStep(message, toolCall));
+          lastStepType = "toolCall";
+        }
+        for (let index = 0; index < reasoningChunks.length; index += 1) {
+          const reasoningChunk = reasoningChunks[index];
+          if (reasoningChunk) {
+            pushReasoningStep(message, reasoningChunk, `reasoning-${index}`);
+          }
+        }
+        const commentary = extractContentFromMessage(message).trim();
+        if (commentary && !isInternalProgressText(commentary)) {
+          const progressKind = message.additional_kwargs?.progress_kind;
+          steps.push({
+            id: `${message.id}-commentary`,
+            messageId: message.id,
+            type: "commentary",
+            commentary,
+            progressKind: isPublicProgressKind(progressKind)
+              ? progressKind
+              : undefined,
+            phaseId:
+              typeof message.additional_kwargs?.phase_id === "string"
+                ? message.additional_kwargs.phase_id
+                : undefined,
+            parentItemId:
+              typeof message.additional_kwargs?.parent_item_id === "string"
+                ? message.additional_kwargs.parent_item_id
+                : undefined,
+            progressSequence:
+              typeof message.additional_kwargs?.progress_sequence === "number"
+                ? message.additional_kwargs.progress_sequence
+                : undefined,
+            groundingMessage: Array.isArray(
+              message.additional_kwargs?.grounding,
+            )
+              ? message
+              : undefined,
+            iteration,
+          });
+          lastStepType = "reasoning";
+        }
+        continue;
+      }
 
       const maxStepCount = Math.max(
         reasoningChunks.length,

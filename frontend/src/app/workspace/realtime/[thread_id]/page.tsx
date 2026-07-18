@@ -33,9 +33,11 @@ import {
 import {
   AGENT_WORKBENCH_FOCUS_EVENT,
   AGENT_WORKBENCH_OPEN_EVENT,
+  type AgentWorkbenchEventView,
   type AgentWorkbenchFocusDetail,
   type AgentWorkbenchFocusView,
   type AgentWorkbenchOpenDetail,
+  type AgentWorkbenchProcessEventKind,
 } from "@/components/workspace/agent-workbench-events";
 import { ChatBox, useThreadChat } from "@/components/workspace/chats";
 import { ChatsDrawer } from "@/components/workspace/chats-drawer";
@@ -1033,6 +1035,15 @@ function RealtimePageContent({
   // same agent (e.g. a view switch) as a fresh intent.
   const [focusedWorkbenchAgentNonce, setFocusedWorkbenchAgentNonce] =
     useState(0);
+  const [focusedWorkbenchEventId, setFocusedWorkbenchEventId] = useState<
+    string | null
+  >(null);
+  const [focusedWorkbenchEventKind, setFocusedWorkbenchEventKind] =
+    useState<AgentWorkbenchProcessEventKind | null>(null);
+  const [focusedWorkbenchEventView, setFocusedWorkbenchEventView] =
+    useState<AgentWorkbenchEventView | null>(null);
+  const [focusedWorkbenchEventNonce, setFocusedWorkbenchEventNonce] =
+    useState(0);
   const settledWorkbenchAutoDismissedRef = useRef<string | null>(null);
   const [discussionOnly, setDiscussionOnly] = useState(false);
   const [chatsDrawerOpen, setChatsDrawerOpen] = useState(false);
@@ -1163,6 +1174,9 @@ function RealtimePageContent({
   useEffect(() => {
     setFocusedWorkbenchAgentId(null);
     setFocusedWorkbenchAgentView(null);
+    setFocusedWorkbenchEventId(null);
+    setFocusedWorkbenchEventKind(null);
+    setFocusedWorkbenchEventView(null);
     setAgentWorkbenchManuallyOpened(false);
   }, [threadId]);
 
@@ -2275,7 +2289,7 @@ function RealtimePageContent({
     (agentWorkbenchManuallyOpened ||
       (collaborationEnabled && !agentWorkbenchDismissed) ||
       (hasRenderableAgentWorkbench &&
-        (!agentWorkbenchDismissed || artifactsOpen || showAgentPlan))) &&
+        (artifactsOpen || showAgentPlan))) &&
     !showResearchHistory &&
     !(showResearch && (!!researchJob || !!researchError));
   const artifactCount = artifacts?.length ?? 0;
@@ -2400,6 +2414,9 @@ function RealtimePageContent({
       setFocusedWorkbenchAgentId(agentId);
       setFocusedWorkbenchAgentView(detail?.view ?? null);
       setFocusedWorkbenchAgentNonce((n) => n + 1);
+      setFocusedWorkbenchEventId(null);
+      setFocusedWorkbenchEventKind(null);
+      setFocusedWorkbenchEventView(null);
       setArtifactsOpen(false);
       setShowAgentPlan(false);
       setAgentWorkbenchDismissed(false);
@@ -2420,6 +2437,10 @@ function RealtimePageContent({
       const detail = (event as CustomEvent<AgentWorkbenchOpenDetail>).detail;
       setFocusedWorkbenchAgentId(null);
       setFocusedWorkbenchAgentView(null);
+      setFocusedWorkbenchEventId(detail?.eventId?.trim() || null);
+      setFocusedWorkbenchEventKind(detail?.eventKind ?? null);
+      setFocusedWorkbenchEventView(detail?.view ?? null);
+      setFocusedWorkbenchEventNonce((n) => n + 1);
       setArtifactsOpen(false);
       setShowAgentPlan(false);
       setAgentWorkbenchDismissed(false);
@@ -2935,6 +2956,7 @@ function RealtimePageContent({
                         paused={hasPausedOrPendingBackgroundTask}
                         progressScopeKey={`${threadId}:agent-progress-plan`}
                         vitals={thread.vitals}
+                        workbenchVisible={showAgentWorkbench}
                       />
                     ) : (
                       <TodoPanel
@@ -3094,6 +3116,10 @@ function RealtimePageContent({
                   focusedAgentId={focusedWorkbenchAgentId}
                   focusedAgentView={focusedWorkbenchAgentView}
                   focusedAgentNonce={focusedWorkbenchAgentNonce}
+                  focusedEventId={focusedWorkbenchEventId}
+                  focusedEventKind={focusedWorkbenchEventKind}
+                  focusedEventView={focusedWorkbenchEventView}
+                  focusedEventNonce={focusedWorkbenchEventNonce}
                   hasAnswer={hasCompletedAgentOutput}
                   isLoading={thread.isLoading}
                   runSettled={agentRunSettled}

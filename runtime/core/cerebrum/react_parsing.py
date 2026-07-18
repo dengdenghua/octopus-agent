@@ -67,6 +67,17 @@ _OBS_JSON_CONTENT_KEY_RE = re.compile(
     r'"content"\s*:\s*"',
     re.IGNORECASE,
 )
+_OBS_FAILURE_MARKERS = (
+    " failed",
+    "error",
+    "traceback",
+    "timed_out",
+    "timeout after",
+    '"exit_code": 1',
+    '"success": false',
+    "失败",
+    "超时",
+)
 
 
 def _summarize_observation(text: str) -> str:
@@ -85,7 +96,16 @@ def _summarize_observation(text: str) -> str:
             t = t[:idx] + "}"  # Implementation note.
 
     if len(t) > _OBS_DISPLAY_MAX:
-        t = t[:_OBS_DISPLAY_MAX] + " …(已截断)"
+        lowered = t.lower()
+        if any(marker in lowered for marker in _OBS_FAILURE_MARKERS):
+            # Failure diagnostics commonly put the assertion/traceback summary
+            # at the end. Keeping only the head hid the exact failing check and
+            # sent agents into environment-probing loops. Preserve both ends.
+            head = t[:160].rstrip()
+            tail = t[-120:].lstrip()
+            t = f"{head} …(中间已截断)\n{tail}"
+        else:
+            t = t[:_OBS_DISPLAY_MAX] + " …(已截断)"
 
     return t
 
@@ -110,21 +130,62 @@ def _safe_for_streamdown(text: str) -> str:
 
 
 _FINAL_RE = re.compile(
-    r"Final\s*Answer\s*:\s*(.+)",
+    r"(?:"
+    r"Final\s*Answer\s*:\s*"
+    r"|\*\*\s*Final\s*Answer\s*:?\s*\*\*\s*:?\s*"
+    r"|__\s*Final\s*Answer\s*:?\s*__\s*:?\s*"
+    r"|^\s*#{1,6}\s*Final\s*Answer\s*:?\s*"
+    r"|^\s*Final\s*Answer\s*(?:\r?\n)+"
+    r")(.+)",
+    re.IGNORECASE | re.DOTALL | re.MULTILINE,
+)
+_XML_FINAL_RE = re.compile(
+    r"<final_answer\s*>\s*(?P<body>.*?)\s*</final_answer\s*>",
     re.IGNORECASE | re.DOTALL,
 )
 _THOUGHT_RE = re.compile(
-    r"Thought\s*:\s*(.+?)(?:\n\s*Action|\n\s*Final|\n\n|$)",
+    r"Thought\s*:\s*(.+?)(?:\n\s*(?:Update|Progress)|\n\s*Action|\n\s*Final|\n\n|$)",
+    re.IGNORECASE | re.DOTALL,
+)
+_PUBLIC_UPDATE_RE = re.compile(
+    r"(?:Update|Progress)\s*:\s*(.+?)(?:\n\s*Action|\n\s*Observation|"
+    r"\n\s*Thought|\n\s*Final|\n\n|$)",
     re.IGNORECASE | re.DOTALL,
 )
 _ACTION_RE = re.compile(
-    r"Action\s*:\s*(.+?)(?:\n\s*Observation|\n\s*Thought|\n\s*Final|\n\n|$)",
+    r"Action\s*:\s*(.+?)(?:\n\s*Observation|\n\s*Thought|\n\s*(?:Update|Progress)|\n\s*Final|\n\n|$)",
     re.IGNORECASE | re.DOTALL,
 )
 _OBS_RE = re.compile(
     r"Observation\s*:\s*(.+?)(?:\n\s*Thought|\n\s*Final|\n\n|$)",
     re.IGNORECASE | re.DOTALL,
 )
+
+_UNFINISHED_WORK_RE = re.compile(
+    r"(?:"
+    r"\b(?:still\s+need|not\s+yet|remaining\s+work|unfinished|incomplete)\b"
+    r"|\b(?:need|needs|must|have)\s+to\s+"
+    r"(?:fix|repair|implement|write|run|verify|complete|change|update)\b"
+    r"|(?:需要|还需|尚需|必须|立即)(?:先|再)?"
+    r"(?:修复|实现|重写|补充|运行|验证|完成|修改|更新)"
+    r"|(?:尚未|还没有|未能)(?:修复|实现|写入|运行|验证|完成)"
+    r"|存在[^\n。]{0,80}(?:bug|缺陷|死锁)"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_unfinished_work(text: str) -> bool:
+    """Whether free-form model prose explicitly says implementation remains.
+
+    Zero-anchor recovery may safely salvage a completed chat-style answer, but
+    must not turn an implementation diagnosis such as "need to fix the deadlock"
+    into a terminal reply.  Keep this deliberately narrow and action-oriented.
+    """
+
+    return bool(_UNFINISHED_WORK_RE.search(str(text or "")))
+
+
 _TOOL_CALL_RE = re.compile(
     r"<tool_call>\s*<function\s*=\s*(?P<name>[A-Za-z_][A-Za-z0-9_./:-]*)\s*>"
     r"(?P<body>.*?)</function>\s*</tool_call>",
@@ -176,6 +237,16 @@ _PARAM_ARG_RE = re.compile(
     r"(?P<value>.*?)</parameter>",
     re.IGNORECASE | re.DOTALL,
 )
+_NAMED_PARAM_ARG_RE = re.compile(
+    r"<parameter\s+name\s*=\s*[\"'](?P<key>[A-Za-z_][A-Za-z0-9_:-]*)[\"']\s*>"
+    r"(?P<value>.*?)</parameter>",
+    re.IGNORECASE | re.DOTALL,
+)
+_INVOKE_TOOL_CALL_RE = re.compile(
+    r"<invoke\s+name\s*=\s*[\"'](?P<name>[A-Za-z_][A-Za-z0-9_./:-]*)[\"']\s*>"
+    r"(?P<body>.*?)</invoke>",
+    re.IGNORECASE | re.DOTALL,
+)
 _FENCED_JSON_RE = re.compile(
     r"```(?:json)?\s*(?P<body>\{.*?\})\s*```",
     re.IGNORECASE | re.DOTALL,
@@ -189,16 +260,18 @@ _SPECIAL_TOOL_ENVELOPE_MARKERS = (
     "<|tool_calls_begin|>",
     "<|tool_calls_end|>",
     "<|tool_calls_section_end|>",
+    "<tool_calls",
+    "<invoke name=",
 )
 
 
 def _looks_like_special_tool_envelope(text: str) -> bool:
     """Return whether provider text claims to be a tool-call envelope.
 
-    Kimi-compatible endpoints occasionally surface their private tool-call
-    sentinels as assistant text.  The content may be prose rather than an
-    executable call, but it must never be streamed or accepted as a normal
-    final answer because that silently skips the requested operation.
+    Compatible endpoints occasionally surface private sentinels or generic
+    ``<tool_calls><invoke ...>`` XML as assistant text.  The content may be
+    incomplete rather than executable, but it must never be streamed or
+    accepted as a normal final answer because that silently skips the request.
     """
     lowered = (text or "").lower()
     return any(marker in lowered for marker in _SPECIAL_TOOL_ENVELOPE_MARKERS)
@@ -231,6 +304,14 @@ def _split_action_lines(action_block: str) -> list[str]:
             continue
         if s.startswith("- "):
             s = s[2:].strip()
+        # Some providers repeat the wire label before every call inside one
+        # Action block. Never dispatch the literal label as a tool named
+        # ``Action:``; strip it and keep the actual call when present.
+        if re.fullmatch(r"Action\s*: ?", s, flags=re.IGNORECASE):
+            continue
+        s = re.sub(r"^Action\s*:\s*", "", s, flags=re.IGNORECASE)
+        if not s:
+            continue
         # `none`, `n/a`, plain identifiers without parens, and
         # `name({...})` shapes all parse via _parse_action; keep them.
         lines.append(s)
@@ -245,6 +326,10 @@ def _parse_step(text: str, iteration: int) -> tuple[ReActStep, str | None]:
     thought_m = _THOUGHT_RE.search(text)
     if thought_m:
         step.thought = thought_m.group(1).strip()
+
+    public_update_m = _PUBLIC_UPDATE_RE.search(text)
+    if public_update_m:
+        step.public_update = public_update_m.group(1).strip()
 
     action_m = _ACTION_RE.search(text)
     if action_m:
@@ -276,12 +361,22 @@ def _parse_step(text: str, iteration: int) -> tuple[ReActStep, str | None]:
     if obs_m:
         step.observation = obs_m.group(1).strip()
 
-    final_m = _FINAL_RE.search(text)
-    final_answer = final_m.group(1).strip() if final_m else None
+    final_answer = _extract_final_answer(text)
     if step.action and final_answer and _extract_tool_action_from_loose_output(final_answer):
         final_answer = None
 
     return step, final_answer
+
+
+def _extract_final_answer(text: str) -> str | None:
+    """Extract standard ReAct or provider XML terminal answers."""
+    final_m = _FINAL_RE.search(text or "")
+    if final_m:
+        return final_m.group(1).strip()
+    xml_final_m = _XML_FINAL_RE.search(text or "")
+    if xml_final_m:
+        return xml_final_m.group("body").strip()
+    return None
 
 
 def _parse_reasoning_action_fallback(text: str, iteration: int) -> ReActStep | None:
@@ -341,6 +436,8 @@ def _xml_args_from_body(body: str) -> dict[str, Any]:
         args[m.group("key")] = _coerce_xml_arg_value(m.group("value"))
     for m in _PARAM_ARG_RE.finditer(body or ""):
         args[m.group("key")] = _coerce_xml_arg_value(m.group("value"))
+    for m in _NAMED_PARAM_ARG_RE.finditer(body or ""):
+        args[m.group("key")] = _coerce_xml_arg_value(m.group("value"))
 
     kwargs = args.get("kwargs")
     if isinstance(kwargs, dict):
@@ -357,6 +454,20 @@ def _xml_args_from_body(body: str) -> dict[str, Any]:
 
 def _extract_tool_actions_from_loose_output(text: str) -> list[str]:
     actions: list[str] = []
+    # Some OpenAI-compatible providers expose their internal function wire
+    # format as assistant text:
+    # ``<tool_calls><invoke name="fn"><parameter name="arg">...``.
+    # A complete, closed invoke is an explicit execution boundary; recover
+    # every call in the container rather than treating it as zero-anchor prose.
+    for xml in _INVOKE_TOOL_CALL_RE.finditer(text):
+        name = _normalize_action_name(xml.group("name").strip())
+        args = _xml_args_from_body(xml.group("body") or "")
+        if name == "todo_write" and "todos" in args and "items" not in args:
+            args["items"] = args.pop("todos")
+        actions.append(_format_action(name, args))
+    if actions:
+        return actions
+
     for xml in _TOOL_CALL_RE.finditer(text):
         name = _normalize_action_name(xml.group("name").strip())
         args = _xml_args_from_body(xml.group("body") or "")
@@ -648,15 +759,23 @@ def _is_code_write_step(step: ReActStep) -> bool:
     contributors adding a new edit-style skill only need to register
     it in ``_CODE_WRITE_TOOLS`` above.
     """
-    parsed = _parse_action(step.action)
-    if parsed is None:
-        return False
-    return parsed[0] in _CODE_WRITE_TOOLS
+    actions = step.actions or ([step.action] if step.action else [])
+    for action in actions:
+        parsed = _parse_action(action)
+        if parsed is not None and parsed[0] in _CODE_WRITE_TOOLS:
+            return True
+    return False
 
 
 def _extract_step_path(step: ReActStep) -> str | None:
     """Return the ``path`` / ``file`` / ``file_path`` arg of a write step,
     or ``None`` when the step isn't a write or has no path argument."""
+    # Mutation guards share this helper.  Do not let a read-only action that
+    # happens to carry the same ``path`` argument masquerade as an edit (for
+    # example ``read_file(runtime/protocol/items.py)`` previously tripped the
+    # wire-schema-change guard and demanded a contract test).
+    if not _is_code_write_step(step):
+        return None
     parsed = _parse_action(step.action)
     if parsed is None:
         return None
@@ -709,14 +828,115 @@ def _extract_step_payloads(step: ReActStep) -> tuple[str, str]:
     return ("\n".join(new_chunks), "\n".join(old_chunks))
 
 
+_AMBIGUOUS_INFLIGHT_IDENTITY_RE = re.compile(
+    r"if\s+(?:self\.)?(?P<map>[A-Za-z_][A-Za-z0-9_]*)\.get\(\s*"
+    r"(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*\)\s+is\s+(?:not\s+)?"
+    r"(?P<pending>[A-Za-z_][A-Za-z0-9_]*)\s*:"
+)
+
+
+def _payload_has_inflight_identity_comparison(text: str) -> bool:
+    return bool(text and _AMBIGUOUS_INFLIGHT_IDENTITY_RE.search(text))
+
+
+def _payload_has_ambiguous_inflight_leader_election(text: str) -> bool:
+    """Detect re-reading an in-flight map to infer who created its entry.
+
+    Once a shared pending object has been inserted, both its creator and every
+    follower read the same object back.  An identity comparison performed
+    after leaving the lock therefore cannot elect a leader; all callers can
+    take the loader path.  A creator flag captured inside the locked
+    ``pending is None`` branch is the auditable form.
+    """
+    if not text or "pending" not in text.lower() or ".get(" not in text:
+        return False
+    for match in _AMBIGUOUS_INFLIGHT_IDENTITY_RE.finditer(text):
+        map_name = re.escape(match.group("map"))
+        key_name = re.escape(match.group("key"))
+        pending_name = re.escape(match.group("pending"))
+        creates_entry = re.search(
+            rf"if\s+{pending_name}\s+is\s+None\s*:"
+            rf"[\s\S]{{0,700}}(?:self\.)?{map_name}\[\s*{key_name}\s*\]\s*=\s*"
+            rf"{pending_name}\b",
+            text,
+        )
+        explicit_election = re.search(r"\b(?:is_)?leader\s*=", text)
+        if creates_entry and not explicit_election:
+            return True
+    return False
+
+
+_WAITER_RESULT_POP_RE = re.compile(
+    r"(?:\.wait(?:_for)?\s*\([^\n]*\)|\.wait\s*\(\s*\))"
+    r"[\s\S]{0,1200}?\.pop\(\s*(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))"
+)
+
+
+def _payload_has_destructive_waiter_result_pop(text: str) -> bool:
+    """Whether followers destructively consume one shared load result."""
+    if not text or ".pop(" not in text or ".wait" not in text:
+        return False
+    return bool(_WAITER_RESULT_POP_RE.search(text))
+
+
+_STALE_IMMUTABLE_WAITER_FALLBACK_RE = re.compile(
+    r"\.wait(?:_for)?\s*\([^\n]*\)"
+    r"[\s\S]{0,1600}?"
+    r"(?P<map>(?:self\.)?[A-Za-z_][A-Za-z0-9_]*)\.get\(\s*"
+    r"(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*,\s*"
+    r"(?P<snapshot>[A-Za-z_][A-Za-z0-9_]*)\s*\)"
+)
+
+
+def _payload_has_stale_immutable_waiter_snapshot(text: str) -> bool:
+    """Detect a waiter falling back to an immutable pre-wait tuple snapshot.
+
+    Replacing ``pending[key]`` with a new tuple and then deleting the entry is
+    not visible through the tuple a follower captured before ``wait()``.  A
+    post-wait ``map.get(key, pending)`` therefore falls back to stale
+    ``(event, None, None)`` and can return ``None`` or hide an exception.
+    Mutable pending objects are safe because the captured object itself is
+    updated before the event is signalled.
+    """
+    if not text or ".wait" not in text or ".get(" not in text or "del " not in text:
+        return False
+    for match in _STALE_IMMUTABLE_WAITER_FALLBACK_RE.finditer(text):
+        map_name = re.escape(match.group("map"))
+        key_name = re.escape(match.group("key"))
+        snapshot_name = re.escape(match.group("snapshot"))
+        tuple_snapshot = re.search(
+            rf"(?:[A-Za-z_][A-Za-z0-9_]*\s*,\s*){{2,}}[A-Za-z_][A-Za-z0-9_]*"
+            rf"\s*=\s*{snapshot_name}\b",
+            text,
+        )
+        tuple_replacement = re.search(
+            rf"{map_name}\[\s*{key_name}\s*\]\s*=\s*\(",
+            text,
+        )
+        deletes_entry = re.search(
+            rf"del\s+{map_name}\[\s*{key_name}\s*\]",
+            text,
+        )
+        if tuple_snapshot and tuple_replacement and deletes_entry:
+            return True
+    return False
+
+
+_DEDICATED_VERIFY_TOOLS: frozenset[str] = frozenset(
+    {
+        "run_tests",
+        "run_checks",
+        "verify",
+        "lint_check",
+        "format_code",
+    }
+)
 _VERIFY_TOOLS: frozenset[str] = frozenset(
     {
         "exec_shell",
         "shell_command",
         "bash",
-        "run_tests",
-        "run_checks",
-        "verify",
+        *_DEDICATED_VERIFY_TOOLS,
     }
 )
 
@@ -807,14 +1027,21 @@ def _step_command_text(step: ReActStep) -> str:
 
 
 def _step_is_verify(step: ReActStep, *, markers: tuple[str, ...]) -> bool:
-    parsed = _parse_action(step.action)
-    if parsed is None:
-        return False
-    name, _args = parsed
-    if name not in _VERIFY_TOOLS:
-        return False
-    haystack = _step_command_text(step)
-    return any(marker in haystack for marker in markers)
+    actions = step.actions or ([step.action] if step.action else [])
+    for action in actions:
+        parsed = _parse_action(action)
+        if parsed is None:
+            continue
+        name, args = parsed
+        if name in _DEDICATED_VERIFY_TOOLS:
+            return True
+        if name not in _VERIFY_TOOLS:
+            continue
+        command = str(args.get("command") or args.get("cmd") or "")
+        haystack = f"{action} {command}".lower()
+        if any(marker in haystack for marker in markers):
+            return True
+    return False
 
 
 def _has_code_verification(steps: list[ReActStep]) -> bool:
@@ -1217,6 +1444,8 @@ _RED_PHRASE_RE = re.compile(
     r"\bnpm\s+err!|"
     r"\bassertion\s*error\b|"
     r"\b(?:build|compilation|type-?check|typecheck|lint|tests?)\s+failed\b|"
+    r"\btimeout after\b|\btimed[_ -]?out\b|\btool failed\b|"
+    r'"success"\s*:\s*false|'
     r"\bexit\s+code\s+[1-9]|"
     r"\breturned\s+non-?zero|"
     r"测试[^。\n]{0,4}失败|构建失败|编译[^。\n]{0,4}失败|"

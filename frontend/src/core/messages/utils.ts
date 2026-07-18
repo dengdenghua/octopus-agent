@@ -112,6 +112,20 @@ export function groupMessages<T>(
           type: "assistant:subagent",
           messages: [message],
         });
+      } else if (message.additional_kwargs?.public_progress === true) {
+        // Public checkpoints are answer-like prose, but they belong to the
+        // chronological process lane rather than becoming standalone final
+        // answer bubbles with a repeated assistant header.
+        const lastGroup = groups[groups.length - 1];
+        if (lastGroup?.type !== "assistant:processing") {
+          groups.push({
+            id: message.id,
+            type: "assistant:processing",
+            messages: [message],
+          });
+        } else {
+          lastGroup.messages.push(message);
+        }
       } else if (hasToolCalls(message)) {
         // Tool-call message: render public thinking / execution first.
         // If this same message carries a long final answer, append it

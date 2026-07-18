@@ -68,6 +68,7 @@ from runtime.core.cerebrum.react_parsing import (
     _detect_shell_injection_in_payload,
     _detect_unsafe_deser_in_payload,
     _detect_weak_tests_in_payload,
+    _extract_step_payloads,
     _final_answer_claims_verification,
     _has_code_verification,
     _has_code_write,
@@ -81,6 +82,10 @@ from runtime.core.cerebrum.react_parsing import (
     _latest_verification_observation_is_red,
     _parse_action,
     _path_language,
+    _payload_has_ambiguous_inflight_leader_election,
+    _payload_has_destructive_waiter_result_pop,
+    _payload_has_stale_immutable_waiter_snapshot,
+    _payload_has_inflight_identity_comparison,
     _step_changed_public_signature,
     _step_command_text,
     _step_deleted_test_functions,
@@ -213,32 +218,52 @@ def _final_answer_requests_user_help(final_answer: str) -> bool:
     return False
 
 
-def _goal_requests_project_inspection(goal: str) -> bool:
+def _inspection_goal_text(goal: str) -> str:
+    """Remove negative read-only clauses before finding inspection intent."""
     lowered = (goal or "").lower()
-    markers = (
-        "inspect",
-        "read",
-        "file",
-        "files",
-        "project",
-        "repo",
-        "repository",
-        "workspace",
-        "code",
-        "config",
-        "list_cwd",
-        "read_file",
-        "tool",
-        "工具",
-        "检查",
-        "查看",
-        "读取",
-        "文件",
-        "项目",
-        "代码",
-        "配置",
+    lowered = re.sub(r"\bread[- ]only\b", " ", lowered)
+    lowered = re.sub(
+        r"\b(?:do\s+not|don't|must\s+not|never)\b"
+        r"[^.!;\n]{0,120}\b(?:files?|code|repo(?:sitory)?|workspace)\b",
+        " ",
+        lowered,
     )
-    return any(marker in lowered for marker in markers)
+    return re.sub(
+        r"(?:不要|严禁|禁止|不得|不可|不允许)[^。.!！；;\n]{0,120}"
+        r"(?:文件|代码|内容|工作区|仓库|项目)",
+        " ",
+        lowered,
+    )
+
+
+def _goal_requests_project_inspection(goal: str) -> bool:
+    lowered = _inspection_goal_text(goal)
+    if re.search(
+        r"\b(?:list_cwd|read_file)\b|"
+        r"\b(?:project|repo|repository|workspace|codebase|source\s+code)\b|"
+        r"\b(?:inspect|read|review|check|open|analy[sz]e)\b[^.!?\n]{0,48}"
+        r"\b(?:files?|config(?:uration)?|project|repo(?:sitory)?|workspace|"
+        r"codebase|source\s+code)\b|"
+        r"(?:^|[\s'\"`(])[^\s'\"`()]+\."
+        r"(?:py|ts|tsx|js|jsx|json|ya?ml|toml|md|css|html|go|rs)\b",
+        lowered,
+    ):
+        return True
+    return any(
+        marker in lowered
+        for marker in (
+            "本地文件",
+            "项目文件",
+            "配置文件",
+            "源代码",
+            "源码",
+            "代码库",
+            "当前项目",
+            "项目目录",
+            "本地仓库",
+            "工作区",
+        )
+    )
 
 
 def _goal_requests_code_mutation(goal: str) -> bool:
@@ -249,7 +274,30 @@ def _goal_requests_code_mutation(goal: str) -> bool:
     must not force an edit.
     """
 
-    lowered = (goal or "").lower()
+    lowered = _inspection_goal_text(goal)
+    # A read-only request often names the forbidden action explicitly
+    # ("do not modify files" / "不要修改任何文件"). Matching mutation verbs
+    # before removing that negated clause turns analysis and research turns
+    # into false implementation tasks and blocks their final report behind
+    # the write-evidence guard.
+    lowered = re.sub(
+        r"\b(?:do\s+not|don't|must\s+not|never)\s+"
+        r"(?:modify|change|edit|write|create|update|add|remove|delete|patch|fix|refactor)\b",
+        " ",
+        lowered,
+    )
+    lowered = re.sub(
+        r"\bwithout\s+"
+        r"(?:modifying|changing|editing|writing|creating|updating|adding|removing|deleting|patching|fixing|refactoring)\b",
+        " ",
+        lowered,
+    )
+    lowered = re.sub(
+        r"(?:不要|无需|不需要|禁止|不得|不可)\s*"
+        r"(?:修改|改动|更改|重命名|更新|创建|新增|添加|删除|写入|修复|构建|迁移|重构)",
+        " ",
+        lowered,
+    )
     markers = (
         "implement",
         "change",
@@ -431,20 +479,114 @@ def _final_answer_claims_tool_was_not_executed(final_answer: str) -> bool:
 
 
 def _goal_requires_file_content(goal: str) -> bool:
-    lowered = (goal or "").lower()
-    markers = (
-        "read_file",
-        "read file",
-        "file",
-        "files",
-        "config",
-        "configuration",
-        "文件",
-        "配置",
-        "读取",
-        "检查",
+    lowered = _inspection_goal_text(goal)
+    return bool(
+        re.search(
+            r"\bread_file\b|\b(?:read|inspect|review|check|open|analy[sz]e)\b"
+            r"[^.!?\n]{0,48}\b(?:files?|config(?:uration)?|source\s+code)\b|"
+            r"(?:^|[\s'\"`(])[^\s'\"`()]+\."
+            r"(?:py|ts|tsx|js|jsx|json|ya?ml|toml|md|css|html|go|rs)\b|"
+            r"(?:检查|查看|读取|分析)[^。.!！；;\n]{0,48}"
+            r"(?:文件|配置|源代码|源码)",
+            lowered,
+        )
+        or any(
+            marker in lowered for marker in ("本地文件", "项目文件", "配置文件", "源代码", "源码")
+        )
     )
-    return any(marker in lowered for marker in markers)
+
+
+_EXPLICIT_SOURCE_PATH_RE = re.compile(
+    r"(?<![\w.-])(?:\.{0,2}/)?(?:[A-Za-z0-9_@.-]+/)*"
+    r"[A-Za-z0-9_@.-]+\."
+    r"(?:py|ts|tsx|js|jsx|json|ya?ml|toml|md|css|html|go|rs)"
+    r"(?::\d+(?::\d+)?)?",
+    re.IGNORECASE,
+)
+
+
+def _normalize_evidence_path(value: str) -> str:
+    path = str(value or "").strip().strip("`'\"()[]{}.,;，。；")
+    path = re.sub(r":\d+(?::\d+)?$", "", path)
+    while path.startswith("./"):
+        path = path[2:]
+    return path.replace("\\", "/").strip("/").lower()
+
+
+def _explicit_source_paths(goal: str) -> list[str]:
+    """Return the concrete source files the user explicitly named."""
+
+    result: list[str] = []
+    seen: set[str] = set()
+    for match in _EXPLICIT_SOURCE_PATH_RE.finditer(str(goal or "")):
+        path = _normalize_evidence_path(match.group(0))
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        result.append(path)
+    return result
+
+
+def _path_evidence_matches(requested: str, observed: str) -> bool:
+    requested_norm = _normalize_evidence_path(requested)
+    observed_norm = _normalize_evidence_path(observed)
+    if not requested_norm or not observed_norm:
+        return False
+    if "/" in requested_norm:
+        return observed_norm == requested_norm or observed_norm.endswith("/" + requested_norm)
+    return observed_norm.rsplit("/", 1)[-1] == requested_norm
+
+
+def _successful_read_paths(steps: list[ReActStep]) -> set[str]:
+    """Collect file paths backed by successful read-file receipts."""
+
+    paths: set[str] = set()
+    read_tools = {
+        "read_file",
+        "read_files",
+        "read_text_file",
+        "bb_read",
+    }
+    for step in steps:
+        actions = step.actions or ([step.action] if step.action else [])
+        for index, raw_action in enumerate(actions):
+            parsed = _parse_action(raw_action)
+            if parsed is None:
+                continue
+            name, args = parsed
+            if name.lower() not in read_tools:
+                continue
+            if index < len(step.action_results):
+                succeeded = bool(step.action_results[index].get("ok"))
+            else:
+                observation = (step.observation or "").lower()
+                succeeded = bool(observation.strip()) and not any(
+                    marker in observation
+                    for marker in (
+                        "未执行观察",
+                        "not executed",
+                        "工具失败",
+                        "工具执行异常",
+                        '"error":',
+                        "timed_out",
+                    )
+                )
+            if not succeeded:
+                continue
+            raw_paths: list[str] = []
+            for key in ("path", "file_path", "filepath", "file"):
+                value = args.get(key)
+                if isinstance(value, str):
+                    raw_paths.append(value)
+            values = args.get("paths") or args.get("files")
+            if isinstance(values, list):
+                raw_paths.extend(str(value) for value in values if isinstance(value, str))
+            paths.update(
+                normalized
+                for value in raw_paths
+                if (normalized := _normalize_evidence_path(value))
+            )
+    return paths
 
 
 def _code_mode_missing_inspection_tool_guard(
@@ -453,6 +595,7 @@ def _code_mode_missing_inspection_tool_guard(
     *,
     goal: str,
     file_tools_visible: bool,
+    grounded_source_paths: frozenset[str] | set[str] = frozenset(),
 ) -> str | None:
     """Reject project-inspection finals that did not use file evidence."""
     if not file_tools_visible:
@@ -460,6 +603,29 @@ def _code_mode_missing_inspection_tool_guard(
     if not _goal_requests_project_inspection(goal):
         return None
     if _final_answer_requests_user_help(final_answer):
+        return None
+    requested_paths = _explicit_source_paths(goal)
+    if requested_paths:
+        observed_paths = {
+            _normalize_evidence_path(path)
+            for path in grounded_source_paths
+            if _normalize_evidence_path(path)
+        }
+        observed_paths.update(_successful_read_paths(steps))
+        missing_paths = [
+            path
+            for path in requested_paths
+            if not any(_path_evidence_matches(path, observed) for observed in observed_paths)
+        ]
+        if missing_paths:
+            return (
+                "Code mode cannot finish this project-inspection task yet: "
+                "the user explicitly named source files that are not covered "
+                "by successful read_file evidence or exact source grounding: "
+                + ", ".join(missing_paths)
+                + ". Read every missing file before answering, then base the "
+                "comparison only on those observations."
+            )
         return None
     if not _has_successful_tool_observation(steps):
         return (
@@ -477,6 +643,71 @@ def _code_mode_missing_inspection_tool_guard(
             "request asks for file/config evidence, but no successful "
             "read_file observation is recorded. Read at least one relevant "
             "file before producing the report."
+        )
+    return None
+
+
+def _incomplete_final_answer_guard(final_answer: str) -> str | None:
+    """Reject placeholder/preparatory prose presented as a terminal answer."""
+
+    raw = str(final_answer or "").strip()
+    visible = re.sub(r"</?[a-z_][^>]*>", " ", raw, flags=re.IGNORECASE)
+    visible = re.sub(r"\s+", " ", visible).strip()
+    if not visible:
+        return (
+            "The proposed Final Answer is empty or only contains an internal "
+            "control marker. Produce the actual user-facing result now."
+        )
+    preparatory_start = re.match(
+        r"^(?:我(?:会|将|先|接下来)|接下来|下一步|先来|准备|"
+        r"let me|i(?:'ll| will| first)|next[,：:]?)",
+        visible,
+        re.IGNORECASE,
+    )
+    evidence_action = re.search(
+        r"\b(?:grep|read|inspect|check|verify|search|open)\b|"
+        r"(?:核对|检查|读取|再读|查看|搜索|检索|调研|打开|确认|探清|定位|查找)"
+        r"(?:[^。.!！；;\n]{0,16})",
+        visible,
+        re.IGNORECASE,
+    )
+    result_signal = re.search(
+        r"(?:结论|结果|区别|差异|一致|不同|表明|因此|所以|答案)|"
+        r"\b(?:result|conclusion|difference|same|therefore|because|answer)\b",
+        visible,
+        re.IGNORECASE,
+    )
+    negated_completion = re.search(
+        r"(?:还|尚|仍)?(?:没有|未|没能)(?:给出|得到|形成|完成|确认|核对)?"
+        r"[^。.!！；;\n]{0,24}(?:结论|结果|答案|比较|差异)|"
+        r"\b(?:not\s+yet|no\s+(?:result|conclusion|answer)\s+yet|"
+        r"have\s+not\s+(?:finished|completed|verified|checked))\b",
+        visible,
+        re.IGNORECASE,
+    )
+    future_action = re.search(
+        r"(?:^|[。.!！；;]\s*)(?:我)?(?:会|将|先|接下来|下一步|准备)|"
+        r"(?:我)?先[^。.!！；;\n]{0,32}(?:再读|读取|查看|核对|检查|探清|定位|查找|搜索)|"
+        r"\b(?:i(?:'ll| will)|let me|next)\b",
+        visible,
+        re.IGNORECASE,
+    )
+    failed_attempt = re.search(
+        r"(?:失败|路径不对|未找到|找不到|无法读取|没有读到)|"
+        r"\b(?:failed|not found|could not read|unable to read)\b",
+        visible,
+        re.IGNORECASE,
+    )
+    if (
+        evidence_action
+        and (preparatory_start or future_action)
+        and (failed_attempt or negated_completion or not result_signal)
+    ):
+        return (
+            "The proposed Final Answer only announces a future inspection or "
+            "search. It is not a completed answer. Execute the stated read/search "
+            "action, use its observation, and then answer the user's question "
+            "with concrete findings."
         )
     return None
 
@@ -601,13 +832,18 @@ def _fabricated_citation_guard(steps: list[ReActStep], final_answer: str) -> str
     )
 
 
-def _code_mode_completion_guard(steps: list[ReActStep], final_answer: str) -> str | None:
+def _code_mode_completion_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    todo_protocol_required: bool = True,
+) -> str | None:
     """Reject premature code-mode Final Answer attempts."""
     if _final_answer_requests_user_help(final_answer):
         return None
 
     todos = _latest_todo_items(steps)
-    if not todos and len(steps) >= 3:
+    if todo_protocol_required and not todos and len(steps) >= 3:
         return (
             "Code mode cannot finish yet: no todo_write checklist is recorded. "
             "Create a complete todo list, execute it, "
@@ -961,6 +1197,67 @@ def _unverified_write_followup_guard(
         "exec_shell), or read_file the result back to confirm the "
         "edit landed as intended. Stacking more edits without "
         "verification compounds errors."
+    )
+
+
+def _failed_verification_followup_guard(
+    steps: list[ReActStep],
+    *,
+    is_code_mode: bool,
+) -> str | None:
+    """Keep a red verifier focused on repair instead of toolchain detours."""
+    if not is_code_mode or not steps or not _latest_verification_observation_is_red(steps):
+        return None
+
+    latest_verify_idx = -1
+    for idx in range(len(steps) - 1, -1, -1):
+        if _has_code_verification([steps[idx]]):
+            latest_verify_idx = idx
+            break
+    if latest_verify_idx < 0:
+        return None
+    if any(_is_code_write_step(step) for step in steps[latest_verify_idx + 1 :]):
+        return None
+
+    return (
+        "The latest verification is red. Read the preserved tail diagnostic and fix the underlying "
+        "source/test/config (or run the targeted formatter) before launching another verifier. "
+        "Do not install dependencies, probe alternate Python environments, or create ad-hoc runner "
+        "scripts to bypass a registered verifier. For a concurrency-test timeout, audit lock ownership "
+        "and wait/notify paths as a likely deadlock before retrying."
+    )
+
+
+def _redundant_green_verification_guard(
+    steps: list[ReActStep],
+    *,
+    is_code_mode: bool,
+) -> str | None:
+    """Stop code agents from repeatedly re-running an already-green suite."""
+    if not is_code_mode or not steps:
+        return None
+
+    last_write_idx = -1
+    for idx in range(len(steps) - 1, -1, -1):
+        if _is_code_write_step(steps[idx]):
+            last_write_idx = idx
+            break
+    if last_write_idx < 0:
+        return None
+
+    green_rounds = sum(
+        1
+        for step in steps[last_write_idx + 1 :]
+        if _has_successful_verification_observation([step])
+    )
+    if green_rounds < 2:
+        return None
+
+    return (
+        f"Verification is already green in {green_rounds} separate rounds with no intervening code "
+        "write. Do not run tests, lint, shell probes, or another verifier again. If the checklist is "
+        "stale, call todo_write once with accurate completed statuses; otherwise emit the concise "
+        "Final Answer now with the recorded test/lint evidence."
     )
 
 
@@ -1505,7 +1802,7 @@ def _trajectory_edits_outside_tsconfig(steps: list[ReActStep]) -> list[str]:
         parsed = _parse_action(step.action)
         if parsed is None:
             continue
-        _name, args = parsed
+        tool_name, args = parsed
         path = args.get("path") or args.get("file") or args.get("file_path")
         if isinstance(path, str) and path not in seen:
             seen.append(path)
@@ -1561,7 +1858,7 @@ def _trajectory_has_oversized_edit(steps: list[ReActStep]) -> tuple[int, str | N
         parsed = _parse_action(step.action)
         if parsed is None:
             continue
-        _name, args = parsed
+        tool_name, args = parsed
         path = args.get("path") or args.get("file") or args.get("file_path")
         return (_step_payload_line_count(step), path if isinstance(path, str) else None)
     return (0, None)
@@ -1843,6 +2140,176 @@ def _full_file_rewrite_guard(
         "template), add an explicit edit_file step earlier in the "
         "trajectory or note the intent in the Final Answer."
     )
+
+
+def _ambiguous_inflight_leader_election_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    is_code_mode: bool,
+) -> str | None:
+    """Reject a common single-flight race that local smoke tests can miss."""
+    if not is_code_mode or not steps or _final_answer_requests_user_help(final_answer):
+        return None
+    affected: set[str] = set()
+    for step in steps:
+        if not _is_code_write_step(step):
+            continue
+        parsed = _parse_action(step.action)
+        if parsed is None:
+            continue
+        tool_name, args = parsed
+        path = args.get("path") or args.get("file") or args.get("file_path")
+        if not isinstance(path, str) or _is_test_path(path):
+            continue
+        new_text, old_text = _extract_step_payloads(step)
+        old_hit = _payload_has_ambiguous_inflight_leader_election(old_text)
+        new_hit = _payload_has_ambiguous_inflight_leader_election(new_text)
+        full_clean_rewrite = (
+            tool_name in {"write_text_file", "write_file", "create_file"}
+            and path in affected
+            and bool(new_text)
+            and not new_hit
+        )
+        removed_identity_election = _payload_has_inflight_identity_comparison(
+            old_text
+        ) and not _payload_has_inflight_identity_comparison(new_text)
+        if (old_hit or removed_identity_election or full_clean_rewrite) and not new_hit:
+            affected.discard(path)
+        elif new_hit:
+            affected.add(path)
+    if not affected:
+        return None
+    preview = ", ".join(sorted(affected)[:3])
+    return (
+        "Cannot finish yet: the single-flight implementation in "
+        f"{preview} tries to distinguish leader from follower by re-reading the pending map and "
+        "comparing object identity after the lock. Creator and followers all observe the same "
+        "pending object, so multiple callers can execute the loader. Capture an explicit leader "
+        "boolean inside the locked `pending is None` branch (or keep the loader branch tied to "
+        "entry creation), make followers wait outside the map lock, then rerun a contention test "
+        "whose loader stays in-flight until followers have joined."
+    )
+
+
+def _destructive_waiter_result_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    is_code_mode: bool,
+) -> str | None:
+    """Reject single-flight state that only one of many waiters can consume."""
+    if not is_code_mode or not steps or _final_answer_requests_user_help(final_answer):
+        return None
+    affected: set[str] = set()
+    for step in steps:
+        if not _is_code_write_step(step):
+            continue
+        parsed = _parse_action(step.action)
+        if parsed is None:
+            continue
+        tool_name, args = parsed
+        path = args.get("path") or args.get("file") or args.get("file_path")
+        if not isinstance(path, str) or _is_test_path(path):
+            continue
+        new_text, old_text = _extract_step_payloads(step)
+        old_hit = _payload_has_destructive_waiter_result_pop(old_text)
+        new_hit = _payload_has_destructive_waiter_result_pop(new_text)
+        removed_pop = ".pop(" in old_text and ".pop(" not in new_text
+        full_clean_rewrite = (
+            tool_name in {"write_text_file", "write_file", "create_file"}
+            and path in affected
+            and bool(new_text)
+            and not new_hit
+        )
+        if (old_hit or removed_pop or full_clean_rewrite) and not new_hit:
+            affected.discard(path)
+        elif new_hit:
+            affected.add(path)
+    if not affected:
+        return None
+    preview = ", ".join(sorted(affected)[:3])
+    return (
+        "Cannot finish yet: follower waiters in "
+        f"{preview} read the shared loader result with `pop`. With multiple waiters, the first "
+        "follower consumes that result and later followers can miss it, retry the loader, or "
+        "return no value. Store result/exception on the per-flight pending object (or read the "
+        "fresh cache entry non-destructively) until every waiter has observed it; only remove the "
+        "in-flight map entry after wake-up state is durable. Then run a contention test with at "
+        "least eight callers and a loader held in-flight long enough for followers to join."
+    )
+
+
+def _stale_immutable_waiter_snapshot_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    is_code_mode: bool,
+) -> str | None:
+    """Reject tuple-based pending state that becomes stale across wait()."""
+    if not is_code_mode or not steps or _final_answer_requests_user_help(final_answer):
+        return None
+    affected: set[str] = set()
+    for step in steps:
+        if not _is_code_write_step(step):
+            continue
+        parsed = _parse_action(step.action)
+        if parsed is None:
+            continue
+        tool_name, args = parsed
+        path = args.get("path") or args.get("file") or args.get("file_path")
+        if not isinstance(path, str) or _is_test_path(path):
+            continue
+        new_text, old_text = _extract_step_payloads(step)
+        old_hit = _payload_has_stale_immutable_waiter_snapshot(old_text)
+        new_hit = _payload_has_stale_immutable_waiter_snapshot(new_text)
+        full_clean_rewrite = (
+            tool_name in {"write_text_file", "write_file", "create_file"}
+            and path in affected
+            and bool(new_text)
+            and not new_hit
+        )
+        removed_stale_fallback = (
+            ".get(" in old_text
+            and ", pending" in old_text
+            and not (
+                ".get(" in new_text
+                and ", pending" in new_text
+            )
+        )
+        if (old_hit or removed_stale_fallback or full_clean_rewrite) and not new_hit:
+            affected.discard(path)
+        elif new_hit:
+            affected.add(path)
+    if not affected:
+        return None
+    preview = ", ".join(sorted(affected)[:3])
+    return (
+        "Cannot finish yet: follower waiters in "
+        f"{preview} capture an immutable pending tuple before waiting, while the leader later "
+        "replaces and deletes the map entry. The post-wait fallback therefore reads the stale "
+        "tuple and can return `None` or lose the loader exception. Store result/exception on a "
+        "mutable per-flight object that every waiter shares, or keep a durable completed entry "
+        "until all waiters can read it. Then run an eight-caller test whose loader remains "
+        "blocked until every follower has joined."
+    )
+
+
+def _concurrency_semantic_followup_guard(
+    steps: list[ReActStep],
+    *,
+    is_code_mode: bool,
+) -> str | None:
+    """Surface deterministic concurrency defects immediately after a write."""
+    for guard in (
+        _ambiguous_inflight_leader_election_guard,
+        _destructive_waiter_result_guard,
+        _stale_immutable_waiter_snapshot_guard,
+    ):
+        message = guard(steps, "implementation complete", is_code_mode=is_code_mode)
+        if message is not None:
+            return message.replace("Cannot finish yet: ", "Before verification: ", 1)
+    return None
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -2640,6 +3107,81 @@ def _browser_interaction_completion_guard(ctx: GuardContext) -> str | None:
     )
 
 
+def _mixed_mode_completion_guard(ctx: GuardContext) -> str | None:
+    """Require evidence from every lane in explicit browser-plus-code work."""
+
+    if (
+        not ctx.browser_operation_mode
+        or not ctx.is_code_mode
+        or _browser_goal_is_ui_only(ctx.goal)
+        or _final_answer_requests_user_help(ctx.final_answer)
+    ):
+        return None
+    lowered = str(ctx.goal or "").lower()
+    browser_requested = any(
+        marker in lowered
+        for marker in ("browser", "browser ui", "web ui", "浏览器", "页面", "界面")
+    )
+    code_requested = any(
+        marker in lowered
+        for marker in (
+            "source code",
+            "codebase",
+            "repository",
+            "repo",
+            "patch",
+            "pytest",
+            "run tests",
+            "源代码",
+            "代码仓库",
+            "修改代码",
+            "运行测试",
+        )
+    )
+    if not (browser_requested and code_requested):
+        return None
+
+    missing: list[str] = []
+    if not _has_successful_browser_action(ctx.steps):
+        missing.append("executed browser reproduction or inspection")
+    if not _has_code_write(ctx.steps):
+        missing.append("workspace code edit")
+    if not _has_code_verification(ctx.steps):
+        missing.append("code verification command")
+    if not missing:
+        return None
+    return (
+        "Cannot finish this mixed browser-and-code task yet. Missing lane evidence: "
+        f"{', '.join(missing)}. Complete each requested lane in the same turn; "
+        "do not treat a code-only or browser-only result as completion."
+    )
+
+
+def _has_successful_browser_action(steps: list[ReActStep]) -> bool:
+    for step in steps:
+        actions = step.actions or ([step.action] if step.action else [])
+        for index, raw_action in enumerate(actions):
+            parsed = _parse_action(raw_action)
+            if parsed is None:
+                continue
+            name = parsed[0].lower()
+            if not (name.startswith("browser_") or name.startswith("live_browser_")):
+                continue
+            if name in {"browser_close", "live_browser_close"}:
+                continue
+            if index < len(step.action_results):
+                if bool(step.action_results[index].get("ok")):
+                    return True
+                continue
+            observation = (step.observation or "").lower()
+            if not any(
+                marker in observation
+                for marker in ("(工具失败)", "(工具执行异常)", '"error":', "timed_out")
+            ):
+                return True
+    return False
+
+
 @dataclass
 class GuardContext:
     """Everything a guard might need to evaluate a candidate final answer.
@@ -2659,6 +3201,7 @@ class GuardContext:
     tools_active: bool = False
     goal: str = ""
     browser_operation_mode: bool = False
+    grounded_source_paths: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -2798,7 +3341,12 @@ def _invoke_missing_inspection(ctx: GuardContext) -> str | None:
         ctx.final_answer,
         goal=ctx.goal,
         file_tools_visible=ctx.file_inspection_tools_visible,
+        grounded_source_paths=ctx.grounded_source_paths,
     )
+
+
+def _invoke_incomplete_final(ctx: GuardContext) -> str | None:
+    return _incomplete_final_answer_guard(ctx.final_answer)
 
 
 def _invoke_false_no_tool(ctx: GuardContext) -> str | None:
@@ -2849,7 +3397,11 @@ def _invoke_todo_protocol(ctx: GuardContext) -> str | None:
 def _invoke_code_mode_completion(ctx: GuardContext) -> str | None:
     if not ctx.is_code_mode:
         return None
-    return _code_mode_completion_guard(ctx.steps, ctx.final_answer)
+    return _code_mode_completion_guard(
+        ctx.steps,
+        ctx.final_answer,
+        todo_protocol_required=ctx.todo_protocol_required,
+    )
 
 
 def _invoke_fabricated_citation(ctx: GuardContext) -> str | None:
@@ -2862,6 +3414,10 @@ def _invoke_fabricated_citation(ctx: GuardContext) -> str | None:
 
 def _invoke_browser_completion(ctx: GuardContext) -> str | None:
     return _browser_interaction_completion_guard(ctx)
+
+
+def _invoke_mixed_mode_completion(ctx: GuardContext) -> str | None:
+    return _mixed_mode_completion_guard(ctx)
 
 
 def _preview_labels(labels: list[str], limit: int = 3) -> str:
@@ -2952,11 +3508,13 @@ GUARD_REGISTRY: list[GuardSpec] = [
     _spec_security("shell-injection guard", "security", _shell_injection_guard),
     _spec_security("unsafe-deser guard", "security", _unsafe_deser_guard),
     # ── Tool-availability / inspection-evidence ──
+    GuardSpec("final-answer completeness guard", "protocol", _invoke_incomplete_final),
     GuardSpec("inspection-evidence guard", "protocol", _invoke_missing_inspection),
     GuardSpec("tool-availability guard", "protocol", _invoke_false_no_tool),
     GuardSpec("tool-result guard", "protocol", _invoke_false_tool_result),
     GuardSpec("implementation-write guard", "protocol", _invoke_missing_write),
     GuardSpec("todo-protocol guard", "protocol", _invoke_todo_protocol),
+    GuardSpec("mixed-mode completion guard", "protocol", _invoke_mixed_mode_completion),
     GuardSpec("browser-completion guard", "protocol", _invoke_browser_completion),
     # ── Research / chat quality (non-code turns) ──
     GuardSpec("citation-grounding guard", "research", _invoke_fabricated_citation),
@@ -2984,9 +3542,7 @@ GUARD_REGISTRY: list[GuardSpec] = [
         "dependency-declaration guard", "verification", _new_third_party_import_without_dep_guard
     ),
     _spec_code_mode("false-verification guard", "verification", _false_verification_claim_guard),
-    _spec_code_mode(
-        "red-verification guard", "verification", _red_verification_observation_guard
-    ),
+    _spec_code_mode("red-verification guard", "verification", _red_verification_observation_guard),
     # ── Code-smell cluster ──
     _spec_code_mode("comment-out-fix guard", "code-smell", _commented_out_as_fix_guard),
     _spec_code_mode("broad-except guard", "code-smell", _broad_except_suppression_guard),
@@ -2998,6 +3554,21 @@ GUARD_REGISTRY: list[GuardSpec] = [
     _spec_code_mode("sleep-in-prod guard", "code-smell", _sleep_in_production_guard),
     _spec_code_mode("async-without-await guard", "code-smell", _async_without_await_guard),
     _spec_code_mode("full-rewrite guard", "code-smell", _full_file_rewrite_guard),
+    _spec_code_mode(
+        "single-flight leader-election guard",
+        "code-smell",
+        _ambiguous_inflight_leader_election_guard,
+    ),
+    _spec_code_mode(
+        "single-flight waiter-result guard",
+        "code-smell",
+        _destructive_waiter_result_guard,
+    ),
+    _spec_code_mode(
+        "single-flight immutable-snapshot guard",
+        "code-smell",
+        _stale_immutable_waiter_snapshot_guard,
+    ),
     _spec_code_mode("print-in-prod guard", "code-smell", _print_in_production_guard),
     _spec_code_mode("hardcoded-path guard", "code-smell", _hardcoded_personal_path_guard),
     _spec_code_mode("long-function guard", "code-smell", _long_function_guard),
@@ -3038,8 +3609,8 @@ def evaluate_guards(
     recorded to telemetry (they didn't actually block anything).
 
     ``categories`` (optional) narrows evaluation to coarse guard groups.
-    Salvage paths use this to run only the security cluster without turning
-    a malformed plain-text answer into a todo/protocol failure.
+    Salvage paths use this to skip mutation-specific quality checks while
+    retaining security, protocol-completeness, and research-grounding gates.
     """
     specs = registry if registry is not None else GUARD_REGISTRY
     if registry is None and (categories is None or "security" in categories):

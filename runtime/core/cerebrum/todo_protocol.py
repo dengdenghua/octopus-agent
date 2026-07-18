@@ -37,6 +37,82 @@ _CODE_OR_TOOL_CUE_RE = re.compile(
     re.IGNORECASE,
 )
 
+_SINGLE_SOURCE_RE = re.compile(
+    r"(?:\u4e00\u4e2a|1\s*\u4e2a)\s*(?:\u5b98\u65b9|\u53ef\u9760)?\s*(?:\u6765\u6e90|\u7f51\u9875|\u9875\u9762)|"
+    r"\b(?:one|single)\s+(?:official\s+|reliable\s+)?source\b",
+    re.IGNORECASE,
+)
+_CONCISE_RESULT_RE = re.compile(
+    r"(?:\u4e00\u53e5|\u4e00\u53e5\u8bdd|\u4e00\u6bb5|\u7b80\u77ed|\u7ed3\u8bba)|"
+    r"\b(?:one sentence|brief|concise|short conclusion)\b",
+    re.IGNORECASE,
+)
+_WEB_LOOKUP_RE = re.compile(
+    r"(?:\u7f51\u9875\u8c03\u7814|\u641c\u7d22|\u67e5\u627e|\u5b98\u65b9\u6765\u6e90)|"
+    r"\b(?:web research|search|look up|official source)\b",
+    re.IGNORECASE,
+)
+_FOLLOWUP_EXECUTION_RE = re.compile(
+    r"(?:\u7136\u540e|\u63a5\u7740|\u968f\u540e|\u5e76(?:\u4e14)?|\u540c\u65f6)\s*"
+    r"(?:\u4fee\u6539|\u5b9e\u73b0|\u4fee\u590d|\u66f4\u65b0|\u521b\u5efa|\u65b0\u589e|\u91cd\u6784|\u6267\u884c|\u8fd0\u884c)|"
+    r"\b(?:then|and then|also)\s+"
+    r"(?:implement|fix|modify|edit|update|create|refactor|run|execute)\b",
+    re.IGNORECASE,
+)
+_LEADING_EXECUTION_RE = re.compile(
+    r"^\s*(?:\u4fee\u6539|\u5b9e\u73b0|\u4fee\u590d|\u66f4\u65b0|\u521b\u5efa|\u65b0\u589e|\u91cd\u6784|\u6267\u884c|\u8fd0\u884c)|"
+    r"^\s*(?:implement|fix|modify|edit|update|create|refactor|run|execute)\b",
+    re.IGNORECASE,
+)
+_EXPLICIT_SOURCE_PATH_RE = re.compile(
+    r"(?<![\w./-])(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+\.(?:py|ts|tsx|js|jsx|json|yaml|yml|md|css|html|go|rs)\b",
+    re.IGNORECASE,
+)
+_READ_ONLY_RE = re.compile(
+    r"(?:只读|不要(?:修改|写入|创建|新增)|不(?:修改|写入|创建|新增)|严禁(?:修改|写入|创建|新增))|"
+    r"\b(?:read[ -]?only|do not (?:modify|edit|write|create)|without (?:modifying|editing|writing|creating))\b",
+    re.IGNORECASE,
+)
+
+
+def _is_narrow_single_source_lookup(text: str) -> bool:
+    """Return whether a turn is a bounded lookup, not a multi-step project.
+
+    Code workspaces are the common default surface, so mode alone cannot make a
+    one-source factual lookup checklist-worthy. Keep the exemption deliberately
+    narrow and reject prompts that continue into implementation or execution.
+    """
+
+    return bool(
+        _SINGLE_SOURCE_RE.search(text)
+        and _CONCISE_RESULT_RE.search(text)
+        and _WEB_LOOKUP_RE.search(text)
+        and not _LEADING_EXECUTION_RE.search(text)
+        and not _FOLLOWUP_EXECUTION_RE.search(text)
+    )
+
+
+def _is_narrow_local_inspection(text: str) -> bool:
+    """Return whether a turn is a bounded read-only comparison of named files.
+
+    A code workspace should not turn a one-sentence inspection of a handful of
+    explicit files into a project checklist. Exact source evidence is enforced
+    separately by the final-answer guards, so skipping the checklist here does
+    not permit an answer before the requested files have been read.
+    """
+
+    source_paths = {
+        match.group(0).rstrip(".,;:!?，。；：！？")
+        for match in _EXPLICIT_SOURCE_PATH_RE.finditer(text)
+    }
+    return bool(
+        1 <= len(source_paths) <= 3
+        and _READ_ONLY_RE.search(text)
+        and _CONCISE_RESULT_RE.search(text)
+        and not _LEADING_EXECUTION_RE.search(text)
+        and not _FOLLOWUP_EXECUTION_RE.search(text)
+    )
+
 
 def context_mode(user_context: dict[str, Any] | None) -> str:
     """Return the best-effort runtime mode from a thread context."""
@@ -73,9 +149,6 @@ def should_require_todo_protocol(
         return False
 
     mode = context_mode(user_context)
-    if mode in {"code", "team", "deep", "deep_research", "research", "swarm", "swarms"}:
-        return True
-
     metadata = user_context.get("metadata") if isinstance(user_context, dict) else None
     goal_mode = None
     if isinstance(user_context, dict):
@@ -93,6 +166,15 @@ def should_require_todo_protocol(
     if capability is None and isinstance(metadata, dict):
         capability = metadata.get("capability_mode")
     if isinstance(capability, str) and capability.lower() in {"swarm", "swarms", "team", "collab"}:
+        return True
+
+    if mode in {"team", "swarm", "swarms"}:
+        return True
+    if _is_narrow_local_inspection(text):
+        return False
+    if _is_narrow_single_source_lookup(text):
+        return False
+    if mode in {"code", "deep", "deep_research", "research"}:
         return True
 
     if "\n" in text or len(text) >= 80:

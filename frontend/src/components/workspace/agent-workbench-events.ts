@@ -13,6 +13,8 @@ export type AgentWorkbenchTab =
 /** Sub-view of the per-agent workbench page: "summary" is the activity
  * trace, "screen" is the agent's computer view. Omitted = panel default. */
 export type AgentWorkbenchFocusView = "summary" | "screen";
+export type AgentWorkbenchEventView = "summary" | "trace" | "screen";
+export type AgentWorkbenchProcessEventKind = "thinking" | "execution";
 
 export type AgentWorkbenchFocusDetail = {
   agentId: string;
@@ -22,6 +24,11 @@ export type AgentWorkbenchFocusDetail = {
 
 export type AgentWorkbenchOpenDetail = {
   tab?: AgentWorkbenchTab;
+  /** Stable id shared by the transcript event and its workbench block. */
+  eventId?: string;
+  eventKind?: AgentWorkbenchProcessEventKind;
+  /** The workbench surface that best explains the selected event. */
+  view?: AgentWorkbenchEventView;
 };
 
 export function emitAgentWorkbenchFocus(detail: AgentWorkbenchFocusDetail) {
