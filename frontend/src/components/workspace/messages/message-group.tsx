@@ -234,7 +234,9 @@ function publicActionTextFromTraceTool(
   ) {
     return withTarget(t.messageGrouping.updateFile);
   }
-  return withTarget(t.messageGrouping.runAction);
+  // Unknown trace actions are implementation details, not a meaningful
+  // public update. Do not invent a generic "Run action" timeline item.
+  return null;
 }
 
 function publicStatusFromPrivateReasoning(
@@ -368,23 +370,6 @@ function isPublicProgressKind(value: unknown): value is PublicProgressKind {
       "recover",
     ].includes(value)
   );
-}
-
-function publicProgressLabel(
-  kind: PublicProgressKind | undefined,
-  t: ReturnType<typeof useI18n>["t"],
-): string | null {
-  if (!kind) return null;
-  const labels: Record<PublicProgressKind, string> = {
-    orient: t.messageGrouping.progressOrient,
-    investigate: t.messageGrouping.progressInvestigate,
-    implement: t.messageGrouping.progressImplement,
-    verify: t.messageGrouping.progressVerify,
-    pivot: t.messageGrouping.progressPivot,
-    synthesize: t.messageGrouping.progressSynthesize,
-    recover: t.messageGrouping.progressRecover,
-  };
-  return labels[kind];
 }
 
 export function MessageGroup({
@@ -564,11 +549,10 @@ export function MessageGroup({
     const isLast =
       isCurrentFrame || (!isHistoryReplay && idx === items.length - 1);
     if (item.type === "commentary") {
-      const progressLabel = publicProgressLabel(item.step.progressKind, t);
       return (
         <div
           key={item.id}
-          className="my-1.5 flex min-w-0 items-start gap-2 text-[13px] leading-5 text-foreground/85"
+          className="my-1.5 min-w-0 text-[13px] leading-5 text-foreground/85"
           data-testid="public-progress-event"
           data-progress-kind={item.step.progressKind}
           data-phase-id={item.step.phaseId}
@@ -576,11 +560,6 @@ export function MessageGroup({
           data-progress-sequence={item.step.progressSequence}
         >
           {renderIterationDivider(prevStep, item.step)}
-          {progressLabel && (
-            <span className="mt-0.5 shrink-0 text-[10px] font-medium tracking-wide text-muted-foreground/45">
-              {progressLabel}
-            </span>
-          )}
           <div className="min-w-0 flex-1">
             <MarkdownContent
               content={item.step.commentary}
@@ -708,22 +687,16 @@ export function MessageGroup({
         isLiveTimeline && isLastOverall && isLoading,
       );
       if (item.type === "commentary") {
-        const progressLabel = publicProgressLabel(item.step.progressKind, t);
         return (
           <div
             key={`${keyPrefix}-${item.id}`}
-            className="my-1.5 flex min-w-0 items-start gap-2 text-[13px] leading-5 text-foreground/85"
+            className="my-1.5 min-w-0 text-[13px] leading-5 text-foreground/85"
             data-testid="public-progress-event"
             data-progress-kind={item.step.progressKind}
             data-phase-id={item.step.phaseId}
             data-parent-item-id={item.step.parentItemId}
             data-progress-sequence={item.step.progressSequence}
           >
-            {progressLabel && (
-              <span className="mt-0.5 shrink-0 text-[10px] font-medium tracking-wide text-muted-foreground/45">
-                {progressLabel}
-              </span>
-            )}
             <div className="min-w-0 flex-1">
               <MarkdownContent
                 content={item.step.commentary}
@@ -783,12 +756,6 @@ export function MessageGroup({
                   agentRunStatusLightClass(state),
                 )}
               />
-            </span>
-            <span className="shrink-0 font-medium text-muted-foreground/70">
-              {isThinking ? t.message.thinkingProcess : t.message.execution}
-            </span>
-            <span aria-hidden="true" className="shrink-0 opacity-35">
-              ·
             </span>
             <span className="min-w-0 flex-1 truncate">{summary}</span>
             {count > 1 && (

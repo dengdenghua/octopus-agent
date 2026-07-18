@@ -203,8 +203,8 @@ describe("MessageGroup reasoning grouping", () => {
       name: "查阅了 1 处项目资料",
     });
     expect(checkpoints[0]).toContainElement(groundingTrigger);
-    expect(screen.getByText("定向")).toBeInTheDocument();
-    expect(screen.getByText("验证")).toBeInTheDocument();
+    expect(screen.queryByText("定向")).not.toBeInTheDocument();
+    expect(screen.queryByText("验证")).not.toBeInTheDocument();
     expect(
       screen.getByText("已确认流事件按消息、思考和执行三条通道归一化。"),
     ).toBeInTheDocument();
@@ -214,6 +214,9 @@ describe("MessageGroup reasoning grouping", () => {
     expect(
       screen.getByTestId("process-timeline-event-execution"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("process-timeline-event-execution"),
+    ).not.toHaveTextContent(/^执行(?:\s|·)/);
   });
 
   it("keeps only the latest thinking step visible while streaming", () => {
@@ -237,9 +240,11 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    expect(
-      screen.getByTestId("process-timeline-event-thinking"),
-    ).toBeInTheDocument();
+    const thinkingEvent = screen.getByTestId(
+      "process-timeline-event-thinking",
+    );
+    expect(thinkingEvent).toBeInTheDocument();
+    expect(thinkingEvent).not.toHaveTextContent(/^思考过程(?:\s|·)/);
     const replayToggle = screen.getByTitle("过程回放 1 步");
     const currentFrame = screen.getByText("再整理成可执行步骤");
     expect(replayToggle).toBeInTheDocument();
@@ -821,7 +826,7 @@ describe("MessageGroup reasoning grouping", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps Action callback text out of thinking groups", () => {
+  it("keeps unknown Action callback text out of the public timeline", () => {
     const messages: AIMessage[] = [
       {
         id: "ai-1",
@@ -844,14 +849,8 @@ describe("MessageGroup reasoning grouping", () => {
     expect(screen.queryByText("已调用")).not.toBeInTheDocument();
     expect(screen.queryByText(/ipython/)).not.toBeInTheDocument();
     expect(screen.queryByText("继续检查输出文件。")).not.toBeInTheDocument();
-    expect(screen.getByText("执行动作")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByTitle("过程回放 1 步"));
-
+    expect(screen.queryByText("执行动作")).not.toBeInTheDocument();
     expect(screen.getAllByText("整理调研结果").length).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText("\u6267\u884c\u52a8\u4f5c").length,
-    ).toBeGreaterThan(0);
     expect(screen.queryByText(/ipython/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Action:/)).not.toBeInTheDocument();
     expect(screen.queryByText("执行中")).not.toBeInTheDocument();
