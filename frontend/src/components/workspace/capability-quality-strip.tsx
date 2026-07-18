@@ -94,6 +94,8 @@ export function CapabilityQualityStrip({
       scorecard.evidence_adjusted_overall?.octopus ?? overall,
     );
     const belowTarget = scorecard.octopus_below_target?.length ?? 0;
+    const externalGaps = scorecard.octopus_external_gap_dimensions?.length ?? 0;
+    const behavioral = scorecard.evidence_layers?.behavioral_head_to_head;
     const targetScore = scorecard.target_score || E2E_SURPASS_TARGET_SCORE;
     const ecosystem = scorecard.ecosystem_readiness
       ? Math.round(scorecard.ecosystem_readiness.score * 100)
@@ -111,6 +113,8 @@ export function CapabilityQualityStrip({
       overall,
       evidenceAdjusted,
       belowTarget,
+      externalGaps,
+      behavioral,
       ecosystem,
       browser,
       targetScore,
@@ -122,6 +126,8 @@ export function CapabilityQualityStrip({
     summary &&
     summary.evidenceAdjusted >= summary.targetScore &&
     summary.belowTarget === 0 &&
+    summary.externalGaps === 0 &&
+    (!summary.behavioral || summary.behavioral.ready) &&
     (!summary.browser || summary.browser.stale === 0);
 
   return (
@@ -169,6 +175,20 @@ export function CapabilityQualityStrip({
               value={String(summary.evidenceAdjusted)}
               tone={summary.evidenceAdjusted >= 90 ? "good" : "warn"}
             />
+            {summary.behavioral ? (
+              <QualityPill
+                icon={<ActivityIcon className="size-3.5" />}
+                label="Behavior"
+                value={
+                  summary.behavioral.ready
+                    ? "certified"
+                    : summary.behavioral.blocker === "infrastructure"
+                      ? "provider blocked"
+                      : "pending"
+                }
+                tone={summary.behavioral.ready ? "good" : "warn"}
+              />
+            ) : null}
             {summary.ecosystem !== null ? (
               <QualityPill
                 icon={<ActivityIcon className="size-3.5" />}

@@ -856,7 +856,7 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
                 <button
                   type="button"
                   onClick={cancelAll}
-                  className="text-muted-foreground hover:text-red-500 rounded p-1"
+                  className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500"
                 >
                   <SquareIcon className="size-3.5" />
                 </button>

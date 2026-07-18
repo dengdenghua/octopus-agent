@@ -36,6 +36,27 @@ export interface PluginSmoke {
     mcp?: boolean;
     commands?: boolean;
   };
+  publisher_provenance?: PluginPublisherProvenance;
+}
+
+export interface PluginPublisherProvenance {
+  schema: "octopus.plugin_publisher_provenance.v1" | string;
+  present: boolean;
+  verified: boolean;
+  trusted: boolean;
+  status:
+    | "unsigned"
+    | "verified"
+    | "invalid"
+    | "tampered"
+    | "untrusted"
+    | "revoked"
+    | string;
+  publisher_id: string;
+  key_id: string;
+  content_digest: string;
+  signature_digest: string;
+  reason: string;
 }
 
 export interface PluginSmokeSummaryItem {
@@ -64,9 +85,18 @@ export interface PluginSmokeSummary {
   failed_count: number;
   review_required_count: number;
   warning_count: number;
+  publisher_verified_count?: number;
+  unsigned_count?: number;
+  invalid_signature_count?: number;
   failed: PluginSmokeSummaryItem[];
   review_required: PluginSmokeSummaryItem[];
   warnings: PluginSmokeSummaryItem[];
+  publisher_provenance?: Array<
+    PluginPublisherProvenance & {
+      plugin_id?: string | null;
+      plugin_name?: string | null;
+    }
+  >;
   permission_resolutions?: PluginPermissionResolution[];
   compatibility?: {
     schema: "octopus.codex_plugin_compatibility.v1" | string;

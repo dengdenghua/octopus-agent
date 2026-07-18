@@ -26,7 +26,7 @@ interface PermissionIndicatorProps {
 }
 
 const PERMISSION_TRIGGER_TONE =
-  "border border-border-default bg-background/90 text-muted-foreground shadow-[var(--shadow-xs)] hover:bg-muted/70 hover:text-foreground";
+  "border-transparent bg-transparent text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground";
 
 export function PermissionIndicator({
   mode,
@@ -63,10 +63,10 @@ export function PermissionIndicator({
           type="button"
           data-testid="permission-mode-trigger"
           className={cn(
-            "flex items-center gap-1.5 text-[11px] font-medium transition-colors",
+            "flex items-center gap-1.5 text-[11px] font-medium transition-all duration-200",
             compact
-              ? "h-8 rounded-md px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
-              : cn("h-8 rounded-full px-2.5", PERMISSION_TRIGGER_TONE),
+              ? "h-8 rounded-lg px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
+              : cn("h-8 rounded-lg px-2.5", PERMISSION_TRIGGER_TONE),
             className,
           )}
           title={`${t.chatInputBox.permissionModeLabel}: ${current.description}`}

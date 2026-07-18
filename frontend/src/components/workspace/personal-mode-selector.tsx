@@ -301,10 +301,10 @@ export function PersonalModeSelector({
           }
         }}
         className={cn(
-          "group flex items-center gap-1.5 text-[11px] font-medium text-foreground shadow-none transition-colors",
+          "group flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground shadow-none transition-all duration-200",
           chromeless
-            ? "h-8 rounded-md px-1.5 hover:bg-muted/55 hover:text-foreground"
-            : "h-8 rounded-full border border-transparent bg-transparent px-2 hover:border-border-subtle hover:bg-muted/55",
+            ? "h-8 rounded-lg px-1.5 hover:bg-muted/55 hover:text-foreground"
+            : "h-8 rounded-lg border border-transparent bg-transparent px-2 hover:border-border-subtle hover:bg-muted/55 hover:text-foreground",
         )}
         title={activeLabels.desc}
       >

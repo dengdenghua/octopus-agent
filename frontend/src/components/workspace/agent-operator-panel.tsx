@@ -301,6 +301,9 @@ const EMPTY_PLUGIN_SMOKE_SUMMARY: PluginSmokeSummary = {
   failed_count: 0,
   review_required_count: 0,
   warning_count: 0,
+  publisher_verified_count: 0,
+  unsigned_count: 0,
+  invalid_signature_count: 0,
   failed: [],
   review_required: [],
   warnings: [],
@@ -1428,6 +1431,8 @@ function CompetitorScorecardCard({
     [];
   const strengths = report.octopus_strengths ?? [];
   const certification = report.parity_certification;
+  const evidenceLayers = report.evidence_layers;
+  const behavioralEvidence = evidenceLayers?.behavioral_head_to_head;
   const topGap = focusGaps
     .slice()
     .sort(
@@ -1446,7 +1451,10 @@ function CompetitorScorecardCard({
   const selectedGapQueueItem = selectedGap
     ? scorecardGapQueueItemForDimension(queueItems, selectedGap.id)
     : null;
-  const healthy = octopusScore >= report.target_score;
+  const healthy =
+    octopusScore >= report.target_score &&
+    externalGaps.length === 0 &&
+    (!behavioralEvidence || behavioralEvidence.ready);
   return (
     <div
       className={cn(
@@ -1482,19 +1490,30 @@ function CompetitorScorecardCard({
                     topGap.octopus_gap_to_effective_target ??
                     topGap.octopus_gap_to_target
                   } vs effective target`
-                : certification?.ready
-                  ? `Certification passed ${certification.passed}/${certification.total}`
-                  : "Octopus has no tracked effective scorecard gaps"}
+                : behavioralEvidence && !behavioralEvidence.ready
+                  ? "Behavioral head-to-head is not certified"
+                  : certification?.ready
+                    ? `Certification passed ${certification.passed}/${certification.total}`
+                    : "Octopus has no tracked effective scorecard gaps"}
           </div>
           <div className="mt-1 text-[11px] text-muted-foreground">
-            Overall is external-calibrated baseline; evidence score is shown
-            separately. External gaps track per-dimension leaders.
+            Architecture is estimated; static certification and same-task
+            behavioral evidence are tracked separately.
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           <div className="grid grid-cols-3 gap-2 text-right font-mono text-[11px] xl:grid-cols-6">
-            <GateStat label="Octo real" value={octopusScore} />
-            <GateStat label="Evidence" value={evidenceAdjustedOctopusScore} />
+            <GateStat label="Architecture" value={octopusScore} />
+            <GateStat
+              label="Static evidence"
+              value={evidenceAdjustedOctopusScore}
+            />
+            {behavioralEvidence && (
+              <GateStat
+                label="Behavior %"
+                value={Math.round(behavioralEvidence.octopus_pass_pow_k * 100)}
+              />
+            )}
             <GateStat label="Codex" value={report.overall.codex ?? 0} />
             <GateStat label="Claude" value={report.overall.claude_code ?? 0} />
             <GateStat label="OpenClaw" value={report.overall.openclaw ?? 0} />
@@ -1639,6 +1658,9 @@ function E2ESurpassCertificationCard({
   const passedChecks = certification.checks.length - failedChecks.length;
   const ready = !error && certification.ready;
   const behavioralReady = summary.behavioral_ready;
+  const behavioralBlocked = Boolean(
+    certification.behavioral?.infrastructure?.active,
+  );
   const focusText = error
     ? error
     : ready
@@ -1687,7 +1709,12 @@ function E2ESurpassCertificationCard({
                   : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
               )}
             >
-              behavior {behavioralReady ? "verified" : "missing"}
+              behavior{" "}
+              {behavioralReady
+                ? "verified"
+                : behavioralBlocked
+                  ? "provider blocked"
+                  : "missing"}
             </Badge>
           </div>
           <div className="mt-1 truncate text-[11px] text-muted-foreground">
@@ -1718,7 +1745,7 @@ function E2ESurpassCertificationCard({
           <GateStat label="Automation" value={summary.automation_octopus} />
           <GateStat label="Quality" value={summary.quality_ready} />
           <GateStat
-            label="Behavior"
+            label={behavioralBlocked ? "Behavior blocked" : "Behavior"}
             value={
               behavioralReady
                 ? Math.round(summary.behavioral_octopus_pass_pow_k * 100)
@@ -2456,7 +2483,10 @@ function AutoVerifierCard({
 }
 
 function PluginHealthCard({ summary }: { summary: PluginSmokeSummary }) {
-  const risky = summary.failed_count > 0 || summary.warning_count > 0;
+  const risky =
+    summary.failed_count > 0 ||
+    summary.warning_count > 0 ||
+    (summary.invalid_signature_count ?? 0) > 0;
   const compatibility = summary.compatibility;
   const rows =
     summary.failed.length > 0
@@ -2512,6 +2542,7 @@ function PluginHealthCard({ summary }: { summary: PluginSmokeSummary }) {
           <GateStat label="ok" value={summary.ok_count} />
           <GateStat label="fail" value={summary.failed_count} />
           <GateStat label="warn" value={summary.warning_count} />
+          <GateStat label="signed" value={summary.publisher_verified_count ?? 0} />
           {compatibility && (
             <GateStat label="compat" value={compatibility.passed} />
           )}

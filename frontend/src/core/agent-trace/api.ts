@@ -1014,6 +1014,41 @@ export interface AgentEcosystemReadiness {
   next_actions: string[];
 }
 
+export interface AgentScoreEvidenceLayers {
+  schema: "octopus.agent_score_evidence_layers.v1" | string;
+  architecture: {
+    status: "estimated" | string;
+    octopus_score: number;
+    codex_score: number;
+    source: string;
+  };
+  static_certification: {
+    status: "certified" | "not_certified" | string;
+    ready: boolean;
+    passed: number;
+    total: number;
+  };
+  behavioral_head_to_head: {
+    status: "certified" | "not_certified" | string;
+    ready: boolean;
+    verdict?: string;
+    blocker?: "infrastructure" | "evidence" | null | string;
+    infrastructure?: BehavioralInfrastructureStatus;
+    octopus_pass_pow_k: number;
+    codex_pass_pow_k: number;
+  };
+}
+
+export interface BehavioralInfrastructureStatus {
+  active: boolean;
+  current?: boolean;
+  path?: string;
+  generated_at?: string;
+  age_days?: number | null;
+  system_id?: string;
+  failures?: Array<{ case_id: string; categories: string[] }>;
+}
+
 export interface AgentCompetitorScorecard {
   ok?: boolean;
   schema: "octopus.agent_competitor_scorecard.v1" | string;
@@ -1032,6 +1067,7 @@ export interface AgentCompetitorScorecard {
     | "near_parity"
     | "behind"
     | string;
+  evidence_layers?: AgentScoreEvidenceLayers;
   scorecard_policy?: {
     schema?: string;
     overall?: string;
@@ -1204,6 +1240,7 @@ export interface E2ESurpassCertification {
     evidence_adjusted_overall?: Record<string, number>;
     verdict?: string;
     evidence_adjusted_verdict?: string;
+    evidence_layers?: AgentScoreEvidenceLayers;
     surpass_summary?: Record<string, unknown>;
     next_focus?: string[];
   };
@@ -1229,6 +1266,7 @@ export interface E2ESurpassCertification {
     verdict: string;
     bundle_path?: string;
     age_days?: number | null;
+    infrastructure?: BehavioralInfrastructureStatus;
     systems?: Record<
       string,
       {

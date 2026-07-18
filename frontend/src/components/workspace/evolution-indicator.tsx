@@ -72,7 +72,7 @@ export function EvolutionIndicator({
     <button
       type="button"
       className={cn(
-        "relative flex items-center gap-1 rounded-md px-2 py-1 text-[11px]",
+        "relative flex items-center gap-1 rounded-lg px-2 py-1 text-[11px]",
         compact && "size-7 justify-center gap-0 px-0 py-0 text-[10px]",
         "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
         "transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",

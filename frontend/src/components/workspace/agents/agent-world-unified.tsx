@@ -223,7 +223,7 @@ function AgentPackImportPanel({ onImported }: { onImported: () => void }) {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex flex-col gap-2 md:flex-row">
         <Input
           value={path}
@@ -493,7 +493,7 @@ function AgentsTab({
       {visibleAgents.length > 0 ? (
         <div
           data-testid="agents-card-grid"
-          className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
         >
           {visibleAgents.map((agent) =>
             agent.is_installed ? (
@@ -1123,8 +1123,8 @@ export function AgentWorldUnified() {
   return (
     <div className="relative flex size-full flex-col gap-2 px-2 pb-2 pt-2 md:px-3">
       {!hudOnly && (
-        <div className="flex flex-col gap-2 rounded-lg border border-border bg-background px-3 py-2 md:flex-row md:items-center md:justify-end">
-          <div className="relative w-full md:max-w-[280px]">
+        <div className="flex flex-col gap-2 rounded-xl border border-border-default bg-card/70 px-3 py-2.5 shadow-[var(--shadow-xs)] md:flex-row md:items-center md:justify-end">
+          <div className="relative w-full md:max-w-[360px]">
             <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
             <Input
               data-testid="agents-search-input"
@@ -1133,13 +1133,13 @@ export function AgentWorldUnified() {
               }
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-8 rounded-lg border-border bg-background pl-8 text-xs shadow-none"
+              className="h-9 rounded-lg border-border-default bg-background/85 pl-8 text-xs shadow-none transition-colors hover:border-border-strong focus-visible:bg-background"
             />
           </div>
           {activeTab === "agents" && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="sm" className="h-8 rounded-lg shadow-none">
+                <Button size="sm" className="h-9 rounded-lg px-3 shadow-none">
                   <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
                   {t.agentWorld.addAgent}
                   <ChevronDownIcon className="ml-1 h-3.5 w-3.5" />
@@ -1168,7 +1168,7 @@ export function AgentWorldUnified() {
 
       {/* Main Content */}
       {!hudOnly && (
-        <div className="relative flex-1 overflow-y-auto rounded-lg border border-border bg-background px-3 py-3">
+        <div className="relative flex-1 overflow-y-auto rounded-xl border border-border-default bg-card/70 px-3 py-3 shadow-[var(--shadow-xs)] md:px-4 md:py-4">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList variant="line" className="mb-3">
               {SHOW_LOCAL_AGENT_LIBRARY && (

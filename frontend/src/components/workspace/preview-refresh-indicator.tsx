@@ -28,7 +28,7 @@ export function PreviewRefreshIndicator({ className }: Props) {
     <button
       type="button"
       className={cn(
-        "flex items-center gap-1 rounded-md px-2 py-1 text-[11px]",
+        "flex items-center gap-1 rounded-lg px-2 py-1 text-[11px]",
         "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
         "transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
         className,

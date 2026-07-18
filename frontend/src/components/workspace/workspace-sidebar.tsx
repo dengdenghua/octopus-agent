@@ -357,15 +357,12 @@ function projectNameForThread(
 
   if (thread.mode === "team") {
     if (workspaceProject) return workspaceProject;
-    return isGeneratedTeamProjectName(explicitProject)
-      ? personalSpaceLabel
-      : explicitProject || personalSpaceLabel;
+    if (isGeneratedTeamProjectName(explicitProject)) return "";
+    return explicitProject;
   }
   if (explicitProject) return explicitProject;
-  if (thread.mode === "code") {
-    return workspaceProject || "Code";
-  }
-  return "Project";
+  if (workspaceProject) return workspaceProject;
+  return "";
 }
 
 function summarizeThreadForSidebar(thread: AgentThread): ThreadSummary {
@@ -1048,6 +1045,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
   const byProject: Record<string, ThreadSummary[]> = {};
   const explicitProjectThreadIdsByProject: Record<string, string[]> = {};
+  const ungroupedProjectThreads: ThreadSummary[] = [];
   for (const name of userProjects) byProject[name] = [];
   const rawThreadMap = new Map(mergedProjectRaw.map((r) => [r.thread_id, r]));
   for (const thread of projectThreads) {
@@ -1059,13 +1057,18 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       meta,
       t.codeMode.personalSpace,
     );
+    if (!project) {
+      ungroupedProjectThreads.push(thread);
+      continue;
+    }
     if (explicitProject && project === explicitProject) {
       (explicitProjectThreadIdsByProject[project] ??= []).push(thread.id);
     }
     (byProject[project] ??= []).push(thread);
   }
-  // Belt-and-suspenders · ensure Recent never contains non-chat
-  const projectOrder = Object.keys(byProject);
+  const projectOrder = Object.keys(byProject).filter(
+    (p) => (byProject[p]?.length ?? 0) > 0 || userProjects.includes(p),
+  );
   const deletableProjects = new Set<string>();
   for (const project of Object.keys(explicitProjectThreadIdsByProject)) {
     deletableProjects.add(project);
@@ -1130,13 +1133,11 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   };
   const browserSurfaceActive = isBrowserSurfaceRoute(pathname);
   const sidebarConversationThreads = conversationThreads;
-  // Chat history stays chat-only. Team history is grouped under Projects by
-  // workspace so it reads as project work rather than loose conversation.
   const allHistoryThreads = useMemo(() => {
-    return [...sidebarConversationThreads].sort((a, b) =>
-      (b.updatedAt || "").localeCompare(a.updatedAt || ""),
+    return [...sidebarConversationThreads, ...ungroupedProjectThreads].sort(
+      (a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""),
     );
-  }, [sidebarConversationThreads]);
+  }, [sidebarConversationThreads, ungroupedProjectThreads]);
 
   return (
     <Sidebar
@@ -1308,7 +1309,7 @@ function LocalDatabaseSection({
           >
             <span
               className={cn(
-                "flex size-6 shrink-0 items-center justify-center rounded-md transition-colors",
+                "flex size-6 shrink-0 items-center justify-center rounded-lg transition-colors",
                 active
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground group-hover/nav:text-foreground",
@@ -1319,7 +1320,7 @@ function LocalDatabaseSection({
             <span className="min-w-0 flex-1 truncate text-left group-data-[collapsible=icon]:hidden">
               {title}
             </span>
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors group-hover/nav:bg-muted/60 group-hover/nav:text-foreground group-data-[collapsible=icon]:hidden">
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors group-hover/nav:bg-muted/60 group-hover/nav:text-foreground group-data-[collapsible=icon]:hidden">
               <ChevronRightIcon
                 className={cn(
                   "size-3.5 transition-transform",
@@ -1376,7 +1377,7 @@ function StorageLibraryRow({
         >
           <span
             className={cn(
-              "flex size-5 shrink-0 items-center justify-center rounded-md transition-colors",
+              "flex size-5 shrink-0 items-center justify-center rounded-lg transition-colors",
               active
                 ? "text-primary"
                 : "text-muted-foreground group-hover/nav:text-foreground",
@@ -1565,27 +1566,27 @@ function ProjectFileExplorerView({
             onClick={onBack}
             title={t.sidebar.backToProjectList}
             aria-label={t.sidebar.backToProjectList}
-            className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md text-left text-foreground/85 transition-colors hover:text-foreground"
+            className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg text-left text-foreground/85 transition-colors hover:text-foreground"
           >
             <ArrowLeftIcon className="size-4 shrink-0" />
             <span className="truncate">{t.sidebar.backToProjectList}</span>
           </button>
           <button
             type="button"
-            className="flex size-8 items-center justify-center rounded-md text-muted-foreground/75 transition-colors hover:bg-muted/55 hover:text-foreground"
+            className="flex size-8 items-center justify-center rounded-lg text-muted-foreground/75 transition-colors hover:bg-muted/55 hover:text-foreground"
             title={t.codeMode.explorer}
             aria-label={t.codeMode.explorer}
           >
             <ListTodoIcon className="size-3.5" />
           </button>
         </div>
-        <div className="mt-1 flex h-8 items-center gap-2 rounded-md px-1 text-sm text-muted-foreground">
+        <div className="mt-1 flex h-8 items-center gap-2 rounded-lg px-1 text-sm text-muted-foreground">
           <FolderIcon className="size-4 shrink-0 opacity-75" />
           <span className="min-w-0 flex-1 truncate">
             {resolvedWorkDir ? basename(resolvedWorkDir) : target.project}
           </span>
         </div>
-        <div className="mt-0.5 overflow-hidden rounded-md">
+        <div className="mt-0.5 overflow-hidden rounded-lg">
           {hasWorkDir && resolvedWorkDir ? (
             <FileTree
               workDir={resolvedWorkDir}
@@ -1741,7 +1742,7 @@ function SurfaceCreateButton() {
       title={t.sidebar.actionNewTask}
       aria-label={t.sidebar.actionNewTask}
       onClick={() => eventBus.emit("task:new")}
-      className="flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-md border border-border-default bg-background/60 px-3 text-[11px] font-medium text-muted-foreground transition-[background-color,border-color,color] hover:border-border hover:bg-background hover:text-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:translate-x-[3px] group-data-[collapsible=icon]:px-0"
+      className="flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border-default bg-background/60 px-3 text-[11px] font-medium text-muted-foreground transition-[background-color,border-color,color] hover:border-border hover:bg-background hover:text-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:translate-x-[3px] group-data-[collapsible=icon]:px-0"
     >
       <PlusIcon className="size-4" />
       <span className="group-data-[collapsible=icon]:sr-only">
@@ -1776,7 +1777,7 @@ function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
         >
           <span
             className={cn(
-              "flex size-6 shrink-0 items-center justify-center rounded-md transition-colors",
+              "flex size-6 shrink-0 items-center justify-center rounded-lg transition-colors",
               active
                 ? "bg-primary/10 text-primary"
                 : "text-muted-foreground group-hover/nav:text-foreground",
@@ -1804,7 +1805,7 @@ function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
  *  Each cell is the agent avatar fetched from
  *  ``/api/agents/{name}/avatar``. The img onError flips to a colored
  *  initial fallback so a missing avatar doesn't show a broken-image
- *  glyph. The whole block is rounded-md to mimic WeChat's group icon. */
+ *  glyph. The whole block is rounded-lg to mimic WeChat's group icon. */
 function ThreadAvatar({
   agents,
   className,
@@ -1838,7 +1839,7 @@ function ThreadAvatar({
   return (
     <span
       className={cn(
-        "grid bg-muted/30 rounded-md overflow-hidden flex-shrink-0",
+        "grid bg-muted/30 rounded-lg overflow-hidden flex-shrink-0",
         className,
       )}
       style={{
@@ -1964,25 +1965,7 @@ function AvatarCell({
 }
 
 function ProjectGroupIcon({ project }: { project: string }) {
-  const isCodeProject = project === "Code";
-
-  if (!isCodeProject) {
-    return <FolderIcon className="size-[18px] shrink-0 opacity-70" />;
-  }
-
-  return (
-    <span className="relative grid size-5 shrink-0 place-items-center text-muted-foreground/75">
-      <FolderIcon className="size-[18px]" strokeWidth={1.9} />
-      <span
-        className={cn(
-          "absolute -bottom-0.5 -right-0.5 grid size-3.5 place-items-center rounded-[4px] border border-sidebar-border bg-sidebar",
-          "text-sky-600 dark:text-sky-400",
-        )}
-      >
-        <Code2Icon className="size-[9px]" strokeWidth={2.6} />
-      </span>
-    </span>
-  );
+  return <FolderIcon className="size-[18px] shrink-0 opacity-70" />;
 }
 
 function ConfirmDeleteThreadDialog({
@@ -2019,7 +2002,7 @@ function ConfirmDeleteThreadDialog({
             type="button"
             disabled={pending}
             onClick={() => onOpenChange(false)}
-            className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-background px-3 text-[12.5px] font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
+            className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-[12.5px] font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
           >
             {t.common.cancel}
           </button>
@@ -2027,7 +2010,7 @@ function ConfirmDeleteThreadDialog({
             type="button"
             disabled={pending}
             onClick={onConfirm}
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-destructive/25 bg-destructive/[0.07] px-3 text-[12.5px] font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-destructive/25 bg-destructive/[0.07] px-3 text-[12.5px] font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
           >
             {pending ? (
               <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
@@ -2080,7 +2063,7 @@ function ProjectGroup({
         <div className="group/project relative">
           <CollapsibleTrigger
             className={cn(
-              "flex h-9 w-full items-center gap-2 rounded-md px-1 text-sm",
+              "flex h-9 w-full items-center gap-2 rounded-lg px-1 text-sm",
               deletable ? "pr-8" : "pr-1",
               "text-foreground/85 hover:text-foreground hover:bg-muted/40 transition-colors",
               "outline-none",
@@ -2108,7 +2091,7 @@ function ProjectGroup({
                 setProjectToDelete(project);
               }}
               className={cn(
-                "absolute right-1 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity group-hover/project:opacity-100 hover:bg-destructive/10 hover:text-destructive",
+                "absolute right-1 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-lg text-muted-foreground/60 opacity-0 transition-opacity group-hover/project:opacity-100 hover:bg-destructive/10 hover:text-destructive",
                 deleting && "opacity-100 cursor-wait hover:bg-transparent",
               )}
             >
@@ -2142,7 +2125,7 @@ function ProjectGroup({
                     aria-current={active ? "page" : undefined}
                     title={thread.title}
                     className={cn(
-                      "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-md py-1 pl-3 pr-3 text-[13px] text-foreground/78 transition-[padding,background-color,color] duration-150 group-hover/thread:pr-12 group-focus-within/thread:pr-12",
+                      "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg py-1 pl-3 pr-3 text-[13px] text-foreground/78 transition-[padding,background-color,color] duration-150 group-hover/thread:pr-12 group-focus-within/thread:pr-12",
                       "hover:bg-muted/40 hover:text-foreground",
                       active &&
                         "text-foreground bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)]",
@@ -2182,7 +2165,7 @@ function ProjectGroup({
                       onOpenFiles(thread, project);
                     }}
                     className={cn(
-                      "absolute right-0.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md border border-transparent bg-background/70 text-muted-foreground/75 shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-[opacity,background-color,border-color,color] duration-150",
+                      "absolute right-0.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg border border-transparent bg-background/70 text-muted-foreground/75 shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-[opacity,background-color,border-color,color] duration-150",
                       "hover:border-border-default hover:bg-background hover:text-foreground",
                       active
                         ? "opacity-100"
@@ -2201,7 +2184,7 @@ function ProjectGroup({
                       e.stopPropagation();
                       setThreadToDelete(thread);
                     }}
-                    className="absolute right-8 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover/thread:opacity-100 focus-visible:opacity-100"
+                    className="absolute right-8 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground/60 opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover/thread:opacity-100 focus-visible:opacity-100"
                   >
                     <Trash2Icon className="size-3" />
                   </button>
@@ -2253,7 +2236,7 @@ function ProjectGroup({
               type="button"
               disabled={deleting}
               onClick={() => setProjectToDelete(null)}
-              className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-background px-3 text-[12.5px] font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-[12.5px] font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
             >
               {t.common.cancel}
             </button>
@@ -2261,7 +2244,7 @@ function ProjectGroup({
               type="button"
               disabled={deleting}
               onClick={confirmDeleteProject}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-destructive/25 bg-destructive/[0.07] px-3 text-[12.5px] font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-destructive/25 bg-destructive/[0.07] px-3 text-[12.5px] font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
             >
               {deleting ? (
                 <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
@@ -2357,7 +2340,7 @@ function SectionHeader({
               : t.sidebar.expandSection(label)
           }
           aria-expanded={open}
-          className="flex h-8 min-w-0 flex-1 items-center gap-1 rounded-md text-left text-sm font-medium text-muted-foreground transition-colors hover:text-foreground outline-none"
+          className="flex h-8 min-w-0 flex-1 items-center gap-1 rounded-lg text-left text-sm font-medium text-muted-foreground transition-colors hover:text-foreground outline-none"
         >
           {/* Implementation note. */}
           <ChevronRightIcon
@@ -2378,7 +2361,7 @@ function SectionHeader({
           {actions.map((a) => {
             const Icon = a.icon;
             const cls = cn(
-              "flex size-8 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted/45 hover:text-foreground",
+              "flex size-8 items-center justify-center rounded-lg text-muted-foreground/70 transition-colors hover:bg-muted/45 hover:text-foreground",
               a.active && "text-foreground",
             );
             if (a.href) {
@@ -2526,7 +2509,7 @@ function ProjectDraftRow({
   const { t } = useI18n();
   const [value, setValue] = useState("");
   return (
-    <div className="flex h-8 items-center gap-2 rounded-md px-1">
+    <div className="flex h-8 items-center gap-2 rounded-lg px-1">
       <FolderIcon className="size-4 shrink-0 opacity-70" />
       <input
         autoFocus
@@ -2549,7 +2532,7 @@ function ProjectDraftRow({
           else onCancel();
         }}
         className={cn(
-          "min-w-0 flex-1 rounded-md border border-primary/40 bg-background px-1.5 py-0.5",
+          "min-w-0 flex-1 rounded-lg border border-primary/40 bg-background px-1.5 py-0.5",
           "text-[13px] outline-none focus:ring-1 focus:ring-primary/40",
         )}
       />
@@ -2650,7 +2633,7 @@ function ChatsSection({
                       aria-current={active ? "page" : undefined}
                       title={t.title}
                       className={cn(
-                        "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-md py-1 pl-2 pr-2 text-xs text-foreground/78 transition-[padding,background-color,color] duration-150 group-hover/thread:pr-8 group-focus-within/thread:pr-8",
+                        "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg py-1 pl-2 pr-2 text-xs text-foreground/78 transition-[padding,background-color,color] duration-150 group-hover/thread:pr-8 group-focus-within/thread:pr-8",
                         "hover:bg-muted/40 hover:text-foreground",
                         active &&
                           "text-foreground bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)]",
@@ -2679,7 +2662,7 @@ function ChatsSection({
                         e.stopPropagation();
                         setThreadToDelete(t);
                       }}
-                      className="absolute right-0.5 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity group-hover/thread:opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100"
+                      className="absolute right-0.5 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-lg text-muted-foreground/60 opacity-0 transition-opacity group-hover/thread:opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100"
                     >
                       <Trash2Icon className="size-3" />
                     </button>
@@ -2745,7 +2728,7 @@ export function CollapseToggle({ compact = false }: { compact?: boolean }) {
 
 function EmptyHint({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-1 rounded-md border border-dashed border-border-default px-2.5 py-1.5 text-[11px] leading-tight text-muted-foreground/75">
+    <div className="mt-1 rounded-lg border border-dashed border-border-default px-2.5 py-1.5 text-[11px] leading-tight text-muted-foreground/75">
       {children}
     </div>
   );

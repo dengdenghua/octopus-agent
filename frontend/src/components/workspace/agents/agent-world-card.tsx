@@ -178,7 +178,7 @@ export function AgentWorldCard({
   return (
     <Card
       className={cn(
-        "group relative flex cursor-pointer flex-col overflow-hidden rounded-lg border-border-default bg-card/86 py-0 transition-all ease-out",
+        "group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border-border-default bg-card/86 py-0 shadow-[var(--shadow-xs)] transition-all duration-200 ease-out sm:min-h-[176px]",
         "hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_0_24px_hsl(var(--primary)/0.10)]",
         "before:pointer-events-none before:absolute before:left-0 before:top-0 before:h-3 before:w-3 before:border-l before:border-t before:border-primary/45",
         "after:pointer-events-none after:absolute after:bottom-0 after:right-0 after:h-3 after:w-3 after:border-b after:border-r after:border-primary/30",
@@ -192,7 +192,7 @@ export function AgentWorldCard({
         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-500/60 via-primary/40 to-violet-500/60" />
       )}
 
-      <CardHeader className="flex flex-1 flex-col px-3 pb-2 pt-3">
+      <CardHeader className="flex flex-1 flex-col px-3.5 pb-2.5 pt-3.5">
         {/* Icon + Title row */}
         <div className="flex items-start gap-2">
           <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/25 bg-background text-lg shadow-[0_0_14px_hsl(var(--primary)/0.08)]">
@@ -229,7 +229,7 @@ export function AgentWorldCard({
         </div>
 
         {/* Description */}
-        <CardDescription className="mt-2 line-clamp-2 min-h-8 text-xs leading-4 text-muted-foreground/90">
+        <CardDescription className="mt-2 line-clamp-2 min-h-8 text-xs leading-4 text-muted-foreground/90 sm:line-clamp-3 sm:min-h-12">
           {agent.description}
         </CardDescription>
 
@@ -260,7 +260,7 @@ export function AgentWorldCard({
         )}
       </CardHeader>
 
-      <CardFooter className="relative mt-auto flex items-center justify-between gap-2 border-t border-border-default bg-background/54 px-3 py-2">
+      <CardFooter className="relative mt-auto flex items-center justify-between gap-2 border-t border-border-default bg-background/54 px-3.5 py-2.5">
         {/* Download count */}
         <div className="text-muted-foreground flex items-center gap-1 text-xs">
           <DownloadIcon className="h-3 w-3" />
@@ -273,7 +273,8 @@ export function AgentWorldCard({
           variant={installed ? "outline" : "default"}
           className={cn(
             "h-7 rounded-sm px-3 text-xs transition-all",
-            !installed && "shadow-[var(--shadow-xs)] hover:shadow-[var(--shadow-sm)]",
+            !installed &&
+              "shadow-[var(--shadow-xs)] hover:shadow-[var(--shadow-sm)]",
           )}
           disabled={installing}
           onClick={handleInstallToggle}

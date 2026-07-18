@@ -86,7 +86,7 @@ export function TerminalInput({
           <button
             onClick={onStop}
             title={t.codeMode.stop}
-            className="flex size-7 shrink-0 items-center justify-center bg-foreground text-background hover:opacity-80 transition-opacity"
+            className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-destructive/90 text-destructive-foreground transition-colors hover:bg-destructive"
           >
             <SquareIcon className="size-3" fill="currentColor" />
           </button>
@@ -96,9 +96,9 @@ export function TerminalInput({
             disabled={disabled || !value.trim()}
             title={t.codeMode.send}
             className={cn(
-              "flex size-7 shrink-0 items-center justify-center transition-[background-color,transform] duration-150",
+              "flex size-7 shrink-0 items-center justify-center rounded-lg transition-[background-color,transform] duration-150",
               "bg-foreground text-background hover:bg-foreground/90 active:scale-95",
-              "disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed",
+              "disabled:bg-transparent disabled:text-muted-foreground/50 disabled:cursor-not-allowed disabled:hover:bg-muted/60 disabled:hover:text-muted-foreground",
             )}
           >
             <ArrowUpIcon className="size-3.5" strokeWidth={2.25} />

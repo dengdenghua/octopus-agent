@@ -1064,10 +1064,10 @@ export function ChatInputBox({
         data-testid="chat-composer"
         className={cn(
           "group relative",
-          "rounded-md border border-border-default bg-background",
-          "transition-[border-color]",
-          "hover:border-border-default",
-          "focus-within:border-border-default",
+          "rounded-xl border border-border-default/80 bg-background/80 shadow-[var(--shadow-xs)] backdrop-blur-sm",
+          "transition-all duration-200 ease-out",
+          "hover:border-border-default hover:shadow-[var(--shadow-sm)]",
+          "focus-within:border-primary/25 focus-within:shadow-[0_0_0_3px_rgba(138,127,255,0.08),var(--shadow-sm)]",
           className,
         )}
       >
@@ -1088,12 +1088,12 @@ export function ChatInputBox({
             {pendingFiles.map((file) => (
               <div
                 key={file.id}
-                className="group flex h-16 min-w-[150px] max-w-[240px] items-center gap-2 rounded-md border border-border-default bg-muted/20 px-2.5"
+                className="group flex h-16 min-w-[150px] max-w-[240px] items-center gap-2 rounded-lg border border-border-default bg-muted/20 px-2.5"
                 title={
                   file.workDir ? `${file.path}\n${file.workDir}` : file.path
                 }
               >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground">
                   {file.file ? (
                     <PaperclipIcon className="size-4" />
                   ) : (
@@ -1111,7 +1111,7 @@ export function ChatInputBox({
                 <button
                   type="button"
                   onClick={() => removePendingFile(file.id)}
-                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-60 transition-colors hover:bg-muted/70 hover:text-foreground hover:opacity-100"
+                  className="flex size-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-60 transition-colors hover:bg-muted/70 hover:text-foreground hover:opacity-100"
                   title={t.chatInputBox.removeImage}
                 >
                   <Trash2Icon className="size-3.5" />
@@ -1217,7 +1217,7 @@ export function ChatInputBox({
                       }
                     }}
                     disabled={isBusy || status === "streaming"}
-                    className="h-7 w-16 rounded-md border border-border-default bg-background/50 px-1.5 text-center text-[12px] text-foreground outline-none"
+                    className="h-7 w-16 rounded-lg border border-border-default bg-background/50 px-1.5 text-center text-[12px] text-foreground outline-none"
                   />
                 </label>
               </div>
@@ -1322,7 +1322,7 @@ export function ChatInputBox({
                       type="button"
                       onClick={() => removeMaterial(item.id)}
                       disabled={isBusy || status === "streaming"}
-                      className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+                      className="flex size-6 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
                       title={t.chatInputBox.removeMaterial}
                     >
                       <Trash2Icon className="size-3.5" />
@@ -1341,7 +1341,7 @@ export function ChatInputBox({
                     onClick={() => toggleResearchSource(source.kind)}
                     disabled={isBusy || status === "streaming"}
                     className={cn(
-                      "rounded-md border px-2 py-1 text-[10px] font-medium transition-colors",
+                      "rounded-lg border px-2 py-1 text-[10px] font-medium transition-colors",
                       active
                         ? "border-primary/30 bg-primary/10 text-primary"
                         : "border-border-default text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -1399,7 +1399,7 @@ export function ChatInputBox({
                   type="button"
                   data-testid="chat-tools-trigger"
                   disabled={isBusy || status === "streaming"}
-                  className="flex size-[42px] items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 sm:size-8"
+                  className="flex size-[42px] items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 sm:size-8 active:scale-95"
                   title={t.chatInputBox.composerInsertions}
                   aria-label={t.chatInputBox.composerInsertions}
                 >
@@ -1411,7 +1411,7 @@ export function ChatInputBox({
                 align="start"
                 side="top"
                 sideOffset={8}
-                className="w-60 rounded-md border-border-default p-1.5 shadow-[var(--shadow-xs)]"
+                className="w-60 rounded-lg border-border-default p-1.5 shadow-[var(--shadow-xs)]"
               >
                 <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
                   {t.chatInputBox.composerInsertions}
@@ -1419,7 +1419,7 @@ export function ChatInputBox({
                 <DropdownMenuItem
                   data-testid="chat-insert-codex-plan"
                   onClick={() => insertCodexModeMarker("plan")}
-                  className="gap-2 rounded-md text-[13px]"
+                  className="gap-2 rounded-lg text-[13px]"
                 >
                   <MapIcon className="size-4" />
                   {t.chatInputBox.insertCodexPlan}
@@ -1427,7 +1427,7 @@ export function ChatInputBox({
                 <DropdownMenuItem
                   data-testid="chat-insert-codex-spec"
                   onClick={() => insertCodexModeMarker("spec")}
-                  className="gap-2 rounded-md text-[13px]"
+                  className="gap-2 rounded-lg text-[13px]"
                 >
                   <ClipboardCheckIcon className="size-4" />
                   {t.chatInputBox.insertCodexSpec}
@@ -1435,7 +1435,7 @@ export function ChatInputBox({
                 <DropdownMenuItem
                   data-testid="chat-insert-codex-goal"
                   onClick={() => insertCodexModeMarker("goal")}
-                  className="gap-2 rounded-md text-[13px]"
+                  className="gap-2 rounded-lg text-[13px]"
                 >
                   <TargetIcon className="size-4" />
                   {t.chatInputBox.insertCodexGoal}
@@ -1443,7 +1443,7 @@ export function ChatInputBox({
                 <DropdownMenuItem
                   data-testid="chat-insert-browser-surface"
                   onClick={() => insertBrowserSurfaceMarker("Browser")}
-                  className="gap-2 rounded-md text-[13px]"
+                  className="gap-2 rounded-lg text-[13px]"
                 >
                   <MonitorIcon className="size-4" />
                   {t.chatInputBox.insertBrowserSurface}
@@ -1451,7 +1451,7 @@ export function ChatInputBox({
                 <DropdownMenuItem
                   data-testid="chat-insert-chrome-surface"
                   onClick={() => insertBrowserSurfaceMarker("Chrome")}
-                  className="gap-2 rounded-md text-[13px]"
+                  className="gap-2 rounded-lg text-[13px]"
                 >
                   <GlobeIcon className="size-4" />
                   {t.chatInputBox.insertChromeSurface}
@@ -1461,7 +1461,7 @@ export function ChatInputBox({
                   <>
                     <DropdownMenuItem
                       onClick={() => setResearchConfigOpen((open) => !open)}
-                      className="gap-2 rounded-md text-[13px]"
+                      className="gap-2 rounded-lg text-[13px]"
                     >
                       <SlidersHorizontalIcon className="size-4" />
                       {t.chatInputBox.deepResearchConfig}
@@ -1472,7 +1472,7 @@ export function ChatInputBox({
                 {allowAgentModes && (
                   <DropdownMenuItem
                     onClick={openResearchFilePicker}
-                    className="gap-2 rounded-md text-[13px]"
+                    className="gap-2 rounded-lg text-[13px]"
                   >
                     <PaperclipIcon className="size-4" />
                     {t.chatInputBox.addResearchMaterial}
@@ -1480,14 +1480,14 @@ export function ChatInputBox({
                 )}
                 <DropdownMenuItem
                   onClick={() => contextFileInputRef.current?.click()}
-                  className="gap-2 rounded-md text-[13px]"
+                  className="gap-2 rounded-lg text-[13px]"
                 >
                   <PaperclipIcon className="size-4" />
                   {t.chatInputBox.file}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => imageInputRef.current?.click()}
-                  className="gap-2 rounded-md text-[13px]"
+                  className="gap-2 rounded-lg text-[13px]"
                 >
                   <ImageIcon className="size-4" />
                   {t.chatInputBox.addImage}
@@ -1521,10 +1521,10 @@ export function ChatInputBox({
                   onModeChange?.(mode === "chat" ? "react" : "chat", draft)
                 }
                 className={cn(
-                  "flex size-[42px] items-center justify-center border text-[11px] font-medium transition-colors sm:size-8",
+                  "flex size-[42px] items-center justify-center rounded-lg text-[11px] font-medium transition-all duration-200 sm:size-8",
                   mode === "chat"
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border-default text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                    ? "bg-primary/10 text-primary hover:bg-primary/15"
+                    : "border border-transparent text-muted-foreground hover:border-border-default hover:bg-muted/60 hover:text-foreground",
                   "disabled:cursor-not-allowed disabled:opacity-45",
                 )}
                 title={t.inputBox.chatModeDescription}
@@ -1569,7 +1569,7 @@ export function ChatInputBox({
               <button
                 type="button"
                 onClick={onStop}
-                className="flex size-[42px] items-center justify-center bg-foreground text-background transition-opacity hover:opacity-80 sm:size-8"
+                className="flex size-[42px] items-center justify-center rounded-lg bg-destructive/90 text-destructive-foreground transition-all duration-200 hover:bg-destructive active:scale-95 sm:size-8"
                 title={stopLabel}
                 aria-label={stopLabel}
               >
@@ -1587,11 +1587,11 @@ export function ChatInputBox({
                   isBusy
                 }
                 className={cn(
-                  "flex size-[42px] items-center justify-center transition-[background-color,transform] duration-150 sm:size-8",
+                  "flex size-[42px] items-center justify-center rounded-lg transition-all duration-200 sm:size-8",
                   isDeepResearchMode
                     ? "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95"
                     : "bg-foreground text-background hover:bg-foreground/90 active:scale-95",
-                  "disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed",
+                  "disabled:bg-transparent disabled:text-muted-foreground/50 disabled:cursor-not-allowed disabled:hover:bg-muted/60 disabled:hover:text-muted-foreground",
                 )}
                 title={sendLabel}
                 aria-label={sendLabel}

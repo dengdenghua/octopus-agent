@@ -33,8 +33,9 @@ const ChatBox: React.FC<{
     queryKey: ["workspace-artifacts", threadId],
     queryFn: () => listWorkspaceArtifactRefs(threadId),
     enabled: Boolean(threadId && threadId !== "new"),
-    refetchInterval: 4000,
-    staleTime: 2000,
+    refetchInterval: 5000,
+    staleTime: 3000,
+    gcTime: 30000,
   });
 
   const {

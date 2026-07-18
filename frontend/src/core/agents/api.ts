@@ -20,10 +20,14 @@ export class AgentNameCheckError extends Error {
 export async function listAgents(opts?: {
   signal?: AbortSignal;
 }): Promise<Agent[]> {
-  const res = await fetch(`${getBackendBaseURL()}/api/agents`, {
-    headers: authHeaders(),
-    signal: opts?.signal,
-  });
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/agents?v=${Date.now()}`,
+    {
+      cache: "no-store",
+      headers: authHeaders(),
+      signal: opts?.signal,
+    },
+  );
   if (!res.ok) throw new Error(`Failed to load agents: ${res.statusText}`);
   const data = (await res.json()) as Agent[] | { agents?: Agent[] };
   const agents = Array.isArray(data) ? data : (data.agents ?? []);
@@ -35,8 +39,9 @@ export async function getAgent(
   opts?: { signal?: AbortSignal },
 ): Promise<Agent> {
   const res = await fetch(
-    `${getBackendBaseURL()}/api/agents/${encodeURIComponent(name)}`,
+    `${getBackendBaseURL()}/api/agents/${encodeURIComponent(name)}?v=${Date.now()}`,
     {
+      cache: "no-store",
       headers: authHeaders(),
       signal: opts?.signal,
     },
