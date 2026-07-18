@@ -18,15 +18,21 @@ tier: "core"
 - `NormalizedToolResult`
 - `StepExecutionError`
 - `ToolCallOrigin`
+- `ToolKind`
 - `ToolLifecycleKind`
+- `ToolTaxonomy`
 - `ToolExecutor`
+- `classify_skill`
 - `normalize_tool_lifecycle_event`
 - `normalize_step_tool_result`
 - `normalize_tool_result`
 - `normalize_task_node_tool_call`
 - `normalize_tool_call`
 - `output_signals_error`
+- `register_taxonomy`
 - `render_tool_output`
+- `reset_overrides`
+- `taxonomy_to_audit_dict`
 - `tool_lifecycle_event_to_react_event`
 - `tool_lifecycle_event_to_trace_payload`
 
@@ -37,6 +43,7 @@ tier: "core"
 | `executor.py` | — |
 | `skill_gate.py` | Shared pre-execution safety gate for direct skill dispatch. |
 | `tool_protocol.py` | — |
+| `tool_taxonomy.py` | Unified tool identity layer · stable taxonomy for audit & grouping. |
 
 ## Who imports this
 

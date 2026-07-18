@@ -98,7 +98,7 @@ def verify_plugin_publisher_provenance(
     if _string(envelope.get("content_digest")) != content_digest:
         return _failed(base, "tampered", "publisher signature content digest does not match")
 
-    resolved_store = _resolve_trust_store_path(trust_store_path)
+    resolved_store = resolve_publisher_trust_store_path(trust_store_path)
     base["trust_store_path"] = str(resolved_store) if resolved_store is not None else ""
     trust_store = _read_json(resolved_store) if resolved_store is not None else None
     if trust_store is None:
@@ -145,18 +145,29 @@ def verify_plugin_publisher_provenance(
     return base
 
 
-def _resolve_trust_store_path(path: str | Path | None) -> Path | None:
+def resolve_publisher_trust_store_path(
+    path: str | Path | None = None,
+    *,
+    existing_only: bool = False,
+) -> Path | None:
+    """Resolve the operator trust store, optionally requiring it to exist."""
+
     if path is not None:
-        return Path(path).expanduser()
+        resolved = Path(path).expanduser()
+        return resolved if not existing_only or resolved.is_file() else None
     configured = os.getenv("OCTOPUS_PLUGIN_PUBLISHER_TRUST_STORE", "").strip()
     if configured:
-        return Path(configured).expanduser()
+        resolved = Path(configured).expanduser()
+        return resolved if not existing_only or resolved.is_file() else None
     root = project_root(Path(__file__))
     candidates = (
         root / ".octopus" / "plugin-publishers.json",
         Path.home() / ".octopus" / "plugin-publishers.json",
     )
-    return next((candidate for candidate in candidates if candidate.is_file()), None)
+    existing = next((candidate for candidate in candidates if candidate.is_file()), None)
+    if existing is not None or existing_only:
+        return existing
+    return candidates[0]
 
 
 def _find_trusted_key(
@@ -213,5 +224,6 @@ def _string(value: Any, default: str = "") -> str:
 __all__ = [
     "SIGNATURE_RELATIVE_PATH",
     "canonical_publisher_signature_payload",
+    "resolve_publisher_trust_store_path",
     "verify_plugin_publisher_provenance",
 ]

@@ -7,6 +7,7 @@ import type {
   PluginInfo,
   PluginRuntimeProfile,
   PluginSmokeSummary,
+  PluginPublisherTrustReport,
 } from "./types";
 import type { HubPluginInfo, DiscoveredPlugin } from "./types";
 
@@ -66,6 +67,58 @@ export async function fetchPluginMigrationReadiness(): Promise<PluginMigrationRe
     );
   }
   return (await res.json()) as PluginMigrationReadiness;
+}
+
+export async function fetchPluginPublisherTrust(): Promise<PluginPublisherTrustReport> {
+  const res = await fetch(`${getBackendBaseURL()}/api/plugins/publisher-trust`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to get publisher trust: ${res.statusText}`);
+  }
+  return (await res.json()) as PluginPublisherTrustReport;
+}
+
+export async function rotatePluginPublisherKey(input: {
+  publisher_id: string;
+  previous_key_id?: string;
+  new_key_id: string;
+  new_public_key: string;
+  reason: string;
+}): Promise<{ status: string; trust: PluginPublisherTrustReport }> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/plugins/publisher-trust/rotate`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({ ...input, confirm_rotation: true }),
+    },
+  );
+  if (!res.ok) throw new Error(`Failed to rotate publisher key: ${res.statusText}`);
+  return res.json() as Promise<{
+    status: string;
+    trust: PluginPublisherTrustReport;
+  }>;
+}
+
+export async function revokePluginPublisherKey(input: {
+  publisher_id: string;
+  key_id: string;
+  reason: string;
+}): Promise<{ status: string; trust: PluginPublisherTrustReport }> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/plugins/publisher-trust/revoke`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({ ...input, confirm_revocation: true }),
+    },
+  );
+  if (!res.ok) throw new Error(`Failed to revoke publisher key: ${res.statusText}`);
+  return res.json() as Promise<{
+    status: string;
+    trust: PluginPublisherTrustReport;
+  }>;
 }
 
 export async function getPluginRuntime(

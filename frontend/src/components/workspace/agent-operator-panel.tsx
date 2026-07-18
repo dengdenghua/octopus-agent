@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -88,8 +89,16 @@ import {
   type OrganizationTopologyProposalsReport,
   type SubagentFitnessReport,
 } from "@/core/agent-trace/api";
-import { fetchPluginSmokeSummary } from "@/core/plugins/api";
-import type { PluginSmokeSummary } from "@/core/plugins/types";
+import {
+  fetchPluginPublisherTrust,
+  fetchPluginSmokeSummary,
+  revokePluginPublisherKey,
+  rotatePluginPublisherKey,
+} from "@/core/plugins/api";
+import type {
+  PluginPublisherTrustReport,
+  PluginSmokeSummary,
+} from "@/core/plugins/types";
 import { swallow } from "@/core/utils/log";
 import { cn } from "@/lib/utils";
 import {
@@ -318,6 +327,20 @@ const EMPTY_PLUGIN_SMOKE_SUMMARY: PluginSmokeSummary = {
   },
 };
 
+const EMPTY_PLUGIN_PUBLISHER_TRUST: PluginPublisherTrustReport = {
+  schema: "octopus.plugin_publisher_trust_report.v1",
+  path: "",
+  exists: false,
+  publisher_count: 0,
+  key_count: 0,
+  active_key_count: 0,
+  revoked_key_count: 0,
+  rotation_due_count: 0,
+  ready: false,
+  publishers: [],
+  next_actions: [],
+};
+
 const EMPTY_TRUST_DENIAL_SUMMARY: AgentTraceTrustDenialSummary = {
   schema: "octopus.trust_denial_summary.v1",
   total: 0,
@@ -433,6 +456,8 @@ export function AgentOperatorPanel() {
     useState<RepairRouteQualityReport>(EMPTY_REPAIR_ROUTE_QUALITY);
   const [pluginSmokeSummary, setPluginSmokeSummary] =
     useState<PluginSmokeSummary>(EMPTY_PLUGIN_SMOKE_SUMMARY);
+  const [pluginPublisherTrust, setPluginPublisherTrust] =
+    useState<PluginPublisherTrustReport>(EMPTY_PLUGIN_PUBLISHER_TRUST);
   const [trustDenialSummary, setTrustDenialSummary] =
     useState<AgentTraceTrustDenialSummary>(EMPTY_TRUST_DENIAL_SUMMARY);
   const [policyRuleDrafts, setPolicyRuleDrafts] =
@@ -480,6 +505,7 @@ export function AgentOperatorPanel() {
       browserRepairVerifications,
       repairRoutes,
       pluginSmoke,
+      publisherTrust,
       trustDenials,
       ruleDrafts,
       scorecardResult,
@@ -511,6 +537,7 @@ export function AgentOperatorPanel() {
       fetchBrowserDesktopRepairRecipeVerifications(),
       fetchRepairRouteQuality(),
       fetchPluginSmokeSummary(),
+      fetchPluginPublisherTrust(),
       fetchAgentTraceTrustDenialSummary(),
       fetchAgentTracePolicyReviewRuleDrafts(),
       fetchAgentCompetitorScorecard(E2E_SURPASS_TARGET_SCORE)
@@ -555,6 +582,7 @@ export function AgentOperatorPanel() {
     setBrowserDesktopRepairVerifications(browserRepairVerifications);
     setRepairRouteQuality(repairRoutes);
     setPluginSmokeSummary(pluginSmoke);
+    setPluginPublisherTrust(publisherTrust);
     setTrustDenialSummary(trustDenials);
     setPolicyRuleDrafts(ruleDrafts);
     if (scorecardResult.scorecard) setAgentScorecard(scorecardResult.scorecard);
@@ -1063,6 +1091,10 @@ export function AgentOperatorPanel() {
         onQueueRepairRoutes={() => void onQueueRepairRoutePromotions()}
       />
       <PluginHealthCard summary={pluginSmokeSummary} />
+      <PublisherTrustCard
+        report={pluginPublisherTrust}
+        onChanged={setPluginPublisherTrust}
+      />
       <ToolSafetyCard
         summary={trustDenialSummary}
         busy={busyId === "queue-trust-denials"}
@@ -2573,6 +2605,229 @@ function PluginHealthCard({ summary }: { summary: PluginSmokeSummary }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function PublisherTrustCard({
+  report,
+  onChanged,
+}: {
+  report: PluginPublisherTrustReport;
+  onChanged: (report: PluginPublisherTrustReport) => void;
+}) {
+  const [mode, setMode] = useState<"rotate" | "revoke" | null>(null);
+  const [publisherId, setPublisherId] = useState("");
+  const [previousKeyId, setPreviousKeyId] = useState("");
+  const [keyId, setKeyId] = useState("");
+  const [publicKey, setPublicKey] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [dialogError, setDialogError] = useState<string | null>(null);
+
+  const openRotate = (publisher = "", previous = "") => {
+    setPublisherId(publisher);
+    setPreviousKeyId(previous);
+    setKeyId("");
+    setPublicKey("");
+    setReason("scheduled rotation");
+    setDialogError(null);
+    setMode("rotate");
+  };
+  const openRevoke = (publisher: string, key: string) => {
+    setPublisherId(publisher);
+    setKeyId(key);
+    setReason("");
+    setDialogError(null);
+    setMode("revoke");
+  };
+  const submit = async () => {
+    if (!mode) return;
+    setBusy(true);
+    setDialogError(null);
+    try {
+      const result =
+        mode === "rotate"
+          ? await rotatePluginPublisherKey({
+              publisher_id: publisherId,
+              previous_key_id: previousKeyId || undefined,
+              new_key_id: keyId,
+              new_public_key: publicKey,
+              reason,
+            })
+          : await revokePluginPublisherKey({
+              publisher_id: publisherId,
+              key_id: keyId,
+              reason,
+            });
+      onChanged(result.trust);
+      setMode(null);
+    } catch (err) {
+      setDialogError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className={cn(
+        "mt-3 rounded-lg border px-3 py-2",
+        report.ready
+          ? "border-border-default bg-muted/15"
+          : "border-amber-500/30 bg-amber-500/10",
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <ShieldAlertIcon className="size-4 text-primary" />
+            Publisher trust
+            <Badge variant="outline" className="text-[10px]">
+              {report.active_key_count} active
+            </Badge>
+            {report.rotation_due_count > 0 && (
+              <Badge
+                variant="outline"
+                className="border-amber-500/30 text-[10px] text-amber-700 dark:text-amber-300"
+              >
+                {report.rotation_due_count} due
+              </Badge>
+            )}
+          </div>
+          <div className="mt-1 text-[11px] text-muted-foreground">
+            Ed25519 publisher keys · atomic rotation · audited revocation
+          </div>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => openRotate()}>
+          Rotate key
+        </Button>
+      </div>
+      <div className="mt-2 space-y-1.5">
+        {report.publishers.flatMap((publisher) =>
+          publisher.keys.map((key) => (
+            <div
+              key={`${publisher.publisher_id}:${key.key_id}`}
+              className="flex items-center justify-between gap-2 rounded-md border border-border-default bg-background/40 px-2 py-1.5"
+            >
+              <div className="min-w-0 text-[11px]">
+                <div className="truncate font-mono">
+                  {publisher.publisher_id}/{key.key_id}
+                </div>
+                <div className="truncate text-muted-foreground">
+                  {key.public_key_fingerprint}
+                  {key.age_days !== null ? ` · ${key.age_days}d` : ""}
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Badge variant="outline" className="text-[10px]">
+                  {key.status}
+                </Badge>
+                {key.status === "active" && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        openRotate(publisher.publisher_id, key.key_id)
+                      }
+                    >
+                      Replace
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive"
+                      onClick={() => openRevoke(publisher.publisher_id, key.key_id)}
+                    >
+                      Revoke
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          )),
+        )}
+        {report.publishers.length === 0 && (
+          <div className="text-[11px] text-muted-foreground">
+            {report.next_actions[0] ?? "No publisher keys registered."}
+          </div>
+        )}
+      </div>
+
+      <Dialog open={mode !== null} onOpenChange={(open) => !open && setMode(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {mode === "rotate" ? "Rotate publisher key" : "Revoke publisher key"}
+            </DialogTitle>
+            <DialogDescription>
+              {mode === "rotate"
+                ? "Register a new Ed25519 public key and retire the previous key atomically."
+                : "Revocation takes effect immediately and is written to the governance audit chain."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              aria-label="Publisher ID"
+              placeholder="Publisher ID"
+              value={publisherId}
+              disabled={mode === "revoke"}
+              onChange={(event) => setPublisherId(event.target.value)}
+            />
+            {mode === "rotate" && (
+              <Input
+                aria-label="Previous key ID"
+                placeholder="Previous key ID (optional)"
+                value={previousKeyId}
+                onChange={(event) => setPreviousKeyId(event.target.value)}
+              />
+            )}
+            <Input
+              aria-label={mode === "rotate" ? "New key ID" : "Key ID"}
+              placeholder={mode === "rotate" ? "New key ID" : "Key ID"}
+              value={keyId}
+              disabled={mode === "revoke"}
+              onChange={(event) => setKeyId(event.target.value)}
+            />
+            {mode === "rotate" && (
+              <Textarea
+                aria-label="Ed25519 public key"
+                placeholder="Base64 Ed25519 public key"
+                value={publicKey}
+                onChange={(event) => setPublicKey(event.target.value)}
+              />
+            )}
+            <Textarea
+              aria-label="Reason"
+              placeholder="Reason"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            />
+            {dialogError && (
+              <div className="text-sm text-destructive">{dialogError}</div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMode(null)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button
+              variant={mode === "revoke" ? "destructive" : "default"}
+              disabled={
+                busy ||
+                !publisherId.trim() ||
+                !keyId.trim() ||
+                !reason.trim() ||
+                (mode === "rotate" && !publicKey.trim())
+              }
+              onClick={() => void submit()}
+            >
+              {busy ? "Applying…" : mode === "rotate" ? "Rotate" : "Revoke"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

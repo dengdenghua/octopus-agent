@@ -147,4 +147,92 @@ describe("<MarkdownContent /> streaming state", () => {
     expect(response).toHaveAttribute("data-is-animating", "false");
     expect(response).not.toHaveAttribute("aria-busy");
   });
+
+  it("toggles from streaming to settled without losing content", () => {
+    const content = "Hello world";
+    const view = renderMarkdown(content, true);
+
+    expect(screen.getByText(content)).toBeInTheDocument();
+    expect(screen.getByText(content)).toHaveAttribute("data-is-animating", "true");
+
+    view.rerender(
+      <MarkdownContent
+        content={content}
+        isLoading={false}
+        remarkPlugins={[]}
+        rehypePlugins={[]}
+      />,
+    );
+
+    expect(screen.getByText(content)).toBeInTheDocument();
+    expect(screen.getByText(content)).toHaveAttribute("data-is-animating", "false");
+    expect(screen.getByText(content)).not.toHaveAttribute("aria-busy");
+  });
+
+  it("does not show aria-busy for completed messages", () => {
+    renderMarkdown("Done", false);
+
+    const response = screen.getByText("Done");
+    expect(response).not.toHaveAttribute("aria-busy");
+  });
+
+  it("renders empty content as null", () => {
+    const { container } = renderMarkdown("", false);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("renders null content as null", () => {
+    const { container } = renderWithProviders(
+      <MarkdownContent
+        content={null as unknown as string}
+        isLoading={false}
+        remarkPlugins={[]}
+        rehypePlugins={[]}
+      />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("preserves content across streaming chunks (appending tokens)", () => {
+    const view = renderMarkdown("Hel", true);
+    expect(screen.getByText("Hel")).toBeInTheDocument();
+
+    view.rerender(
+      <MarkdownContent
+        content="Hello"
+        isLoading={true}
+        remarkPlugins={[]}
+        rehypePlugins={[]}
+      />,
+    );
+    expect(screen.getByText("Hello")).toBeInTheDocument();
+
+    view.rerender(
+      <MarkdownContent
+        content="Hello world"
+        isLoading={false}
+        remarkPlugins={[]}
+        rehypePlugins={[]}
+      />,
+    );
+    expect(screen.getByText("Hello world")).toBeInTheDocument();
+    expect(screen.getByText("Hello world")).toHaveAttribute("data-is-animating", "false");
+  });
+});
+
+describe("<MarkdownContent /> code block streaming", () => {
+  it("shows code block content immediately during streaming", () => {
+    renderMarkdown("```python\nprint('hello')\n```", true);
+    expect(screen.getByText(/print\('hello'\)/)).toBeInTheDocument();
+  });
+
+  it("renders code language correctly", () => {
+    renderMarkdown("```typescript\nconst x = 1;\n```", false);
+    expect(screen.getByText(/const x = 1/)).toBeInTheDocument();
+  });
+
+  it("handles incomplete code fence during streaming", () => {
+    renderMarkdown("```javascript\nfunction test() {", true);
+    expect(screen.getByText(/function test\(\)/)).toBeInTheDocument();
+  });
 });

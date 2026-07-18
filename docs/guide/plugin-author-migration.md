@@ -45,6 +45,15 @@ publisher ID, and key ID. Any runtime-file change, manifest identity change,
 unknown key, or revoked key fails the smoke gate. The signature envelope itself
 is excluded from the content digest to avoid a circular hash.
 
+Publisher keys have a complete operator-managed lifecycle. Use
+`GET /api/plugins/publisher-trust` to inspect fingerprints, active-key coverage,
+and 90-day key rotation warnings. Use the confirmed
+`POST /api/plugins/publisher-trust/rotate` operation to add a new public key and
+retire its predecessor atomically. Use the confirmed
+`POST /api/plugins/publisher-trust/revoke` operation for compromise response.
+Both changes are appended to the tamper-evident governance audit chain. Private
+keys never enter the runtime or its audit records.
+
 ## Permission Review
 
 Permission review is mandatory for plugins that execute tools, invoke MCP
@@ -72,3 +81,6 @@ Before release, confirm:
   audit records.
 - Publicly distributed plugins have a trusted publisher signature; unsigned
   local plugins remain visibly review-required.
+- Publisher key rotation and revocation have been exercised from the operator
+  panel, and the resulting governance audit entries contain no private signing
+  material.

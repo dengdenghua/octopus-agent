@@ -58,7 +58,10 @@ const api = vi.hoisted(() => ({
 }));
 
 const pluginApi = vi.hoisted(() => ({
+  fetchPluginPublisherTrust: vi.fn(),
   fetchPluginSmokeSummary: vi.fn(),
+  revokePluginPublisherKey: vi.fn(),
+  rotatePluginPublisherKey: vi.fn(),
 }));
 
 vi.mock("@/core/agent-trace/api", () => api);
@@ -1138,6 +1141,42 @@ describe("<AgentOperatorPanel />", () => {
         ],
         next_actions: ["Fix plugins with failed local smoke checks."],
       },
+    });
+    pluginApi.fetchPluginPublisherTrust.mockResolvedValue({
+      schema: "octopus.plugin_publisher_trust_report.v1",
+      path: "/tmp/plugin-publishers.json",
+      exists: true,
+      publisher_count: 1,
+      key_count: 1,
+      active_key_count: 1,
+      revoked_key_count: 0,
+      rotation_due_count: 0,
+      ready: true,
+      publishers: [
+        {
+          publisher_id: "acme",
+          display_name: "Acme",
+          active_key_count: 1,
+          rotation_due_count: 0,
+          keys: [
+            {
+              key_id: "release-2026",
+              algorithm: "ed25519",
+              status: "active",
+              public_key_fingerprint: "sha256:0123456789abcdef",
+              created_at: "2026-07-18T00:00:00Z",
+              age_days: 0,
+              rotation_due: false,
+              replaces: "",
+              replaced_by: "",
+              retired_at: "",
+              revoked_at: "",
+              revocation_reason: "",
+            },
+          ],
+        },
+      ],
+      next_actions: [],
     });
     api.fetchAgentTraceProcessTimeline.mockResolvedValue({
       schema: "octopus.process_timeline.v1",

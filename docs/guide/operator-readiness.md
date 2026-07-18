@@ -84,8 +84,17 @@ Operator surfaces:
 
 - `/api/plugins`
 - `/api/plugins/smoke-summary`
+- `/api/plugins/publisher-trust`
+- `/api/plugins/publisher-trust/rotate`
+- `/api/plugins/publisher-trust/revoke`
 - `/api/plugin-hub/plugins`
-- The operator panel `Plugin health` card
+- The operator panel `Plugin health` and `Publisher trust` cards
+
+Publisher trust operations require explicit confirmation. Key rotation installs
+the replacement Ed25519 public key and retires its predecessor in one atomic
+write. Emergency revocation takes effect immediately. Both operations record
+the actor, key fingerprint, reason, and result in the governance audit chain;
+private signing keys are never accepted by these APIs.
 
 ## Release Checklist
 
@@ -96,4 +105,6 @@ Before raising the ecosystem maturity score, confirm:
 - Replay gate failures block promotion unless a reasoned override is recorded.
 - Plugin smoke summary is green or has explicit review-required rows.
 - Public plugins show a verified publisher count and no invalid signatures.
+- Every publisher has an active key, overdue keys are rotated, and revocation
+  drills remain traceable through the governance audit chain.
 - The competitor scorecard shows the relevant evidence checklist.

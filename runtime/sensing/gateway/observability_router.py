@@ -1265,6 +1265,95 @@ def create_observability_router(
             "events": serialized,
         }
 
+    # ─── /api/tasks/{task_id}/rewind · turn-scoped rewind ────
+    # Sibling to /api/files/rollback/* · rolls a task back to a
+    # prior ``react_checkpoint`` anchor (Grok Build's /rewind
+    # ergonomics). Reuses ``apply_file_rollback_ledger`` but slices
+    # the file_op stream by checkpoint ``ts`` instead of by event_id.
+    @router.get("/api/tasks/{task_id}/rewind/points")
+    def api_task_rewind_points(task_id: str) -> dict[str, Any]:
+        """List every ``react_checkpoint`` anchor for ``task_id``.
+
+        Each entry is a valid rewind target. The last one is the
+        current state.
+        """
+        from runtime.core.cerebrum.rewind import list_rewind_points
+
+        points = list_rewind_points(journal, task_id)
+        return {
+            "task_id": task_id,
+            "count": len(points),
+            "points": [p.to_dict() for p in points],
+        }
+
+    @router.post("/api/tasks/{task_id}/rewind/apply")
+    def api_task_rewind_apply(
+        task_id: str,
+        body: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Rewind ``task_id`` to the checkpoint at ``iteration``.
+
+        Request body:
+            {"iteration": 3, "project_root": "/abs/path", "dry_run": false}
+
+        ``dry_run=true`` previews the rollback without touching disk.
+        """
+        from runtime.core.cerebrum.rewind import rewind_to_checkpoint
+
+        iteration_raw = body.get("iteration")
+        try:
+            iteration = int(iteration_raw)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, "iteration (int) required") from exc
+
+        project_root = body.get("project_root")
+        if isinstance(project_root, str):
+            project_root = project_root.strip() or None
+
+        dry_run = bool(body.get("dry_run", False))
+
+        try:
+            result = rewind_to_checkpoint(
+                journal,
+                task_id,
+                iteration,
+                project_root=project_root,
+                dry_run=dry_run,
+            )
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+        if not dry_run:
+            # Mirror the existing rollback endpoint's audit trail so
+            # /api/files/rollback/history still surfaces rewinds.
+            from runtime.memory.journal import FileRollbackEvent
+
+            journal.write(
+                FileRollbackEvent(
+                    dry_run=False,
+                    project_root=project_root or "",
+                    event_id_filter=None,
+                    task_id_filter=task_id,
+                    path_filter=None,
+                    applied=int(getattr(result.file_rollback, "applied", 0) or 0),
+                    skipped=int(getattr(result.file_rollback, "skipped", 0) or 0),
+                    failed=int(getattr(result.file_rollback, "failed", 0) or 0),
+                    source_event_ids=[
+                        str(getattr(entry, "source_event_id", "") or "")
+                        for entry in getattr(result.file_rollback, "entries", ()) or ()
+                        if getattr(entry, "source_event_id", "") or ""
+                    ],
+                    paths=[
+                        str(getattr(entry, "path", "") or "")
+                        for entry in getattr(result.file_rollback, "entries", ()) or ()
+                        if getattr(entry, "path", "") or ""
+                    ],
+                    errors=list(getattr(result.file_rollback, "errors", ()) or ()),
+                )
+            )
+
+        return result.to_dict()
+
     @router.get("/api/blackboard")
     def api_blackboard(
         turn_id: str | None = None,

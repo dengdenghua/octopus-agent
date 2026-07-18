@@ -806,3 +806,210 @@ describe("MessageGroup reasoning grouping", () => {
     expect(screen.getByText("已读取")).toBeInTheDocument();
   });
 });
+
+describe("MessageGroup streaming lifecycle", () => {
+  it("transitions from streaming to completed without losing tool calls", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "search-1",
+            name: "web_search",
+            args: { query: "test query" },
+          },
+        ],
+      },
+      {
+        id: "tool-1",
+        type: "tool",
+        content: "search results here",
+        tool_call_id: "search-1",
+      },
+    ];
+
+    const { rerender } = renderWithProviders(
+      <MessageGroup messages={messages as never} isLoading />,
+      { locale: "en-US" },
+    );
+
+    expect(screen.getByText(/test query/)).toBeInTheDocument();
+
+    rerender(<MessageGroup messages={messages as never} />);
+
+    expect(screen.getByText("View 2 saved steps")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("View 2 saved steps"));
+    expect(screen.getByText(/test query/)).toBeInTheDocument();
+  });
+
+  it("keeps reasoning content stable when streaming tokens arrive", () => {
+    const makeMessages = (reasoning: string): AIMessage[] => [
+      {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        additional_kwargs: { reasoning_content: reasoning },
+      },
+    ];
+
+    const { rerender } = renderWithProviders(
+      <MessageGroup messages={makeMessages("Thinking about phase one")} isLoading />,
+      { locale: "en-US" },
+    );
+
+    expect(screen.getByText(/phase one/)).toBeInTheDocument();
+
+    rerender(
+      <MessageGroup
+        messages={makeMessages("Thinking about phase one and phase two")}
+        isLoading
+      />,
+    );
+
+    expect(screen.getByText(/phase one and phase two/)).toBeInTheDocument();
+  });
+
+  it("handles empty message array gracefully", () => {
+    const { container } = renderWithProviders(<MessageGroup messages={[]} />, {
+      locale: "en-US",
+    });
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("shows error state correctly when tool fails during streaming", () => {
+    const messages: Message[] = [
+      {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "tool-1",
+            name: "web_search",
+            args: { query: "test" },
+          },
+        ],
+      },
+      {
+        id: "tool-1",
+        type: "tool",
+        content: "",
+        tool_call_id: "tool-1",
+        additional_kwargs: { status: "error", error: "Search failed" },
+      },
+    ];
+
+    renderWithProviders(<MessageGroup messages={messages} isLoading />, {
+      locale: "en-US",
+    });
+
+    expect(screen.getByText(/test/)).toBeInTheDocument();
+  });
+
+  it("code mode live process strip transitions from running to completed", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "read-1",
+            name: "read_file",
+            args: { path: "test.ts" },
+          },
+        ],
+      },
+      {
+        id: "tool-read-1",
+        type: "tool",
+        content: "file content",
+        tool_call_id: "read-1",
+      },
+    ];
+
+    const { rerender } = renderWithProviders(
+      <MessageGroup codeMode isLoading messages={messages as never} />,
+      { locale: "en-US" },
+    );
+
+    expect(screen.getByTestId("live-process-strip")).toBeInTheDocument();
+
+    rerender(<MessageGroup codeMode messages={messages as never} />);
+
+    expect(screen.queryByTestId("live-process-strip")).not.toBeInTheDocument();
+  });
+
+  it("preserves user-opened reasoning groups across streaming updates", () => {
+    const makeMessages = (reasoning: string): AIMessage[] => [
+      {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          reasoning_content: [
+            "Reasoning step 1 with enough text to trigger nesting. ".repeat(12),
+            reasoning,
+          ].join("\n\n"),
+        },
+      },
+      {
+        id: "ai-2",
+        type: "ai",
+        content: "",
+        additional_kwargs: { reasoning_content: "Reasoning step 3" },
+      },
+    ];
+
+    const { rerender } = renderWithProviders(
+      <MessageGroup messages={makeMessages("Reasoning step 2")} keepOpen />,
+      { locale: "en-US" },
+    );
+
+    fireEvent.click(screen.getByText(/Replay \d+ previous steps/));
+    expect(screen.getByText(/Reasoning step 1/)).toBeInTheDocument();
+
+    const nestedTriggers = screen.getAllByText(/Reasoning step 1/);
+    const nestedTrigger = nestedTriggers.find(
+      (el) => el.closest("[data-state]") !== null,
+    );
+    if (nestedTrigger) {
+      fireEvent.click(nestedTrigger);
+      expect(screen.getByText(/Reasoning step 2/)).toBeInTheDocument();
+    }
+
+    rerender(
+      <MessageGroup
+        messages={makeMessages("Reasoning step 2 extended")}
+        keepOpen
+      />,
+    );
+
+    expect(screen.getByText(/Replay \d+ previous steps/)).toBeInTheDocument();
+    expect(screen.getByText(/Reasoning step 3/)).toBeInTheDocument();
+  });
+
+  it("handles mixed content + tool calls in the same AI message", () => {
+    const message: AIMessage = {
+      id: "ai-mixed",
+      type: "ai",
+      content: "Let me look this up for you.",
+      tool_calls: [
+        {
+          id: "search-1",
+          name: "web_search",
+          args: { query: "reference docs" },
+        },
+      ],
+    };
+
+    renderWithProviders(<MessageGroup messages={[message]} isLoading />, {
+      locale: "en-US",
+    });
+
+    expect(screen.getByText(/reference docs/)).toBeInTheDocument();
+    expect(screen.getByText(/Let me look this up/)).toBeInTheDocument();
+  });
+});

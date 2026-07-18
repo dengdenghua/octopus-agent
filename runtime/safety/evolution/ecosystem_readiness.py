@@ -51,6 +51,17 @@ REQUIRED_TOPICS: tuple[ReadinessTopic, ...] = (
             "release checklist",
         ),
     ),
+    ReadinessTopic(
+        id="publisher_trust_lifecycle",
+        title="Publisher trust lifecycle",
+        path="docs/guide/operator-readiness.md",
+        required_terms=(
+            "publisher trust",
+            "key rotation",
+            "revocation",
+            "governance audit",
+        ),
+    ),
 )
 
 

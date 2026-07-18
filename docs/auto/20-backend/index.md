@@ -54,8 +54,8 @@ graph LR
   safety -- 13 --> adapters
   platform -- 12 --> sensing
   platform -- 11 --> memory
+  core -- 10 --> memory
   platform -- 10 --> adapters
-  core -- 9 --> memory
   platform -- 9 --> core
   execution -- 7 --> adapters
   memory -- 7 --> safety

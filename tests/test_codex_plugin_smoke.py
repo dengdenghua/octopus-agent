@@ -154,6 +154,79 @@ def test_plugin_smoke_summary_reports_publisher_provenance(tmp_path: Path) -> No
     assert data["review_required_count"] == 0
 
 
+def test_publisher_trust_endpoints_rotate_revoke_and_audit(tmp_path: Path) -> None:
+    plugin_dir = _write_plugin(tmp_path, explicit_permissions=True)
+    trust_store = _sign_plugin(plugin_dir)
+    audit_path = tmp_path / "promotion-audit.json"
+    new_private_key = Ed25519PrivateKey.generate()
+    new_public_key = new_private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    app = FastAPI()
+    app.include_router(
+        create_plugins_router(
+            plugin_roots=[tmp_path],
+            publisher_trust_store_path=trust_store,
+            promotion_audit_path=audit_path,
+        )
+    )
+    client = TestClient(app)
+
+    initial = client.get("/api/plugins/publisher-trust")
+    assert initial.status_code == 200
+    assert initial.json()["active_key_count"] == 1
+    assert initial.json()["publishers"][0]["keys"][0][
+        "public_key_fingerprint"
+    ].startswith("sha256:")
+    assert "public_key" not in initial.json()["publishers"][0]["keys"][0]
+
+    rejected = client.post(
+        "/api/plugins/publisher-trust/rotate",
+        json={"publisher_id": "acme"},
+    )
+    assert rejected.status_code == 400
+
+    rotated = client.post(
+        "/api/plugins/publisher-trust/rotate",
+        json={
+            "publisher_id": "acme",
+            "previous_key_id": "release-2026",
+            "new_key_id": "release-2026-q3",
+            "new_public_key": base64.b64encode(new_public_key).decode("ascii"),
+            "reason": "quarterly rotation",
+            "confirm_rotation": True,
+        },
+    )
+    assert rotated.status_code == 200
+    assert rotated.json()["status"] == "rotated"
+    keys = rotated.json()["trust"]["publishers"][0]["keys"]
+    assert [(key["key_id"], key["status"]) for key in keys] == [
+        ("release-2026", "retired"),
+        ("release-2026-q3", "active"),
+    ]
+
+    revoked = client.post(
+        "/api/plugins/publisher-trust/revoke",
+        json={
+            "publisher_id": "acme",
+            "key_id": "release-2026-q3",
+            "reason": "key compromise drill",
+            "confirm_revocation": True,
+        },
+    )
+    assert revoked.status_code == 200
+    assert revoked.json()["status"] == "revoked"
+    assert revoked.json()["trust"]["active_key_count"] == 0
+
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    assert [row["event_type"] for row in audit["records"]] == [
+        "plugin_publisher_key_rotation",
+        "plugin_publisher_key_revocation",
+    ]
+    assert "new_public_key" not in json.dumps(audit)
+
+
 def test_codex_plugin_smoke_endpoint(tmp_path: Path) -> None:
     _write_plugin(tmp_path)
     app = FastAPI()

@@ -11,6 +11,14 @@ from runtime.platform.plugins.codex_discovery import (  # re-exported
     _string,
     discover_codex_plugins,
 )
+from runtime.platform.plugins.publisher_provenance import (
+    resolve_publisher_trust_store_path,
+)
+from runtime.platform.plugins.publisher_trust import (
+    inspect_publisher_trust_store,
+    revoke_publisher_key,
+    rotate_publisher_key,
+)
 from runtime.platform.process.paths import app_paths
 from runtime.safety.evolution.governance_audit import append_governance_audit_event
 from runtime.safety.evolution.plugin_migration_readiness import (
@@ -55,6 +63,12 @@ def create_plugins_router(
             plugin_roots,
             publisher_trust_store_path=publisher_trust_store_path,
         )
+
+    def _publisher_store_path() -> Path:
+        resolved = resolve_publisher_trust_store_path(publisher_trust_store_path)
+        if resolved is None:
+            raise HTTPException(500, "publisher trust store path is unavailable")
+        return resolved
 
     def _auth_dep(request: Request) -> None:
         path = str(getattr(getattr(request, "url", None), "path", "") or "")
@@ -232,6 +246,85 @@ def create_plugins_router(
         return compute_plugin_migration_readiness(
             plugins=_discover(),
         )
+
+    @router.get("/api/plugins/publisher-trust")
+    def _plugin_publisher_trust() -> dict[str, Any]:
+        try:
+            return inspect_publisher_trust_store(_publisher_store_path())
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @router.post("/api/plugins/publisher-trust/rotate")
+    def _plugin_publisher_key_rotate(
+        request: Request,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        body = payload or {}
+        if body.get("confirm_rotation") is not True:
+            raise HTTPException(400, "confirm_rotation=true is required")
+        try:
+            result = rotate_publisher_key(
+                _publisher_store_path(),
+                publisher_id=str(body.get("publisher_id") or ""),
+                new_key_id=str(body.get("new_key_id") or ""),
+                new_public_key=str(body.get("new_public_key") or ""),
+                previous_key_id=str(body.get("previous_key_id") or "") or None,
+                reason=str(body.get("reason") or "scheduled rotation"),
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+        append_governance_audit_event(
+            event_type="plugin_publisher_key_rotation",
+            target=str(result["publisher_id"]),
+            status="rotated",
+            artifact={
+                key: value
+                for key, value in result.items()
+                if key != "trust"
+            },
+            decision_context={
+                "schema": "octopus.plugin_publisher_key_rotation_context.v1",
+                "actor": _actor_from_request(request),
+                "source": "plugins_router",
+            },
+            audit_path=promotion_audit_path or app_paths().promotion_audit_path,
+        )
+        return result
+
+    @router.post("/api/plugins/publisher-trust/revoke")
+    def _plugin_publisher_key_revoke(
+        request: Request,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        body = payload or {}
+        if body.get("confirm_revocation") is not True:
+            raise HTTPException(400, "confirm_revocation=true is required")
+        try:
+            result = revoke_publisher_key(
+                _publisher_store_path(),
+                publisher_id=str(body.get("publisher_id") or ""),
+                key_id=str(body.get("key_id") or ""),
+                reason=str(body.get("reason") or ""),
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+        append_governance_audit_event(
+            event_type="plugin_publisher_key_revocation",
+            target=str(result["publisher_id"]),
+            status="revoked",
+            artifact={
+                key: value
+                for key, value in result.items()
+                if key != "trust"
+            },
+            decision_context={
+                "schema": "octopus.plugin_publisher_key_revocation_context.v1",
+                "actor": _actor_from_request(request),
+                "source": "plugins_router",
+            },
+            audit_path=promotion_audit_path or app_paths().promotion_audit_path,
+        )
+        return result
 
     @router.get("/api/plugins/permission-rule-drafts")
     def _plugin_permission_rule_drafts() -> dict[str, Any]:

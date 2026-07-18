@@ -15,6 +15,14 @@ from .tool_protocol import (
     tool_lifecycle_event_to_react_event,
     tool_lifecycle_event_to_trace_payload,
 )
+from .tool_taxonomy import (
+    ToolKind,
+    ToolTaxonomy,
+    classify_skill,
+    register_taxonomy,
+    reset_overrides,
+    taxonomy_to_audit_dict,
+)
 
 __all__ = [
     "NormalizedToolCall",
@@ -22,15 +30,21 @@ __all__ = [
     "NormalizedToolResult",
     "StepExecutionError",
     "ToolCallOrigin",
+    "ToolKind",
     "ToolLifecycleKind",
+    "ToolTaxonomy",
     "ToolExecutor",
+    "classify_skill",
     "normalize_tool_lifecycle_event",
     "normalize_step_tool_result",
     "normalize_tool_result",
     "normalize_task_node_tool_call",
     "normalize_tool_call",
     "output_signals_error",
+    "register_taxonomy",
     "render_tool_output",
+    "reset_overrides",
+    "taxonomy_to_audit_dict",
     "tool_lifecycle_event_to_react_event",
     "tool_lifecycle_event_to_trace_payload",
 ]

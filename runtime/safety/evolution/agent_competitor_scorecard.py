@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,16 @@ from runtime.safety.evolution.behavioral_surpass_evidence import (
 from runtime.safety.evolution.codex_gap import compute_codex_gap_report
 from runtime.safety.evolution.ecosystem_readiness import compute_ecosystem_readiness
 from runtime.safety.evolution.parity_certification import compute_parity_certification
+
+
+def _baseline_as_of(now: datetime | None = None) -> str:
+    """Calibration date for the architecture capability estimate.
+
+    Static scores are point-in-time estimates and must carry a date so the
+    radar cannot silently self-inflate as competitors ship. The K3 behavioral
+    bundle is the ground truth; this date only stamps the architecture layer.
+    """
+    return (now or datetime.now(UTC)).strftime("%Y-%m-%d")
 
 COMPETITORS: tuple[str, ...] = (
     "codex",
@@ -26,8 +37,13 @@ EXTERNAL_COMPETITORS: tuple[str, ...] = tuple(
 )
 DEFAULT_TARGET_SCORE = 95
 BASELINE_CONTEXT: dict[str, Any] = {
-    "as_of": "2026-07-17",
+    "as_of": _baseline_as_of(),
     "score_kind": "architecture_capability_estimate",
+    "score_basis": (
+        "static architecture estimate calibrated against public Codex surface; "
+        "K3 same-task behavioral bundle is ground truth and overrides this layer "
+        "when current (see behavioral_head_to_head)"
+    ),
     "codex_surface": (
         "combined Codex desktop app, CLI, cloud execution, skills/plugins, "
         "browser/computer-use, automations, and multi-agent collaboration"
@@ -216,11 +232,11 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
             "claude_code": 96,
             "openclaw": 90,
             "hermes": 88,
-            "octopus": 98,
+            "octopus": 99,
         },
         octopus_evidence_ids=("skills_plugins_hooks", "approvals_sandbox_security"),
         octopus_next_actions=(
-            "Expose publisher key rotation and revocation controls in the operator UI.",
+            "Keep publisher key rotation and revocation controls release-gated.",
             "Add UI install controls for plugin permission rule drafts.",
         ),
     ),
@@ -287,12 +303,12 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
             "claude_code": 90,
             "openclaw": 86,
             "hermes": 86,
-            "octopus": 96,
+            "octopus": 97,
         },
         octopus_evidence_ids=("skills_plugins_hooks", "agent_organization_os"),
         octopus_next_actions=(
             "Keep third-party plugin migration readiness visible in release gates.",
-            "Publish plugin compatibility examples for common MCP and app surfaces.",
+            "Publish compatibility examples and install paths for common MCP and app surfaces.",
         ),
     ),
     ScoreDimension(
@@ -809,6 +825,14 @@ def _operator_evidence_links(
                 "label": "Plugin migration readiness",
                 "method": "GET",
                 "href": "/api/plugins/migration-readiness",
+            }
+        )
+        links.append(
+            {
+                "id": "plugin_publisher_trust",
+                "label": "Plugin publisher trust",
+                "method": "GET",
+                "href": "/api/plugins/publisher-trust",
             }
         )
     if "agent_organization_os" in evidence_ids or dimension_id in {

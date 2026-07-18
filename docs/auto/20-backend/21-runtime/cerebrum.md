@@ -28,6 +28,7 @@ tier: "core"
 | `checkpoint_mirror.py` | Distributed checkpoint mirror — P3 fourth slice. |
 | `completion_receipt.py` | — |
 | `input_mentions.py` | Parse @plugin/@skill/@agent and runtime surface mentions from prompts. |
+| `leader.py` | Leader Process · single-owner supervisor for long-running tasks. |
 | `llm_planner.py` | — |
 | `output_styles.py` | Per-turn output style overlays for the ReAct system prompt. |
 | `pause_control.py` | — |
@@ -47,6 +48,7 @@ tier: "core"
 | `react_security_guards.py` | Security + quality guards (post-step / pre-Final-Answer gates). |
 | `react_types.py` | — |
 | `resume_cli.py` | CLI for inspecting + driving ReAct checkpoint resume (P3 long-task durability). |
+| `rewind.py` | Turn-scoped rewind · roll a task back to a prior checkpoint anchor. |
 | `rules_persistence.py` | — |
 | `run_state.py` | — |
 | `stable_prompt.py` | Cache-stable prompt builder. |

@@ -33,7 +33,7 @@ DIMENSIONS: tuple[AutomationRadarDimension, ...] = (
         title="Browser session control",
         weight=16,
         why="Launch, recover, inspect, and replay browser sessions through a stable local bridge.",
-        scores={"codex": 95, "claude_code": 87, "cursor": 82, "octopus": 96},
+        scores={"codex": 98, "claude_code": 88, "cursor": 82, "octopus": 97},
         evidence_check_ids=("browser_session_lifecycle",),
         next_actions=(
             "Keep browser recovery proof and relay policy persisted before every release.",

@@ -141,6 +141,39 @@ export interface PluginMigrationReadiness {
   next_actions: string[];
 }
 
+export interface PluginPublisherTrustReport {
+  schema: "octopus.plugin_publisher_trust_report.v1" | string;
+  path: string;
+  exists: boolean;
+  publisher_count: number;
+  key_count: number;
+  active_key_count: number;
+  revoked_key_count: number;
+  rotation_due_count: number;
+  ready: boolean;
+  publishers: Array<{
+    publisher_id: string;
+    display_name: string;
+    active_key_count: number;
+    rotation_due_count: number;
+    keys: Array<{
+      key_id: string;
+      algorithm: string;
+      status: string;
+      public_key_fingerprint: string;
+      created_at: string;
+      age_days: number | null;
+      rotation_due: boolean;
+      replaces: string;
+      replaced_by: string;
+      retired_at: string;
+      revoked_at: string;
+      revocation_reason: string;
+    }>;
+  }>;
+  next_actions: string[];
+}
+
 export interface PluginRuntimeProfile {
   schema: "octopus.codex_plugin_runtime.v1" | string;
   plugin_id: string;
