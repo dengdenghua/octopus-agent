@@ -36,9 +36,13 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
+import os
 import shlex
+import threading
+import time
 from pathlib import Path
 from queue import Empty, SimpleQueue
 from typing import Any
@@ -591,7 +595,16 @@ class CerebrumRuntime:
         # boundary between them.
         self._active_turns: dict[str, tuple[Turn, EventLog]] = {}
         self._turn_steering: dict[str, SimpleQueue[tuple[str, str]]] = {}
+        self._turn_steering_seen: dict[str, set[str]] = {}
+        self._turn_steering_notified: dict[str, set[str]] = {}
+        self._turn_steering_last_sync: dict[str, float] = {}
+        self._turn_steering_lock = threading.Lock()
+        self._turn_steering_accepting: dict[str, bool] = {}
         self._turn_timeline: dict[str, tuple[int, str | None]] = {}
+        self._instance_id = f"{os.getpid()}-{id(self):x}"
+        self._active_turn_lease_root = Path(logs_root) / ".active-turns"
+        self._active_turn_lease_root.mkdir(parents=True, exist_ok=True)
+        self._active_turn_lease_tasks: dict[str, asyncio.Task[None]] = {}
         # Per-thread compaction serialization. Reference-counted so the
         # map is reclaimed when a thread goes idle rather than leaking one
         # lock per thread_id forever.
@@ -638,12 +651,103 @@ class CerebrumRuntime:
     def _register_active_turn(self, turn: Turn, log: EventLog) -> None:
         self._active_turns[turn.id] = (turn, log)
         self._turn_steering[turn.id] = SimpleQueue()
-        self._turn_timeline[turn.id] = (0, None)
+        self._turn_steering_seen[turn.id] = {
+            item.id for item in turn.items if isinstance(item, SteeringUserMessageItem)
+        }
+        self._turn_steering_notified[turn.id] = set(self._turn_steering_seen[turn.id])
+        self._turn_steering_last_sync[turn.id] = 0.0
+        self._turn_steering_accepting[turn.id] = True
+        previous = max(
+            (item for item in turn.items if item.timeline_sequence is not None),
+            key=lambda item: item.timeline_sequence or 0,
+            default=None,
+        )
+        self._turn_timeline[turn.id] = (
+            previous.timeline_sequence or 0 if previous is not None else 0,
+            previous.id if previous is not None else None,
+        )
+        self._write_active_turn_lease(turn)
+
+        async def _refresh_lease() -> None:
+            try:
+                while turn.id in self._active_turns:
+                    await asyncio.sleep(2.0)
+                    self._write_active_turn_lease(turn)
+            except asyncio.CancelledError:
+                return
+
+        self._active_turn_lease_tasks[turn.id] = asyncio.create_task(_refresh_lease())
 
     def _unregister_active_turn(self, turn_id: str) -> None:
         self._active_turns.pop(turn_id, None)
         self._turn_steering.pop(turn_id, None)
+        self._turn_steering_seen.pop(turn_id, None)
+        self._turn_steering_notified.pop(turn_id, None)
+        self._turn_steering_last_sync.pop(turn_id, None)
+        self._turn_steering_accepting.pop(turn_id, None)
         self._turn_timeline.pop(turn_id, None)
+        task = self._active_turn_lease_tasks.pop(turn_id, None)
+        if task is not None:
+            task.cancel()
+        self._remove_active_turn_lease(turn_id)
+
+    def _active_turn_lease_path(self, turn_id: str) -> Path:
+        digest = hashlib.sha256(turn_id.encode("utf-8")).hexdigest()
+        return self._active_turn_lease_root / f"{digest}.json"
+
+    def _write_active_turn_lease(self, turn: Turn) -> None:
+        path = self._active_turn_lease_path(turn.id)
+        payload = {
+            "turnId": turn.id,
+            "threadId": turn.thread_id,
+            "instanceId": self._instance_id,
+            "updatedAt": time.time(),
+            "acceptingSteering": self._turn_steering_accepting.get(turn.id, False),
+        }
+        temporary = path.with_suffix(f".{self._instance_id}.tmp")
+        try:
+            temporary.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+            os.replace(temporary, path)
+        except OSError:
+            _logger.warning("failed to refresh active-turn lease %s", turn.id, exc_info=True)
+            with contextlib.suppress(OSError):
+                temporary.unlink()
+
+    def _has_fresh_active_turn_lease(
+        self,
+        thread_id: str,
+        turn_id: str,
+        *,
+        require_accepting_steering: bool = False,
+    ) -> bool:
+        try:
+            payload = json.loads(self._active_turn_lease_path(turn_id).read_text(encoding="utf-8"))
+            fresh = (
+                payload.get("turnId") == turn_id
+                and payload.get("threadId") == thread_id
+                and time.time() - float(payload.get("updatedAt") or 0) <= 8.0
+            )
+            return fresh and (
+                not require_accepting_steering or payload.get("acceptingSteering") is True
+            )
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return False
+
+    def _remove_active_turn_lease(self, turn_id: str) -> None:
+        path = self._active_turn_lease_path(turn_id)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if payload.get("instanceId") != self._instance_id:
+                return
+            path.unlink()
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return
+
+    def _set_turn_steering_accepting(self, turn: Turn, accepting: bool) -> None:
+        if turn.id not in self._active_turns:
+            return
+        self._turn_steering_accepting[turn.id] = accepting
+        self._write_active_turn_lease(turn)
 
     def _bind_turn_timeline(
         self,
@@ -654,7 +758,10 @@ class CerebrumRuntime:
     ) -> None:
         sequence, previous_id = self._turn_timeline.get(turn_id, (0, None))
         if getattr(item, "timeline_sequence", None) is None:
-            sequence += 1
+            active = self._active_turns.get(turn_id)
+            sequence = (
+                active[1].reserve_timeline_sequence(turn_id) if active is not None else sequence + 1
+            )
             item.timeline_sequence = sequence
         else:
             sequence = max(sequence, int(item.timeline_sequence))
@@ -664,7 +771,75 @@ class CerebrumRuntime:
             item.phase_id = phase_id
         self._turn_timeline[turn_id] = (sequence, item.id)
 
+    def _sync_persisted_turn_steering(
+        self,
+        turn_id: str,
+        *,
+        force: bool = False,
+    ) -> list[SteeringUserMessageItem]:
+        active = self._active_turns.get(turn_id)
+        if active is None:
+            return []
+        turn, log = active
+        now = time.monotonic()
+        with self._turn_steering_lock:
+            last_sync = self._turn_steering_last_sync.get(turn_id, 0.0)
+            if not force and now - last_sync < 0.1:
+                return []
+            self._turn_steering_last_sync[turn_id] = now
+        replayed = next((item for item in log.replay() if item.id == turn_id), None)
+        if replayed is None:
+            return []
+        discovered: list[SteeringUserMessageItem] = []
+        pending = self._turn_steering.get(turn_id)
+        if pending is None:
+            return []
+        with self._turn_steering_lock:
+            seen = self._turn_steering_seen.setdefault(turn_id, set())
+            live_ids = {item.id for item in turn.items}
+            for item in replayed.items:
+                if not isinstance(item, SteeringUserMessageItem) or item.id in seen:
+                    continue
+                seen.add(item.id)
+                if item.id not in live_ids:
+                    turn.items.append(item)
+                    live_ids.add(item.id)
+                sequence = item.timeline_sequence
+                if sequence is None:
+                    sequence = log.reserve_timeline_sequence(turn_id)
+                    item.timeline_sequence = sequence
+                current_sequence, _ = self._turn_timeline.get(turn_id, (0, None))
+                self._turn_timeline[turn_id] = (max(current_sequence, sequence), item.id)
+                pending.put((item.id, item.text))
+                discovered.append(item)
+        return discovered
+
+    async def _publish_discovered_steering(
+        self,
+        turn: Turn,
+        emitter: EventEmitter,
+    ) -> None:
+        self._sync_persisted_turn_steering(turn.id)
+        with self._turn_steering_lock:
+            notified = self._turn_steering_notified.setdefault(turn.id, set())
+            pending = [
+                item
+                for item in turn.items
+                if isinstance(item, SteeringUserMessageItem) and item.id not in notified
+            ]
+            notified.update(item.id for item in pending)
+        for item in pending:
+            await emitter.notify(
+                ServerMethod.ITEM_COMPLETED,
+                {
+                    "threadId": turn.thread_id,
+                    "turnId": turn.id,
+                    "item": item.model_dump(by_alias=True, mode="json"),
+                },
+            )
+
     def _drain_turn_steering(self, turn_id: str) -> list[str]:
+        self._sync_persisted_turn_steering(turn_id, force=True)
         pending = self._turn_steering.get(turn_id)
         if pending is None:
             return []
@@ -863,7 +1038,9 @@ class CerebrumRuntime:
         stale = [
             turn
             for turn in turns
-            if turn.status == TurnStatus.IN_PROGRESS and turn.id not in self._active_turn_ids
+            if turn.status == TurnStatus.IN_PROGRESS
+            and turn.id not in self._active_turn_ids
+            and not self._has_fresh_active_turn_lease(turn.thread_id, turn.id)
         ]
         for turn in stale:
             turn.status = TurnStatus.FAILED
@@ -1014,16 +1191,42 @@ class CerebrumRuntime:
             text = text.strip()
             if len(text) > 32_768:
                 raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "turn/steer text is too long")
+            log = self._log_for(thread_id)
+            turns = log.replay()
+            self._require_thread_owner(
+                log,
+                getattr(emitter, "actor_id", None),
+                turns=turns,
+            )
             active = self._active_turns.get(turn_id)
-            if active is None or turn_id not in self._active_turn_ids:
-                raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "target turn is not active")
-            turn, log = active
+            local_active = active is not None and turn_id in self._active_turn_ids
+            if local_active:
+                if not self._turn_steering_accepting.get(turn_id, False):
+                    raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "target turn is finalizing")
+                turn = active[0]
+            else:
+                if not self._has_fresh_active_turn_lease(
+                    thread_id,
+                    turn_id,
+                    require_accepting_steering=True,
+                ):
+                    raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "target turn is not active")
+                turn = next((candidate for candidate in turns if candidate.id == turn_id), None)
+                if turn is None or turn.status != TurnStatus.IN_PROGRESS:
+                    raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "target turn is not active")
             if turn.thread_id != thread_id:
                 raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "turn does not belong to thread")
-            self._require_thread_owner(log, getattr(emitter, "actor_id", None))
             if isinstance(item_id, str) and item_id:
                 existing = next((item for item in turn.items if item.id == item_id), None)
                 if existing is not None:
+                    await emitter.notify(
+                        ServerMethod.ITEM_COMPLETED,
+                        {
+                            "threadId": thread_id,
+                            "turnId": turn_id,
+                            "item": existing.model_dump(by_alias=True, mode="json"),
+                        },
+                    )
                     return {"turnId": turn_id, "itemId": item_id, "accepted": True}
             else:
                 item_id = None
@@ -1032,14 +1235,34 @@ class CerebrumRuntime:
                 text=text,
                 targetTurnId=turn_id,
             )
-            pending = self._turn_steering.get(turn_id)
-            if pending is None:
-                raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "target turn is no longer active")
-            self._bind_turn_timeline(turn_id, item)
+            if local_active:
+                self._bind_turn_timeline(turn_id, item)
+            else:
+                previous = max(
+                    (
+                        candidate
+                        for candidate in turn.items
+                        if candidate.timeline_sequence is not None
+                    ),
+                    key=lambda candidate: candidate.timeline_sequence or 0,
+                    default=None,
+                )
+                item.timeline_sequence = log.reserve_timeline_sequence(turn_id)
+                item.parent_item_id = previous.id if previous is not None else None
             turn.items.append(item)
-            # Queue before the first socket await so the model cannot cross a
-            # safe boundary while the UI notification is still in flight.
-            pending.put((item.id, text))
+            if local_active:
+                pending = self._turn_steering.get(turn_id)
+                if pending is None:
+                    raise _RpcError(
+                        JsonRpcErrorCode.INVALID_PARAMS,
+                        "target turn is no longer active",
+                    )
+                with self._turn_steering_lock:
+                    self._turn_steering_seen.setdefault(turn_id, set()).add(item.id)
+                    self._turn_steering_notified.setdefault(turn_id, set()).add(item.id)
+                # Queue before the first socket await so the model cannot cross
+                # a safe boundary while the UI notification is still in flight.
+                pending.put((item.id, text))
             await self._emit_item_started(turn, log, emitter, item)
             item.status = ItemStatus.COMPLETED
             await self._emit_item_completed(turn, log, emitter, item)

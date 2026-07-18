@@ -630,8 +630,16 @@ async def _start_turn(
         # drivers (reflection, topology, Project OS) may finish one atomic
         # pass without such a boundary; hand any message that arrived during
         # that pass to the normal agent loop before finalizing the same turn.
-        late_steering = runtime._drain_turn_steering(turn.id)
-        if late_steering and turn.status not in {TurnStatus.INTERRUPTED, TurnStatus.FAILED}:
+        while turn.status not in {TurnStatus.INTERRUPTED, TurnStatus.FAILED}:
+            # Close intake before the last durable drain. Any steering RPC
+            # acknowledged before this lease update is already in the log and
+            # must be consumed; any later RPC is rejected instead of being
+            # accepted after the final answer can no longer change.
+            runtime._set_turn_steering_accepting(turn, False)
+            late_steering = runtime._drain_turn_steering(turn.id)
+            if not late_steering:
+                break
+            runtime._set_turn_steering_accepting(turn, True)
             correction = "\n\n".join(late_steering)
             steering_context = dict(intent.user_context or {})
             steering_context["live_steering"] = True

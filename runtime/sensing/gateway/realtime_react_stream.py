@@ -664,10 +664,12 @@ async def _drive_react(
                 # already winding down) so the frontend reads "working",
                 # not "stuck", then keep waiting.
                 if not (cancel_source.is_cancelled or emitter.is_turn_interrupted(turn.id)):
+                    await runtime._publish_discovered_steering(turn, emitter)
                     await _emit_turn_heartbeat(emitter, turn, loop_started)
                 continue
             if evt is None:
                 break
+            await runtime._publish_discovered_steering(turn, emitter)
             if evt.get("type") in {
                 "react_completed",
                 "react_cancelled",

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -25,30 +27,141 @@ async def test_turn_steer_is_persisted_and_queued_for_the_active_model(tmp_path:
     emitter = _Emitter()
     log = await runtime._ensure_thread("thread-steer", emitter)
     turn = Turn(thread_id="thread-steer")
+    log.turn_started(turn.thread_id, turn)
     runtime._active_turn_ids.add(turn.id)
     runtime._register_active_turn(turn, log)
+    try:
+        result = await runtime.handle_request(
+            "turn/steer",
+            {
+                "threadId": "thread-steer",
+                "turnId": turn.id,
+                "itemId": "itm_client_1",
+                "text": "先别改文件，先确认根因",
+            },
+            emitter,
+        )
 
-    result = await runtime.handle_request(
-        "turn/steer",
-        {
-            "threadId": "thread-steer",
-            "turnId": turn.id,
-            "itemId": "itm_client_1",
-            "text": "先别改文件，先确认根因",
-        },
-        emitter,
-    )
+        assert result == {"turnId": turn.id, "itemId": "itm_client_1", "accepted": True}
+        assert runtime._drain_turn_steering(turn.id) == ["先别改文件，先确认根因"]
+        assert runtime._drain_turn_steering(turn.id) == []
+        assert turn.items[0].type == "steeringUserMessage"
+        assert turn.items[0].status == "completed"
+        assert (turn.items[0].timeline_sequence or 0) > 0
+        assert [method for method, _ in emitter.notifications[-2:]] == [
+            "item/started",
+            "item/completed",
+        ]
+        replayed = log.replay()[0]
+        assert [(item.id, item.type, item.status) for item in replayed.items] == [
+            ("itm_client_1", "steeringUserMessage", "completed")
+        ]
+    finally:
+        runtime._active_turn_ids.discard(turn.id)
+        runtime._unregister_active_turn(turn.id)
 
-    assert result == {"turnId": turn.id, "itemId": "itm_client_1", "accepted": True}
-    assert runtime._drain_turn_steering(turn.id) == ["先别改文件，先确认根因"]
-    assert runtime._drain_turn_steering(turn.id) == []
-    assert turn.items[0].type == "steeringUserMessage"
-    assert turn.items[0].status == "completed"
-    assert turn.items[0].timeline_sequence == 1
-    assert [method for method, _ in emitter.notifications[-2:]] == [
-        "item/started",
-        "item/completed",
-    ]
+
+@pytest.mark.asyncio
+async def test_turn_steer_crosses_runtime_instances_and_reaches_the_active_client(
+    tmp_path: Path,
+) -> None:
+    logs_root = tmp_path / "threads"
+    active_runtime = CerebrumRuntime(stack=object(), logs_root=str(logs_root))
+    remote_runtime = CerebrumRuntime(stack=object(), logs_root=str(logs_root))
+    active_emitter = _Emitter()
+    remote_emitter = _Emitter()
+    log = await active_runtime._ensure_thread("thread-shared", active_emitter)
+    turn = Turn(thread_id="thread-shared")
+    log.turn_started(turn.thread_id, turn)
+    active_runtime._active_turn_ids.add(turn.id)
+    active_runtime._register_active_turn(turn, log)
+    try:
+        result = await remote_runtime.handle_request(
+            "turn/steer",
+            {
+                "threadId": turn.thread_id,
+                "turnId": turn.id,
+                "itemId": "itm_from_second_tab",
+                "text": "第二个标签页要求先验证再修改",
+            },
+            remote_emitter,
+        )
+        assert result["accepted"] is True
+
+        resumed = await remote_runtime.handle_request(
+            "thread/resume",
+            {"threadId": turn.thread_id},
+            remote_emitter,
+        )
+        assert resumed["turns"][-1]["status"] == "inProgress"
+        assert resumed["turns"][-1]["items"][-1]["type"] == "steeringUserMessage"
+        assert resumed["turns"][-1]["items"][-1]["id"] == "itm_from_second_tab"
+
+        # The owner process discovers the durable item, feeds it to the model,
+        # and mirrors it onto the original tab without an in-memory signal.
+        await active_runtime._publish_discovered_steering(turn, active_emitter)
+        assert active_runtime._drain_turn_steering(turn.id) == ["第二个标签页要求先验证再修改"]
+        assert any(
+            method == "item/completed" and params["item"]["id"] == "itm_from_second_tab"
+            for method, params in active_emitter.notifications
+        )
+        assert [item.id for item in turn.items].count("itm_from_second_tab") == 1
+
+        # Retrying the same client item id is idempotent across instances.
+        await remote_runtime.handle_request(
+            "turn/steer",
+            {
+                "threadId": turn.thread_id,
+                "turnId": turn.id,
+                "itemId": "itm_from_second_tab",
+                "text": "第二个标签页要求先验证再修改",
+            },
+            remote_emitter,
+        )
+        replayed = log.replay()[0]
+        assert [item.id for item in replayed.items].count("itm_from_second_tab") == 1
+    finally:
+        active_runtime._active_turn_ids.discard(turn.id)
+        active_runtime._unregister_active_turn(turn.id)
+
+
+@pytest.mark.asyncio
+async def test_remote_steer_rejects_a_stale_owner_lease(tmp_path: Path) -> None:
+    logs_root = tmp_path / "threads"
+    owner = CerebrumRuntime(stack=object(), logs_root=str(logs_root))
+    remote = CerebrumRuntime(stack=object(), logs_root=str(logs_root))
+    emitter = _Emitter()
+    log = await owner._ensure_thread("thread-stale-owner", emitter)
+    turn = Turn(thread_id="thread-stale-owner")
+    log.turn_started(turn.thread_id, turn)
+    owner._active_turn_ids.add(turn.id)
+    owner._register_active_turn(turn, log)
+    try:
+        lease_path = owner._active_turn_lease_path(turn.id)
+        lease = json.loads(lease_path.read_text(encoding="utf-8"))
+        lease["updatedAt"] = time.time() - 60
+        lease_path.write_text(json.dumps(lease), encoding="utf-8")
+
+        with pytest.raises(Exception, match="target turn is not active"):
+            await remote.handle_request(
+                "turn/steer",
+                {
+                    "threadId": turn.thread_id,
+                    "turnId": turn.id,
+                    "text": "这条消息不能落到已经失联的执行器",
+                },
+                emitter,
+            )
+        resumed = await remote.handle_request(
+            "thread/resume",
+            {"threadId": turn.thread_id},
+            emitter,
+        )
+        assert resumed["turns"][-1]["status"] == "failed"
+        assert resumed["turns"][-1]["error"]["code"] == "stale_in_progress_turn"
+    finally:
+        owner._active_turn_ids.discard(turn.id)
+        owner._unregister_active_turn(turn.id)
 
 
 @pytest.mark.asyncio

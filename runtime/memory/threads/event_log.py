@@ -23,6 +23,8 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import logging
+import os
 import re
 import threading
 from collections.abc import Iterator
@@ -51,6 +53,7 @@ from runtime.protocol.items import (
     McpToolProgress,
     PlanItem,
     ReasoningItem,
+    SteeringUserMessageItem,
     SubagentItem,
     TodoListItem,
     Turn,
@@ -68,6 +71,47 @@ from runtime.protocol.text_limits import (
     STREAM_CONTENT_TRUNCATION_MARK,
     append_capped_text,
 )
+
+_logger = logging.getLogger(__name__)
+
+
+@contextlib.contextmanager
+def _exclusive_file_lock(stream: Any, path: Path) -> Iterator[None]:
+    """Best-effort cross-process exclusive lock for one open file."""
+    fd = stream.fileno()
+    locked = False
+    try:
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                stream.seek(0)
+                msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_EX)
+            locked = True
+        except (ImportError, OSError) as exc:
+            _logger.warning(
+                "event-log: cross-process lock unavailable for %s (%s)",
+                path.name,
+                exc,
+            )
+        yield
+    finally:
+        if locked:
+            with contextlib.suppress(ImportError, OSError):
+                if os.name == "nt":
+                    import msvcrt
+
+                    stream.seek(0)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+
 
 EventKind = Literal[
     "thread_started",
@@ -182,10 +226,10 @@ class EventLogSnapshot:
 class EventLog:
     """Per-thread JSONL writer + reader.
 
-    Concurrency: a single ``threading.Lock`` guards the writer. Readers
-    snapshot the file path and stream lines lock-free; partial trailing
-    writes are handled by skipping unparseable lines (the writer always
-    flushes whole lines).
+    Concurrency: a process-local ``threading.Lock`` plus an OS file lock
+    guards each append. Readers snapshot lock-free; a partial trailing line
+    remains invisible until the next snapshot. This keeps one shared thread
+    log valid under multiple Uvicorn workers and second-tab steering.
     """
 
     def __init__(self, path: Path | str) -> None:
@@ -203,9 +247,60 @@ class EventLog:
         if not event.event_id:
             event = event.model_copy(update={"event_id": f"evt_{new_id().hex}"})
         line = event.model_dump_json(by_alias=True) + "\n"
-        with self._lock, self._path.open("a", encoding="utf-8") as f:
-            f.write(line)
-            f.flush()
+        with (
+            self._lock,
+            self._path.open("a", encoding="utf-8") as stream,
+            _exclusive_file_lock(stream, self._path),
+        ):
+            stream.seek(0, 2)
+            stream.write(line)
+            stream.flush()
+
+    def reserve_timeline_sequence(self, turn_id: str) -> int:
+        """Atomically reserve the next 1-based item slot for one turn.
+
+        The mutable sidecar is only an allocator; item coordinates remain in
+        the append-only event log and are still the replay source of truth.
+        A fresh sidecar seeds itself from replay so upgrades and restored logs
+        preserve existing coordinates.
+        """
+        counter_path = self._path.with_suffix(self._path.suffix + ".timeline")
+        counter_path.parent.mkdir(parents=True, exist_ok=True)
+        with (
+            counter_path.open("a+", encoding="utf-8") as stream,
+            _exclusive_file_lock(stream, counter_path),
+        ):
+            stream.seek(0)
+            try:
+                counters = json.loads(stream.read() or "{}")
+            except (json.JSONDecodeError, TypeError, ValueError):
+                counters = {}
+            if not isinstance(counters, dict):
+                counters = {}
+            raw_current = counters.get(turn_id)
+            if isinstance(raw_current, int) and raw_current >= 0:
+                current = raw_current
+            else:
+                replayed = next((turn for turn in self.replay() if turn.id == turn_id), None)
+                current = (
+                    max(
+                        (
+                            item.timeline_sequence or 0
+                            for item in replayed.items
+                            if item.timeline_sequence is not None
+                        ),
+                        default=0,
+                    )
+                    if replayed is not None
+                    else 0
+                )
+            reserved = current + 1
+            counters[turn_id] = reserved
+            stream.seek(0)
+            stream.truncate()
+            stream.write(json.dumps(counters, separators=(",", ":")))
+            stream.flush()
+            return reserved
 
     def thread_started(self, thread_id: str) -> None:
         self.append(
@@ -572,6 +667,7 @@ def _thread_id_from_path(path: Path) -> str:
 
 _ITEM_BY_TYPE: dict[ItemType, type] = {
     ItemType.USER_MESSAGE: UserMessageItem,
+    ItemType.STEERING_USER_MESSAGE: SteeringUserMessageItem,
     ItemType.AGENT_MESSAGE: AgentMessageItem,
     ItemType.REASONING: ReasoningItem,
     ItemType.PLAN: PlanItem,
