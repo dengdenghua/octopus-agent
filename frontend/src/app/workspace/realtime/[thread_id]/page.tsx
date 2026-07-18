@@ -22,7 +22,6 @@ import {
   ArtifactsProvider,
   useArtifacts,
 } from "@/components/workspace/artifacts";
-import { AgentProgressPill } from "@/components/workspace/agent-progress-pill";
 import {
   AgentWorkbenchPanel,
   hasAgentWorkbenchContent,
@@ -91,7 +90,6 @@ import {
   modePresetForAgentMode,
   workflowPresetForMode,
 } from "@/core/agent-modes/presets";
-import { TodoPanel } from "@/components/workspace/todo-panel";
 import { PlanPanel } from "@/components/workspace/plan-panel";
 import { Welcome } from "@/components/workspace/welcome";
 import {
@@ -2243,16 +2241,6 @@ function RealtimePageContent({
   }, [sidebarRunState, sidebarThreadId, threadRouteFor]);
   const shouldHideSettledProcessChrome =
     agentRunSettled && hasCompletedAgentOutput;
-  const hasStreamingAnswer = Boolean(
-    thread.streamingMessage &&
-    extractTextFromMessage(thread.streamingMessage).trim(),
-  );
-  const currentTodoEvents = shouldHideSettledProcessChrome
-    ? []
-    : agentDisplayEvents;
-  const hasCurrentTodos = currentTodoEvents.some(
-    (event) => event.name === "todo_write" && event.input,
-  );
   const hasRenderableAgentWorkbench = useMemo(
     () =>
       isAgentWorkflowMode &&
@@ -2271,9 +2259,6 @@ function RealtimePageContent({
       isAgentWorkflowMode,
     ],
   );
-  const showAgentProgressPill =
-    (thread.isLoading || hasRenderableAgentWorkbench) &&
-    !shouldHideSettledProcessChrome;
   const canOpenAgentWorkbench =
     !isNewThread ||
     collaborationEnabled ||
@@ -2884,10 +2869,7 @@ function RealtimePageContent({
                     />
                   ) : null
                 }
-                paddingBottom={
-                  MESSAGE_LIST_DEFAULT_PADDING_BOTTOM +
-                  (showAgentProgressPill ? 96 : hasCurrentTodos ? 64 : 0)
-                }
+                paddingBottom={MESSAGE_LIST_DEFAULT_PADDING_BOTTOM}
                 mode={effectiveMode}
                 liveToolEvents={lastTurnToolEvents}
                 lastTurnToolEvents={lastTurnToolEvents}
@@ -2928,12 +2910,7 @@ function RealtimePageContent({
                 )}
               >
                 {mounted ? (
-                  <div
-                    className={cn(
-                      "flex flex-col",
-                      showAgentProgressPill ? "gap-0" : "gap-2",
-                    )}
-                  >
+                  <div className="flex flex-col gap-2">
                     {isNewThread &&
                       (isAgentRoute ? (
                         <AgentWelcome
@@ -2943,28 +2920,6 @@ function RealtimePageContent({
                       ) : (
                         <Welcome mode={effectiveMode} />
                       ))}
-                    {showAgentProgressPill ? (
-                      <AgentProgressPill
-                        events={agentDisplayEvents}
-                        hasAnswer={
-                          hasCompletedAgentOutput || hasStreamingAnswer
-                        }
-                        hasStreamingAnswer={hasStreamingAnswer}
-                        isLoading={thread.isLoading}
-                        runSettled={agentRunSettled}
-                        runFailed={agentRunFailed}
-                        paused={hasPausedOrPendingBackgroundTask}
-                        progressScopeKey={`${threadId}:agent-progress-plan`}
-                        vitals={thread.vitals}
-                        workbenchVisible={showAgentWorkbench}
-                      />
-                    ) : (
-                      <TodoPanel
-                        liveToolEvents={currentTodoEvents}
-                        className="relative z-10"
-                        defaultOpen={false}
-                      />
-                    )}
                     <ChatInputBox
                       key={composerSeed || "empty-composer"}
                       status={
@@ -3043,7 +2998,6 @@ function RealtimePageContent({
                       className={cn(
                         isNewThread &&
                           "border-border-default bg-card/95 shadow-[0_18px_56px_-34px_rgba(15,23,42,0.45)]",
-                        showAgentProgressPill && "rounded-t-none border-t-0",
                       )}
                     />
                     {isNewThread && !isAgentRoute && !composerSeed && (

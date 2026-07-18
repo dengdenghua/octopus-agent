@@ -375,6 +375,30 @@ describe("MessageList process trace lifecycle", () => {
 
     rerender(
       messageListTree({
+        thread: mockThread({
+          messages: [
+            ...activeThread.messages,
+            message("assistant-progress", "ai", "正在核对 src/app.ts"),
+          ],
+          isLoading: true,
+        }),
+        mode: "chat",
+        liveToolEvents: [
+          toolEvent("read_file", {
+            id: "read-live",
+            status: "running",
+            input: { path: "src/app.ts" },
+          }),
+        ],
+      }),
+    );
+
+    expect(
+      screen.queryByTestId("conversation-activity-pulse"),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      messageListTree({
         thread: mockThread({ messages: activeThread.messages }),
         mode: "chat",
       }),

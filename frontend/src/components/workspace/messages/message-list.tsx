@@ -1474,7 +1474,10 @@ export function MessageList({
                     : null;
 
                 const showActivityPulse =
-                  isLatestTurn && group.type === "human" && thread.isLoading;
+                  isLatestTurn &&
+                  isLatestGroup &&
+                  group.type === "human" &&
+                  thread.isLoading;
 
                 return (
                   <Fragment key={groupKey}>
