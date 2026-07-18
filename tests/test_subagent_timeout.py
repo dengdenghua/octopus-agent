@@ -13,6 +13,7 @@ Coverage
 
 from __future__ import annotations
 
+import threading
 import time
 
 import pytest
@@ -116,6 +117,74 @@ def test_none_timeout_does_not_enforce():
 
     assert result["success"] is True
     assert result.get("status") != "timeout"
+
+
+def test_parent_redirect_returns_cancelled_and_fences_late_child_events():
+    from runtime.execution.subagents.bridge import call_subagent
+    from runtime.safety.approval.cancellation import (
+        CancellationSource,
+        current_cancellation_token,
+        scoped_cancellation,
+    )
+
+    started = threading.Event()
+    emitted: list[dict] = []
+
+    def _late_runner(prompt, *, subagent_name, context):
+        token = current_cancellation_token()
+        started.set()
+        while not token.is_cancelled:
+            time.sleep(0.005)
+        time.sleep(0.12)
+        context["event_emitter"]({"type": "sub_tool_end", "round": 9, "status": "success"})
+        return "late child success"
+
+    _install_runner(_late_runner)
+    parent = CancellationSource()
+
+    def _redirect() -> None:
+        assert started.wait(timeout=1)
+        parent.cancel(reason="user changed direction")
+
+    thread = threading.Thread(target=_redirect)
+    thread.start()
+    before = time.monotonic()
+    with scoped_cancellation(parent.token):
+        result = call_subagent(
+            agent_id="coder",
+            prompt="old task",
+            event_emitter=emitted.append,
+        )
+    elapsed = time.monotonic() - before
+    thread.join(timeout=1)
+
+    assert elapsed < 0.5
+    assert result["status"] == "cancelled"
+    assert result["cancelled"] is True
+    assert result["output"] == ""
+    assert result["cancellation_reason"] == "user changed direction"
+
+    time.sleep(0.18)
+    finished = [event for event in emitted if event["type"] == "subagent_finished"]
+    assert len(finished) == 1
+    assert finished[0]["status"] == "cancelled"
+    assert not any(event.get("round") == 9 for event in emitted)
+
+
+def test_parent_cancellation_listener_detaches_after_child_completion():
+    from runtime.execution.subagents.bridge import call_subagent
+    from runtime.safety.approval.cancellation import (
+        CancellationSource,
+        scoped_cancellation,
+    )
+
+    _install_runner(_fast_runner)
+    parent = CancellationSource()
+    with scoped_cancellation(parent.token):
+        result = call_subagent(agent_id="coder", prompt="quick task")
+
+    assert result["success"] is True
+    assert parent._callbacks == []
 
 
 # ─── test 4: event_emitter receives sub_tool_start events ────────────────────

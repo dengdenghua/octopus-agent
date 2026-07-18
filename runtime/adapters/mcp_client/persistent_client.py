@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import contextlib
 import logging
 import threading
@@ -10,6 +11,11 @@ from contextlib import AsyncExitStack
 from typing import Any
 
 from runtime.adapters.instrumentation import trace_stage
+from runtime.safety.approval.cancellation import (
+    CancellationToken,
+    OperationCancelled,
+    current_cancellation_token,
+)
 
 from .client import (
     STDIO_AVAILABLE,
@@ -17,6 +23,7 @@ from .client import (
     MCPClientError,
     MCPInvocationResult,
     MCPTool,
+    _cancelled_result,
 )
 from .types import MCPServerConfig
 
@@ -162,18 +169,29 @@ class PersistentStdioMCPClient(MCPClient):
             self.config.timeout_ms / 1000,
         )
 
-    def call_tool(self, name: str, args: dict[str, Any]) -> MCPInvocationResult:
+    def call_tool(
+        self,
+        name: str,
+        args: dict[str, Any],
+        *,
+        cancellation: CancellationToken | None = None,
+    ) -> MCPInvocationResult:
         self._check_alive()
         t0 = time.monotonic()
+        token = cancellation or current_cancellation_token()
+        if token.is_cancelled:
+            return _cancelled_result(name, token, t0)
         with trace_stage("mcp.persistent.call_tool") as span:
             span.set_attribute("octopus.mcp.server", self.config.name)
             span.set_attribute("octopus.mcp.tool", name)
             try:
                 result: MCPInvocationResult = self._call_with_reconnect(
                     self._call_tool_async,
-                    (name, args),
+                    (name, args, token),
                     self.config.timeout_ms / 1000,
                 )
+            except OperationCancelled:
+                return _cancelled_result(name, token, t0)
             except Exception as e:  # noqa: BLE001
                 return MCPInvocationResult(
                     tool_name=name,
@@ -188,9 +206,13 @@ class PersistentStdioMCPClient(MCPClient):
         factory: Any,
         args: tuple[Any, ...],
         timeout: float,
+        *,
+        cancellation: CancellationToken | None = None,
     ) -> Any:
         try:
-            return self._run_in_loop(factory(*args), timeout)
+            return self._run_in_loop(factory(*args), timeout, cancellation=cancellation)
+        except OperationCancelled:
+            raise
         except Exception as e:  # noqa: BLE001
             if self._closed or not _should_reconnect(e):
                 raise
@@ -204,7 +226,7 @@ class PersistentStdioMCPClient(MCPClient):
                 self._run_in_loop(self._reconnect_async(), self.connect_timeout_ms / 1000)
             except Exception as rc:  # noqa: BLE001
                 raise MCPClientError(f"reconnect failed: {type(rc).__name__}: {rc}") from rc
-            return self._run_in_loop(factory(*args), timeout)
+            return self._run_in_loop(factory(*args), timeout, cancellation=cancellation)
 
     async def _list_tools_async(self) -> list[MCPTool]:
         result = await self._session.list_tools()
@@ -218,8 +240,51 @@ class PersistentStdioMCPClient(MCPClient):
             for t in result.tools
         ]
 
-    async def _call_tool_async(self, name: str, args: dict[str, Any]) -> MCPInvocationResult:
-        result = await self._session.call_tool(name, args)
+    async def _call_tool_async(
+        self,
+        name: str,
+        args: dict[str, Any],
+        cancellation: CancellationToken | None = None,
+    ) -> MCPInvocationResult:
+        from mcp import types as mcp_types
+
+        token = cancellation or CancellationToken.none()
+        request_state: dict[str, Any] = {}
+
+        async def _invoke() -> Any:
+            # Capture on the session loop immediately before ``call_tool``
+            # enters ``send_request``. There is no await between these two
+            # operations in the SDK, so concurrent MCP calls cannot make us
+            # cancel a neighbour's request id.
+            request_state["id"] = getattr(self._session, "_request_id", None)
+            return await self._session.call_tool(name, args)
+
+        async def _notify_cancel(reason: str) -> None:
+            request_id = request_state.get("id")
+            if request_id is None:
+                return
+            try:
+                await self._session.send_notification(
+                    mcp_types.ClientNotification(
+                        mcp_types.CancelledNotification(
+                            params=mcp_types.CancelledNotificationParams(
+                                requestId=request_id,
+                                reason=reason or "turn redirected",
+                            )
+                        )
+                    ),
+                    related_request_id=request_id,
+                )
+            except Exception as exc:  # noqa: BLE001 — remote cancellation is best-effort
+                _LOG.debug("MCP cancel notification failed: %s", exc)
+
+        from .client import _await_with_cancellation
+
+        result = await _await_with_cancellation(
+            _invoke(),
+            token,
+            cancel_notification=_notify_cancel,
+        )
         text = "\n".join(
             getattr(b, "text", "")
             for b in result.content
@@ -237,11 +302,33 @@ class PersistentStdioMCPClient(MCPClient):
 
     # ─── helpers ────────────────────────────────
 
-    def _run_in_loop(self, coro: Any, timeout: float) -> Any:
+    def _run_in_loop(
+        self,
+        coro: Any,
+        timeout: float,
+        *,
+        cancellation: CancellationToken | None = None,
+    ) -> Any:
         if self._loop is None or not self._loop.is_running():
             raise MCPClientError("event loop not running")
         fut = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        return fut.result(timeout=timeout)
+        token = cancellation or CancellationToken.none()
+
+        def _cancel_future(_reason: str) -> None:
+            fut.cancel()
+
+        unsubscribe = token.on_cancelled(_cancel_future)
+        try:
+            return fut.result(timeout=timeout)
+        except concurrent.futures.CancelledError as exc:
+            if token.is_cancelled:
+                raise OperationCancelled(token.reason or "MCP call cancelled") from exc
+            raise
+        except concurrent.futures.TimeoutError:
+            fut.cancel()
+            raise
+        finally:
+            unsubscribe()
 
     def _check_alive(self) -> None:
         if self._closed:

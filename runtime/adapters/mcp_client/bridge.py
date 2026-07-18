@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import inspect
 import re
 from typing import Any
 
 from runtime.execution.suckers import Skill, SkillExpect, SkillRegistry, SkillTestCase
+from runtime.safety.approval.cancellation import current_cancellation_token
 
 from .client import MCPClient
 
@@ -102,7 +104,26 @@ def _make_handler_for(client: MCPClient, tool_name: str) -> Any:
 
     def handler(**kwargs: Any) -> Any:
         filtered = {k: v for k, v in kwargs.items() if not k.startswith("_") and k != "intent_goal"}
-        result = client.call_tool(tool_name, filtered)
+        token = current_cancellation_token()
+        call = client.call_tool
+        if "cancellation" in inspect.signature(call).parameters:
+            result = call(tool_name, filtered, cancellation=token)
+        else:
+            # Compatibility for lightweight third-party adapters. The
+            # post-call fence below still prevents a late result from entering
+            # a redirected turn, even if that adapter cannot abort in flight.
+            result = call(tool_name, filtered)
+        if getattr(result, "cancelled", False) or token.is_cancelled:
+            reason = (
+                getattr(result, "cancellation_reason", None) or token.reason or "turn redirected"
+            )
+            return {
+                "error": f"cancelled: {reason}",
+                "tool": tool_name,
+                "status": "cancelled",
+                "cancelled": True,
+                "cancellation_reason": reason,
+            }
         if not result.success:
             return {"error": result.error or "mcp_call_failed", "tool": tool_name}
         return {

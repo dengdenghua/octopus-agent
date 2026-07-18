@@ -3,11 +3,17 @@ from __future__ import annotations
 import asyncio
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from runtime.adapters.instrumentation import trace_stage
+from runtime.safety.approval.cancellation import (
+    CancellationToken,
+    OperationCancelled,
+    current_cancellation_token,
+)
 
 from .types import MCPServerConfig
 
@@ -46,6 +52,9 @@ class MCPInvocationResult(BaseModel):
     error: str | None = None
     latency_ms: float = 0.0
     raw_content: list[Any] = Field(default_factory=list)  # Implementation note.
+    status: str = "completed"
+    cancelled: bool = False
+    cancellation_reason: str | None = None
 
 
 class MCPClientError(RuntimeError):
@@ -62,7 +71,13 @@ class MCPClient(ABC):
     def list_tools(self) -> list[MCPTool]: ...
 
     @abstractmethod
-    def call_tool(self, name: str, args: dict[str, Any]) -> MCPInvocationResult: ...
+    def call_tool(
+        self,
+        name: str,
+        args: dict[str, Any],
+        *,
+        cancellation: CancellationToken | None = None,
+    ) -> MCPInvocationResult: ...
 
     @abstractmethod
     def close(self) -> None: ...
@@ -96,9 +111,18 @@ class MockMCPClient(MCPClient):
         self._check_open()
         return [t.model_copy(update={"server_name": self.server_name}) for t in self._tools]
 
-    def call_tool(self, name: str, args: dict[str, Any]) -> MCPInvocationResult:
+    def call_tool(
+        self,
+        name: str,
+        args: dict[str, Any],
+        *,
+        cancellation: CancellationToken | None = None,
+    ) -> MCPInvocationResult:
         self._check_open()
         t0 = time.monotonic()
+        token = cancellation or current_cancellation_token()
+        if token.is_cancelled:
+            return _cancelled_result(name, token, t0)
         self.call_log.append((name, dict(args)))
         with trace_stage("mcp.call_tool") as span:
             span.set_attribute("octopus.mcp.server", self.server_name)
@@ -106,6 +130,8 @@ class MockMCPClient(MCPClient):
 
             handler = self._handlers.get(name)
             if handler is None:
+                if token.is_cancelled:
+                    return _cancelled_result(name, token, t0)
                 return MCPInvocationResult(
                     tool_name=name,
                     success=False,
@@ -114,6 +140,8 @@ class MockMCPClient(MCPClient):
                 )
             try:
                 output = handler(args) if callable(handler) else handler
+                if token.is_cancelled:
+                    return _cancelled_result(name, token, t0)
                 return MCPInvocationResult(
                     tool_name=name,
                     success=True,
@@ -156,15 +184,28 @@ class StdioMCPClient(MCPClient):
             self._tools_cache = asyncio.run(self._list_tools_async())
         return list(self._tools_cache)
 
-    def call_tool(self, name: str, args: dict[str, Any]) -> MCPInvocationResult:
+    def call_tool(
+        self,
+        name: str,
+        args: dict[str, Any],
+        *,
+        cancellation: CancellationToken | None = None,
+    ) -> MCPInvocationResult:
         if self._closed:
             raise MCPClientError("client closed")
         t0 = time.monotonic()
+        token = cancellation or current_cancellation_token()
+        if token.is_cancelled:
+            return _cancelled_result(name, token, t0)
         with trace_stage("mcp.stdio.call_tool") as span:
             span.set_attribute("octopus.mcp.server", self.config.name)
             span.set_attribute("octopus.mcp.tool", name)
             try:
-                result = asyncio.run(self._call_tool_async(name, args))
+                result = asyncio.run(
+                    _await_with_cancellation(self._call_tool_async(name, args), token)
+                )
+            except OperationCancelled:
+                return _cancelled_result(name, token, t0)
             except Exception as e:  # noqa: BLE001
                 return MCPInvocationResult(
                     tool_name=name,
@@ -266,15 +307,28 @@ class HttpMCPClient(MCPClient):
             self._tools_cache = asyncio.run(self._list_tools_async())
         return list(self._tools_cache)
 
-    def call_tool(self, name: str, args: dict[str, Any]) -> MCPInvocationResult:
+    def call_tool(
+        self,
+        name: str,
+        args: dict[str, Any],
+        *,
+        cancellation: CancellationToken | None = None,
+    ) -> MCPInvocationResult:
         if self._closed:
             raise MCPClientError("client closed")
         t0 = time.monotonic()
+        token = cancellation or current_cancellation_token()
+        if token.is_cancelled:
+            return _cancelled_result(name, token, t0)
         with trace_stage("mcp.http.call_tool") as span:
             span.set_attribute("octopus.mcp.server", self.config.name)
             span.set_attribute("octopus.mcp.tool", name)
             try:
-                result = asyncio.run(self._call_tool_async(name, args))
+                result = asyncio.run(
+                    _await_with_cancellation(self._call_tool_async(name, args), token)
+                )
+            except OperationCancelled:
+                return _cancelled_result(name, token, t0)
             except Exception as e:  # noqa: BLE001
                 return MCPInvocationResult(
                     tool_name=name,
@@ -296,20 +350,20 @@ class HttpMCPClient(MCPClient):
         ``sse`` a 2-tuple ``(read, write)``; callers index ``[0]``/``[1]``
         so both shapes work uniformly.
         """
-        headers = dict(self.config.headers) if self.config.headers else {}
+        header_values = dict(self.config.headers) if self.config.headers else {}
         # OAuth-authorized servers (see mcp_router.py's /api/mcp/oauth/*
         # endpoints) get their bearer token injected here rather than
         # baked into ``config.headers`` — tokens refresh/expire and are
         # looked up fresh on every connect. An explicit Authorization
         # header the user pasted into the server config always wins
         # (manual token beats auto-OAuth).
-        if "Authorization" not in headers and "authorization" not in headers:
+        if "Authorization" not in header_values and "authorization" not in header_values:
             from .oauth import bearer_for_server
 
             token = bearer_for_server(self.config.name)
             if token:
-                headers["Authorization"] = f"Bearer {token}"
-        headers = headers or None
+                header_values["Authorization"] = f"Bearer {token}"
+        headers: dict[str, str] | None = header_values or None
         timeout = max(1.0, self.config.timeout_ms / 1000.0)
         if self.config.transport == "sse":
             from mcp.client.sse import sse_client
@@ -361,3 +415,66 @@ class HttpMCPClient(MCPClient):
                     error=text if is_err else None,
                     raw_content=raw,
                 )
+
+
+async def _await_with_cancellation(
+    coro: Any,
+    token: CancellationToken,
+    *,
+    cancel_notification: Callable[[str], Awaitable[None]] | None = None,
+) -> Any:
+    """Await an MCP request while forwarding the ambient turn cancellation.
+
+    Persistent sessions may provide ``cancel_notification`` to send MCP's
+    protocol-level ``notifications/cancelled`` message before the local await
+    is torn down. Regardless of peer behaviour, the task is fenced so a late
+    response cannot become the tool result of a redirected turn.
+    """
+
+    token.throw_if_cancelled()
+    loop = asyncio.get_running_loop()
+    task = loop.create_task(coro)
+
+    notification_tasks: set[asyncio.Future[None]] = set()
+
+    def _cancel_task(reason: str) -> None:
+        def _cancel_on_loop() -> None:
+            if task.done():
+                return
+            if cancel_notification is not None:
+                notice: asyncio.Future[None] = asyncio.ensure_future(
+                    cancel_notification(reason),
+                    loop=loop,
+                )
+                notification_tasks.add(notice)
+                notice.add_done_callback(notification_tasks.discard)
+            task.cancel()
+
+        loop.call_soon_threadsafe(_cancel_on_loop)
+
+    unsubscribe = token.on_cancelled(_cancel_task)
+    try:
+        return await task
+    except asyncio.CancelledError as exc:
+        if token.is_cancelled:
+            raise OperationCancelled(token.reason or "MCP call cancelled") from exc
+        raise
+    finally:
+        unsubscribe()
+
+
+def _cancelled_result(
+    name: str,
+    token: CancellationToken,
+    started_at: float,
+) -> MCPInvocationResult:
+    reason = token.reason or "operation cancelled"
+    return MCPInvocationResult(
+        tool_name=name,
+        success=False,
+        error=f"cancelled: {reason}",
+        latency_ms=(time.monotonic() - started_at) * 1000,
+        status="cancelled",
+        cancelled=True,
+        cancellation_reason=reason,
+    )

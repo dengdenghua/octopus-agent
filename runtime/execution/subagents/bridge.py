@@ -570,6 +570,12 @@ def call_subagent(
     _safe_journal_emit(_spawn_event)
 
     def _tracking_emitter(event: dict) -> None:
+        # Once the parent turn redirects, the old execution generation is
+        # closed. A cooperative child may still emit its final bookkeeping
+        # event while unwinding; suppress it so no late progress can appear
+        # inside the new trajectory.
+        if _child_source.is_cancelled:
+            return
         rnd = event.get("round")
         if isinstance(rnd, int) and rnd > _rounds_state["max_round"]:
             _rounds_state["max_round"] = rnd
@@ -608,17 +614,20 @@ def call_subagent(
     # call inside the subagent sees the inherited signal.
     from runtime.safety.approval.cancellation import (
         CancellationSource,
+        CancellationToken,
         current_cancellation_token,
         scoped_cancellation,
     )
 
     _parent_token = current_cancellation_token()
     _child_source = CancellationSource()
+
     # Parent cancel → cancel child. If the parent is the never-token
     # (no ambient handler), ``on_cancelled`` is a no-op.
-    _parent_token.on_cancelled(
-        lambda reason: _child_source.cancel(reason or "parent cancelled"),
-    )
+    def _cancel_child(reason: str) -> None:
+        _child_source.cancel(reason=reason or "parent cancelled")
+
+    _unlink_parent = _parent_token.on_cancelled(_cancel_child)
 
     def _do_call() -> dict[str, Any]:
         # Always pass _tracking_emitter so round counting works even when
@@ -750,7 +759,7 @@ def call_subagent(
             return first
         # Stitch: prefer the retry's output but mark that a retry happened.
         second.setdefault("output", "")
-        if not second.get("output").strip() and partial:
+        if not str(second.get("output") or "").strip() and partial:
             # Retry produced nothing usable → keep first call's partial
             # but propagate the retry-attempted flag.
             second["output"] = partial
@@ -970,16 +979,78 @@ def call_subagent(
         )
         return _augment(_reject)
     try:
-        if timeout_seconds is None:
+        # Preserve the direct-call path for non-request callers that have no
+        # cancellable parent. Live turns use a worker even without an explicit
+        # timeout, allowing the caller to return promptly when the user
+        # redirects while a non-cooperative child is still unwinding.
+        monitor_parent = _parent_token is not CancellationToken.none()
+        if timeout_seconds is None and not monitor_parent:
             return _augment(_do_call_with_schema())
 
-        # Timeout path: run in a thread so we can enforce a wall-clock limit.
+        # Monitored path: run in a thread so we can enforce both a wall-clock
+        # limit and parent cancellation.
         # We use shutdown(wait=False) to avoid blocking forever if the worker
         # thread is stuck (Python threads cannot be killed cleanly).
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         future = executor.submit(_do_call_with_schema)
+        deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
         try:
-            return _augment(future.result(timeout=timeout_seconds))
+            while True:
+                # Cancellation wins over a simultaneously arriving success:
+                # this is the generation fence that keeps late child output
+                # out of the redirected parent turn.
+                if _child_source.is_cancelled:
+                    future.cancel()
+                    reason = _child_source.token.reason or "parent cancelled"
+                    elapsed = max(0.0, time.time() - _spawn_started_at)
+                    _cancel_event = {
+                        "type": "subagent_finished",
+                        "agent_id": agent_id,
+                        "role": _role_label,
+                        "codename": _codename,
+                        "avatar": _avatar,
+                        "ok": False,
+                        "duration_s": round(elapsed, 2),
+                        "iteration_count": _rounds_state["max_round"],
+                        "files_touched": list(_files_touched),
+                        "error": f"subagent cancelled: {reason}",
+                        "status": "cancelled",
+                        "cancelled": True,
+                        "cancellation_reason": reason,
+                    }
+                    _attach_trace_fields(_cancel_event, _trace_context)
+                    _safe_emit(event_emitter, _cancel_event)
+                    _safe_journal_emit(_cancel_event)
+                    return _attach_trace_fields(
+                        {
+                            "status": "cancelled",
+                            "error": f"subagent cancelled: {reason}",
+                            "cancelled": True,
+                            "cancellation_reason": reason,
+                            "agent_id": agent_id,
+                            "role": _role_label,
+                            "codename": _codename,
+                            "avatar": _avatar,
+                            "output": "",
+                            "success": False,
+                            "rounds_completed": _rounds_state["max_round"],
+                            "iteration_count": _rounds_state["max_round"],
+                            "files_touched": list(_files_touched),
+                        },
+                        _trace_context,
+                    )
+
+                remaining = None if deadline is None else deadline - time.monotonic()
+                if remaining is not None and remaining <= 0:
+                    raise concurrent.futures.TimeoutError
+                wait_for = 0.05 if remaining is None else min(0.05, remaining)
+                try:
+                    result = future.result(timeout=wait_for)
+                except concurrent.futures.TimeoutError:
+                    continue
+                if _child_source.is_cancelled:
+                    continue
+                return _augment(result)
         except concurrent.futures.TimeoutError:
             # Signal cancellation to the subagent so any poll-aware loop
             # (ReAct, subprocess waits) unwinds gracefully. ``future.cancel``
@@ -1032,6 +1103,7 @@ def call_subagent(
         finally:
             executor.shutdown(wait=False)
     finally:
+        _unlink_parent()
         _release_subagent_slot()
 
 

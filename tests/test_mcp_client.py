@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import threading
+import time
+
 import pytest
 
 from runtime.adapters.mcp_client import (
@@ -16,6 +20,10 @@ from runtime.adapters.mcp_client import (
     register_mcp_tools_as_skills,
 )
 from runtime.execution.suckers import SkillRegistry
+from runtime.safety.approval.cancellation import (
+    CancellationSource,
+    scoped_cancellation,
+)
 
 # ═══════════════════════════════════════════════════════════
 # MCPServerConfig
@@ -265,6 +273,40 @@ class TestHttpClient:
         assert result.raw_content
         client.close()
 
+    @pytest.mark.skipif(not HTTP_AVAILABLE, reason="mcp SDK required")
+    def test_inflight_call_is_cancelled_by_turn_redirect(self, monkeypatch):
+        import mcp
+
+        started = threading.Event()
+
+        class _SlowSession(_FakeSession):
+            async def call_tool(self, _name, _args):
+                started.set()
+                await asyncio.Event().wait()
+
+        client = HttpMCPClient(MCPServerConfig(name="srv", transport="http", url="http://x/mcp"))
+        monkeypatch.setattr(client, "_transport", lambda: _FakeTransport())
+        monkeypatch.setattr(mcp, "ClientSession", _SlowSession)
+        source = CancellationSource()
+
+        def _redirect() -> None:
+            assert started.wait(timeout=1)
+            source.cancel(reason="user redirected the turn")
+
+        thread = threading.Thread(target=_redirect)
+        thread.start()
+        before = time.monotonic()
+        result = client.call_tool("slow", {}, cancellation=source.token)
+        elapsed = time.monotonic() - before
+        thread.join(timeout=1)
+
+        assert elapsed < 0.5
+        assert result.cancelled is True
+        assert result.status == "cancelled"
+        assert result.cancellation_reason == "user redirected the turn"
+        assert result.output is None
+        client.close()
+
 
 # ═══════════════════════════════════════════════════════════
 # Registry bridge
@@ -327,6 +369,39 @@ class TestRegistryBridge:
         result = skill.handler()
         assert "error" in result
         assert result["tool"] == "boom"
+
+    def test_late_mcp_success_is_fenced_after_redirect(self):
+        started = threading.Event()
+        release = threading.Event()
+
+        def _late_success(_args):
+            started.set()
+            assert release.wait(timeout=1)
+            return "stale success"
+
+        client = MockMCPClient(
+            tools=[MCPTool(name="slow")],
+            tool_handlers={"slow": _late_success},
+        )
+        registry = SkillRegistry()
+        register_mcp_tools_as_skills(registry, client, require_trust=False, name_prefix="")
+        source = CancellationSource()
+
+        def _redirect() -> None:
+            assert started.wait(timeout=1)
+            source.cancel(reason="new user instruction")
+            release.set()
+
+        thread = threading.Thread(target=_redirect)
+        thread.start()
+        with scoped_cancellation(source.token):
+            result = registry.get("slow").handler()
+        thread.join(timeout=1)
+
+        assert result["status"] == "cancelled"
+        assert result["cancelled"] is True
+        assert "new user instruction" in result["cancellation_reason"]
+        assert "stale success" not in str(result)
 
     def test_trusted_source_set_correctly(self):
         client = MockMCPClient(
