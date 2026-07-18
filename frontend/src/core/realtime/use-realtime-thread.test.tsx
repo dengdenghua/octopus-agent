@@ -162,7 +162,73 @@ describe("useRealtimeThread reconnect reconciliation", () => {
     };
   }
 
-  it("replaces a locally interrupted turn with server truth after reconnect", async () => {
+  it("keeps live state until incremental server truth arrives", async () => {
+    const handles: FakeClientHandles[] = [];
+    let resumeCount = 0;
+    const resumeParams: Record<string, unknown>[] = [];
+    const factory = (deps: {
+      onIncomingRequest: IncomingRequestFn;
+      onNotification: (n: {
+        method: string;
+        params: Record<string, unknown>;
+      }) => void;
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      handles.push({
+        emitRequest: (req) => deps.onIncomingRequest(req),
+        emitOpen: () => deps.onOpen?.(),
+        emitClose: (code, reason) => deps.onClose?.(code, reason),
+      });
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string, params?: Record<string, unknown>) => {
+          if (method !== "thread/resume") return Promise.resolve({});
+          resumeCount += 1;
+          resumeParams.push(params ?? {});
+          return Promise.resolve({
+            thread: { id: "th" },
+            turns: [
+              resumeCount === 1
+                ? turn("t-live", "inProgress")
+                : turn("t-live", "completed"),
+            ],
+            hasMore: false,
+            incremental: resumeCount > 1,
+            nextEventSequence: resumeCount === 1 ? 10 : 14,
+          });
+        },
+      };
+    };
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
+    );
+
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.status).toBe("inProgress"),
+    );
+
+    act(() => {
+      handles[0]!.emitClose(1006, "network lost");
+    });
+    expect(rendered.result.current.connected).toBe(false);
+    expect(rendered.result.current.state.turns[0]?.status).toBe("inProgress");
+
+    act(() => {
+      handles[0]!.emitOpen();
+    });
+
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.status).toBe("completed"),
+    );
+    expect(resumeCount).toBe(2);
+    expect(resumeParams[1]).toMatchObject({ afterSequence: 10 });
+  });
+
+  it("preserves the timeline when an incremental resume has no changes", async () => {
     const handles: FakeClientHandles[] = [];
     let resumeCount = 0;
     const factory = (deps: {
@@ -186,15 +252,22 @@ describe("useRealtimeThread reconnect reconciliation", () => {
         request: (method: string) => {
           if (method !== "thread/resume") return Promise.resolve({});
           resumeCount += 1;
-          return Promise.resolve({
-            thread: { id: "th" },
-            turns: [
-              resumeCount === 1
-                ? turn("t-live", "inProgress")
-                : turn("t-live", "completed"),
-            ],
-            hasMore: false,
-          });
+          return Promise.resolve(
+            resumeCount === 1
+              ? {
+                  thread: { id: "th" },
+                  turns: [turn("t-stable", "completed")],
+                  hasMore: true,
+                  incremental: false,
+                  nextEventSequence: 20,
+                }
+              : {
+                  thread: { id: "th" },
+                  turns: [],
+                  incremental: true,
+                  nextEventSequence: 20,
+                },
+          );
         },
       };
     };
@@ -202,27 +275,18 @@ describe("useRealtimeThread reconnect reconciliation", () => {
     const rendered = renderHook(() =>
       useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
     );
-
     await waitFor(() =>
-      expect(rendered.result.current.state.turns[0]?.status).toBe(
-        "inProgress",
-      ),
+      expect(rendered.result.current.state.turns[0]?.id).toBe("t-stable"),
     );
 
     act(() => {
       handles[0]!.emitClose(1006, "network lost");
-    });
-    expect(rendered.result.current.connected).toBe(false);
-    expect(rendered.result.current.state.turns[0]?.status).toBe("interrupted");
-
-    act(() => {
       handles[0]!.emitOpen();
     });
 
-    await waitFor(() =>
-      expect(rendered.result.current.state.turns[0]?.status).toBe("completed"),
-    );
-    expect(resumeCount).toBe(2);
+    await waitFor(() => expect(resumeCount).toBe(2));
+    expect(rendered.result.current.state.turns[0]?.id).toBe("t-stable");
+    expect(rendered.result.current.state.hasMoreTurns).toBe(true);
   });
 
   it("resumes on first socket open after the startup resume request failed", async () => {

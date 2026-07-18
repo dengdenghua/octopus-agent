@@ -283,12 +283,23 @@ class EventLog:
 
     # ── Reader side ──────────────────────────────────────────
 
-    def iter_events(self) -> Iterator[LoggedEvent]:
-        """Yield events in append order. Skips malformed lines."""
+    def iter_events_with_sequence(self) -> Iterator[tuple[int, LoggedEvent]]:
+        """Yield ``(cursor, event)`` pairs in append order.
+
+        The cursor is the one-based physical JSONL line number. That makes it
+        stable for every existing log without a migration and monotonic across
+        process restarts. Malformed lines consume a cursor but are not yielded;
+        a later valid line still advances beyond them.
+        """
         if not self._path.exists():
             return
         with self._path.open("r", encoding="utf-8") as f:
-            for line in f:
+            for sequence, line in enumerate(f, start=1):
+                # A concurrent writer may expose a trailing partial line.
+                # Do not make it visible or advance a resumable cursor until
+                # its terminating newline has landed.
+                if not line.endswith("\n"):
+                    continue
                 line = line.strip()
                 if not line:
                     continue
@@ -297,9 +308,60 @@ class EventLog:
                 except json.JSONDecodeError:
                     continue
                 try:
-                    yield LoggedEvent.model_validate(raw)
+                    yield sequence, LoggedEvent.model_validate(raw)
                 except (TypeError, ValueError):
                     continue
+
+    def iter_events(self) -> Iterator[LoggedEvent]:
+        """Yield events in append order. Skips malformed lines."""
+        for _sequence, event in self.iter_events_with_sequence():
+            yield event
+
+    def cursor_delta(self, after_sequence: int) -> tuple[list[str], int, bool]:
+        """Return changed turn ids, latest cursor and whether a reset is needed.
+
+        ``turn_compacted`` rewrites the visible turn set, so an incremental
+        merge cannot represent it safely; callers receive ``requires_reset``
+        and fall back to a normal window snapshot. A cursor beyond the current
+        file also signals reset (log replacement/truncation).
+        """
+        after = max(0, int(after_sequence))
+        changed_turn_ids: list[str] = []
+        seen_turn_ids: set[str] = set()
+        latest_sequence = 0
+        requires_reset = False
+        if self._path.exists():
+            with self._path.open("r", encoding="utf-8") as f:
+                for sequence, line in enumerate(f, start=1):
+                    if not line.endswith("\n"):
+                        continue
+                    latest_sequence = sequence
+                    if sequence <= after:
+                        continue
+                    try:
+                        raw = json.loads(line)
+                        event = LoggedEvent.model_validate(raw)
+                    except (json.JSONDecodeError, TypeError, ValueError):
+                        continue
+                    if event.event == "turn_compacted":
+                        requires_reset = True
+                    if event.turn_id and event.turn_id not in seen_turn_ids:
+                        seen_turn_ids.add(event.turn_id)
+                        changed_turn_ids.append(event.turn_id)
+        if after > latest_sequence:
+            requires_reset = True
+        return changed_turn_ids, latest_sequence, requires_reset
+
+    def latest_sequence(self) -> int:
+        """Return the current append cursor without decoding event payloads."""
+        if not self._path.exists():
+            return 0
+        latest = 0
+        with self._path.open("r", encoding="utf-8") as f:
+            for sequence, line in enumerate(f, start=1):
+                if line.endswith("\n"):
+                    latest = sequence
+        return latest
 
     def replay(self) -> list[Turn]:
         """Reconstruct the full turn list from disk.

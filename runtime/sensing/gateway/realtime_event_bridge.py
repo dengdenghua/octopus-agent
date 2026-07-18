@@ -278,20 +278,14 @@ class _ReactBridgeState:
         emitter: EventEmitter,
         delta: str,
         *,
-        progress_kind: str | None = None,
+        start_new_segment: bool = False,
     ) -> None:
         if not delta:
             return
-        # A commentary item represents one public semantic phase. Reusing the
-        # same item across ``orient → synthesize`` keeps the first progressKind
-        # forever and makes the final checkpoint visually disappear into the
-        # opening prose. Close the old item when the phase changes so the
-        # frontend receives a real ordered timeline rather than one text blob.
-        if (
-            self.commentary_message is not None
-            and progress_kind
-            and self.commentary_message.progress_kind != progress_kind
-        ):
+        # Public-checkpoint boundaries are structural. Never inspect prose or
+        # a hard-coded "investigate / implement / verify" label to decide
+        # whether two messages belong together.
+        if self.commentary_message is not None and start_new_segment:
             await self._flush_pending_delta()
             self.commentary_message.status = ItemStatus.COMPLETED
             await self._emit_completed(turn, log, emitter, self.commentary_message)
@@ -304,7 +298,6 @@ class _ReactBridgeState:
             self.commentary_message = AgentMessageItem(
                 text="",
                 message_kind="commentary",
-                progress_kind=progress_kind,
                 phase_id=phase_id,
                 progress_sequence=self.progress_sequence,
             )

@@ -210,7 +210,6 @@ function SegmentedReasoningPanel({
   isLoading: boolean;
   messageId?: string;
 }) {
-  const { t } = useI18n();
   const replyThinking = publicThinkingSummary?.trim() || null;
   if (!replyThinking) return null;
   const summary = replyThinking.replace(/\s+/g, " ").trim();
@@ -230,7 +229,7 @@ function SegmentedReasoningPanel({
       data-process-event-id={messageId}
       data-process-event-kind="thinking"
       data-testid="assistant-thinking-event"
-      aria-label={`${t.message.thinkingProcess}: ${summary}`}
+      aria-label={summary}
     >
       <span
         className={cn(
@@ -238,12 +237,6 @@ function SegmentedReasoningPanel({
           isLoading && "animate-pulse bg-primary/55",
         )}
       />
-      <span className="shrink-0 font-medium text-muted-foreground/70">
-        {t.message.thinkingProcess}
-      </span>
-      <span aria-hidden="true" className="shrink-0 opacity-35">
-        ·
-      </span>
       <span className="min-w-0 flex-1 truncate">{summary}</span>
       <PanelRightOpenIcon className="size-3 shrink-0 opacity-0 transition-opacity group-hover/thinking-row:opacity-50" />
     </button>

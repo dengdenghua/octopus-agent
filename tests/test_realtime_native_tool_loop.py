@@ -52,7 +52,6 @@ def test_agentic_commentary_maps_to_public_timeline_event():
     assert evt == {
         "type": "commentary_delta",
         "delta": "已确认第一批资料，现在继续核对官方文档。",
-        "progress_kind": "investigate",
         "progress_source": "model",
     }
 

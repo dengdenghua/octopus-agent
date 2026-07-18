@@ -933,9 +933,39 @@ class CerebrumRuntime:
             summary = log.summary()
             if summary is not None and summary.archived:
                 raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
-            # Stale-turn closing must see the FULL replay; pagination
-            # only slices the response.
-            turns = self._resume_turns(log)
+            # Close stale turns before anchoring the cursor. The response
+            # snapshot is replayed *after* that cursor is read: concurrent
+            # writes may therefore be returned twice on the next resume, but
+            # can never be skipped by a cursor that advanced past unseen data.
+            self._resume_turns(log)
+            raw_after_sequence = params.get("afterSequence")
+            before_turn_id = (
+                params.get("beforeTurnId") if isinstance(params.get("beforeTurnId"), str) else None
+            )
+            if (
+                isinstance(raw_after_sequence, int)
+                and not isinstance(raw_after_sequence, bool)
+                and raw_after_sequence >= 0
+                and before_turn_id is None
+            ):
+                changed_ids, next_sequence, requires_reset = log.cursor_delta(raw_after_sequence)
+                turns = log.replay()
+                if not requires_reset:
+                    changed = set(changed_ids)
+                    return {
+                        "thread": {"id": thread_id, "path": str(log.path)},
+                        "turns": [
+                            turn.model_dump(by_alias=True, mode="json")
+                            for turn in turns
+                            if turn.id in changed
+                        ],
+                        "totalTurns": len(turns),
+                        "hasMore": False,
+                        "incremental": True,
+                        "nextEventSequence": next_sequence,
+                    }
+            next_sequence = log.latest_sequence()
+            turns = log.replay()
             raw_limit = params.get("limit")
             window, has_more = EventLog.paginate_turns(
                 turns,
@@ -944,17 +974,15 @@ class CerebrumRuntime:
                     if isinstance(raw_limit, int) and not isinstance(raw_limit, bool)
                     else None
                 ),
-                before_turn_id=(
-                    params.get("beforeTurnId")
-                    if isinstance(params.get("beforeTurnId"), str)
-                    else None
-                ),
+                before_turn_id=before_turn_id,
             )
             return {
                 "thread": {"id": thread_id, "path": str(log.path)},
                 "turns": [t.model_dump(by_alias=True, mode="json") for t in window],
                 "totalTurns": len(turns),
                 "hasMore": has_more,
+                "incremental": False,
+                "nextEventSequence": next_sequence,
             }
         if method == "thread/compact":
             thread_id = self._require_thread_id(params.get("threadId"))

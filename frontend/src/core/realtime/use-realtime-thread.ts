@@ -125,6 +125,31 @@ export interface UseRealtimeThreadValue {
 // loadOlderTurns().
 const RESUME_TURN_LIMIT = 50;
 
+interface ResumeResponse {
+  thread?: { id: string; path?: string };
+  turns: Conversation["turns"];
+  hasMore?: boolean;
+  totalTurns?: number;
+  incremental?: boolean;
+  nextEventSequence?: number;
+}
+
+/** Replace changed turn snapshots without disturbing the surrounding
+ * timeline. The server returns whole snapshots for affected turns, so
+ * reconnect recovery never has to replay individual deltas in the UI. */
+function mergeTurnSnapshots(
+  existing: Conversation["turns"],
+  changed: Conversation["turns"],
+): Conversation["turns"] {
+  if (changed.length === 0) return existing;
+  const changedById = new Map(changed.map((turn) => [turn.id, turn]));
+  const existingIds = new Set(existing.map((turn) => turn.id));
+  return [
+    ...existing.map((turn) => changedById.get(turn.id) ?? turn),
+    ...changed.filter((turn) => !existingIds.has(turn.id)),
+  ];
+}
+
 export function useRealtimeThread(
   args: UseRealtimeThreadArgs,
 ): UseRealtimeThreadValue {
@@ -153,6 +178,10 @@ export function useRealtimeThread(
   // Latest reduced snapshot for callbacks that don't want React's stale
   // closure semantics. Updated synchronously alongside ``setState``.
   const stateRef = useRef<Conversation>(state);
+  // One-based physical event-log cursor returned by thread/resume. It is
+  // intentionally independent of rendered item sequence: reconnect asks
+  // only for turns changed after this durable server position.
+  const resumeCursorRef = useRef<number | null>(null);
   // Delivery watches for in-flight turn/start requests. The server holds
   // the turn/start RPC response until the whole turn has run to
   // completion, so ANY mid-turn socket drop rejects the pending request
@@ -200,16 +229,10 @@ export function useRealtimeThread(
   useEffect(() => {
     setState(emptyConversation(args.threadId));
     stateRef.current = emptyConversation(args.threadId);
+    resumeCursorRef.current = null;
     vitalsMarksRef.current = emptyVitalsMarks();
     const resolvers = approvalResolvers.current;
     const timers = approvalTimers.current;
-    type ResumeResponse = {
-      thread: { id: string; path?: string };
-      turns: Conversation["turns"];
-      hasMore?: boolean;
-      totalTurns?: number;
-    };
-
     const onIncomingRequest = async (req: JsonRpcRequest): Promise<unknown> =>
       new Promise((resolve) => {
         const pending: PendingApproval = {
@@ -274,57 +297,50 @@ export function useRealtimeThread(
     ): void => {
       const seq = ++resumeSeq;
       resumeInFlight = true;
+      const afterSequence = resumeCursorRef.current;
       void client
         .request<ResumeResponse>("thread/resume", {
           threadId: args.threadId,
           limit: RESUME_TURN_LIMIT,
+          ...(afterSequence !== null ? { afterSequence } : {}),
         })
         .then((result) => {
           if (cancelled || seq !== resumeSeq) return;
           resumeInFlight = false;
-          const resumedActive = [...(result.turns ?? [])]
-            .reverse()
-            .find((turn) => turn.status === "inProgress");
-          seedVitalsFromResumedTurn(
-            vitalsMarksRef.current,
-            resumedActive ?? null,
-            Date.now(),
-          );
+          if (
+            typeof result.nextEventSequence === "number" &&
+            Number.isFinite(result.nextEventSequence) &&
+            result.nextEventSequence >= 0
+          ) {
+            resumeCursorRef.current = result.nextEventSequence;
+          }
           setState((prev) => {
-            if (mode === "preserve-live" && prev.turns.length > 0) {
-              // Live events landed before this resume response. Keep
-              // those optimistic turns, but carry the server's older-page
-              // flag so loadOlderTurns() still works.
-              // Guard: only preserve if the live turns actually belong to
-              // this thread — otherwise a stale notification from a
-              // previous thread could keep its turns pinned here.
-              if (
-                result.thread?.id &&
-                prev.threadId !== result.thread.id
-              ) {
-                const next: Conversation = {
-                  ...prev,
-                  turns: result.turns ?? [],
-                  resumeState: "resumed",
-                  hasMoreTurns: result.hasMore === true,
-                };
-                stateRef.current = next;
-                return next;
-              }
-              const next: Conversation = {
-                ...prev,
-                resumeState: "resumed",
-                hasMoreTurns: result.hasMore === true,
-              };
-              stateRef.current = next;
-              return next;
-            }
+            const serverTurns = result.turns ?? [];
+            const turns =
+              result.incremental === true
+                ? mergeTurnSnapshots(prev.turns, serverTurns)
+                : mode === "preserve-live" &&
+                    prev.turns.length > 0 &&
+                    (!result.thread?.id || prev.threadId === result.thread.id)
+                  ? mergeTurnSnapshots(serverTurns, prev.turns)
+                  : serverTurns;
             const next: Conversation = {
               ...prev,
-              turns: result.turns ?? [],
+              turns,
               resumeState: "resumed",
-              hasMoreTurns: result.hasMore === true,
+              hasMoreTurns:
+                result.incremental === true
+                  ? prev.hasMoreTurns
+                  : result.hasMore === true,
             };
+            const resumedActive = [...turns]
+              .reverse()
+              .find((turn) => turn.status === "inProgress");
+            seedVitalsFromResumedTurn(
+              vitalsMarksRef.current,
+              resumedActive ?? null,
+              Date.now(),
+            );
             stateRef.current = next;
             return next;
           });
@@ -395,18 +411,7 @@ export function useRealtimeThread(
       applyEvent(note as unknown as ConversationEvent);
     };
 
-    const onClose = (code: number, _reason: string): void => {
-      // The websocket dropped while a turn was streaming. Without
-      // this, the UI keeps showing "thinking..." indefinitely because
-      // the reducer never observes a ``turn/completed`` envelope —
-      // the only place ``turn.status`` flips out of ``inProgress``.
-      // Synthesize a turn/interrupted so ``isLoading`` and the
-      // "stop" button drop, the user sees an interrupted-turn marker,
-      // and the auto-reconnect path can resume cleanly.
-      //
-      // Skip when the close was a planned client-side teardown
-      // (code 1000 with no reason and the hook tearing down) — that
-      // path already cleans up via the unmount effect.
+    const onClose = (_code: number, _reason: string): void => {
       if (cancelled) return;
       // The socket is gone — flip ``connected`` to false so the UI
       // can show a "reconnecting..." pill. The auto-reconnect logic
@@ -429,19 +434,10 @@ export function useRealtimeThread(
           return next;
         });
       }
-      const turns = stateRef.current.turns;
-      const active = turns[turns.length - 1];
-      if (!active || active.status !== "inProgress") return;
-      persistTurnTelemetry(active.id, "interrupted");
-      applyEvent({
-        method: "turn/interrupted",
-        params: {
-          threadId: args.threadId,
-          turnId: active.id,
-          completedAt: new Date().toISOString(),
-          reason: `connection lost (code ${code})`,
-        },
-      } as unknown as ConversationEvent);
+      // Do not invent a turn outcome from a transport failure. The server
+      // owns turn lifecycle and may still be running or may have persisted
+      // an interruption. Keep the live timeline intact while disconnected;
+      // incremental resume reconciles the authoritative snapshot on reopen.
     };
 
     const onOpen = (): void => {
@@ -571,31 +567,41 @@ export function useRealtimeThread(
   const resume = useCallback(async () => {
     const client = clientRef.current;
     if (!client) return;
-    type ResumeResponse = {
-      thread: { id: string; path?: string };
-      turns: Conversation["turns"];
-      hasMore?: boolean;
-      totalTurns?: number;
-    };
+    const afterSequence = resumeCursorRef.current;
     const result = await client.request<ResumeResponse>("thread/resume", {
       threadId: args.threadId,
       limit: RESUME_TURN_LIMIT,
+      ...(afterSequence !== null ? { afterSequence } : {}),
     });
-    const resumedActive = [...(result.turns ?? [])]
-      .reverse()
-      .find((turn) => turn.status === "inProgress");
-    seedVitalsFromResumedTurn(
-      vitalsMarksRef.current,
-      resumedActive ?? null,
-      Date.now(),
-    );
+    if (
+      typeof result.nextEventSequence === "number" &&
+      Number.isFinite(result.nextEventSequence) &&
+      result.nextEventSequence >= 0
+    ) {
+      resumeCursorRef.current = result.nextEventSequence;
+    }
     setState((prev) => {
+      const turns =
+        result.incremental === true
+          ? mergeTurnSnapshots(prev.turns, result.turns ?? [])
+          : (result.turns ?? []);
       const next: Conversation = {
         ...prev,
-        turns: result.turns ?? [],
+        turns,
         resumeState: "resumed",
-        hasMoreTurns: result.hasMore === true,
+        hasMoreTurns:
+          result.incremental === true
+            ? prev.hasMoreTurns
+            : result.hasMore === true,
       };
+      const resumedActive = [...turns]
+        .reverse()
+        .find((turn) => turn.status === "inProgress");
+      seedVitalsFromResumedTurn(
+        vitalsMarksRef.current,
+        resumedActive ?? null,
+        Date.now(),
+      );
       stateRef.current = next;
       return next;
     });

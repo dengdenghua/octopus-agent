@@ -82,13 +82,10 @@ def _agentic_stream_event_to_react_event(
     if kind == "text":
         return {"type": "text_delta", "delta": str(delta or "")}
     if kind == "commentary":
-        from runtime.core.cerebrum.react_loop import _public_update_kind
-
         text = str(delta or "")
         return {
             "type": "commentary_delta",
             "delta": text,
-            "progress_kind": _public_update_kind(text),
             "progress_source": "model",
         }
     if kind == "reasoning":
@@ -795,7 +792,10 @@ async def _apply_react_event(
             log,
             emitter,
             evt.get("delta", ""),
-            progress_kind=evt.get("progress_kind"),
+            # A commentary event is already a complete public checkpoint.
+            # Its event boundary — not keyword classification of its prose —
+            # starts the next timeline segment.
+            start_new_segment=True,
         )
         return
     if kind == "thinking_delta":

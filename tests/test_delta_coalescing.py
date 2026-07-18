@@ -151,7 +151,6 @@ async def test_public_timeline_coordinates_interleave_commentary_tool_and_answer
         log,
         emitter,
         "I found the relevant implementation.",
-        progress_kind="investigate",
     )
     await state.start_tool(
         turn,

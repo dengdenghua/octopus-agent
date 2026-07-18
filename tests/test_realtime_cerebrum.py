@@ -307,11 +307,9 @@ def test_commentary_delta_maps_to_non_terminal_agent_message(gateway: Any) -> No
         "最终答案",
     ]
     assert messages[0]["messageKind"] == "commentary"
-    assert messages[0]["progressKind"] == "verify"
+    assert messages[0].get("progressKind") is None
     tool_item = next(item for item in turn["items"] if item["type"] == "commandExecution")
-    coordinated = [
-        item for item in turn["items"] if item.get("timelineSequence") is not None
-    ]
+    coordinated = [item for item in turn["items"] if item.get("timelineSequence") is not None]
     assert [item["timelineSequence"] for item in coordinated] == list(
         range(1, len(coordinated) + 1)
     )
@@ -321,7 +319,7 @@ def test_commentary_delta_maps_to_non_terminal_agent_message(gateway: Any) -> No
     assert all(item["status"] == "completed" for item in messages)
 
 
-def test_commentary_phase_change_starts_a_new_timeline_item(gateway: Any) -> None:
+def test_commentary_event_boundary_starts_a_new_timeline_item(gateway: Any) -> None:
     client, _ = gateway
     _set_script(
         [
@@ -353,11 +351,12 @@ def test_commentary_phase_change_starts_a_new_timeline_item(gateway: Any) -> Non
     messages = [
         item for item in out["response"].result["turn"]["items"] if item["type"] == "agentMessage"
     ]
-    assert [(item["text"], item.get("progressKind")) for item in messages] == [
-        ("我先核对关键文件。", "orient"),
-        ("证据已经够了，开始收束。", "synthesize"),
-        ("最终答案", None),
+    assert [item["text"] for item in messages] == [
+        "我先核对关键文件。",
+        "证据已经够了，开始收束。",
+        "最终答案",
     ]
+    assert all(item.get("progressKind") is None for item in messages)
     assert messages[0]["progressSequence"] == 1
     assert messages[0]["phaseId"].endswith(":progress:1")
     assert messages[0]["parentItemId"] is None
@@ -2799,11 +2798,33 @@ def test_resume_after_turn_rebuilds_from_disk(gateway: Any) -> None:
             msg = decode_message(ws.receive_text())
             if isinstance(msg, JsonRpcResponse) and msg.id == 7:
                 break
-    assert msg.result is not None
-    turns = msg.result["turns"]
+        assert msg.result is not None
+        resume_msg = msg
+        ws.send_text(
+            encode_message(
+                JsonRpcRequest(
+                    id=8,
+                    method="thread/resume",
+                    params={
+                        "threadId": "th-resume",
+                        "afterSequence": resume_msg.result["nextEventSequence"],
+                    },
+                )
+            )
+        )
+        while True:
+            msg = decode_message(ws.receive_text())
+            if isinstance(msg, JsonRpcResponse) and msg.id == 8:
+                break
+        incremental_msg = msg
+    turns = resume_msg.result["turns"]
     assert len(turns) == 1
     agent = [it for it in turns[0]["items"] if it["type"] == "agentMessage"]
     assert agent and agent[0]["text"] == "persist me"
+    assert resume_msg.result["incremental"] is False
+    assert incremental_msg.result["incremental"] is True
+    assert incremental_msg.result["turns"] == []
+    assert incremental_msg.result["nextEventSequence"] == resume_msg.result["nextEventSequence"]
 
 
 def test_thread_list_via_cerebrum(gateway: Any) -> None:

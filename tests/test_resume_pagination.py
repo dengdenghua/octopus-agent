@@ -7,7 +7,7 @@ newest window is returned; ``beforeTurnId`` pages backwards.
 
 from pathlib import Path
 
-from runtime.memory.threads.event_log import EventLog
+from runtime.memory.threads.event_log import EventLog, LoggedEvent
 from runtime.protocol import Turn, TurnParams, TurnStatus
 
 
@@ -70,6 +70,25 @@ class TestPaginateTurns:
             assert has_more is False
 
 
+def test_event_cursor_ignores_a_partial_trailing_write(tmp_path: Path) -> None:
+    log = EventLog(tmp_path / "th-1.jsonl")
+    log.thread_started("th-1")
+    partial = LoggedEvent(event="thread_started", threadId="th-1").model_dump_json(by_alias=True)
+    with log.path.open("a", encoding="utf-8") as stream:
+        stream.write(partial)
+        stream.flush()
+
+    assert log.latest_sequence() == 1
+    assert len(list(log.iter_events_with_sequence())) == 1
+
+    with log.path.open("a", encoding="utf-8") as stream:
+        stream.write("\n")
+        stream.flush()
+
+    assert log.latest_sequence() == 2
+    assert [sequence for sequence, _event in log.iter_events_with_sequence()] == [1, 2]
+
+
 class TestEchoResumePagination:
     def _log_with_turns(self, tmp_path: Path, n: int) -> EventLog:
         log = EventLog(tmp_path / "th-1.jsonl")
@@ -95,6 +114,8 @@ class TestEchoResumePagination:
         assert len(out["turns"]) == 5
         assert out["totalTurns"] == 5
         assert out["hasMore"] is False
+        assert out["incremental"] is False
+        assert out["nextEventSequence"] == 11
 
     def test_resume_with_limit_and_cursor(self, tmp_path: Path) -> None:
         import asyncio
@@ -127,3 +148,73 @@ class TestEchoResumePagination:
         )
         assert [t["id"] for t in older["turns"]] == ["turn-3", "turn-4"]
         assert older["hasMore"] is True
+
+    def test_resume_after_event_cursor_returns_only_changed_turns(self, tmp_path: Path) -> None:
+        import asyncio
+
+        from runtime.sensing.gateway.realtime_echo import EchoRuntime
+
+        log = self._log_with_turns(tmp_path, 2)
+        rt = EchoRuntime(logs_root=tmp_path)
+
+        class _Emitter:
+            actor_id = None
+
+        full = asyncio.run(
+            rt.handle_request("thread/resume", {"threadId": "th-1", "limit": 50}, _Emitter())
+        )
+        cursor = full["nextEventSequence"]
+        assert cursor == 5
+
+        changed = _turn(2)
+        log.turn_started("th-1", changed)
+        log.turn_completed("th-1", changed.id, TurnStatus.COMPLETED)
+
+        delta = asyncio.run(
+            rt.handle_request(
+                "thread/resume",
+                {"threadId": "th-1", "limit": 50, "afterSequence": cursor},
+                _Emitter(),
+            )
+        )
+        assert delta["incremental"] is True
+        assert [turn["id"] for turn in delta["turns"]] == ["turn-2"]
+        assert delta["nextEventSequence"] == 7
+        assert delta["totalTurns"] == 3
+
+        unchanged = asyncio.run(
+            rt.handle_request(
+                "thread/resume",
+                {
+                    "threadId": "th-1",
+                    "limit": 50,
+                    "afterSequence": delta["nextEventSequence"],
+                },
+                _Emitter(),
+            )
+        )
+        assert unchanged["incremental"] is True
+        assert unchanged["turns"] == []
+        assert unchanged["nextEventSequence"] == 7
+
+    def test_invalid_future_cursor_falls_back_to_full_snapshot(self, tmp_path: Path) -> None:
+        import asyncio
+
+        from runtime.sensing.gateway.realtime_echo import EchoRuntime
+
+        self._log_with_turns(tmp_path, 2)
+        rt = EchoRuntime(logs_root=tmp_path)
+
+        class _Emitter:
+            actor_id = None
+
+        out = asyncio.run(
+            rt.handle_request(
+                "thread/resume",
+                {"threadId": "th-1", "limit": 50, "afterSequence": 999},
+                _Emitter(),
+            )
+        )
+        assert out["incremental"] is False
+        assert [turn["id"] for turn in out["turns"]] == ["turn-0", "turn-1"]
+        assert out["nextEventSequence"] == 5

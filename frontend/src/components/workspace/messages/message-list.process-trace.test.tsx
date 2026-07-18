@@ -645,7 +645,9 @@ describe("MessageList reasoning privacy", () => {
 
     renderMessageList({ thread, locale: "zh-CN" });
 
-    expect(screen.getByText(/\u601d\u8003\u8fc7\u7a0b/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/\u601d\u8003\u8fc7\u7a0b/),
+    ).not.toBeInTheDocument();
     expect(screen.getByText(publicSummary)).toBeInTheDocument();
     expect(screen.queryByText(/SOUL\.md/)).not.toBeInTheDocument();
 

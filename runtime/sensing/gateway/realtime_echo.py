@@ -253,6 +253,33 @@ class EchoRuntime:
             from runtime.sensing.gateway.realtime_gateway import _RpcError
 
             raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
+        raw_after_sequence = params.get("afterSequence")
+        before_turn_id = (
+            params.get("beforeTurnId") if isinstance(params.get("beforeTurnId"), str) else None
+        )
+        if (
+            isinstance(raw_after_sequence, int)
+            and not isinstance(raw_after_sequence, bool)
+            and raw_after_sequence >= 0
+            and before_turn_id is None
+        ):
+            changed_ids, next_sequence, requires_reset = log.cursor_delta(raw_after_sequence)
+            turns = log.replay()
+            if not requires_reset:
+                changed = set(changed_ids)
+                return {
+                    "thread": {"id": thread_id, "path": str(log.path)},
+                    "turns": [
+                        turn.model_dump(by_alias=True, mode="json")
+                        for turn in turns
+                        if turn.id in changed
+                    ],
+                    "totalTurns": len(turns),
+                    "hasMore": False,
+                    "incremental": True,
+                    "nextEventSequence": next_sequence,
+                }
+        next_sequence = log.latest_sequence()
         turns = log.replay()
         raw_limit = params.get("limit")
         window, has_more = EventLog.paginate_turns(
@@ -262,15 +289,15 @@ class EchoRuntime:
                 if isinstance(raw_limit, int) and not isinstance(raw_limit, bool)
                 else None
             ),
-            before_turn_id=(
-                params.get("beforeTurnId") if isinstance(params.get("beforeTurnId"), str) else None
-            ),
+            before_turn_id=before_turn_id,
         )
         return {
             "thread": {"id": thread_id, "path": str(log.path)},
             "turns": [t.model_dump(by_alias=True, mode="json") for t in window],
             "totalTurns": len(turns),
             "hasMore": has_more,
+            "incremental": False,
+            "nextEventSequence": next_sequence,
         }
 
     async def _handle_list(self, params: dict[str, Any], emitter: EventEmitter) -> dict[str, Any]:
