@@ -51,6 +51,9 @@ export interface ToolCall {
   args: Record<string, unknown>;
   id?: string;
   type?: "tool_call";
+  timelineSequence?: number | null;
+  parentItemId?: string | null;
+  phaseId?: string | null;
 }
 
 export interface UsageMetadata {

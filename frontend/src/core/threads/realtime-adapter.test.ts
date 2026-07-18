@@ -218,6 +218,7 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
       progressKind: "orient",
       phaseId: "turn-1:progress:1",
       progressSequence: 1,
+      timelineSequence: 1,
     };
     const secondCommentary: AgentMessageItem = {
       ...agentMsg("本地分析进一步确认工具结果会先完成再进入下一轮。", "p2"),
@@ -226,6 +227,7 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
       phaseId: "turn-1:progress:2",
       parentItemId: "c1",
       progressSequence: 2,
+      timelineSequence: 3,
     };
     const state = conversationToAgentThreadState(
       makeConv([
@@ -233,7 +235,11 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
           userMsg("analyze"),
           reasoning("inspect bridge", "r1"),
           firstCommentary,
-          cmd("read_file", "c1"),
+          cmd("read_file", "c1", {
+            timelineSequence: 2,
+            parentItemId: "p1",
+            phaseId: "turn-1:progress:1",
+          }),
           reasoning("compare reducer", "r2"),
           secondCommentary,
           cmd("typecheck", "c2"),
@@ -256,9 +262,16 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     expect(second.additional_kwargs?.progress_kind).toBe("verify");
     expect(first.additional_kwargs?.phase_id).toBe("turn-1:progress:1");
     expect(first.additional_kwargs?.progress_sequence).toBe(1);
+    expect(first.additional_kwargs?.timeline_sequence).toBe(1);
     expect(second.additional_kwargs?.phase_id).toBe("turn-1:progress:2");
     expect(second.additional_kwargs?.parent_item_id).toBe("c1");
     expect(second.additional_kwargs?.progress_sequence).toBe(2);
+    expect(second.additional_kwargs?.timeline_sequence).toBe(3);
+    expect(second.tool_calls?.[0]).toMatchObject({
+      timelineSequence: 2,
+      parentItemId: "p1",
+      phaseId: "turn-1:progress:1",
+    });
     expect(second.tool_calls?.[0]?.id).toBe("c1");
     expect((state.messages[3] as AIMessage).tool_calls?.[0]?.id).toBe("c2");
   });

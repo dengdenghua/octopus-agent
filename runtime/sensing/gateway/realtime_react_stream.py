@@ -781,23 +781,15 @@ async def _apply_react_event(
     runtime._record_react_trace_event(turn, evt)
     kind = evt.get("type")
     if kind == "text_delta":
-        # Transport-level narrative invariant: once a turn has shown public
-        # progress, the polished answer must not appear as an abrupt jump from
-        # the last investigation/execution checkpoint. Some provider paths
-        # (notably pre-grounded, non-tool final responses) bypass the loop's
-        # synthesis emitter, so close that semantic gap here before the first
-        # answer token reaches the client.
-        if state.public_narrative_started and not state.synthesis_seen:
-            await state.append_commentary(
-                turn,
-                log,
-                emitter,
-                "现有信息已经够了；我现在把关键点收束成最终回答。",
-                progress_kind="synthesize",
-            )
         await state.append_agent_message(turn, log, emitter, evt.get("delta", ""))
         return
     if kind == "commentary_delta":
+        # Runtime-authored fallback prose is intentionally not public. It made
+        # every provider sound identical (and often repeated a fixed synthesis
+        # sentence immediately before the answer). Only model-authored or
+        # legacy unlabelled commentary belongs in the conversational timeline.
+        if evt.get("progress_source") == "runtime":
+            return
         await state.append_commentary(
             turn,
             log,

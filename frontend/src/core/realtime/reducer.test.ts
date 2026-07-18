@@ -323,6 +323,116 @@ describe("reducer", () => {
     if (item.type === "agentMessage") expect(item.text).toBe("final");
   });
 
+  it("orders late lifecycle snapshots by server timeline sequence", () => {
+    const turn = blankTurn("trn-1", "th");
+    const state = apply(
+      emptyConversation("th"),
+      { method: "turn/started", params: { threadId: "th", turn } },
+      {
+        method: "item/started",
+        params: {
+          threadId: "th",
+          turnId: turn.id,
+          item: {
+            id: "answer",
+            type: "agentMessage",
+            status: "inProgress",
+            createdAt: T0_ISO,
+            text: "",
+            timelineSequence: 3,
+            parentItemId: "tool",
+          },
+        },
+      },
+      {
+        method: "item/started",
+        params: {
+          threadId: "th",
+          turnId: turn.id,
+          item: {
+            id: "commentary",
+            type: "agentMessage",
+            status: "inProgress",
+            createdAt: T0_ISO,
+            text: "Checking the implementation.",
+            messageKind: "commentary",
+            timelineSequence: 1,
+          },
+        },
+      },
+      {
+        method: "item/started",
+        params: {
+          threadId: "th",
+          turnId: turn.id,
+          item: {
+            id: "tool",
+            type: "commandExecution",
+            status: "inProgress",
+            createdAt: T0_ISO,
+            command: "read_file",
+            cwd: null,
+            aggregatedOutput: "",
+            exitCode: null,
+            processId: null,
+            networkAccess: false,
+            timelineSequence: 2,
+            parentItemId: "commentary",
+          },
+        },
+      },
+    );
+
+    expect(state.turns[0].items.map((item) => item.id)).toEqual([
+      "commentary",
+      "tool",
+      "answer",
+    ]);
+  });
+
+  it("keeps legacy user slots fixed while ordering coordinated replay items", () => {
+    const user = {
+      id: "user",
+      type: "userMessage" as const,
+      status: "completed" as const,
+      createdAt: T0_ISO,
+      text: "go",
+    };
+    const answer = {
+      id: "answer",
+      type: "agentMessage" as const,
+      status: "completed" as const,
+      createdAt: T0_ISO,
+      text: "done",
+      timelineSequence: 2,
+    };
+    const commentary = {
+      id: "commentary",
+      type: "agentMessage" as const,
+      status: "completed" as const,
+      createdAt: T0_ISO,
+      text: "working",
+      messageKind: "commentary" as const,
+      timelineSequence: 1,
+    };
+    const state = apply(emptyConversation("th"), {
+      method: "turn/started",
+      params: {
+        threadId: "th",
+        turn: {
+          ...blankTurn("trn-1", "th"),
+          items: [user, answer, commentary],
+        },
+      },
+    });
+
+    expect(state.turns[0].items.map((item) => item.id)).toEqual([
+      "user",
+      "commentary",
+      "answer",
+    ]);
+  });
+
   it("reasoning delta accumulates onto reasoning content", () => {
     const reasoning = {
       id: "itm-r",

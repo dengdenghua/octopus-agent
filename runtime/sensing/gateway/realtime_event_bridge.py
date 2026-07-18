@@ -132,10 +132,10 @@ class _ReactBridgeState:
     ) -> None:
         self.agent_message: AgentMessageItem | None = None
         self.commentary_message: AgentMessageItem | None = None
-        self.public_narrative_started = False
-        self.synthesis_seen = False
         self.progress_sequence = 0
+        self.timeline_sequence = 0
         self.last_timeline_item_id: str | None = None
+        self.current_phase_id: str | None = None
         self.reasoning: ReasoningItem | None = None
         self.tools: dict[str, CommandExecutionItem] = {}
         self.phases: list[AgentPhaseSnapshot] = []
@@ -171,6 +171,23 @@ class _ReactBridgeState:
             "turnId": turn.id,
             "item": item.model_dump(by_alias=True, mode="json"),
         }
+
+    def _bind_timeline(self, item: Any, *, phase_id: str | None = None) -> None:
+        """Assign stable causal coordinates before an item is published.
+
+        Transport arrival order is not durable: reconnect replay, browser
+        batching and background completions can all deliver snapshots on a
+        different schedule. A monotonic per-turn coordinate plus an explicit
+        parent lets every client reconstruct the same conversational rhythm.
+        """
+        if getattr(item, "timeline_sequence", None) is None:
+            self.timeline_sequence += 1
+            item.timeline_sequence = self.timeline_sequence
+        if getattr(item, "parent_item_id", None) is None:
+            item.parent_item_id = self.last_timeline_item_id
+        if getattr(item, "phase_id", None) is None:
+            item.phase_id = phase_id or self.current_phase_id
+        self.last_timeline_item_id = item.id
 
     async def _emit_started(
         self,
@@ -209,13 +226,10 @@ class _ReactBridgeState:
             return
         first = self.agent_message is None
         if first:
-            self.agent_message = AgentMessageItem(
-                text="",
-                parent_item_id=self.last_timeline_item_id,
-            )
+            self.agent_message = AgentMessageItem(text="")
+            self._bind_timeline(self.agent_message)
             turn.items.append(self.agent_message)
             await self._emit_started(turn, log, emitter, self.agent_message)
-            self.last_timeline_item_id = self.agent_message.id
         self.agent_message.text = _append_capped_stream_content(
             self.agent_message.text,
             delta,
@@ -241,6 +255,7 @@ class _ReactBridgeState:
         first = self.reasoning is None
         if first:
             self.reasoning = ReasoningItem(content="")
+            self._bind_timeline(self.reasoning)
             turn.items.append(self.reasoning)
             await self._emit_started(turn, log, emitter, self.reasoning)
         self.reasoning.content = _append_capped_stream_content(
@@ -267,9 +282,6 @@ class _ReactBridgeState:
     ) -> None:
         if not delta:
             return
-        self.public_narrative_started = True
-        if progress_kind == "synthesize":
-            self.synthesis_seen = True
         # A commentary item represents one public semantic phase. Reusing the
         # same item across ``orient → synthesize`` keeps the first progressKind
         # forever and makes the final checkpoint visually disappear into the
@@ -287,17 +299,18 @@ class _ReactBridgeState:
         first = self.commentary_message is None
         if first:
             self.progress_sequence += 1
+            phase_id = f"{turn.id}:progress:{self.progress_sequence}"
+            self.current_phase_id = phase_id
             self.commentary_message = AgentMessageItem(
                 text="",
                 message_kind="commentary",
                 progress_kind=progress_kind,
-                phase_id=f"{turn.id}:progress:{self.progress_sequence}",
-                parent_item_id=self.last_timeline_item_id,
+                phase_id=phase_id,
                 progress_sequence=self.progress_sequence,
             )
+            self._bind_timeline(self.commentary_message, phase_id=phase_id)
             turn.items.append(self.commentary_message)
             await self._emit_started(turn, log, emitter, self.commentary_message)
-            self.last_timeline_item_id = self.commentary_message.id
         self.commentary_message.text = _append_capped_stream_content(
             self.commentary_message.text,
             delta,
@@ -425,6 +438,7 @@ class _ReactBridgeState:
             input_preview=evt.get("input_preview"),
             **({"id": call_id} if call_id else {}),
         )
+        self._bind_timeline(item)
         self.tools[call_id] = item
         turn.items.append(item)
         await self._emit_started(turn, log, emitter, item)
@@ -610,8 +624,6 @@ class _ReactBridgeState:
             # detail, so overwriting would regress the live view.
             item.aggregated_output = _append_capped_output("", evt["output_preview"])
         await self._emit_completed(turn, log, emitter, item)
-        self.last_timeline_item_id = item.id
-
         # Apply-patch first-class item: when a file-editing tool ran
         # successfully and surfaced a unified diff, promote it to a
         # dedicated FileChangeItem so the UI can render hunks with
@@ -622,6 +634,7 @@ class _ReactBridgeState:
             related_files: list[str] = []
             file_item = _file_change_item_from_tool_evt(evt)
             if file_item is not None:
+                self._bind_timeline(file_item)
                 related_change_item_ids.append(file_item.id)
                 related_files = [change.path for change in file_item.changes]
                 turn.items.append(file_item)
@@ -629,6 +642,9 @@ class _ReactBridgeState:
                     id=file_item.id,
                     changes=[],
                     grant_root=file_item.grant_root,
+                    timeline_sequence=file_item.timeline_sequence,
+                    parent_item_id=file_item.parent_item_id,
+                    phase_id=file_item.phase_id,
                 )
                 await self._emit_started(turn, log, emitter, started_file_item)
                 file_focus = _workspace_focus_for_file_change(file_item)
@@ -657,6 +673,7 @@ class _ReactBridgeState:
                 related_files=related_files,
             )
             if verification_item is not None:
+                self._bind_timeline(verification_item)
                 turn.items.append(verification_item)
                 await self._emit_started(turn, log, emitter, verification_item)
                 await self._emit_completed(turn, log, emitter, verification_item)
@@ -668,6 +685,7 @@ class _ReactBridgeState:
                 related_files=[],
             )
             if verification_item is not None:
+                self._bind_timeline(verification_item)
                 turn.items.append(verification_item)
                 await self._emit_started(turn, log, emitter, verification_item)
                 await self._emit_completed(turn, log, emitter, verification_item)

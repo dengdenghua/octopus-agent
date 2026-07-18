@@ -28,6 +28,9 @@ class _StubLog:
     def item_completed(self, *args, **kwargs) -> None:  # noqa: ARG002
         pass
 
+    def turn_updated(self, *args, **kwargs) -> None:  # noqa: ARG002
+        pass
+
 
 class _StubEmitter:
     def __init__(self) -> None:
@@ -134,3 +137,47 @@ async def test_deadline_timer_flushes_a_stalled_tail() -> None:
     await asyncio.sleep(state._DELTA_FLUSH_INTERVAL_S * 3)
 
     assert "".join(emitter.deltas()) == "head tail"
+
+
+@pytest.mark.asyncio
+async def test_public_timeline_coordinates_interleave_commentary_tool_and_answer() -> None:
+    state = _ReactBridgeState()
+    turn = _make_turn()
+    emitter = _StubEmitter()
+    log = _StubLog()
+
+    await state.append_commentary(
+        turn,
+        log,
+        emitter,
+        "I found the relevant implementation.",
+        progress_kind="investigate",
+    )
+    await state.start_tool(
+        turn,
+        log,
+        emitter,
+        {"tool_call_id": "read-1", "tool_name": "read_file"},
+    )
+    await state.complete_tool(
+        turn,
+        log,
+        emitter,
+        {
+            "tool_call_id": "read-1",
+            "tool_name": "read_file",
+            "status": "success",
+            "output_preview": "source loaded",
+        },
+    )
+    await state.append_agent_message(turn, log, emitter, "The two sides now agree.")
+    await state.flush(turn, log, emitter)
+
+    commentary, tool, answer = turn.items
+    assert [item.timeline_sequence for item in turn.items] == [1, 2, 3]
+    assert commentary.parent_item_id is None
+    assert tool.parent_item_id == commentary.id
+    assert answer.parent_item_id == tool.id
+    assert commentary.phase_id
+    assert tool.phase_id == commentary.phase_id
+    assert answer.phase_id == commentary.phase_id

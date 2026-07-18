@@ -65,9 +65,8 @@ const REPEATED_NULL_PLACEHOLDER_RE = /^\s*(?:null\s*)+$/i;
  * shape that the legacy thread hooks (``useThreadStream``) expose.
  *
  * Mapping:
- *   - Each turn's items are walked in declared order (the realtime
- *     reducer preserves ``item/started`` order, which matches what
- *     the previous ``messages-tuple`` stream used to produce).
+ *   - Each turn's items are walked in the server-authored causal order.
+ *     Legacy items without timeline coordinates keep their stored positions.
  *   - User messages -> ``HumanMessage`` records.
  *   - Reasoning + agentMessage items in the SAME turn collapse into
  *     ONE ``AIMessage``: reasoning attaches to
@@ -349,6 +348,7 @@ function turnToMessages(turn: Turn): Message[] {
             exit_code: ce.exitCode,
           },
           type: "tool_call",
+          ...toolCallTimelineCoordinates(ce),
         });
         break;
       }
@@ -359,6 +359,7 @@ function turnToMessages(turn: Turn): Message[] {
           name: `${mcp.server}.${mcp.tool}`,
           args: mcp.arguments,
           type: "tool_call",
+          ...toolCallTimelineCoordinates(mcp),
         });
         break;
       }
@@ -378,6 +379,7 @@ function turnToMessages(turn: Turn): Message[] {
             files_touched: subagent.filesTouched,
           },
           type: "tool_call",
+          ...toolCallTimelineCoordinates(subagent),
         });
         break;
       }
@@ -429,6 +431,9 @@ function turnToMessages(turn: Turn): Message[] {
         if (typeof am.progressSequence === "number") {
           kwargs.progress_sequence = am.progressSequence;
         }
+        if (typeof am.timelineSequence === "number") {
+          kwargs.timeline_sequence = am.timelineSequence;
+        }
         if (am.messageKind === "commentary") {
           kwargs.public_progress = true;
           kwargs.message_kind = "commentary";
@@ -462,6 +467,7 @@ function turnToMessages(turn: Turn): Message[] {
             grant_root: fc.grantRoot,
           },
           type: "tool_call",
+          ...toolCallTimelineCoordinates(fc),
         });
         break;
       }
@@ -482,6 +488,7 @@ function turnToMessages(turn: Turn): Message[] {
             params: approval.params,
           },
           type: "tool_call",
+          ...toolCallTimelineCoordinates(approval),
         });
         break;
       }
@@ -499,6 +506,7 @@ function turnToMessages(turn: Turn): Message[] {
             related_change_item_ids: verification.relatedChangeItemIds,
           },
           type: "tool_call",
+          ...toolCallTimelineCoordinates(verification),
         });
         break;
       }
@@ -516,6 +524,7 @@ function turnToMessages(turn: Turn): Message[] {
             validation_status: artifact.validationStatus,
           },
           type: "tool_call",
+          ...toolCallTimelineCoordinates(artifact),
         });
         break;
       }
@@ -537,6 +546,16 @@ function turnToMessages(turn: Turn): Message[] {
   flushPendingAsTrailingAi();
   attachGroundingToNarrativeAnchor(out, turn.grounding);
   return out;
+}
+
+function toolCallTimelineCoordinates(
+  item: Item,
+): Pick<ToolCall, "timelineSequence" | "parentItemId" | "phaseId"> {
+  return {
+    timelineSequence: item.timelineSequence ?? null,
+    parentItemId: item.parentItemId ?? null,
+    phaseId: item.phaseId ?? null,
+  };
 }
 
 // Fold the turn's codebase grounding (project docs/chunks it was grounded on)

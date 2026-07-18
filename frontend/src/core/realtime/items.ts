@@ -33,6 +33,10 @@ export interface ItemBase {
   type: ItemType;
   status: ItemStatus;
   createdAt: string;
+  /** Stable causal position inside one turn. Older persisted items may omit it. */
+  timelineSequence?: number | null;
+  parentItemId?: string | null;
+  phaseId?: string | null;
 }
 
 export interface UserMessageItem extends ItemBase {
@@ -59,8 +63,6 @@ export interface AgentMessageItem extends ItemBase {
     | "pivot"
     | "synthesize"
     | "recover";
-  phaseId?: string;
-  parentItemId?: string;
   progressSequence?: number;
   /** Per-message speaker identity (group/team rooms). When set, the bubble
    *  renders this member's avatar + name instead of the turn leader's. */
@@ -200,7 +202,6 @@ export interface SubagentItem extends ItemBase {
   name: string | null;
   codename: string | null;
   avatar: string | null;
-  parentItemId: string | null;
   summary: string | null;
   error: string | null;
   iterationCount: number | null;

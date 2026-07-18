@@ -235,7 +235,10 @@ export function reduce(
     case "thread/status/changed":
       return { next: state, changedTurnIds: [], changedItemIds: [] };
     case "turn/started": {
-      const incoming = evt.params.turn;
+      const incoming = {
+        ...evt.params.turn,
+        items: orderTimelineItems(evt.params.turn.items),
+      };
       const idx = state.turns.findIndex((t) => t.id === incoming.id);
       const turns =
         idx === -1
@@ -495,7 +498,7 @@ function mergeCompletedTurn(existing: Turn, incoming: Turn): Turn {
   const terminalStatus = itemTerminalStatus(incoming.status);
   const existingItems = existing.items.map((item) => {
     const replacement = incomingById.get(item.id);
-    if (replacement) return replacement;
+    if (replacement) return preserveTimelineCoordinates(item, replacement);
     if (item.status === "inProgress") {
       return { ...item, status: terminalStatus } as Item;
     }
@@ -503,7 +506,11 @@ function mergeCompletedTurn(existing: Turn, incoming: Turn): Turn {
   });
   const existingIds = new Set(existing.items.map((item) => item.id));
   const appended = incomingItems.filter((item) => !existingIds.has(item.id));
-  return { ...existing, ...incoming, items: [...existingItems, ...appended] };
+  return {
+    ...existing,
+    ...incoming,
+    items: orderTimelineItems([...existingItems, ...appended]),
+  };
 }
 
 function itemTerminalStatus(turnStatus: Turn["status"]): Item["status"] {
@@ -526,13 +533,16 @@ function upsertItem(
   const idx = turn.items.findIndex((it) => it.id === item.id);
   let nextItems: Item[];
   if (idx === -1) {
-    nextItems = [...turn.items, item];
+    nextItems = orderTimelineItems([...turn.items, item]);
   } else {
     // ``completed`` snapshots replace; ``started`` after ``completed`` is
     // a no-op (out-of-order delivery from a buffered queue).
     const existing = turn.items[idx];
-    if (phase === "completed" || existing?.status === "inProgress") {
-      nextItems = replaceAt(turn.items, idx, item);
+    if (!existing) return unchanged(state);
+    if (phase === "completed" || existing.status === "inProgress") {
+      nextItems = orderTimelineItems(
+        replaceAt(turn.items, idx, preserveTimelineCoordinates(existing, item)),
+      );
     } else {
       return unchanged(state);
     }
@@ -543,6 +553,39 @@ function upsertItem(
     changedTurnIds: [turnId],
     changedItemIds: [item.id],
   };
+}
+
+function preserveTimelineCoordinates(existing: Item, incoming: Item): Item {
+  return {
+    ...incoming,
+    timelineSequence:
+      incoming.timelineSequence ?? existing.timelineSequence ?? null,
+    parentItemId: incoming.parentItemId ?? existing.parentItemId ?? null,
+    phaseId: incoming.phaseId ?? existing.phaseId ?? null,
+  } as Item;
+}
+
+/**
+ * Reorder only the slots that carry server-authored timeline coordinates.
+ * Legacy/user items without coordinates keep their exact positions, so a
+ * mixed old/new replay never moves the user's prompt behind assistant work.
+ */
+function orderTimelineItems(items: readonly Item[]): Item[] {
+  const sequenced = items
+    .filter((item) => Number.isFinite(item.timelineSequence))
+    .map((item, stableIndex) => ({ item, stableIndex }))
+    .sort((left, right) => {
+      const delta =
+        Number(left.item.timelineSequence) -
+        Number(right.item.timelineSequence);
+      return delta || left.stableIndex - right.stableIndex;
+    })
+    .map(({ item }) => item);
+  if (sequenced.length < 2) return items.slice();
+  let cursor = 0;
+  return items.map((item) =>
+    Number.isFinite(item.timelineSequence) ? sequenced[cursor++]! : item,
+  );
 }
 
 type DeltaKind = "agentMessage" | "reasoning" | "plan" | "commandOutput";

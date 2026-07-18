@@ -84,6 +84,13 @@ class _ItemBase(BaseModel):
     type: ItemType
     status: ItemStatus = ItemStatus.IN_PROGRESS
     created_at: datetime = Field(default_factory=now_utc, alias="createdAt")
+    # Stable coordinates in the public turn timeline. These fields live on
+    # every item instead of only commentary so replay/reconnect clients can
+    # restore causal order without inferring it from arrival timing or text.
+    # They remain optional for backward compatibility with existing logs.
+    timeline_sequence: int | None = Field(default=None, alias="timelineSequence")
+    parent_item_id: str | None = Field(default=None, alias="parentItemId")
+    phase_id: str | None = Field(default=None, alias="phaseId")
 
 
 class UserMessageItem(_ItemBase):
@@ -117,21 +124,20 @@ class AgentMessageItem(_ItemBase):
     # Public progress carries a small semantic phase so clients can render a
     # human task narrative (orient → investigate → implement → verify) rather
     # than treating every checkpoint as identical assistant prose.
-    progress_kind: Literal[
-        "orient",
-        "investigate",
-        "implement",
-        "verify",
-        "pivot",
-        "synthesize",
-        "recover",
-    ] | None = Field(default=None, alias="progressKind")
-    # Stable public-timeline coordinates. ``phase_id`` groups the visible
-    # checkpoint, ``parent_item_id`` links it to the preceding evidence/tool
-    # item, and ``progress_sequence`` preserves causal order even if transport
-    # frames are coalesced or replayed later.
-    phase_id: str | None = Field(default=None, alias="phaseId")
-    parent_item_id: str | None = Field(default=None, alias="parentItemId")
+    progress_kind: (
+        Literal[
+            "orient",
+            "investigate",
+            "implement",
+            "verify",
+            "pivot",
+            "synthesize",
+            "recover",
+        ]
+        | None
+    ) = Field(default=None, alias="progressKind")
+    # ``progress_sequence`` is the legacy commentary-only counter. New clients
+    # should prefer the common ``timeline_sequence`` inherited from _ItemBase.
     progress_sequence: int | None = Field(default=None, alias="progressSequence")
     # Per-message speaker identity. Set in group/team rooms so each bubble
     # renders the ACTUAL author's avatar + name (not the turn leader's). The
@@ -342,7 +348,6 @@ class SubagentItem(_ItemBase):
     name: str | None = None
     codename: str | None = None
     avatar: str | None = None
-    parent_item_id: str | None = Field(default=None, alias="parentItemId")
     summary: str | None = None
     error: str | None = None
     iteration_count: int | None = Field(default=None, alias="iterationCount")

@@ -166,6 +166,7 @@ describe("MessageGroup reasoning grouping", () => {
           phase_id: "turn-1:progress:2",
           parent_item_id: "read-bridge",
           progress_sequence: 2,
+          timeline_sequence: 3,
           reasoning_content: "inspect the reducer",
         },
         tool_calls: [
@@ -173,6 +174,9 @@ describe("MessageGroup reasoning grouping", () => {
             id: "read-bridge",
             name: "read_file",
             args: { path: "realtime_event_bridge.py" },
+            timelineSequence: 2,
+            parentItemId: "progress-1",
+            phaseId: "turn-1:progress:1",
           },
         ],
       },
@@ -199,6 +203,7 @@ describe("MessageGroup reasoning grouping", () => {
       "read-bridge",
     );
     expect(checkpoints[1]).toHaveAttribute("data-progress-sequence", "2");
+    expect(checkpoints[1]).toHaveAttribute("data-timeline-sequence", "3");
     const groundingTrigger = screen.getByRole("button", {
       name: "查阅了 1 处项目资料",
     });
@@ -214,6 +219,9 @@ describe("MessageGroup reasoning grouping", () => {
     expect(
       screen.getByTestId("process-timeline-event-execution"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("process-timeline-event-execution"),
+    ).toHaveAttribute("data-timeline-sequence", "2");
     expect(
       screen.getByTestId("process-timeline-event-execution"),
     ).not.toHaveTextContent(/^执行(?:\s|·)/);
@@ -240,9 +248,7 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    const thinkingEvent = screen.getByTestId(
-      "process-timeline-event-thinking",
-    );
+    const thinkingEvent = screen.getByTestId("process-timeline-event-thinking");
     expect(thinkingEvent).toBeInTheDocument();
     expect(thinkingEvent).not.toHaveTextContent(/^思考过程(?:\s|·)/);
     const replayToggle = screen.getByTitle("过程回放 1 步");

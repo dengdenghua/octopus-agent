@@ -270,6 +270,7 @@ def test_commentary_delta_maps_to_non_terminal_agent_message(gateway: Any) -> No
                 "type": "commentary_delta",
                 "delta": "已确认第一组数据一致。",
                 "progress_kind": "verify",
+                "progress_source": "model",
             },
             {
                 "type": "tool_start",
@@ -303,15 +304,20 @@ def test_commentary_delta_maps_to_non_terminal_agent_message(gateway: Any) -> No
     messages = [item for item in turn["items"] if item["type"] == "agentMessage"]
     assert [item["text"] for item in messages] == [
         "已确认第一组数据一致。",
-        "现有信息已经够了；我现在把关键点收束成最终回答。",
         "最终答案",
     ]
     assert messages[0]["messageKind"] == "commentary"
     assert messages[0]["progressKind"] == "verify"
-    assert messages[1]["progressKind"] == "synthesize"
     tool_item = next(item for item in turn["items"] if item["type"] == "commandExecution")
+    coordinated = [
+        item for item in turn["items"] if item.get("timelineSequence") is not None
+    ]
+    assert [item["timelineSequence"] for item in coordinated] == list(
+        range(1, len(coordinated) + 1)
+    )
+    assert tool_item["parentItemId"] == messages[0]["id"]
     assert messages[1]["parentItemId"] == tool_item["id"]
-    assert messages[2]["messageKind"] == "answer"
+    assert messages[1]["messageKind"] == "answer"
     assert all(item["status"] == "completed" for item in messages)
 
 
@@ -345,8 +351,7 @@ def test_commentary_phase_change_starts_a_new_timeline_item(gateway: Any) -> Non
         )
 
     messages = [
-        item for item in out["response"].result["turn"]["items"]
-        if item["type"] == "agentMessage"
+        item for item in out["response"].result["turn"]["items"] if item["type"] == "agentMessage"
     ]
     assert [(item["text"], item.get("progressKind")) for item in messages] == [
         ("我先核对关键文件。", "orient"),
@@ -362,14 +367,15 @@ def test_commentary_phase_change_starts_a_new_timeline_item(gateway: Any) -> Non
     assert messages[2]["parentItemId"] == messages[1]["id"]
 
 
-def test_final_answer_closes_public_narrative_with_synthesis(gateway: Any) -> None:
+def test_runtime_generated_commentary_is_not_shown_as_model_progress(gateway: Any) -> None:
     client, _ = gateway
     _set_script(
         [
             {
                 "type": "commentary_delta",
-                "delta": "我先核对关键文件。",
-                "progress_kind": "orient",
+                "delta": "现有信息已经够了；我现在把关键点收束成最终回答。",
+                "progress_kind": "synthesize",
+                "progress_source": "runtime",
             },
             {"type": "text_delta", "delta": "最终答案"},
             {"type": "react_completed"},
@@ -380,21 +386,16 @@ def test_final_answer_closes_public_narrative_with_synthesis(gateway: Any) -> No
         out = _drive(
             ws,
             {
-                "threadId": "th-commentary-auto-synthesis",
+                "threadId": "th-runtime-commentary-filter",
                 "input": [{"type": "text", "text": "compare two files"}],
                 "approvalPolicy": "never",
             },
         )
 
     messages = [
-        item for item in out["response"].result["turn"]["items"]
-        if item["type"] == "agentMessage"
+        item for item in out["response"].result["turn"]["items"] if item["type"] == "agentMessage"
     ]
-    assert [(item["text"], item.get("progressKind")) for item in messages] == [
-        ("我先核对关键文件。", "orient"),
-        ("现有信息已经够了；我现在把关键点收束成最终回答。", "synthesize"),
-        ("最终答案", None),
-    ]
+    assert [(item["text"], item.get("progressKind")) for item in messages] == [("最终答案", None)]
 
 
 def test_commentary_without_terminal_event_fails_instead_of_completing(gateway: Any) -> None:

@@ -558,6 +558,7 @@ export function MessageGroup({
           data-phase-id={item.step.phaseId}
           data-parent-item-id={item.step.parentItemId}
           data-progress-sequence={item.step.progressSequence}
+          data-timeline-sequence={item.step.timelineSequence}
         >
           {renderIterationDivider(prevStep, item.step)}
           <div className="min-w-0 flex-1">
@@ -696,6 +697,7 @@ export function MessageGroup({
             data-phase-id={item.step.phaseId}
             data-parent-item-id={item.step.parentItemId}
             data-progress-sequence={item.step.progressSequence}
+            data-timeline-sequence={item.step.timelineSequence}
           >
             <div className="min-w-0 flex-1">
               <MarkdownContent
@@ -740,6 +742,9 @@ export function MessageGroup({
             data-process-event-id={workbenchEventId}
             data-process-event-kind={isThinking ? "thinking" : "execution"}
             data-process-event-status={state}
+            data-phase-id={step.phaseId}
+            data-parent-item-id={step.parentItemId}
+            data-timeline-sequence={step.timelineSequence}
             data-testid={`process-timeline-event-${isThinking ? "thinking" : "execution"}`}
           >
             <span className="relative flex size-1.5 shrink-0 items-center justify-center">
@@ -1899,6 +1904,7 @@ interface GenericCoTStep<T extends string = string> {
   phaseId?: string;
   parentItemId?: string;
   progressSequence?: number;
+  timelineSequence?: number;
 }
 
 interface CoTReasoningStep extends GenericCoTStep<"reasoning"> {
@@ -2281,6 +2287,9 @@ function convertToSteps(
       name: toolCall.name,
       args: toolCall.args,
       iteration,
+      phaseId: toolCall.phaseId ?? undefined,
+      parentItemId: toolCall.parentItemId ?? undefined,
+      timelineSequence: toolCall.timelineSequence ?? undefined,
     };
     const toolCallId = toolCall.id;
     if (toolCallId) {
@@ -2378,6 +2387,10 @@ function convertToSteps(
             progressSequence:
               typeof message.additional_kwargs?.progress_sequence === "number"
                 ? message.additional_kwargs.progress_sequence
+                : undefined,
+            timelineSequence:
+              typeof message.additional_kwargs?.timeline_sequence === "number"
+                ? message.additional_kwargs.timeline_sequence
                 : undefined,
             groundingMessage: Array.isArray(
               message.additional_kwargs?.grounding,

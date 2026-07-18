@@ -510,7 +510,7 @@ def _apply_event(
             return
         item = _decode_item(evt.payload.get("item", {}))
         if item is not None:
-            turn.items.append(item)
+            _upsert_replayed_item(turn, item, completed=False)
         return
     if evt.event == "item_delta":
         turn = by_id.get(evt.turn_id or "")
@@ -532,11 +532,7 @@ def _apply_event(
         new_item = _decode_item(evt.payload.get("item", {}))
         if new_item is None:
             return
-        for idx, itm in enumerate(turn.items):
-            if itm.id == new_item.id:
-                turn.items[idx] = new_item
-                return
-        turn.items.append(new_item)
+        _upsert_replayed_item(turn, new_item, completed=True)
         return
     if evt.event == "turn_compacted":
         # Compaction replaces a contiguous range of prior turns with a
@@ -584,6 +580,47 @@ def _decode_item(raw: dict[str, Any]) -> Item | None:
         return cls.model_validate(raw)
     except (TypeError, ValueError):
         return None
+
+
+def _upsert_replayed_item(turn: Turn, incoming: Item, *, completed: bool) -> None:
+    """Idempotently fold a lifecycle snapshot into replay state.
+
+    A completed snapshot may be observed before its delayed started snapshot
+    after journal repair or event import. Never regress terminal state, and
+    use protocol-authored timeline coordinates rather than append order.
+    """
+    existing_idx = next(
+        (idx for idx, item in enumerate(turn.items) if item.id == incoming.id),
+        None,
+    )
+    if existing_idx is None:
+        turn.items.append(incoming)
+    else:
+        existing = turn.items[existing_idx]
+        if not completed and existing.status != ItemStatus.IN_PROGRESS:
+            return
+        if incoming.timeline_sequence is None:
+            incoming.timeline_sequence = existing.timeline_sequence
+        if incoming.parent_item_id is None:
+            incoming.parent_item_id = existing.parent_item_id
+        if incoming.phase_id is None:
+            incoming.phase_id = existing.phase_id
+        turn.items[existing_idx] = incoming
+    _order_replayed_timeline(turn)
+
+
+def _order_replayed_timeline(turn: Turn) -> None:
+    """Sort coordinated item slots while leaving legacy slots untouched."""
+    sequenced = sorted(
+        (item for item in turn.items if item.timeline_sequence is not None),
+        key=lambda item: item.timeline_sequence or 0,
+    )
+    if len(sequenced) < 2:
+        return
+    cursor = iter(sequenced)
+    turn.items = [
+        next(cursor) if item.timeline_sequence is not None else item for item in turn.items
+    ]
 
 
 def _apply_turn_update(turn: Turn, payload: dict[str, Any]) -> None:
