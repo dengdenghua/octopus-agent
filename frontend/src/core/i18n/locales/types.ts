@@ -5337,6 +5337,7 @@ export interface Translations {
     primaryAccount: string;
     linkGoogle: string;
     linkGithub: string;
+    thirdPartyLinkUnavailable: string;
     unlinkConfirm: string;
     systemManaged: string;
     clickToChangeAvatar: string;

@@ -69,7 +69,7 @@ export const enUS: Translations = {
     stubResponseDescription: (method: string, path: string) =>
       `${method} ${path} returned stub data. Treat this workspace state as a development fallback until the real backend endpoint is enabled.`,
     openSidebarMenu: "Open sidebar menu",
-    localPartnerModel: "Local partner model (passed straight to the CLI's -m)",
+    localPartnerModel: "Local partner model (owned by the CLI)",
   },
 
   // Home
@@ -6270,6 +6270,8 @@ Strategy:
     primaryAccount: "Primary",
     linkGoogle: "Link Google",
     linkGithub: "Link GitHub",
+    thirdPartyLinkUnavailable:
+      "Third-party account linking is not available yet. Existing links can still be removed.",
     unlinkConfirm: "Are you sure you want to unlink?",
     systemManaged: "Managed by system, cannot be modified",
     clickToChangeAvatar: "Click to change avatar",

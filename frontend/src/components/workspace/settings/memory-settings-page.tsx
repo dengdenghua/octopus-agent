@@ -707,6 +707,7 @@ export default function MemorySettingsPage() {
                     </div>
                   </div>
                   <Switch
+                    aria-label={t.settings.memory.enableMemory}
                     checked={memoryConfigEnabled}
                     disabled={updateMemoryConfig.isPending}
                     onCheckedChange={(enabled) =>
@@ -725,6 +726,7 @@ export default function MemorySettingsPage() {
                     </div>
                   </div>
                   <Switch
+                    aria-label={t.settings.memory.autoCapture}
                     checked={memoryConfigEnabled && autoCaptureEnabled}
                     disabled={
                       !memoryConfigEnabled || updateMemoryConfig.isPending
@@ -745,6 +747,7 @@ export default function MemorySettingsPage() {
                     </div>
                   </div>
                   <Switch
+                    aria-label={t.settings.memory.injectOnReply}
                     checked={memoryConfigEnabled && injectionEnabled}
                     disabled={
                       !memoryConfigEnabled || updateMemoryConfig.isPending
@@ -940,7 +943,7 @@ export default function MemorySettingsPage() {
                               onClick={() => openEditFactDialog(fact)}
                               disabled={deleteMemoryFact.isPending}
                               title={t.common.edit}
-                              aria-label={t.common.edit}
+                              aria-label={`${t.common.edit}: ${truncateFactPreview(fact.content, 60)}`}
                             >
                               <PenLineIcon className="h-4 w-4" />
                             </Button>
@@ -952,7 +955,7 @@ export default function MemorySettingsPage() {
                               onClick={() => setFactToDelete(fact)}
                               disabled={deleteMemoryFact.isPending}
                               title={t.common.delete}
-                              aria-label={t.common.delete}
+                              aria-label={`${t.common.delete}: ${truncateFactPreview(fact.content, 60)}`}
                             >
                               <Trash2Icon className="h-4 w-4" />
                             </Button>

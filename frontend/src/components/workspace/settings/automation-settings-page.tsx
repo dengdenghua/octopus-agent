@@ -401,6 +401,7 @@ function CapabilityCard({
           </p>
         </div>
         <Switch
+          aria-label={title}
           checked={checked}
           onCheckedChange={onCheckedChange}
           disabled={disabled}

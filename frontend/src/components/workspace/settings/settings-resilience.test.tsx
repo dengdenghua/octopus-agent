@@ -110,6 +110,22 @@ describe("settings error recovery", () => {
     expect(mocks.getCapabilities).toHaveBeenCalledTimes(2);
     expect(await screen.findByText("执行与权限")).toBeInTheDocument();
   });
+
+  it("names automation capability switches for assistive technology", async () => {
+    mocks.getCapabilities.mockResolvedValue({
+      browser_automation: true,
+      desktop_automation: false,
+    });
+
+    renderWithProviders(<AutomationSettingsPage />, { locale: "zh-CN" });
+
+    expect(
+      await screen.findByRole("switch", { name: "允许浏览器操作" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("switch", { name: "允许桌面操作" }),
+    ).not.toBeChecked();
+  });
 });
 
 describe("settings identity and input guards", () => {

@@ -69,7 +69,7 @@ export const zhCN: Translations = {
     stubResponseDescription: (method: string, path: string) =>
       `${method} ${path} 返回了桩数据。在真实后端接口启用前，请把当前工作区状态视为开发 fallback。`,
     openSidebarMenu: "打开侧栏菜单",
-    localPartnerModel: "本地伙伴模型(透传给 CLI 的 -m)",
+    localPartnerModel: "本地伙伴模型(由 CLI 自身决定)",
   },
 
   // Home
@@ -5943,6 +5943,8 @@ export const zhCN: Translations = {
     primaryAccount: "主账号",
     linkGoogle: "关联 Google",
     linkGithub: "关联 GitHub",
+    thirdPartyLinkUnavailable:
+      "第三方账号关联暂未开放；已关联的账号仍可解除关联。",
     unlinkConfirm: "确定要解除关联吗？",
     systemManaged: "由系统管理，无法修改",
     clickToChangeAvatar: "点击更换头像",

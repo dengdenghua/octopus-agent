@@ -69,7 +69,7 @@ export const koKR: Translations = {
     stubResponseDescription: (method: string, path: string) =>
       `${method} ${path} returned stub data. Treat this workspace state as a development fallback until the real backend endpoint is enabled.`,
     openSidebarMenu: "사이드바 메뉴 열기",
-    localPartnerModel: "로컬 파트너 모델(CLI의 -m으로 그대로 전달됨)",
+    localPartnerModel: "로컬 파트너 모델(CLI가 관리)",
   },
 
   // Home
@@ -6262,6 +6262,8 @@ Strategy:
     primaryAccount: "Primary",
     linkGoogle: "Link Google",
     linkGithub: "Link GitHub",
+    thirdPartyLinkUnavailable:
+      "Third-party account linking is not available yet. Existing links can still be removed.",
     unlinkConfirm: "Are you sure you want to unlink?",
     systemManaged: "Managed by system, cannot be modified",
     clickToChangeAvatar: "Click to change avatar",

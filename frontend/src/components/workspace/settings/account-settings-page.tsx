@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CameraIcon,
   MailIcon,
@@ -33,6 +33,7 @@ import {
   useUploadAvatar,
   usePrivacySettings,
   useUpdatePrivacySettings,
+  useUnlinkAccount,
 } from "@/core/account";
 import { useI18n } from "@/core/i18n/hooks";
 import { useOctLink, useRefreshOctCredits } from "@/core/oct/hooks";
@@ -57,16 +58,22 @@ export default function AccountSettingsPage() {
   const updateProfile = useUpdateProfile();
   const uploadAvatar = useUploadAvatar();
   const updatePrivacy = useUpdatePrivacySettings();
+  const unlinkLinkedAccount = useUnlinkAccount();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const profileDisplayName = profile?.display_name || "";
+  const profileBio = profile?.bio || "";
 
-  const [displayName, setDisplayName] = useState(profile?.display_name || "");
-  const [bio, setBio] = useState(profile?.bio || "");
+  const [displayName, setDisplayName] = useState(profileDisplayName);
+  const [bio, setBio] = useState(profileBio);
   const [unlinkAccount, setUnlinkAccount] = useState<{
     provider: string;
     email?: string;
   } | null>(null);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+
+  useEffect(() => {
+    setDisplayName(profileDisplayName);
+    setBio(profileBio);
+  }, [profileBio, profileDisplayName]);
 
   const handleAvatarClick = () => {
     fileInputRef.current?.click();
@@ -95,21 +102,10 @@ export default function AccountSettingsPage() {
 
   const handleUnlink = () => {
     if (unlinkAccount) {
-      toast.info(
-        `${unlinkAccount.provider} ${unlinkAccount.email ?? ""} ${t.common.unlink}`,
-      );
-      setUnlinkAccount(null);
+      unlinkLinkedAccount.mutate(unlinkAccount.provider, {
+        onSuccess: () => setUnlinkAccount(null),
+      });
     }
-  };
-
-  const handleDeleteAccount = () => {
-    if (deleteConfirmText !== "DELETE") {
-      toast.error(t.accountSettings.typeToConfirm);
-      return;
-    }
-    toast.info(t.settings.account.dangerZone.deleteAccount);
-    setShowDeleteDialog(false);
-    setDeleteConfirmText("");
   };
 
   const isLoading = profileLoading || privacyLoading;
@@ -146,10 +142,7 @@ export default function AccountSettingsPage() {
           <div className="p-5">
             <div className="flex items-start gap-4">
               <div className="relative group flex-shrink-0">
-                <Avatar
-                  className="size-14 border border-border-default bg-background ring-2 ring-transparent transition group-hover:ring-primary/20 cursor-pointer"
-                  onClick={handleAvatarClick}
-                >
+                <Avatar className="size-14 border border-border-default bg-background ring-2 ring-transparent transition group-hover:ring-primary/20 cursor-pointer">
                   <AvatarImage src={profile?.avatar_url} />
                   <AvatarFallback className="bg-muted/50 text-base font-medium text-foreground">
                     {profile?.display_name?.[0] || profile?.username?.[0] || (
@@ -160,7 +153,8 @@ export default function AccountSettingsPage() {
                 <button
                   type="button"
                   onClick={handleAvatarClick}
-                  className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100"
+                  aria-label={t.accountSettings.clickToChangeAvatar}
+                  className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100 focus-visible:bg-black/40 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 >
                   <CameraIcon className="size-4" />
                 </button>
@@ -311,7 +305,7 @@ export default function AccountSettingsPage() {
                 variant="ghost"
                 size="icon"
                 className="size-8 text-muted-foreground hover:text-destructive"
-                aria-label="Unlink account"
+                aria-label={`${t.common.unlink}: ${account.provider}`}
                 onClick={() =>
                   setUnlinkAccount({
                     provider: account.provider,
@@ -334,8 +328,14 @@ export default function AccountSettingsPage() {
             </div>
           )}
 
-          <div className="flex gap-2 p-4">
-            <Button variant="outline" size="sm" className="flex-1 h-8 text-xs">
+          <div className="flex gap-2 p-4 pb-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 h-8 text-xs"
+              disabled
+              title={t.accountSettings.thirdPartyLinkUnavailable}
+            >
               <svg className="mr-1.5 size-3.5" viewBox="0 0 24 24">
                 <path
                   fill="currentColor"
@@ -348,7 +348,13 @@ export default function AccountSettingsPage() {
               </svg>
               {t.accountSettings.linkGoogle}
             </Button>
-            <Button variant="outline" size="sm" className="flex-1 h-8 text-xs">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 h-8 text-xs"
+              disabled
+              title={t.accountSettings.thirdPartyLinkUnavailable}
+            >
               <svg className="mr-1.5 size-3.5" viewBox="0 0 24 24">
                 <path
                   fill="currentColor"
@@ -358,6 +364,9 @@ export default function AccountSettingsPage() {
               {t.accountSettings.linkGithub}
             </Button>
           </div>
+          <p className="px-4 pb-4 text-xs text-muted-foreground">
+            {t.accountSettings.thirdPartyLinkUnavailable}
+          </p>
         </div>
       </section>
 
@@ -383,6 +392,8 @@ export default function AccountSettingsPage() {
             </div>
             <Switch
               checked={privacy?.privacy_mode || false}
+              aria-label={t.settings.account.privacy.shareUsageData}
+              disabled={updatePrivacy.isPending}
               onCheckedChange={(checked) =>
                 updatePrivacy.mutate({ privacy_mode: checked })
               }
@@ -399,42 +410,12 @@ export default function AccountSettingsPage() {
             </div>
             <Switch
               checked={privacy?.data_collection_consent !== false}
+              aria-label={t.settings.account.privacy.allowAnalytics}
+              disabled={updatePrivacy.isPending}
               onCheckedChange={(checked) =>
                 updatePrivacy.mutate({ data_collection_consent: checked })
               }
             />
-          </div>
-        </div>
-      </section>
-
-      {/* Danger Zone */}
-      <section>
-        <div className="mb-3">
-          <h3 className="text-sm font-medium text-destructive">
-            {t.settings.account.dangerZone.title}
-          </h3>
-          <p className="text-muted-foreground text-xs mt-0.5">
-            {t.settings.account.dangerZone.description}
-          </p>
-        </div>
-        <div className="rounded-xl border border-destructive/20 bg-destructive/5">
-          <div className="flex items-center justify-between px-5 py-4">
-            <div>
-              <p className="text-sm font-medium">
-                {t.settings.account.dangerZone.deleteAccount}
-              </p>
-              <p className="text-muted-foreground text-xs">
-                {t.settings.account.dangerZone.deleteAccountDescription}
-              </p>
-            </div>
-            <Button
-              variant="destructive"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => setShowDeleteDialog(true)}
-            >
-              {t.settings.account.dangerZone.deleteAccount}
-            </Button>
           </div>
         </div>
       </section>
@@ -455,50 +436,12 @@ export default function AccountSettingsPage() {
             <Button variant="outline" onClick={() => setUnlinkAccount(null)}>
               {t.common.cancel}
             </Button>
-            <Button variant="destructive" onClick={handleUnlink}>
-              {t.common.confirm}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Account Dialog */}
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangleIcon className="size-5" />
-              {t.accountSettings.deleteAccountConfirm}
-            </DialogTitle>
-            <DialogDescription>
-              {t.accountSettings.deleteAccountWarning}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-4">
-            <Label htmlFor="delete-confirm" className="text-sm">
-              {t.accountSettings.typeToConfirm}
-            </Label>
-            <Input
-              id="delete-confirm"
-              value={deleteConfirmText}
-              onChange={(e) => setDeleteConfirmText(e.target.value)}
-              placeholder="DELETE"
-              className="h-9"
-            />
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => setShowDeleteDialog(false)}
-            >
-              {t.common.cancel}
-            </Button>
             <Button
               variant="destructive"
-              onClick={handleDeleteAccount}
-              disabled={deleteConfirmText !== "DELETE"}
+              onClick={handleUnlink}
+              disabled={unlinkLinkedAccount.isPending}
             >
-              {t.accountSettings.confirmDelete}
+              {t.common.confirm}
             </Button>
           </DialogFooter>
         </DialogContent>
