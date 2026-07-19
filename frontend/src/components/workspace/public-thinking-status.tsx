@@ -69,7 +69,9 @@ export function PublicThinkingStatus({
       ? t.publicThinkingStatus.reconnecting
       : phase === "slow"
         ? t.publicThinkingStatus.slowResponse
-        : t.publicThinkingStatus.modelWorking;
+        : phase === "waiting"
+          ? t.publicThinkingStatus.waitingForModel
+          : t.publicThinkingStatus.modelWorking;
   const elapsedSeconds = Math.floor((vitals?.elapsedMs ?? 0) / 1000);
   const detail = running ? eventSummary(running) : undefined;
 

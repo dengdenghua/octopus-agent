@@ -59,6 +59,22 @@ describe("PublicThinkingStatus", () => {
     expect(status).not.toHaveTextContent("规划");
   });
 
+  test("distinguishes an alive connection from a model that has not responded", () => {
+    renderWithProviders(
+      <PublicThinkingStatus
+        isLoading
+        liveToolEvents={[]}
+        vitals={vitals({ phase: "waiting", elapsedMs: 18_000 })}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("等待模型首个响应");
+    expect(status).toHaveTextContent("18s");
+    expect(status).not.toHaveTextContent("模型处理中");
+  });
+
   test("shows the current action and its public target", () => {
     renderWithProviders(
       <PublicThinkingStatus

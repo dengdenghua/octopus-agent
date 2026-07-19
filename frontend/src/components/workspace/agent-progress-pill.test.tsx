@@ -31,20 +31,34 @@ function vitals(partial: Partial<StreamVitals>): StreamVitals {
 }
 
 describe("<AgentProgressPill />", () => {
-  test("shows one stable primary stage before tool events arrive", () => {
+  test("does not invent a primary stage before model events arrive", () => {
     renderWithProviders(<AgentProgressPill events={[]} isLoading />);
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Understanding what you need",
+      "Waiting for the model's first response",
     );
   });
 
-  test("switches the primary stage to answer generation", () => {
+  test("uses measured activity once answer content is streaming", () => {
     renderWithProviders(
       <AgentProgressPill events={[]} hasAnswer hasStreamingAnswer isLoading />,
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent("Writing back to you");
+    expect(screen.getByRole("status")).toHaveTextContent("Model is working");
+  });
+
+  test("keeps heartbeat-only waiting distinct from model work", () => {
+    renderWithProviders(
+      <AgentProgressPill
+        events={[]}
+        isLoading
+        vitals={vitals({ phase: "waiting", elapsedMs: 9_000 })}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Waiting for the model's first response · 9s",
+    );
   });
 
   test("lets a real stall override an earlier partial answer", () => {

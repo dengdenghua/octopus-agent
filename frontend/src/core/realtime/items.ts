@@ -55,14 +55,6 @@ export interface AgentMessageItem extends ItemBase {
   type: "agentMessage";
   text: string;
   messageKind?: "answer" | "commentary";
-  progressKind?:
-    | "orient"
-    | "investigate"
-    | "implement"
-    | "verify"
-    | "pivot"
-    | "synthesize"
-    | "recover";
   progressSequence?: number;
   /** Per-message speaker identity (group/team rooms). When set, the bubble
    *  renders this member's avatar + name instead of the turn leader's. */

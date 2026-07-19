@@ -5455,15 +5455,7 @@ export const zhCN: Translations = {
 
   // Public Thinking Status
   publicThinkingStatus: {
-    title: "思考状态",
-    organizingReply: "正在回答你",
-    executingTool: "正在动手处理",
-    gotResults: "刚拿到结果",
-    analyzing: "正在看结果并继续",
-    understandingTask: "正在理解你的要求",
-    planningFirstStep: "正在想第一步怎么做",
-    waitingForModel: "正在继续思考",
-    stillWaiting: "还在处理，马上继续",
+    waitingForModel: "等待模型首个响应",
     modelWorking: "模型处理中",
     slowResponse: "仍在处理，响应较慢",
     reconnecting: "连接中断，正在重连",

@@ -121,21 +121,6 @@ class AgentMessageItem(_ItemBase):
         default="answer",
         alias="messageKind",
     )
-    # Public progress carries a small semantic phase so clients can render a
-    # human task narrative (orient → investigate → implement → verify) rather
-    # than treating every checkpoint as identical assistant prose.
-    progress_kind: (
-        Literal[
-            "orient",
-            "investigate",
-            "implement",
-            "verify",
-            "pivot",
-            "synthesize",
-            "recover",
-        ]
-        | None
-    ) = Field(default=None, alias="progressKind")
     # ``progress_sequence`` is the legacy commentary-only counter. New clients
     # should prefer the common ``timeline_sequence`` inherited from _ItemBase.
     progress_sequence: int | None = Field(default=None, alias="progressSequence")

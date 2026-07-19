@@ -46,6 +46,10 @@ export interface VitalsMarks {
   /** Most recent activity of ANY kind (delta, tool progress, heartbeat).
    * Drives stall detection. */
   lastActivityAt: number | null;
+  /** First observable agent-side item for this turn. Heartbeats and the
+   * user's own message do not count: until this is set, the server is alive
+   * but the user is still honestly waiting for the model's first response. */
+  firstAgentActivityAt: number | null;
   /** Most recent ``turn/heartbeat`` — team-mode keepalive. */
   lastHeartbeatAt: number | null;
   /** Server-reported elapsed seconds from the last heartbeat, if any. */
@@ -96,6 +100,7 @@ export function emptyVitalsMarks(): VitalsMarks {
     firstDeltaAt: null,
     lastDeltaAt: null,
     lastActivityAt: null,
+    firstAgentActivityAt: null,
     lastHeartbeatAt: null,
     heartbeatElapsedS: null,
     maxDeltaGapMs: 0,
@@ -143,6 +148,7 @@ export function applyVitalNotification(
     marks.firstDeltaAt = null;
     marks.lastDeltaAt = null;
     marks.lastActivityAt = now;
+    marks.firstAgentActivityAt = null;
     marks.lastHeartbeatAt = null;
     marks.heartbeatElapsedS = null;
     marks.maxDeltaGapMs = 0;
@@ -157,6 +163,7 @@ export function applyVitalNotification(
       );
     }
     if (marks.firstDeltaAt == null) marks.firstDeltaAt = now;
+    if (marks.firstAgentActivityAt == null) marks.firstAgentActivityAt = now;
     marks.lastDeltaAt = now;
     marks.lastActivityAt = now;
     return;
@@ -173,8 +180,32 @@ export function applyVitalNotification(
   }
 
   if (isActivityMethod(method)) {
+    if (
+      marks.firstAgentActivityAt == null &&
+      isAgentActivityNotification(note)
+    ) {
+      marks.firstAgentActivityAt = now;
+    }
     marks.lastActivityAt = now;
   }
+}
+
+function isAgentActivityNotification(note: {
+  method: string;
+  params?: Record<string, unknown>;
+}): boolean {
+  if (!note.method.startsWith("item/")) return false;
+  const item = note.params?.item;
+  const itemType =
+    item && typeof item === "object" && "type" in item
+      ? (item as { type?: unknown }).type
+      : undefined;
+  if (itemType === "userMessage" || itemType === "steeringUserMessage") {
+    return false;
+  }
+  // Delta methods encode their item type in the method even when the compact
+  // payload omits the full item snapshot.
+  return !/item\/(?:userMessage|steeringUserMessage)(?:\/|$)/.test(note.method);
 }
 
 /** Refresh liveness when thread/resume confirms that a turn is still active.
@@ -182,7 +213,12 @@ export function applyVitalNotification(
  * observations collected before reconnect. */
 export function seedVitalsFromResumedTurn(
   marks: VitalsMarks,
-  turn: { id?: unknown; status?: unknown; startedAt?: unknown } | null,
+  turn: {
+    id?: unknown;
+    status?: unknown;
+    startedAt?: unknown;
+    items?: unknown;
+  } | null,
   now: number,
 ): void {
   if (!turn || typeof turn.id !== "string" || turn.status !== "inProgress") {
@@ -197,6 +233,19 @@ export function seedVitalsFromResumedTurn(
     marks.turnStartedAt = Number.isFinite(parsedStartedAt)
       ? Math.min(parsedStartedAt, now)
       : now;
+    const items = Array.isArray(turn.items) ? turn.items : [];
+    if (
+      items.some(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          "type" in item &&
+          (item as { type?: unknown }).type !== "userMessage" &&
+          (item as { type?: unknown }).type !== "steeringUserMessage",
+      )
+    ) {
+      marks.firstAgentActivityAt = now;
+    }
   }
   // The resume response is positive evidence from the server and starts a
   // fresh silence window. If nothing follows, classification becomes slow.
@@ -264,12 +313,10 @@ export function classifyVitals(
     return { ...base, phase: "slow", stalled: true };
   }
 
-  // Waiting on the model to *begin*: no visible text, no running tool, and
-  // nothing has happened since the turn opened. Any real activity beyond
-  // the start (reasoning, heartbeat, tool progress) is "working", not this.
-  const hadActivity =
-    marks.turnStartedAt != null && marks.lastActivityAt > marks.turnStartedAt;
-  if (marks.firstDeltaAt == null && !hasRunningWork && !hadActivity) {
+  // A heartbeat proves the server is alive; it does not prove the model has
+  // produced anything. Keep this honest waiting state until the first real
+  // agent item (commentary, reasoning, tool or answer) arrives.
+  if (marks.firstAgentActivityAt == null && !hasRunningWork) {
     return { ...base, phase: "waiting", stalled: false };
   }
 

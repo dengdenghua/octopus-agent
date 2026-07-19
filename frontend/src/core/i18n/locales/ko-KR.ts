@@ -5747,15 +5747,7 @@ Strategy:
 
   // Public Thinking Status
   publicThinkingStatus: {
-    title: "Thinking Status",
-    organizingReply: "Writing back to you",
-    executingTool: "Working on it",
-    gotResults: "Got a result",
-    analyzing: "Reading the result and continuing",
-    understandingTask: "Understanding what you need",
-    planningFirstStep: "Working out the first step",
-    waitingForModel: "Still thinking",
-    stillWaiting: "Still working — I'll continue shortly",
+    waitingForModel: "모델의 첫 응답을 기다리는 중입니다",
     modelWorking: "모델이 처리 중입니다",
     slowResponse: "평소보다 처리 시간이 길어지고 있습니다",
     reconnecting: "연결이 끊어져 다시 연결하고 있습니다",

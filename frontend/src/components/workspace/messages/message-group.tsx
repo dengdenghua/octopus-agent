@@ -227,21 +227,6 @@ function dedupeTimelineChunks(chunks: string[]): string[] {
   return result;
 }
 
-function isPublicProgressKind(value: unknown): value is PublicProgressKind {
-  return (
-    typeof value === "string" &&
-    [
-      "orient",
-      "investigate",
-      "implement",
-      "verify",
-      "pivot",
-      "synthesize",
-      "recover",
-    ].includes(value)
-  );
-}
-
 export function MessageGroup({
   className,
   enableClarificationActions = false,
@@ -467,7 +452,6 @@ export function MessageGroup({
           data-process-event-id={item.step.messageId ?? item.step.id}
           data-process-event-kind="thinking"
           data-process-event-status={commentaryState}
-          data-progress-kind={item.step.progressKind}
           data-phase-id={item.step.phaseId}
           data-parent-item-id={item.step.parentItemId}
           data-progress-sequence={item.step.progressSequence}
@@ -665,7 +649,6 @@ export function MessageGroup({
               data-process-event-id={item.step.messageId ?? item.step.id}
               data-process-event-kind="thinking"
               data-process-event-status={state}
-              data-progress-kind={item.step.progressKind}
               data-phase-id={item.step.phaseId}
               data-parent-item-id={item.step.parentItemId}
               data-progress-sequence={item.step.progressSequence}
@@ -1908,18 +1891,8 @@ interface CoTActionCallbackStep extends GenericCoTStep<"actionCallback"> {
 
 interface CoTCommentaryStep extends GenericCoTStep<"commentary"> {
   commentary: string;
-  progressKind?: PublicProgressKind;
   groundingMessage?: Message;
 }
-
-type PublicProgressKind =
-  | "orient"
-  | "investigate"
-  | "implement"
-  | "verify"
-  | "pivot"
-  | "synthesize"
-  | "recover";
 
 interface CoTToolCallStep extends GenericCoTStep<"toolCall"> {
   name: string;
@@ -2395,15 +2368,11 @@ function convertToSteps(
           !seenPublicCommentary.has(commentaryFingerprint)
         ) {
           seenPublicCommentary.add(commentaryFingerprint);
-          const progressKind = message.additional_kwargs?.progress_kind;
           steps.push({
             id: `${message.id}-commentary`,
             messageId: message.id,
             type: "commentary",
             commentary,
-            progressKind: isPublicProgressKind(progressKind)
-              ? progressKind
-              : undefined,
             phaseId:
               typeof message.additional_kwargs?.phase_id === "string"
                 ? message.additional_kwargs.phase_id

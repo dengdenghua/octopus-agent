@@ -177,7 +177,6 @@ _PUBLIC_UPDATE_BOILERPLATE_RE = re.compile(
     re.IGNORECASE,
 )
 
-_FINAL_SYNTHESIS_UPDATE = "现有信息已经够了；我现在把关键点收束成最终回答。"
 _PUBLIC_EVIDENCE_NARRATIVE_TIMEOUT_S = 6.0
 _PUBLIC_EVIDENCE_STREAM_GATE_CHARS = 24
 
@@ -295,7 +294,7 @@ def _stream_public_evidence_narrative(
 ) -> Generator[dict[str, Any], None, str]:
     """Stream one evidence-grounded public update into a single timeline item.
 
-    The narrator is tools-disabled and receives completed evidence only.  A
+    The narrator is tools-disabled and receives completed evidence only. A
     short prefix gate prevents control values such as ``SKIP`` from flashing
     in the conversation, then later deltas extend the same commentary item
     instead of manufacturing one avatar/message per provider chunk.
@@ -356,11 +355,10 @@ def _stream_public_evidence_narrative(
             return True
         return bool(re.search(r"[。.!！?？；;]\s*$", checkpoint))
 
-    def _event(delta: str, *, start_new_segment: bool, full_text: str) -> dict[str, Any]:
+    def _event(delta: str, *, start_new_segment: bool) -> dict[str, Any]:
         return {
             "type": "commentary_delta",
             "delta": delta,
-            "progress_kind": _public_update_kind(full_text, succeeded=succeeded),
             "progress_source": "model",
             "start_new_segment": start_new_segment,
             "iteration": iteration,
@@ -395,7 +393,6 @@ def _stream_public_evidence_narrative(
                 yield _event(
                     checkpoint,
                     start_new_segment=True,
-                    full_text=checkpoint,
                 )
                 emitted = checkpoint
                 continue
@@ -404,13 +401,10 @@ def _stream_public_evidence_narrative(
                 yield _event(
                     suffix,
                     start_new_segment=False,
-                    full_text=checkpoint,
                 )
                 emitted = checkpoint
         elif event_type in {"done", "response_end"}:
-            final_response = getattr(event, "final", None) or getattr(
-                event, "response", None
-            )
+            final_response = getattr(event, "final", None) or getattr(event, "response", None)
 
     # Most providers send text deltas, but preserve the final-response fallback
     # for adapters that only attach text to the terminal event.
@@ -422,7 +416,6 @@ def _stream_public_evidence_narrative(
             yield _event(
                 checkpoint,
                 start_new_segment=True,
-                full_text=checkpoint,
             )
             emitted = checkpoint
     elif checkpoint.startswith(emitted) and len(checkpoint) > len(emitted):
@@ -430,7 +423,6 @@ def _stream_public_evidence_narrative(
         yield _event(
             suffix,
             start_new_segment=False,
-            full_text=checkpoint,
         )
         emitted = checkpoint
     return emitted
@@ -452,114 +444,6 @@ def _public_tool_target(args: dict[str, Any]) -> str:
     return ""
 
 
-def _fallback_tool_checkpoint(actions: list[str]) -> str:
-    """Synthesize a concise public pre-tool update when the model omitted one."""
-    parsed = [entry for action in actions if (entry := _parse_action(action))]
-    if not parsed:
-        return ""
-    if len(parsed) > 1:
-        return f"我先并行核对 {len(parsed)} 项关键信息，拿到结果后再交叉整理。"
-
-    name, args = parsed[0]
-    target = _public_tool_target(args if isinstance(args, dict) else {})
-    target_text = f"（{target}）" if target else ""
-    lowered = name.lower()
-    if lowered == "todo_write":
-        return "我先更新任务清单，确保当前进度和剩余事项准确。"
-    if lowered in {"fetch_url", "browser_open", "browser_get_content"}:
-        return f"我先读取目标来源{target_text}，确认页面里的原始信息。"
-    if "search" in lowered:
-        return f"我先检索相关来源{target_text}，补齐可核对的证据。"
-    if lowered in {"read_file", "read_text_file", "list_cwd", "glob", "grep"}:
-        return f"我先查看相关实现{target_text}，确认当前结构和调用关系。"
-    if lowered in _WRITE_TOOLS or any(
-        token in lowered for token in ("write", "edit", "patch")
-    ):
-        return f"修改点已经明确，我现在写入这处改动{target_text}。"
-    if lowered in {"exec_shell", "shell", "run_command"}:
-        return "我先运行一次针对性检查，确认当前结果是否可靠。"
-    return f"我先完成这一步必要操作{target_text}，再根据结果继续判断。"
-
-
-def _fallback_tool_result_checkpoint(actions: list[str], *, succeeded: bool) -> str:
-    """Synthesize a factual post-tool checkpoint without exposing tool output."""
-    parsed = [entry for action in actions if (entry := _parse_action(action))]
-    if not parsed:
-        return ""
-    if not succeeded:
-        return "这一步没有得到可用结果；我会依据错误信息调整方法，不把失败当作证据。"
-    if len(parsed) > 1:
-        return f"{len(parsed)} 项并行操作已经完成；我正在对照结果，筛出一致结论和差异。"
-
-    name = parsed[0][0].lower()
-    if name == "todo_write":
-        return "任务清单已经更新；我会按当前状态继续执行或收敛交付。"
-    if name in {"fetch_url", "browser_open", "browser_get_content"} or "search" in name:
-        return "来源已经拿到；我接下来只提取与问题直接相关、能够核对的结论。"
-    if name in {"read_file", "read_text_file", "list_cwd", "glob", "grep"}:
-        return "实现细节已经确认；我接下来沿调用链收敛到具体差异。"
-    if name in _WRITE_TOOLS or any(token in name for token in ("write", "edit", "patch")):
-        return "改动已经写入；下一步用针对性测试确认行为没有回退。"
-    if name in {"exec_shell", "shell", "run_command"}:
-        return "检查已经完成；我接下来根据结果决定继续修正还是整理交付。"
-    return "这一步已经完成；我正在把结果并入当前判断，再继续下一步。"
-
-
-def _public_action_phase(actions: list[str]) -> str:
-    """Collapse concrete tools into a stable user-facing work phase."""
-    parsed = [entry for action in actions if (entry := _parse_action(action))]
-    if not parsed:
-        return "investigate"
-    names = [name.lower() for name, _args in parsed]
-    if names and all(name == "todo_write" for name in names):
-        return "investigate"
-    if any(
-        name in _WRITE_TOOLS
-        or any(token in name for token in ("write", "edit", "patch", "replace"))
-        for name in names
-    ):
-        return "implement"
-    if any(name in {"exec_shell", "shell", "run_command"} for name in names):
-        return "verify"
-    return "investigate"
-
-
-def _public_update_kind(
-    value: str,
-    *,
-    actions: list[str] | None = None,
-    succeeded: bool | None = None,
-    opening: bool = False,
-) -> str:
-    """Classify a safe public checkpoint without exposing private reasoning."""
-    if opening:
-        return "orient"
-    lowered = value.casefold()
-    if succeeded is False:
-        return "recover"
-    if re.search(r"超时|时限|失败|拒绝|中断|timeout|failed|rejected|interrupted", lowered):
-        return "recover"
-    if re.search(r"调整|改用|换一种|转向|重新|pivot|adjust|switch|instead", lowered):
-        return "pivot"
-    # A checkpoint attached to concrete tool calls describes the work that is
-    # happening now. Classify it from those calls before broad prose cues such
-    # as “整理” or “结论” can incorrectly make an inspection look like final
-    # synthesis in the timeline.
-    if actions:
-        return _public_action_phase(actions)
-    if re.search(r"验证|测试|检查|核验|通过|verify|test|check|lint|build", lowered):
-        return "verify"
-    if re.search(
-        r"收敛|整理|总结|归纳|结论|停止扩展|完成回答|"
-        r"synthesi[sz]|summari[sz]|conclusion|wrap up",
-        lowered,
-    ):
-        return "synthesize"
-    if re.search(r"写入|修改|实现|改动|implement|edit|write|patch", lowered):
-        return "implement"
-    return "investigate"
-
-
 def _result_checkpoint_is_meaningful(
     actions: list[str],
     *,
@@ -573,43 +457,12 @@ def _result_checkpoint_is_meaningful(
         return False
     name = parsed[0][0].lower()
     return (
-        _public_action_phase(actions) in {"implement", "verify"}
+        name in _WRITE_TOOLS
+        or any(token in name for token in ("write", "edit", "patch", "replace"))
+        or name in {"exec_shell", "shell", "run_command"}
         or "search" in name
         or name in {"fetch_url", "browser_open", "browser_get_content"}
     )
-
-
-def _initial_public_checkpoint(goal: str | None) -> str:
-    """Build one task-specific opening checkpoint for non-trivial turns."""
-    text = str(goal or "").strip()
-    if not text:
-        return ""
-    urls = re.findall(r"https?://[^\s)\]}>，。]+", text, re.IGNORECASE)
-    if urls:
-        targets = []
-        for url in urls[:2]:
-            match = re.match(r"https?://([^/]+)", url, re.IGNORECASE)
-            if match and match.group(1) not in targets:
-                targets.append(match.group(1))
-        suffix = f"（{'、'.join(targets)}）" if targets else ""
-        return f"我先核对你指定的原始来源{suffix}，再给出可追溯的结论。"
-    file_refs = re.findall(
-        r"(?:[\w.@+-]+/)+(?:[\w.@+-]+\.)[A-Za-z0-9]+",
-        text,
-    )
-    if file_refs:
-        names = list(dict.fromkeys(os.path.basename(path) for path in file_refs))[:3]
-        if len(names) == 1:
-            subject = names[0]
-        elif len(names) == 2:
-            subject = f"{names[0]} 和 {names[1]}"
-        else:
-            subject = f"{names[0]}、{names[1]} 和 {names[2]}"
-        return f"我先只读核对 {subject} 的实际实现，再把证据按调用顺序串起来。"
-    lowered = text.lower()
-    if any(token in lowered for token in ("调研", "research", "对比", "compare", "分析")):
-        return "我先确认问题边界和可核对证据，再逐步收敛到结论。"
-    return ""
 
 
 def _explicit_read_only_goal(value: str | None) -> bool:
@@ -629,6 +482,25 @@ def _explicit_read_only_goal(value: str | None) -> bool:
             r"(?:修改|改动|更改|编辑|写入|创建|新增|添加|删除|提交))",
             text,
         )
+    )
+
+
+def _explicit_no_tool_goal(value: str | None) -> bool:
+    """Whether the user explicitly requires a direct, tool-free reply."""
+    text = str(value or "").lower()
+    return bool(
+        re.search(
+            r"\b(?:do\s+not|don't|must\s+not|never)\s+"
+            r"(?:use|call|invoke|run)\s+(?:any\s+)?tools?\b",
+            text,
+        )
+        or re.search(r"\b(?:answer|reply|respond)\s+without\s+(?:any\s+)?tools?\b", text)
+        or re.search(
+            r"(?:不要|别|禁止|不得|无需|不用|不需要)\s*"
+            r"(?:使用|调用|执行|运行)?\s*(?:任何|任意)?\s*(?:工具|tool)",
+            text,
+        )
+        or re.search(r"(?:直接|仅|只)\s*(?:回答|回复).{0,12}(?:不用|不要|无需)\s*(?:工具)?", text)
     )
 
 
@@ -1705,7 +1577,10 @@ def stream_react_loop(
     # ``exit_plan_mode`` skill flow is still available for explicit
     # human-in-the-loop approval, but auto-detection no longer strands
     # the turn in plan-only territory.
-    executor = getattr(stack, "executor", None) if enable_tools else None
+    _no_tool_turn = _explicit_no_tool_goal(
+        str(getattr(intent, "normalized_goal", "") or getattr(intent, "raw", "") or "")
+    )
+    executor = getattr(stack, "executor", None) if enable_tools and not _no_tool_turn else None
     tools_active = executor is not None
     # Explicit Browser turns must register their dependency-gated local tools
     # before native ToolSpecs are frozen below.  Registering later only changes
@@ -1810,6 +1685,14 @@ def stream_react_loop(
         else REACT_SYSTEM_PROMPT_BASE
     )
     system_parts: list[str] = [_base_system_prompt]
+    if _no_tool_turn:
+        system_parts.append(
+            "\n<direct-answer-contract>\n"
+            "The user explicitly forbids tool use for this turn. Answer the request "
+            "directly in one response. Do not call tools or narrate an execution plan. "
+            "The literal `Final Answer:` label is optional.\n"
+            "</direct-answer-contract>"
+        )
     # Volatile sections — per-turn signals (date / user prefs /
     # camouflage A-B / memory recall / output_style / thinking).
     # Routed to a prepended user message so they don't poison the
@@ -1875,7 +1758,7 @@ def stream_react_loop(
     # planned turns are (previously only plan() got this). Volatile (goal-
     # dependent) + best-effort; self-gating when no project wiki/source exists.
     _grounding_sources: list[dict[str, str]] = []
-    if _is_code_mode:
+    if _is_code_mode and not _no_tool_turn:
         try:
             from runtime.memory.hemolymph.repo_context import (
                 build_codebase_context,
@@ -2039,7 +1922,7 @@ def stream_react_loop(
         or intent.flags.get("budget_auto_pause", False)
     )
     _todo_protocol_mode = context_mode(_uc)
-    _todo_protocol_required = should_require_todo_protocol(
+    _todo_protocol_required = not _no_tool_turn and should_require_todo_protocol(
         intent.normalized_goal,
         _uc,
     )
@@ -2965,28 +2848,8 @@ def stream_react_loop(
     consecutive_format_violations = 0
     consecutive_llm_errors = 0
     _last_public_update_key = ""
-    _public_narrative_started = False
-    _synthesis_update_emitted = False
-    _realtime_public_narrative = bool(
-        intent.user_context.get("realtime_public_narrative")
-    )
+    _realtime_public_narrative = bool(intent.user_context.get("realtime_public_narrative"))
     _realtime_public_orientation = _realtime_public_orientation_requested
-    _last_fallback_phase = ""
-    _same_phase_tool_rounds = 0
-    if resume_from_iter == 0:
-        _opening_update = _initial_public_checkpoint(intent.normalized_goal)
-        if _opening_update:
-            _public_narrative_started = True
-            yield {
-                "type": "commentary_delta",
-                "delta": _opening_update,
-                "progress_kind": _public_update_kind(_opening_update, opening=True),
-                "progress_source": "runtime",
-                "iteration": 1,
-            }
-            _last_public_update_key = re.sub(
-                r"\s+", " ", _opening_update
-            ).strip().casefold()
     _force_convergence_next = False
     _green_verification_convergence_active = False
     _green_convergence_todo_used = False
@@ -3215,7 +3078,7 @@ def stream_react_loop(
                 and _realtime_public_orientation
                 and i == 0
                 and not steps
-                and _initial_public_checkpoint(intent.normalized_goal)
+                and str(intent.normalized_goal or "").strip()
             )
             _native_orientation_emitted = ""
             _native_orientation_disabled = False
@@ -3303,39 +3166,29 @@ def stream_react_loop(
                                     yield {
                                         "type": "commentary_delta",
                                         "delta": _orientation,
-                                        "progress_kind": _public_update_kind(
-                                            _orientation,
-                                            opening=True,
-                                        ),
                                         "progress_source": "model",
                                         "start_new_segment": True,
                                         "iteration": i + 1,
                                     }
                                     _native_orientation_emitted = _orientation
-                                    _public_narrative_started = True
                                     _last_public_update_key = _orientation_key
-                            elif (
-                                _orientation.startswith(_native_orientation_emitted)
-                                and len(_orientation) > len(_native_orientation_emitted)
-                            ):
+                            elif _orientation.startswith(_native_orientation_emitted) and len(
+                                _orientation
+                            ) > len(_native_orientation_emitted):
                                 _orientation_suffix = _orientation[
                                     len(_native_orientation_emitted) :
                                 ]
                                 yield {
                                     "type": "commentary_delta",
                                     "delta": _orientation_suffix,
-                                    "progress_kind": _public_update_kind(
-                                        _orientation,
-                                        opening=True,
-                                    ),
                                     "progress_source": "model",
                                     "start_new_segment": False,
                                     "iteration": i + 1,
                                 }
                                 _native_orientation_emitted = _orientation
-                                _last_public_update_key = re.sub(
-                                    r"\s+", " ", _orientation
-                                ).strip().casefold()
+                                _last_public_update_key = (
+                                    re.sub(r"\s+", " ", _orientation).strip().casefold()
+                                )
                     if _final_stream_started:
                         # Already past the anchor — every subsequent
                         # token is part of the user-visible answer.
@@ -3400,15 +3253,6 @@ def stream_react_loop(
                                 ):
                                     _final_stream_guarded = True
                                     continue
-                                if _public_narrative_started and not _synthesis_update_emitted:
-                                    yield {
-                                        "type": "commentary_delta",
-                                        "delta": _FINAL_SYNTHESIS_UPDATE,
-                                        "progress_kind": "synthesize",
-                                        "progress_source": "runtime",
-                                        "iteration": i + 1,
-                                    }
-                                    _synthesis_update_emitted = True
                                 yield {
                                     "type": "text_delta",
                                     "delta": answer_so_far,
@@ -3454,15 +3298,6 @@ def stream_react_loop(
                             ):
                                 _final_stream_guarded = True
                                 continue
-                            if _public_narrative_started and not _synthesis_update_emitted:
-                                yield {
-                                    "type": "commentary_delta",
-                                    "delta": _FINAL_SYNTHESIS_UPDATE,
-                                    "progress_kind": "synthesize",
-                                    "progress_source": "runtime",
-                                    "iteration": i + 1,
-                                }
-                                _synthesis_update_emitted = True
                             yield {
                                 "type": "text_delta",
                                 "delta": joined,
@@ -3830,15 +3665,6 @@ def stream_react_loop(
             # parsed final once. When _final_stream_started is true the
             # user has already seen these tokens live, so skip to avoid
             # duplicate text in the transcript.
-            if _public_narrative_started and not _synthesis_update_emitted:
-                yield {
-                    "type": "commentary_delta",
-                    "delta": _FINAL_SYNTHESIS_UPDATE,
-                    "progress_kind": "synthesize",
-                    "progress_source": "runtime",
-                    "iteration": i + 1,
-                }
-                _synthesis_update_emitted = True
             yield {
                 "type": "text_delta",
                 "delta": maybe_final,
@@ -3960,7 +3786,8 @@ def stream_react_loop(
                     text
                     and not maybe_final
                     and (
-                        i > 0
+                        _no_tool_turn
+                        or i > 0
                         or executed_beak_steps
                         or any(
                             prior_step.action_results
@@ -4202,18 +4029,6 @@ def stream_react_loop(
         step.public_update = _safe_public_update(step.public_update)
         _checkpoint_actions = step.actions or [step.action]
         _model_supplied_update = bool(step.public_update)
-        if tool_action_requested and maybe_final is None and not step.public_update:
-            _fallback_phase = _public_action_phase(_checkpoint_actions)
-            if _fallback_phase == _last_fallback_phase:
-                _same_phase_tool_rounds += 1
-            else:
-                _last_fallback_phase = _fallback_phase
-                _same_phase_tool_rounds = 0
-            # Narrate phase changes immediately. During long same-phase runs,
-            # add one bounded heartbeat only after three silent tool rounds.
-            if _same_phase_tool_rounds == 0 or _same_phase_tool_rounds >= 3:
-                step.public_update = _fallback_tool_checkpoint(_checkpoint_actions)
-                _same_phase_tool_rounds = 0
         _public_update_key = re.sub(r"\s+", " ", step.public_update).strip().casefold()
         if (
             step.public_update
@@ -4221,20 +4036,12 @@ def stream_react_loop(
             and maybe_final is None
             and _public_update_key != _last_public_update_key
         ):
-            _public_narrative_started = True
-            _public_update_kind_value = _public_update_kind(
-                step.public_update,
-                actions=_checkpoint_actions,
-            )
             yield {
                 "type": "commentary_delta",
                 "delta": step.public_update,
-                "progress_kind": _public_update_kind_value,
                 "progress_source": "model" if _model_supplied_update else "runtime",
                 "iteration": i + 1,
             }
-            if _public_update_kind_value == "synthesize":
-                _synthesis_update_emitted = True
             _last_public_update_key = _public_update_key
 
         if tool_action_requested:
@@ -4758,45 +4565,9 @@ def stream_react_loop(
             except Exception as exc:  # noqa: BLE001 — optional public narration
                 _logger.warning("public evidence narration failed: %s", exc)
                 _model_result_update = ""
-            _model_result_update_key = re.sub(
-                r"\s+", " ", _model_result_update
-            ).strip().casefold()
-            if (
-                _model_result_update
-                and _model_result_update_key != _last_public_update_key
-            ):
-                _model_result_update_kind = _public_update_kind(
-                    _model_result_update,
-                    succeeded=tool_ok,
-                )
-                _public_narrative_started = True
-                if _model_result_update_kind == "synthesize":
-                    _synthesis_update_emitted = True
+            _model_result_update_key = re.sub(r"\s+", " ", _model_result_update).strip().casefold()
+            if _model_result_update and _model_result_update_key != _last_public_update_key:
                 _last_public_update_key = _model_result_update_key
-
-        if _meaningful_result_checkpoint and not _model_result_update:
-            _result_update = _fallback_tool_result_checkpoint(
-                step.actions or [step.action],
-                succeeded=tool_ok,
-            )
-            _result_update_key = re.sub(r"\s+", " ", _result_update).strip().casefold()
-            if _result_update and _result_update_key != _last_public_update_key:
-                _result_update_kind = _public_update_kind(
-                    _result_update,
-                    actions=step.actions or [step.action],
-                    succeeded=tool_ok,
-                )
-                _public_narrative_started = True
-                yield {
-                    "type": "commentary_delta",
-                    "delta": _result_update,
-                    "progress_kind": _result_update_kind,
-                    "progress_source": "runtime",
-                    "iteration": i + 1,
-                }
-                if _result_update_kind == "synthesize":
-                    _synthesis_update_emitted = True
-                _last_public_update_key = _result_update_key
 
         if _is_code_mode and observation and _current_phase in ("execute", "verify"):
             _write_tools = frozenset(
@@ -4995,15 +4766,6 @@ def stream_react_loop(
                     + _guard_message
                 )
             elif _deferred_final_emit:
-                if _public_narrative_started and not _synthesis_update_emitted:
-                    yield {
-                        "type": "commentary_delta",
-                        "delta": _FINAL_SYNTHESIS_UPDATE,
-                        "progress_kind": "synthesize",
-                        "progress_source": "runtime",
-                        "iteration": i + 1,
-                    }
-                    _synthesis_update_emitted = True
                 _delta = (
                     maybe_final[_streamed_final_chars:] if _streamed_final_chars else maybe_final
                 )

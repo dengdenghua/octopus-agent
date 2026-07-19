@@ -51,12 +51,10 @@ function fallbackStatusLabel({
   t,
   vitals,
   hasStreamingAnswer,
-  loadingAgeMs,
 }: {
   t: ReturnType<typeof useI18n>["t"];
   vitals?: StreamVitals;
   hasStreamingAnswer?: boolean;
-  loadingAgeMs: number;
 }): string {
   const s = t.publicThinkingStatus;
   if (vitals?.phase === "disconnected") return s.reconnecting;
@@ -64,22 +62,20 @@ function fallbackStatusLabel({
     const elapsedS = Math.floor(vitals.elapsedMs / 1000);
     return `${s.slowResponse}${elapsedS >= 3 ? ` · ${elapsedS}s` : ""}`;
   }
-  if (hasStreamingAnswer) return s.organizingReply;
-  if (vitals && vitals.phase !== "idle" && vitals.phase !== "waiting") {
+  if (vitals?.phase === "waiting") {
+    const elapsedS = Math.floor(vitals.elapsedMs / 1000);
+    return `${s.waitingForModel}${elapsedS >= 3 ? ` · ${elapsedS}s` : ""}`;
+  }
+  if (vitals && vitals.phase !== "idle") {
     const elapsedS = Math.floor(vitals.elapsedMs / 1000);
     const suffix = elapsedS >= 3 ? ` · ${elapsedS}s` : "";
-    switch (vitals.phase) {
-      case "streaming":
-        return s.organizingReply;
-      case "working":
-        return `${s.modelWorking}${suffix}`;
-    }
+    return `${s.modelWorking}${suffix}`;
   }
-  return loadingAgeMs < 3000
-    ? s.understandingTask
-    : loadingAgeMs < 12000
-      ? s.analyzing
-      : s.waitingForModel;
+  if (hasStreamingAnswer) return s.modelWorking;
+  // Without wire telemetry, do not manufacture “understanding / planning /
+  // analysing” stages from a timer. The only fact we know is that the first
+  // observable model event has not arrived yet.
+  return s.waitingForModel;
 }
 
 function StatusIcon({
@@ -153,7 +149,6 @@ export function AgentProgressPill({
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const [minimized, setMinimized] = useState(false);
-  const [loadingAgeMs, setLoadingAgeMs] = useState(0);
   const [enablingCapability, setEnablingCapability] = useState(false);
   const displayEvents = useMemo(
     () =>
@@ -238,19 +233,6 @@ export function AgentProgressPill({
     : {};
 
   useEffect(() => {
-    if (!isLoading) {
-      setLoadingAgeMs(0);
-      return;
-    }
-    const startedAt = Date.now();
-    setLoadingAgeMs(0);
-    const timer = window.setInterval(() => {
-      setLoadingAgeMs(Date.now() - startedAt);
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [isLoading]);
-
-  useEffect(() => {
     if (!progressScopeKey || !planFingerprint) return;
     const storedFingerprint = minimizedPlanByScope.get(progressScopeKey);
     if (storedFingerprint === planFingerprint) {
@@ -305,7 +287,6 @@ export function AgentProgressPill({
       t,
       vitals,
       hasStreamingAnswer,
-      loadingAgeMs,
     });
     // "slow" is the one genuinely ambiguous state — the model may still be
     // working or the turn may be wedged. Tint it so it reads as "taking a

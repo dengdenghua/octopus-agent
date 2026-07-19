@@ -146,7 +146,6 @@ describe("MessageGroup reasoning grouping", () => {
         content: "四个目标文件均已读取完毕，关键字段一致；下一步整理最终结论。",
         additional_kwargs: {
           public_progress: true,
-          progress_kind: "synthesize",
           progress_sequence: 1,
           timeline_sequence: 5,
         },
@@ -197,7 +196,6 @@ describe("MessageGroup reasoning grouping", () => {
         content: "已确认流事件按消息、思考和执行三条通道归一化。",
         additional_kwargs: {
           public_progress: true,
-          progress_kind: "orient",
           reasoning_content: "inspect the bridge",
           grounding: [
             {
@@ -214,7 +212,6 @@ describe("MessageGroup reasoning grouping", () => {
         content: "进一步确认执行完成后才会开启下一轮公开结论。",
         additional_kwargs: {
           public_progress: true,
-          progress_kind: "verify",
           phase_id: "turn-1:progress:2",
           parent_item_id: "read-bridge",
           progress_sequence: 2,
@@ -244,8 +241,6 @@ describe("MessageGroup reasoning grouping", () => {
 
     const checkpoints = screen.getAllByTestId("public-progress-event");
     expect(checkpoints).toHaveLength(2);
-    expect(checkpoints[0]).toHaveAttribute("data-progress-kind", "orient");
-    expect(checkpoints[1]).toHaveAttribute("data-progress-kind", "verify");
     expect(checkpoints[1]).toHaveAttribute(
       "data-phase-id",
       "turn-1:progress:2",

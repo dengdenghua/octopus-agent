@@ -269,7 +269,6 @@ def test_commentary_delta_maps_to_non_terminal_agent_message(gateway: Any) -> No
             {
                 "type": "commentary_delta",
                 "delta": "已确认第一组数据一致。",
-                "progress_kind": "verify",
                 "progress_source": "model",
             },
             {
@@ -363,12 +362,10 @@ def test_commentary_event_boundary_starts_a_new_timeline_item(gateway: Any) -> N
             {
                 "type": "commentary_delta",
                 "delta": "我先核对关键文件。",
-                "progress_kind": "orient",
             },
             {
                 "type": "commentary_delta",
                 "delta": "证据已经够了，开始收束。",
-                "progress_kind": "synthesize",
             },
             {"type": "text_delta", "delta": "最终答案"},
             {"type": "react_completed"},
@@ -497,8 +494,7 @@ def test_runtime_generated_commentary_is_not_shown_as_model_progress(gateway: An
         [
             {
                 "type": "commentary_delta",
-                "delta": "现有信息已经够了；我现在把关键点收束成最终回答。",
-                "progress_kind": "synthesize",
+                "delta": "runtime-only status",
                 "progress_source": "runtime",
             },
             {"type": "text_delta", "delta": "最终答案"},

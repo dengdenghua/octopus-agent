@@ -215,7 +215,6 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     const firstCommentary: AgentMessageItem = {
       ...agentMsg("首轮扫描确认事件桥负责三类流。", "p1"),
       messageKind: "commentary",
-      progressKind: "orient",
       phaseId: "turn-1:progress:1",
       progressSequence: 1,
       timelineSequence: 1,
@@ -223,7 +222,6 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     const secondCommentary: AgentMessageItem = {
       ...agentMsg("本地分析进一步确认工具结果会先完成再进入下一轮。", "p2"),
       messageKind: "commentary",
-      progressKind: "verify",
       phaseId: "turn-1:progress:2",
       parentItemId: "c1",
       progressSequence: 2,
@@ -258,8 +256,6 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     const second = state.messages[2] as AIMessage;
     expect(first.additional_kwargs?.public_progress).toBe(true);
     expect(second.additional_kwargs?.public_progress).toBe(true);
-    expect(first.additional_kwargs?.progress_kind).toBe("orient");
-    expect(second.additional_kwargs?.progress_kind).toBe("verify");
     expect(first.additional_kwargs?.phase_id).toBe("turn-1:progress:1");
     expect(first.additional_kwargs?.progress_sequence).toBe(1);
     expect(first.additional_kwargs?.timeline_sequence).toBe(1);
@@ -410,12 +406,10 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     const orient: AgentMessageItem = {
       ...agentMsg("我先核对字段定义。", "p-orient"),
       messageKind: "commentary",
-      progressKind: "orient",
     };
     const synthesis: AgentMessageItem = {
       ...agentMsg("证据已齐，开始收束。", "p-synthesis"),
       messageKind: "commentary",
-      progressKind: "synthesize",
     };
     const turn: Turn = {
       ...makeTurn([

@@ -9,9 +9,35 @@ import pytest
 
 from runtime.core.cerebrum import react_loop
 from runtime.core.cerebrum.react_loop import (
+    _explicit_no_tool_goal,
     _finish_reason_is_length_limited,
     _tool_call_succeeded,
 )
+
+
+@pytest.mark.parametrize(
+    "goal",
+    [
+        "Do not use tools; answer directly.",
+        "Reply without any tools.",
+        "不要使用工具，只回答结果。",
+        "直接回复，不用工具。",
+    ],
+)
+def test_explicit_no_tool_goal(goal):
+    assert _explicit_no_tool_goal(goal) is True
+
+
+@pytest.mark.parametrize(
+    "goal",
+    [
+        "Use the browser tool to verify this.",
+        "只读分析两个文件，不要修改。",
+        "直接回答后继续执行测试。",
+    ],
+)
+def test_non_no_tool_goal(goal):
+    assert _explicit_no_tool_goal(goal) is False
 
 
 @pytest.mark.parametrize(

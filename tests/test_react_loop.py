@@ -37,10 +37,7 @@ from runtime.core.cerebrum.react_loop import (
     _escape_md_brackets,
     _execute_action_via_beak,
     _explicit_read_only_goal,
-    _fallback_tool_checkpoint,
-    _fallback_tool_result_checkpoint,
     _format_skill_catalog,
-    _initial_public_checkpoint,
     _iter_model_stream_with_deadline,
     _long_task_budget_limits,
     _looks_like_special_tool_envelope,
@@ -53,8 +50,6 @@ from runtime.core.cerebrum.react_loop import (
     _parse_reasoning_action_fallback,
     _parse_step,
     _placeholder_observation,
-    _public_action_phase,
-    _public_update_kind,
     _reset_kg_throttle_for_tests,
     _reset_react_variants_for_tests,
     _result_checkpoint_is_meaningful,
@@ -119,54 +114,15 @@ def test_safe_public_update_rejects_private_protocol_and_empty_status() -> None:
     assert _safe_public_update("正在处理。") == ""
 
 
-def test_fallback_tool_checkpoints_are_concrete_and_bounded() -> None:
-    action = 'fetch_url({"url": "https://github.com/openai/codex/issues/31218"})'
-
-    assert _fallback_tool_checkpoint([action]) == (
-        "我先读取目标来源（github.com），确认页面里的原始信息。"
-    )
-    assert _fallback_tool_result_checkpoint([action], succeeded=True) == (
-        "来源已经拿到；我接下来只提取与问题直接相关、能够核对的结论。"
-    )
-    assert "没有得到可用结果" in _fallback_tool_result_checkpoint(
-        [action], succeeded=False
-    )
-
-
-def test_public_progress_semantics_separate_phases_from_tool_names() -> None:
+def test_result_checkpoint_selection_uses_tool_evidence_not_phase_labels() -> None:
     read = 'read_file({"path": "runtime/core/cerebrum/react_loop.py"})'
     write = 'edit_file({"path": "frontend/src/app.tsx"})'
     verify = 'exec_shell({"cmd": "pnpm typecheck"})'
 
-    assert _public_action_phase([read]) == "investigate"
-    assert _public_action_phase([write]) == "implement"
-    assert _public_action_phase([verify]) == "verify"
-    assert _public_update_kind("这条路线不通，我改用事件日志核对。") == "pivot"
-    assert _public_update_kind("测试已通过。", actions=[verify]) == "verify"
-    assert _public_update_kind("没有拿到结果。", succeeded=False) == "recover"
     assert not _result_checkpoint_is_meaningful([read], succeeded=True)
     assert _result_checkpoint_is_meaningful([write], succeeded=True)
     assert _result_checkpoint_is_meaningful([verify], succeeded=True)
     assert _result_checkpoint_is_meaningful([read], succeeded=False)
-
-
-def test_initial_public_checkpoint_names_requested_files() -> None:
-    checkpoint = _initial_public_checkpoint(
-        "只读分析 frontend/src/core/threads/realtime-adapter.ts、"
-        "frontend/src/components/workspace/messages/message-group.tsx 和 "
-        "runtime/core/cerebrum/react_loop.py，不要修改文件。"
-    )
-
-    assert checkpoint == (
-        "我先只读核对 realtime-adapter.ts、message-group.tsx 和 react_loop.py "
-        "的实际实现，再把证据按调用顺序串起来。"
-    )
-    assert _initial_public_checkpoint(
-        "打开 https://raw.githubusercontent.com/openai/codex/main/README.md"
-    ) == (
-        "我先核对你指定的原始来源（raw.githubusercontent.com），"
-        "再给出可追溯的结论。"
-    )
 
 
 def test_parse_step_only_final_answer() -> None:
@@ -1063,7 +1019,7 @@ def test_public_update_is_emitted_before_its_tool_execution() -> None:
     assert commentary["delta"] == "已定位到消息桥接层，下一步核对事件顺序。"
 
 
-def test_missing_public_update_gets_one_bounded_phase_checkpoint() -> None:
+def test_missing_public_update_does_not_invent_runtime_commentary() -> None:
     router = _ScriptedRouter(
         [
             'Thought: inspect source\nAction: echo({"text": "evidence"})',
@@ -1074,23 +1030,12 @@ def test_missing_public_update_gets_one_bounded_phase_checkpoint() -> None:
     intent = _intent("inspect source")
     intent.user_context["mode"] = "react"
 
-    events, result = _drain(
-        stream_react_loop(stack, intent, agent=None, max_iterations=3)
-    )
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=3))
 
     assert result is not None and result.final_answer == "evidence verified"
-    commentary = [
-        event["delta"] for event in events if event["type"] == "commentary_delta"
-    ]
-    assert commentary == [
-        "我先完成这一步必要操作，再根据结果继续判断。",
-        "现有信息已经够了；我现在把关键点收束成最终回答。",
-    ]
-    checkpoint = next(event for event in events if event["type"] == "commentary_delta")
-    assert checkpoint["progress_kind"] == "investigate"
-    assert checkpoint["progress_source"] == "runtime"
-    event_types = [event["type"] for event in events]
-    assert event_types.index("commentary_delta") < event_types.index("tool_start")
+    commentary = [event["delta"] for event in events if event["type"] == "commentary_delta"]
+    assert commentary == []
+    assert any(event["type"] == "tool_start" for event in events)
 
 
 def test_realtime_quiet_tool_result_gets_model_authored_evidence_checkpoint() -> None:
@@ -1348,7 +1293,7 @@ def test_public_evidence_narrator_skip_stays_out_of_conversation() -> None:
     )
 
 
-def test_tool_checkpoint_with_synthesis_words_stays_in_action_phase() -> None:
+def test_tool_checkpoint_is_forwarded_without_a_hard_coded_phase() -> None:
     router = _ScriptedRouter(
         [
             (
@@ -1362,18 +1307,15 @@ def test_tool_checkpoint_with_synthesis_words_stays_in_action_phase() -> None:
     intent = _intent("inspect two supplied definitions")
     intent.user_context["mode"] = "react"
 
-    events, result = _drain(
-        stream_react_loop(stack, intent, agent=None, max_iterations=3)
-    )
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=3))
 
     assert result is not None and result.final_answer == "evidence verified"
-    first_checkpoint = next(
-        event for event in events if event["type"] == "commentary_delta"
-    )
-    assert first_checkpoint["progress_kind"] == "investigate"
+    first_checkpoint = next(event for event in events if event["type"] == "commentary_delta")
+    assert first_checkpoint["delta"] == "我先并行核对两处实现，拿到结果后再整理结论。"
+    assert "progress_kind" not in first_checkpoint
 
 
-def test_opening_checkpoint_is_followed_by_synthesis_before_buffered_final() -> None:
+def test_direct_final_does_not_get_runtime_authored_bookends() -> None:
     router = _ScriptedRouter(["Final Answer: concise comparison"])
     intent = _intent(
         "只读比较 runtime/core/cerebrum/react_loop.py 和 "
@@ -1387,14 +1329,10 @@ def test_opening_checkpoint_is_followed_by_synthesis_before_buffered_final() -> 
 
     assert result is not None and result.final_answer == "concise comparison"
     visible = [
-        (event["type"], event.get("progress_kind"))
-        for event in events
-        if event["type"] in {"commentary_delta", "text_delta"}
+        event for event in events if event["type"] in {"commentary_delta", "text_delta"}
     ]
     assert visible == [
-        ("commentary_delta", "orient"),
-        ("commentary_delta", "synthesize"),
-        ("text_delta", None),
+        {"type": "text_delta", "delta": "concise comparison", "iteration": 1}
     ]
 
 
@@ -1739,32 +1677,23 @@ def test_research_placeholder_continues_to_fetched_source_and_grounded_answer() 
         verify_tests=False,
     )
 
-    events, result = _drain(
-        stream_react_loop(stack, intent, agent=None, max_iterations=6)
-    )
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=6))
 
     assert result is not None and result.success
     assert router.calls == 5
-    visible_answer = "".join(
-        event["delta"] for event in events if event["type"] == "text_delta"
-    )
+    visible_answer = "".join(event["delta"] for event in events if event["type"] == "text_delta")
     assert placeholder not in visible_answer
     assert premature_final not in visible_answer
     assert visible_answer == result.final_answer
     assert "https://example.com/octopus-streaming" in result.final_answer
-    assert any(
-        event.get("progress_kind") == "investigate"
-        for event in events
-        if event["type"] == "commentary_delta"
-    )
-    assert any(
-        event.get("progress_kind") == "synthesize"
+    assert all(
+        "progress_kind" not in event
         for event in events
         if event["type"] == "commentary_delta"
     )
 
 
-def test_same_phase_fallback_updates_are_throttled() -> None:
+def test_silent_tool_rounds_do_not_generate_runtime_authored_updates() -> None:
     router = _ScriptedRouter(
         [
             'Thought: inspect one\nAction: echo({"text": "one"})',
@@ -1782,10 +1711,7 @@ def test_same_phase_fallback_updates_are_throttled() -> None:
 
     assert result is not None and "调查已经完成" in result.final_answer
     commentary = [event for event in events if event["type"] == "commentary_delta"]
-    assert [event["progress_kind"] for event in commentary] == [
-        "investigate",
-        "synthesize",
-    ]
+    assert commentary == []
 
 
 def test_explicit_read_only_turn_injects_non_mutation_contract() -> None:
@@ -4376,6 +4302,37 @@ def test_zero_anchor_response_is_salvaged_as_text_delta() -> None:
     assert result.final_answer == plain_markdown_reply
 
 
+def test_explicit_no_tool_short_answer_finishes_on_first_response() -> None:
+    plain_answer = "验收通过"
+    router = _ScriptedRouter(
+        [
+            plain_answer,
+            "Final Answer: this second model round must not run",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("不要使用工具，只回答：验收通过")
+    intent.user_context["mode"] = "code"
+
+    events, result = _drain(
+        stream_react_loop(
+            stack,
+            intent,
+            agent=None,
+            max_iterations=3,
+        )
+    )
+
+    assert result is not None and result.success
+    assert result.final_answer == plain_answer
+    assert router.calls == 1
+    assert not [event for event in events if event["type"] == "tool_start"]
+    assert (
+        "".join(event["delta"] for event in events if event["type"] == "text_delta")
+        == plain_answer
+    )
+
+
 def test_zero_anchor_answer_after_tool_evidence_finishes_on_first_response() -> None:
     plain_answer = "组件在 `idle` 和 `streaming` 这两个 phase 会直接返回 null。"
     stack = _build_stack_with_executor(
@@ -5216,16 +5173,7 @@ def test_chat_style_zero_anchor_streams_live_after_120_chars() -> None:
     assert len(deltas) >= 2, deltas
     # No double-yield: the joined deltas equal the full body once.
     assert "".join(deltas) == full
-    synthesis_index = next(
-        index
-        for index, event in enumerate(events)
-        if event["type"] == "commentary_delta"
-        and event.get("progress_kind") == "synthesize"
-    )
-    first_text_index = next(
-        index for index, event in enumerate(events) if event["type"] == "text_delta"
-    )
-    assert synthesis_index < first_text_index
+    assert not any(event["type"] == "commentary_delta" for event in events)
 
 
 def test_observation_echo_does_not_complete_or_stream_as_answer() -> None:

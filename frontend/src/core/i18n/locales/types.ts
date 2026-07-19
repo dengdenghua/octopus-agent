@@ -4882,15 +4882,7 @@ export interface Translations {
 
   // Public Thinking Status
   publicThinkingStatus: {
-    title: string;
-    organizingReply: string;
-    executingTool: string;
-    gotResults: string;
-    analyzing: string;
-    understandingTask: string;
-    planningFirstStep: string;
     waitingForModel: string;
-    stillWaiting: string;
     modelWorking: string;
     slowResponse: string;
     reconnecting: string;

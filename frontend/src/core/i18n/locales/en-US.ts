@@ -5761,15 +5761,7 @@ Strategy:
 
   // Public Thinking Status
   publicThinkingStatus: {
-    title: "Thinking Status",
-    organizingReply: "Writing back to you",
-    executingTool: "Working on it",
-    gotResults: "Got a result",
-    analyzing: "Reading the result and continuing",
-    understandingTask: "Understanding what you need",
-    planningFirstStep: "Working out the first step",
-    waitingForModel: "Still thinking",
-    stillWaiting: "Still working — I'll continue shortly",
+    waitingForModel: "Waiting for the model's first response",
     modelWorking: "Model is working",
     slowResponse: "Still working — slower than usual",
     reconnecting: "Connection lost — reconnecting",

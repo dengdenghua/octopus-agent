@@ -43,6 +43,7 @@ describe("applyVitalNotification", () => {
     applyVitalNotification(m, { method: "turn/started" }, T0);
     expect(m.turnStartedAt).toBe(T0);
     expect(m.firstDeltaAt).toBeNull();
+    expect(m.firstAgentActivityAt).toBeNull();
     expect(m.maxDeltaGapMs).toBe(0);
     expect(m.lastActivityAt).toBe(T0);
   });
@@ -62,6 +63,7 @@ describe("applyVitalNotification", () => {
     applyVitalNotification(m, { method: "item/agentMessage/delta" }, T0 + 800);
     expect(m.firstDeltaAt).toBe(T0 + 800);
     expect(m.lastDeltaAt).toBe(T0 + 800);
+    expect(m.firstAgentActivityAt).toBe(T0 + 800);
   });
 
   it("tracks the worst inter-delta gap (streaming interval)", () => {
@@ -91,6 +93,7 @@ describe("applyVitalNotification", () => {
     expect(m.heartbeatElapsedS).toBe(12);
     expect(m.lastHeartbeatAt).toBe(T0 + 5_000);
     expect(m.lastActivityAt).toBe(T0 + 5_000);
+    expect(m.firstAgentActivityAt).toBeNull();
   });
 
   it("reasoning + tool-progress deltas count as activity but not text", () => {
@@ -108,6 +111,22 @@ describe("applyVitalNotification", () => {
     expect(m.lastActivityAt).toBe(T0 + 4_000);
     expect(m.lastDeltaAt).toBeNull(); // no visible text yet
     expect(m.firstDeltaAt).toBeNull();
+    expect(m.firstAgentActivityAt).toBe(T0 + 2_000);
+  });
+
+  it("does not treat the echoed user message as an agent response", () => {
+    const m = marksAtTurnStart();
+    applyVitalNotification(
+      m,
+      {
+        method: "item/started",
+        params: { item: { type: "userMessage" } },
+      },
+      T0 + 50,
+    );
+
+    expect(m.lastActivityAt).toBe(T0 + 50);
+    expect(m.firstAgentActivityAt).toBeNull();
   });
 });
 
@@ -127,8 +146,24 @@ describe("seedVitalsFromResumedTurn", () => {
     expect(m.activeTurnId).toBe("turn-resumed");
     expect(m.turnStartedAt).toBe(T0 - 30_000);
     expect(m.lastActivityAt).toBe(T0);
-    expect(classify(m, T0 + 9_999).phase).toBe("working");
+    expect(classify(m, T0 + 9_999).phase).toBe("waiting");
     expect(classify(m, T0 + 10_000).phase).toBe("slow");
+  });
+
+  it("restores working state when a resumed turn already has agent output", () => {
+    const m = emptyVitalsMarks();
+    seedVitalsFromResumedTurn(
+      m,
+      {
+        id: "turn-resumed",
+        status: "inProgress",
+        items: [{ type: "userMessage" }, { type: "reasoning" }],
+      },
+      T0,
+    );
+
+    expect(m.firstAgentActivityAt).toBe(T0);
+    expect(classify(m, T0 + 1_000).phase).toBe("working");
   });
 
   it("preserves same-turn metrics but resets them for a different turn", () => {
@@ -150,6 +185,7 @@ describe("seedVitalsFromResumedTurn", () => {
     );
     expect(m.activeTurnId).toBe("turn-b");
     expect(m.firstDeltaAt).toBeNull();
+    expect(m.firstAgentActivityAt).toBeNull();
     expect(m.lastActivityAt).toBe(T0 + 6_000);
   });
 });
@@ -221,7 +257,7 @@ describe("classifyVitals", () => {
     expect(v.sinceActivityMs).toBe(11_000);
   });
 
-  it("a heartbeat rescues a silent single-agent-looking turn from slow", () => {
+  it("a heartbeat keeps the turn alive without pretending the model responded", () => {
     const m = marksAtTurnStart();
     applyVitalNotification(
       m,
@@ -229,7 +265,8 @@ describe("classifyVitals", () => {
       T0 + 30_000,
     );
     const v = classify(m, T0 + 31_000); // 1s since heartbeat
-    expect(v.phase).toBe("working");
+    expect(v.phase).toBe("waiting");
+    expect(v.stalled).toBe(false);
   });
 
   it("exposes elapsed + TTFT + worst-gap metrics", () => {

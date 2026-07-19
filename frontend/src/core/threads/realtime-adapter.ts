@@ -467,9 +467,6 @@ function turnToMessages(turn: Turn): Message[] {
         }
         if (messageKind === "commentary" && !isInterruptedMessage) {
           kwargs.public_progress = true;
-          if (am.progressKind) {
-            kwargs.progress_kind = am.progressKind;
-          }
         }
         const ai: AIMessage = {
           type: "ai",
@@ -589,24 +586,21 @@ function toolCallTimelineCoordinates(
 }
 
 // Fold the turn's codebase grounding (project docs/chunks it was grounded on)
-// onto the latest investigation checkpoint before synthesis. That preserves
-// the causal order users actually experienced: orient/investigate → consulted
-// sources → synthesize → answer. Turns without public progress keep the legacy
-// fallback of attaching it to the final AI reply.
+// onto the first public checkpoint, which is the earliest conversational beat
+// that can truthfully acknowledge those sources. This is structural: it does
+// not classify prose into a hard-coded orient/investigate/synthesize ladder.
+// Turns without public progress keep the legacy final-answer fallback.
 function attachGroundingToNarrativeAnchor(
   messages: Message[],
   grounding: GroundingSource[] | undefined,
 ): void {
   if (!grounding || grounding.length === 0) return;
   let fallbackIndex = -1;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
+  for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index];
     if (!message || message.type !== "ai") continue;
-    if (fallbackIndex < 0) fallbackIndex = index;
-    const isNarrativeAnchor =
-      message.additional_kwargs?.public_progress === true &&
-      message.additional_kwargs?.progress_kind !== "synthesize";
-    if (isNarrativeAnchor) {
+    fallbackIndex = index;
+    if (message.additional_kwargs?.public_progress === true) {
       fallbackIndex = index;
       break;
     }
