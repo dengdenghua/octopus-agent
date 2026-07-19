@@ -270,10 +270,12 @@ def test_account_refresh_pulls_balance_membership(tmp_path: Any) -> None:
     assert snap["credits"] == 500 and snap["membership"]["active"] is True
 
 
-def test_account_404_when_no_link(tmp_path: Any) -> None:
+def test_account_returns_empty_state_when_no_link(tmp_path: Any) -> None:
     store = OctLinkStore(path=tmp_path / "l.json")
     client = _account_app({}, store=store)
-    assert client.get("/api/account/oct", headers=_bearer()).status_code == 404
+    response = client.get("/api/account/oct", headers=_bearer())
+    assert response.status_code == 200
+    assert response.json() is None
 
 
 # ─── model router ───────────────────────────────────────

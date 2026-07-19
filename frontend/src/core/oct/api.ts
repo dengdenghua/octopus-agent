@@ -154,8 +154,8 @@ export interface OctOrder {
 }
 
 export const octApi = {
-  /** 缓存视图 — 不打上游。404 = 未登录绑定。 */
-  get: () => _request<OctLink>("/api/account/oct"),
+  /** 缓存视图 — 不打上游。null = 未登录绑定。 */
+  get: () => _request<OctLink | null>("/api/account/oct"),
 
   /** 强制刷新(拉网关 balance + membership)。 */
   refresh: () => _request<OctLink>("/api/account/oct/refresh", { method: "POST" }),

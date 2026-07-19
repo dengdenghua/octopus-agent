@@ -795,6 +795,67 @@ def create_meta_router(
             "exempt_paths": [],
         }
 
+    def auth_me(request: Request) -> dict[str, Any]:
+        """Return the authenticated actor from the real identity store.
+
+        This endpoint used to exist only in the optional stub router. With
+        production auth enabled the frontend therefore made a guaranteed 404
+        request on every reload even though the bearer token was valid.
+        """
+        if identity_store is None:
+            raise HTTPException(401, "authentication required")
+
+        from runtime.sensing.gateway.openai_gateway import _resolve_actor
+
+        actor = _resolve_actor(
+            request,
+            identity_store,
+            True,
+            jwt_secret=molili_jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+        if not actor:
+            raise HTTPException(401, "authentication required")
+
+        identity = identity_store.get(actor) if hasattr(identity_store, "get") else None
+        metadata = dict(getattr(identity, "metadata", None) or {})
+        roles = [str(role) for role in (getattr(identity, "roles", None) or ())]
+        fallback_name = actor.split(":", 1)[-1] if ":" in actor else actor
+        username = next(
+            (
+                str(metadata[key]).strip()
+                for key in ("username", "display_name", "email", "mobile")
+                if isinstance(metadata.get(key), str) and str(metadata[key]).strip()
+            ),
+            fallback_name,
+        )
+        permissions_raw = metadata.get("permissions")
+        permissions = (
+            [str(value) for value in permissions_raw]
+            if isinstance(permissions_raw, (list, tuple))
+            else []
+        )
+        response: dict[str, Any] = {
+            "user_id": actor,
+            "actor_id": actor,
+            "username": username,
+            "roles": roles,
+            "permissions": permissions,
+            "is_active": True,
+        }
+        for key in ("email", "mobile", "provider"):
+            value = metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                response[key] = value.strip()
+        return response
+
+    # Leave the route to the compatibility stub when auth is disabled and no
+    # real identity store exists; otherwise the generic handler would shadow
+    # the stub's anonymous development response.
+    if identity_store is not None:
+        router.add_api_route("/api/auth/me", auth_me, methods=["GET"])
+
     # ─── Auth providers ─────────────────────────────────────
 
     @router.get(

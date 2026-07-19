@@ -118,6 +118,35 @@ def secured_meta_client(
 
 
 # ═══════════════════════════════════════════════════════════
+# GET /api/auth/me
+# ═══════════════════════════════════════════════════════════
+
+
+def test_auth_me_uses_real_identity_store(secured_meta_client) -> None:
+    client, headers, _registry = secured_meta_client
+
+    response = client.get("/api/auth/me", headers=headers["admin"])
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "user_id": "alice",
+        "actor_id": "alice",
+        "username": "alice",
+        "roles": ["admin"],
+        "permissions": [],
+        "is_active": True,
+    }
+    assert client.get("/api/auth/me").status_code == 401
+
+
+def test_auth_me_keeps_development_stub_when_auth_is_disabled(client) -> None:
+    response = client.get("/api/auth/me")
+
+    assert response.status_code == 200
+    assert response.json()["user_id"] == "anonymous"
+
+
+# ═══════════════════════════════════════════════════════════
 # POST /api/feedback
 # ═══════════════════════════════════════════════════════════
 

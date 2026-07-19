@@ -23,7 +23,6 @@ import {
   ConversationContent,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
-import { getBackendBaseURL } from "@/core/config";
 import { useLocalSettings } from "@/core/settings";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -48,7 +47,6 @@ import type { LiveToolEvent } from "../live-tool-timeline";
 import { PublicThinkingStatus } from "../public-thinking-status";
 import {
   type AgentRunState,
-  agentRunAvatarAnimationClass,
   agentRunStatusLightClass,
   agentRunStatusLightPulseClass,
 } from "../agent-run-status";
@@ -74,9 +72,6 @@ export const MESSAGE_LIST_FOLLOWUPS_EXTRA_PADDING_BOTTOM = 80;
 export const MESSAGE_LIST_TIMEOUT_WARNING_MS = 300_000;
 type SubtaskUpdate = Partial<Subtask> & { id: string };
 interface TurnMarker {
-  agentAvatar?: string;
-  agentIcon?: string | null;
-  agentName?: string;
   key: string;
   kind: "dot" | "phase";
   label: string;
@@ -87,10 +82,7 @@ function sameTurnMarker(a: TurnMarker, b: TurnMarker): boolean {
     a.key === b.key &&
     a.kind === b.kind &&
     a.label === b.label &&
-    a.number === b.number &&
-    a.agentName === b.agentName &&
-    a.agentAvatar === b.agentAvatar &&
-    a.agentIcon === b.agentIcon
+    a.number === b.number
   );
 }
 type TurnLocatorRunState = AgentRunState;
@@ -934,21 +926,10 @@ export function MessageList({
         .slice(index, endIndex)
         .flatMap((candidate) => candidate.messages);
       const firstMessage = group.messages[0];
-      const turnAiMessage = turnMessages.find(
-        (message): message is AIMessage => message.type === "ai",
-      );
-      const {
-        name: agentName,
-        avatar: agentAvatar,
-        icon: agentIcon,
-      } = resolveAgentIdentity(turnAiMessage);
       const rawLabel = firstMessage
         ? extractTextFromMessage(firstMessage).replace(/\s+/g, " ").trim()
         : "";
       markers.push({
-        agentAvatar,
-        agentIcon,
-        agentName,
         key: `${group.type}:${group.id ?? `idx-${index}`}`,
         kind: turnMarkerKindFromMessages(turnMessages),
         label: rawLabel || t.message.turnLabel(markers.length + 1),
@@ -964,7 +945,7 @@ export function MessageList({
     }
     turnMarkersRef.current = markers;
     return markers;
-  }, [groupedMessages, resolveAgentIdentity, t.message]);
+  }, [groupedMessages, t.message]);
   const [activeTurnKey, setActiveTurnKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1727,6 +1708,7 @@ function TurnLocatorRail({
               key={marker.key}
               aria-current={active ? "step" : undefined}
               aria-label={label}
+              data-turn-marker-active={active ? "true" : undefined}
               data-turn-marker-kind={marker.kind}
               className={cn(
                 "group relative flex w-6 items-center justify-center rounded-full transition-all duration-150",
@@ -1745,16 +1727,25 @@ function TurnLocatorRail({
                 className={cn(
                   "rounded-full transition-all duration-150",
                   marker.kind === "phase"
-                    ? "h-8 w-2 bg-muted-foreground/25 group-hover:bg-muted-foreground/40"
-                    : "size-2.5 bg-muted-foreground/30 group-hover:bg-muted-foreground/45",
+                    ? cn(
+                        "h-8 w-2",
+                        active
+                          ? "bg-muted-foreground/50"
+                          : "bg-muted-foreground/25 group-hover:bg-muted-foreground/40",
+                      )
+                    : cn(
+                        "size-2.5",
+                        active
+                          ? "bg-muted-foreground/55"
+                          : "bg-muted-foreground/30 group-hover:bg-muted-foreground/45",
+                      ),
                 )}
               />
-              {active && (
-                <TurnMarkerAvatar
-                  marker={marker}
-                  runState={marker.key === lastMarker.key ? runState : "done"}
-                />
-              )}
+              {active &&
+                marker.key === lastMarker.key &&
+                runState !== "done" && (
+                  <TurnMarkerStatusLight runState={runState} />
+                )}
             </button>
           );
         })}
@@ -1771,53 +1762,6 @@ function TurnLocatorRail({
   );
 }
 
-function TurnMarkerAvatar({
-  marker,
-  runState,
-}: {
-  marker: TurnMarker;
-  runState: TurnLocatorRunState;
-}) {
-  const { t } = useI18n();
-  const backendBase = getBackendBaseURL();
-  const avatarUrl = marker.agentAvatar
-    ? marker.agentAvatar.startsWith("http")
-      ? marker.agentAvatar
-      : `${backendBase}${marker.agentAvatar}`
-    : null;
-  const agentName = marker.agentName ?? t.message.assistant;
-  const icon = marker.agentIcon?.trim();
-  const initial = agentName.trim().charAt(0).toUpperCase() || "?";
-  const knockOutWhite = /octopus|\u7ae0\u9c7c/i.test(
-    `${agentName} ${marker.agentAvatar ?? ""}`,
-  );
-
-  return (
-    <div
-      aria-hidden="true"
-      data-turn-marker-avatar="true"
-      className={cn(
-        "pointer-events-none absolute flex size-5 items-center justify-center rounded-full bg-transparent drop-shadow-[0_1px_1px_rgba(0,0,0,0.18)]",
-        agentRunAvatarAnimationClass(runState),
-      )}
-    >
-      {avatarUrl ? (
-        <TransparentTurnAvatarImage
-          src={avatarUrl}
-          transparentizeWhite={knockOutWhite}
-        />
-      ) : icon ? (
-        <span className="bg-transparent text-sm leading-none">{icon}</span>
-      ) : (
-        <span className="bg-transparent text-[10px] font-semibold leading-none text-muted-foreground">
-          {initial}
-        </span>
-      )}
-      {runState !== "done" && <TurnMarkerStatusLight runState={runState} />}
-    </div>
-  );
-}
-
 function TurnMarkerStatusLight({
   runState,
 }: {
@@ -1829,7 +1773,7 @@ function TurnMarkerStatusLight({
     <span
       aria-hidden="true"
       className={cn(
-        "absolute -right-0.5 -bottom-0.5 size-1.5 rounded-full border border-background",
+        "absolute right-0 bottom-0 size-1.5 rounded-full border border-background",
         color,
       )}
       data-turn-marker-status={runState}
@@ -1844,81 +1788,6 @@ function TurnMarkerStatusLight({
         />
       )}
     </span>
-  );
-}
-
-function TransparentTurnAvatarImage({
-  src,
-  transparentizeWhite,
-}: {
-  src: string;
-  transparentizeWhite: boolean;
-}) {
-  const [renderedSrc, setRenderedSrc] = useState(src);
-  const [processed, setProcessed] = useState(false);
-
-  useEffect(() => {
-    setRenderedSrc(src);
-    setProcessed(false);
-    if (!transparentizeWhite || typeof window === "undefined") return;
-
-    let cancelled = false;
-    const image = new window.Image();
-    image.crossOrigin = "anonymous";
-    image.onload = () => {
-      try {
-        const width = image.naturalWidth || image.width;
-        const height = image.naturalHeight || image.height;
-        if (!width || !height) return;
-
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const context = canvas.getContext("2d");
-        if (!context) return;
-
-        context.drawImage(image, 0, 0);
-        const imageData = context.getImageData(0, 0, width, height);
-        const { data } = imageData;
-        for (let index = 0; index < data.length; index += 4) {
-          const red = data[index] ?? 0;
-          const green = data[index + 1] ?? 0;
-          const blue = data[index + 2] ?? 0;
-          const alpha = data[index + 3] ?? 0;
-          const maxChannel = Math.max(red, green, blue);
-          const minChannel = Math.min(red, green, blue);
-          if (alpha > 0 && minChannel > 238 && maxChannel - minChannel < 18) {
-            data[index + 3] = 0;
-          }
-        }
-        context.putImageData(imageData, 0, 0);
-        if (!cancelled) {
-          setRenderedSrc(canvas.toDataURL("image/png"));
-          setProcessed(true);
-        }
-      } catch {
-        if (!cancelled) setProcessed(false);
-      }
-    };
-    image.onerror = () => {
-      if (!cancelled) setProcessed(false);
-    };
-    image.src = src;
-
-    return () => {
-      cancelled = true;
-    };
-  }, [src, transparentizeWhite]);
-
-  return (
-    <img
-      alt=""
-      className={cn(
-        "size-5 bg-transparent object-contain",
-        transparentizeWhite && !processed && "mix-blend-multiply",
-      )}
-      src={renderedSrc}
-    />
   );
 }
 

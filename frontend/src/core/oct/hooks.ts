@@ -61,8 +61,9 @@ export function useOctLink() {
     queryFn: async () => {
       try {
         const link = await octApi.get();
+        if (!link) return null;
         // 登录后首访 credits 可能为空 → 刷一次拿真实余额
-        if (link && typeof link.credits?.credits !== "number") {
+        if (typeof link.credits?.credits !== "number") {
           try {
             return normalize(await octApi.refresh());
           } catch (e) {

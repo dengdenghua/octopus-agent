@@ -140,11 +140,17 @@ def create_account_router(
 
     # ─── 绑定展示 / 刷新 / 解绑 ─────────────────────────
 
-    @router.get("", response_model=OctLinkResponse)
-    def show(request: Request) -> OctLinkResponse:
+    @router.get("", response_model=OctLinkResponse | None)
+    def show(request: Request) -> OctLinkResponse | None:
         _require_enabled()
         actor = _actor(request)
-        link = _link_or_404(actor)
+        link = link_store.get(actor)
+        # "Not linked" is an ordinary account state, not a missing API
+        # resource. Returning JSON null keeps the workspace boot path free of
+        # expected 404 noise; mutation and usage routes still fail closed via
+        # _link_or_404 when a binding is actually required.
+        if link is None:
+            return None
         # snapshot 为空时顺手刷一次
         if not link.credits_snapshot:
             return refresh(request)

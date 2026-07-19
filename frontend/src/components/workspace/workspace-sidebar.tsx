@@ -621,7 +621,7 @@ function readProjectGroupingEnabled(): boolean {
   }
 }
 
-function activeTaskRoomIdFromPathname(pathname: string): string | null {
+function activeWorkspaceThreadIdFromPathname(pathname: string): string | null {
   const match = /^\/workspace\/(?:realtime|team)\/([^/?#]+)/.exec(pathname);
   const value = match?.[1];
   if (!value || value === "new") return null;
@@ -630,6 +630,28 @@ function activeTaskRoomIdFromPathname(pathname: string): string | null {
   } catch {
     return value;
   }
+}
+
+function activeTeamTaskRoomId(
+  pathname: string,
+  thread: AgentThread | null,
+): string | null {
+  const routeId = activeWorkspaceThreadIdFromPathname(pathname);
+  if (!routeId) return null;
+  if (/^\/workspace\/team\//.test(pathname)) return routeId;
+
+  const metadata: Record<string, unknown> = thread?.metadata ?? {};
+  const values: Record<string, unknown> = thread?.values ?? {};
+  if (firstString(metadata["mode"], values["mode"]) !== "team") {
+    return null;
+  }
+  return firstString(
+    metadata["team_room_id"],
+    metadata["room_id"],
+    values["team_room_id"],
+    values["room_id"],
+    thread?.thread_id,
+  );
 }
 
 export function syncedSidebarPathname(
@@ -944,16 +966,18 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   // Group code/team threads by project. Team history defaults to its bound
   // workspace folder, so multi-agent work sits with the project instead of
   // falling back to loose chat recents.
-  const activeTaskRoomId = activeTaskRoomIdFromPathname(sidebarPathname);
+  const activeThreadId = activeWorkspaceThreadIdFromPathname(sidebarPathname);
 
   const activeThread = useMemo(() => {
-    if (!activeTaskRoomId) return null;
+    if (!activeThreadId) return null;
     return (
-      mergedConversationRaw.find((t) => t.thread_id === activeTaskRoomId) ||
-      mergedProjectRaw.find((t) => t.thread_id === activeTaskRoomId) ||
+      mergedConversationRaw.find((t) => t.thread_id === activeThreadId) ||
+      mergedProjectRaw.find((t) => t.thread_id === activeThreadId) ||
       null
     );
-  }, [activeTaskRoomId, mergedConversationRaw, mergedProjectRaw]);
+  }, [activeThreadId, mergedConversationRaw, mergedProjectRaw]);
+
+  const activeTaskRoomId = activeTeamTaskRoomId(sidebarPathname, activeThread);
 
   const activeWorkDir = useMemo(() => {
     if (activeThread) {
@@ -1632,6 +1656,7 @@ export const __testing = {
   buildProjectSectionActions,
   buildChatsSectionActions,
   syncedSidebarPathname,
+  activeTeamTaskRoomId,
 };
 
 type WorkspaceSurfaceMode = "agent" | "browser";

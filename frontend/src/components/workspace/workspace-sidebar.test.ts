@@ -92,6 +92,26 @@ describe("workspace sidebar project grouping", () => {
     expect(__testing.isProjectThreadMode("chat")).toBe(false);
   });
 
+  test("queries team tasks only for actual team rooms", () => {
+    const ordinaryThread = makeThread("chat-1", "chat");
+    const teamThread = makeThread("team-1", "team", {
+      team_room_id: "room-1",
+    });
+
+    expect(
+      __testing.activeTeamTaskRoomId(
+        "/workspace/realtime/chat-1",
+        ordinaryThread,
+      ),
+    ).toBeNull();
+    expect(
+      __testing.activeTeamTaskRoomId("/workspace/realtime/team-1", teamThread),
+    ).toBe("room-1");
+    expect(__testing.activeTeamTaskRoomId("/workspace/team/room-2", null)).toBe(
+      "room-2",
+    );
+  });
+
   test("keeps team history out of chat recents and under projects", () => {
     const threads = [
       makeThread("chat-1", "chat"),
