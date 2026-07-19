@@ -70,6 +70,18 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
             ),
         ),
         GapBehaviorCheck(
+            id="local_partner_connect_ui_badge_tests",
+            title="Connect dialog badge tests cover effective status and repair states",
+            path="frontend/src/components/workspace/agents/local-agent-connect-dialog.test.ts",
+            required_terms=(
+                "localPartnerBadge",
+                "effective_status",
+                "已连接 · 需修复",
+                "model_unconfigured",
+                "launcher_only",
+            ),
+        ),
+        GapBehaviorCheck(
             id="local_partner_router_tests",
             title="Local partner router covers probe, readiness, effective status, and domestic CLI states",
             path="tests/test_agents_router.py",

@@ -39,6 +39,66 @@ const PARTNER_ICONS: Record<string, typeof BotIcon> = {
   openclaw: BotIcon,
 };
 
+export interface LocalPartnerBadgeLabels {
+  connected: string;
+  detected: string;
+  notDetected: string;
+}
+
+export function localPartnerBadge(
+  partner: LocalAgentPartner,
+  labels: LocalPartnerBadgeLabels,
+): {
+  label: string;
+  className: string;
+} {
+  const effectiveStatus =
+    partner.effective_status || partner.readiness_status || partner.status;
+  if (effectiveStatus === "registered") {
+    return {
+      label: labels.connected,
+      className: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+    };
+  }
+  if (partner.registered && effectiveStatus !== "registered") {
+    return {
+      label: "已连接 · 需修复",
+      className: "bg-amber-50 text-amber-700 ring-amber-100",
+    };
+  }
+  if (effectiveStatus === "ready") {
+    return {
+      label: "可连接",
+      className: "bg-primary/10 text-primary ring-primary/15",
+    };
+  }
+  if (effectiveStatus === "model_unconfigured") {
+    return {
+      label: "模型未配置",
+      className: "bg-amber-50 text-amber-700 ring-amber-100",
+    };
+  }
+  if (
+    effectiveStatus === "launcher_only" ||
+    effectiveStatus === "headless_unsupported"
+  ) {
+    return {
+      label: "仅可手动",
+      className: "bg-amber-50 text-amber-700 ring-amber-100",
+    };
+  }
+  if (partner.detected) {
+    return {
+      label: labels.detected,
+      className: "bg-primary/10 text-primary ring-primary/15",
+    };
+  }
+  return {
+    label: labels.notDetected,
+    className: "bg-muted text-muted-foreground ring-border",
+  };
+}
+
 export function LocalAgentConnectDialog({
   open,
   onOpenChange,
@@ -55,57 +115,10 @@ export function LocalAgentConnectDialog({
   >({});
   const [probingId, setProbingId] = useState("");
 
-  const partnerBadge = (
-    partner: LocalAgentPartner,
-  ): {
-    label: string;
-    className: string;
-  } => {
-    const effectiveStatus =
-      partner.effective_status || partner.readiness_status || partner.status;
-    if (effectiveStatus === "registered") {
-      return {
-        label: t.localAgentConnect.statusConnected,
-        className: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-      };
-    }
-    if (partner.registered && effectiveStatus !== "registered") {
-      return {
-        label: "已连接 · 需修复",
-        className: "bg-amber-50 text-amber-700 ring-amber-100",
-      };
-    }
-    if (effectiveStatus === "ready") {
-      return {
-        label: "可连接",
-        className: "bg-primary/10 text-primary ring-primary/15",
-      };
-    }
-    if (effectiveStatus === "model_unconfigured") {
-      return {
-        label: "模型未配置",
-        className: "bg-amber-50 text-amber-700 ring-amber-100",
-      };
-    }
-    if (
-      effectiveStatus === "launcher_only" ||
-      effectiveStatus === "headless_unsupported"
-    ) {
-      return {
-        label: "仅可手动",
-        className: "bg-amber-50 text-amber-700 ring-amber-100",
-      };
-    }
-    if (partner.detected) {
-      return {
-        label: t.localAgentConnect.statusDetected,
-        className: "bg-primary/10 text-primary ring-primary/15",
-      };
-    }
-    return {
-      label: t.localAgentConnect.statusNotDetected,
-      className: "bg-muted text-muted-foreground ring-border",
-    };
+  const partnerBadgeLabels = {
+    connected: t.localAgentConnect.statusConnected,
+    detected: t.localAgentConnect.statusDetected,
+    notDetected: t.localAgentConnect.statusNotDetected,
   };
 
   const {
@@ -271,7 +284,7 @@ export function LocalAgentConnectDialog({
                 !partner.ready ||
                 partner.registered ||
                 registerMutation.isPending;
-              const badge = partnerBadge(partner);
+              const badge = localPartnerBadge(partner, partnerBadgeLabels);
               const probeResult = probeResults[partner.id];
               const isProbing = probingId === partner.id;
               const commandRows = [
