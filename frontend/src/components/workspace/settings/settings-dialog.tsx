@@ -37,6 +37,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Suspense, lazy } from "react";
+import { getSettingsUxCopy } from "./settings-ux-copy";
 
 // Lazy load settings pages. Each ``import()`` is kept as a reusable factory
 // so we can preload *all* chunks the moment the dialog opens — see
@@ -175,7 +176,8 @@ function getAccountDisplayName(
 
 export function SettingsDialog(props: SettingsDialogProps) {
   const { defaultSection = "appearance", ...dialogProps } = props;
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const settingsUxCopy = getSettingsUxCopy(locale);
   const navigate = useNavigate();
   const { user, logout, authStatus, isLoading, isGuest } = useAuth();
   const accountName = getAccountDisplayName(user);
@@ -195,6 +197,22 @@ export function SettingsDialog(props: SettingsDialogProps) {
     w: number;
     h: number;
   } | null>(null);
+  const contentScrollRootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!dialogProps.open) return;
+    // Each settings page can be much taller than the dialog. Never carry a
+    // previous page's vertical position into the newly selected page: that
+    // would make its heading appear clipped and suggests the tab failed to
+    // switch. Wait one frame so the new Suspense child has mounted first.
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = contentScrollRootRef.current?.querySelector<HTMLElement>(
+        '[data-slot="scroll-area-viewport"]',
+      );
+      if (viewport) viewport.scrollTop = 0;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeSection, dialogProps.open]);
 
   const onResizeStart = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -379,7 +397,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       },
       {
         id: "mcp",
-        label: t.mcpSettings.title,
+        label: settingsUxCopy.mcp.title,
         icon: ServerIcon,
         keywords: [
           "mcp",
@@ -433,7 +451,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
     t.settings.model.title,
     t.settings.sections.memory,
     t.settings.sections.automation,
-    t.mcpSettings.title,
+    settingsUxCopy.mcp.title,
     t.settings.sections.notification,
     t.settings.sections.about,
     t.settings.sections.observability,
@@ -632,7 +650,10 @@ export function SettingsDialog(props: SettingsDialogProps) {
               ) : null}
             </div>
           </nav>
-          <ScrollArea className="h-full min-h-0 min-w-0 rounded-lg border [&_[data-slot=scroll-area-viewport]>div]:!block [&_[data-slot=scroll-area-viewport]>div]:!w-full [&_[data-slot=scroll-area-viewport]>div]:!min-w-0">
+          <ScrollArea
+            ref={contentScrollRootRef}
+            className="h-full min-h-0 min-w-0 rounded-lg border [&_[data-slot=scroll-area-viewport]>div]:!block [&_[data-slot=scroll-area-viewport]>div]:!w-full [&_[data-slot=scroll-area-viewport]>div]:!min-w-0"
+          >
             <div className="w-full min-w-0 max-w-full space-y-8 overflow-x-hidden p-3 sm:p-6">
               {/* Each tab gets its own Suspense boundary so switching
                   to an uncached tab doesn't blank out the currently

@@ -164,12 +164,65 @@ describe("settings identity and input guards", () => {
   it("prevents credential autofill and keeps the MCP token masked", async () => {
     renderWithProviders(<McpSettingsPage />, { locale: "zh-CN" });
 
-    const urlInput = screen.getByPlaceholderText("https://server/mcp");
-    const tokenInput = screen.getByPlaceholderText("鉴权 token（可选）");
+    const urlInput = screen.getByLabelText("服务地址");
+    const tokenInput = screen.getByLabelText("访问令牌（可选）");
     expect(urlInput).toHaveAttribute("type", "url");
     expect(urlInput).toHaveAttribute("autocomplete", "url");
     expect(tokenInput).toHaveAttribute("type", "password");
     expect(tokenInput).toHaveAttribute("autocomplete", "new-password");
+    expect(
+      screen.getByText("令牌只用于连接该服务，不会在列表中显示。"),
+    ).toBeInTheDocument();
+  });
+
+  it("distinguishes an MCP load failure from an empty service list", async () => {
+    const user = userEvent.setup();
+    mocks.loadMCPConfig
+      .mockRejectedValueOnce(new Error("raw config path"))
+      .mockResolvedValueOnce({ mcp_servers: {} });
+
+    renderWithProviders(<McpSettingsPage />, { locale: "zh-CN" });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("暂时无法读取 MCP 服务");
+    expect(alert).not.toHaveTextContent("raw config path");
+    expect(
+      screen.queryByText("还没有连接 MCP 服务。可在下方添加远程服务。"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "重新加载" }));
+
+    expect(
+      await screen.findByText("还没有连接 MCP 服务。可在下方添加远程服务。"),
+    ).toBeInTheDocument();
+    expect(mocks.loadMCPConfig).toHaveBeenCalledTimes(2);
+  });
+
+  it("prevents a case-insensitive duplicate MCP name from overwriting config", async () => {
+    const user = userEvent.setup();
+    mocks.loadMCPConfig.mockResolvedValue({
+      mcp_servers: {
+        github: {
+          transport: "http",
+          url: "https://existing.example/mcp",
+          enabled: true,
+        },
+      },
+    });
+
+    renderWithProviders(<McpSettingsPage />, { locale: "zh-CN" });
+
+    await screen.findByText("github");
+    await user.type(screen.getByLabelText("服务名称"), "GitHub");
+    await user.type(
+      screen.getByLabelText("服务地址"),
+      "https://new.example/mcp",
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "已存在名为“GitHub”的服务",
+    );
+    expect(screen.getByRole("button", { name: "添加服务" })).toBeDisabled();
   });
 });
 

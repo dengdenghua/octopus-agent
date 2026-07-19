@@ -16,7 +16,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangleIcon,
-  MoreHorizontalIcon,
+  LoaderCircleIcon,
   PlusIcon,
   RefreshCwIcon,
   TrashIcon,
@@ -44,6 +44,7 @@ import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { formatAiModeDevice, type AiModeDevice } from "./settings-resilience";
+import { getSettingsUxCopy } from "./settings-ux-copy";
 
 // ─── Local API types · narrow to what the UI actually uses ──────
 //
@@ -71,25 +72,6 @@ interface PathDenylistStatus {
   paths: string[];
 }
 
-// Static fallback so the AI-mode cards still render before the
-// initial GET resolves (or if the endpoint is briefly unavailable).
-function getDefaultAiModeOptions(
-  t: ReturnType<typeof useI18n>["t"],
-): AiModeOption[] {
-  return [
-    {
-      id: "efficiency",
-      label: t.privacySettings.efficiencyMode,
-      description: t.privacySettings.efficiencyModeDesc,
-    },
-    {
-      id: "privacy",
-      label: t.privacySettings.privacyMode,
-      description: t.privacySettings.privacyModeDesc,
-    },
-  ];
-}
-
 // Pulled from the auto-generated OpenAPI types so backend changes
 // to the ``IdentityLockResponse`` pydantic model propagate here
 // without a hand-edit. See docs/adr/004-openapi-ts-codegen.md.
@@ -114,24 +96,25 @@ type JudgeStatus = {
   available: boolean;
 };
 
+type LoadState = "loading" | "ready" | "error";
+
 export default function PrivacySettingsPage() {
   const { t, locale } = useI18n();
+  const copy = getSettingsUxCopy(locale).privacy;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  // Blurbs resolve live against the selected locale.
-  const PROFILE_BLURB: Record<ConstitutionProfile, string> = {
-    strict: t.privacySettings.profileStrictBlurb,
-    normal: t.privacySettings.profileNormalBlurb,
-    lax: t.privacySettings.profileLaxBlurb,
-  };
   const [status, setStatus] = useState<LockStatus | null>(null);
+  const [statusLoadState, setStatusLoadState] = useState<LoadState>("loading");
   const [busy, setBusy] = useState(false);
   const [profile, setProfile] = useState<ConstitutionProfileStatus | null>(
     null,
   );
   const [profileBusy, setProfileBusy] = useState(false);
+  const [profileLoadState, setProfileLoadState] =
+    useState<LoadState>("loading");
   const [judge, setJudge] = useState<JudgeStatus | null>(null);
   const [judgeBusy, setJudgeBusy] = useState(false);
+  const [judgeLoadState, setJudgeLoadState] = useState<LoadState>("loading");
   const [showFactoryResetDialog, setShowFactoryResetDialog] = useState(false);
   const [factoryResetConfirmText, setFactoryResetConfirmText] = useState("");
   const [factoryResetPending, setFactoryResetPending] = useState(false);
@@ -139,52 +122,115 @@ export default function PrivacySettingsPage() {
   // ── AI mode (efficiency / privacy) ──
   const [aiMode, setAiMode] = useState<AiModeStatus | null>(null);
   const [aiModeBusy, setAiModeBusy] = useState(false);
+  const [aiModeLoadState, setAiModeLoadState] = useState<LoadState>("loading");
 
   // ── Path denylist ──
   const [denylist, setDenylist] = useState<PathDenylistStatus | null>(null);
+  const [denylistLoadState, setDenylistLoadState] =
+    useState<LoadState>("loading");
   const [showAddPathDialog, setShowAddPathDialog] = useState(false);
   const [newPath, setNewPath] = useState("");
   const [denylistBusy, setDenylistBusy] = useState(false);
-  const [denylistMenuOpen, setDenylistMenuOpen] = useState<string | null>(null);
+  const [pathToRemove, setPathToRemove] = useState<string | null>(null);
+
+  const fetchIdentityLock = useCallback(async () => {
+    setStatusLoadState("loading");
+    try {
+      const res = await fetch(
+        `${getBackendBaseURL()}/api/config/identity-lock`,
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const next = (await res.json()) as LockStatus;
+      if (typeof next?.locked !== "boolean") throw new Error("invalid data");
+      setStatus(next);
+      setStatusLoadState("ready");
+    } catch {
+      setStatus(null);
+      setStatusLoadState("error");
+    }
+  }, []);
+
+  const fetchProfile = useCallback(async () => {
+    setProfileLoadState("loading");
+    try {
+      const res = await fetch(
+        `${getBackendBaseURL()}/api/safety/constitution-profile`,
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const next = (await res.json()) as ConstitutionProfileStatus;
+      if (!(["strict", "normal", "lax"] as string[]).includes(next?.profile)) {
+        throw new Error("invalid data");
+      }
+      setProfile(next);
+      setProfileLoadState("ready");
+    } catch {
+      setProfile(null);
+      setProfileLoadState("error");
+    }
+  }, []);
+
+  const fetchJudge = useCallback(async () => {
+    setJudgeLoadState("loading");
+    try {
+      const res = await fetch(`${getBackendBaseURL()}/api/safety/llm-judge`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const next = (await res.json()) as JudgeStatus;
+      if (
+        typeof next?.enabled !== "boolean" ||
+        typeof next?.available !== "boolean"
+      ) {
+        throw new Error("invalid data");
+      }
+      setJudge(next);
+      setJudgeLoadState("ready");
+    } catch {
+      setJudge(null);
+      setJudgeLoadState("error");
+    }
+  }, []);
 
   const fetchAiMode = useCallback(async () => {
+    setAiModeLoadState("loading");
     try {
       const res = await fetch(`${getBackendBaseURL()}/api/ai-mode`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as AiModeStatus;
+      if (
+        (data?.mode !== "efficiency" && data?.mode !== "privacy") ||
+        !Array.isArray(data.modes) ||
+        data.modes.length === 0
+      ) {
+        throw new Error("invalid data");
+      }
       setAiMode(data);
+      setAiModeLoadState("ready");
     } catch {
       setAiMode(null);
+      setAiModeLoadState("error");
     }
   }, []);
 
   const fetchDenylist = useCallback(async () => {
+    setDenylistLoadState("loading");
     try {
       const res = await fetch(`${getBackendBaseURL()}/api/path-denylist`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as PathDenylistStatus;
       setDenylist({ paths: Array.isArray(data?.paths) ? data.paths : [] });
+      setDenylistLoadState("ready");
     } catch {
-      setDenylist({ paths: [] });
+      setDenylist(null);
+      setDenylistLoadState("error");
     }
   }, []);
 
   useEffect(() => {
-    fetch(`${getBackendBaseURL()}/api/config/identity-lock`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: LockStatus | null) => setStatus(j))
-      .catch(() => setStatus(null));
-    fetch(`${getBackendBaseURL()}/api/safety/constitution-profile`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: ConstitutionProfileStatus | null) => setProfile(j))
-      .catch(() => setProfile(null));
-    fetch(`${getBackendBaseURL()}/api/safety/llm-judge`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: JudgeStatus | null) => setJudge(j))
-      .catch(() => setJudge(null));
-    fetchAiMode();
-    fetchDenylist();
-  }, [fetchAiMode, fetchDenylist]);
+    void fetchIdentityLock();
+    void fetchProfile();
+    void fetchJudge();
+    void fetchAiMode();
+    void fetchDenylist();
+  }, [fetchAiMode, fetchDenylist, fetchIdentityLock, fetchJudge, fetchProfile]);
 
   async function selectAiMode(mode: AiModeId) {
     if (aiModeBusy || !aiMode) return;
@@ -216,13 +262,9 @@ export default function PrivacySettingsPage() {
       setAiMode(next);
       const label = next.modes.find((m) => m.id === mode)?.label ?? mode;
       toast.success(t.privacySettings.toastAiModeSwitched(label));
-    } catch (e) {
+    } catch {
       setAiMode(prev);
-      toast.error(
-        t.privacySettings.toastAiModeSwitchFailed(
-          e instanceof Error ? e.message : String(e),
-        ),
-      );
+      toast.error(copy.restoreFailed);
     } finally {
       setAiModeBusy(false);
     }
@@ -246,20 +288,15 @@ export default function PrivacySettingsPage() {
       setNewPath("");
       setShowAddPathDialog(false);
       await fetchDenylist();
-    } catch (e) {
-      toast.error(
-        t.privacySettings.toastPathAddFailed(
-          e instanceof Error ? e.message : String(e),
-        ),
-      );
+    } catch {
+      toast.error(copy.restoreFailed);
     } finally {
       setDenylistBusy(false);
     }
   }
 
-  async function removeDenylistPath(path: string) {
+  async function removeDenylistPath(path: string): Promise<boolean> {
     setDenylistBusy(true);
-    setDenylistMenuOpen(null);
     try {
       const res = await fetch(`${getBackendBaseURL()}/api/path-denylist`, {
         method: "DELETE",
@@ -269,12 +306,10 @@ export default function PrivacySettingsPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toast.success(t.privacySettings.toastPathRemoved(path));
       await fetchDenylist();
-    } catch (e) {
-      toast.error(
-        t.privacySettings.toastPathRemoveFailed(
-          e instanceof Error ? e.message : String(e),
-        ),
-      );
+      return true;
+    } catch {
+      toast.error(copy.restoreFailed);
+      return false;
     } finally {
       setDenylistBusy(false);
     }
@@ -294,13 +329,10 @@ export default function PrivacySettingsPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const next: ConstitutionProfileStatus = await res.json();
       setProfile(next);
+      setProfileLoadState("ready");
       toast.success(t.privacySettings.toastProfileSwitched(name));
-    } catch (e) {
-      toast.error(
-        t.privacySettings.toastProfileFailed(
-          e instanceof Error ? e.message : String(e),
-        ),
-      );
+    } catch {
+      toast.error(copy.restoreFailed);
     } finally {
       setProfileBusy(false);
     }
@@ -318,17 +350,14 @@ export default function PrivacySettingsPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const next: JudgeStatus = await res.json();
       setJudge(next);
+      setJudgeLoadState("ready");
       toast.success(
         next.enabled
           ? t.privacySettings.toastJudgeEnabled
           : t.privacySettings.toastJudgeDisabled,
       );
-    } catch (e) {
-      toast.error(
-        t.privacySettings.toastJudgeToggleFailed(
-          e instanceof Error ? e.message : String(e),
-        ),
-      );
+    } catch {
+      toast.error(copy.restoreFailed);
     } finally {
       setJudgeBusy(false);
     }
@@ -348,6 +377,7 @@ export default function PrivacySettingsPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const next: LockStatus = await res.json();
       setStatus(next);
+      setStatusLoadState("ready");
       toast.success(
         newLocked === null
           ? t.privacySettings.toastRestoreDefault
@@ -355,12 +385,8 @@ export default function PrivacySettingsPage() {
             ? t.privacySettings.toastLockOn
             : t.privacySettings.toastLockOff,
       );
-    } catch (e) {
-      toast.error(
-        t.privacySettings.toastToggleFailed(
-          e instanceof Error ? e.message : String(e),
-        ),
-      );
+    } catch {
+      toast.error(copy.restoreFailed);
     } finally {
       setBusy(false);
     }
@@ -384,10 +410,7 @@ export default function PrivacySettingsPage() {
           }),
         },
       );
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `Factory reset failed: ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       clearOctopusBrowserState();
       queryClient.removeQueries({ queryKey: ["threads"] });
       queryClient.removeQueries({ queryKey: ["projects"] });
@@ -395,12 +418,8 @@ export default function PrivacySettingsPage() {
       setShowFactoryResetDialog(false);
       setFactoryResetConfirmText("");
       navigate("/workspace/realtime/new", { replace: true });
-    } catch (err) {
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : t.accountSettings.factoryResetFailed,
-      );
+    } catch {
+      toast.error(t.accountSettings.factoryResetFailed);
     } finally {
       setFactoryResetPending(false);
     }
@@ -412,67 +431,82 @@ export default function PrivacySettingsPage() {
   return (
     <div className="flex flex-col gap-6 text-sm">
       {/* ─── Identity Lock toggle ─── */}
-      <div className="rounded-lg border border-border-default bg-card/50 p-5">
+      <div
+        data-testid="identity-protection-section"
+        className="rounded-lg border border-border-default bg-card/50 p-5"
+      >
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <h3 className="text-base font-semibold text-foreground">
-              {t.privacySettings.identityLockTitle}
+              {copy.identityTitle}
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              {t.privacySettings.identityLockDesc}
+              {copy.identityDescription}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => toggle(!locked)}
-            disabled={busy}
-            aria-pressed={locked}
-            className={cn(
-              "shrink-0 relative inline-flex h-7 w-12 items-center rounded-full transition-colors",
-              locked ? "bg-primary" : "bg-muted",
-              busy && "opacity-60 cursor-not-allowed",
-            )}
-          >
-            <span
-              className={cn(
-                "inline-block h-5 w-5 rounded-full bg-background shadow transition-transform",
-                locked ? "translate-x-6" : "translate-x-1",
-              )}
-            />
-          </button>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px]">
-          <span
-            className={cn(
-              "rounded px-1.5 py-0.5 font-medium",
-              locked
-                ? "bg-emerald-500/10 text-emerald-600"
-                : "bg-amber-500/10 text-amber-600",
-            )}
-          >
-            {locked
-              ? t.privacySettings.lockedTag
-              : t.privacySettings.unlockedTag}
-          </span>
-          <span className="text-muted-foreground/70">
-            {t.privacySettings.sourceLabel}: <code>{source}</code>
-          </span>
-          {source === "runtime" && (
+          {statusLoadState === "ready" && status ? (
             <button
               type="button"
-              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
-              onClick={() => toggle(null)}
+              onClick={() => toggle(!locked)}
               disabled={busy}
+              aria-pressed={locked}
+              aria-label={locked ? copy.disableIdentity : copy.enableIdentity}
+              className={cn(
+                "shrink-0 relative inline-flex h-7 w-12 items-center rounded-full transition-colors",
+                locked ? "bg-primary" : "bg-muted",
+                busy && "opacity-60 cursor-not-allowed",
+              )}
             >
-              {t.privacySettings.restoreDefault}
+              <span
+                className={cn(
+                  "inline-block h-5 w-5 rounded-full bg-background shadow transition-transform",
+                  locked ? "translate-x-6" : "translate-x-1",
+                )}
+              />
             </button>
-          )}
+          ) : null}
         </div>
+
+        {statusLoadState === "ready" && status ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+            <span
+              className={cn(
+                "rounded px-1.5 py-0.5 font-medium",
+                locked
+                  ? "bg-emerald-500/10 text-emerald-600"
+                  : "bg-amber-500/10 text-amber-600",
+              )}
+            >
+              {locked ? copy.identityOn : copy.identityOff}
+            </span>
+            <span className="text-muted-foreground/80">
+              {copy.sourceLabel}：{copy.sources[source]}
+            </span>
+            {source === "runtime" && (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                onClick={() => toggle(null)}
+                disabled={busy}
+              >
+                {t.privacySettings.restoreDefault}
+              </button>
+            )}
+          </div>
+        ) : (
+          <SettingsStateNotice
+            state={statusLoadState}
+            copy={copy}
+            onRetry={fetchIdentityLock}
+          />
+        )}
       </div>
 
       {/* ─── AI mode (efficiency / privacy) ─── */}
-      <div className="rounded-lg border border-border-default bg-card/50 p-5">
+      <div
+        data-testid="ai-mode-section"
+        className="rounded-lg border border-border-default bg-card/50 p-5"
+      >
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <h3 className="text-base font-semibold text-foreground">
@@ -496,65 +530,85 @@ export default function PrivacySettingsPage() {
             size="sm"
             className="h-8 text-xs"
             onClick={fetchAiMode}
-            disabled={aiModeBusy}
+            disabled={aiModeBusy || aiModeLoadState === "loading"}
           >
-            <RefreshCwIcon className="mr-1 h-3 w-3" />{" "}
-            {t.privacySettings.detectButton}
+            <RefreshCwIcon
+              className={cn(
+                "mr-1 h-3 w-3",
+                aiModeLoadState === "loading" && "animate-spin",
+              )}
+            />{" "}
+            {aiModeLoadState === "error"
+              ? copy.retry
+              : t.privacySettings.detectButton}
           </Button>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {(aiMode?.modes ?? getDefaultAiModeOptions(t)).map((opt) => {
-            const active = aiMode?.mode === opt.id;
-            const recommended =
-              !!opt.recommended_default || aiMode?.recommended === opt.id;
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => selectAiMode(opt.id)}
-                disabled={aiModeBusy}
-                aria-pressed={active}
-                className={cn(
-                  "flex flex-col gap-2 rounded-lg border p-4 text-left transition",
-                  active
-                    ? "border-primary bg-primary/5 ring-1 ring-primary/40"
-                    : "border-border-default hover:border-primary/40",
-                  aiModeBusy && "opacity-60 cursor-not-allowed",
-                )}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">{opt.label}</span>
-                  <div className="flex items-center gap-1.5">
-                    {recommended && (
-                      <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                        {t.privacySettings.recommendedTag}
-                      </span>
+        {aiModeLoadState === "ready" && aiMode ? (
+          <>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {aiMode.modes.map((opt) => {
+                const active = aiMode?.mode === opt.id;
+                const recommended =
+                  !!opt.recommended_default || aiMode?.recommended === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => selectAiMode(opt.id)}
+                    disabled={aiModeBusy}
+                    aria-pressed={active}
+                    className={cn(
+                      "flex flex-col gap-2 rounded-lg border p-4 text-left transition",
+                      active
+                        ? "border-primary bg-primary/5 ring-1 ring-primary/40"
+                        : "border-border-default hover:border-primary/40",
+                      aiModeBusy && "opacity-60 cursor-not-allowed",
                     )}
-                    {active && (
-                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                        {t.privacySettings.enabledTag}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <p className="text-[11px] leading-snug text-muted-foreground">
-                  {opt.description}
-                </p>
-              </button>
-            );
-          })}
-        </div>
-        {formatAiModeDevice(aiMode?.device, locale) && (
-          <div className="mt-3 text-[11px] text-muted-foreground/80">
-            {t.privacySettings.deviceLabel}{" "}
-            <code>{formatAiModeDevice(aiMode?.device, locale)}</code>
-          </div>
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{opt.label}</span>
+                      <div className="flex items-center gap-1.5">
+                        {recommended && (
+                          <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                            {t.privacySettings.recommendedTag}
+                          </span>
+                        )}
+                        {active && (
+                          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                            {t.privacySettings.enabledTag}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-[11px] leading-snug text-muted-foreground">
+                      {opt.description}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+            {formatAiModeDevice(aiMode.device, locale) && (
+              <div className="mt-3 text-[11px] text-muted-foreground/80">
+                {t.privacySettings.deviceLabel}{" "}
+                <code>{formatAiModeDevice(aiMode.device, locale)}</code>
+              </div>
+            )}
+          </>
+        ) : (
+          <SettingsStateNotice
+            state={aiModeLoadState}
+            copy={copy}
+            onRetry={fetchAiMode}
+          />
         )}
       </div>
 
       {/* ─── Path denylist (folders the agent can't read) ─── */}
-      <div className="rounded-lg border border-border-default bg-card/50 p-5">
+      <div
+        data-testid="path-denylist-section"
+        className="rounded-lg border border-border-default bg-card/50 p-5"
+      >
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <h3 className="text-base font-semibold text-foreground">
@@ -572,169 +626,181 @@ export default function PrivacySettingsPage() {
               setNewPath("");
               setShowAddPathDialog(true);
             }}
+            disabled={denylistLoadState !== "ready"}
           >
             <PlusIcon className="mr-1 h-3 w-3" />{" "}
             {t.privacySettings.addPathButton}
           </Button>
         </div>
 
-        <div className="mt-4 rounded-lg border border-border-subtle divide-y divide-border/40">
-          {(denylist?.paths ?? []).length === 0 ? (
-            <div className="px-4 py-6 text-center text-xs text-muted-foreground">
-              {t.privacySettings.pathDenyEmpty}
-            </div>
-          ) : (
-            (denylist?.paths ?? []).map((p) => (
-              <div
-                key={p}
-                className="flex items-center justify-between gap-3 px-4 py-3"
-              >
-                <code className="truncate font-mono text-xs text-foreground">
-                  {p}
-                </code>
-                <div className="relative shrink-0">
+        {denylistLoadState === "ready" && denylist ? (
+          <div className="mt-4 rounded-lg border border-border-subtle divide-y divide-border/40">
+            {denylist.paths.length === 0 ? (
+              <div className="px-4 py-6 text-center text-xs text-muted-foreground">
+                {t.privacySettings.pathDenyEmpty}
+              </div>
+            ) : (
+              denylist.paths.map((p) => (
+                <div
+                  key={p}
+                  className="flex items-center justify-between gap-3 px-4 py-3"
+                >
+                  <code className="truncate font-mono text-xs text-foreground">
+                    {p}
+                  </code>
                   <button
                     type="button"
-                    aria-label={t.privacySettings.pathActionAria(p)}
-                    className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    onClick={() =>
-                      setDenylistMenuOpen((cur) => (cur === p ? null : p))
-                    }
+                    aria-label={`${copy.removePathTitle}: ${p}`}
+                    className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => setPathToRemove(p)}
                     disabled={denylistBusy}
                   >
-                    <MoreHorizontalIcon className="h-4 w-4" />
+                    <TrashIcon className="h-4 w-4" />
                   </button>
-                  {denylistMenuOpen === p && (
-                    <div
-                      role="menu"
-                      className="absolute right-0 top-full z-10 mt-1 min-w-[120px] rounded-md border border-border bg-popover p-1 shadow-[var(--shadow-sm)]"
-                    >
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-destructive hover:bg-destructive/10"
-                        onClick={() => removeDenylistPath(p)}
-                        disabled={denylistBusy}
-                      >
-                        <TrashIcon className="h-3 w-3" />{" "}
-                        {t.privacySettings.pathDeleteButton}
-                      </button>
-                    </div>
-                  )}
                 </div>
-              </div>
-            ))
-          )}
-        </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <SettingsStateNotice
+            state={denylistLoadState}
+            copy={copy}
+            onRetry={fetchDenylist}
+          />
+        )}
       </div>
 
       {/* ─── Constitution profile ─── */}
-      <div className="rounded-lg border border-border-default bg-card/50 p-5">
+      <div
+        data-testid="outbound-safety-section"
+        className="rounded-lg border border-border-default bg-card/50 p-5"
+      >
         <h3 className="text-base font-semibold text-foreground">
-          {t.privacySettings.profileTitle}
+          {copy.profileTitle}
         </h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          {t.privacySettings.profileDescPrefix}
+          {copy.profileDescription}{" "}
           <a
             href="https://github.com/octopus-agent/octopus-agent/blob/main/docs/constitution.md"
             className="underline underline-offset-2"
+            target="_blank"
+            rel="noreferrer"
           >
-            {t.privacySettings.profileDescDocLink}
+            {copy.profileDocLabel}
           </a>
-          {t.privacySettings.profileDescSuffix}
         </p>
 
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {(["strict", "normal", "lax"] as ConstitutionProfile[]).map(
-            (name) => {
-              const active = profile?.profile === name;
-              return (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => setConstitutionProfile(name)}
-                  disabled={profileBusy || active}
-                  className={cn(
-                    "flex flex-col gap-1 rounded-lg border p-3 text-left transition",
-                    active
-                      ? "border-primary bg-primary/5 ring-1 ring-primary/40"
-                      : "border-border-default hover:border-primary/40",
-                    profileBusy && "opacity-60 cursor-not-allowed",
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-sm font-medium uppercase">
-                      {name}
-                    </span>
-                    {active && (
-                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                        {t.privacySettings.activeTag}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground leading-snug">
-                    {PROFILE_BLURB[name]}
-                  </div>
-                </button>
-              );
-            },
-          )}
-        </div>
-        {profile === null && (
-          <div className="mt-3 text-[11px] text-muted-foreground">
-            {t.privacySettings.profileLoadFailed}
-          </div>
-        )}
+        {profileLoadState === "ready" && profile ? (
+          <>
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {(["strict", "normal", "lax"] as ConstitutionProfile[]).map(
+                (name) => {
+                  const active = profile.profile === name;
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => setConstitutionProfile(name)}
+                      disabled={profileBusy || active}
+                      aria-pressed={active}
+                      className={cn(
+                        "flex flex-col gap-1 rounded-lg border p-3 text-left transition",
+                        active
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/40"
+                          : "border-border-default hover:border-primary/40",
+                        profileBusy && "opacity-60 cursor-not-allowed",
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium">
+                          {copy.profiles[name].label}
+                        </span>
+                        {active && (
+                          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                            {copy.active}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground leading-snug">
+                        {copy.profiles[name].description}
+                      </div>
+                    </button>
+                  );
+                },
+              )}
+            </div>
 
-        {/* LLM 语义审查 judge —— 运行时开关(无需重启)。上面的 profile 决定
-            judge 命中是硬拦截(strict)还是仅审计(normal/lax)。 */}
-        <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-border-default p-3">
-          <div className="min-w-0">
-            <div className="text-sm font-medium">
-              {t.privacySettings.judgeTitle}
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-border-default p-3">
+              <div className="min-w-0">
+                <div className="text-sm font-medium">{copy.judgeTitle}</div>
+                <div className="text-[11px] text-muted-foreground leading-snug">
+                  {copy.judgeDescription}
+                  {judgeLoadState === "ready" && judge && !judge.available && (
+                    <span className="mt-1 block text-amber-600 dark:text-amber-400">
+                      {copy.judgeUnavailable}
+                    </span>
+                  )}
+                </div>
+                {judgeLoadState !== "ready" && (
+                  <SettingsStateNotice
+                    state={judgeLoadState}
+                    copy={copy}
+                    onRetry={fetchJudge}
+                    compact
+                  />
+                )}
+              </div>
+              <Switch
+                aria-label={copy.judgeSwitchLabel}
+                checked={!!judge?.enabled}
+                disabled={
+                  judgeBusy || judgeLoadState !== "ready" || !judge?.available
+                }
+                onCheckedChange={(v) => setJudgeEnabled(v)}
+              />
             </div>
-            <div className="text-[11px] text-muted-foreground leading-snug">
-              {t.privacySettings.judgeDesc}
-              {judge && !judge.available && t.privacySettings.judgeUnavailable}
-            </div>
-          </div>
-          <Switch
-            checked={!!judge?.enabled}
-            disabled={judgeBusy || !judge || !judge.available}
-            onCheckedChange={(v) => setJudgeEnabled(v)}
+          </>
+        ) : (
+          <SettingsStateNotice
+            state={profileLoadState}
+            copy={copy}
+            onRetry={fetchProfile}
           />
-        </div>
+        )}
       </div>
 
       {/* ─── Local private web-search backend (one-click SearXNG) ─── */}
       <SearxngControl />
 
       {/* ─── Alternative unlock paths ─── */}
-      <div className="rounded-lg border border-border-subtle bg-muted/20 p-4">
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {t.privacySettings.alternativeUnlockTitle}
-        </h4>
-        <ul className="space-y-1.5 text-xs text-muted-foreground/90">
-          <li>
-            <strong className="text-foreground">
-              {t.privacySettings.altEnvLabel}
-            </strong>{" "}
-            {t.privacySettings.altEnvDesc}
-          </li>
-          <li>
-            <strong className="text-foreground">
-              {t.privacySettings.altTurnLabel}
-            </strong>{" "}
-            {t.privacySettings.altTurnDesc}
-          </li>
-          <li>
-            <strong className="text-foreground">
-              {t.privacySettings.altApiLabel}
-            </strong>{" "}
-            {t.privacySettings.altApiDesc}
-          </li>
-        </ul>
-      </div>
+      <details className="group rounded-lg border border-border-subtle bg-muted/20 p-4">
+        <summary className="cursor-pointer list-none rounded text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+          <span className="flex items-center justify-between gap-3">
+            <span>
+              <span className="block font-semibold">{copy.advancedTitle}</span>
+              <span className="mt-0.5 block font-normal text-muted-foreground">
+                {copy.advancedSummary}
+              </span>
+            </span>
+            <span
+              aria-hidden="true"
+              className="text-muted-foreground transition-transform group-open:rotate-90"
+            >
+              ›
+            </span>
+          </span>
+        </summary>
+        <div className="mt-3 border-t border-border-subtle pt-3">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {copy.advancedDescription}
+          </p>
+          <ul className="mt-2 space-y-1.5 text-xs text-muted-foreground/90">
+            <li>{copy.advancedEnvironment}</li>
+            <li>{copy.advancedTurn}</li>
+            <li>{copy.advancedApi}</li>
+          </ul>
+        </div>
+      </details>
 
       <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-5">
         <div className="flex items-start justify-between gap-4">
@@ -758,7 +824,7 @@ export default function PrivacySettingsPage() {
       </div>
 
       <Dialog open={showAddPathDialog} onOpenChange={setShowAddPathDialog}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent closeLabel={t.common.close} className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>{t.privacySettings.addPathDialogTitle}</DialogTitle>
             <DialogDescription>
@@ -797,10 +863,48 @@ export default function PrivacySettingsPage() {
       </Dialog>
 
       <Dialog
+        open={pathToRemove !== null}
+        onOpenChange={(open) => {
+          if (!open && !denylistBusy) setPathToRemove(null);
+        }}
+      >
+        <DialogContent closeLabel={t.common.close} className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">
+              {copy.removePathTitle}
+            </DialogTitle>
+            <DialogDescription>
+              {pathToRemove ? copy.removePathDescription(pathToRemove) : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setPathToRemove(null)}
+              disabled={denylistBusy}
+            >
+              {t.common.cancel}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!pathToRemove) return;
+                const removed = await removeDenylistPath(pathToRemove);
+                if (removed) setPathToRemove(null);
+              }}
+              disabled={denylistBusy}
+            >
+              {denylistBusy ? t.common.loading : copy.removePathConfirm}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={showFactoryResetDialog}
         onOpenChange={setShowFactoryResetDialog}
       >
-        <DialogContent className="sm:max-w-[420px]">
+        <DialogContent closeLabel={t.common.close} className="sm:max-w-[420px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangleIcon className="size-5" />
@@ -844,6 +948,55 @@ export default function PrivacySettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function SettingsStateNotice({
+  state,
+  copy,
+  onRetry,
+  compact = false,
+}: {
+  state: Exclude<LoadState, "ready"> | "ready";
+  copy: Pick<
+    ReturnType<typeof getSettingsUxCopy>["privacy"],
+    "loading" | "loadFailed" | "retry"
+  >;
+  onRetry: () => void | Promise<void>;
+  compact?: boolean;
+}) {
+  if (state === "ready") return null;
+  const failed = state === "error";
+  return (
+    <div
+      role={failed ? "alert" : "status"}
+      aria-live="polite"
+      className={cn(
+        "mt-3 flex items-center justify-between gap-3 rounded-lg border px-3 text-xs",
+        compact ? "py-2" : "py-3",
+        failed
+          ? "border-destructive/25 bg-destructive/5 text-destructive"
+          : "border-border-subtle bg-muted/25 text-muted-foreground",
+      )}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        {failed ? null : (
+          <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
+        )}
+        <span>{failed ? copy.loadFailed : copy.loading}</span>
+      </span>
+      {failed ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 shrink-0 px-2 text-xs"
+          onClick={() => void onRetry()}
+        >
+          {copy.retry}
+        </Button>
+      ) : null}
     </div>
   );
 }
