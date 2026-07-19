@@ -3597,7 +3597,11 @@ export const enUS: Translations = {
       editModelTitle: (name: string) => `Edit: ${name}`,
       keepApiKeyHint: "API Key (leave empty to keep current value)",
       saveSuccess: "Saved successfully",
+      notTested: "Connection not tested yet",
       testFailed: "Connection test failed",
+      testConnection: "Test connection",
+      showApiKey: "Show API key",
+      hideApiKey: "Hide API key",
       diagnoseHealthy: "Diagnosis complete: all services are healthy.",
       diagnoseIssues: (issues: string) => `Diagnosis found issues: ${issues}`,
       deleteConfirm: (name: string) =>

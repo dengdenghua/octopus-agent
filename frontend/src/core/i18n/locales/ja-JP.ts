@@ -3596,7 +3596,11 @@ export const jaJP: Translations = {
       editModelTitle: (name: string) => `Edit: ${name}`,
       keepApiKeyHint: "API Key (leave empty to keep current value)",
       saveSuccess: "Saved successfully",
+      notTested: "接続はまだテストされていません",
       testFailed: "Connection test failed",
+      testConnection: "接続をテスト",
+      showApiKey: "API Key を表示",
+      hideApiKey: "API Key を隠す",
       diagnoseHealthy: "Diagnosis complete: all services are healthy.",
       diagnoseIssues: (issues: string) => `Diagnosis found issues: ${issues}`,
       deleteConfirm: (name: string) =>
@@ -3638,7 +3642,7 @@ export const jaJP: Translations = {
       modelCount: (count: number) => `${count} 個のモデル`,
       modelList: {
         label: "モデル一覧",
-        hint: "先頭のエントリが選択ツールの既定値、末尾のエントリが Auto モードの高性能ティアで使用されます。「Model list」形式で自由に追加・削除できます。",
+        hint: "先頭は既定モデル、末尾は「高性能」モデルとして使われます。いつでも追加、削除、並べ替えができます。",
         pickerDefault: "選択ツールの既定",
         performanceTier: "高性能ティア",
         pickerDefaultAndPerformance: "既定 · 高性能",

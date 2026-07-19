@@ -2952,7 +2952,11 @@ export interface Translations {
       editModelTitle: (name: string) => string;
       keepApiKeyHint: string;
       saveSuccess: string;
+      notTested: string;
       testFailed: string;
+      testConnection: string;
+      showApiKey: string;
+      hideApiKey: string;
       diagnoseHealthy: string;
       diagnoseIssues: (issues: string) => string;
       deleteConfirm: (name: string) => string;

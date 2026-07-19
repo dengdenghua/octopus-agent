@@ -180,6 +180,16 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     expect(screen.getByText("选择器默认")).toBeInTheDocument();
     expect(screen.getByText("备用")).toBeInTheDocument();
     expect(screen.getByText("高性能档")).toBeInTheDocument();
+    expect(screen.getByText("1 个连接 · 3 个模型")).toBeInTheDocument();
+    expect(
+      screen.getByText(/不管理 Codex、Claude、Trae 等外部 CLI/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "API 模型连接", level: 3 }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "接入 API 模型" })).toHaveLength(
+      1,
+    );
   });
 
   it("does not repeat an entry name and explains a single model's two roles", async () => {
@@ -210,6 +220,7 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
   });
 
   it("renders OpenAI-compatible diagnostics for a strict domestic provider", async () => {
+    const user = userEvent.setup();
     mockModelSettingsFetch({
       models: [
         {
@@ -274,8 +285,14 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
       expect(screen.getByText("Kimi Code")).toBeInTheDocument();
     });
 
+    const advancedTitle = screen.getByText("高级能力与兼容诊断");
+    expect(screen.getByText("兼容诊断")).not.toBeVisible();
+    await user.click(advancedTitle);
+    expect(screen.getByText("兼容诊断")).not.toBeVisible();
+    await user.click(screen.getByText("连接与网关诊断"));
+
     await waitFor(() => {
-      expect(screen.getByText("兼容诊断")).toBeInTheDocument();
+      expect(screen.getByText("兼容诊断")).toBeVisible();
     });
     expect(screen.getByText("Kimi Coding")).toBeInTheDocument();
     expect(screen.getByText("2 个 fallback")).toBeInTheDocument();
@@ -290,6 +307,7 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
   });
 
   it("renders the built-in OpenAI-compatible provider matrix", async () => {
+    const user = userEvent.setup();
     mockModelSettingsFetch({
       models: [],
       profileCatalog: [
@@ -343,7 +361,12 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
 
     renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
 
-    expect(await screen.findByText("OpenAI 兼容配置矩阵")).toBeInTheDocument();
+    const compatMatrix = await screen.findByText("OpenAI 兼容配置矩阵");
+    expect(compatMatrix).not.toBeVisible();
+    await user.click(screen.getByText("高级能力与兼容诊断"));
+    expect(compatMatrix).not.toBeVisible();
+    await user.click(screen.getByText("提供方兼容矩阵"));
+    expect(compatMatrix).toBeVisible();
     expect(await screen.findByText("2 个配置")).toBeInTheDocument();
     expect(screen.getByText("高级")).toBeInTheDocument();
     expect(screen.getByDisplayValue("同源代理")).toBeInTheDocument();
@@ -682,7 +705,7 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
         }
         return jsonOk({
           models:
-            listCalls >= 3
+            listCalls >= 2
               ? [
                   {
                     id: "recovered",
@@ -716,15 +739,35 @@ describe("ModelSettingsPage · add-model form · open-ended list", () => {
 
     // Wait for the settings page to mount + the initial list call to resolve.
     await waitFor(() => {
-      expect(screen.getByText("添加自定义模型")).toBeInTheDocument();
+      expect(screen.getByText("接入 API 模型")).toBeInTheDocument();
     });
 
     // Open the add-model form
-    await user.click(screen.getByRole("button", { name: "添加自定义模型" }));
+    await user.click(screen.getByRole("button", { name: "接入 API 模型" }));
 
     // Label and hint are both visible, anchoring the new shape.
     expect(screen.getByText("模型列表")).toBeInTheDocument();
-    expect(screen.getByText(/首项作为选择器默认值/)).toBeInTheDocument();
+    expect(screen.getByText(/首项作为默认模型/)).toBeInTheDocument();
+    const apiKeyInput = screen.getByPlaceholderText("请输入 API Key");
+    expect(apiKeyInput).toHaveValue("");
+    expect(apiKeyInput).toHaveAttribute("type", "password");
+    expect(apiKeyInput).toHaveAttribute("autocomplete", "new-password");
+    expect(apiKeyInput).toHaveAttribute("data-1p-ignore", "true");
+    expect(screen.getByPlaceholderText("例如：我的模型")).toHaveValue("");
+    expect(
+      screen.getByRole("button", { name: "显示 API Key" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "测试连接" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "取消" })).toHaveLength(1);
+    const addForm = apiKeyInput.closest("form");
+    expect(addForm).not.toBeNull();
+    expect(within(addForm as HTMLFormElement).getByRole("status")).toHaveTextContent(
+      "尚未测试连接",
+    );
+    expect(screen.getByRole("switch", { name: "思考" })).not.toBeChecked();
+    expect(screen.getByRole("switch", { name: "视觉" })).not.toBeChecked();
 
     // The initial row + the "add model id" button are present.
     expect(

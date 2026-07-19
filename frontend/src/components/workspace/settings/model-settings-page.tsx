@@ -1,6 +1,7 @@
 import {
   AlertTriangleIcon,
   CheckCircle2Icon,
+  ChevronRightIcon,
   InfoIcon,
   EyeIcon,
   EyeOffIcon,
@@ -534,13 +535,15 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     currentDefault: string;
     noDefault: string;
     configuredModels: string;
+    configuredSummary: (connections: number, models: number) => string;
+    connectionsTitle: string;
+    connectionsSubtitle: string;
     gateway: string;
     gatewayConnected: string;
     gatewayDisconnected: string;
     gatewayChecking: string;
     addApiModel: string;
     scanLocalModels: string;
-    diagnoseGateway: string;
     advancedTitle: string;
     advancedSubtitle: string;
     advancedBadge: string;
@@ -557,6 +560,16 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     compatDrops: (values: string) => string;
     compatRetries: (values: string) => string;
     compatRemaining: (count: number) => string;
+    configuredDiagnosticsTitle: string;
+    configuredDiagnosticsSubtitle: string;
+    connectionToolsTitle: string;
+    connectionToolsSubtitle: string;
+    localToolsTitle: string;
+    localToolsSubtitle: string;
+    mixToolsTitle: string;
+    mixToolsSubtitle: string;
+    providerToolsTitle: string;
+    providerToolsSubtitle: string;
     deletingDefault: (replacement: string | null) => string;
     deletedAndSwitched: (replacement: string) => string;
     deletedAndReset: string;
@@ -566,20 +579,24 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
   zh: {
     overviewTitle: "模型入口总览",
     overviewSubtitle:
-      "先决定 Octopus 默认用哪个模型；需要接 API 就添加自定义模型，需要本地推理就扫描本地模型，高级兼容诊断放在下方。",
+      "这里管理 Octopus 对话与自动路由使用的模型，不管理 Codex、Claude、Trae 等外部 CLI。第三方服务从 API 模型连接接入，本机推理通过本地模型扫描。",
     currentDefault: "当前默认",
     noDefault: "未设置",
-    configuredModels: "已接入模型",
+    configuredModels: "API 模型连接",
+    configuredSummary: (connections, models) =>
+      `${connections} 个连接 · ${models} 个模型`,
+    connectionsTitle: "API 模型连接",
+    connectionsSubtitle:
+      "一个连接可以包含多个模型。列表首项用于默认选择，末项用于高性能路由。",
     gateway: "模型网关",
     gatewayConnected: "已连接",
     gatewayDisconnected: "未连接",
     gatewayChecking: "检查中",
     addApiModel: "接入 API 模型",
     scanLocalModels: "扫描本地模型",
-    diagnoseGateway: "诊断网关",
     advancedTitle: "高级能力与兼容诊断",
     advancedSubtitle:
-      "Cookbook、Octopus Mix 和 OpenAI-compatible 矩阵偏专家向，默认收在这里，避免干扰日常配置。",
+      "网关排障、连接兼容详情、Cookbook、Octopus Mix 和 OpenAI-compatible 矩阵统一收在这里。",
     advancedBadge: "高级",
     sameOriginProxy: "同源代理",
     compatDetails: "查看兼容处理规则",
@@ -595,6 +612,17 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     compatDrops: (values) => `移除：${values}`,
     compatRetries: (values) => `重试：${values}`,
     compatRemaining: (count) => `后端目录中还有 ${count} 个配置。`,
+    configuredDiagnosticsTitle: "已接入连接的兼容详情",
+    configuredDiagnosticsSubtitle:
+      "仅在排查提供方兼容问题时需要查看，不影响日常选择和使用模型。",
+    connectionToolsTitle: "连接与网关诊断",
+    connectionToolsSubtitle: "检查网关状态和已接入连接的兼容处理。",
+    localToolsTitle: "本地模型推荐",
+    localToolsSubtitle: "按当前设备能力查看可运行模型和下载建议。",
+    mixToolsTitle: "多模型协同",
+    mixToolsSubtitle: "配置多个模型共同起草和汇总答案。",
+    providerToolsTitle: "提供方兼容矩阵",
+    providerToolsSubtitle: "查看内置提供方的请求归一化与回退规则。",
     deletingDefault: (replacement) =>
       replacement
         ? `这是当前默认模型。删除后将自动切换到“${replacement}”。`
@@ -607,20 +635,24 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
   en: {
     overviewTitle: "Model setup overview",
     overviewSubtitle:
-      "Pick the default model first. Add a custom API model for hosted providers, scan local models for on-device inference, and keep compatibility diagnostics below.",
+      "Manage models used by Octopus chat and automatic routing here. External CLIs such as Codex, Claude, and Trae are managed in the Agent Workbench. Add hosted providers as API connections or scan local models.",
     currentDefault: "Current default",
     noDefault: "Not set",
-    configuredModels: "Configured models",
+    configuredModels: "API model connections",
+    configuredSummary: (connections, models) =>
+      `${connections} connection${connections === 1 ? "" : "s"} · ${models} model${models === 1 ? "" : "s"}`,
+    connectionsTitle: "API model connections",
+    connectionsSubtitle:
+      "A connection can contain multiple models. The first is the default choice and the last powers the performance route.",
     gateway: "Model gateway",
     gatewayConnected: "Connected",
     gatewayDisconnected: "Disconnected",
     gatewayChecking: "Checking",
     addApiModel: "Add API model",
     scanLocalModels: "Scan local models",
-    diagnoseGateway: "Diagnose gateway",
     advancedTitle: "Advanced capabilities and diagnostics",
     advancedSubtitle:
-      "Cookbook, Octopus Mix, and the OpenAI-compatible matrix are expert tools, so they stay grouped away from everyday setup.",
+      "Gateway troubleshooting, connection compatibility, Cookbook, Octopus Mix, and the OpenAI-compatible matrix stay grouped here.",
     advancedBadge: "Advanced",
     sameOriginProxy: "Same-origin proxy",
     compatDetails: "View compatibility rules",
@@ -637,6 +669,21 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     compatRetries: (values) => `Retry: ${values}`,
     compatRemaining: (count) =>
       `${count} more profile${count === 1 ? "" : "s"} in the backend catalog.`,
+    configuredDiagnosticsTitle: "Connection compatibility details",
+    configuredDiagnosticsSubtitle:
+      "Use these details only when troubleshooting a provider compatibility issue.",
+    connectionToolsTitle: "Connections and gateway",
+    connectionToolsSubtitle:
+      "Inspect gateway health and compatibility handling for configured connections.",
+    localToolsTitle: "Local model recommendations",
+    localToolsSubtitle:
+      "Review models that fit this device and optional download suggestions.",
+    mixToolsTitle: "Multi-model collaboration",
+    mixToolsSubtitle:
+      "Configure models that draft independently and aggregate a final answer.",
+    providerToolsTitle: "Provider compatibility matrix",
+    providerToolsSubtitle:
+      "Review built-in request normalization and fallback rules by provider.",
     deletingDefault: (replacement) =>
       replacement
         ? `This is the current default. Deleting it will switch the default to “${replacement}”.`
@@ -650,20 +697,24 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
   ja: {
     overviewTitle: "モデル設定の概要",
     overviewSubtitle:
-      "まず既定モデルを決めます。API 接続はカスタムモデル、ローカル推論はローカルスキャン、互換診断は下の高度な設定にまとめています。",
+      "ここでは Octopus の会話と自動ルーティング用モデルを管理します。Codex、Claude、Trae などの外部 CLI は Agent Workbench で管理します。外部サービスは API 接続、端末内推論はローカルスキャンから追加できます。",
     currentDefault: "現在の既定",
     noDefault: "未設定",
-    configuredModels: "設定済みモデル",
+    configuredModels: "API モデル接続",
+    configuredSummary: (connections, models) =>
+      `${connections} 接続 · ${models} モデル`,
+    connectionsTitle: "API モデル接続",
+    connectionsSubtitle:
+      "1 つの接続に複数モデルを登録できます。先頭は既定、末尾は高性能ルートに使われます。",
     gateway: "モデルゲートウェイ",
     gatewayConnected: "接続済み",
     gatewayDisconnected: "未接続",
     gatewayChecking: "確認中",
     addApiModel: "API モデルを追加",
     scanLocalModels: "ローカルモデルをスキャン",
-    diagnoseGateway: "ゲートウェイ診断",
     advancedTitle: "高度な機能と互換診断",
     advancedSubtitle:
-      "Cookbook、Octopus Mix、OpenAI 互換マトリクスは上級者向けなので、日常設定とは分けています。",
+      "ゲートウェイ診断、接続互換性、Cookbook、Octopus Mix、OpenAI 互換マトリクスをここにまとめています。",
     advancedBadge: "上級",
     sameOriginProxy: "同一オリジンプロキシ",
     compatDetails: "互換処理ルールを表示",
@@ -680,6 +731,17 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     compatRetries: (values) => `再試行：${values}`,
     compatRemaining: (count) =>
       `バックエンドの一覧に残り ${count} 件あります。`,
+    configuredDiagnosticsTitle: "設定済み接続の互換性詳細",
+    configuredDiagnosticsSubtitle:
+      "プロバイダー互換性の問題を調査するときだけ確認してください。",
+    connectionToolsTitle: "接続とゲートウェイ診断",
+    connectionToolsSubtitle: "ゲートウェイ状態と接続ごとの互換処理を確認します。",
+    localToolsTitle: "ローカルモデルの推奨",
+    localToolsSubtitle: "この端末で動作するモデルと取得候補を確認します。",
+    mixToolsTitle: "複数モデル連携",
+    mixToolsSubtitle: "複数モデルによる下書きと最終統合を設定します。",
+    providerToolsTitle: "プロバイダー互換マトリクス",
+    providerToolsSubtitle: "組み込みの正規化とフォールバック規則を確認します。",
     deletingDefault: (replacement) =>
       replacement
         ? `現在の既定モデルです。削除後は「${replacement}」へ自動的に切り替わります。`
@@ -692,20 +754,24 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
   ko: {
     overviewTitle: "모델 설정 개요",
     overviewSubtitle:
-      "먼저 기본 모델을 정하세요. API 제공자는 사용자 모델 추가, 로컬 추론은 로컬 모델 스캔, 호환성 진단은 아래 고급 영역에 모았습니다.",
+      "여기서는 Octopus 대화와 자동 라우팅 모델을 관리합니다. Codex, Claude, Trae 같은 외부 CLI는 Agent Workbench에서 관리합니다. 외부 서비스는 API 연결, 기기 내 추론은 로컬 스캔으로 추가할 수 있습니다.",
     currentDefault: "현재 기본값",
     noDefault: "미설정",
-    configuredModels: "설정된 모델",
+    configuredModels: "API 모델 연결",
+    configuredSummary: (connections, models) =>
+      `연결 ${connections}개 · 모델 ${models}개`,
+    connectionsTitle: "API 모델 연결",
+    connectionsSubtitle:
+      "하나의 연결에 여러 모델을 등록할 수 있습니다. 첫 항목은 기본 선택, 마지막 항목은 고성능 경로에 사용됩니다.",
     gateway: "모델 게이트웨이",
     gatewayConnected: "연결됨",
     gatewayDisconnected: "연결 안 됨",
     gatewayChecking: "확인 중",
     addApiModel: "API 모델 추가",
     scanLocalModels: "로컬 모델 스캔",
-    diagnoseGateway: "게이트웨이 진단",
     advancedTitle: "고급 기능 및 호환성 진단",
     advancedSubtitle:
-      "Cookbook, Octopus Mix, OpenAI 호환 매트릭스는 전문가용 도구이므로 일반 설정과 분리했습니다.",
+      "게이트웨이 진단, 연결 호환성, Cookbook, Octopus Mix, OpenAI 호환 매트릭스를 여기에 모았습니다.",
     advancedBadge: "고급",
     sameOriginProxy: "동일 출처 프록시",
     compatDetails: "호환 처리 규칙 보기",
@@ -721,6 +787,17 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     compatDrops: (values) => `제거: ${values}`,
     compatRetries: (values) => `재시도: ${values}`,
     compatRemaining: (count) => `백엔드 목록에 프로필 ${count}개 더 있음.`,
+    configuredDiagnosticsTitle: "연결된 모델의 호환성 상세",
+    configuredDiagnosticsSubtitle:
+      "제공자 호환성 문제를 진단할 때만 확인하면 됩니다.",
+    connectionToolsTitle: "연결 및 게이트웨이 진단",
+    connectionToolsSubtitle: "게이트웨이 상태와 연결별 호환 처리를 확인합니다.",
+    localToolsTitle: "로컬 모델 추천",
+    localToolsSubtitle: "이 기기에서 실행 가능한 모델과 다운로드 제안을 확인합니다.",
+    mixToolsTitle: "다중 모델 협업",
+    mixToolsSubtitle: "여러 모델의 초안 작성과 최종 통합을 설정합니다.",
+    providerToolsTitle: "제공자 호환성 매트릭스",
+    providerToolsSubtitle: "내장 요청 정규화와 대체 규칙을 확인합니다.",
     deletingDefault: (replacement) =>
       replacement
         ? `현재 기본 모델입니다. 삭제하면 기본 모델이 “${replacement}”(으)로 자동 전환됩니다.`
@@ -746,18 +823,18 @@ function ModelSettingsOverview({
   copy,
   defaultModelName,
   customModelCount,
+  modelCount,
   gatewayStatus,
   onAddModel,
   onScanLocal,
-  onDiagnoseGateway,
 }: {
   copy: ReturnType<typeof modelSettingsPageCopy>;
   defaultModelName: string;
   customModelCount: number;
+  modelCount: number;
   gatewayStatus: "connected" | "disconnected" | "checking";
   onAddModel: () => void;
   onScanLocal: () => void;
-  onDiagnoseGateway: () => void;
 }) {
   const gatewayLabel =
     gatewayStatus === "connected"
@@ -789,15 +866,6 @@ function ModelSettingsOverview({
             <WifiIcon className="mr-1.5 size-3.5" />
             {copy.scanLocalModels}
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full sm:w-auto"
-            onClick={onDiagnoseGateway}
-          >
-            <SearchIcon className="mr-1.5 size-3.5" />
-            {copy.diagnoseGateway}
-          </Button>
         </div>
       </div>
 
@@ -815,7 +883,7 @@ function ModelSettingsOverview({
             {copy.configuredModels}
           </div>
           <div className="mt-1 text-sm font-semibold text-foreground">
-            {customModelCount}
+            {copy.configuredSummary(customModelCount, modelCount)}
           </div>
         </div>
         <div className="rounded-xl border border-border bg-background/65 p-3">
@@ -823,6 +891,8 @@ function ModelSettingsOverview({
             {copy.gateway}
           </div>
           <div
+            role="status"
+            aria-live="polite"
             className={cn(
               "mt-1 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium",
               gatewayStatus === "connected" &&
@@ -960,11 +1030,13 @@ export default function ModelSettingsPage() {
       const list = data.models || [];
       setModels(list);
       setModelsLoadError(false);
+      setGatewayStatus("connected");
       void fetchCompatDiagnostics();
       void fetchCompatProfileCatalog();
     } catch (error) {
       console.error(error);
       setModelsLoadError(true);
+      setGatewayStatus("disconnected");
       toast.error(t.settings.model.loadFailed);
     } finally {
       setLoading(false);
@@ -994,8 +1066,7 @@ export default function ModelSettingsPage() {
 
   useEffect(() => {
     fetchModels();
-    checkGateway();
-  }, [fetchModels, checkGateway]);
+  }, [fetchModels]);
 
   const handleSetDefault = async (name: string) => {
     try {
@@ -1158,11 +1229,6 @@ export default function ModelSettingsPage() {
     scrollToSection("model-settings-local");
     window.dispatchEvent(new Event(LOCAL_MODEL_SCAN_EVENT));
   }, [scrollToSection]);
-
-  const handleOverviewDiagnoseGateway = useCallback(() => {
-    scrollToSection("model-settings-gateway");
-    void handleDiagnose();
-  }, [handleDiagnose, scrollToSection]);
 
   const { isGuest } = useAuth();
 
@@ -1379,6 +1445,10 @@ export default function ModelSettingsPage() {
     deleteReplacementModel?.display_name ??
     deleteReplacementModel?.name ??
     null;
+  const configuredModelCount = models.reduce(
+    (count, model) => count + (Array.isArray(model.models) ? model.models.length : 0),
+    0,
+  );
 
   return (
     <div className="min-w-0 max-w-full space-y-8 overflow-x-hidden">
@@ -1386,37 +1456,20 @@ export default function ModelSettingsPage() {
         copy={pageCopy}
         defaultModelName={defaultModelName ?? ""}
         customModelCount={models.length}
+        modelCount={configuredModelCount}
         gatewayStatus={gatewayStatus}
         onAddModel={handleOverviewAddModel}
         onScanLocal={handleOverviewScanLocal}
-        onDiagnoseGateway={handleOverviewDiagnoseGateway}
       />
 
       {/* ── Models Section ── */}
       <SettingsSection
         className="scroll-mt-6"
-        title={
-          <div
-            id="model-settings-custom"
-            className="flex w-full flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <span>{t.settings.model.customModels}</span>
-            {!showAdd && !editingModel && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full sm:w-auto"
-                onClick={() => setShowAdd(true)}
-              >
-                <PlusIcon className="mr-1 h-3 w-3" />{" "}
-                {t.settings.model.addCustomModel}
-              </Button>
-            )}
-          </div>
-        }
+        title={<span id="model-settings-custom">{pageCopy.connectionsTitle}</span>}
+        description={pageCopy.connectionsSubtitle}
       >
         {loading ? (
-          <div className="text-muted-foreground text-sm">
+          <div role="status" className="text-muted-foreground text-sm">
             {t.common.loading}
           </div>
         ) : (
@@ -1443,18 +1496,17 @@ export default function ModelSettingsPage() {
             ) : null}
             {/* Model list */}
             {models.length > 0 || !modelsLoadError ? (
-              <div className="divide-y divide-border rounded-lg border border-border">
+              <ul className="divide-y divide-border rounded-lg border border-border">
                 {models.map((m) => {
                   const modelId = customModelEntryId(m);
                   const list = Array.isArray(m.models) ? m.models : [];
-                  const diagnostic = compatDiagnostics.byId[modelId];
                   const displayName = m.display_name || m.name;
                   const isDefault = customModelMatchesSelection(
                     m,
                     defaultModelName,
                   );
                   return (
-                    <div
+                    <li
                       key={modelId}
                       className={cn(
                         "flex flex-col items-stretch justify-between gap-4 px-4 py-4 sm:flex-row sm:items-start sm:px-5",
@@ -1503,10 +1555,6 @@ export default function ModelSettingsPage() {
                             ))}
                           </ul>
                         )}
-                        <CompatDiagnosticSummary
-                          diagnostic={diagnostic}
-                          status={compatDiagnostics.status}
-                        />
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center justify-start gap-x-3 gap-y-2 sm:max-w-64 sm:justify-end">
                         {isDefault ? (
@@ -1543,15 +1591,15 @@ export default function ModelSettingsPage() {
                           {t.common.delete}
                         </button>
                       </div>
-                    </div>
+                    </li>
                   );
                 })}
                 {models.length === 0 && (
-                  <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+                  <li className="px-5 py-8 text-center text-sm text-muted-foreground">
                     {t.settings.model.emptyCustomModels}
-                  </div>
+                  </li>
                 )}
-              </div>
+              </ul>
             ) : null}
 
             {/* Edit form (inline under the list) */}
@@ -1597,84 +1645,11 @@ export default function ModelSettingsPage() {
       {/* Official models */}
       {!isGuest && <OfficialModelsSection />}
 
-      {/* ── Gateway Connection Section ── */}
-      <SettingsSection
-        className="scroll-mt-6"
-        title={
-          <span id="model-settings-gateway">{t.settings.model.gatewayUrl}</span>
-        }
-      >
-        <div className="space-y-4">
-          {/* Status bar */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium">
-                {t.settings.model.gatewayUrl}
-              </span>
-              {gatewayStatus === "connected" && (
-                <span className="inline-flex items-center rounded-lg bg-green-100 dark:bg-green-500/20 px-3 py-1 text-xs font-medium text-green-700 dark:text-green-400">
-                  {t.settings.model.connected}
-                </span>
-              )}
-              {gatewayStatus === "disconnected" && (
-                <span className="inline-flex items-center rounded-lg bg-red-100 dark:bg-red-500/20 px-3 py-1 text-xs font-medium text-red-700 dark:text-red-400">
-                  {t.settings.model.disconnected}
-                </span>
-              )}
-              {gatewayStatus === "checking" && (
-                <span className="inline-flex items-center gap-1 rounded-lg bg-blue-100 dark:bg-blue-500/20 px-3 py-1 text-xs font-medium text-blue-700 dark:text-blue-400">
-                  <Loader2Icon className="h-3 w-3 animate-spin" />{" "}
-                  {t.common.loading}
-                </span>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleReconnect}>
-                <RefreshCwIcon className="mr-1 h-3 w-3" />{" "}
-                {t.settings.model.reconnect}
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleDiagnose}>
-                <SearchIcon className="mr-1 h-3 w-3" />{" "}
-                {t.settings.model.diagnose}
-              </Button>
-            </div>
-          </div>
-
-          {/* Read-only backend target */}
-          <div className="rounded-lg border border-border p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-medium">
-                  {t.settings.model.port}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {t.settings.model.backendUrlHint}
-                </div>
-              </div>
-              <Input
-                className="w-56 text-right"
-                value={getBackendBaseURL() || pageCopy.sameOriginProxy}
-                readOnly
-              />
-            </div>
-          </div>
-
-          {/* Troubleshooting tips */}
-          <div className="rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 p-4 text-sm">
-            <div className="font-medium text-blue-800 dark:text-blue-300 mb-2">
-              {t.settings.model.connectionHelp}
-            </div>
-            <ul className="space-y-1 text-blue-700 dark:text-blue-400 text-xs">
-              <li>{t.settings.model.connectionHelpReconnect}</li>
-              <li>{t.settings.model.setDefaultHint}</li>
-              <li>{t.settings.model.connectionHelpDiagnose}</li>
-            </ul>
-          </div>
-        </div>
-      </SettingsSection>
-
       <details className="group rounded-2xl border border-border bg-card/40 p-4">
-        <summary className="cursor-pointer list-none">
+        <summary
+          aria-label={pageCopy.advancedTitle}
+          className="cursor-pointer list-none"
+        >
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-lg font-semibold">
@@ -1689,17 +1664,49 @@ export default function ModelSettingsPage() {
             </span>
           </div>
         </summary>
-        <div className="mt-6 space-y-8">
-          {/* Hardware-aware local-model recommendations + one-click pull */}
-          <ModelCookbook />
+        <div className="mt-5 space-y-3">
+          <AdvancedDisclosure
+            title={pageCopy.connectionToolsTitle}
+            description={pageCopy.connectionToolsSubtitle}
+          >
+            <div className="space-y-8">
+              <GatewayDiagnosticsSection
+                gatewayStatus={gatewayStatus}
+                copy={pageCopy}
+                onReconnect={handleReconnect}
+                onDiagnose={handleDiagnose}
+              />
+              <ConfiguredCompatDiagnosticsCard
+                models={models}
+                diagnostics={compatDiagnostics}
+                copy={pageCopy}
+              />
+            </div>
+          </AdvancedDisclosure>
 
-          {/* Octopus Mix · mixture-of-agents composer */}
-          <MixSettingsSection />
+          <AdvancedDisclosure
+            title={pageCopy.localToolsTitle}
+            description={pageCopy.localToolsSubtitle}
+          >
+            <ModelCookbook />
+          </AdvancedDisclosure>
 
-          <BuiltInCompatProfilesCard
-            catalog={compatProfileCatalog}
-            copy={pageCopy}
-          />
+          <AdvancedDisclosure
+            title={pageCopy.mixToolsTitle}
+            description={pageCopy.mixToolsSubtitle}
+          >
+            <MixSettingsSection />
+          </AdvancedDisclosure>
+
+          <AdvancedDisclosure
+            title={pageCopy.providerToolsTitle}
+            description={pageCopy.providerToolsSubtitle}
+          >
+            <BuiltInCompatProfilesCard
+              catalog={compatProfileCatalog}
+              copy={pageCopy}
+            />
+          </AdvancedDisclosure>
         </div>
       </details>
 
@@ -1764,6 +1771,171 @@ export default function ModelSettingsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function AdvancedDisclosure({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="group/advanced-item rounded-xl border border-border bg-background/55 px-4 py-3">
+      <summary
+        aria-label={title}
+        className="cursor-pointer list-none rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-foreground">{title}</div>
+            <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
+              {description}
+            </div>
+          </div>
+          <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open/advanced-item:rotate-90" />
+        </div>
+      </summary>
+      <div className="mt-5 border-t border-border pt-5">{children}</div>
+    </details>
+  );
+}
+
+function GatewayDiagnosticsSection({
+  gatewayStatus,
+  copy,
+  onReconnect,
+  onDiagnose,
+}: {
+  gatewayStatus: "connected" | "disconnected" | "checking";
+  copy: ReturnType<typeof modelSettingsPageCopy>;
+  onReconnect: () => void;
+  onDiagnose: () => void;
+}) {
+  const { t } = useI18n();
+  const statusLabel =
+    gatewayStatus === "connected"
+      ? t.settings.model.connected
+      : gatewayStatus === "checking"
+        ? t.common.loading
+        : t.settings.model.disconnected;
+
+  return (
+    <SettingsSection
+      title={
+        <span id="model-settings-gateway">{t.settings.model.gatewayUrl}</span>
+      }
+    >
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-medium">
+              {t.settings.model.gatewayUrl}
+            </span>
+            <span
+              role="status"
+              className={cn(
+                "inline-flex items-center gap-1 rounded-lg px-3 py-1 text-xs font-medium",
+                gatewayStatus === "connected" &&
+                  "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400",
+                gatewayStatus === "disconnected" &&
+                  "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+                gatewayStatus === "checking" &&
+                  "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+              )}
+            >
+              {gatewayStatus === "checking" && (
+                <Loader2Icon className="size-3 animate-spin" />
+              )}
+              {statusLabel}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:flex">
+            <Button variant="outline" size="sm" onClick={onReconnect}>
+              <RefreshCwIcon className="mr-1 size-3" />
+              {t.settings.model.reconnect}
+            </Button>
+            <Button variant="outline" size="sm" onClick={onDiagnose}>
+              <SearchIcon className="mr-1 size-3" />
+              {t.settings.model.diagnose}
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="text-sm font-medium">{t.settings.model.port}</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {t.settings.model.backendUrlHint}
+            </div>
+          </div>
+          <Input
+            aria-label={t.settings.model.port}
+            className="w-full font-mono text-xs sm:w-56 sm:text-right"
+            value={getBackendBaseURL() || copy.sameOriginProxy}
+            readOnly
+          />
+        </div>
+
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm dark:border-blue-500/20 dark:bg-blue-500/10">
+          <div className="mb-2 font-medium text-blue-800 dark:text-blue-300">
+            {t.settings.model.connectionHelp}
+          </div>
+          <ul className="list-disc space-y-1 pl-4 text-xs text-blue-700 dark:text-blue-400">
+            <li>{t.settings.model.connectionHelpReconnect}</li>
+            <li>{t.settings.model.setDefaultHint}</li>
+            <li>{t.settings.model.connectionHelpDiagnose}</li>
+          </ul>
+        </div>
+      </div>
+    </SettingsSection>
+  );
+}
+
+function ConfiguredCompatDiagnosticsCard({
+  models,
+  diagnostics,
+  copy,
+}: {
+  models: ModelConfig[];
+  diagnostics: CompatDiagnosticState;
+  copy: ReturnType<typeof modelSettingsPageCopy>;
+}) {
+  const relevantModels =
+    diagnostics.status === "ready"
+      ? models.filter((model) =>
+          Boolean(diagnostics.byId[customModelEntryId(model)]),
+        )
+      : models;
+  if (relevantModels.length === 0) return null;
+
+  return (
+    <SettingsSection
+      title={copy.configuredDiagnosticsTitle}
+      description={copy.configuredDiagnosticsSubtitle}
+    >
+      <div className="divide-y divide-border rounded-lg border border-border">
+        {relevantModels.map((model) => {
+          const modelId = customModelEntryId(model);
+          return (
+            <div
+              key={modelId}
+              role="group"
+              aria-label={model.display_name || model.name}
+              className="min-w-0 px-4 py-3"
+            >
+              <CompatDiagnosticSummary
+                diagnostic={diagnostics.byId[modelId]}
+                status={diagnostics.status}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </SettingsSection>
   );
 }
 
@@ -2439,19 +2611,34 @@ function EditModelForm({
               </div>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">
+              <label
+                htmlFor="edit-model-api-key"
+                className="text-xs text-muted-foreground"
+              >
                 {t.settings.model.keepApiKeyHint}
               </label>
               <div className="relative">
                 <Input
+                  id="edit-model-api-key"
+                  name="octopus-edit-model-api-key"
                   className="pr-10"
                   type={showKey ? "text" : "password"}
+                  autoComplete="new-password"
+                  data-1p-ignore="true"
+                  data-lpignore="true"
+                  data-form-type="other"
+                  spellCheck={false}
                   placeholder={apiKeyPlaceholder}
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                 />
                 <button
                   type="button"
+                  aria-label={
+                    showKey
+                      ? t.settings.model.hideApiKey
+                      : t.settings.model.showApiKey
+                  }
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   onClick={() => setShowKey(!showKey)}
                 >
@@ -2542,6 +2729,7 @@ function EditModelForm({
           <div className="rounded-lg border border-border-default bg-muted/20">
             <button
               type="button"
+              aria-expanded={showHeaders}
               onClick={() => setShowHeaders((v) => !v)}
               className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium hover:bg-muted/40"
             >
@@ -2591,7 +2779,7 @@ function EditModelForm({
                 <>
                   <div className="h-2.5 w-2.5 rounded-lg bg-muted-foreground/40" />
                   <span className="text-muted-foreground">
-                    {t.settings.model.testFailed}
+                    {t.settings.model.notTested}
                   </span>
                 </>
               )}
@@ -2628,7 +2816,7 @@ function EditModelForm({
                 disabled={testStatus === "testing" || loading}
               >
                 <WifiIcon className="mr-1 h-3 w-3" />{" "}
-                {t.settings.model.diagnose}
+                {t.settings.model.testConnection}
               </Button>
             </div>
           </div>
@@ -2830,18 +3018,27 @@ function AddModelForm({
   };
 
   return (
-    <div className="rounded-lg border border-border p-5 space-y-4">
+    <form
+      className="space-y-4 rounded-lg border border-border p-4 sm:p-5"
+      autoComplete="off"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void handleSave();
+      }}
+    >
       <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-sm text-amber-600 dark:text-amber-400">
         <AlertTriangleIcon className="h-4 w-4 shrink-0" />
         <span>{t.settings.model.externalModelRisk}</span>
       </div>
 
       <div>
-        <label className="text-sm font-medium">
+        <label htmlFor="add-model-provider" className="text-sm font-medium">
           <span className="text-destructive">*</span>{" "}
           {t.settings.model.provider}
         </label>
         <select
+          id="add-model-provider"
+          name="octopus-model-provider"
           className="mt-1 flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           value={provider}
           onChange={(e) => handleProviderChange(e.target.value)}
@@ -2869,6 +3066,11 @@ function AddModelForm({
                 {idx === 0 ? "★" : idx === models.length - 1 ? "▴" : "·"}
               </span>
               <Input
+                name={`octopus-model-id-${idx}`}
+                autoComplete="off"
+                data-1p-ignore="true"
+                data-lpignore="true"
+                aria-label={`${t.settings.model.modelList.label} ${idx + 1}`}
                 className="flex-1 font-mono text-xs"
                 placeholder={
                   idx === 0
@@ -2931,10 +3133,16 @@ function AddModelForm({
       </div>
 
       <div>
-        <label className="text-sm font-medium">
+        <label htmlFor="add-model-display-name" className="text-sm font-medium">
           {t.settings.model.displayName}
         </label>
         <Input
+          id="add-model-display-name"
+          name="octopus-model-display-name"
+          autoComplete="off"
+          data-1p-ignore="true"
+          data-lpignore="true"
+          data-form-type="other"
           className="mt-1"
           placeholder={t.settings.model.displayNamePlaceholder}
           value={displayName}
@@ -2942,13 +3150,17 @@ function AddModelForm({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <label className="text-sm font-medium flex items-center justify-between gap-2">
-            <span>
+          <div className="flex items-center justify-between gap-2">
+            <label
+              htmlFor="add-model-api-key"
+              className="text-sm font-medium"
+            >
+              <span className="text-destructive">*</span>{" "}
               {getProviderLabel(provider) || t.settings.model.provider}{" "}
               {t.settings.model.apiKey}
-            </span>
+            </label>
             {/* Console link · opens the provider's dashboard in a
                 new tab so users don't have to hunt for the API
                 key page. Renders only when the preset carries one. */}
@@ -2966,17 +3178,29 @@ function AddModelForm({
                 </a>
               );
             })()}
-          </label>
+          </div>
           <div className="relative mt-1">
             <Input
+              id="add-model-api-key"
+              name="octopus-new-model-api-key"
               className="pr-10"
               type={showKey ? "text" : "password"}
+              autoComplete="new-password"
+              data-1p-ignore="true"
+              data-lpignore="true"
+              data-form-type="other"
+              spellCheck={false}
               placeholder={t.settings.model.apiKeyPlaceholder}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
             />
             <button
               type="button"
+              aria-label={
+                showKey
+                  ? t.settings.model.hideApiKey
+                  : t.settings.model.showApiKey
+              }
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               onClick={() => setShowKey(!showKey)}
             >
@@ -2989,10 +3213,12 @@ function AddModelForm({
           </div>
         </div>
         <div>
-          <label className="text-sm font-medium">
+          <label htmlFor="add-model-protocol" className="text-sm font-medium">
             {t.settings.model.apiProtocol}
           </label>
           <select
+            id="add-model-protocol"
+            name="octopus-model-protocol"
             className="mt-1 flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             value={protocol}
             onChange={(e) => setProtocol(e.target.value)}
@@ -3007,10 +3233,14 @@ function AddModelForm({
       </div>
 
       <div>
-        <label className="text-sm font-medium">
+        <label htmlFor="add-model-base-url" className="text-sm font-medium">
+          <span className="text-destructive">*</span>{" "}
           {t.settings.model.baseUrlLabel}
         </label>
         <Input
+          id="add-model-base-url"
+          name="octopus-model-base-url"
+          autoComplete="url"
           className="mt-1"
           placeholder={t.settings.model.baseUrlPlaceholder}
           value={baseUrl}
@@ -3024,6 +3254,7 @@ function AddModelForm({
       <div className="rounded-lg border border-border-default bg-muted/20">
         <button
           type="button"
+          aria-expanded={showHeaders}
           onClick={() => setShowHeaders((v) => !v)}
           className="flex w-full items-center justify-between px-3 py-2 text-sm font-medium hover:bg-muted/40"
         >
@@ -3055,25 +3286,33 @@ function AddModelForm({
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="flex items-center gap-2 pt-6">
-          <Switch checked={thinking} onCheckedChange={setThinking} />{" "}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="flex items-center gap-2">
+          <Switch
+            aria-label={t.settings.model.thinkingLabel}
+            checked={thinking}
+            onCheckedChange={setThinking}
+          />{" "}
           <span className="text-sm">{t.settings.model.thinkingLabel}</span>
         </div>
-        <div className="flex items-center gap-2 pt-6">
-          <Switch checked={vision} onCheckedChange={setVision} />{" "}
+        <div className="flex items-center gap-2">
+          <Switch
+            aria-label={t.settings.model.visionLabel}
+            checked={vision}
+            onCheckedChange={setVision}
+          />{" "}
           <span className="text-sm">{t.settings.model.visionLabel}</span>
         </div>
       </div>
 
       {/* Test status + buttons */}
-      <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
-        <div className="flex items-center gap-2 text-sm">
+      <div className="flex flex-col gap-3 rounded-lg border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div role="status" className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
           {testStatus === "idle" && (
             <>
               <div className="h-2.5 w-2.5 rounded-lg bg-muted-foreground/40" />
               <span className="text-muted-foreground">
-                {t.settings.model.testFailed}
+                {t.settings.model.notTested}
               </span>
             </>
           )}
@@ -3102,41 +3341,39 @@ function AddModelForm({
             {t.settings.model.testEndpointHint}
           </span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 self-end sm:self-auto">
           <Button
-            variant="outline"
-            size="sm"
-            className="text-destructive border-destructive hover:bg-destructive/10"
-            onClick={onCancel}
-          >
-            {t.common.cancel}
-          </Button>
-          <Button
+            type="button"
             variant="outline"
             size="sm"
             onClick={handleTest}
             disabled={testStatus === "testing"}
           >
-            <WifiIcon className="mr-1 h-3 w-3" /> {t.settings.model.diagnose}
+            <WifiIcon className="mr-1 h-3 w-3" />
+            {t.settings.model.testConnection}
           </Button>
         </div>
       </div>
 
-      {error && <div className="text-sm text-destructive">{error}</div>}
+      {error && (
+        <div role="alert" className="text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
       <div className="flex justify-end gap-2">
-        <Button variant="ghost" onClick={onCancel}>
+        <Button type="button" variant="ghost" onClick={onCancel}>
           {t.common.cancel}
         </Button>
         <Button
+          type="submit"
           className="bg-orange-500 hover:bg-orange-600 text-white"
-          onClick={handleSave}
           disabled={saving}
         >
           {saving ? t.common.loading : t.common.save}
         </Button>
       </div>
-    </div>
+    </form>
   );
 }
 
