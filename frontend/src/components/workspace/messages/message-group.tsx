@@ -264,8 +264,8 @@ export function MessageGroup({
   // Keep the live turn focused on the current frame. Older steps move behind
   // a replay disclosure so streaming never becomes a long historical pile.
   const isLiveTimeline = isLoading || keepOpen;
-  const [showSteps, setShowSteps] = useState(false);
-  const [savedStepsOpen, setSavedStepsOpen] = useState(false);
+  const [_showSteps, setShowSteps] = useState(false);
+  const [_savedStepsOpen, setSavedStepsOpen] = useState(false);
   const [openReasoningGroups, setOpenReasoningGroups] = useState<
     Record<string, boolean>
   >({});
@@ -358,7 +358,11 @@ export function MessageGroup({
     : steps.length;
   const showTimelineToggle = replayStepCount > 0;
   const useCompactToggleLabel = replayStepCount > 12;
-  const timelineExpanded = isLiveTimeline ? showSteps : savedStepsOpen;
+  // The transcript has one disclosure model: compact events stay inline and
+  // their detail opens in the right workbench. Expanding the same replay a
+  // second time inside the conversation duplicated checkpoints and tool rows,
+  // making one model turn read like several competing logs.
+  const timelineExpanded = false;
   const timelineToggleLabel = isLiveTimeline
     ? timelineExpanded
       ? t.messageGrouping.hideProcessReplay
@@ -690,24 +694,14 @@ export function MessageGroup({
             {isLastOverall && showTimelineToggle && (
               <button
                 type="button"
-                onClick={() => {
-                  if (isLiveTimeline) {
-                    setShowSteps((value) => !value);
-                  } else {
-                    setSavedStepsOpen((value) => !value);
-                  }
-                }}
+                onClick={openProcessDetails}
                 className="mt-1 p-0.5 text-muted-foreground/35 transition-colors hover:text-muted-foreground"
-                aria-label={timelineToggleLabel}
-                title={timelineToggleLabel}
+                aria-label={t.message.processDetails}
+                title={t.message.processDetails}
+                data-testid="process-details-trigger"
               >
-                <span className="sr-only">{timelineToggleLabel}</span>
-                <ChevronUp
-                  className={cn(
-                    "size-3 transition-transform duration-200",
-                    timelineExpanded ? "rotate-180" : "",
-                  )}
-                />
+                <span className="sr-only">{t.message.processDetails}</span>
+                <PanelRightOpenIcon className="size-3" />
               </button>
             )}
           </div>
@@ -830,28 +824,51 @@ export function MessageGroup({
           {isLastOverall && showTimelineToggle && (
             <button
               type="button"
-              onClick={() => {
-                if (isLiveTimeline) {
-                  setShowSteps((value) => !value);
-                } else {
-                  setSavedStepsOpen((value) => !value);
-                }
-              }}
+              onClick={openProcessDetails}
               className="p-0.5 text-muted-foreground/35 transition-colors hover:text-muted-foreground"
-              aria-label={timelineToggleLabel}
-              title={timelineToggleLabel}
+              aria-label={t.message.processDetails}
+              title={t.message.processDetails}
+              data-testid="process-details-trigger"
             >
-              <span className="sr-only">{timelineToggleLabel}</span>
-              <ChevronUp
-                className={cn(
-                  "size-3 transition-transform duration-200",
-                  timelineExpanded ? "rotate-180" : "",
-                )}
-              />
+              <span className="sr-only">{t.message.processDetails}</span>
+              <PanelRightOpenIcon className="size-3" />
             </button>
           )}
         </div>
       );
+    });
+  }
+
+  function openProcessDetails() {
+    const last = steps[steps.length - 1];
+    if (!last) return;
+    const isThinkingOnly = steps.every(
+      (step) => step.type === "reasoning" || step.type === "commentary",
+    );
+    const kind = isThinkingOnly ? "thinking" : "execution";
+    const detail = steps
+      .map((step) =>
+        step.type === "toolCall"
+          ? summarizeCurrentStep(step, t)
+          : stepText(step).trim(),
+      )
+      .filter(Boolean)
+      .join("\n");
+    emitOpenAgentWorkbench({
+      tab: "agent",
+      eventId: last.messageId ?? last.id,
+      eventKind: kind,
+      view: kind === "thinking" ? "summary" : "trace",
+      processEvent: {
+        kind,
+        summary: t.message.processDetails,
+        detail,
+        status: runStateForCurrentStep(last, isLoading),
+        count: steps.length,
+        phaseId: last.phaseId,
+        parentItemId: last.parentItemId,
+        timelineSequence: last.timelineSequence,
+      },
     });
   }
 
@@ -2244,6 +2261,8 @@ function convertToSteps(
   isLoading = false,
 ): CoTStep[] {
   const steps: CoTStep[] = [];
+  const seenPublicCommentary = new Set<string>();
+  const seenToolCallIds = new Set<string>();
   let iteration = 1;
   let lastStepType: "reasoning" | "toolCall" | null = null;
 
@@ -2301,9 +2320,13 @@ function convertToSteps(
   for (const message of messages) {
     if (message.type === "ai") {
       const tc = (message as AIMessage).tool_calls;
-      const visibleToolCalls = (tc ?? []).filter(
-        (tool_call) => !isHiddenTimelineToolName(tool_call.name),
-      );
+      const visibleToolCalls = (tc ?? []).filter((toolCall) => {
+        if (isHiddenTimelineToolName(toolCall.name)) return false;
+        if (!toolCall.id) return true;
+        if (seenToolCallIds.has(toolCall.id)) return false;
+        seenToolCallIds.add(toolCall.id);
+        return true;
+      });
       // Raw reasoning_content is private model state. It must never be used
       // to invent public "thinking" or execution rows. Only an explicitly
       // public summary, public checkpoint, or an actual tool call belongs in
@@ -2347,7 +2370,16 @@ function convertToSteps(
           }
         }
         const commentary = extractContentFromMessage(message).trim();
-        if (commentary && !isInternalProgressText(commentary)) {
+        const commentaryFingerprint = commentary
+          .replace(/\s+/g, " ")
+          .trim()
+          .toLowerCase();
+        if (
+          commentary &&
+          !isInternalProgressText(commentary) &&
+          !seenPublicCommentary.has(commentaryFingerprint)
+        ) {
+          seenPublicCommentary.add(commentaryFingerprint);
           const progressKind = message.additional_kwargs?.progress_kind;
           steps.push({
             id: `${message.id}-commentary`,

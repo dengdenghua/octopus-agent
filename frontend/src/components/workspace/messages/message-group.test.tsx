@@ -92,13 +92,13 @@ describe("MessageGroup todo_write rendering", () => {
       screen.queryByText(/verification required/i),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle("View 1 saved steps"));
+    fireEvent.click(screen.getByTitle("Process details"));
 
     expect(screen.queryByText(/verification/i)).not.toBeInTheDocument();
     expect(
       screen.queryByText(/verification required/i),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("notes.md")).toBeInTheDocument();
+    expect(screen.getByText(/notes\.md/)).toBeInTheDocument();
   });
 
   it("treats auto-verification-only groups as empty", () => {
@@ -173,10 +173,20 @@ describe("MessageGroup reasoning grouping", () => {
       screen.queryByTestId("process-timeline-event-thinking"),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle("查看 5 个历史步骤"));
+    const opened: CustomEvent[] = [];
+    const handleOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+    fireEvent.click(screen.getByTitle("过程细节"));
+    expect(opened.at(-1)?.detail).toMatchObject({
+      eventKind: "execution",
+      view: "trace",
+      processEvent: { count: 5 },
+    });
     for (const path of paths) {
-      expect(screen.getAllByText(path).length).toBeGreaterThan(0);
+      expect(opened.at(-1)?.detail.processEvent.detail).toContain(path);
     }
+    expect(screen.queryByText("a.py")).not.toBeInTheDocument();
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });
 
   it("renders public checkpoints inline between thinking and execution", () => {
@@ -285,6 +295,33 @@ describe("MessageGroup reasoning grouping", () => {
     ).not.toHaveTextContent(/^执行(?:\s|·)/);
   });
 
+  it("deduplicates replayed checkpoints and tool ids in the main transcript", () => {
+    const repeatedProgress = "正在读取消息组件，确认时间线的真实渲染顺序。";
+    const messages: AIMessage[] = ["progress-a", "progress-b"].map((id) => ({
+      id,
+      type: "ai",
+      content: repeatedProgress,
+      additional_kwargs: { public_progress: true },
+      tool_calls: [
+        {
+          id: "read-shared",
+          name: "read_file",
+          args: { path: "message-group.tsx" },
+        },
+      ],
+    }));
+
+    renderWithProviders(<MessageGroup messages={messages} />, {
+      locale: "zh-CN",
+    });
+
+    expect(screen.getAllByTestId("public-progress-event")).toHaveLength(1);
+    expect(
+      screen.getAllByTestId("process-timeline-event-execution"),
+    ).toHaveLength(1);
+    expect(screen.getAllByText(repeatedProgress)).toHaveLength(1);
+  });
+
   it("keeps only the latest thinking step visible while streaming", () => {
     const messages: AIMessage[] = [
       {
@@ -313,7 +350,7 @@ describe("MessageGroup reasoning grouping", () => {
     const thinkingEvent = screen.getByTestId("process-timeline-event-thinking");
     expect(thinkingEvent).toBeInTheDocument();
     expect(thinkingEvent).not.toHaveTextContent(/^思考过程(?:\s|·)/);
-    const replayToggle = screen.getByTitle("过程回放 1 步");
+    const replayToggle = screen.getByTitle("过程细节");
     const currentFrame = screen.getByText("再整理成可执行步骤");
     expect(replayToggle).toBeInTheDocument();
     expect(currentFrame).toBeInTheDocument();
@@ -321,18 +358,25 @@ describe("MessageGroup reasoning grouping", () => {
     expect(screen.queryByText("01")).not.toBeInTheDocument();
     expect(screen.queryByText("02")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle("过程回放 1 步"));
+    const opened: CustomEvent[] = [];
+    const handleOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+    fireEvent.click(replayToggle);
 
-    expect(screen.getByTitle("收起过程回放")).toBeInTheDocument();
-    const previousFrame = screen.getByText("先扫一遍上下文");
-    expect(previousFrame).toBeInTheDocument();
+    expect(screen.queryByText("先扫一遍上下文")).not.toBeInTheDocument();
+    expect(opened.at(-1)?.detail).toMatchObject({
+      eventKind: "thinking",
+      view: "summary",
+      processEvent: { count: 2 },
+    });
+    expect(opened.at(-1)?.detail.processEvent.detail).toContain(
+      "先扫一遍上下文",
+    );
     expect(screen.getAllByText("再整理成可执行步骤")).toHaveLength(1);
-    expect(
-      screen.queryByTestId("interleaved-process-timeline"),
-    ).not.toBeInTheDocument();
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });
 
-  it("keeps kept-open traces on the current frame and replays prior steps on demand", () => {
+  it("keeps kept-open traces compact and sends prior steps to the workbench", () => {
     const messages: AIMessage[] = Array.from({ length: 4 }, (_, index) => ({
       id: `ai-${index + 1}`,
       type: "ai",
@@ -349,7 +393,7 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    expect(screen.getByTitle("Replay 3 previous steps")).toBeInTheDocument();
+    expect(screen.getByTitle("Process details")).toBeInTheDocument();
     expect(screen.queryByText("01")).not.toBeInTheDocument();
     expect(screen.queryByText("03")).not.toBeInTheDocument();
     expect(
@@ -357,12 +401,19 @@ describe("MessageGroup reasoning grouping", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByText("Latest trace thought 4.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle("Replay 3 previous steps"));
+    const opened: CustomEvent[] = [];
+    const handleOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+    fireEvent.click(screen.getByTitle("Process details"));
 
-    expect(screen.getByTitle("Hide process replay")).toBeInTheDocument();
     expect(
-      screen.getAllByText("Latest trace thought 1.").length,
-    ).toBeGreaterThan(0);
+      screen.queryByText("Latest trace thought 1."),
+    ).not.toBeInTheDocument();
+    expect(opened.at(-1)?.detail.processEvent.detail).toContain(
+      "Latest trace thought 1.",
+    );
+    expect(opened.at(-1)?.detail.processEvent.count).toBe(4);
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });
 
   it("never turns private reasoning tool protocol into public actions", () => {
@@ -398,7 +449,7 @@ describe("MessageGroup reasoning grouping", () => {
     expect(screen.queryByText(/web_search/)).not.toBeInTheDocument();
   });
 
-  it("nests long numbered thinking steps under their own disclosure row", () => {
+  it("keeps long thinking details out of the transcript and sends them to the workbench", () => {
     const hiddenTail = "UNIQUE_NESTED_REASONING_TAIL";
     const messages: AIMessage[] = [
       {
@@ -424,18 +475,19 @@ describe("MessageGroup reasoning grouping", () => {
       locale: "en-US",
     });
 
-    fireEvent.click(screen.getByTitle("View 2 saved steps"));
+    const opened: CustomEvent[] = [];
+    const handleOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+    fireEvent.click(screen.getByTitle("Process details"));
 
-    expect(screen.getByText("01")).toBeInTheDocument();
-    expect(screen.getByText("02")).toBeInTheDocument();
+    expect(screen.queryByText("01")).not.toBeInTheDocument();
+    expect(screen.queryByText("02")).not.toBeInTheDocument();
     expect(screen.queryByText(new RegExp(hiddenTail))).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByText(/First I will inspect the request/));
-
-    expect(screen.getByText(new RegExp(hiddenTail))).toBeInTheDocument();
+    expect(opened.at(-1)?.detail.processEvent.detail).toContain(hiddenTail);
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });
 
-  it("collapses saved steps behind a compact disclosure after completion", () => {
+  it("keeps saved steps compact and opens their detail in the workbench", () => {
     const messages: AIMessage[] = [
       {
         id: "ai-1",
@@ -463,13 +515,13 @@ describe("MessageGroup reasoning grouping", () => {
       locale: "en-US",
     });
 
-    expect(screen.getByTitle("View 1 saved steps")).toBeInTheDocument();
+    expect(screen.getByTitle("Process details")).toBeInTheDocument();
     expect(screen.queryByText("01")).not.toBeInTheDocument();
     expect(screen.getByText(/laser engraving market 2025/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle("View 1 saved steps"));
+    fireEvent.click(screen.getByTitle("Process details"));
 
-    expect(screen.getByTitle("Hide saved steps")).toBeInTheDocument();
+    expect(screen.queryByTitle("Hide saved steps")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Clarify task direction"),
     ).not.toBeInTheDocument();
@@ -478,7 +530,7 @@ describe("MessageGroup reasoning grouping", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("keeps completed code-mode traces behind the saved-steps disclosure", () => {
+  it("keeps completed code-mode traces behind the workbench disclosure", () => {
     const messages: AIMessage[] = [
       {
         id: "ai-1",
@@ -509,7 +561,7 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    expect(screen.getByTitle("View 1 saved steps")).toBeInTheDocument();
+    expect(screen.getByTitle("Process details")).toBeInTheDocument();
     expect(
       screen.queryByText("Inspect the user request before editing."),
     ).not.toBeInTheDocument();
@@ -554,7 +606,7 @@ describe("MessageGroup reasoning grouping", () => {
 
     rerender(<MessageGroup codeMode messages={messages as never} />);
 
-    expect(screen.getByTitle("View 1 saved steps")).toBeInTheDocument();
+    expect(screen.getByTitle("Process details")).toBeInTheDocument();
     expect(screen.queryByTitle("Hide saved steps")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Clarify task direction"),
@@ -955,12 +1007,12 @@ describe("MessageGroup reasoning grouping", () => {
       screen.getAllByTestId("process-timeline-event-execution"),
     ).toHaveLength(3);
 
-    fireEvent.click(screen.getByTitle("过程回放 2 步"));
+    fireEvent.click(screen.getByTitle("过程细节"));
 
     expect(screen.queryByText("已浏览目录")).not.toBeInTheDocument();
     expect(screen.queryByText("已读取")).not.toBeInTheDocument();
-    expect(screen.getAllByText("src").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("src/app.tsx").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/src$/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/src\/app\.tsx/).length).toBeGreaterThan(0);
   });
 });
 
@@ -1125,8 +1177,8 @@ describe("MessageGroup streaming lifecycle", () => {
 
     rerender(<MessageGroup messages={messages as never} />);
 
-    expect(screen.getByTitle("View 2 saved steps")).toBeInTheDocument();
-    fireEvent.click(screen.getByTitle("View 2 saved steps"));
+    expect(screen.getByTitle("Process details")).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("Process details"));
     expect(screen.getAllByText(/test query/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/notes\.md/).length).toBeGreaterThan(0);
   });
@@ -1236,7 +1288,7 @@ describe("MessageGroup streaming lifecycle", () => {
     ).toBeInTheDocument();
   });
 
-  it("preserves user-opened reasoning groups across streaming updates", () => {
+  it("keeps workbench-only reasoning details stable across streaming updates", () => {
     const makeMessages = (extraText: string): AIMessage[] => [
       {
         id: "ai-1",
@@ -1264,9 +1316,14 @@ describe("MessageGroup streaming lifecycle", () => {
     expect(screen.getAllByText(/Second thinking step/).length).toBeGreaterThan(
       0,
     );
-    fireEvent.click(screen.getByText(/Replay \d+ previous steps/));
-    expect(screen.getByText(/First thinking step/)).toBeInTheDocument();
-    expect(screen.getByText(/Hide process replay/)).toBeInTheDocument();
+    const opened: CustomEvent[] = [];
+    const handleOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+    fireEvent.click(screen.getByTitle("Process details"));
+    expect(screen.queryByText(/First thinking step/)).not.toBeInTheDocument();
+    expect(opened.at(-1)?.detail.processEvent.detail).toContain(
+      "First thinking step",
+    );
 
     rerender(
       <MessageGroup
@@ -1275,11 +1332,12 @@ describe("MessageGroup streaming lifecycle", () => {
       />,
     );
 
-    expect(screen.getByText(/Hide process replay/)).toBeInTheDocument();
-    expect(screen.getByText(/First thinking step/)).toBeInTheDocument();
+    expect(screen.getByTitle("Process details")).toBeInTheDocument();
+    expect(screen.queryByText(/First thinking step/)).not.toBeInTheDocument();
     expect(screen.getAllByText(/Second thinking step/).length).toBeGreaterThan(
       0,
     );
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });
 
   it("groups mixed content + tool calls into processing + assistant groups", () => {

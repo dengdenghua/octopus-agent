@@ -396,7 +396,7 @@ describe("MessageList process trace lifecycle", () => {
 
     renderMessageList({ thread });
 
-    const savedStepToggles = screen.getAllByText("View 1 saved steps");
+    const savedStepToggles = screen.getAllByTitle("Process details");
     expect(savedStepToggles).toHaveLength(2);
     expect(screen.getByText(/old market query/)).toBeInTheDocument();
     expect(
@@ -413,7 +413,7 @@ describe("MessageList process trace lifecycle", () => {
     expect(screen.getByText(/latest market query/)).toBeInTheDocument();
   });
 
-  test("expands only the actively streaming process trace", () => {
+  test("keeps streaming details in the workbench instead of expanding the transcript", () => {
     const oldTrace: AIMessage = {
       id: "assistant-old",
       type: "ai",
@@ -458,7 +458,7 @@ describe("MessageList process trace lifecycle", () => {
 
     renderMessageList({ thread });
 
-    expect(screen.getByText("View 1 saved steps")).toBeInTheDocument();
+    expect(screen.getByTitle("Process details")).toBeInTheDocument();
     expect(
       screen.getAllByTestId("process-timeline-event-execution").length,
     ).toBeGreaterThan(0);
