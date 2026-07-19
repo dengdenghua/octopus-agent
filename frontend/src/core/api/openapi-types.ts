@@ -12780,6 +12780,11 @@ export interface components {
              * @default false
              */
             detected: boolean;
+            /**
+             * Effective Status
+             * @default missing
+             */
+            effective_status: string;
             /** Executable */
             executable?: string | null;
             /** Fix Hint */

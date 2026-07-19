@@ -693,6 +693,8 @@ def to_wire(
     in_registry = bool(getattr(registry, "has", lambda _agent_id: False)(agent_id))
     registered = in_registry or dir_registered(agent_id)
     status = "registered" if registered else ("detected" if executable else "missing")
+    readiness_status = str(readiness.get("readiness_status") or status)
+    effective_status = "registered" if registered else readiness_status
     return LocalPartnerWire(
         id=str(spec["id"]),
         agent_id=agent_id,
@@ -703,11 +705,12 @@ def to_wire(
         detected=bool(executable),
         registered=registered,
         status=status,
+        effective_status=effective_status,
         command=command,
         executable=executable,
         ready=bool(readiness.get("ready")),
         headless_supported=bool(readiness.get("headless_supported")),
-        readiness_status=str(readiness.get("readiness_status") or status),
+        readiness_status=readiness_status,
         readiness_message=str(readiness.get("readiness_message") or ""),
         fix_hint=str(readiness.get("fix_hint") or "") or None,
         install_command=guidance.get("install_command"),

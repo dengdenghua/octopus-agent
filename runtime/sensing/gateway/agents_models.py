@@ -118,6 +118,7 @@ class LocalPartnerWire(BaseModel):
     detected: bool = False
     registered: bool = False
     status: str = "missing"
+    effective_status: str = "missing"
     command: str | None = None
     executable: str | None = None
     ready: bool = False

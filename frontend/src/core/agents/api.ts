@@ -73,6 +73,7 @@ export interface LocalAgentPartner {
   detected: boolean;
   registered: boolean;
   status: "registered" | "detected" | "missing" | string;
+  effective_status?: string;
   command?: string | null;
   executable?: string | null;
   ready?: boolean;

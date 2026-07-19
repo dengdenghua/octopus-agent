@@ -908,6 +908,7 @@ class TestLocalPartners:
         assert partners["codex-cli"]["ready"] is True
         assert partners["codex-cli"]["headless_supported"] is True
         assert partners["codex-cli"]["readiness_status"] == "ready"
+        assert partners["codex-cli"]["effective_status"] == "ready"
         assert partners["codex-cli"]["native_command"] == "codex"
         assert partners["codex-cli"]["native_launch_cwd"] == str(project_root())
         assert partners["codex-cli"]["native_launch_command"].startswith("cd ")
@@ -951,6 +952,7 @@ class TestLocalPartners:
         assert partners["codebuddy-cli"]["command_hints"][0]["scope"] == "一次性覆盖"
         assert partners["openclaw"]["detected"] is False
         assert partners["openclaw"]["readiness_status"] == "missing"
+        assert partners["openclaw"]["effective_status"] == "missing"
 
     def test_local_partner_copy_commands_quote_shell_special_paths(
         self,
@@ -991,6 +993,40 @@ class TestLocalPartners:
             f" && {codebuddy['native_command']}"
         )
 
+    def test_local_partner_effective_status_reflects_not_ready_state(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        from runtime.sensing.gateway import agents_local_partner
+
+        monkeypatch.setattr(
+            agents_router_module,
+            "_which_local_partner_command",
+            lambda commands: ("trae-cli", str(tmp_path / "trae-cli"))
+            if "trae-cli" in commands
+            else (None, None),
+        )
+
+        class _Proc:
+            stdout = "[]"
+
+        monkeypatch.setattr(
+            agents_local_partner.subprocess,
+            "run",
+            lambda *args, **kwargs: _Proc(),
+        )
+        app = FastAPI()
+        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
+
+        r = TestClient(app).get("/api/agents/local-partners")
+
+        assert r.status_code == 200
+        partners = {p["id"]: p for p in r.json()["partners"]}
+        assert partners["trae-cli"]["status"] == "detected"
+        assert partners["trae-cli"]["readiness_status"] == "model_unconfigured"
+        assert partners["trae-cli"]["effective_status"] == "model_unconfigured"
+
     def test_register_local_partner_creates_real_agent(
         self,
         tmp_path: Path,
@@ -1030,6 +1066,9 @@ class TestLocalPartners:
         local_agent = next(a for a in agents if a["name"] == "local_codex_cli")
         assert local_agent["display_name"] == "Codex 本地伙伴"
         assert local_agent["capabilities"]["local_partner"] is True
+
+        partners = {p["id"]: p for p in client.get("/api/agents/local-partners").json()["partners"]}
+        assert partners["codex-cli"]["effective_status"] == "registered"
 
         duplicate = client.post(
             "/api/agents/local-partners/register",
@@ -1144,6 +1183,11 @@ class TestLocalPartners:
         }
         command_hints = schemas["LocalPartnerWire"]["properties"]["command_hints"]
         assert command_hints["items"]["$ref"] == "#/components/schemas/LocalPartnerCommandHint"
+        assert schemas["LocalPartnerWire"]["properties"]["effective_status"] == {
+            "default": "missing",
+            "title": "Effective Status",
+            "type": "string",
+        }
         assert schemas["LocalPartnerWire"]["properties"]["native_launch_cwd"] == {
             "anyOf": [{"type": "string"}, {"type": "null"}],
             "title": "Native Launch Cwd",
