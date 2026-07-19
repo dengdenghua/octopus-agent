@@ -43,8 +43,9 @@ _SINGLE_SOURCE_RE = re.compile(
     re.IGNORECASE,
 )
 _CONCISE_RESULT_RE = re.compile(
-    r"(?:\u4e00\u53e5|\u4e00\u53e5\u8bdd|\u4e00\u6bb5|\u7b80\u77ed|\u7ed3\u8bba)|"
-    r"\b(?:one sentence|brief|concise|short conclusion)\b",
+    r"(?:\u4e00\u53e5|\u4e00\u53e5\u8bdd|\u4e00\u6bb5|\u7b80\u77ed|\u7ed3\u8bba|"
+    r"\u53ea\u56de\u7b54|\u4ec5\u56de\u7b54)|"
+    r"\b(?:one sentence|brief|concise|short conclusion|only (?:answer|report|return))\b",
     re.IGNORECASE,
 )
 _WEB_LOOKUP_RE = re.compile(
@@ -115,6 +116,26 @@ def _is_narrow_local_inspection(text: str) -> bool:
     )
 
 
+def _is_narrow_read_only_command(text: str) -> bool:
+    """Return whether a turn is one bounded command with a concise result.
+
+    Code mode is also the default home for tiny shell probes. Requiring a
+    project checklist for a single explicitly read-only command adds another
+    model round-trip and can contaminate the final synthesis with unrelated
+    conversation context. Safety and approval policy still govern the command
+    independently; this exemption only removes checklist ceremony.
+    """
+
+    return bool(
+        len(text) <= 300
+        and "\n" not in text
+        and re.search(r"\bexec_shell\b", text, re.IGNORECASE)
+        and _READ_ONLY_RE.search(text)
+        and _CONCISE_RESULT_RE.search(text)
+        and not _FOLLOWUP_EXECUTION_RE.search(text)
+    )
+
+
 def context_mode(user_context: dict[str, Any] | None) -> str:
     """Return the best-effort runtime mode from a thread context."""
 
@@ -174,6 +195,8 @@ def should_require_todo_protocol(
     if _is_narrow_local_inspection(text):
         return False
     if _is_narrow_single_source_lookup(text):
+        return False
+    if _is_narrow_read_only_command(text):
         return False
     if mode in {"code", "deep", "deep_research", "research"}:
         return True

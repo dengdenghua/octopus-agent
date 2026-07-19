@@ -1749,6 +1749,21 @@ def test_read_only_research_is_not_misclassified_as_project_inspection() -> None
     assert _goal_requires_file_content(inspection_goal)
 
 
+def test_shell_command_location_is_not_misclassified_as_project_inspection() -> None:
+    command_goal = (
+        "只读权限语义验收：必须使用 exec_shell 在当前项目执行 pwd，"
+        "不修改任何文件；命令结束后只回答输出目录。"
+    )
+    assert not _goal_requests_project_inspection(command_goal)
+    assert not _goal_requires_file_content(command_goal)
+
+    english_command_goal = "Run pwd in the current project and only report its output."
+    assert not _goal_requests_project_inspection(english_command_goal)
+
+    inspection_goal = "分析当前项目的架构，然后给出改进建议。"
+    assert _goal_requests_project_inspection(inspection_goal)
+
+
 def test_hidden_reasoning_timeout_retries_once_without_extended_thinking(monkeypatch) -> None:
     from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
 

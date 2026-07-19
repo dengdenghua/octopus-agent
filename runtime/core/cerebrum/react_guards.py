@@ -243,10 +243,11 @@ def _goal_requests_project_inspection(goal: str) -> bool:
     lowered = _inspection_goal_text(goal)
     if re.search(
         r"\b(?:list_cwd|read_file)\b|"
-        r"\b(?:project|repo|repository|workspace|codebase|source\s+code)\b|"
         r"\b(?:inspect|read|review|check|open|analy[sz]e)\b[^.!?\n]{0,48}"
         r"\b(?:files?|config(?:uration)?|project|repo(?:sitory)?|workspace|"
         r"codebase|source\s+code)\b|"
+        r"(?:检查|查看|读取|分析|调研|审计|梳理|了解|评估|摸清|研究)"
+        r"[^。.!！；;\n]{0,48}(?:当前项目|项目目录|本地仓库|工作区|代码库)|"
         r"(?:^|[\s'\"`(])[^\s'\"`()]+\."
         r"(?:py|ts|tsx|js|jsx|json|ya?ml|toml|md|css|html|go|rs)\b",
         lowered,
@@ -260,11 +261,6 @@ def _goal_requests_project_inspection(goal: str) -> bool:
             "配置文件",
             "源代码",
             "源码",
-            "代码库",
-            "当前项目",
-            "项目目录",
-            "本地仓库",
-            "工作区",
         )
     )
 

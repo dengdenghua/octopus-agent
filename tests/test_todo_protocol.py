@@ -59,6 +59,22 @@ def test_todo_protocol_skips_bounded_basename_inspection_in_code_mode() -> None:
     )
 
 
+def test_todo_protocol_skips_narrow_read_only_shell_command_in_code_mode() -> None:
+    assert not should_require_todo_protocol(
+        "只读权限语义验收：必须使用 exec_shell 在当前项目执行 pwd，"
+        "不修改任何文件；命令结束后只回答输出目录。",
+        {"mode": "code", "capability_mode": "code"},
+    )
+    assert not should_require_todo_protocol(
+        "Use exec_shell to run pwd read-only and only report its output.",
+        {"mode": "code"},
+    )
+    assert should_require_todo_protocol(
+        "Use exec_shell to inspect the project, then update the code.",
+        {"mode": "code"},
+    )
+
+
 def test_todo_protocol_keeps_broad_or_mutating_file_comparison() -> None:
     assert should_require_todo_protocol(
         "比较 runtime/protocol/items.py 与 frontend/src/core/realtime/items.ts，"

@@ -259,6 +259,12 @@ local_auth:
 # disabling — but disabling is the right escape hatch when noise
 # is hurting the agent's productivity.
 safety:
+  # Keep false on shared or remotely reachable deployments. Set true only on
+  # a trusted single-user host when the UI's “Full Access / 全权执行” mode
+  # should be allowed to send approvalPolicy=never. Prompt-injection taint and
+  # hard safety blocks still escalate risky operations independently.
+  allow_client_approval_bypass: false
+
   # ─── Process sandbox backend (exec_shell / verify / git / quality) ───
   # Runtime env var only: OCTOPUS_PROCESS_SANDBOX controls the
   # subprocess backend used once a tool has a sandbox_dir.
