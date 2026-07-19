@@ -36,6 +36,7 @@ import {
   type MessageGroup as CoreMessageGroup,
 } from "@/core/messages/utils";
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
+import type { StreamVitals } from "@/core/realtime/stream-vitals";
 import type { Subtask } from "@/core/tasks";
 import { useUpdateSubtask } from "@/core/tasks/context";
 import type { AgentThreadState } from "@/core/threads";
@@ -662,6 +663,9 @@ export function MessageList({
     thread.streamingMessage &&
     extractContentFromMessage(thread.streamingMessage).trim(),
   );
+  const streamVitals = (
+    thread as BaseStream<AgentThreadState> & { vitals?: StreamVitals }
+  ).vitals;
 
   // A content delta is progress, so move the silence watermark without
   // restarting the per-turn timer. The previous combined effect tore down
@@ -1520,11 +1524,6 @@ export function MessageList({
                     ? failureReceipt
                     : null;
 
-                const showActivityPulse =
-                  isLatestTurn &&
-                  isLatestGroup &&
-                  group.type === "human" &&
-                  thread.isLoading;
                 const turnGroupPosition = turn.groupIndexes.indexOf(index);
                 const assistantIdentity = assistantFrameIdentity(group);
                 const previousAssistantIdentity = [...turn.groupIndexes]
@@ -1557,17 +1556,17 @@ export function MessageList({
                       renderGroupContent={renderGroupContent}
                       showAssistantAvatar={showAssistantAvatar}
                     />
-                    {showActivityPulse && (
-                      <PublicThinkingStatus
-                        isLoading={thread.isLoading}
-                        liveToolEvents={liveToolEvents ?? []}
-                        hasStreamingMessage={hasStreamingAnswer}
-                        threadId={threadId}
-                      />
-                    )}
                   </Fragment>
                 );
               })}
+              {isLatestTurn && (
+                <PublicThinkingStatus
+                  isLoading={thread.isLoading}
+                  liveToolEvents={liveToolEvents ?? []}
+                  hasStreamingMessage={hasStreamingAnswer}
+                  vitals={streamVitals}
+                />
+              )}
             </div>
           );
         })}

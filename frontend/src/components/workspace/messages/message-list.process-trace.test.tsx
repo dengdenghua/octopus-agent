@@ -470,7 +470,7 @@ describe("MessageList process trace lifecycle", () => {
     });
 
     const pulse = screen.getByTestId("conversation-activity-pulse");
-    expect(pulse).toHaveTextContent("Working on it");
+    expect(pulse).toHaveTextContent("Model is working");
     expect(pulse).toHaveTextContent("read file: src/app.ts");
 
     rerender(
@@ -493,9 +493,9 @@ describe("MessageList process trace lifecycle", () => {
       }),
     );
 
-    expect(
-      screen.queryByTestId("conversation-activity-pulse"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("conversation-activity-pulse")).toHaveTextContent(
+      "Model is working",
+    );
 
     rerender(
       messageListTree({
