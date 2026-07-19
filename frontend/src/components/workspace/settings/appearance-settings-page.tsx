@@ -38,8 +38,7 @@ import { cn } from "@/lib/utils";
 
 import { SettingsSection } from "./settings-section";
 
-function useLanguageOptions(
-): { value: Locale; label: string }[] {
+function useLanguageOptions(): { value: Locale; label: string }[] {
   return SUPPORTED_LOCALES.map((value) => ({
     value,
     label: TRANSLATIONS_BY_LOCALE[value].locale.localName,
@@ -274,7 +273,10 @@ export default function AppearanceSettingsPage() {
             }
           }}
         >
-          <SelectTrigger className="w-[220px]">
+          <SelectTrigger
+            aria-label={t.settings.appearance.chatFontSizeTitle}
+            className="w-[220px] max-w-full"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -578,7 +580,9 @@ function MaterialPreviewCard({
     <div
       className={cn(
         "relative h-28 overflow-hidden rounded-lg border p-3 transition-all",
-        active ? "border-primary ring-primary/25 ring-2" : "border-border-default",
+        active
+          ? "border-primary ring-primary/25 ring-2"
+          : "border-border-default",
         liquidTone || "bg-card",
       )}
     >
@@ -680,6 +684,7 @@ function ThemePreviewCard({
     <button
       type="button"
       onClick={() => onSelect(mode)}
+      aria-pressed={active}
       className={cn(
         "group flex h-full flex-col gap-3 rounded-lg border p-4 text-left transition-all",
         active

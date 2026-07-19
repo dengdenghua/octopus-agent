@@ -6,6 +6,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { useI18n } from "@/core/i18n/hooks";
+
 import { accountApi } from "./api";
 import { queryKeys } from "./query-keys";
 
@@ -36,13 +38,14 @@ export function useProfile() {
 
 export function useUpdateProfile() {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
 
   return useMutation<UserProfile, Error, UpdateProfileRequest>({
     mutationFn: (data) => accountApi.updateProfile(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.profile() });
       queryClient.invalidateQueries({ queryKey: queryKeys.overview() });
-      toast.success("Profile updated successfully");
+      toast.success(t.accountSettings.profileUpdated);
     },
     onError: (error) => {
       toast.error(error.message);
@@ -52,12 +55,13 @@ export function useUpdateProfile() {
 
 export function useUploadAvatar() {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
 
   return useMutation<{ success: boolean; avatar_url: string }, Error, File>({
     mutationFn: (file) => accountApi.uploadAvatar(file),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.profile() });
-      toast.success("Avatar uploaded successfully");
+      toast.success(t.accountSettings.avatarUploaded);
     },
     onError: (error) => {
       toast.error(error.message);
@@ -95,13 +99,14 @@ export function useLinkAccount() {
 
 export function useUnlinkAccount() {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
 
   return useMutation<UserProfile, Error, string>({
     mutationFn: (provider) => accountApi.unlinkAccount(provider),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.linkedAccounts() });
       queryClient.invalidateQueries({ queryKey: queryKeys.profile() });
-      toast.success("Account unlinked successfully");
+      toast.success(t.accountSettings.accountUnlinked);
     },
     onError: (error) => {
       toast.error(error.message);
@@ -121,12 +126,13 @@ export function usePrivacySettings() {
 
 export function useUpdatePrivacySettings() {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
 
   return useMutation<PrivacySettings, Error, Partial<PrivacySettings>>({
     mutationFn: (data) => accountApi.updatePrivacySettings(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.privacy() });
-      toast.success("Privacy settings updated");
+      toast.success(t.accountSettings.privacyUpdated);
     },
     onError: (error) => {
       toast.error(error.message);
@@ -177,12 +183,13 @@ export function useSubscribe() {
 
 export function useCancelSubscription() {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
 
   return useMutation<UserSubscription, Error>({
     mutationFn: () => accountApi.cancelSubscription(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.subscription() });
-      toast.success("Subscription cancelled successfully");
+      toast.success(t.subscriptionSettings.cancelled);
     },
     onError: (error) => {
       toast.error(error.message);

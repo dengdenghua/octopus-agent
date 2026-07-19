@@ -617,6 +617,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                           disabled={disabled}
                           title={disabled ? disabledReason : undefined}
                           aria-disabled={disabled || undefined}
+                          aria-current={active ? "page" : undefined}
                           className={cn(
                             // Match sidebar NavRow: opacity + leading 2px
                             // accent bar instead of a full primary fill.

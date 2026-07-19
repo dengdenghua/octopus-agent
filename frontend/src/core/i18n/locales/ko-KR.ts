@@ -3447,17 +3447,23 @@ export const koKR: Translations = {
       discoverFromMarket: "Discover from market",
     },
     notification: {
-      title: "Notification",
+      title: "알림",
       description:
-        "Octopus only sends a completion notification when the window is not active. This is especially useful for long-running tasks so you can switch to other work and get notified when done.",
-      requestPermission: "Request notification permission",
+        "창이 비활성 상태일 때 Octopus가 작업 완료를 알려 줍니다. 긴 작업 중 다른 업무로 전환할 때 유용합니다.",
+      enableNotification: "알림 사용",
+      permissionGranted: "권한 허용됨",
+      permissionPrompt: "권한 필요",
+      permissionDenied: "권한 거부됨",
+      requestPermission: "알림 권한 요청",
       deniedHint:
-        "Notification permission was denied. You can enable it in your browser's site settings to receive completion alerts.",
-      testButton: "Send test notification",
+        "알림 권한이 거부되었습니다. 시스템 또는 브라우저 알림 설정에서 Octopus 알림을 켜 주세요.",
+      testButton: "테스트 알림 보내기",
       testTitle: "Octopus",
-      testBody: "This is a test notification.",
-      notSupported: "Your browser does not support notifications.",
-      disableNotification: "Disable notification",
+      testBody: "테스트 알림입니다.",
+      testSent: "테스트 알림을 보냈습니다",
+      requestFailed: "알림 권한을 요청할 수 없습니다",
+      notSupported: "현재 실행 환경은 시스템 알림을 지원하지 않습니다.",
+      disableNotification: "알림 사용 안 함",
     },
     acknowledge: {
       emptyTitle: "Acknowledgements",
@@ -6379,6 +6385,12 @@ Strategy:
     cachedSuffix: " (cached)",
     expiredTooltip:
       "Difference between nominal and available balance (expired or frozen)",
+    profileUpdated: "프로필을 업데이트했습니다",
+    avatarUploaded: "아바타를 업데이트했습니다",
+    accountUnlinked: "계정 연결을 해제했습니다",
+    privacyUpdated: "개인정보 설정을 업데이트했습니다",
+    dataUnavailable: "계정 정보를 불러올 수 없습니다.",
+    retry: "계정 정보 다시 불러오기",
   },
 
   // Subscription Settings
@@ -6391,6 +6403,21 @@ Strategy:
     supportEmail: "support@octopus.local",
     invoiceHint: ", invoices available after purchase",
     totalCredits: (total) => `Total ${total} credits`,
+    billingUnavailableTitle: "요금제를 일시적으로 사용할 수 없습니다",
+    billingUnavailableDescription:
+      "Octopus 계정에는 로그인되어 있지만 결제 서비스가 연결되지 않았습니다. 다시 시도해 계정 연결과 요금제를 새로고침하세요.",
+    subscriptionUnavailable: "구독 정보를 불러올 수 없습니다.",
+    plansUnavailable: "요금제를 불러올 수 없습니다.",
+    noPlans: "현재 구매 가능한 요금제가 없습니다.",
+    reloadSubscription: "구독 정보 다시 불러오기",
+    reloadBilling: "결제 서비스 다시 연결",
+    reloadPlans: "요금제 목록 다시 불러오기",
+    cancelTitle: "구독을 취소할까요?",
+    cancelDescription:
+      "현재 이용 권한은 결제 기간이 끝날 때까지 유지되며 다음 갱신이 중지됩니다.",
+    keepPlan: "요금제 유지",
+    confirmCancel: "구독 취소",
+    cancelled: "구독을 취소했습니다",
     plans: {
       plus: {
         name: "Plus (Monthly)",

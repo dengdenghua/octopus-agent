@@ -3186,7 +3186,7 @@ export const zhCN: Translations = {
       chatFontSizeLarge: "大",
       cornerRadiusTitle: "圆角尺寸",
       cornerRadiusDescription:
-        "应用于所有圆角的全局系数。Crisp 更像代码编辑器，Pill 更圆润友好。",
+        "应用于所有圆角的全局系数。锐利更像代码编辑器，胶囊更圆润友好。",
       cornerCrisp: "锐利",
       cornerSoft: "柔和",
       cornerDefault: "默认",
@@ -3234,13 +3234,20 @@ export const zhCN: Translations = {
     notification: {
       title: "通知",
       description:
-        "Octopus 可以向你发送通知,提醒你重要的事件:任务完成、消息回复等",
+        "窗口不在前台时，Octopus 会在任务完成后提醒你，适合需要切换去处理其他工作的长任务。",
+      enableNotification: "启用通知",
+      permissionGranted: "权限已允许",
+      permissionPrompt: "需要授权",
+      permissionDenied: "权限被拒绝",
       requestPermission: "请求通知权限",
-      deniedHint: "通知权限被拒绝,请在浏览器设置中手动开启",
+      deniedHint:
+        "通知权限已被拒绝，请前往系统或浏览器的通知设置，为 Octopus 开启通知。",
       testButton: "发送测试通知",
       testTitle: "Octopus",
-      testBody: "这是一条测试通知",
-      notSupported: "你的浏览器不支持桌面通知",
+      testBody: "这是一条测试通知。",
+      testSent: "测试通知已发送",
+      requestFailed: "无法请求通知权限",
+      notSupported: "当前运行环境不支持系统通知。",
       disableNotification: "禁用通知",
     },
     acknowledge: {
@@ -6057,6 +6064,12 @@ export const zhCN: Translations = {
     sessionCacheHint: "下方显示的是缓存积分。请退出后重新用手机号登录以刷新。",
     cachedSuffix: "（缓存）",
     expiredTooltip: "账面与可用余额的差额（已过期或冻结的部分）",
+    profileUpdated: "个人资料已更新",
+    avatarUploaded: "头像已更新",
+    accountUnlinked: "账号关联已解除",
+    privacyUpdated: "隐私设置已更新",
+    dataUnavailable: "账户信息暂时无法加载。",
+    retry: "重新加载账户信息",
   },
 
   // Subscription Settings
@@ -6069,6 +6082,20 @@ export const zhCN: Translations = {
     supportEmail: "support@octopus.local",
     invoiceHint: "，购买后支持开具发票",
     totalCredits: (total) => `共 ${total} 积分`,
+    billingUnavailableTitle: "套餐暂时不可用",
+    billingUnavailableDescription:
+      "当前 Octopus 账号已登录，但计费服务尚未连接。请重试刷新账号关联与可购买套餐。",
+    subscriptionUnavailable: "订阅信息暂时无法加载。",
+    plansUnavailable: "套餐加载失败。",
+    noPlans: "当前暂无可购买的套餐。",
+    reloadSubscription: "重新加载订阅信息",
+    reloadBilling: "重新连接套餐服务",
+    reloadPlans: "重新加载套餐列表",
+    cancelTitle: "取消订阅？",
+    cancelDescription: "当前权益会保留到已付费周期结束，本操作将关闭后续续订。",
+    keepPlan: "保留套餐",
+    confirmCancel: "取消订阅",
+    cancelled: "订阅已取消",
     plans: {
       plus: {
         name: "Plus（月卡）",

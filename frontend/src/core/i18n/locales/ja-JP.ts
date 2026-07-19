@@ -3452,17 +3452,23 @@ export const jaJP: Translations = {
       discoverFromMarket: "Discover from market",
     },
     notification: {
-      title: "Notification",
+      title: "通知",
       description:
-        "Octopus only sends a completion notification when the window is not active. This is especially useful for long-running tasks so you can switch to other work and get notified when done.",
-      requestPermission: "Request notification permission",
+        "ウィンドウが非アクティブなとき、Octopus はタスク完了を通知します。長時間のタスク中に別の作業へ切り替える場合に便利です。",
+      enableNotification: "通知を有効にする",
+      permissionGranted: "許可済み",
+      permissionPrompt: "許可が必要です",
+      permissionDenied: "拒否されました",
+      requestPermission: "通知を許可する",
       deniedHint:
-        "Notification permission was denied. You can enable it in your browser's site settings to receive completion alerts.",
-      testButton: "Send test notification",
+        "通知が拒否されています。システムまたはブラウザの通知設定で Octopus を有効にしてください。",
+      testButton: "テスト通知を送信",
       testTitle: "Octopus",
-      testBody: "This is a test notification.",
-      notSupported: "Your browser does not support notifications.",
-      disableNotification: "Disable notification",
+      testBody: "これはテスト通知です。",
+      testSent: "テスト通知を送信しました",
+      requestFailed: "通知の許可を要求できませんでした",
+      notSupported: "現在の環境はシステム通知に対応していません。",
+      disableNotification: "通知を無効にする",
     },
     acknowledge: {
       emptyTitle: "Acknowledgements",
@@ -6393,6 +6399,12 @@ Strategy:
     cachedSuffix: " (cached)",
     expiredTooltip:
       "Difference between nominal and available balance (expired or frozen)",
+    profileUpdated: "プロフィールを更新しました",
+    avatarUploaded: "アバターを更新しました",
+    accountUnlinked: "アカウントの連携を解除しました",
+    privacyUpdated: "プライバシー設定を更新しました",
+    dataUnavailable: "アカウント情報を読み込めませんでした。",
+    retry: "アカウント情報を再読み込み",
   },
 
   // Subscription Settings
@@ -6405,6 +6417,21 @@ Strategy:
     supportEmail: "support@octopus.local",
     invoiceHint: ", invoices available after purchase",
     totalCredits: (total) => `Total ${total} credits`,
+    billingUnavailableTitle: "プランを一時的に利用できません",
+    billingUnavailableDescription:
+      "Octopus アカウントにはログイン済みですが、請求サービスに接続されていません。再試行してアカウント連携とプランを更新してください。",
+    subscriptionUnavailable: "サブスクリプション情報を読み込めませんでした。",
+    plansUnavailable: "プランを読み込めませんでした。",
+    noPlans: "現在購入できるプランはありません。",
+    reloadSubscription: "サブスクリプション情報を再読み込み",
+    reloadBilling: "請求サービスに再接続",
+    reloadPlans: "プラン一覧を再読み込み",
+    cancelTitle: "サブスクリプションを解約しますか？",
+    cancelDescription:
+      "現在の利用権は支払い済み期間の終了まで維持され、次回の更新が停止されます。",
+    keepPlan: "プランを維持",
+    confirmCancel: "解約する",
+    cancelled: "サブスクリプションを解約しました",
     plans: {
       plus: {
         name: "Plus (Monthly)",

@@ -3456,12 +3456,18 @@ export const enUS: Translations = {
       title: "Notification",
       description:
         "Octopus only sends a completion notification when the window is not active. This is especially useful for long-running tasks so you can switch to other work and get notified when done.",
+      enableNotification: "Enable notifications",
+      permissionGranted: "Permission granted",
+      permissionPrompt: "Permission required",
+      permissionDenied: "Permission denied",
       requestPermission: "Request notification permission",
       deniedHint:
-        "Notification permission was denied. You can enable it in your browser's site settings to receive completion alerts.",
+        "Notification permission was denied. Enable Octopus notifications in your system or browser notification settings.",
       testButton: "Send test notification",
       testTitle: "Octopus",
       testBody: "This is a test notification.",
+      testSent: "Test notification sent",
+      requestFailed: "Unable to request notification permission",
       notSupported: "Your browser does not support notifications.",
       disableNotification: "Disable notification",
     },
@@ -6394,6 +6400,12 @@ Strategy:
     cachedSuffix: " (cached)",
     expiredTooltip:
       "Difference between nominal and available balance (expired or frozen)",
+    profileUpdated: "Profile updated",
+    avatarUploaded: "Avatar updated",
+    accountUnlinked: "Account unlinked",
+    privacyUpdated: "Privacy settings updated",
+    dataUnavailable: "Account information could not be loaded.",
+    retry: "Reload account information",
   },
 
   // Subscription Settings
@@ -6406,6 +6418,21 @@ Strategy:
     supportEmail: "support@octopus.local",
     invoiceHint: ", invoices available after purchase",
     totalCredits: (total) => `Total ${total} credits`,
+    billingUnavailableTitle: "Plans are temporarily unavailable",
+    billingUnavailableDescription:
+      "Your Octopus account is signed in, but the billing service is not connected. Retry to refresh the account link and available plans.",
+    subscriptionUnavailable: "Subscription information could not be loaded.",
+    plansUnavailable: "Plans could not be loaded.",
+    noPlans: "No purchasable plans are currently available.",
+    reloadSubscription: "Reload subscription information",
+    reloadBilling: "Reconnect billing service",
+    reloadPlans: "Reload plan list",
+    cancelTitle: "Cancel subscription?",
+    cancelDescription:
+      "Your current access remains available until the end of the paid period. This action turns off renewal.",
+    keepPlan: "Keep plan",
+    confirmCancel: "Cancel subscription",
+    cancelled: "Subscription cancelled",
     plans: {
       plus: {
         name: "Plus (Monthly)",

@@ -2820,11 +2820,17 @@ export interface Translations {
     notification: {
       title: string;
       description: string;
+      enableNotification: string;
+      permissionGranted: string;
+      permissionPrompt: string;
+      permissionDenied: string;
       requestPermission: string;
       deniedHint: string;
       testButton: string;
       testTitle: string;
       testBody: string;
+      testSent: string;
+      requestFailed: string;
       notSupported: string;
       disableNotification: string;
     };
@@ -5446,6 +5452,12 @@ export interface Translations {
     sessionCacheHint: string;
     cachedSuffix: string;
     expiredTooltip: string;
+    profileUpdated: string;
+    avatarUploaded: string;
+    accountUnlinked: string;
+    privacyUpdated: string;
+    dataUnavailable: string;
+    retry: string;
   };
 
   // Subscription Settings
@@ -5458,6 +5470,19 @@ export interface Translations {
     supportEmail: string;
     invoiceHint: string;
     totalCredits: (total: string) => string;
+    billingUnavailableTitle: string;
+    billingUnavailableDescription: string;
+    subscriptionUnavailable: string;
+    plansUnavailable: string;
+    noPlans: string;
+    reloadSubscription: string;
+    reloadBilling: string;
+    reloadPlans: string;
+    cancelTitle: string;
+    cancelDescription: string;
+    keepPlan: string;
+    confirmCancel: string;
+    cancelled: string;
     plans: {
       plus: {
         name: string;

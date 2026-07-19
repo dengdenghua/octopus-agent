@@ -36,6 +36,11 @@ describe("SettingsDialog", () => {
       { locale: "zh-CN" },
     );
 
+    expect(screen.getByRole("button", { name: "外观" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+
     const viewport = document.querySelector<HTMLElement>(
       '[data-slot="scroll-area-viewport"]',
     );
@@ -46,5 +51,12 @@ describe("SettingsDialog", () => {
     await user.click(screen.getByRole("button", { name: "MCP 服务" }));
 
     await waitFor(() => expect(viewport.scrollTop).toBe(0));
+    expect(screen.getByRole("button", { name: "MCP 服务" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("button", { name: "外观" })).not.toHaveAttribute(
+      "aria-current",
+    );
   });
 });

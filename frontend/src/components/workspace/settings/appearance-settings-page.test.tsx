@@ -7,7 +7,10 @@ import { enUS, jaJP, koKR, zhCN, type Translations } from "@/core/i18n/locales";
 
 import AppearanceSettingsPage from "./appearance-settings-page";
 
-const TRANSLATIONS_BY_LOCALE: Record<(typeof SUPPORTED_LOCALES)[number], Translations> = {
+const TRANSLATIONS_BY_LOCALE: Record<
+  (typeof SUPPORTED_LOCALES)[number],
+  Translations
+> = {
   "en-US": enUS,
   "zh-CN": zhCN,
   "ja-JP": jaJP,
@@ -18,7 +21,9 @@ describe("AppearanceSettingsPage · language selector", () => {
   it("offers every supported locale", async () => {
     renderWithProviders(<AppearanceSettingsPage />);
 
-    const trigger = screen.getByLabelText(enUS.settings.appearance.languageTitle);
+    const trigger = screen.getByLabelText(
+      enUS.settings.appearance.languageTitle,
+    );
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
 
@@ -34,12 +39,39 @@ describe("AppearanceSettingsPage · language selector", () => {
   it("hydrates Japanese locale in the shared test harness", () => {
     renderWithProviders(<AppearanceSettingsPage />, { locale: "ja-JP" });
 
-    expect(screen.getByText(jaJP.settings.appearance.themeTitle)).toBeInTheDocument();
+    expect(
+      screen.getByText(jaJP.settings.appearance.themeTitle),
+    ).toBeInTheDocument();
   });
 
   it("hydrates Korean locale in the shared test harness", () => {
     renderWithProviders(<AppearanceSettingsPage />, { locale: "ko-KR" });
 
-    expect(screen.getByText(koKR.settings.appearance.themeTitle)).toBeInTheDocument();
+    expect(
+      screen.getByText(koKR.settings.appearance.themeTitle),
+    ).toBeInTheDocument();
+  });
+
+  it("exposes selected themes and the chat font selector accessibly", () => {
+    renderWithProviders(<AppearanceSettingsPage />, { locale: "zh-CN" });
+
+    expect(screen.getByRole("button", { name: /跟随系统/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByLabelText(zhCN.settings.appearance.chatFontSizeTitle),
+    ).toHaveAttribute("role", "combobox");
+  });
+
+  it("does not leak English corner-style names into Chinese copy", () => {
+    renderWithProviders(<AppearanceSettingsPage />, { locale: "zh-CN" });
+
+    const description = screen.getByText(
+      zhCN.settings.appearance.cornerRadiusDescription,
+    );
+    expect(description).toHaveTextContent("锐利");
+    expect(description).toHaveTextContent("胶囊");
+    expect(description).not.toHaveTextContent(/Crisp|Pill/);
   });
 });

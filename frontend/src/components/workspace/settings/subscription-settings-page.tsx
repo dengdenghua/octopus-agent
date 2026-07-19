@@ -5,7 +5,8 @@ import {
   TrendingUpIcon,
   CalendarIcon,
   UserIcon,
-  CoinsIcon,
+  AlertCircleIcon,
+  RefreshCwIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -13,6 +14,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   useSubscription,
   useCancelSubscription,
@@ -29,9 +38,14 @@ import { resolvePricingAccountLabel } from "./settings-resilience";
 
 export default function SubscriptionSettingsPage() {
   const { t } = useI18n();
-  const { data: subscription, isLoading: subscriptionLoading } =
-    useSubscription();
+  const {
+    data: subscription,
+    isLoading: subscriptionLoading,
+    isError: subscriptionError,
+    refetch: refetchSubscription,
+  } = useSubscription();
   const cancelSubscription = useCancelSubscription();
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   const isInitialLoading = subscriptionLoading && !subscription;
 
@@ -62,90 +76,140 @@ export default function SubscriptionSettingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Current Plan Card */}
-      <div className="rounded-xl border bg-card p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div
-              className={cn(
-                "flex size-10 items-center justify-center rounded-lg",
-                subscription?.tier && ["pro", "max"].includes(subscription.tier)
-                  ? "bg-gradient-to-br from-violet-500 to-blue-500 text-white"
-                  : "bg-muted text-muted-foreground",
-              )}
-            >
-              <SparklesIcon className="size-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">
-                  {currentPlan?.name || t.settings.subscription.free}
-                </span>
-                <Badge
-                  variant={effectiveTier === "free" ? "secondary" : "default"}
-                  className="text-[10px]"
-                >
-                  {effectiveTier.toUpperCase()}
-                </Badge>
-              </div>
-              <p className="text-muted-foreground text-xs mt-0.5">
-                {effectiveTier === "free"
-                  ? t.settings.subscription.freeTierDesc
-                  : t.settings.subscription.paidTierDesc}
-              </p>
-            </div>
-          </div>
-
-          {effectiveTier !== "free" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => cancelSubscription.mutate()}
-              disabled={cancelSubscription.isPending}
-              className="h-8 text-xs"
-            >
-              {cancelSubscription.isPending && (
-                <Loader2Icon className="mr-1 size-3 animate-spin" />
-              )}
-              {t.settings.subscription.cancel}
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="default"
-              className="h-8 text-xs"
-              onClick={() => {
-                const el = document.querySelector(
-                  '[data-slot="dialog-content"] [data-subscription-pricing]',
-                );
-                el?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-            >
-              <TrendingUpIcon className="mr-1 size-3.5" />
-              {t.subscriptionSettings.upgradeNow}
-            </Button>
-          )}
+      {subscriptionError && !subscription && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+        >
+          <span>{t.subscriptionSettings.subscriptionUnavailable}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refetchSubscription()}
+          >
+            <RefreshCwIcon className="mr-1.5 size-3.5" />
+            {t.subscriptionSettings.reloadSubscription}
+          </Button>
         </div>
+      )}
+      {/* Current Plan Card */}
+      {!subscriptionError && (
+        <div className="rounded-xl border bg-card p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div
+                className={cn(
+                  "flex size-10 items-center justify-center rounded-lg",
+                  subscription?.tier &&
+                    ["pro", "max"].includes(subscription.tier)
+                    ? "bg-gradient-to-br from-violet-500 to-blue-500 text-white"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                <SparklesIcon className="size-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">
+                    {currentPlan?.name || t.settings.subscription.free}
+                  </span>
+                  <Badge
+                    variant={effectiveTier === "free" ? "secondary" : "default"}
+                    className="text-[10px]"
+                  >
+                    {effectiveTier.toUpperCase()}
+                  </Badge>
+                </div>
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  {effectiveTier === "free"
+                    ? t.settings.subscription.freeTierDesc
+                    : t.settings.subscription.paidTierDesc}
+                </p>
+              </div>
+            </div>
 
-        {subscription?.expires_at && (
-          <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-            <CalendarIcon className="size-3.5" />
-            <span>
-              {t.settings.subscription.expiresOn(
-                formatDate(subscription.expires_at),
-              )}
-            </span>
-            {subscription?.auto_renew && (
-              <Badge variant="outline" className="text-[10px] ml-2">
-                {t.settings.subscription.autoRenewal}
-              </Badge>
+            {effectiveTier !== "free" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCancelOpen(true)}
+                disabled={cancelSubscription.isPending}
+                className="h-8 text-xs"
+              >
+                {cancelSubscription.isPending && (
+                  <Loader2Icon className="mr-1 size-3 animate-spin" />
+                )}
+                {t.settings.subscription.cancel}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="default"
+                className="h-8 text-xs"
+                onClick={() => {
+                  const el = document.querySelector(
+                    '[data-slot="dialog-content"] [data-subscription-pricing]',
+                  );
+                  el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+              >
+                <TrendingUpIcon className="mr-1 size-3.5" />
+                {t.subscriptionSettings.upgradeNow}
+              </Button>
             )}
           </div>
-        )}
-      </div>
+
+          {subscription?.expires_at && (
+            <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+              <CalendarIcon className="size-3.5" />
+              <span>
+                {t.settings.subscription.expiresOn(
+                  formatDate(subscription.expires_at),
+                )}
+              </span>
+              {subscription?.auto_renew && (
+                <Badge variant="outline" className="text-[10px] ml-2">
+                  {t.settings.subscription.autoRenewal}
+                </Badge>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Pricing plans sourced live from the account service. */}
       <OfficialPricingSection />
+
+      <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>{t.subscriptionSettings.cancelTitle}</DialogTitle>
+            <DialogDescription>
+              {t.subscriptionSettings.cancelDescription}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setCancelOpen(false)}>
+              {t.subscriptionSettings.keepPlan}
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={cancelSubscription.isPending}
+              aria-busy={cancelSubscription.isPending}
+              onClick={() =>
+                cancelSubscription.mutate(undefined, {
+                  onSuccess: () => setCancelOpen(false),
+                })
+              }
+            >
+              {cancelSubscription.isPending && (
+                <Loader2Icon className="mr-1.5 size-3.5 animate-spin" />
+              )}
+              {t.subscriptionSettings.confirmCancel}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -167,19 +231,6 @@ function goodsUnit(
   if (days >= 365) return t.payOrder.perYear;
   if (days >= 28) return t.payOrder.perMonth;
   return t.payOrder.oneTime;
-}
-
-function formatCredits(
-  n: number | undefined | null,
-  t: { numberFormat: { yi: string; wan: string } },
-): string {
-  if (n === undefined || n === null || Number.isNaN(n)) return "—";
-  if (n >= 100_000_000)
-    return `${(n / 100_000_000).toFixed(1)}${t.numberFormat.yi}`;
-  if (n >= 10_000)
-    return `${(n / 10_000).toFixed(n >= 100_000 ? 0 : 1)}${t.numberFormat.wan}`;
-  if (n >= 1_000) return n.toLocaleString();
-  return String(n);
 }
 
 interface PayState {
@@ -239,16 +290,16 @@ function OfficialPricingSection() {
     }
   };
 
-  // Not linked yet: show login status and credits instead of the price grid.
+  // A local login and the official billing link are separate states. Keep the
+  // user oriented and provide a recovery action when the bridge is unavailable.
   if (!linked && !link.isLoading) {
-    const credits = link.data?.credits;
-    const surplusCredits = credits?.surplusCredits;
-
     return (
       <div
-        className="rounded-xl border border-dashed bg-muted/30 p-8 text-center space-y-4"
+        className="rounded-xl border border-dashed bg-muted/30 p-6 text-center space-y-4"
         data-subscription-pricing
+        role={link.isError ? "alert" : "status"}
       >
+        <AlertCircleIcon className="mx-auto size-5 text-muted-foreground" />
         {isLoggedIn ? (
           <>
             <div className="flex items-center justify-center gap-2 text-sm">
@@ -258,23 +309,24 @@ function OfficialPricingSection() {
                 {t.auth.currentAccount}
               </Badge>
             </div>
-            {typeof surplusCredits === "number" && (
-              <div className="flex items-center justify-center gap-2 pt-3 border-t">
-                <CoinsIcon className="size-4 text-amber-500" />
-                <span className="text-lg font-semibold tabular-nums">
-                  {formatCredits(surplusCredits, t)}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {t.accountSettings.available}
-                </span>
-              </div>
-            )}
+            <div>
+              <p className="text-sm font-medium">
+                {t.subscriptionSettings.billingUnavailableTitle}
+              </p>
+              <p className="mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted-foreground">
+                {t.subscriptionSettings.billingUnavailableDescription}
+              </p>
+            </div>
           </>
         ) : (
           <div className="text-sm text-muted-foreground">
             {t.auth.notLoggedIn}
           </div>
         )}
+        <Button variant="outline" size="sm" onClick={() => void link.refetch()}>
+          <RefreshCwIcon className="mr-1.5 size-3.5" />
+          {t.subscriptionSettings.reloadBilling}
+        </Button>
       </div>
     );
   }
@@ -302,12 +354,23 @@ function OfficialPricingSection() {
   if (goodsQuery.isError || goodsQuery.data?.length === 0) {
     return (
       <div
-        className="rounded-xl border border-dashed bg-muted/30 p-8 text-center"
+        className="rounded-xl border border-dashed bg-muted/30 p-8 text-center space-y-3"
         data-subscription-pricing
+        role={goodsQuery.isError ? "alert" : "status"}
       >
         <p className="text-sm text-muted-foreground">
-          {t.payOrder.goodsFailed}
+          {goodsQuery.isError
+            ? t.subscriptionSettings.plansUnavailable
+            : t.subscriptionSettings.noPlans}
         </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void goodsQuery.refetch()}
+        >
+          <RefreshCwIcon className="mr-1.5 size-3.5" />
+          {t.subscriptionSettings.reloadPlans}
+        </Button>
       </div>
     );
   }
@@ -327,7 +390,7 @@ function OfficialPricingSection() {
         </p>
       </div>
 
-      <div
+      <ul
         className={cn(
           "grid gap-4",
           goods.length >= 3 ? "md:grid-cols-3" : "md:grid-cols-2",
@@ -340,7 +403,7 @@ function OfficialPricingSection() {
           const yuan = (priceFen / 100).toFixed(priceFen % 100 === 0 ? 0 : 2);
           const originalYuan = null;
           return (
-            <div
+            <li
               key={g.id}
               className={cn(
                 "relative flex flex-col rounded-xl border p-5 transition-all",
@@ -351,7 +414,7 @@ function OfficialPricingSection() {
             >
               {isRecommended && (
                 <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-violet-500 to-violet-600 px-2.5 py-0.5 text-[10px] font-medium text-white shadow-[var(--shadow-xs)]">
-                  🔥 {t.payOrder.recommended}
+                  <span aria-hidden="true">🔥</span> {t.payOrder.recommended}
                 </span>
               )}
 
@@ -389,7 +452,8 @@ function OfficialPricingSection() {
                     ? "bg-violet-600 text-white hover:bg-violet-700"
                     : "bg-foreground text-background hover:bg-foreground/85",
                 )}
-                disabled={isPending}
+                disabled={pendingId !== null}
+                aria-busy={isPending}
                 onClick={() => onBuy(g)}
               >
                 {isPending && (
@@ -397,10 +461,10 @@ function OfficialPricingSection() {
                 )}
                 {t.payOrder.subscribeNow}
               </Button>
-            </div>
+            </li>
           );
         })}
-      </div>
+      </ul>
 
       <p className="text-muted-foreground text-center text-xs">
         {t.subscriptionSettings.contactUs}
