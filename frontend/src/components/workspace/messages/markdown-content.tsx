@@ -204,7 +204,7 @@ export const MarkdownContent = memo(
     return (
       <MessageResponse
         key={isLoading ? "streaming" : "settled"}
-        className={cn(proseSizeClass, className)}
+        className={cn("chat-markdown", proseSizeClass, className)}
         remarkPlugins={resolvedRemarkPlugins}
         rehypePlugins={rehypePlugins}
         components={components}

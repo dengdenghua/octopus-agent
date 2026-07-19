@@ -2850,6 +2850,106 @@
 }
 
 @layer components {
+  /* Long answers keep the conversation column calm while wide technical
+     content manages its own width. Streamdown already supplies the semantic
+     table and controls; these rules make that boundary reliable inside the
+     timeline's overflow-clipped viewport and remove the heavy card look. */
+  .chat-markdown {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .chat-markdown :where(p, li, blockquote) {
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+  }
+
+  .chat-markdown :where(h1, h2, h3, h4, h5, h6) {
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+  }
+
+  .chat-markdown [data-streamdown="table-wrapper"] {
+    min-width: 0;
+    max-width: 100%;
+    margin-block: 1.1rem;
+    gap: 0.15rem;
+  }
+
+  .chat-markdown [data-streamdown="table-wrapper"] > div:last-child {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    padding-bottom: 0.25rem;
+    scrollbar-gutter: stable;
+  }
+
+  .chat-markdown [data-streamdown="table"] {
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+    border-width: 0 !important;
+    background: transparent !important;
+  }
+
+  .chat-markdown [data-streamdown="table-header"],
+  .chat-markdown [data-streamdown="table-body"] {
+    background: transparent !important;
+  }
+
+  .chat-markdown [data-streamdown="table-row"] {
+    border-color: color-mix(in oklch, var(--border) 55%, transparent);
+  }
+
+  .chat-markdown [data-streamdown="table-header-cell"] {
+    min-width: 8.5rem;
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid
+      color-mix(in oklch, var(--foreground) 20%, transparent);
+    color: color-mix(in oklch, var(--foreground) 84%, transparent);
+    font-size: 0.82em;
+    letter-spacing: 0.01em;
+  }
+
+  .chat-markdown [data-streamdown="table-cell"] {
+    min-width: 10rem;
+    max-width: min(32rem, 72vw);
+    padding: 0.58rem 0.75rem;
+    vertical-align: top;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .chat-markdown
+    [data-streamdown="table-wrapper"]
+    > div:first-child:has(button) {
+    min-height: 1.25rem;
+    opacity: 0.45;
+    transition: opacity 120ms ease;
+  }
+
+  .chat-markdown
+    [data-streamdown="table-wrapper"]:hover
+    > div:first-child:has(button),
+  .chat-markdown
+    [data-streamdown="table-wrapper"]:focus-within
+    > div:first-child:has(button) {
+    opacity: 1;
+  }
+
+  @media (max-width: 640px) {
+    .chat-markdown [data-streamdown="table-header-cell"] {
+      min-width: 7.5rem;
+      padding-inline: 0.625rem;
+    }
+
+    .chat-markdown [data-streamdown="table-cell"] {
+      min-width: 9rem;
+      max-width: 82vw;
+      padding-inline: 0.625rem;
+    }
+  }
+
   .octo-global-liquid-field {
     position: fixed;
     inset: 0;

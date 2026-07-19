@@ -18,6 +18,7 @@ vi.mock("@/components/ai-elements/message", async () => {
   const React = await import("react");
   type MockMessageResponseProps = {
     children: string;
+    className?: string;
     components: {
       pre?: (props: { children?: React.ReactNode }) => React.ReactNode;
     };
@@ -27,6 +28,7 @@ vi.mock("@/components/ai-elements/message", async () => {
   const MessageResponse = React.memo(
     ({
       children,
+      className,
       components,
       isAnimating,
       "aria-busy": ariaBusy,
@@ -51,6 +53,7 @@ vi.mock("@/components/ai-elements/message", async () => {
         "div",
         {
           "aria-busy": ariaBusy,
+          className,
           "data-is-animating": isAnimating ? "true" : "false",
         },
         children,
@@ -132,6 +135,12 @@ describe("<MarkdownContent /> Mermaid", () => {
 });
 
 describe("<MarkdownContent /> streaming state", () => {
+  it("gives long technical content its own responsive layout boundary", () => {
+    renderMarkdown("A compact answer");
+
+    expect(screen.getByText("A compact answer")).toHaveClass("chat-markdown");
+  });
+
   it("hides leaked read-only control tags but preserves the answer", () => {
     renderMarkdown(
       "<read_only>\n</read_only>\n\nPython 与 TypeScript 定义一致。",
