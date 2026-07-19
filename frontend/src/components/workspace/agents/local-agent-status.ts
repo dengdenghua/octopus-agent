@@ -21,13 +21,15 @@ export function localPartnerBadge(
   if (effectiveStatus === "registered") {
     return {
       label: labels.connected,
-      className: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+      className:
+        "bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-950/45 dark:text-emerald-300 dark:ring-emerald-900/70",
     };
   }
   if (partner.registered && effectiveStatus !== "registered") {
     return {
       label: "已连接 · 需修复",
-      className: "bg-amber-50 text-amber-700 ring-amber-100",
+      className:
+        "bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/45 dark:text-amber-300 dark:ring-amber-900/70",
     };
   }
   if (effectiveStatus === "ready") {
@@ -39,7 +41,8 @@ export function localPartnerBadge(
   if (effectiveStatus === "model_unconfigured") {
     return {
       label: "模型未配置",
-      className: "bg-amber-50 text-amber-700 ring-amber-100",
+      className:
+        "bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/45 dark:text-amber-300 dark:ring-amber-900/70",
     };
   }
   if (
@@ -48,7 +51,8 @@ export function localPartnerBadge(
   ) {
     return {
       label: "仅可手动",
-      className: "bg-amber-50 text-amber-700 ring-amber-100",
+      className:
+        "bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/45 dark:text-amber-300 dark:ring-amber-900/70",
     };
   }
   if (partner.detected) {
@@ -79,7 +83,9 @@ export function localPartnerSetupSteps(
     return [
       {
         label: "修复本机 CLI 状态",
-        detail: partner.fix_hint || "重新登录、选择模型，或恢复 PATH 中的官方 CLI 命令。",
+        detail:
+          partner.fix_hint ||
+          "重新登录、选择模型，或恢复 PATH 中的官方 CLI 命令。",
         tone: "blocked",
       },
       {
@@ -101,7 +107,8 @@ export function localPartnerSetupSteps(
       },
       {
         label: "完成 CLI 登录/授权",
-        detail: "桌面端账号或免费权益不一定同步到 CLI，需要以 CLI 自己的状态为准。",
+        detail:
+          "桌面端账号或免费权益不一定同步到 CLI，需要以 CLI 自己的状态为准。",
         tone: "action",
       },
     ];
@@ -116,7 +123,8 @@ export function localPartnerSetupSteps(
       },
       {
         label: "选择可用模型",
-        detail: "如果模型列表为空，通常需要单独处理 CLI 登录、企业网络或模型授权。",
+        detail:
+          "如果模型列表为空，通常需要单独处理 CLI 登录、企业网络或模型授权。",
         tone: "blocked",
       },
       {
@@ -134,7 +142,8 @@ export function localPartnerSetupSteps(
     return [
       {
         label: "使用原生 CLI 手动操作",
-        detail: "当前入口不能稳定 prompt→stdout 自动派工，先保留为手动伙伴入口。",
+        detail:
+          "当前入口不能稳定 prompt→stdout 自动派工，先保留为手动伙伴入口。",
         tone: "blocked",
       },
       {
@@ -149,7 +158,8 @@ export function localPartnerSetupSteps(
     return [
       {
         label: "已接入团队",
-        detail: "可以继续用 Octopus 派工；账号、模型和原生快捷指令仍由该 CLI 自己管理。",
+        detail:
+          "可以继续用 Octopus 派工；账号、模型和原生快捷指令仍由该 CLI 自己管理。",
         tone: "ready",
       },
     ];
@@ -261,15 +271,13 @@ export function localPartnerDoctorFromPartners(
       partner.readiness_status ||
       partner.status ||
       "missing";
-    const group =
-      groupsByStatus.get(status) ??
-      {
-        status,
-        label: DOCTOR_STATUS_LABELS[status] ?? status,
-        count: 0,
-        partner_ids: [],
-        next_action: localPartnerDoctorNextAction(status),
-      };
+    const group = groupsByStatus.get(status) ?? {
+      status,
+      label: DOCTOR_STATUS_LABELS[status] ?? status,
+      count: 0,
+      partner_ids: [],
+      next_action: localPartnerDoctorNextAction(status),
+    };
     group.count += 1;
     group.partner_ids.push(partner.id);
     groupsByStatus.set(status, group);
@@ -284,12 +292,16 @@ export function localPartnerDoctorFromPartners(
   const needsAttention =
     partners.length -
     groups
-      .filter((group) => group.status === "registered" || group.status === "ready")
+      .filter(
+        (group) => group.status === "registered" || group.status === "ready",
+      )
       .reduce((total, group) => total + group.count, 0);
   const nextActions = Array.from(
     new Set(
       groups
-        .filter((group) => group.status !== "registered" && group.status !== "ready")
+        .filter(
+          (group) => group.status !== "registered" && group.status !== "ready",
+        )
         .map((group) => group.next_action)
         .filter(Boolean),
     ),

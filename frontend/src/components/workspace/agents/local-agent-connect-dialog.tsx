@@ -4,6 +4,7 @@ import {
   AlertCircleIcon,
   BotIcon,
   CheckIcon,
+  ChevronDownIcon,
   ClipboardIcon,
   Code2Icon,
   Loader2Icon,
@@ -22,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { copyTextToClipboard } from "@/core/clipboard";
 import {
   getLocalAgentPartnersDoctor,
   listLocalAgentPartners,
@@ -45,6 +47,39 @@ const PARTNER_ICONS: Record<string, typeof BotIcon> = {
   "codebuddy-cli": Code2Icon,
   openclaw: BotIcon,
 };
+const EMPTY_PARTNERS: LocalAgentPartner[] = [];
+const PARTNER_ALIAS_PATTERN = /^[A-Za-z0-9\u4e00-\u9fa5\u3000-\u303f ._-]*$/;
+
+export function normalizePartnerAlias(value: string, fallback: string): string {
+  return value.trim() || fallback.trim();
+}
+
+export function isValidPartnerAlias(value: string): boolean {
+  const normalized = value.trim();
+  return normalized.length <= 64 && PARTNER_ALIAS_PATTERN.test(normalized);
+}
+
+function PartnerAvatar({
+  avatarUrl,
+  Icon,
+}: {
+  avatarUrl?: string;
+  Icon: typeof BotIcon;
+}) {
+  const [failedUrl, setFailedUrl] = useState("");
+  const showAvatar = Boolean(avatarUrl && avatarUrl !== failedUrl);
+
+  return showAvatar ? (
+    <img
+      src={avatarUrl}
+      alt=""
+      className="size-5 rounded-sm object-contain"
+      onError={() => setFailedUrl(avatarUrl ?? "")}
+    />
+  ) : (
+    <Icon className="size-4" aria-hidden="true" />
+  );
+}
 
 export function LocalAgentConnectDialog({
   open,
@@ -69,8 +104,9 @@ export function LocalAgentConnectDialog({
   };
 
   const {
-    data: partners = [],
+    data: partners = EMPTY_PARTNERS,
     isLoading,
+    isFetching,
     isError,
     refetch,
   } = useQuery({
@@ -79,7 +115,7 @@ export function LocalAgentConnectDialog({
     enabled: open,
     refetchOnWindowFocus: false,
   });
-  const { data: doctor } = useQuery({
+  const { data: doctor, refetch: refetchDoctor } = useQuery({
     queryKey: ["agents", "local-partners", "doctor"],
     queryFn: ({ signal }) => getLocalAgentPartnersDoctor({ signal }),
     enabled: open,
@@ -122,26 +158,37 @@ export function LocalAgentConnectDialog({
   });
 
   useEffect(() => {
-    if (!open || partners.length === 0) return;
-    setSelectedIds(
-      partners
-        .filter(
-          (partner) => partner.detected && partner.ready && !partner.registered,
-        )
-        .map((partner) => partner.id),
+    if (!open) return;
+    const nextSelectedIds = partners
+      .filter(
+        (partner) => partner.detected && partner.ready && !partner.registered,
+      )
+      .map((partner) => partner.id);
+    setSelectedIds((current) =>
+      current.length === nextSelectedIds.length &&
+      current.every((id, index) => id === nextSelectedIds[index])
+        ? current
+        : nextSelectedIds,
     );
-    setAliases((prev) => ({
-      ...Object.fromEntries(
-        partners.map((partner) => [partner.id, partner.default_alias]),
-      ),
-      ...prev,
-    }));
+    if (partners.length > 0) {
+      setAliases((prev) => ({
+        ...Object.fromEntries(
+          partners.map((partner) => [partner.id, partner.default_alias]),
+        ),
+        ...prev,
+      }));
+    }
   }, [open, partners]);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectableCount = partners.filter(
     (partner) => partner.detected && partner.ready && !partner.registered,
   ).length;
+  const hasInvalidSelectedAlias = partners.some(
+    (partner) =>
+      selectedSet.has(partner.id) &&
+      !isValidPartnerAlias(aliases[partner.id] ?? partner.default_alias),
+  );
 
   const togglePartner = (partner: LocalAgentPartner) => {
     if (
@@ -165,21 +212,32 @@ export function LocalAgentConnectDialog({
       toast.error(t.localAgentConnect.noPartnerSelected);
       return;
     }
+    if (hasInvalidSelectedAlias) {
+      toast.error("伙伴名称只能包含文字、数字、空格、点、短横线和下划线");
+      return;
+    }
     registerMutation.mutate(
       selected.map((partner) => ({
         id: partner.id,
-        alias: aliases[partner.id] || partner.default_alias,
+        alias: normalizePartnerAlias(
+          aliases[partner.id] ?? "",
+          partner.default_alias,
+        ),
       })),
     );
   };
 
   const copyCommand = async (command: string) => {
     try {
-      await navigator.clipboard.writeText(command);
+      await copyTextToClipboard(command);
       toast.success("已复制命令");
     } catch {
       toast.error("复制失败，请手动复制");
     }
+  };
+
+  const handleRefetch = async () => {
+    await Promise.all([refetch(), refetchDoctor()]);
   };
 
   const handleProbe = async (partner: LocalAgentPartner) => {
@@ -202,8 +260,8 @@ export function LocalAgentConnectDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-3 p-4 sm:max-w-2xl">
-        <DialogHeader className="pr-8">
+      <DialogContent className="flex max-h-[calc(100dvh-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-h-[min(92dvh,56rem)] sm:max-w-3xl">
+        <DialogHeader className="shrink-0 px-4 pb-3 pt-4 pr-12 text-left">
           <DialogTitle className="flex items-center gap-2 text-base">
             <BotIcon className="size-4 text-primary" />
             {t.localAgentConnect.title}
@@ -213,21 +271,31 @@ export function LocalAgentConnectDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-2">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto border-y border-border-subtle px-4 py-3 overscroll-contain">
           {isLoading ? (
-            <div className="flex min-h-28 items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground">
+            <div
+              role="status"
+              className="flex min-h-28 items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground"
+            >
               <Loader2Icon className="mr-2 size-4 animate-spin" />
               {t.localAgentConnect.detecting}
             </div>
           ) : isError ? (
-            <div className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-lg border border-dashed text-xs text-muted-foreground">
+            <div
+              role="alert"
+              className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-lg border border-dashed text-xs text-muted-foreground"
+            >
               <AlertCircleIcon className="size-4 text-destructive" />
               {t.localAgentConnect.detectFailed}
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => void refetch()}
+                disabled={isFetching}
+                onClick={() => void handleRefetch()}
               >
+                {isFetching ? (
+                  <Loader2Icon className="mr-1 size-3.5 animate-spin" />
+                ) : null}
                 {t.localAgentConnect.retryDetect}
               </Button>
             </div>
@@ -239,10 +307,10 @@ export function LocalAgentConnectDialog({
                     <span className="font-medium text-foreground">
                       本机 CLI Doctor
                     </span>
-                    <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700">
+                    <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-950/45 dark:text-emerald-300">
                       可派工 {doctorSummary.ready}
                     </span>
-                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
+                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700 dark:bg-amber-950/45 dark:text-amber-300">
                       需处理 {doctorSummary.needs_attention}
                     </span>
                     <span className="rounded bg-background px-1.5 py-0.5 text-muted-foreground">
@@ -253,7 +321,7 @@ export function LocalAgentConnectDialog({
                     {doctorSummary.summary}
                   </div>
                   {doctorSummary.next_actions.length > 0 ? (
-                    <div className="mt-1 line-clamp-2 text-amber-700">
+                    <div className="mt-1 line-clamp-2 text-amber-700 dark:text-amber-300">
                       下一步：
                       {doctorSummary.next_actions.slice(0, 2).join("；")}
                     </div>
@@ -281,6 +349,26 @@ export function LocalAgentConnectDialog({
                   ) : null}
                 </div>
               ) : null}
+              {partners.length === 0 ? (
+                <div
+                  role="status"
+                  className="flex min-h-32 flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-6 text-center text-xs text-muted-foreground"
+                >
+                  <TerminalSquareIcon className="size-5 opacity-60" />
+                  <span>{t.localAgentConnect.noPartnersAvailable}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isFetching}
+                    onClick={() => void handleRefetch()}
+                  >
+                    {isFetching ? (
+                      <Loader2Icon className="mr-1 size-3.5 animate-spin" />
+                    ) : null}
+                    {t.localAgentConnect.retryDetect}
+                  </Button>
+                </div>
+              ) : null}
               {partners.map((partner) => {
                 const Icon = PARTNER_ICONS[partner.id] ?? BotIcon;
                 const avatarUrl = partner.avatar_url?.trim();
@@ -298,6 +386,8 @@ export function LocalAgentConnectDialog({
                   probeResult?.failure_kind,
                 );
                 const isProbing = probingId === partner.id;
+                const aliasValue = aliases[partner.id] ?? partner.default_alias;
+                const aliasInvalid = !isValidPartnerAlias(aliasValue);
                 const commandRows = [
                   partner.install_command
                     ? {
@@ -322,89 +412,111 @@ export function LocalAgentConnectDialog({
                 );
                 const commandHints = partner.command_hints ?? [];
                 const activate = () => togglePartner(partner);
+                const hasDetails = Boolean(
+                  partner.setup_hint ||
+                  partner.interaction_hint ||
+                  setupSteps.length > 0 ||
+                  diagnosticItems.length > 0 ||
+                  commandRows.length > 0 ||
+                  partner.executable,
+                );
                 return (
                   <div
                     key={partner.id}
-                    role={disabled ? undefined : "button"}
-                    tabIndex={disabled ? undefined : 0}
-                    onClick={activate}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        activate();
-                      }
-                    }}
                     className={cn(
-                      "flex w-full items-center gap-3 rounded-lg border border-border-default bg-background/75 p-3 text-left transition-colors",
-                      !disabled && "hover:border-primary/25 hover:bg-muted/20",
+                      "w-full rounded-lg border border-border-default bg-background/75 p-3 text-left transition-colors",
                       checked && "border-primary/30 bg-primary/5",
-                      disabled && "cursor-default opacity-75",
+                      disabled && "bg-muted/10",
                     )}
                   >
-                    <span
-                      className={cn(
-                        "grid size-8 shrink-0 place-items-center rounded-lg border",
-                        checked || partner.registered
-                          ? "border-primary/25 bg-primary/10 text-primary"
-                          : "border-border-default bg-muted text-muted-foreground",
-                      )}
-                    >
-                      {avatarUrl ? (
-                        <img
-                          src={avatarUrl}
-                          alt=""
-                          className="size-5 rounded-sm object-contain"
-                        />
-                      ) : checked || partner.registered ? (
-                        <CheckIcon className="size-4" aria-hidden="true" />
+                    <div className="flex items-start gap-3">
+                      {disabled ? (
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "grid size-9 shrink-0 place-items-center rounded-lg border",
+                            partner.registered
+                              ? "border-primary/30 bg-primary/10 text-primary"
+                              : "border-border-default bg-muted text-muted-foreground",
+                          )}
+                        >
+                          <PartnerAvatar avatarUrl={avatarUrl} Icon={Icon} />
+                        </span>
                       ) : (
-                        <Icon className="size-4" aria-hidden="true" />
+                        <button
+                          type="button"
+                          aria-pressed={checked}
+                          aria-label={`${checked ? "取消选择" : "选择"} ${partner.name}`}
+                          onClick={activate}
+                          className={cn(
+                            "relative grid size-9 shrink-0 place-items-center rounded-lg border transition-colors",
+                            checked
+                              ? "border-primary/30 bg-primary/10 text-primary"
+                              : "border-border-default bg-muted text-muted-foreground",
+                            "hover:border-primary/40 hover:bg-primary/10",
+                          )}
+                        >
+                          <PartnerAvatar avatarUrl={avatarUrl} Icon={Icon} />
+                          {checked ? (
+                            <span className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
+                              <CheckIcon
+                                className="size-2.5"
+                                aria-hidden="true"
+                              />
+                            </span>
+                          ) : null}
+                        </button>
                       )}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        <span className="text-sm font-semibold">
-                          {partner.name}
-                        </span>
-                        <Badge
-                          variant="secondary"
-                          className={cn(
-                            "h-5 rounded-md px-1.5 text-[10px] font-medium ring-1",
-                            badge.className,
-                          )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold">
+                            {partner.name}
+                          </span>
+                          <Badge
+                            variant="secondary"
+                            className={cn(
+                              "h-5 rounded-md px-1.5 text-[10px] font-medium ring-1",
+                              badge.className,
+                            )}
+                          >
+                            {badge.label}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {partner.description}
+                        </p>
+                        {partner.readiness_message ? (
+                          <p
+                            className={cn(
+                              "mt-1 text-[11px]",
+                              partner.ready
+                                ? "text-emerald-700 dark:text-emerald-300"
+                                : "text-amber-700 dark:text-amber-300",
+                            )}
+                          >
+                            {partner.readiness_message}
+                          </p>
+                        ) : null}
+                        {partner.fix_hint && !partner.ready ? (
+                          <p
+                            className="mt-1 line-clamp-2 text-[11px] text-muted-foreground"
+                            title={partner.fix_hint}
+                          >
+                            修复建议：{partner.fix_hint}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                    {hasDetails ? (
+                      <details className="group mt-2 overflow-hidden rounded-md border border-border-default/70 bg-muted/15">
+                        <summary
+                          aria-label={`${partner.name} 接入与诊断详情`}
+                          className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/35"
                         >
-                          {badge.label}
-                        </Badge>
-                      </span>
-                      <span className="mt-1 block text-xs text-muted-foreground">
-                        {partner.description}
-                      </span>
-                      {partner.readiness_message ? (
-                        <span
-                          className={cn(
-                            "mt-1 block text-[11px]",
-                            partner.ready
-                              ? "text-emerald-700"
-                              : "text-amber-700",
-                          )}
-                        >
-                          {partner.readiness_message}
-                        </span>
-                      ) : null}
-                      {partner.fix_hint && !partner.ready ? (
-                        <span className="mt-1 block text-[11px] text-muted-foreground">
-                          修复建议：{partner.fix_hint}
-                        </span>
-                      ) : null}
-                      {partner.setup_hint ||
-                      partner.interaction_hint ||
-                      setupSteps.length > 0 ||
-                      diagnosticItems.length > 0 ||
-                      commandRows.length > 0 ? (
-                        <span
-                          className="mt-2 block space-y-1 rounded-md border border-border-default/70 bg-muted/20 p-2"
-                          onClick={(event) => event.stopPropagation()}
-                        >
+                          <span>接入与诊断详情</span>
+                          <ChevronDownIcon className="size-3.5 shrink-0 transition-transform group-open:rotate-180" />
+                        </summary>
+                        <div className="space-y-1 border-t border-border-default/70 p-2">
                           {setupSteps.length > 0 ? (
                             <span className="block space-y-1">
                               <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
@@ -416,9 +528,9 @@ export function LocalAgentConnectDialog({
                                   className={cn(
                                     "flex gap-2 rounded border px-2 py-1 text-[10px]",
                                     step.tone === "ready"
-                                      ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+                                      ? "border-emerald-100 bg-emerald-50 text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/35 dark:text-emerald-200"
                                       : step.tone === "blocked"
-                                        ? "border-amber-200 bg-amber-50 text-amber-800"
+                                        ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/35 dark:text-amber-200"
                                         : "border-border-default/60 bg-background/70 text-muted-foreground",
                                   )}
                                 >
@@ -455,11 +567,11 @@ export function LocalAgentConnectDialog({
                                   className={cn(
                                     "rounded border px-2 py-1 text-[10px]",
                                     item.tone === "ready"
-                                      ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+                                      ? "border-emerald-100 bg-emerald-50 text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/35 dark:text-emerald-200"
                                       : item.tone === "blocked"
-                                        ? "border-amber-200 bg-amber-50 text-amber-800"
+                                        ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/35 dark:text-amber-200"
                                         : item.tone === "warning"
-                                          ? "border-amber-100 bg-amber-50/70 text-amber-800"
+                                          ? "border-amber-100 bg-amber-50/70 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-200"
                                           : "border-border-default/60 bg-background/70 text-muted-foreground",
                                   )}
                                 >
@@ -556,8 +668,8 @@ export function LocalAgentConnectDialog({
                               className={cn(
                                 "mt-1 block rounded border px-2 py-1 text-[11px]",
                                 probeResult.ok
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                                  : "border-amber-200 bg-amber-50 text-amber-800",
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/35 dark:text-emerald-200"
+                                  : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/35 dark:text-amber-200",
                               )}
                             >
                               <span className="block font-medium">
@@ -586,20 +698,23 @@ export function LocalAgentConnectDialog({
                               ) : null}
                             </span>
                           ) : null}
-                        </span>
-                      ) : null}
-                      {partner.executable ? (
-                        <span className="mt-1 block truncate text-[11px] text-muted-foreground/80">
-                          {partner.executable}
-                        </span>
-                      ) : null}
-                      <span
-                        className="mt-2 block"
-                        onClick={(event) => event.stopPropagation()}
-                      >
+                          {partner.executable ? (
+                            <code
+                              className="block truncate rounded border border-border-default/60 bg-background/70 px-2 py-1 font-mono text-[10px] text-muted-foreground"
+                              title={partner.executable}
+                            >
+                              {partner.executable}
+                            </code>
+                          ) : null}
+                        </div>
+                      </details>
+                    ) : null}
+                    {!disabled ? (
+                      <div className="mt-2">
                         <Input
-                          value={aliases[partner.id] ?? partner.default_alias}
-                          disabled={disabled}
+                          value={aliasValue}
+                          maxLength={64}
+                          aria-invalid={aliasInvalid}
                           onChange={(event) =>
                             setAliases((prev) => ({
                               ...prev,
@@ -611,8 +726,13 @@ export function LocalAgentConnectDialog({
                             partner.name,
                           )}
                         />
-                      </span>
-                    </span>
+                        {aliasInvalid ? (
+                          <p className="mt-1 text-[10px] text-destructive">
+                            仅支持文字、数字、空格、点、短横线和下划线
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
@@ -620,7 +740,7 @@ export function LocalAgentConnectDialog({
           )}
         </div>
 
-        <DialogFooter className="items-center justify-between gap-2 border-t pt-3 sm:justify-between">
+        <DialogFooter className="shrink-0 flex-row items-center justify-between gap-2 px-4 py-3 sm:justify-between">
           <span className="text-xs text-muted-foreground">
             {t.localAgentConnect.availableCount(selectableCount)}
           </span>
@@ -635,7 +755,11 @@ export function LocalAgentConnectDialog({
             </Button>
             <Button
               size="sm"
-              disabled={selectedIds.length === 0 || registerMutation.isPending}
+              disabled={
+                selectedIds.length === 0 ||
+                hasInvalidSelectedAlias ||
+                registerMutation.isPending
+              }
               onClick={handleConfirm}
             >
               {registerMutation.isPending ? (

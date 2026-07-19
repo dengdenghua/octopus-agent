@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   Select,
   SelectContent,
@@ -1122,6 +1123,18 @@ export function AgentWorldUnified() {
 
   return (
     <div className="relative flex size-full flex-col gap-2 px-2 pb-2 pt-2 md:px-3">
+      {!hudOnly ? (
+        <div className="-mx-2 -mt-2 flex h-12 shrink-0 items-center gap-2 border-b border-border-subtle bg-background/95 px-2 md:hidden">
+          <SidebarTrigger
+            className="size-9 shrink-0"
+            aria-label={t.common.openSidebarMenu}
+            title={t.common.openSidebarMenu}
+          />
+          <span className="min-w-0 truncate text-sm font-semibold">
+            {t.agentWorld.title}
+          </span>
+        </div>
+      ) : null}
       {!hudOnly && (
         <div className="flex flex-col gap-2 rounded-xl border border-border-default bg-card/70 px-3 py-2.5 shadow-[var(--shadow-xs)] md:flex-row md:items-center md:justify-end">
           <div className="relative w-full md:max-w-[360px]">

@@ -98,10 +98,26 @@ describe("local-agent-status localPartnerBadge", () => {
   });
 
   it("falls back to detected and missing labels for legacy payloads", () => {
-    expect(localPartnerBadge(partner({ detected: true, status: "detected" }), LABELS).label).toBe(
-      "已检测到",
-    );
+    expect(
+      localPartnerBadge(partner({ detected: true, status: "detected" }), LABELS)
+        .label,
+    ).toBe("已检测到");
     expect(localPartnerBadge(partner({}), LABELS).label).toBe("未检测到");
+  });
+
+  it("keeps connected and blocked badges legible in dark mode", () => {
+    expect(
+      localPartnerBadge(
+        partner({ registered: true, effective_status: "registered" }),
+        LABELS,
+      ).className,
+    ).toContain("dark:bg-emerald");
+    expect(
+      localPartnerBadge(
+        partner({ detected: true, effective_status: "model_unconfigured" }),
+        LABELS,
+      ).className,
+    ).toContain("dark:bg-amber");
   });
 });
 
@@ -219,13 +235,18 @@ describe("local-agent-status localPartnerDoctorFromPartners", () => {
       }),
     ]);
 
-    expect(doctor?.summary).toBe("2/4 个本地 CLI 伙伴可自动派工，2 个需要处理。");
+    expect(doctor?.summary).toBe(
+      "2/4 个本地 CLI 伙伴可自动派工，2 个需要处理。",
+    );
     expect(doctor?.ready).toBe(2);
     expect(doctor?.registered).toBe(1);
     expect(doctor?.needs_attention).toBe(2);
     expect(
       Object.fromEntries(
-        (doctor?.groups ?? []).map((group) => [group.status, group.partner_ids]),
+        (doctor?.groups ?? []).map((group) => [
+          group.status,
+          group.partner_ids,
+        ]),
       ),
     ).toEqual({
       ready: ["codebuddy-cli"],
