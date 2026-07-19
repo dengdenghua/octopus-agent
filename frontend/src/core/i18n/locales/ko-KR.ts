@@ -3619,6 +3619,10 @@ export const koKR: Translations = {
       modelList: {
         label: "모델 목록",
         hint: '첫 번째 항목은 선택기의 기본값이고, 마지막 항목은 Auto 모드의 고성능 티어에서 사용됩니다. "Model list" 형식으로 자유롭게 추가/삭제할 수 있습니다.',
+        pickerDefault: "선택기 기본값",
+        performanceTier: "고성능 티어",
+        pickerDefaultAndPerformance: "기본값 · 고성능",
+        fallback: "대체 모델",
         addButton: "모델 ID 추가",
         removeTooltip: "이 모델 ID 제거",
         empty: "모델 ID가 최소 하나 필요합니다",

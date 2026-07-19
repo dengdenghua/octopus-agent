@@ -3627,6 +3627,10 @@ export const enUS: Translations = {
       modelList: {
         label: "Model list",
         hint: "First entry is the picker default. Last entry is what Auto mode uses for the performance tier. Add or remove as many as you need — ordered list of model entries.",
+        pickerDefault: "Picker default",
+        performanceTier: "Performance",
+        pickerDefaultAndPerformance: "Default · Performance",
+        fallback: "Fallback",
         addButton: "Add model ID",
         removeTooltip: "Remove this model ID",
         empty: "At least one model ID is required",

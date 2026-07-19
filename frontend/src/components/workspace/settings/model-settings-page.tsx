@@ -1044,7 +1044,7 @@ export default function ModelSettingsPage() {
     checkGateway();
   };
 
-  const handleDiagnose = async () => {
+  const handleDiagnose = useCallback(async () => {
     const issues: string[] = [];
     try {
       const res = await fetch(
@@ -1067,7 +1067,7 @@ export default function ModelSettingsPage() {
         t.settings.model.diagnoseIssues(issues.map((i) => `• ${i}`).join(" ")),
       );
     }
-  };
+  }, [t.settings.model]);
 
   const scrollToSection = useCallback((id: string) => {
     requestAnimationFrame(() => {
@@ -1402,22 +1402,28 @@ export default function ModelSettingsPage() {
                             {t.settings.model.modelCount(list.length)}
                           </span>
                         </div>
-                        <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {m.name}
-                        </div>
+                        {m.name !== displayName && (
+                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {m.name}
+                          </div>
+                        )}
                         {list.length > 0 && (
                           <ul className="mt-1.5 space-y-0.5 font-mono text-[11px] text-foreground/80">
                             {list.map((id, idx) => (
                               <li
                                 key={`${modelId}:${idx}:${id}`}
-                                className="flex items-center gap-2"
+                                className="flex min-w-0 items-center gap-2"
                               >
-                                <span className="w-4 shrink-0 text-right text-muted-foreground/60 tabular-nums">
-                                  {idx === 0
-                                    ? "★"
-                                    : idx === list.length - 1
-                                      ? "▴"
-                                      : "·"}
+                                <span className="shrink-0 rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 font-sans text-[9px] font-medium text-muted-foreground">
+                                  {idx === 0 && idx === list.length - 1
+                                    ? t.settings.model.modelList
+                                        .pickerDefaultAndPerformance
+                                    : idx === 0
+                                      ? t.settings.model.modelList.pickerDefault
+                                      : idx === list.length - 1
+                                        ? t.settings.model.modelList
+                                            .performanceTier
+                                        : t.settings.model.modelList.fallback}
                                 </span>
                                 <code className="truncate rounded bg-muted/60 px-1.5 py-0.5">
                                   {id}

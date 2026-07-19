@@ -3401,6 +3401,10 @@ export const zhCN: Translations = {
       modelList: {
         label: "模型列表",
         hint: "首项作为选择器默认值。末项作为 Auto 模式「高性能」档使用的模型。可任意增删,按「Model list」格式配置即可。",
+        pickerDefault: "选择器默认",
+        performanceTier: "高性能档",
+        pickerDefaultAndPerformance: "默认 · 高性能",
+        fallback: "备用",
         addButton: "添加模型 ID",
         removeTooltip: "删除该模型 ID",
         empty: "至少需要一个模型 ID",

@@ -177,6 +177,36 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     expect(screen.getByText("gpt-4o-mini")).toBeInTheDocument();
     expect(screen.getByText("gpt-4o")).toBeInTheDocument();
     expect(screen.getByText("gpt-4.1")).toBeInTheDocument();
+    expect(screen.getByText("选择器默认")).toBeInTheDocument();
+    expect(screen.getByText("备用")).toBeInTheDocument();
+    expect(screen.getByText("高性能档")).toBeInTheDocument();
+  });
+
+  it("does not repeat an entry name and explains a single model's two roles", async () => {
+    mockModelSettingsFetch({
+      models: [
+        {
+          id: "same-name-entry",
+          name: "Same Name",
+          display_name: "Same Name",
+          models: ["upstream-model"],
+          provider: "openai",
+          base_url: "https://api.openai.com/v1",
+          has_api_key: true,
+          supports_thinking: false,
+          supports_vision: false,
+        },
+      ],
+    });
+
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+
+    await waitFor(() => {
+      expect(screen.getByText("Same Name")).toBeInTheDocument();
+    });
+
+    expect(screen.getAllByText("Same Name")).toHaveLength(1);
+    expect(screen.getByText("默认 · 高性能")).toBeInTheDocument();
   });
 
   it("renders OpenAI-compatible diagnostics for a strict domestic provider", async () => {

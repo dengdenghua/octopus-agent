@@ -2976,6 +2976,10 @@ export interface Translations {
       modelList: {
         label: string;
         hint: string;
+        pickerDefault: string;
+        performanceTier: string;
+        pickerDefaultAndPerformance: string;
+        fallback: string;
         addButton: string;
         removeTooltip: string;
         empty: string;

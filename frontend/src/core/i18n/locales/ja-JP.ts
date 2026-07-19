@@ -3625,6 +3625,10 @@ export const jaJP: Translations = {
       modelList: {
         label: "モデル一覧",
         hint: "先頭のエントリが選択ツールの既定値、末尾のエントリが Auto モードの高性能ティアで使用されます。「Model list」形式で自由に追加・削除できます。",
+        pickerDefault: "選択ツールの既定",
+        performanceTier: "高性能ティア",
+        pickerDefaultAndPerformance: "既定 · 高性能",
+        fallback: "フォールバック",
         addButton: "モデル ID を追加",
         removeTooltip: "このモデル ID を削除",
         empty: "モデル ID は1つ以上必要です",
