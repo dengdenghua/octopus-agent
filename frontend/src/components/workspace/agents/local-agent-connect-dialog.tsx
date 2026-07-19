@@ -280,7 +280,7 @@ export function LocalAgentConnectDialog({
                 (item): item is { label: string; command: string } =>
                   Boolean(item?.command),
               );
-              const commandHints = (partner.command_hints ?? []).slice(0, 3);
+              const commandHints = partner.command_hints ?? [];
               const activate = () => togglePartner(partner);
               return (
                 <div
