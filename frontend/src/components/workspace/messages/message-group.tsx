@@ -420,11 +420,42 @@ export function MessageGroup({
     const isLast =
       isCurrentFrame || (!isHistoryReplay && idx === items.length - 1);
     if (item.type === "commentary") {
+      const commentaryState = runStateForCurrentStep(item.step, itemIsLoading);
+      const commentarySummary = summarizeCurrentStep(item.step, t);
       return (
         <div
           key={item.id}
-          className="my-1.5 min-w-0 text-[13px] leading-5 text-foreground/85"
+          role="button"
+          tabIndex={0}
+          aria-label={`${t.message.thinkingProcess}: ${commentarySummary}`}
+          onClick={() =>
+            emitOpenAgentWorkbench({
+              tab: "agent",
+              eventId: item.step.messageId ?? item.step.id,
+              eventKind: "thinking",
+              view: "summary",
+              processEvent: {
+                kind: "thinking",
+                summary: commentarySummary,
+                detail: item.step.commentary,
+                status: commentaryState,
+                count: 1,
+                phaseId: item.step.phaseId,
+                parentItemId: item.step.parentItemId,
+                timelineSequence: item.step.timelineSequence,
+              },
+            })
+          }
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            event.currentTarget.click();
+          }}
+          className="group/progress-row my-1.5 flex min-w-0 cursor-pointer items-start gap-1 text-[13px] leading-5 text-foreground/85 outline-none transition-colors hover:text-foreground focus-visible:text-foreground"
           data-testid="public-progress-event"
+          data-process-event-id={item.step.messageId ?? item.step.id}
+          data-process-event-kind="thinking"
+          data-process-event-status={commentaryState}
           data-progress-kind={item.step.progressKind}
           data-phase-id={item.step.phaseId}
           data-parent-item-id={item.step.parentItemId}
@@ -442,6 +473,7 @@ export function MessageGroup({
               <GroundingChip message={item.step.groundingMessage} />
             )}
           </div>
+          <PanelRightOpenIcon className="mt-1 size-3 shrink-0 opacity-0 transition-opacity group-hover/progress-row:opacity-40 group-focus-visible/progress-row:opacity-40" />
         </div>
       );
     }
@@ -563,11 +595,41 @@ export function MessageGroup({
         isLiveTimeline && isLastOverall && isLoading,
       );
       if (item.type === "commentary") {
+        const commentarySummary = summarizeCurrentStep(item.step, t);
         return (
           <div
             key={`${keyPrefix}-${item.id}`}
-            className="my-1.5 min-w-0 text-[13px] leading-5 text-foreground/85"
+            role="button"
+            tabIndex={0}
+            aria-label={`${t.message.thinkingProcess}: ${commentarySummary}`}
+            onClick={() =>
+              emitOpenAgentWorkbench({
+                tab: "agent",
+                eventId: item.step.messageId ?? item.step.id,
+                eventKind: "thinking",
+                view: "summary",
+                processEvent: {
+                  kind: "thinking",
+                  summary: commentarySummary,
+                  detail: item.step.commentary,
+                  status: state,
+                  count: 1,
+                  phaseId: item.step.phaseId,
+                  parentItemId: item.step.parentItemId,
+                  timelineSequence: item.step.timelineSequence,
+                },
+              })
+            }
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              event.currentTarget.click();
+            }}
+            className="group/progress-row my-1.5 flex min-w-0 cursor-pointer items-start gap-1 text-[13px] leading-5 text-foreground/85 outline-none transition-colors hover:text-foreground focus-visible:text-foreground"
             data-testid="public-progress-event"
+            data-process-event-id={item.step.messageId ?? item.step.id}
+            data-process-event-kind="thinking"
+            data-process-event-status={state}
             data-progress-kind={item.step.progressKind}
             data-phase-id={item.step.phaseId}
             data-parent-item-id={item.step.parentItemId}
@@ -584,6 +646,7 @@ export function MessageGroup({
                 <GroundingChip message={item.step.groundingMessage} />
               )}
             </div>
+            <PanelRightOpenIcon className="mt-1 size-3 shrink-0 opacity-0 transition-opacity group-hover/progress-row:opacity-40 group-focus-visible/progress-row:opacity-40" />
           </div>
         );
       }
@@ -601,6 +664,18 @@ export function MessageGroup({
         (item.type === "toolCall" ? item.step.effectReceipt : undefined) ??
         (workbenchEventId ? receiptsByCallId.get(workbenchEventId) : undefined);
       const needsEffectReview = effectReceipt?.state === "indeterminate";
+      const processEventDetail =
+        item.type === "reasoningGroup"
+          ? item.steps
+              .map((reasoningStep) => reasoningStep.reasoning?.trim())
+              .filter((value): value is string => Boolean(value))
+              .join("\n\n")
+          : item.type === "actionCallbackGroup"
+            ? item.steps
+                .map((actionStep) => actionStep.actionText.trim())
+                .filter(Boolean)
+                .join("\n\n")
+            : summary;
 
       return (
         <div
@@ -615,6 +690,16 @@ export function MessageGroup({
                 eventId: workbenchEventId,
                 eventKind: isThinking ? "thinking" : "execution",
                 view: isThinking ? "summary" : "trace",
+                processEvent: {
+                  kind: isThinking ? "thinking" : "execution",
+                  summary,
+                  detail: processEventDetail || summary,
+                  status: state,
+                  count,
+                  phaseId: step.phaseId,
+                  parentItemId: step.parentItemId,
+                  timelineSequence: step.timelineSequence,
+                },
                 effectKey: needsEffectReview
                   ? "effect_key" in effectReceipt
                     ? effectReceipt.effect_key
@@ -2007,7 +2092,7 @@ function stepIsWaiting(step: CoTStep): boolean {
     }
     return false;
   }
-  return /(?:approval|confirm|waiting|awaiting|待确认|等待|审批|确认)/i.test(
+  return /(?:\b(?:awaiting|waiting)(?:\s+for)?\s+(?:approval|confirmation|the\s+user|user\s+(?:input|reply))\b|\bapproval\s+(?:needed|required|pending)\b|待(?:用户)?确认|等待(?:用户)?(?:确认|审批|回复|输入)|审批中)/i.test(
     stepText(step),
   );
 }

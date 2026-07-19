@@ -1090,6 +1090,44 @@ describe("<AgentWorkbenchPanel />", () => {
     );
   });
 
+  test("expands the exact public thinking event selected from the transcript", async () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        focusedEventId="thinking-7"
+        focusedEventKind="thinking"
+        focusedEventView="summary"
+        focusedEventNonce={1}
+        focusedProcessEvent={{
+          kind: "thinking",
+          summary: "已确认时间线顺序",
+          detail:
+            "已确认公开进展位于工具结果之后，最终回答之前；下一步检查刷新后的顺序是否保持。",
+          status: "done",
+          count: 2,
+          phaseId: "phase-verify",
+          timelineSequence: 7,
+        }}
+        events={[]}
+      />,
+    );
+
+    expect(screen.getByTestId("focused-process-event")).toHaveAttribute(
+      "data-process-event-kind",
+      "thinking",
+    );
+    expect(screen.getByText("思考过程")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "已确认公开进展位于工具结果之后，最终回答之前；下一步检查刷新后的顺序是否保持。",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("phase-verify")).toBeInTheDocument();
+    expect(screen.getByText("#7")).toBeInTheDocument();
+    expect(
+      screen.queryByText("暂无运行中的机器人进程"),
+    ).not.toBeInTheDocument();
+  });
+
   test("keeps a manually selected replay frame while the snapshot updates", async () => {
     const baseEvents = [
       event({

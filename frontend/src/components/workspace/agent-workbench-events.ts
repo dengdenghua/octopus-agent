@@ -16,6 +16,18 @@ export type AgentWorkbenchFocusView = "summary" | "screen";
 export type AgentWorkbenchEventView = "summary" | "trace" | "screen";
 export type AgentWorkbenchProcessEventKind = "thinking" | "execution";
 
+export type AgentWorkbenchProcessEventSnapshot = {
+  /** Only explicitly public text belongs here; never raw provider reasoning. */
+  summary: string;
+  detail?: string;
+  kind: AgentWorkbenchProcessEventKind;
+  status?: "running" | "waiting" | "error" | "pending" | "done";
+  count?: number;
+  phaseId?: string;
+  parentItemId?: string;
+  timelineSequence?: number;
+};
+
 export type AgentWorkbenchFocusDetail = {
   agentId: string;
   tab?: AgentWorkbenchTab;
@@ -29,6 +41,8 @@ export type AgentWorkbenchOpenDetail = {
   /** Durable external-effect receipt selected from the transcript. */
   effectKey?: string;
   eventKind?: AgentWorkbenchProcessEventKind;
+  /** Public snapshot used when the selected transcript row has no tool block. */
+  processEvent?: AgentWorkbenchProcessEventSnapshot;
   /** The workbench surface that best explains the selected event. */
   view?: AgentWorkbenchEventView;
 };

@@ -37,6 +37,7 @@ import {
   type AgentWorkbenchFocusView,
   type AgentWorkbenchOpenDetail,
   type AgentWorkbenchProcessEventKind,
+  type AgentWorkbenchProcessEventSnapshot,
 } from "@/components/workspace/agent-workbench-events";
 import { ChatBox, useThreadChat } from "@/components/workspace/chats";
 import { ChatsDrawer } from "@/components/workspace/chats-drawer";
@@ -1045,6 +1046,8 @@ function RealtimePageContent({
     useState<AgentWorkbenchEventView | null>(null);
   const [focusedWorkbenchEventNonce, setFocusedWorkbenchEventNonce] =
     useState(0);
+  const [focusedWorkbenchProcessEvent, setFocusedWorkbenchProcessEvent] =
+    useState<AgentWorkbenchProcessEventSnapshot | null>(null);
   const [focusedWorkbenchEffectKey, setFocusedWorkbenchEffectKey] = useState<
     string | null
   >(null);
@@ -2439,6 +2442,7 @@ function RealtimePageContent({
       setFocusedWorkbenchEventId(null);
       setFocusedWorkbenchEventKind(null);
       setFocusedWorkbenchEventView(null);
+      setFocusedWorkbenchProcessEvent(null);
       setFocusedWorkbenchEffectKey(null);
       setArtifactsOpen(false);
       setShowAgentPlan(false);
@@ -2463,6 +2467,7 @@ function RealtimePageContent({
       setFocusedWorkbenchEventId(detail?.eventId?.trim() || null);
       setFocusedWorkbenchEventKind(detail?.eventKind ?? null);
       setFocusedWorkbenchEventView(detail?.view ?? null);
+      setFocusedWorkbenchProcessEvent(detail?.processEvent ?? null);
       setFocusedWorkbenchEffectKey(detail?.effectKey?.trim() || null);
       setFocusedWorkbenchEventNonce((n) => n + 1);
       setArtifactsOpen(false);
@@ -3120,6 +3125,7 @@ function RealtimePageContent({
                     focusedEventKind={focusedWorkbenchEventKind}
                     focusedEventView={focusedWorkbenchEventView}
                     focusedEventNonce={focusedWorkbenchEventNonce}
+                    focusedProcessEvent={focusedWorkbenchProcessEvent}
                     focusedEffectKey={focusedWorkbenchEffectKey}
                     hasAnswer={hasCompletedAgentOutput}
                     isLoading={thread.isLoading}

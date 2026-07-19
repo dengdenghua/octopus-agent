@@ -39,6 +39,11 @@ import {
   agentEventGroupId,
   DIFF_TAB_LABEL,
 } from "./agent-workbench-utils";
+import type { AgentWorkbenchProcessEventSnapshot } from "./agent-workbench-events";
+import {
+  agentRunStatusLightClass,
+  agentRunStatusLightPulseClass,
+} from "./agent-run-status";
 
 // ── Shared UI primitives ──────────────────────────────────────────────
 
@@ -79,7 +84,10 @@ export function WorkbenchEmptyPage({
         <div className="relative">
           <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/15 via-primary/5 to-transparent blur-lg" />
           <div className="relative flex size-12 items-center justify-center rounded-2xl border border-border-default/60 bg-gradient-to-br from-card to-muted/30 shadow-[var(--shadow-xs)]">
-            <MonitorIcon className="size-5 text-muted-foreground/60" strokeWidth={1.5} />
+            <MonitorIcon
+              className="size-5 text-muted-foreground/60"
+              strokeWidth={1.5}
+            />
           </div>
         </div>
         <div className="text-sm font-medium text-foreground/90">{title}</div>
@@ -706,6 +714,7 @@ export function AgentSummaryPage({
   diffEntries,
   agentTiles,
   blocks,
+  focusedProcessEvent,
   onSelectTab,
   onOpenArtifact,
 }: {
@@ -713,6 +722,7 @@ export function AgentSummaryPage({
   diffEntries: DiffEntry[];
   agentTiles: AgentTile[];
   blocks: WorkBlock[];
+  focusedProcessEvent?: AgentWorkbenchProcessEventSnapshot | null;
   onSelectTab?: (tabId: AgentWorkbenchTabId) => void;
   onOpenArtifact?: (path: string) => void;
 }) {
@@ -858,6 +868,7 @@ export function AgentSummaryPage({
   }, [blocks, t]);
 
   const isCompletelyEmpty =
+    !focusedProcessEvent &&
     phases.length === 0 &&
     diffEntries.length === 0 &&
     agentTiles.length === 0 &&
@@ -866,6 +877,61 @@ export function AgentSummaryPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
       <div className="mx-auto w-full max-w-2xl px-5 py-4">
+        {focusedProcessEvent && (
+          <section
+            className="border-b border-border-subtle pb-4"
+            data-testid="focused-process-event"
+            data-process-event-kind={focusedProcessEvent.kind}
+            data-process-event-status={focusedProcessEvent.status}
+          >
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              <span className="relative flex size-2 shrink-0 items-center justify-center">
+                <span
+                  className={cn(
+                    "absolute inline-flex size-2 rounded-full opacity-25",
+                    agentRunStatusLightClass(
+                      focusedProcessEvent.status ?? "done",
+                    ),
+                    agentRunStatusLightPulseClass(
+                      focusedProcessEvent.status ?? "done",
+                    ),
+                  )}
+                />
+                <span
+                  className={cn(
+                    "relative inline-flex size-1.5 rounded-full",
+                    agentRunStatusLightClass(
+                      focusedProcessEvent.status ?? "done",
+                    ),
+                  )}
+                />
+              </span>
+              <span className="font-medium text-foreground/80">
+                {focusedProcessEvent.kind === "thinking"
+                  ? t.message.thinkingProcess
+                  : t.message.executionProcess}
+              </span>
+              {(focusedProcessEvent.count ?? 0) > 1 && (
+                <span className="tabular-nums opacity-60">
+                  ×{focusedProcessEvent.count}
+                </span>
+              )}
+              {focusedProcessEvent.phaseId && (
+                <span className="ml-auto truncate font-mono text-[10px] opacity-60">
+                  {focusedProcessEvent.phaseId}
+                </span>
+              )}
+            </div>
+            <div className="mt-2 text-sm leading-6 text-foreground/85">
+              {focusedProcessEvent.detail || focusedProcessEvent.summary}
+            </div>
+            {focusedProcessEvent.timelineSequence != null && (
+              <div className="mt-2 font-mono text-[10px] text-muted-foreground/50">
+                #{focusedProcessEvent.timelineSequence}
+              </div>
+            )}
+          </section>
+        )}
         {phases.length === 0 &&
           (diffEntries.length > 0 ||
             totalReferenceItems > 0 ||
@@ -1254,7 +1320,9 @@ export function AgentSummaryPage({
                 <div>
                   <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px]">
                     {observedReferenceTabs.length === 0 ? (
-                      <span className="text-muted-foreground">{t.agentWorkbenchPages.noSources}</span>
+                      <span className="text-muted-foreground">
+                        {t.agentWorkbenchPages.noSources}
+                      </span>
                     ) : (
                       observedReferenceTabs.map((tab) => {
                         const meta = OBSERVED_REFERENCE_META[tab.id];
@@ -1283,10 +1351,14 @@ export function AgentSummaryPage({
                               )}
                             />
                             <span>{tab.label}</span>
-                            <span className={cn(
-                              "font-mono text-[9px]",
-                              isActive ? "text-foreground/70" : "text-muted-foreground/60",
-                            )}>
+                            <span
+                              className={cn(
+                                "font-mono text-[9px]",
+                                isActive
+                                  ? "text-foreground/70"
+                                  : "text-muted-foreground/60",
+                              )}
+                            >
                               {tab.items.length}
                             </span>
                           </button>

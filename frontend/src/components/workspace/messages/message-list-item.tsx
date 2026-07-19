@@ -223,6 +223,13 @@ function SegmentedReasoningPanel({
           eventId: messageId,
           eventKind: "thinking",
           view: "summary",
+          processEvent: {
+            kind: "thinking",
+            summary,
+            detail: replyThinking,
+            status: isLoading ? "running" : "done",
+            count: 1,
+          },
         })
       }
       className="group/thinking-row mb-1 flex w-full min-w-0 items-center gap-1.5 py-0.5 text-left text-[11px] leading-4 text-muted-foreground/55 transition-colors hover:text-muted-foreground"

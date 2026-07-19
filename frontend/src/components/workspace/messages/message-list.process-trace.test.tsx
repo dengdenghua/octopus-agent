@@ -700,11 +700,18 @@ describe("MessageList reasoning privacy", () => {
       "assistant-public-summary",
     );
     fireEvent.click(thinkingEvent);
-    expect(opened.at(-1)?.detail).toEqual({
+    expect(opened.at(-1)?.detail).toMatchObject({
       tab: "agent",
       eventId: "assistant-public-summary",
       eventKind: "thinking",
       view: "summary",
+      processEvent: {
+        kind: "thinking",
+        summary: publicSummary,
+        detail: publicSummary,
+        status: "running",
+        count: 1,
+      },
     });
     window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });

@@ -240,6 +240,22 @@ describe("MessageGroup reasoning grouping", () => {
     );
     expect(checkpoints[1]).toHaveAttribute("data-progress-sequence", "2");
     expect(checkpoints[1]).toHaveAttribute("data-timeline-sequence", "3");
+    const opened: CustomEvent[] = [];
+    const handleOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+    fireEvent.click(checkpoints[0]!);
+    expect(opened.at(-1)?.detail).toMatchObject({
+      eventId: "progress-1",
+      eventKind: "thinking",
+      view: "summary",
+      processEvent: {
+        kind: "thinking",
+        detail: "已确认流事件按消息、思考和执行三条通道归一化。",
+        status: "done",
+        count: 1,
+      },
+    });
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
     const groundingTrigger = screen.getByRole("button", {
       name: "预读了 0 篇项目文档 · 1 处代码",
     });
@@ -993,18 +1009,30 @@ describe("MessageGroup streaming lifecycle", () => {
     expect(execution).toHaveAttribute("data-process-event-id", "read-1");
 
     fireEvent.click(thinking);
-    expect(opened.at(-1)?.detail).toEqual({
+    expect(opened.at(-1)?.detail).toMatchObject({
       tab: "agent",
       eventId: "ai-thinking",
       eventKind: "thinking",
       view: "summary",
+      processEvent: {
+        kind: "thinking",
+        summary: "先确认需求和现有上下文",
+        detail: "先确认需求和现有上下文",
+        status: "done",
+        count: 1,
+      },
     });
     fireEvent.click(execution);
-    expect(opened.at(-1)?.detail).toEqual({
+    expect(opened.at(-1)?.detail).toMatchObject({
       tab: "agent",
       eventId: "read-1",
       eventKind: "execution",
       view: "trace",
+      processEvent: {
+        kind: "execution",
+        status: "running",
+        count: 1,
+      },
     });
 
     window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);

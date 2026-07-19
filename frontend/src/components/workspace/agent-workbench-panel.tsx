@@ -17,6 +17,7 @@ import { TerminalPanel } from "@/components/workspace/terminal-panel";
 import { ToolEffectDetailPanel } from "@/components/workspace/tool-effect-detail-panel";
 import type {
   AgentWorkbenchEventView,
+  AgentWorkbenchProcessEventSnapshot,
   AgentWorkbenchProcessEventKind,
 } from "./agent-workbench-events";
 import type { LiveToolEvent } from "./live-tool-timeline";
@@ -202,6 +203,7 @@ export function AgentWorkbenchPanel({
   focusedEventKind,
   focusedEventView,
   focusedEventNonce,
+  focusedProcessEvent,
   focusedEffectKey,
   hasAnswer,
   isLoading,
@@ -232,6 +234,7 @@ export function AgentWorkbenchPanel({
   focusedEventKind?: AgentWorkbenchProcessEventKind | null;
   focusedEventView?: AgentWorkbenchEventView | null;
   focusedEventNonce?: number;
+  focusedProcessEvent?: AgentWorkbenchProcessEventSnapshot | null;
   /** Durable effect receipt selected from the transcript timeline. */
   focusedEffectKey?: string | null;
   hasAnswer?: boolean;
@@ -704,7 +707,7 @@ export function AgentWorkbenchPanel({
   );
 
   // Workbench view: summary / computer view.
-  if (emptyShell && !selectedEffectKey) {
+  if (emptyShell && !selectedEffectKey && !focusedProcessEvent) {
     const emptyEmbeddedPage =
       effectiveActiveTab === "diff" ? (
         <AgentDiffPage
@@ -894,6 +897,7 @@ export function AgentWorkbenchPanel({
             diffEntries={visibleDiffEntries}
             agentTiles={agentTiles}
             blocks={blocks}
+            focusedProcessEvent={focusedProcessEvent}
             onSelectTab={onSelectTab}
             onOpenArtifact={onOpenArtifact}
           />
