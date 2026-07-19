@@ -61,10 +61,16 @@ export function LocalAgentConnectDialog({
     label: string;
     className: string;
   } => {
-    if (partner.registered) {
+    if (partner.registered && partner.ready) {
       return {
         label: t.localAgentConnect.statusConnected,
         className: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+      };
+    }
+    if (partner.registered && !partner.ready) {
+      return {
+        label: "已连接 · 需修复",
+        className: "bg-amber-50 text-amber-700 ring-amber-100",
       };
     }
     if (partner.detected && partner.ready) {

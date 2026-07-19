@@ -62,6 +62,7 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
                 "command_hints",
                 "interaction_hint",
                 "native_launch_cwd",
+                "已连接 · 需修复",
                 "健康检查",
                 "打开原生 CLI",
                 "修复建议",
