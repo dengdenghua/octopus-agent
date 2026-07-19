@@ -4,6 +4,7 @@ import type * as ReactRouterDom from "react-router-dom";
 
 import { renderWithProviders } from "@/test/harness";
 import { STUB_RESPONSE_EVENT } from "@/core/api/client";
+import { eventBus } from "@/core/events";
 
 import WorkspaceLayout from "./layout";
 
@@ -12,7 +13,15 @@ vi.mock("react-router-dom", async () => {
     await vi.importActual<typeof ReactRouterDom>("react-router-dom");
   return {
     ...actual,
-    Outlet: () => <div>workspace content</div>,
+    Outlet: () => {
+      const location = actual.useLocation();
+      return (
+        <div data-testid="workspace-location">
+          {location.pathname}
+          {location.search}
+        </div>
+      );
+    },
   };
 });
 
@@ -22,6 +31,7 @@ vi.mock("@/components/workspace/workspace-sidebar", () => ({
 
 describe("<WorkspaceLayout /> stub response banner", () => {
   afterEach(() => {
+    eventBus.clear();
     vi.unstubAllGlobals();
   });
 
@@ -59,5 +69,23 @@ describe("<WorkspaceLayout /> stub response banner", () => {
     });
 
     expect(screen.getByText("模拟后端响应")).toBeInTheDocument();
+  });
+
+  test("preserves agent and project identity when starting a fresh task", () => {
+    renderWithProviders(<WorkspaceLayout />, {
+      initialRoute: "/workspace/realtime/existing",
+      locale: "zh-CN",
+    });
+
+    act(() => {
+      eventBus.emit("task:new", {
+        agentId: "coder",
+        workspacePath: "/Users/dangbei/Public/octopus-agent",
+      });
+    });
+
+    expect(screen.getByTestId("workspace-location").textContent).toBe(
+      "/workspace/realtime/new?agent=coder&workspace_path=%2FUsers%2Fdangbei%2FPublic%2Foctopus-agent",
+    );
   });
 });

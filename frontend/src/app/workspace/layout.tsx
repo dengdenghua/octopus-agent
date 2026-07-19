@@ -15,6 +15,7 @@ import { swallow } from "@/core/utils/log";
 import { uuid } from "@/core/utils/uuid";
 import { useWorkspaceShortcuts } from "@/core/shortcuts/use-global-shortcuts";
 import { useI18n } from "@/core/i18n/hooks";
+import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 
 const CommandPalette = lazy(() =>
   import("@/components/workspace/command-palette").then((m) => ({
@@ -119,8 +120,19 @@ export default function WorkspaceLayout() {
   useWorkspaceShortcuts();
   useEvent(
     "task:new",
-    () => {
-      navigate(`/workspace/realtime/${uuid()}`);
+    (taskIdentity) => {
+      navigate(
+        taskWorkspaceRoute({
+          agentId: taskIdentity?.agentId,
+          workspacePath: taskIdentity?.workspacePath,
+        }),
+        {
+          state: {
+            taskNonce: uuid(),
+            workspacePath: taskIdentity?.workspacePath,
+          },
+        },
+      );
     },
     [navigate],
   );

@@ -23,6 +23,7 @@ import { useDeleteThread, useThreads } from "@/core/threads/hooks";
 import type { AgentThread } from "@/core/threads/types";
 import { formatCompactRelativeTimestamp } from "@/core/utils/datetime";
 import { uuid } from "@/core/utils/uuid";
+import { isAbsolutePath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
 
 const DRAWER_WIDTH = "min(320px, 86vw)";
@@ -89,9 +90,10 @@ function threadOwnerAgent(thread: AgentThread): string {
   return "";
 }
 
-function threadWorkspacePath(thread: AgentThread): string {
-  const meta = (thread.metadata ?? {}) as Record<string, unknown>;
-  const path = meta["workspace_path"];
+function threadWorkspacePath(thread?: AgentThread): string {
+  const meta = (thread?.metadata ?? {}) as Record<string, unknown>;
+  const values = (thread?.values ?? {}) as Record<string, unknown>;
+  const path = meta["workspace_path"] ?? values["workspace_path"];
   return typeof path === "string" ? path.trim() : "";
 }
 
@@ -103,7 +105,7 @@ interface ChatsDrawerProps {
 export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const deleteThread = useDeleteThread();
   const [query, setQuery] = useState("");
 
@@ -128,8 +130,24 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
 
   const startNewChat = useCallback(() => {
     onOpenChange(false);
-    eventBus.emit("task:new");
-  }, [onOpenChange]);
+    const activeThread = threads.find((thread) =>
+      pathname.includes(thread.thread_id),
+    );
+    const routeWorkspacePath =
+      new URLSearchParams(search).get("workspace_path") ?? "";
+    const threadPath = threadWorkspacePath(activeThread);
+    const workspacePath = isAbsolutePath(threadPath)
+      ? threadPath
+      : isAbsolutePath(routeWorkspacePath)
+        ? routeWorkspacePath
+        : undefined;
+    eventBus.emit("task:new", {
+      agentId: activeThread
+        ? threadOwnerAgent(activeThread) || undefined
+        : undefined,
+      workspacePath,
+    });
+  }, [onOpenChange, pathname, search, threads]);
 
   const handleDelete = useCallback(
     (thread: AgentThread) => {

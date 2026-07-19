@@ -64,6 +64,13 @@ export interface UseRealtimeThreadArgs {
   }) => RealtimeClient;
 }
 
+export function visibleConversationForThread(
+  state: Conversation,
+  threadId: string,
+): Conversation {
+  return state.threadId === threadId ? state : emptyConversation(threadId);
+}
+
 export interface UseRealtimeThreadValue {
   state: Conversation;
   connected: boolean;
@@ -767,8 +774,17 @@ export function useRealtimeThread(
     [args.threadId],
   );
 
+  // React renders once with the previous hook state before the thread-change
+  // effect clears it. Never expose that stale frame to the next task: it can
+  // otherwise promote `/new` to a fake existing thread and leak old messages,
+  // approvals, or activity into the fresh workspace.
+  const visibleState = useMemo(
+    () => visibleConversationForThread(state, args.threadId),
+    [args.threadId, state],
+  );
+
   // Derive the two state-dependent inputs the vitals classifier needs.
-  const activeTurn = state.turns[state.turns.length - 1];
+  const activeTurn = visibleState.turns[visibleState.turns.length - 1];
   const turnActive = activeTurn?.status === "inProgress";
   const hasRunningWork = useMemo(() => {
     if (!activeTurn || activeTurn.status !== "inProgress") return false;
@@ -786,7 +802,7 @@ export function useRealtimeThread(
 
   return useMemo(
     () => ({
-      state,
+      state: visibleState,
       connected,
       vitals,
       startTurn,
@@ -799,7 +815,7 @@ export function useRealtimeThread(
       decideHunk,
     }),
     [
-      state,
+      visibleState,
       connected,
       vitals,
       startTurn,

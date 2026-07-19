@@ -977,6 +977,17 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     );
   }, [activeThreadId, mergedConversationRaw, mergedProjectRaw]);
 
+  const activeTaskWorkspacePath = useMemo(() => {
+    if (activeThread) {
+      const value =
+        activeThread.metadata?.["workspace_path"] ??
+        activeThread.values?.["workspace_path"];
+      if (typeof value === "string" && isAbsolutePath(value)) return value;
+    }
+    const routeValue = new URLSearchParams(search).get("workspace_path") ?? "";
+    return isAbsolutePath(routeValue) ? routeValue : null;
+  }, [activeThread, search]);
+
   const activeTaskRoomId = activeTeamTaskRoomId(sidebarPathname, activeThread);
 
   const activeWorkDir = useMemo(() => {
@@ -1192,7 +1203,10 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
           space back. */}
       <SidebarContent className="gap-1.5 px-2.5 py-2 group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:py-1.5">
         <SidebarGroup className="p-0 px-1 pb-0.5 group-data-[collapsible=icon]:px-0">
-          <SurfaceCreateButton />
+          <SurfaceCreateButton
+            agentId={activeAgentId}
+            workspacePath={activeTaskWorkspacePath}
+          />
         </SidebarGroup>
         {/* Unified sidebar — no more surface branching. All navigation
             items are always visible regardless of the current route. */}
@@ -1230,6 +1244,8 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
               threads={allHistoryThreads}
               pathname={sidebarPathname}
               label={t.sidebar.sectionChats}
+              agentId={activeAgentId}
+              workspacePath={activeTaskWorkspacePath}
               runStatusByHref={runStatusByHref}
             />
           </>
@@ -1758,7 +1774,13 @@ export function WorkspaceSurfaceSwitch({
   );
 }
 
-function SurfaceCreateButton() {
+function SurfaceCreateButton({
+  agentId,
+  workspacePath,
+}: {
+  agentId?: string | null;
+  workspacePath?: string | null;
+}) {
   const { t } = useI18n();
 
   return (
@@ -1766,7 +1788,12 @@ function SurfaceCreateButton() {
       type="button"
       title={t.sidebar.actionNewTask}
       aria-label={t.sidebar.actionNewTask}
-      onClick={() => eventBus.emit("task:new")}
+      onClick={() =>
+        eventBus.emit("task:new", {
+          agentId: agentId || undefined,
+          workspacePath: workspacePath || undefined,
+        })
+      }
       className="flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border-default bg-background/60 px-3 text-[11px] font-medium text-muted-foreground transition-[background-color,border-color,color] hover:border-border hover:bg-background hover:text-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:translate-x-[3px] group-data-[collapsible=icon]:px-0"
     >
       <PlusIcon className="size-4" />
@@ -2571,6 +2598,8 @@ function ChatsSection({
   label,
   emptyLabel,
   newActionLabel,
+  agentId,
+  workspacePath,
   runStatusByHref,
 }: {
   threads: ThreadSummary[];
@@ -2578,6 +2607,8 @@ function ChatsSection({
   label?: string;
   emptyLabel?: string;
   newActionLabel?: string;
+  agentId?: string | null;
+  workspacePath?: string | null;
   runStatusByHref?: Map<string, ThreadRunStatus>;
 }) {
   const { t: tr } = useI18n();
@@ -2608,8 +2639,11 @@ function ChatsSection({
     null,
   );
   const startNewChat = useCallback(() => {
-    eventBus.emit("task:new");
-  }, []);
+    eventBus.emit("task:new", {
+      agentId: agentId || undefined,
+      workspacePath: workspacePath || undefined,
+    });
+  }, [agentId, workspacePath]);
   const sectionLabel = label ?? tr.sidebar.sectionChats;
   const actionLabel = newActionLabel ?? tr.sidebar.actionNewTask;
   const visibleLimit = 20;

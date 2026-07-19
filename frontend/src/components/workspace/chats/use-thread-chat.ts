@@ -7,7 +7,7 @@ import { uuid } from "@/core/utils/uuid";
 export function useThreadChat() {
   const params = useParams();
   const threadIdFromPath = params.threadId ?? params.thread_id;
-  const { pathname } = useLocation();
+  const { key: locationKey, pathname } = useLocation();
   const isNewPath = threadIdFromPath === "new" || pathname.endsWith("/new");
 
   const [searchParams] = useSearchParams();
@@ -25,7 +25,7 @@ export function useThreadChat() {
       setIsNewThread(false);
       setThreadId(threadIdFromPath);
     }
-  }, [pathname, threadIdFromPath]);
+  }, [locationKey, pathname, threadIdFromPath]);
 
   const isMock = env.STATIC_WEBSITE_ONLY && searchParams.get("mock") === "true";
   return { threadId, isNewThread, setIsNewThread, isMock };

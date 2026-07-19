@@ -7,7 +7,24 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { JsonRpcRequest } from "./envelope";
-import { useRealtimeThread } from "./use-realtime-thread";
+import { emptyConversation } from "./items";
+import {
+  useRealtimeThread,
+  visibleConversationForThread,
+} from "./use-realtime-thread";
+
+describe("visibleConversationForThread", () => {
+  it("hides the previous task during a thread route transition", () => {
+    const previous = emptyConversation("previous-thread");
+
+    expect(visibleConversationForThread(previous, "next-thread")).toEqual(
+      emptyConversation("next-thread"),
+    );
+    expect(visibleConversationForThread(previous, "previous-thread")).toBe(
+      previous,
+    );
+  });
+});
 
 type IncomingRequestFn = (req: JsonRpcRequest) => Promise<unknown>;
 
