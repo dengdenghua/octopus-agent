@@ -425,7 +425,7 @@ def _iter_model_stream_with_deadline(
     router: Any,
     request: Any,
     timeout_s: float,
-    visible_started: Callable[[], bool],
+    visible_started: Callable[[], Any],
 ) -> Generator[Any, None, None]:
     """Pump a blocking model iterator through a hard wall-clock deadline.
 
@@ -472,17 +472,22 @@ def _iter_model_stream_with_deadline(
     timeout_s = max(0.0, timeout_s)
     deadline = time.monotonic() + timeout_s
     visible_mode = False
+    visible_activity: Any = None
     try:
         while True:
             token = _current_cancellation_token() if _current_cancellation_token else None
             if token is not None and token.is_cancelled:
                 return
-            if visible_started() and not visible_mode:
+            current_visible_activity = visible_started()
+            if current_visible_activity and (
+                not visible_mode or current_visible_activity != visible_activity
+            ):
                 # Once an answer is visibly streaming, switch from a hard
                 # thinking ceiling to an inactivity deadline. Long reports
                 # may legitimately exceed the thinking ceiling as long as
                 # user-visible tokens continue to arrive.
                 visible_mode = True
+                visible_activity = current_visible_activity
                 deadline = time.monotonic() + timeout_s
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -493,8 +498,6 @@ def _iter_model_stream_with_deadline(
             except queue.Empty:
                 continue
             if kind == "event":
-                if visible_mode:
-                    deadline = time.monotonic() + timeout_s
                 yield value
             elif kind == "error":
                 raise value
@@ -521,12 +524,12 @@ def _collect_model_stream_text_with_deadline(
     """
     text_parts: list[str] = []
     final_response = None
-    visible_state = {"started": False}
+    visible_state = {"chars": 0}
     for event in _iter_model_stream_with_deadline(
         router,
         request,
         timeout_s,
-        lambda state=visible_state: state["started"],
+        lambda state=visible_state: state["chars"],
     ):
         if event is _MODEL_STREAM_DEADLINE:
             return _MODEL_STREAM_DEADLINE
@@ -534,7 +537,7 @@ def _collect_model_stream_text_with_deadline(
             delta = str(getattr(event, "delta", "") or "")
             if delta:
                 text_parts.append(delta)
-                visible_state["started"] = True
+                visible_state["chars"] += len(delta)
         elif getattr(event, "type", "") in {"done", "response_end"}:
             final_response = getattr(event, "final", None) or getattr(event, "response", None)
     text = "".join(text_parts).strip()
@@ -807,7 +810,7 @@ def _looks_like_observation_echo(text: str) -> bool:
     stripped = (text or "").lstrip()
     if not stripped:
         return False
-    head = stripped[:240].lower()
+    head = stripped[:800].lower()
     return (
         head.startswith("observation:")
         or head.startswith("[1/")
@@ -815,6 +818,11 @@ def _looks_like_observation_echo(text: str) -> bool:
         or head.startswith("<tool_call")
         or head.startswith("<function")
         or "(real tool execution succeeded)" in head
+        or "[system guard]" in head
+        or bool(
+            re.search(r"(?im)^(?:user|model|assistant|system):\s*", head)
+            and re.search(r"(?im)^(?:thought|action|observation|update):\s*", head)
+        )
     )
 
 
@@ -2846,7 +2854,7 @@ def stream_react_loop(
             # response time. Pre-anchor chunks must stay buffered because
             # they may contain Thought:/Action: prose that must not leak.
             _final_stream_started = False
-            _visible_stream_state = {"started": False}
+            _visible_stream_state = {"chars": 0}
             _streamed_final_chars = 0
             _final_stream_guarded = False
             _final_delta_emitted_this_iteration = False
@@ -2876,7 +2884,7 @@ def stream_react_loop(
                 router,
                 req,
                 _iteration_timeout,
-                lambda state=_visible_stream_state: state["started"],
+                lambda state=_visible_stream_state: state["chars"],
             ):
                 if evt is _MODEL_STREAM_DEADLINE:
                     _iteration_soft_timed_out = True
@@ -2917,6 +2925,7 @@ def stream_react_loop(
                             }
                             _final_delta_emitted_this_iteration = True
                             _streamed_final_chars += len(evt.delta)
+                            _visible_stream_state["chars"] += len(evt.delta)
                             _throughput_chars += len(evt.delta)
                             _tp = _maybe_emit_throughput(_throughput_chars)
                             if _tp is not None:
@@ -2981,7 +2990,7 @@ def stream_react_loop(
                                 if _tp is not None:
                                     yield _tp
                                 _final_stream_started = True
-                                _visible_stream_state["started"] = True
+                                _visible_stream_state["chars"] = len(answer_so_far)
                         elif (
                             len(joined) >= 120
                             and not _THOUGHT_RE.search(joined)
@@ -3033,7 +3042,7 @@ def stream_react_loop(
                             if _tp is not None:
                                 yield _tp
                             _final_stream_started = True
-                            _visible_stream_state["started"] = True
+                            _visible_stream_state["chars"] = len(joined)
                 elif evt.type == "thinking_delta":
                     thinking_parts.append(evt.delta)
                     yield {
@@ -3439,6 +3448,19 @@ def stream_react_loop(
                 }
             else:
                 consecutive_format_violations += 1
+                _plain_answer_can_finish = bool(
+                    text
+                    and not maybe_final
+                    and (
+                        i > 0
+                        or executed_beak_steps
+                        or any(
+                            prior_step.action_results
+                            or (prior_step.action and prior_step.observation)
+                            for prior_step in steps
+                        )
+                    )
+                )
                 _logger.warning(
                     "react_loop iter %d · LLM produced zero ReAct anchors "
                     "(consec=%d/%d) · raw head=%r",
@@ -3447,7 +3469,10 @@ def stream_react_loop(
                     _format_violation_bail_at,
                     text[:200],
                 )
-                if consecutive_format_violations >= _format_violation_bail_at:
+                if (
+                    consecutive_format_violations >= _format_violation_bail_at
+                    or _plain_answer_can_finish
+                ):
                     # Salvage the model's raw output as the final reply.
                     # Without this yield the gateway records a turn that
                     # produced no text → frontend renders the stream as

@@ -1738,11 +1738,45 @@ def test_native_model_stream_deadline_recovers_from_silent_provider():
     assert elapsed < 0.5
 
 
+def test_native_model_stream_deadline_ignores_nonvisible_heartbeat_events():
+    visible_chunks: list[str] = []
+
+    class Router:
+        def call_stream(self, _request):
+            yield ModelStreamEvent(type="text_delta", delta="可见回答")
+            for _ in range(100):
+                time.sleep(0.005)
+                yield ModelStreamEvent(type="thinking_delta", delta="internal")
+
+    started = time.monotonic()
+    events = []
+    for event in tool_bridge._iter_native_model_stream_with_deadline(
+        Router(),
+        object(),
+        0.03,
+        visible_started=lambda: len(visible_chunks),
+    ):
+        events.append(event)
+        if getattr(event, "type", "") == "text_delta":
+            visible_chunks.append(event.delta)
+    elapsed = time.monotonic() - started
+
+    assert events[-1] is tool_bridge._NATIVE_STREAM_DEADLINE
+    assert elapsed < 0.2
+
+
 def test_native_convergence_retry_uses_shorter_timeout(monkeypatch):
     monkeypatch.setenv("OCTOPUS_NATIVE_MODEL_RECOVERY_TIMEOUT_S", "30")
 
     assert tool_bridge._native_model_recovery_timeout_s(120.0) == 30.0
     assert tool_bridge._native_model_recovery_timeout_s(12.0) == 12.0
+
+
+def test_native_post_tool_round_uses_shorter_silence_timeout(monkeypatch):
+    monkeypatch.setenv("OCTOPUS_NATIVE_POST_TOOL_TIMEOUT_S", "60")
+
+    assert tool_bridge._native_post_tool_timeout_s(120.0) == 60.0
+    assert tool_bridge._native_post_tool_timeout_s(15.0) == 15.0
 
 
 def test_agentic_timeout_emits_public_recovery_then_forces_final(monkeypatch):
@@ -1773,6 +1807,98 @@ def test_agentic_timeout_emits_public_recovery_then_forces_final(monkeypatch):
     assert commentary_index < text_index
     assert "超过单轮时限" in events[commentary_index][1]
     assert events[-1] == ("done", "", "Final from saved evidence.")
+
+
+def test_agentic_timeout_replays_partial_draft_into_complete_recovery(monkeypatch):
+    monkeypatch.setattr(tool_bridge, "_native_model_round_timeout_s", lambda: 0.03)
+
+    class Router:
+        def __init__(self):
+            self.requests = []
+
+        def call_stream(self, request):
+            self.requests.append(request)
+            if request.tools:
+                yield ModelStreamEvent(
+                    type="text_delta",
+                    delta="First verified point, but the answer is not complete",
+                )
+                threading.Event().wait(timeout=1)
+                return
+            assert request.messages[-2].role == "assistant"
+            assert "First verified point" in request.messages[-2].content
+            final = "First verified point. Second verified point."
+            yield ModelStreamEvent(type="text_delta", delta=final)
+            yield ModelStreamEvent(type="done", final=ModelResponse(text=final))
+
+    router = Router()
+    intent = ParsedIntent(
+        raw="compare two verified points",
+        intent_type="task",
+        normalized_goal="compare two verified points",
+        user_context={"conversation_id": "partial-timeout-thread"},
+    )
+
+    events = list(stream_agentic_fallback(_stack(router), intent, _agent()))
+
+    text = "".join(event[1] for event in events if event[0] == "text")
+    assert text == "First verified point. Second verified point."
+    assert events[-1] == (
+        "done",
+        "",
+        "First verified point. Second verified point.",
+    )
+
+
+def test_agentic_post_tool_stall_fails_over_for_final_synthesis(monkeypatch):
+    monkeypatch.setattr(tool_bridge, "_native_model_round_timeout_s", lambda: 0.03)
+    monkeypatch.setattr(
+        tool_bridge,
+        "_next_custom_model_fallback",
+        lambda current, _attempted: "backup-model" if current != "backup-model" else None,
+    )
+
+    class Router:
+        def __init__(self):
+            self.requests = []
+
+        def call_stream(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                yield ModelStreamEvent(
+                    type="tool_use",
+                    tool_call=ToolCall(
+                        id="evidence-list",
+                        name="list_cwd",
+                        input={"path": "."},
+                    ),
+                )
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            if request.model != "backup-model":
+                threading.Event().wait(timeout=1)
+                return
+            final = "Backup model completed the answer from saved evidence."
+            yield ModelStreamEvent(type="text_delta", delta=final)
+            yield ModelStreamEvent(type="done", final=ModelResponse(text=final))
+
+    router = Router()
+    intent = ParsedIntent(
+        raw="inspect the directory and summarize once",
+        intent_type="task",
+        normalized_goal="inspect the directory and summarize once",
+        user_context={"conversation_id": "post-tool-stall-failover-thread"},
+    )
+
+    events = list(stream_agentic_fallback(_stack(router), intent, _agent()))
+
+    assert [event[0] for event in events].count("tool_start") == 1
+    assert any(request.model == "backup-model" for request in router.requests)
+    assert events[-1] == (
+        "done",
+        "",
+        "Backup model completed the answer from saved evidence.",
+    )
 
 
 def test_agentic_repeated_timeout_is_terminal_error_not_answer_text(monkeypatch):
@@ -1846,6 +1972,201 @@ def test_agentic_tool_preamble_becomes_commentary_before_execution():
     assert commentary_index < tool_index
     assert tool_index < synthesis_index < text_index
     assert "confirmed the scope" in events[commentary_index][1]
+
+
+def test_native_duplicate_calls_in_one_round_execute_once():
+    execution = {"count": 0}
+
+    def probe(path: str = "."):
+        execution["count"] += 1
+        return {"path": path, "ok": True}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="list_cwd",
+            description="Read one stable target.",
+            affinity=["file", "io"],
+            trusted_source="skill://public/list_cwd",
+            handler=probe,
+        ),
+        verify_tests=False,
+    )
+
+    class Router:
+        def __init__(self):
+            self.round = 0
+
+        def call_stream(self, _request):
+            self.round += 1
+            if self.round == 1:
+                for call_id in ("duplicate-1", "duplicate-2"):
+                    yield ModelStreamEvent(
+                        type="tool_use",
+                        tool_call=ToolCall(
+                            id=call_id,
+                            name="list_cwd",
+                            input={"path": "same.txt"},
+                        ),
+                    )
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            yield ModelStreamEvent(type="text_delta", delta="Duplicate collapsed.")
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(text="Duplicate collapsed."),
+            )
+
+    router = Router()
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=router, planner_model="mock"),
+    )
+    intent = ParsedIntent(
+        raw="inspect one stable target",
+        intent_type="task",
+        normalized_goal="inspect one stable target",
+        user_context={"conversation_id": "native-deduplicate-thread"},
+    )
+
+    events = list(stream_agentic_fallback(stack, intent, _agent()))
+
+    assert execution["count"] == 1
+    assert [event[0] for event in events].count("tool_start") == 1
+    assert [event[0] for event in events].count("tool_end") == 1
+    assert events[-1] == ("done", "", "Duplicate collapsed.")
+
+
+def test_native_definitive_missing_read_is_not_retried():
+    execution = {"count": 0}
+
+    def missing_read(path: str, offset: int = 0):
+        execution["count"] += 1
+        return {"error": f"file not found: {path} at offset {offset}"}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="read_file",
+            description="Read one project file.",
+            affinity=["file", "io"],
+            trusted_source="skill://public/read_file",
+            handler=missing_read,
+        ),
+        verify_tests=False,
+    )
+
+    class Router:
+        def __init__(self):
+            self.requests = []
+
+        def call_stream(self, request):
+            self.requests.append(request)
+            if request.tools:
+                yield ModelStreamEvent(
+                    type="tool_use",
+                    tool_call=ToolCall(
+                        id=f"missing-{len(self.requests)}",
+                        name="read_file",
+                        input={
+                            "path": "missing.ts",
+                            "offset": len(self.requests) * 100,
+                        },
+                    ),
+                )
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            yield ModelStreamEvent(
+                type="text_delta",
+                delta="The requested file does not exist; I stopped retrying it.",
+            )
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(
+                    text="The requested file does not exist; I stopped retrying it."
+                ),
+            )
+
+    router = Router()
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=router, planner_model="mock"),
+    )
+    intent = ParsedIntent(
+        raw="read the requested project file",
+        intent_type="task",
+        normalized_goal="read the requested project file",
+        user_context={"conversation_id": "native-missing-read-thread"},
+    )
+
+    events = list(stream_agentic_fallback(stack, intent, _agent()))
+
+    assert execution["count"] == 1
+    assert [event[0] for event in events].count("tool_start") == 1
+    assert [event[0] for event in events].count("tool_end") == 1
+    assert router.requests[-1].tools == []
+    assert events[-1][0] == "done"
+
+
+def test_native_identical_successful_read_is_reused_not_reexecuted():
+    execution = {"count": 0}
+
+    def list_once(path: str = "."):
+        execution["count"] += 1
+        return {"path": path, "entries": ["evidence.tsx"]}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="list_cwd",
+            description="List one directory.",
+            affinity=["file", "io"],
+            trusted_source="skill://public/list_cwd",
+            handler=list_once,
+        ),
+        verify_tests=False,
+    )
+
+    class Router:
+        def __init__(self):
+            self.requests = []
+
+        def call_stream(self, request):
+            self.requests.append(request)
+            if request.tools:
+                yield ModelStreamEvent(
+                    type="tool_use",
+                    tool_call=ToolCall(
+                        id=f"same-success-{len(self.requests)}",
+                        name="list_cwd",
+                        input={"path": "frontend/src"},
+                    ),
+                )
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            final = "The existing directory result was reused."
+            yield ModelStreamEvent(type="text_delta", delta=final)
+            yield ModelStreamEvent(type="done", final=ModelResponse(text=final))
+
+    router = Router()
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=router, planner_model="mock"),
+    )
+    intent = ParsedIntent(
+        raw="list the directory once and summarize it",
+        intent_type="task",
+        normalized_goal="list the directory once and summarize it",
+        user_context={"conversation_id": "native-success-reuse-thread"},
+    )
+
+    events = list(stream_agentic_fallback(stack, intent, _agent()))
+
+    assert execution["count"] == 1
+    assert [event[0] for event in events].count("tool_start") == 1
+    assert [event[0] for event in events].count("tool_end") == 1
+    assert router.requests[-1].tools == []
+    assert events[-1][0] == "done"
 
 
 def test_quiet_realtime_tool_batch_gets_model_generated_public_update(

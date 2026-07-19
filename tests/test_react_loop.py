@@ -18,6 +18,7 @@ from runtime.core.cerebrum.react_guards import (
     _unverified_write_followup_guard,
 )
 from runtime.core.cerebrum.react_loop import (
+    _MODEL_STREAM_DEADLINE,
     ReActResult,
     ReActStep,
     _browser_operation_requested,
@@ -40,6 +41,7 @@ from runtime.core.cerebrum.react_loop import (
     _fallback_tool_result_checkpoint,
     _format_skill_catalog,
     _initial_public_checkpoint,
+    _iter_model_stream_with_deadline,
     _long_task_budget_limits,
     _looks_like_special_tool_envelope,
     _looks_like_unfinished_work,
@@ -1368,6 +1370,34 @@ def test_silent_model_stream_is_interrupted_by_wall_clock_deadline(monkeypatch) 
     assert result.final_answer == "recovered after a silent provider stream"
     assert router.calls == 2
     assert any(event["type"] == "commentary_delta" for event in events)
+
+
+def test_visible_stream_deadline_ignores_private_thinking_heartbeats() -> None:
+    from runtime.sensing.model_router.models import ModelStreamEvent
+
+    visible_state = {"chars": 0}
+
+    class Router:
+        def call_stream(self, request: Any):  # noqa: ARG002
+            yield ModelStreamEvent(type="text_delta", delta="visible")
+            for _ in range(100):
+                time.sleep(0.005)
+                yield ModelStreamEvent(type="thinking_delta", delta="private")
+
+    started_at = time.monotonic()
+    events = []
+    for event in _iter_model_stream_with_deadline(
+        Router(),
+        object(),
+        0.03,
+        lambda: visible_state["chars"],
+    ):
+        events.append(event)
+        if getattr(event, "type", "") == "text_delta":
+            visible_state["chars"] += len(event.delta)
+
+    assert events[-1] is _MODEL_STREAM_DEADLINE
+    assert time.monotonic() - started_at < 0.2
 
 
 def test_repeated_hidden_reasoning_timeout_is_reported_as_failure(monkeypatch) -> None:
@@ -3642,6 +3672,51 @@ def test_zero_anchor_response_is_salvaged_as_text_delta() -> None:
     assert result.final_answer == plain_markdown_reply
 
 
+def test_zero_anchor_answer_after_tool_evidence_finishes_on_first_response() -> None:
+    plain_answer = "组件在 `idle` 和 `streaming` 这两个 phase 会直接返回 null。"
+    stack = _build_stack_with_executor(
+        _ScriptedRouter(
+            [
+                'Thought: inspect evidence\nAction: echo({"text": "source inspected"})',
+                plain_answer,
+                "Final Answer: this extra round must not run",
+            ]
+        )
+    )
+
+    events, result = _drain(
+        stream_react_loop(stack, _intent("inspect then answer"), agent=None, max_iterations=3)
+    )
+
+    assert result is not None and result.success
+    assert result.final_answer == plain_answer
+    assert "".join(event["delta"] for event in events if event["type"] == "text_delta") == plain_answer
+
+
+def test_zero_anchor_answer_after_parallel_tool_evidence_finishes_immediately() -> None:
+    plain_answer = "并行读取已完成，证据足够。"
+    stack = _build_stack_with_executor(
+        _ScriptedRouter(
+            [
+                "Thought: inspect in parallel\nAction:\n"
+                '    echo({"text": "first"})\n'
+                '    echo({"text": "second"})\n\n'
+                "Observation:",
+                plain_answer,
+                "Final Answer: this extra round must not run",
+            ]
+        )
+    )
+
+    events, result = _drain(
+        stream_react_loop(stack, _intent("inspect then answer"), agent=None, max_iterations=3)
+    )
+
+    assert result is not None and result.success
+    assert result.final_answer == plain_answer
+    assert "".join(event["delta"] for event in events if event["type"] == "text_delta") == plain_answer
+
+
 def test_zero_anchor_unfinished_diagnosis_forces_action_instead_of_bailing() -> None:
     stack = _build_stack_with_executor(
         _ScriptedRouter(
@@ -4457,6 +4532,38 @@ def test_observation_echo_does_not_complete_or_stream_as_answer() -> None:
     assert "Observation:" not in visible
     assert "(real tool execution succeeded)" not in visible
     assert visible == "synthesized report"
+
+
+def test_transcript_echo_does_not_stream_private_protocol_as_answer() -> None:
+    leaked_transcript = (
+        '正在读取目标文件。" (This was wrong; I should inspect the observation.)\n'
+        "User: [System Guard]\n"
+        "Model: Update: 正在读取文件。\n"
+        'Thought: inspect\nAction: read_file({"path": "missing.ts"})\n'
+        "User: Observation: the tool failed and this transcript is private."
+    )
+    assert len(leaked_transcript) >= 120
+
+    router = _ScriptedRouter(
+        [
+            'Thought: gather evidence\nAction: echo({"text": "evidence"})\n',
+            leaked_transcript,
+            "Final Answer: synthesized without protocol leakage",
+        ]
+    )
+    events, result = _drain(
+        stream_react_loop(
+            _build_stack_with_executor(router),
+            _intent("inspect once"),
+            agent=None,
+            max_iterations=4,
+        )
+    )
+
+    assert result is not None and result.success
+    visible = "".join(event["delta"] for event in events if event["type"] == "text_delta")
+    assert visible == "synthesized without protocol leakage"
+    assert "System Guard" not in visible
 
 
 def test_tool_invocation_protocol_text_does_not_stream_as_answer() -> None:

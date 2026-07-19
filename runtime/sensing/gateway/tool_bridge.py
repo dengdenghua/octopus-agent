@@ -189,6 +189,17 @@ def _native_model_recovery_timeout_s(base_timeout_s: float) -> float:
     return min(base_timeout_s, recovery_ceiling)
 
 
+def _native_post_tool_timeout_s(base_timeout_s: float) -> float:
+    """Bound silence after evidence exists without truncating visible output."""
+    raw = os.environ.get("OCTOPUS_NATIVE_POST_TOOL_TIMEOUT_S", "60")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = 60.0
+    post_tool_ceiling = max(10.0, min(value, 180.0))
+    return min(base_timeout_s, post_tool_ceiling)
+
+
 _NATIVE_STREAM_DEADLINE = object()
 _NATIVE_STREAM_REDIRECTED = object()
 
@@ -260,6 +271,7 @@ def _iter_native_model_stream_with_deadline(
     timeout_s = max(0.0, timeout_s)
     deadline = time.monotonic() + timeout_s
     visible_mode = False
+    visible_activity: Any = None
     try:
         while True:
             token = _cancellation.current_cancellation_token() if _cancellation else None
@@ -270,9 +282,14 @@ def _iter_native_model_stream_with_deadline(
                     stream_cancel_source.cancel(reason="user redirected model stream")
                 yield _NATIVE_STREAM_REDIRECTED
                 return
-            if callable(visible_started) and visible_started() and not visible_mode:
-                visible_mode = True
-                deadline = time.monotonic() + timeout_s
+            if callable(visible_started):
+                current_visible_activity = visible_started()
+                if current_visible_activity and (
+                    not visible_mode or current_visible_activity != visible_activity
+                ):
+                    visible_mode = True
+                    visible_activity = current_visible_activity
+                    deadline = time.monotonic() + timeout_s
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 yield _NATIVE_STREAM_DEADLINE
@@ -282,8 +299,6 @@ def _iter_native_model_stream_with_deadline(
             except queue.Empty:
                 continue
             if kind == "event":
-                if visible_mode:
-                    deadline = time.monotonic() + timeout_s
                 yield value
             elif kind == "error":
                 raise value
@@ -311,7 +326,105 @@ def _native_public_checkpoint(text: str) -> str:
         )
     ):
         return ""
-    return value[:800].rstrip()
+    sentence_ends = list(re.finditer(r"[。！？!?]|\.(?:\s+|$)", value))
+    if len(sentence_ends) >= 2:
+        value = value[: sentence_ends[1].end()].strip()
+    return value[:360].rstrip()
+
+
+def _native_tool_call_fingerprint(call: ToolCall) -> str:
+    """Return a stable native tool+arguments key for retry control."""
+    try:
+        payload = json.dumps(
+            call.input or {},
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+    except (TypeError, ValueError):
+        payload = repr(call.input)
+    return f"{call.name}:{payload}"
+
+
+def _deduplicate_native_tool_calls(calls: list[ToolCall]) -> tuple[list[ToolCall], int]:
+    """Collapse identical native calls before they enter the public timeline."""
+    unique: list[ToolCall] = []
+    seen: set[str] = set()
+    duplicates = 0
+    for call in calls:
+        fingerprint = _native_tool_call_fingerprint(call)
+        if fingerprint in seen:
+            duplicates += 1
+            continue
+        seen.add(fingerprint)
+        unique.append(call)
+    return unique, duplicates
+
+
+def _native_tool_batch_fingerprint(calls: list[ToolCall]) -> str:
+    fingerprints = [_native_tool_call_fingerprint(call) for call in calls]
+    if len(fingerprints) == 1:
+        return fingerprints[0]
+    return "batch:" + json.dumps(fingerprints, ensure_ascii=False, separators=(",", ":"))
+
+
+def _native_definitive_failure_target(call: ToolCall) -> str:
+    """Identify a missing read target independent of pagination arguments."""
+    aliases = {
+        "read_file": "read",
+        "read_text_file": "read",
+        "list_cwd": "list",
+        "glob_files": "glob",
+    }
+    family = aliases.get(call.name)
+    if family is None:
+        return ""
+    arguments = call.input or {}
+    raw_path = next(
+        (
+            arguments.get(key)
+            for key in ("path", "file_path", "directory", "root")
+            if arguments.get(key) is not None
+        ),
+        "",
+    )
+    path = str(raw_path).strip().replace("\\", "/")
+    while path.startswith("./"):
+        path = path[2:]
+    return f"{family}:{path.rstrip('/')}" if path else ""
+
+
+def _native_call_failure_is_definitive(
+    call: ToolCall,
+    result_block: dict[str, Any],
+) -> bool:
+    if not _native_definitive_failure_target(call) or not result_block.get("is_error"):
+        return False
+    markers = (
+        "not found",
+        "file not found",
+        "does not exist",
+        "no such file",
+        "enoent",
+        "不存在",
+        "未找到",
+    )
+    content = str(result_block.get("content") or "").casefold()
+    return any(marker in content for marker in markers)
+
+
+def _native_failure_is_definitive(
+    calls: list[ToolCall],
+    result_blocks: list[dict[str, Any]],
+) -> bool:
+    """Whether an identical read-only retry cannot produce a different result."""
+    if not calls or len(calls) != len(result_blocks):
+        return False
+    return all(
+        _native_call_failure_is_definitive(call, block)
+        for call, block in zip(calls, result_blocks, strict=True)
+    )
 
 
 def _public_narrative_silence_s(user_context: dict[str, Any]) -> float:
@@ -401,7 +514,8 @@ def _generate_native_evidence_checkpoint(
             "State one concrete result that is now known and the next "
             "decision or action. Do not mention tool names, system prompts, "
             "protocols, hidden reasoning, or claim unobserved results. This "
-            "is a progress update, not the final answer. If the results add "
+            "is a progress update, not the final answer. Use plain prose, not "
+            "a heading, bullet list, or numbered list. If the results add "
             "no meaningful user-facing evidence, output exactly SKIP."
         ),
     )
@@ -1664,6 +1778,22 @@ def stream_agentic_fallback(
                 content=_capability_activation_prompt,
             ),
         )
+    messages.insert(
+        0,
+        Message(
+            role="system",
+            content=(
+                "TOOL LOOP DISCIPLINE:\n"
+                "- Reuse successful tool results already present in this turn. Never "
+                "repeat an identical read/search/list call merely to reconfirm it.\n"
+                "- If a read-only target is confirmed missing, changing pagination or "
+                "range arguments cannot make it exist; correct the path or inspect its "
+                "parent instead.\n"
+                "- Once the evidence requested by the user is present, stop calling "
+                "tools and return the complete answer."
+            ),
+        ),
+    )
     _code_change_task = _is_code_change_task(intent)
     if _code_change_task:
         available_code_tools = [
@@ -1928,6 +2058,7 @@ def stream_agentic_fallback(
     _completed_tool_count = 0
     _attempted_models = {effective_model}
     _provider_failovers = 0
+    _stall_failovers = 0
     _code_mutation_seen = False
     _code_verification_state: bool | None = None
     _clean_code_verifier_rounds = 0
@@ -1945,6 +2076,10 @@ def stream_agentic_fallback(
     _browser_guard_nudges = 0
     _force_convergence_next = False
     _model_timeout_recoveries = 0
+    _failed_native_batches: dict[str, tuple[int, bool]] = {}
+    _definitive_failed_native_targets: set[str] = set()
+    _successful_native_read_calls: set[str] = set()
+    _repeated_failure_guard_hits = 0
     _pending_steering: list[str] = []
     _last_steering_probe_at = 0.0
 
@@ -2119,6 +2254,8 @@ def stream_agentic_fallback(
 
         _round_stream_event_seen = False
         _round_timeout_s = _native_model_round_timeout_s()
+        if _completed_tool_count > 0:
+            _round_timeout_s = _native_post_tool_timeout_s(_round_timeout_s)
         if _round_convergence_mode:
             _round_timeout_s = _native_model_recovery_timeout_s(_round_timeout_s)
         try:
@@ -2126,6 +2263,7 @@ def stream_agentic_fallback(
                 router,
                 req,
                 _round_timeout_s,
+                visible_started=lambda chunks=round_text_chunks: len(chunks),
                 redirect_probe=_capture_steering,
             ):
                 if event is _NATIVE_STREAM_DEADLINE:
@@ -2160,16 +2298,6 @@ def stream_agentic_fallback(
                                 yield ("commentary", checkpoint, None)
                                 _round_commentary_emitted = True
                                 _last_public_checkpoint_at = time.monotonic()
-                        yield (
-                            "tool_start",
-                            {
-                                "id": event.tool_call.id,
-                                "name": event.tool_call.name,
-                                "input": event.tool_call.input,
-                                "iteration": round_i + 1,
-                            },
-                            None,
-                        )
                 elif etype == "done":
                     # Pull this round's token counts from the
                     # ModelResponse (every router populates these via
@@ -2234,6 +2362,34 @@ def stream_agentic_fallback(
                     None,
                 )
                 return
+            partial_round_text = round_text.strip()
+            if partial_round_text:
+                # The timed-out provider may already have produced a useful
+                # prefix. It was not emitted publicly by this native path, so
+                # preserve it as assistant context for the tools-disabled
+                # recovery instead of making the model start over blind.
+                messages.append(
+                    Message(
+                        role="assistant",
+                        content=partial_round_text,
+                    )
+                )
+            if _completed_tool_count > 0 and _stall_failovers < 1:
+                fallback_model = _next_custom_model_fallback(
+                    effective_model,
+                    _attempted_models,
+                )
+                if fallback_model:
+                    _logger.warning(
+                        "agentic model %s stayed silent after evidence; "
+                        "switching final synthesis to %s",
+                        effective_model,
+                        fallback_model,
+                    )
+                    effective_model = fallback_model
+                    _attempted_models.add(fallback_model)
+                    _stall_failovers += 1
+                    _model_timeout_recoveries = 0
             recovery_update = (
                 "这一轮推理超过单轮时限；已保留前面的有效结果，"
                 "现在关闭扩展工具调用，直接收敛阶段结论或最终答案。"
@@ -2247,8 +2403,11 @@ def stream_agentic_fallback(
                         "The previous native-tool model stream exceeded its "
                         "wall-clock deadline without a usable tool call or final "
                         "answer. Preserve every completed tool result. Do not call "
-                        "more tools and do not deliberate at length. Produce the "
-                        "best complete final answer supported by the evidence now; "
+                        "more tools and do not deliberate at length. Return one "
+                        "complete final answer for the user, incorporating any "
+                        "partial assistant draft immediately above without assuming "
+                        "the user has seen it and without merely continuing mid-sentence. "
+                        "Use only the evidence already present; "
                         "if evidence is insufficient, name the exact gap truthfully."
                     ),
                 )
@@ -2263,12 +2422,116 @@ def stream_agentic_fallback(
                 allowed_names={spec.name for spec in _active_tool_specs},
             )
 
+        _duplicate_native_calls = 0
+        _current_native_batch_fingerprint = ""
+        if round_tool_calls:
+            round_tool_calls, _duplicate_native_calls = _deduplicate_native_tool_calls(
+                round_tool_calls
+            )
+            suppressed_targets = [
+                target
+                for call in round_tool_calls
+                if (target := _native_definitive_failure_target(call))
+                in _definitive_failed_native_targets
+            ]
+            if suppressed_targets:
+                round_tool_calls = [
+                    call
+                    for call in round_tool_calls
+                    if _native_definitive_failure_target(call)
+                    not in _definitive_failed_native_targets
+                ]
+                _repeated_failure_guard_hits += 1
+                messages.append(
+                    Message(
+                        role="user",
+                        content=(
+                            "[SYSTEM CHECK - definitive missing target suppressed]\n"
+                            "The runtime did not repeat a read against a path already "
+                            "confirmed missing. Pagination or range changes cannot make "
+                            "that target exist. Correct the path, inspect its parent "
+                            "directory, use a different source, or finish from existing "
+                            "evidence. Do not request the same missing target again."
+                        ),
+                    )
+                )
+                if not round_tool_calls:
+                    if _repeated_failure_guard_hits >= 2:
+                        _force_convergence_next = True
+                    continue
+            repeated_successes = [
+                _native_tool_call_fingerprint(call)
+                for call in round_tool_calls
+                if _native_tool_call_fingerprint(call) in _successful_native_read_calls
+            ]
+            if repeated_successes:
+                round_tool_calls = [
+                    call
+                    for call in round_tool_calls
+                    if _native_tool_call_fingerprint(call)
+                    not in _successful_native_read_calls
+                ]
+                _repeated_failure_guard_hits += 1
+                messages.append(
+                    Message(
+                        role="user",
+                        content=(
+                            "[SYSTEM CHECK - redundant successful read suppressed]\n"
+                            "The identical read/search/list call already succeeded in this "
+                            "turn. Reuse its existing result instead of executing it again. "
+                            "Choose a genuinely new evidence source only if the user's "
+                            "request still has a specific unmet gap; otherwise finalize now."
+                        ),
+                    )
+                )
+                if not round_tool_calls:
+                    _force_convergence_next = True
+                    continue
+            _current_native_batch_fingerprint = _native_tool_batch_fingerprint(
+                round_tool_calls
+            )
+            failed_count, definitive_failure = _failed_native_batches.get(
+                _current_native_batch_fingerprint,
+                (0, False),
+            )
+            retry_limit = 1 if definitive_failure else 2
+            if failed_count >= retry_limit:
+                _repeated_failure_guard_hits += 1
+                messages.append(
+                    Message(
+                        role="user",
+                        content=(
+                            "[SYSTEM CHECK - repeated failed tool call suppressed]\n"
+                            "The runtime did not execute the identical tool call or ordered "
+                            "batch again because the same arguments already produced a "
+                            "definitive failure. Treat that result as evidence. Correct the "
+                            "path or arguments, choose a different evidence source, or finish "
+                            "from the evidence already collected. Do not repeat the same call."
+                        ),
+                    )
+                )
+                if _repeated_failure_guard_hits >= 2:
+                    _force_convergence_next = True
+                continue
+
         if round_tool_calls and not _round_commentary_emitted:
             checkpoint = _native_public_checkpoint(round_text)
             if checkpoint:
                 yield ("commentary", checkpoint, None)
                 _round_commentary_emitted = True
                 _last_public_checkpoint_at = time.monotonic()
+
+        for call in round_tool_calls:
+            yield (
+                "tool_start",
+                {
+                    "id": call.id,
+                    "name": call.name,
+                    "input": call.input,
+                    "iteration": round_i + 1,
+                },
+                None,
+            )
 
         _action_narration_pool: ThreadPoolExecutor | None = None
         _action_narration_future: Any = None
@@ -2832,6 +3095,52 @@ def stream_agentic_fallback(
 
         _tool_batch_source.cancel(reason="tool batch closed")
         _completed_tool_count += len(round_tool_calls)
+
+        if _current_native_batch_fingerprint:
+            batch_failed = bool(tool_result_blocks) and all(
+                bool(block.get("is_error")) for block in tool_result_blocks
+            )
+            if batch_failed:
+                previous_count, previous_definitive = _failed_native_batches.get(
+                    _current_native_batch_fingerprint,
+                    (0, False),
+                )
+                _failed_native_batches[_current_native_batch_fingerprint] = (
+                    previous_count + 1,
+                    previous_definitive
+                    or _native_failure_is_definitive(
+                        round_tool_calls,
+                        tool_result_blocks,
+                    ),
+                )
+                for call, block in zip(
+                    round_tool_calls,
+                    tool_result_blocks,
+                    strict=True,
+                ):
+                    if _native_call_failure_is_definitive(call, block):
+                        target = _native_definitive_failure_target(call)
+                        if target:
+                            _definitive_failed_native_targets.add(target)
+            else:
+                _failed_native_batches.pop(_current_native_batch_fingerprint, None)
+                _repeated_failure_guard_hits = 0
+                repeatable_read_names = {
+                    "read_file",
+                    "read_text_file",
+                    "list_cwd",
+                    "glob_files",
+                    "grep_text",
+                }
+                for call, block in zip(
+                    round_tool_calls,
+                    tool_result_blocks,
+                    strict=True,
+                ):
+                    if call.name in repeatable_read_names and not block.get("is_error"):
+                        _successful_native_read_calls.add(
+                            _native_tool_call_fingerprint(call)
+                        )
 
         messages.append(
             Message(
