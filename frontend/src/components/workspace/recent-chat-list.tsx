@@ -23,6 +23,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -142,6 +143,10 @@ export function RecentChatList() {
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameThreadId, setRenameThreadId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [threadToDelete, setThreadToDelete] = useState<AgentThread | null>(
+    null,
+  );
 
   const handleDelete = useCallback(
     (threadId: string) => {
@@ -179,6 +184,19 @@ export function RecentChatList() {
       setRenameValue("");
     }
   }, [renameThread, renameThreadId, renameValue]);
+
+  const handleProjectDelete = useCallback(() => {
+    if (!projectToDelete) return;
+    deleteProject(projectToDelete.id, {
+      onSuccess: () => setProjectToDelete(null),
+    });
+  }, [deleteProject, projectToDelete]);
+
+  const handleThreadDelete = useCallback(() => {
+    if (!threadToDelete) return;
+    handleDelete(threadToDelete.thread_id);
+    setThreadToDelete(null);
+  }, [handleDelete, threadToDelete]);
 
   const handleShare = useCallback(
     async (threadId: string) => {
@@ -372,7 +390,7 @@ export function RecentChatList() {
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => handleDelete(thread.thread_id)}>
+              <DropdownMenuItem onSelect={() => setThreadToDelete(thread)}>
                 <Trash2 className="text-muted-foreground" />
                 <span>{t.common.delete}</span>
               </DropdownMenuItem>
@@ -439,7 +457,7 @@ export function RecentChatList() {
                     <DropdownMenuContent align="start" side="right">
                       <DropdownMenuItem
                         className="text-destructive"
-                        onClick={() => deleteProject(group.project!.id)}
+                        onClick={() => setProjectToDelete(group.project!)}
                       >
                         <Trash2 className="mr-2 size-4" />
                         {t.common.delete}
@@ -488,6 +506,54 @@ export function RecentChatList() {
               {t.common.cancel}
             </Button>
             <Button onClick={handleRenameSubmit}>{t.common.save}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={projectToDelete !== null}
+        onOpenChange={(open) => !open && setProjectToDelete(null)}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{t.sidebar.confirmDeleteProjectTitle}</DialogTitle>
+            <DialogDescription>
+              {projectToDelete
+                ? t.sidebar.confirmDeleteProject(projectToDelete.name)
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProjectToDelete(null)}>
+              {t.common.cancel}
+            </Button>
+            <Button variant="destructive" onClick={handleProjectDelete}>
+              {t.common.delete}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={threadToDelete !== null}
+        onOpenChange={(open) => !open && setThreadToDelete(null)}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{t.common.delete}</DialogTitle>
+            <DialogDescription>
+              {threadToDelete
+                ? t.sidebar.confirmDeleteThread(titleOfThread(threadToDelete))
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setThreadToDelete(null)}>
+              {t.common.cancel}
+            </Button>
+            <Button variant="destructive" onClick={handleThreadDelete}>
+              {t.common.delete}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
