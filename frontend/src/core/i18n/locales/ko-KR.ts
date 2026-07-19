@@ -304,7 +304,8 @@ export const koKR: Translations = {
     actionLabel: (action: string) => `액션: ${action}`,
     attachmentFallback: "첨부 파일",
     grounding: {
-      label: "프로젝트 자료 {count}건 참조",
+      summary: (docs: number, sources: number) =>
+        `사전 참조: 프로젝트 문서 ${docs}건 · 코드 ${sources}곳`,
       doc: "문서",
       source: "코드",
     },

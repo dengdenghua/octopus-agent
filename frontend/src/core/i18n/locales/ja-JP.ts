@@ -305,7 +305,8 @@ export const jaJP: Translations = {
     actionLabel: (action: string) => `アクション: ${action}`,
     attachmentFallback: "添付ファイル",
     grounding: {
-      label: "{count} 件のプロジェクト資料を参照",
+      summary: (docs: number, sources: number) =>
+        `事前参照: プロジェクト文書 ${docs} 件 · コード ${sources} 箇所`,
       doc: "ドキュメント",
       source: "コード",
     },

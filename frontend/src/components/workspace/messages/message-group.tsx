@@ -2161,9 +2161,12 @@ function convertToSteps(
       // public summary, public checkpoint, or an actual tool call belongs in
       // the conversation timeline.
       const publicReasoning = extractPublicReasoningSummary(message);
+      const isPublicProgress =
+        message.additional_kwargs?.public_progress === true;
       const rawPublicPreamble =
         tc &&
         tc.length > 0 &&
+        !isPublicProgress &&
         !publicReasoning &&
         !isLikelyFinalAnswerContent(message) &&
         !isLoading
@@ -2181,8 +2184,6 @@ function convertToSteps(
           : [],
       );
 
-      const isPublicProgress =
-        message.additional_kwargs?.public_progress === true;
       if (isPublicProgress) {
         // A checkpoint follows the previous tool result and the current
         // private reasoning. Preserve that real order instead of zipping the

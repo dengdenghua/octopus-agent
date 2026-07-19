@@ -26,7 +26,13 @@ from runtime.execution.tool_engine import (
 )
 from runtime.memory.threads.event_log import EventLog
 from runtime.platform.models import ParsedIntent
-from runtime.protocol import ErrorItem, ServerMethod, TurnParams, TurnStatus
+from runtime.protocol import (
+    ErrorItem,
+    GroundingSource,
+    ServerMethod,
+    TurnParams,
+    TurnStatus,
+)
 from runtime.safety.approval.approval_gate import ApprovalProvider
 from runtime.sensing.gateway.realtime_event_bridge import _ReactBridgeState
 from runtime.sensing.gateway.realtime_gateway import EventEmitter
@@ -865,12 +871,29 @@ async def _apply_react_event(
         # on the AI reply. Best-effort UX — never a turn-breaking contract.
         sources = evt.get("sources")
         if isinstance(sources, list) and sources:
+            validated_sources: list[GroundingSource] = []
+            for source in sources:
+                if not isinstance(source, dict):
+                    continue
+                with contextlib.suppress(TypeError, ValueError):
+                    validated_sources.append(GroundingSource.model_validate(source))
+            if not validated_sources:
+                return
+            turn.grounding = validated_sources
+            sources_payload = [
+                source.model_dump(mode="json") for source in validated_sources
+            ]
+            log.turn_updated(
+                turn.thread_id,
+                turn.id,
+                grounding=sources_payload,
+            )
             await emitter.notify(
                 ServerMethod.TURN_GROUNDING,
                 {
                     "threadId": turn.thread_id,
                     "turnId": turn.id,
-                    "sources": sources,
+                    "sources": sources_payload,
                 },
             )
         return

@@ -7,7 +7,7 @@ import type { GroundingSource } from "@/core/realtime/items";
 import { cn } from "@/lib/utils";
 
 /**
- * Plain-language "consulted N project docs" chip.
+ * Plain-language auto-prefetched project context chip.
  *
  * Surfaces the codebase grounding the agent actually used this turn — the wiki
  * pages + source chunks folded into its prompt — carried on the AI reply's
@@ -24,12 +24,16 @@ export function GroundingChip({ message }: { message: Message }) {
     return g as GroundingSource[];
   }, [message.additional_kwargs?.grounding]);
   if (!sources) return null;
-  const label = t.message.grounding.label.replace(
-    "{count}",
-    String(sources.length),
-  );
+  const docCount = sources.filter((source) => source.kind === "doc").length;
+  const sourceCount = sources.length - docCount;
+  const label = t.message.grounding.summary(docCount, sourceCount);
   return (
-    <div className="mb-1" data-grounding-evidence="true">
+    <div
+      className="mb-1"
+      data-grounding-evidence="true"
+      data-grounding-doc-count={docCount}
+      data-grounding-source-count={sourceCount}
+    >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

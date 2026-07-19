@@ -40,7 +40,7 @@ describe("GroundingChip", () => {
 
     // Collapsed: one quiet plain-language line, no source paths leaking in.
     const trigger = screen.getByRole("button", {
-      name: /Consulted 2 project docs/,
+      name: /Prefetched 1 project doc · 1 code location/,
     });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("runtime/react_loop.py:501")).toBeNull();

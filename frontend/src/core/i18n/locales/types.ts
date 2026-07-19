@@ -244,8 +244,8 @@ export interface Translations {
     actionLabel: (action: string) => string;
     attachmentFallback: string;
     grounding: {
-      /** ``{count}`` is replaced with the number of consulted sources. */
-      label: string;
+      /** Describe auto-prefetched context separately from explicit tool work. */
+      summary: (docs: number, sources: number) => string;
       doc: string;
       source: string;
     };

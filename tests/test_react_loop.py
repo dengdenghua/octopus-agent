@@ -1058,6 +1058,115 @@ def test_missing_public_update_gets_one_bounded_phase_checkpoint() -> None:
     assert event_types.index("commentary_delta") < event_types.index("tool_start")
 
 
+def test_realtime_quiet_tool_result_gets_model_authored_evidence_checkpoint() -> None:
+    router = _CapturingRouter(
+        [
+            (
+                "Thought: compare the completed evidence\n"
+                'Action: echo({"text": "stream state stable"})\n'
+                'Action: echo({"text": "timeline order stable"})'
+            ),
+            "检查结果已经确认流式链路正常；下一步把这个证据并入最终结论。",
+            "Final Answer: 流式链路验证通过。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("对比两份流式结果并给出结论")
+    intent.user_context.update(
+        {"mode": "react", "realtime_public_narrative": True}
+    )
+
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=3)
+    )
+
+    assert result is not None and result.final_answer == "流式链路验证通过。"
+    public = [
+        event
+        for event in events
+        if event["type"] == "commentary_delta"
+        and event.get("progress_source") == "model"
+    ]
+    assert [event["delta"] for event in public] == [
+        "检查结果已经确认流式链路正常；下一步把这个证据并入最终结论。"
+    ]
+    event_types = [event["type"] for event in events]
+    assert event_types.index("tool_end") < events.index(public[0])
+    assert events.index(public[0]) < event_types.index("text_delta")
+    checkpoint_request = router.requests[1]
+    assert checkpoint_request.tools == []
+    assert checkpoint_request.max_tokens == 180
+    assert checkpoint_request.enable_thinking is False
+    checkpoint_input = "\n".join(
+        str(message.content) for message in checkpoint_request.messages
+    )
+    assert "stream state stable" in checkpoint_input
+    assert "timeline order stable" in checkpoint_input
+    assert "对比两份流式结果" in checkpoint_input
+
+
+def test_model_supplied_update_skips_extra_evidence_narration_call() -> None:
+    router = _CapturingRouter(
+        [
+            (
+                "Update: 我先运行一次聚焦验证，确认链路是否稳定。\n"
+                'Action: echo({"text": "stream state stable"})\n'
+                'Action: echo({"text": "timeline order stable"})'
+            ),
+            "Final Answer: 链路稳定。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("对比两份流式结果")
+    intent.user_context.update(
+        {"mode": "react", "realtime_public_narrative": True}
+    )
+
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=3)
+    )
+
+    assert result is not None and result.final_answer == "链路稳定。"
+    assert router.calls == 2
+    model_updates = [
+        event["delta"]
+        for event in events
+        if event["type"] == "commentary_delta"
+        and event.get("progress_source") == "model"
+    ]
+    assert model_updates == ["我先运行一次聚焦验证，确认链路是否稳定。"]
+
+
+def test_public_evidence_narrator_skip_stays_out_of_conversation() -> None:
+    router = _CapturingRouter(
+        [
+            (
+                "Thought: compare evidence\n"
+                'Action: echo({"text": "stream state stable"})\n'
+                'Action: echo({"text": "timeline order stable"})'
+            ),
+            "SKIP",
+            "Final Answer: 验证结束。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("对比两份流式结果")
+    intent.user_context.update(
+        {"mode": "react", "realtime_public_narrative": True}
+    )
+
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=3)
+    )
+
+    assert result is not None and result.final_answer == "验证结束。"
+    assert not any(
+        event["type"] == "commentary_delta"
+        and event.get("progress_source") == "model"
+        for event in events
+    )
+
+
 def test_tool_checkpoint_with_synthesis_words_stays_in_action_phase() -> None:
     router = _ScriptedRouter(
         [
@@ -1195,6 +1304,107 @@ def test_read_only_evidence_convergence_suppresses_scope_expansion(tmp_path) -> 
         event.get("type") == "tool_start" and event.get("tool_name") == "echo" for event in events
     )
     assert any("already complete" in step.observation for step in result.steps)
+
+
+def test_bounded_multi_file_turn_narrates_coverage_before_final_answer(tmp_path) -> None:
+    (tmp_path / "backend.py").write_text("phase_id = 'phaseId'\n", encoding="utf-8")
+    (tmp_path / "frontend.ts").write_text(
+        "export const phaseId = 'phaseId';\n",
+        encoding="utf-8",
+    )
+    router = _CapturingRouter(
+        [
+            (
+                "Thought: read both requested files\n"
+                'Action: read_file({"path":"backend.py"})\n'
+                'Action: read_file({"path":"frontend.ts"})'
+            ),
+            "两端文件都已读到，字段名称一致；我现在只收束这项对比，不再扩大范围。",
+            "Final Answer: 两端都使用 phaseId，字段命名一致。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent(
+        "只读比较 backend.py 与 frontend.ts 的阶段字段，只用一句话回答；不要修改文件。"
+    )
+    intent.user_context.update(
+        {
+            "mode": "code",
+            "workspace_path": str(tmp_path),
+            "realtime_public_narrative": True,
+        }
+    )
+
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=4)
+    )
+
+    assert result is not None and result.final_answer == "两端都使用 phaseId，字段命名一致。"
+    assert router.calls == 3
+    narrator_request = router.requests[1]
+    assert narrator_request.tools == []
+    narrator_context = "\n".join(
+        str(message.content) for message in narrator_request.messages
+    )
+    assert "backend.py" in narrator_context
+    assert "frontend.ts" in narrator_context
+    model_updates = [
+        event["delta"]
+        for event in events
+        if event["type"] == "commentary_delta"
+        and event.get("progress_source") == "model"
+    ]
+    assert model_updates == [
+        "两端文件都已读到，字段名称一致；我现在只收束这项对比，不再扩大范围。"
+    ]
+    model_comment = next(
+        index
+        for index, event in enumerate(events)
+        if event.get("progress_source") == "model"
+    )
+    last_tool_event = max(
+        index for index, event in enumerate(events) if event["type"] == "tool_end"
+    )
+    answer_event = next(
+        index for index, event in enumerate(events) if event["type"] == "text_delta"
+    )
+    assert last_tool_event < model_comment < answer_event
+
+
+def test_bounded_single_file_answer_does_not_repeat_as_public_progress(tmp_path) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"name":"octopus-frontend"}',
+        encoding="utf-8",
+    )
+    router = _CapturingRouter(
+        [
+            'Thought: read it\nAction: read_file({"path":"package.json"})',
+            "Final Answer: 项目名称是 octopus-frontend。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent(
+        "只读读取 package.json，只用一句话告诉我项目名称；不要修改文件。"
+    )
+    intent.user_context.update(
+        {
+            "mode": "code",
+            "workspace_path": str(tmp_path),
+            "realtime_public_narrative": True,
+        }
+    )
+
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=3)
+    )
+
+    assert result is not None and result.final_answer == "项目名称是 octopus-frontend。"
+    assert router.calls == 2
+    assert not any(
+        event["type"] == "commentary_delta"
+        and event.get("progress_source") == "model"
+        for event in events
+    )
 
 
 def test_evidence_convergence_rejects_fallback_that_forgot_the_user_task(tmp_path) -> None:

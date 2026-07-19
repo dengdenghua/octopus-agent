@@ -173,6 +173,13 @@ def test_event_log_replays_workbench_snapshot(tmp_path: Path) -> None:
         phases=[phase.model_dump(by_alias=True, mode="json") for phase in phases],
         workspace_focus=focus.model_dump(by_alias=True, mode="json"),
         workbench_snapshot=snapshot.model_dump(by_alias=True, mode="json"),
+        grounding=[
+            {
+                "kind": "source",
+                "title": "realtime-adapter.ts",
+                "path": "frontend/src/core/threads/realtime-adapter.ts:439",
+            }
+        ],
     )
 
     replayed = log.replay()
@@ -182,3 +189,6 @@ def test_event_log_replays_workbench_snapshot(tmp_path: Path) -> None:
     assert replayed[0].workbench_snapshot.current_item_id == "cmd-1"
     assert replayed[0].workbench_snapshot.workspace_focus is not None
     assert replayed[0].workbench_snapshot.workspace_focus.view == "terminal"
+    assert len(replayed[0].grounding) == 1
+    assert replayed[0].grounding[0].title == "realtime-adapter.ts"
+    assert replayed[0].grounding[0].path.endswith(":439")

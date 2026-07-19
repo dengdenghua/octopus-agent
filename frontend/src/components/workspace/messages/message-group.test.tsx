@@ -137,6 +137,42 @@ describe("MessageGroup todo_write rendering", () => {
 });
 
 describe("MessageGroup reasoning grouping", () => {
+  it("does not echo a public checkpoint as thinking when it carries completed tools", () => {
+    const paths = ["a.py", "b.ts", "c.ts", "d.ts"];
+    const messages: AIMessage[] = [
+      {
+        id: "coverage-progress",
+        type: "ai",
+        content: "四个目标文件均已读取完毕，关键字段一致；下一步整理最终结论。",
+        additional_kwargs: {
+          public_progress: true,
+          progress_kind: "synthesize",
+          progress_sequence: 1,
+          timeline_sequence: 5,
+        },
+        tool_calls: paths.map((path, index) => ({
+          id: `read-${index}`,
+          name: "read_file",
+          args: { path },
+          timelineSequence: index + 1,
+          type: "tool_call" as const,
+        })),
+      },
+    ];
+
+    renderWithProviders(<MessageGroup messages={messages} />, {
+      locale: "zh-CN",
+    });
+
+    expect(screen.getAllByTestId("public-progress-event")).toHaveLength(1);
+    expect(
+      screen.getAllByTestId("process-timeline-event-execution"),
+    ).toHaveLength(4);
+    expect(
+      screen.queryByTestId("process-timeline-event-thinking"),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders public checkpoints inline between thinking and execution", () => {
     const messages: AIMessage[] = [
       {
@@ -205,7 +241,7 @@ describe("MessageGroup reasoning grouping", () => {
     expect(checkpoints[1]).toHaveAttribute("data-progress-sequence", "2");
     expect(checkpoints[1]).toHaveAttribute("data-timeline-sequence", "3");
     const groundingTrigger = screen.getByRole("button", {
-      name: "查阅了 1 处项目资料",
+      name: "预读了 0 篇项目文档 · 1 处代码",
     });
     expect(checkpoints[0]).toContainElement(groundingTrigger);
     expect(screen.queryByText("定向")).not.toBeInTheDocument();

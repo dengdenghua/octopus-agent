@@ -296,7 +296,8 @@ export const zhCN: Translations = {
     actionLabel: (action: string) => `Action: ${action}`,
     attachmentFallback: "附件",
     grounding: {
-      label: "查阅了 {count} 处项目资料",
+      summary: (docs: number, sources: number) =>
+        `预读了 ${docs} 篇项目文档 · ${sources} 处代码`,
       doc: "文档",
       source: "代码",
     },

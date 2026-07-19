@@ -307,7 +307,8 @@ export const enUS: Translations = {
     actionLabel: (action: string) => `Action: ${action}`,
     attachmentFallback: "attachment",
     grounding: {
-      label: "Consulted {count} project docs",
+      summary: (docs: number, sources: number) =>
+        `Prefetched ${docs} project doc${docs === 1 ? "" : "s"} · ${sources} code location${sources === 1 ? "" : "s"}`,
       doc: "doc",
       source: "code",
     },

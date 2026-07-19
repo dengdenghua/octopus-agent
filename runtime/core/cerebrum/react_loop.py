@@ -43,6 +43,7 @@ from runtime.core.cerebrum.react_context import (
 from runtime.core.cerebrum.react_convergence import (
     EvidenceConvergence,
     build_direct_answer_directive,
+    build_evidence_digest,
     evidence_answer_conflicts_with_goal,
     read_only_evidence_convergence,
 )
@@ -177,6 +178,7 @@ _PUBLIC_UPDATE_BOILERPLATE_RE = re.compile(
 )
 
 _FINAL_SYNTHESIS_UPDATE = "现有信息已经够了；我现在把关键点收束成最终回答。"
+_PUBLIC_EVIDENCE_NARRATIVE_TIMEOUT_S = 6.0
 
 
 def _safe_public_update(value: str | None) -> str:
@@ -196,6 +198,144 @@ def _safe_public_update(value: str | None) -> str:
     if _PUBLIC_UPDATE_BOILERPLATE_RE.fullmatch(cleaned):
         return ""
     return cleaned[:1200].rstrip()
+
+
+def _bounded_public_evidence_excerpt(value: Any, *, max_chars: int = 700) -> str:
+    """Keep the latest tool evidence useful without replaying a huge payload."""
+    if not isinstance(value, str):
+        value = json.dumps(value, ensure_ascii=False, default=str)
+    text = value.strip()
+    if not text:
+        return ""
+    # Runtime convergence/guard directives are instructions for the working
+    # model, not evidence the public narrator should paraphrase to the user.
+    text = re.split(
+        r"\n\n(?:\[(?:green-verification-convergence|duplicate-tools-collapsed|"
+        r"redundant-tool-skipped)\]|The user's requested read-only evidence is complete\.)",
+        text,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0].strip()
+    if len(text) <= max_chars:
+        return text
+    head = max_chars // 2
+    tail = max_chars - head
+    return f"{text[:head]}\n…\n{text[-tail:]}"
+
+
+def _build_public_evidence_narrative_input(
+    *,
+    goal: str,
+    step: ReActStep,
+    convergence: EvidenceConvergence | None,
+    evidence_steps: list[ReActStep] | None = None,
+) -> str:
+    """Build a compact, attributed snapshot of the just-finished milestone."""
+    actions = step.actions or ([step.action] if step.action else [])
+    sections: list[str] = [
+        "[original-user-request]",
+        (goal or "").strip()[:1600],
+        "[/original-user-request]",
+        "[just-completed-evidence]",
+    ]
+    if convergence is not None:
+        digest = build_evidence_digest(
+            convergence,
+            evidence_steps or [step],
+            max_chars_per_target=700,
+        )
+        if digest:
+            sections.append(digest)
+
+    results = step.action_results
+    if len(results) == len(actions):
+        for index, (action, result) in enumerate(zip(actions, results, strict=True), start=1):
+            parsed = _parse_action(action)
+            target = ""
+            if parsed is not None:
+                _name, args = parsed
+                target = _public_tool_target(args if isinstance(args, dict) else {})
+            status = "completed" if result.get("ok") is True else "failed"
+            excerpt = _bounded_public_evidence_excerpt(result.get("observation") or "")
+            sections.append(
+                f"Result {index} ({target or 'requested operation'}): {status}"
+                + (f"\n{excerpt}" if excerpt else "")
+            )
+    else:
+        parsed_targets: list[str] = []
+        for action in actions:
+            parsed = _parse_action(action)
+            if parsed is None:
+                continue
+            _name, args = parsed
+            target = _public_tool_target(args if isinstance(args, dict) else {})
+            if target and target not in parsed_targets:
+                parsed_targets.append(target)
+        if parsed_targets:
+            sections.append("Completed scope: " + ", ".join(parsed_targets[:8]))
+        excerpt = _bounded_public_evidence_excerpt(step.observation or "")
+        if excerpt:
+            sections.append(excerpt)
+    sections.append("[/just-completed-evidence]")
+    return "\n\n".join(part for part in sections if part)
+
+
+def _generate_public_evidence_narrative(
+    router: Any,
+    *,
+    model: str,
+    goal: str,
+    step: ReActStep,
+    convergence: EvidenceConvergence | None,
+    evidence_steps: list[ReActStep] | None = None,
+) -> str:
+    """Ask the working model for one factual, tools-disabled public update."""
+    from runtime.platform.models.llm import Message, ModelRequest
+
+    request = ModelRequest(
+        model=model,
+        messages=[
+            Message(
+                role="system",
+                content=(
+                    "Write a brief public progress update from completed evidence only. "
+                    "Use one or two natural sentences in the user's language. State one "
+                    "concrete thing now known and the next decision, correction, or action. "
+                    "Do not expose hidden reasoning, mention tool names or internal protocols, "
+                    "use a heading/list, repeat the request, or pretend this is the final answer. "
+                    "Never claim anything absent from the evidence. If there is no meaningful "
+                    "user-facing result, output exactly SKIP."
+                ),
+            ),
+            Message(
+                role="user",
+                content=_build_public_evidence_narrative_input(
+                    goal=goal,
+                    step=step,
+                    convergence=convergence,
+                    evidence_steps=evidence_steps,
+                ),
+            ),
+        ],
+        max_tokens=180,
+        temperature=0.35,
+        enable_thinking=False,
+        tools=[],
+    )
+    result = _collect_model_stream_text_with_deadline(
+        router,
+        request,
+        _PUBLIC_EVIDENCE_NARRATIVE_TIMEOUT_S,
+    )
+    if result is _MODEL_STREAM_DEADLINE:
+        return ""
+    text, _response = result
+    checkpoint = _safe_public_update(text)
+    if checkpoint.strip().casefold() == "skip":
+        return ""
+    # This is a conversational beat, not a second answer. A short hard cap
+    # keeps weak models from turning the checkpoint into a mini-report.
+    return checkpoint[:420].rstrip()
 
 
 def _public_tool_target(args: dict[str, Any]) -> str:
@@ -2694,6 +2834,9 @@ def stream_react_loop(
     _last_public_update_key = ""
     _public_narrative_started = False
     _synthesis_update_emitted = False
+    _realtime_public_narrative = bool(
+        intent.user_context.get("realtime_public_narrative")
+    )
     _last_fallback_phase = ""
     _same_phase_tool_rounds = 0
     if resume_from_iter == 0:
@@ -4337,6 +4480,7 @@ def stream_react_loop(
                     "emit Final Answer."
                 )
 
+        _evidence_convergence_became_active = False
         if _evidence_convergence_active is None and tool_action_requested:
             _evidence_convergence_active = read_only_evidence_convergence(
                 goal=intent.normalized_goal,
@@ -4344,6 +4488,7 @@ def stream_react_loop(
                 read_only=_read_only_turn,
             )
             if _evidence_convergence_active is not None:
+                _evidence_convergence_became_active = True
                 _force_convergence_next = True
                 _coverage = ", ".join(_evidence_convergence_active.covered[:6])
                 _coverage_note = f" Covered evidence: {_coverage}." if _coverage else ""
@@ -4360,14 +4505,67 @@ def stream_react_loop(
                     + (f"\n\n{_direct_answer_directive}" if _direct_answer_directive else "")
                 )
 
-        if (
+        _meaningful_result_checkpoint = (
             tool_action_requested
             and observation
             and _result_checkpoint_is_meaningful(
                 step.actions or [step.action],
                 succeeded=tool_ok,
             )
+        )
+        _model_result_update = ""
+        if (
+            _realtime_public_narrative
+            and not _model_supplied_update
+            and (
+                _meaningful_result_checkpoint
+                or (
+                    _evidence_convergence_became_active
+                    and _evidence_convergence_active is not None
+                    and len(_evidence_convergence_active.covered) > 1
+                )
+            )
         ):
+            try:
+                _model_result_update = _generate_public_evidence_narrative(
+                    router,
+                    model=effective_model,
+                    goal=intent.normalized_goal,
+                    step=step,
+                    convergence=(
+                        _evidence_convergence_active
+                        if _evidence_convergence_became_active
+                        else None
+                    ),
+                    evidence_steps=steps + [step],
+                )
+            except Exception as exc:  # noqa: BLE001 — optional public narration
+                _logger.warning("public evidence narration failed: %s", exc)
+                _model_result_update = ""
+            _model_result_update_key = re.sub(
+                r"\s+", " ", _model_result_update
+            ).strip().casefold()
+            if (
+                _model_result_update
+                and _model_result_update_key != _last_public_update_key
+            ):
+                _model_result_update_kind = _public_update_kind(
+                    _model_result_update,
+                    succeeded=tool_ok,
+                )
+                _public_narrative_started = True
+                yield {
+                    "type": "commentary_delta",
+                    "delta": _model_result_update,
+                    "progress_kind": _model_result_update_kind,
+                    "progress_source": "model",
+                    "iteration": i + 1,
+                }
+                if _model_result_update_kind == "synthesize":
+                    _synthesis_update_emitted = True
+                _last_public_update_key = _model_result_update_key
+
+        if _meaningful_result_checkpoint and not _model_result_update:
             _result_update = _fallback_tool_result_checkpoint(
                 step.actions or [step.action],
                 succeeded=tool_ok,

@@ -319,6 +319,43 @@ def test_commentary_delta_maps_to_non_terminal_agent_message(gateway: Any) -> No
     assert all(item["status"] == "completed" for item in messages)
 
 
+def test_codebase_grounding_is_attached_to_the_turn_snapshot(gateway: Any) -> None:
+    client, _ = gateway
+    sources = [
+        {
+            "kind": "source",
+            "title": "realtime-adapter.ts",
+            "path": "frontend/src/core/threads/realtime-adapter.ts:439",
+        }
+    ]
+    _set_script(
+        [
+            {"type": "codebase_grounding", "sources": sources},
+            {"type": "text_delta", "delta": "最终答案"},
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-grounding-snapshot",
+                "input": [{"type": "text", "text": "inspect adapter"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["grounding"] == sources
+    grounding_notifications = [
+        notification
+        for notification in out["notifications"]
+        if notification.method == "turn/grounding"
+    ]
+    assert grounding_notifications[-1].params["sources"] == sources
+
+
 def test_commentary_event_boundary_starts_a_new_timeline_item(gateway: Any) -> None:
     client, _ = gateway
     _set_script(

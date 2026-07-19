@@ -46,6 +46,7 @@ from runtime.protocol.items import (
     FileChange,
     FileChangeItem,
     FileHunk,
+    GroundingSource,
     Item,
     ItemStatus,
     ItemType,
@@ -348,6 +349,7 @@ class EventLog:
         phases: list[dict[str, Any]] | None = None,
         workspace_focus: dict[str, Any] | None = None,
         workbench_snapshot: dict[str, Any] | None = None,
+        grounding: list[dict[str, str]] | None = None,
     ) -> None:
         payload: dict[str, Any] = {}
         if phases is not None:
@@ -356,6 +358,8 @@ class EventLog:
             payload["workspaceFocus"] = workspace_focus
         if workbench_snapshot is not None:
             payload["workbenchSnapshot"] = workbench_snapshot
+        if grounding is not None:
+            payload["grounding"] = grounding
         if not payload:
             return
         self.append(
@@ -886,6 +890,15 @@ def _order_replayed_timeline(turn: Turn) -> None:
 
 
 def _apply_turn_update(turn: Turn, payload: dict[str, Any]) -> None:
+    grounding_raw = payload.get("grounding")
+    if isinstance(grounding_raw, list):
+        grounding: list[GroundingSource] = []
+        for raw in grounding_raw:
+            if not isinstance(raw, dict):
+                continue
+            with contextlib.suppress(TypeError, ValueError):
+                grounding.append(GroundingSource.model_validate(raw))
+        turn.grounding = grounding
     phases_raw = payload.get("phases")
     if isinstance(phases_raw, list):
         phases: list[AgentPhaseSnapshot] = []

@@ -459,6 +459,14 @@ class TurnStatus(StrEnum):
     FAILED = "failed"
 
 
+class GroundingSource(BaseModel):
+    """One project reference folded into the model context for this turn."""
+
+    kind: Literal["doc", "source"]
+    title: str
+    path: str
+
+
 class TurnParams(BaseModel):
     """Inputs to :meth:`Runtime.start_turn`. Carries only the fields
     octopus actually consumes; the surface is intentionally narrow
@@ -525,6 +533,7 @@ class Turn(BaseModel):
     items: list[Item] = Field(default_factory=list)
     error: dict[str, Any] | None = None
     params: TurnParams | None = None
+    grounding: list[GroundingSource] = Field(default_factory=list)
     phases: list[AgentPhaseSnapshot] = Field(default_factory=list)
     workspace_focus: WorkspaceFocus | None = Field(default=None, alias="workspaceFocus")
     workbench_snapshot: WorkbenchSnapshotV2 | None = Field(
@@ -544,6 +553,7 @@ __all__ = [
     "FileChange",
     "FileChangeItem",
     "FileHunk",
+    "GroundingSource",
     "Item",
     "ItemMarker",
     "ItemStatus",
