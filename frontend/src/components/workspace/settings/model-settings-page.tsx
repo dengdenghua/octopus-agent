@@ -309,6 +309,22 @@ function customModelReferences(model: ModelConfig): string[] {
   );
 }
 
+function customModelEntryId(model: ModelConfig): string {
+  return model.id?.trim() || model.name.trim();
+}
+
+function customModelMatchesIdentity(
+  model: ModelConfig,
+  identity: string,
+): boolean {
+  const normalized = identity.trim();
+  return Boolean(
+    normalized &&
+    (customModelEntryId(model) === normalized ||
+      model.name.trim() === normalized),
+  );
+}
+
 export function customModelMatchesSelection(
   model: ModelConfig,
   selection?: string | null,
@@ -320,7 +336,10 @@ export function customModelMatchesSelection(
 }
 
 export function customModelPreferredSelection(model: ModelConfig): string {
-  return model.models.find((value) => value.trim())?.trim() || model.name;
+  return (
+    model.models.find((value) => value.trim())?.trim() ||
+    customModelEntryId(model)
+  );
 }
 
 interface CompatDiagnosticUpstream {
@@ -937,24 +956,30 @@ export default function ModelSettingsPage() {
   const [deletingModel, setDeletingModel] = useState(false);
 
   const reconcileDeletedModel = useCallback(
-    (name: string) => {
-      const deletedModel = models.find((model) => model.name === name);
+    (modelId: string) => {
+      const deletedModel = models.find(
+        (model) => customModelEntryId(model) === modelId,
+      );
       const deletedReferences = deletedModel
         ? customModelReferences(deletedModel)
-        : [name];
+        : [modelId];
       deletedReferences.forEach((reference) =>
         clearThreadModelReferences(reference),
       );
       const settings = getLocalSettings();
       const deletedWasDefault = deletedModel
         ? customModelMatchesSelection(deletedModel, settings.context.model_name)
-        : settings.context.model_name === name;
+        : settings.context.model_name === modelId;
       if (!deletedWasDefault) {
-        setModels((current) => current.filter((model) => model.name !== name));
+        setModels((current) =>
+          current.filter((model) => customModelEntryId(model) !== modelId),
+        );
         return null;
       }
 
-      const replacementModel = models.find((model) => model.name !== name);
+      const replacementModel = models.find(
+        (model) => customModelEntryId(model) !== modelId,
+      );
       const replacement = replacementModel
         ? customModelPreferredSelection(replacementModel)
         : "";
@@ -965,17 +990,19 @@ export default function ModelSettingsPage() {
           model_name: replacement,
         },
       });
-      setModels((current) => current.filter((model) => model.name !== name));
+      setModels((current) =>
+        current.filter((model) => customModelEntryId(model) !== modelId),
+      );
       return replacement;
     },
     [models],
   );
 
-  const doDeleteModel = async (name: string) => {
+  const doDeleteModel = async (modelId: string) => {
     setDeletingModel(true);
     try {
       const res = await fetch(
-        `${getBackendBaseURL()}/api/config/custom-models/${encodeURIComponent(name)}`,
+        `${getBackendBaseURL()}/api/config/custom-models/${encodeURIComponent(modelId)}`,
         {
           method: "DELETE",
           headers: authHeaders(),
@@ -985,7 +1012,7 @@ export default function ModelSettingsPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `Delete failed: ${res.status}`);
       }
-      const replacement = reconcileDeletedModel(name);
+      const replacement = reconcileDeletedModel(modelId);
       if (replacement === null) {
         toast.success(t.settings.model.deleteSuccess);
       } else if (replacement) {
@@ -1009,8 +1036,8 @@ export default function ModelSettingsPage() {
     }
   };
 
-  const handleDelete = (name: string) => {
-    setModelToDelete(name);
+  const handleDelete = (modelId: string) => {
+    setModelToDelete(modelId);
   };
 
   const handleReconnect = () => {
@@ -1085,6 +1112,7 @@ export default function ModelSettingsPage() {
           gatewayStatus,
           defaultModelName,
           models: models.map((model) => ({
+            id: customModelEntryId(model),
             name: model.name,
             display_name: model.display_name,
             provider: model.provider,
@@ -1093,7 +1121,8 @@ export default function ModelSettingsPage() {
             supports_thinking: model.supports_thinking,
             supports_vision: model.supports_vision,
             isDefault: customModelMatchesSelection(model, defaultModelName),
-            compat_diagnostic: compatDiagnostics.byId[model.name] ?? null,
+            compat_diagnostic:
+              compatDiagnostics.byId[customModelEntryId(model)] ?? null,
           })),
           builtInCompatProfiles: compatProfileCatalog.items.map((item) => ({
             id: item.id,
@@ -1146,13 +1175,19 @@ export default function ModelSettingsPage() {
         run: async (input) => {
           const name = String(input?.name || "").trim();
           if (!name) throw new Error("name is required");
+          const model = models.find((candidate) =>
+            customModelMatchesIdentity(candidate, name),
+          );
+          if (!model) {
+            throw new Error(`custom model not found: ${name}`);
+          }
           const started = performance.now();
           const res = await fetch(
             `${getBackendBaseURL()}/api/config/custom-models/test`,
             {
               method: "POST",
               headers: jsonAuthHeaders(),
-              body: JSON.stringify({ id: name }),
+              body: JSON.stringify({ id: customModelEntryId(model) }),
               signal: AbortSignal.timeout(8000),
             },
           );
@@ -1182,7 +1217,9 @@ export default function ModelSettingsPage() {
         run: async (input) => {
           const name = String(input?.name || "").trim();
           if (!name) throw new Error("name is required");
-          const model = models.find((candidate) => candidate.name === name);
+          const model = models.find((candidate) =>
+            customModelMatchesIdentity(candidate, name),
+          );
           if (!model) {
             throw new Error(`custom model not found: ${name}`);
           }
@@ -1216,11 +1253,15 @@ export default function ModelSettingsPage() {
         run: async (input) => {
           const name = String(input?.name || "").trim();
           if (!name) throw new Error("name is required");
-          if (!models.some((model) => model.name === name)) {
+          const model = models.find((candidate) =>
+            customModelMatchesIdentity(candidate, name),
+          );
+          if (!model) {
             throw new Error(`custom model not found: ${name}`);
           }
+          const modelId = customModelEntryId(model);
           const res = await fetch(
-            `${getBackendBaseURL()}/api/config/custom-models/${encodeURIComponent(name)}`,
+            `${getBackendBaseURL()}/api/config/custom-models/${encodeURIComponent(modelId)}`,
             {
               method: "DELETE",
               headers: authHeaders(),
@@ -1230,10 +1271,10 @@ export default function ModelSettingsPage() {
             const data = await res.json().catch(() => ({}));
             throw new Error(data.detail || `Delete failed: ${res.status}`);
           }
-          const replacement = reconcileDeletedModel(name);
+          const replacement = reconcileDeletedModel(modelId);
           await fetchModels();
           return {
-            deleted: name,
+            deleted: modelId,
             defaultModelName:
               replacement === null ? defaultModelName : replacement,
           };
@@ -1255,13 +1296,13 @@ export default function ModelSettingsPage() {
   ]);
 
   const deleteModelConfig = modelToDelete
-    ? models.find((model) => model.name === modelToDelete)
+    ? models.find((model) => customModelEntryId(model) === modelToDelete)
     : undefined;
   const deletingCurrentDefault = deleteModelConfig
     ? customModelMatchesSelection(deleteModelConfig, defaultModelName)
     : modelToDelete !== null && modelToDelete === defaultModelName;
   const deleteReplacementModel = deletingCurrentDefault
-    ? models.find((model) => model.name !== modelToDelete)
+    ? models.find((model) => customModelEntryId(model) !== modelToDelete)
     : undefined;
   const deleteReplacement =
     deleteReplacementModel?.display_name ??
@@ -1333,8 +1374,9 @@ export default function ModelSettingsPage() {
             {models.length > 0 || !modelsLoadError ? (
               <div className="divide-y divide-border rounded-lg border border-border">
                 {models.map((m) => {
+                  const modelId = customModelEntryId(m);
                   const list = Array.isArray(m.models) ? m.models : [];
-                  const diagnostic = compatDiagnostics.byId[m.name];
+                  const diagnostic = compatDiagnostics.byId[modelId];
                   const displayName = m.display_name || m.name;
                   const isDefault = customModelMatchesSelection(
                     m,
@@ -1342,7 +1384,7 @@ export default function ModelSettingsPage() {
                   );
                   return (
                     <div
-                      key={m.name}
+                      key={modelId}
                       className={cn(
                         "flex flex-col items-stretch justify-between gap-4 px-4 py-4 sm:flex-row sm:items-start sm:px-5",
                         isDefault && "bg-emerald-500/[0.035]",
@@ -1367,7 +1409,7 @@ export default function ModelSettingsPage() {
                           <ul className="mt-1.5 space-y-0.5 font-mono text-[11px] text-foreground/80">
                             {list.map((id, idx) => (
                               <li
-                                key={`${m.name}:${idx}:${id}`}
+                                key={`${modelId}:${idx}:${id}`}
                                 className="flex items-center gap-2"
                               >
                                 <span className="w-4 shrink-0 text-right text-muted-foreground/60 tabular-nums">
@@ -1409,7 +1451,7 @@ export default function ModelSettingsPage() {
                           className="text-xs font-medium text-orange-500 hover:text-orange-600"
                           onClick={() =>
                             setEditingModel(
-                              editingModel === m.name ? null : m.name,
+                              editingModel === modelId ? null : modelId,
                             )
                           }
                           aria-label={`${t.common.edit}: ${displayName}`}
@@ -1418,7 +1460,7 @@ export default function ModelSettingsPage() {
                         </button>
                         <button
                           className="text-xs font-medium text-orange-500 hover:text-orange-600"
-                          onClick={() => handleDelete(m.name)}
+                          onClick={() => handleDelete(modelId)}
                           aria-label={`${t.common.delete}: ${displayName}`}
                         >
                           {t.common.delete}
@@ -1597,7 +1639,11 @@ export default function ModelSettingsPage() {
             </DialogTitle>
             <DialogDescription className="text-[12.5px] leading-5">
               {modelToDelete
-                ? t.settings.model.deleteConfirm(modelToDelete)
+                ? t.settings.model.deleteConfirm(
+                    deleteModelConfig?.display_name ||
+                      deleteModelConfig?.name ||
+                      modelToDelete,
+                  )
                 : ""}
             </DialogDescription>
             {deletingCurrentDefault && (

@@ -143,7 +143,7 @@ describe("custom model selection identity", () => {
         name: "empty-alias",
         models: [],
       }),
-    ).toBe("empty-alias");
+    ).toBe("empty-entry");
   });
 });
 
@@ -426,6 +426,71 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     });
     await waitFor(() => {
       expect(screen.queryByText("Disposable")).not.toBeInTheDocument();
+    });
+  });
+
+  it("deletes by stable id when the display name and alias differ", async () => {
+    const user = userEvent.setup();
+    let models: unknown[] = [
+      {
+        id: "kimi-k3",
+        name: "Kimi K3",
+        display_name: "Kimi K3 (火山 Agent Plan)",
+        models: ["kimi-k3-upstream"],
+        provider: "openai",
+        base_url: "https://ark.example.test/v1",
+        has_api_key: true,
+      },
+    ];
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("/api/config/custom-models/compat-diagnostics")) {
+          return jsonOk({ diagnostics: [] });
+        }
+        if (url.includes("/api/config/openai-compat-profiles")) {
+          return jsonOk({ diagnostics: [] });
+        }
+        if (
+          url.includes("/api/config/custom-models/kimi-k3") &&
+          init?.method === "DELETE"
+        ) {
+          models = [];
+          return jsonOk({ ok: true, removed: true });
+        }
+        if (url.includes("/api/config/custom-models")) {
+          return jsonOk({ models });
+        }
+        return jsonOk({ default: "", models: [] });
+      },
+    );
+
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+    await screen.findByText("Kimi K3 (火山 Agent Plan)");
+    await user.click(
+      screen.getByRole("button", {
+        name: "删除: Kimi K3 (火山 Agent Plan)",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "删除模型" });
+    expect(
+      within(dialog).getByText("模型“Kimi K3 (火山 Agent Plan)”将被永久删除。"),
+    ).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "删除" }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input, init]) => {
+          const url = typeof input === "string" ? input : input.toString();
+          return (
+            url.endsWith("/api/config/custom-models/kimi-k3") &&
+            (init as RequestInit | undefined)?.method === "DELETE"
+          );
+        }),
+      ).toBe(true);
+      expect(
+        screen.queryByText("Kimi K3 (火山 Agent Plan)"),
+      ).not.toBeInTheDocument();
     });
   });
 
