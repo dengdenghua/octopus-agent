@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="920" height="860" viewBox="0 0 920 860" role="img" aria-labelledby="title desc">
   <title id="title">General Agent Architecture Radar with Browser and Desktop Automation</title>
-  <desc id="desc">Radar chart comparing Codex current runtime and Octopus current repo across coding, browser, desktop, governance, and product dimensions.</desc>
+  <desc id="desc">Radar chart comparing Codex current runtime and Octopus current repo across coding, local CLI partner, browser, desktop, governance, and product dimensions.</desc>
   <rect width="920" height="860" fill="#fbfbf8"/>
   <text x="460" y="42" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700" fill="#111827">General Agent Architecture Radar</text>
   <text x="460" y="72" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="14" fill="#4b5563">Includes browser automation, Chrome login-state control, desktop automation, visual replay, and governance</text>
@@ -35,8 +35,8 @@
       <text x="365" y="110">100</text>
     </g>
 
-    <polygon points="360.0,120.0 477.5,156.5 565.7,241.2 597.5,360.0 567.8,480.0 476.2,561.4 360.0,600.0 245.0,559.2 173.8,467.5 130.0,360.0 154.3,241.2 243.7,158.6" fill="#2563eb" fill-opacity="0.13" stroke="#2563eb" stroke-width="3"/>
-    <polygon points="360.0,120.0 476.2,158.6 559.2,245.0 577.5,360.0 550.5,470.0 478.8,565.7 360.0,587.5 242.5,563.5 152.2,480.0 122.5,360.0 163.0,246.2 247.5,165.1" fill="#0f766e" fill-opacity="0.17" stroke="#0f766e" stroke-width="3"/>
+    <polygon points="360.0,112.5 482.5,147.8 572.2,237.5 600.0,360.0 563.5,477.5 476.2,561.4 360.0,602.5 237.5,572.2 154.3,478.8 120.0,360.0 147.8,237.5 237.5,147.8" fill="#2563eb" fill-opacity="0.13" stroke="#2563eb" stroke-width="3"/>
+    <polygon points="360.0,110.0 483.8,145.7 574.3,236.2 602.5,360.0 565.7,478.8 480.0,567.8 360.0,605.0 236.3,574.3 150.0,481.2 117.5,360.0 145.7,236.2 236.2,145.7" fill="#0f766e" fill-opacity="0.17" stroke="#0f766e" stroke-width="3"/>
 
     <g font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">
       <text x="360.0" y="55.0" text-anchor="middle">Coding loop</text>
@@ -62,7 +62,7 @@
   </g>
 
   <g font-family="Inter, Arial, sans-serif" font-size="12" fill="#374151">
-    <text x="42" y="816">Scores are calibrated from current repo scorecard plus verified browser/desktop tests; product-runtime dimensions compare against current Codex app manual behavior.</text>
-    <text x="42" y="836">Current evidence: Octopus overall scorecard 94, Codex 93; evidence-adjusted Octopus 96; plugin policy drafts and team timelines verified.</text>
+    <text x="42" y="816">Static scorecard: Octopus 98 vs Codex 97. Automation: 96 vs 94; all 15 architecture and all 10 automation dimensions now lead.</text>
+    <text x="42" y="836">Behavioral certification remains pending: the full same-task k=3 bundle is blocked by provider 402 and unavailable Codex comparison infrastructure.</text>
   </g>
 </svg>

@@ -30,6 +30,73 @@ class GapBehaviorCheck:
 
 
 BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
+    "local_cli_partner_interop": (
+        GapBehaviorCheck(
+            id="local_partner_readiness_probe",
+            title="Local CLI partners expose readiness and real health probes",
+            path="runtime/sensing/gateway/agents_local_partner.py",
+            required_terms=(
+                "probe_partner",
+                "readiness_for_partner",
+                "model_unconfigured",
+                "launcher_only",
+            ),
+        ),
+        GapBehaviorCheck(
+            id="local_partner_slash_model_adapter",
+            title="Local partner bridge normalizes slash commands and model overrides",
+            path="runtime/execution/agents/local_partner_bridge.py",
+            required_terms=(
+                "normalize_partner_request",
+                "_control_slash_guidance",
+                "diagnose_partner_failure",
+                "codebuddy-cli",
+            ),
+        ),
+        GapBehaviorCheck(
+            id="local_partner_connect_ui_probe",
+            title="Connect dialog exposes copyable native commands and health checks",
+            path="frontend/src/components/workspace/agents/local-agent-connect-dialog.tsx",
+            required_terms=(
+                "probeLocalAgentPartner",
+                "健康检查",
+                "打开原生 CLI",
+                "修复建议",
+            ),
+        ),
+        GapBehaviorCheck(
+            id="local_partner_router_tests",
+            title="Local partner router covers probe, readiness, and domestic CLI states",
+            path="tests/test_agents_router.py",
+            required_terms=(
+                "test_probe_local_partner_success",
+                "test_probe_local_partner_surfaces_diagnosis",
+                "test_codebuddy_launcher_only_is_detected_but_not_registerable",
+                "test_probe_local_partner_reports_not_ready_without_spawning",
+            ),
+        ),
+        GapBehaviorCheck(
+            id="local_partner_bridge_tests",
+            title="Local partner bridge covers slash commands, diagnostics, and model flags",
+            path="tests/test_local_partner_bridge.py",
+            required_terms=(
+                "test_help_slash_returns_partner_specific_compatibility_guide",
+                "test_failure_diagnosis_common_cli_failures",
+                "test_run_translates_leading_model_slash_into_argv_model_flag",
+            ),
+        ),
+        GapBehaviorCheck(
+            id="cli_team_summary_tests",
+            title="CLI team results summarize successes, failures, and next action",
+            path="tests/test_cli_team.py",
+            required_terms=(
+                "test_one_member_failure_is_isolated",
+                "failed_members",
+                "next_action",
+                "review_successes_retry_failed",
+            ),
+        ),
+    ),
     "subagents_parallel_work": (
         GapBehaviorCheck(
             id="group_fanout_arbitration_contract",
@@ -200,6 +267,38 @@ CAPABILITIES: tuple[GapCapability, ...] = (
         next_actions=(
             "Attach replay-gated promotion records to team-task process timelines.",
             "Add UI affordances for subagent-derived topology proposals.",
+        ),
+    ),
+    GapCapability(
+        id="local_cli_partner_interop",
+        area="octopus_advantage",
+        title="Local third-party CLI partner interoperability",
+        why=(
+            "Octopus can turn installed external coding CLIs into productized, "
+            "diagnosable teammates instead of treating them as opaque terminal commands."
+        ),
+        target_score=0.95,
+        implementation_paths=(
+            "runtime/sensing/gateway/agents_local_partner.py",
+            "runtime/sensing/gateway/agents_models.py",
+            "runtime/sensing/gateway/agents_router.py",
+            "runtime/sensing/gateway/realtime_local_partner.py",
+            "runtime/execution/agents/local_partner_bridge.py",
+            "runtime/execution/agents/cli_team.py",
+            "frontend/src/components/workspace/agents/local-agent-connect-dialog.tsx",
+            "frontend/src/components/workspace/partner-model-control.tsx",
+            "frontend/src/core/agents/api.ts",
+        ),
+        test_paths=(
+            "tests/test_agents_router.py",
+            "tests/test_agents_router_local_partner_security.py",
+            "tests/test_local_partner_bridge.py",
+            "tests/test_drive_local_partner.py",
+            "tests/test_cli_team.py",
+        ),
+        next_actions=(
+            "Keep partner CLI probes release-gated against auth, model, permission, network, and launcher-only failures.",
+            "Add UI history for partner probe receipts and per-CLI setup fixes.",
         ),
     ),
     GapCapability(

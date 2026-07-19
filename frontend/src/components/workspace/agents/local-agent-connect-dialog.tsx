@@ -4,6 +4,7 @@ import {
   AlertCircleIcon,
   BotIcon,
   CheckIcon,
+  ClipboardIcon,
   Code2Icon,
   Loader2Icon,
   TerminalSquareIcon,
@@ -23,8 +24,10 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   listLocalAgentPartners,
+  probeLocalAgentPartner,
   registerLocalAgentPartners,
   type LocalAgentPartner,
+  type LocalAgentPartnerProbeResponse,
 } from "@/core/agents/api";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -32,6 +35,7 @@ import { cn } from "@/lib/utils";
 const PARTNER_ICONS: Record<string, typeof BotIcon> = {
   "claude-code": TerminalSquareIcon,
   "codex-cli": Code2Icon,
+  "codebuddy-cli": Code2Icon,
   openclaw: BotIcon,
 };
 
@@ -46,6 +50,10 @@ export function LocalAgentConnectDialog({
   const { t } = useI18n();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [aliases, setAliases] = useState<Record<string, string>>({});
+  const [probeResults, setProbeResults] = useState<
+    Record<string, LocalAgentPartnerProbeResponse>
+  >({});
+  const [probingId, setProbingId] = useState("");
 
   const partnerBadge = (
     partner: LocalAgentPartner,
@@ -57,6 +65,27 @@ export function LocalAgentConnectDialog({
       return {
         label: t.localAgentConnect.statusConnected,
         className: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+      };
+    }
+    if (partner.detected && partner.ready) {
+      return {
+        label: "可连接",
+        className: "bg-primary/10 text-primary ring-primary/15",
+      };
+    }
+    if (partner.readiness_status === "model_unconfigured") {
+      return {
+        label: "模型未配置",
+        className: "bg-amber-50 text-amber-700 ring-amber-100",
+      };
+    }
+    if (
+      partner.readiness_status === "launcher_only" ||
+      partner.readiness_status === "headless_unsupported"
+    ) {
+      return {
+        label: "仅可手动",
+        className: "bg-amber-50 text-amber-700 ring-amber-100",
       };
     }
     if (partner.detected) {
@@ -120,7 +149,7 @@ export function LocalAgentConnectDialog({
     if (!open || partners.length === 0) return;
     setSelectedIds(
       partners
-        .filter((partner) => partner.detected && !partner.registered)
+        .filter((partner) => partner.detected && partner.ready && !partner.registered)
         .map((partner) => partner.id),
     );
     setAliases((prev) => ({
@@ -133,11 +162,16 @@ export function LocalAgentConnectDialog({
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectableCount = partners.filter(
-    (partner) => partner.detected && !partner.registered,
+    (partner) => partner.detected && partner.ready && !partner.registered,
   ).length;
 
   const togglePartner = (partner: LocalAgentPartner) => {
-    if (!partner.detected || partner.registered || registerMutation.isPending) {
+    if (
+      !partner.detected ||
+      !partner.ready ||
+      partner.registered ||
+      registerMutation.isPending
+    ) {
       return;
     }
     setSelectedIds((prev) =>
@@ -159,6 +193,33 @@ export function LocalAgentConnectDialog({
         alias: aliases[partner.id] || partner.default_alias,
       })),
     );
+  };
+
+  const copyCommand = async (command: string) => {
+    try {
+      await navigator.clipboard.writeText(command);
+      toast.success("已复制命令");
+    } catch {
+      toast.error("复制失败，请手动复制");
+    }
+  };
+
+  const handleProbe = async (partner: LocalAgentPartner) => {
+    if (!partner.detected || probingId) return;
+    setProbingId(partner.id);
+    try {
+      const result = await probeLocalAgentPartner(partner.id);
+      setProbeResults((prev) => ({ ...prev, [partner.id]: result }));
+      if (result.ok) {
+        toast.success(`${partner.name} 健康检查通过`);
+      } else {
+        toast.error(result.failure_title || `${partner.name} 健康检查未通过`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "健康检查失败");
+    } finally {
+      setProbingId("");
+    }
   };
 
   return (
@@ -195,17 +256,43 @@ export function LocalAgentConnectDialog({
           ) : (
             partners.map((partner) => {
               const Icon = PARTNER_ICONS[partner.id] ?? BotIcon;
+              const avatarUrl = partner.avatar_url?.trim();
               const checked = selectedSet.has(partner.id);
               const disabled =
                 !partner.detected ||
+                !partner.ready ||
                 partner.registered ||
                 registerMutation.isPending;
               const badge = partnerBadge(partner);
+              const probeResult = probeResults[partner.id];
+              const isProbing = probingId === partner.id;
+              const commandRows = [
+                partner.install_command
+                  ? { label: "安装", command: partner.install_command }
+                  : null,
+                partner.native_command
+                  ? { label: "打开原生 CLI", command: partner.native_command }
+                  : null,
+                partner.verify_command
+                  ? { label: "验证", command: partner.verify_command }
+                  : null,
+              ].filter(
+                (item): item is { label: string; command: string } =>
+                  Boolean(item?.command),
+              );
+              const activate = () => togglePartner(partner);
               return (
-                <button
+                <div
                   key={partner.id}
-                  type="button"
-                  onClick={() => togglePartner(partner)}
+                  role={disabled ? undefined : "button"}
+                  tabIndex={disabled ? undefined : 0}
+                  onClick={activate}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      activate();
+                    }
+                  }}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-lg border border-border-default bg-background/75 p-3 text-left transition-colors",
                     !disabled && "hover:border-primary/25 hover:bg-muted/20",
@@ -221,10 +308,16 @@ export function LocalAgentConnectDialog({
                         : "border-border-default bg-muted text-muted-foreground",
                     )}
                   >
-                    {checked || partner.registered ? (
-                      <CheckIcon className="size-4" />
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt=""
+                        className="size-5 rounded-sm object-contain"
+                      />
+                    ) : checked || partner.registered ? (
+                      <CheckIcon className="size-4" aria-hidden="true" />
                     ) : (
-                      <Icon className="size-4" />
+                      <Icon className="size-4" aria-hidden="true" />
                     )}
                   </span>
                   <span className="min-w-0 flex-1">
@@ -245,6 +338,115 @@ export function LocalAgentConnectDialog({
                     <span className="mt-1 block text-xs text-muted-foreground">
                       {partner.description}
                     </span>
+                    {partner.readiness_message ? (
+                      <span
+                        className={cn(
+                          "mt-1 block text-[11px]",
+                          partner.ready
+                            ? "text-emerald-700"
+                            : "text-amber-700",
+                        )}
+                      >
+                        {partner.readiness_message}
+                      </span>
+                    ) : null}
+                    {partner.fix_hint && !partner.ready ? (
+                      <span className="mt-1 block text-[11px] text-muted-foreground">
+                        修复建议：{partner.fix_hint}
+                      </span>
+                    ) : null}
+                    {partner.setup_hint ||
+                    partner.interaction_hint ||
+                    commandRows.length > 0 ? (
+                      <span
+                        className="mt-2 block space-y-1 rounded-md border border-border-default/70 bg-muted/20 p-2"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {partner.setup_hint ? (
+                          <span className="block text-[11px] text-muted-foreground">
+                            {partner.setup_hint}
+                          </span>
+                        ) : null}
+                        {partner.interaction_hint ? (
+                          <span className="block text-[11px] leading-relaxed text-muted-foreground">
+                            {partner.interaction_hint}
+                          </span>
+                        ) : null}
+                        {commandRows.length > 0 ? (
+                          <span className="flex flex-wrap gap-1">
+                            {partner.detected ? (
+                              <button
+                                type="button"
+                                onClick={() => void handleProbe(partner)}
+                                disabled={Boolean(probingId)}
+                                className="inline-flex max-w-full items-center gap-1 rounded border border-border-default/70 bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:border-primary/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {isProbing ? (
+                                  <Loader2Icon
+                                    className="size-3 animate-spin"
+                                    aria-hidden="true"
+                                  />
+                                ) : (
+                                  <CheckIcon
+                                    className="size-3"
+                                    aria-hidden="true"
+                                  />
+                                )}
+                                <span>{isProbing ? "检查中" : "健康检查"}</span>
+                              </button>
+                            ) : null}
+                            {commandRows.map((row) => (
+                              <button
+                                key={`${partner.id}-${row.label}`}
+                                type="button"
+                                onClick={() => void copyCommand(row.command)}
+                                className="inline-flex max-w-full items-center gap-1 rounded border border-border-default/70 bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
+                                title={row.command}
+                              >
+                                <ClipboardIcon
+                                  className="size-3"
+                                  aria-hidden="true"
+                                />
+                                <span>{row.label}</span>
+                                <code className="max-w-[180px] truncate font-mono">
+                                  {row.command}
+                                </code>
+                              </button>
+                            ))}
+                          </span>
+                        ) : null}
+                        {probeResult ? (
+                          <span
+                            className={cn(
+                              "mt-1 block rounded border px-2 py-1 text-[11px]",
+                              probeResult.ok
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                : "border-amber-200 bg-amber-50 text-amber-800",
+                            )}
+                          >
+                            <span className="block font-medium">
+                              {probeResult.ok
+                                ? "健康检查通过，可真实派工"
+                                : probeResult.failure_title ||
+                                  "健康检查未通过"}
+                              {typeof probeResult.elapsed_ms === "number"
+                                ? `（${probeResult.elapsed_ms}ms）`
+                                : ""}
+                            </span>
+                            {!probeResult.ok && probeResult.fix_hint ? (
+                              <span className="mt-0.5 block">
+                                建议：{probeResult.fix_hint}
+                              </span>
+                            ) : null}
+                            {!probeResult.ok && probeResult.raw_error ? (
+                              <code className="mt-0.5 block truncate font-mono text-[10px] opacity-80">
+                                {probeResult.raw_error}
+                              </code>
+                            ) : null}
+                          </span>
+                        ) : null}
+                      </span>
+                    ) : null}
                     {partner.executable ? (
                       <span className="mt-1 block truncate text-[11px] text-muted-foreground/80">
                         {partner.executable}
@@ -270,7 +472,7 @@ export function LocalAgentConnectDialog({
                       />
                     </span>
                   </span>
-                </button>
+                </div>
               );
             })
           )}

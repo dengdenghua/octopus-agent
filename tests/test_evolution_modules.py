@@ -695,8 +695,8 @@ class TestAgentCompetitorScorecard:
         ]
         assert report["surpass_summary"] == {
             "schema": "octopus.agent_surpass_summary.v1",
-            "total_dimensions": 14,
-            "surpassed_dimensions": 14,
+            "total_dimensions": 15,
+            "surpassed_dimensions": 15,
             "gap_dimensions": 0,
             "target_gap_dimensions": 0,
             "focus_gap_dimensions": 0,
@@ -717,6 +717,23 @@ class TestAgentCompetitorScorecard:
             link["id"] == "agent_loop_quality"
             and link["href"] == "/api/evolution/agent-loop-quality"
             for link in general["operator_drilldown"]["links"]
+        )
+        local_cli = next(
+            row for row in report["dimensions"] if row["id"] == "local_cli_partner_interop"
+        )
+        assert local_cli["scores"] == {
+            "codex": 94,
+            "claude_code": 82,
+            "openclaw": 78,
+            "hermes": 82,
+            "octopus": 98,
+        }
+        assert local_cli["octopus_evidence_readiness"] == 1.0
+        assert local_cli["octopus_missing_evidence_count"] == 0
+        assert any(
+            link["id"] == "cli_partner_probe"
+            and link["href"] == "/api/agents/local-partners/{partner_id}/probe"
+            for link in local_cli["operator_drilldown"]["links"]
         )
         employee = next(
             row for row in report["dimensions"] if row["id"] == "digital_employee_workflows"
@@ -888,7 +905,7 @@ class TestAgentCompetitorScorecard:
             "total": 7,
         }
         assert report["octopus_strengths"]
-        assert len(report["octopus_strengths"]) == 14
+        assert len(report["octopus_strengths"]) == 15
         assert report["next_focus"] == []
 
     def test_e2e_surpass_certification_unifies_release_evidence(
@@ -957,6 +974,7 @@ class TestAgentCompetitorScorecard:
         assert coverage["multi_agent_digital_employee"]["scorecard_dimension_ids"] == [
             "digital_employee_workflows",
             "subagents_parallelism",
+            "local_cli_partner_interop",
             "differentiated_agent_os",
         ]
         static_checks = [

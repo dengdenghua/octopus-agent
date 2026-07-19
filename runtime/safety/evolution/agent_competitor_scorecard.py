@@ -75,7 +75,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
     ScoreDimension(
         id="general_agent_loop",
         title="General agent loop",
-        weight=8,
+        weight=7,
         why="Handle broad user goals, choose tools, keep context, and finish without forcing a coding-only path.",
         scores={
             "codex": 97,
@@ -97,7 +97,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
     ScoreDimension(
         id="digital_employee_workflows",
         title="Digital employee workflows",
-        weight=8,
+        weight=7,
         why="Run persistent workspaces, recurring tasks, handoffs, memory, and accountable long-running work.",
         scores={
             "codex": 96,
@@ -119,7 +119,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
     ScoreDimension(
         id="core_coding_loop",
         title="Core coding loop",
-        weight=11,
+        weight=10,
         why="Plan, edit, run, verify, and recover inside a real repository.",
         scores={
             "codex": 99,
@@ -154,7 +154,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
     ScoreDimension(
         id="product_experience",
         title="IDE and product experience",
-        weight=6,
+        weight=5,
         why="Make the working loop feel fast, obvious, and low-friction for operators.",
         scores={
             "codex": 98,
@@ -221,6 +221,27 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         octopus_next_actions=(
             "Expose timeout, queue, and cancellation-latency trends per agent role.",
             "Keep process-isolation compatibility and worker replacement limits release-gated.",
+        ),
+    ),
+    ScoreDimension(
+        id="local_cli_partner_interop",
+        title="Local third-party CLI partner interoperability",
+        weight=5,
+        why=(
+            "Detect, register, probe, diagnose, and team-run external coding CLIs "
+            "without forcing users to abandon their native CLI subscriptions or muscle memory."
+        ),
+        scores={
+            "codex": 94,
+            "claude_code": 82,
+            "openclaw": 78,
+            "hermes": 82,
+            "octopus": 98,
+        },
+        octopus_evidence_ids=("local_cli_partner_interop", "subagents_parallel_work"),
+        octopus_next_actions=(
+            "Keep CodeBuddy/Codex/Claude/Trae probes release-gated with auth, model, permission, network, and launcher-only failures.",
+            "Add retained health-check receipts and per-provider setup history in the local partner UI.",
         ),
     ),
     ScoreDimension(
@@ -315,7 +336,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
     ScoreDimension(
         id="differentiated_agent_os",
         title="Agent OS differentiation",
-        weight=8,
+        weight=7,
         why="Durable teams, memory, governance, and self-evolution beyond task-local coding.",
         scores={
             "codex": 96,
@@ -746,6 +767,29 @@ def _operator_evidence_links(
                 "method": "GET",
                 "href": "/api/evolution/agent-loop-quality",
             }
+        )
+    if dimension_id == "local_cli_partner_interop" or "local_cli_partner_interop" in evidence_ids:
+        links.extend(
+            [
+                {
+                    "id": "local_partners",
+                    "label": "Local CLI partners",
+                    "method": "GET",
+                    "href": "/api/agents/local-partners",
+                },
+                {
+                    "id": "cli_team_status",
+                    "label": "CLI team status",
+                    "method": "GET",
+                    "href": "/api/cli-team/status",
+                },
+                {
+                    "id": "cli_partner_probe",
+                    "label": "Probe local CLI partner",
+                    "method": "POST",
+                    "href": "/api/agents/local-partners/{partner_id}/probe",
+                },
+            ]
         )
     if dimension_id == "repo_context" or "long_term_learning" in evidence_ids:
         links.append(

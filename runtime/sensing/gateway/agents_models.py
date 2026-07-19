@@ -108,11 +108,22 @@ class LocalPartnerWire(BaseModel):
     name: str
     default_alias: str
     description: str
+    avatar_url: str | None = None
     detected: bool = False
     registered: bool = False
     status: str = "missing"
     command: str | None = None
     executable: str | None = None
+    ready: bool = False
+    headless_supported: bool = False
+    readiness_status: str = "missing"
+    readiness_message: str = ""
+    fix_hint: str | None = None
+    install_command: str | None = None
+    native_command: str | None = None
+    verify_command: str | None = None
+    setup_hint: str | None = None
+    interaction_hint: str | None = None
 
 
 class LocalPartnerRegisterItem(BaseModel):
@@ -137,6 +148,24 @@ class LocalPartnerRegisterResponse(BaseModel):
     registered_count: int = 0
     already_exists_count: int = 0
     skipped_count: int = 0
+
+
+class LocalPartnerProbeResponse(BaseModel):
+    id: str
+    agent_id: str = ""
+    ok: bool = False
+    detected: bool = False
+    ready: bool = False
+    status: str = "missing"
+    command: str | None = None
+    executable: str | None = None
+    output: str = ""
+    error: str = ""
+    raw_error: str = ""
+    failure_kind: str | None = None
+    failure_title: str = ""
+    fix_hint: str | None = None
+    elapsed_ms: int = 0
 
 
 # Task control bodies. Defined at module level so FastAPI's Pydantic

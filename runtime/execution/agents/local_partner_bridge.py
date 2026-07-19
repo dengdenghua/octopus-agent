@@ -1,5 +1,5 @@
 """Execution bridge for LocalPartner agents — drive an official coding-agent
-CLI (Claude Code, Codex) directly, with the user's own login/subscription.
+CLI (Claude Code, Codex, Trae, Qoder) directly, with the user's own login/subscription.
 
 LocalPartner registration (``agents_local_partner.write_partner_agent``) detects
 an installed CLI and writes an agent whose ``profile.jsonc`` carries::
@@ -31,7 +31,10 @@ Design:
 
 from __future__ import annotations
 
+import json
 import os
+import re
+import shlex
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -48,6 +51,35 @@ _DEFAULT_TIMEOUT_S = 240.0
 # Trim runaway CLI output so one run can't flood a chat turn / the journal.
 _MAX_OUTPUT_CHARS = 20_000
 
+_SLASH_COMMAND_RE = re.compile(r"^/([A-Za-z][A-Za-z0-9_-]*)(?:\s+(.*))?$")
+_MODEL_FLAG_PARTNERS = frozenset({"claude-code", "codex-cli", "codebuddy-cli"})
+_CONTROL_ONLY_SLASH_COMMANDS = frozenset(
+    {
+        "clear",
+        "compact",
+        "config",
+        "doctor",
+        "help",
+        "init",
+        "login",
+        "logout",
+        "models",
+        "permissions",
+        "resume",
+        "status",
+        "tools",
+    }
+)
+
+_PARTNER_LABELS = {
+    "claude-code": "Claude Code",
+    "codex-cli": "Codex CLI",
+    "trae-cli": "Trae CLI",
+    "qoder-cli": "Qoder CLI",
+    "kimi-cli": "Kimi CLI",
+    "codebuddy-cli": "CodeBuddy CLI",
+}
+
 
 @dataclass(frozen=True)
 class LocalPartnerResult:
@@ -56,6 +88,7 @@ class LocalPartnerResult:
     ok: bool
     output: str = ""
     error: str = ""
+    raw_error: str = ""
     exit_code: int | None = None
     argv: list[str] = field(default_factory=list)
     timed_out: bool = False
@@ -63,6 +96,234 @@ class LocalPartnerResult:
     # yet — the caller should fall back to the normal loop rather than show an
     # error (the agent isn't broken, we just can't drive it directly).
     unsupported: bool = False
+    failure_kind: str | None = None
+    failure_title: str = ""
+    fix_hint: str = ""
+
+
+@dataclass(frozen=True)
+class PartnerRequestPlan:
+    """A user prompt normalized for one headless CLI invocation."""
+
+    prompt: str
+    model: str | None = None
+    notices: tuple[str, ...] = ()
+    handled_output: str | None = None
+
+
+@dataclass(frozen=True)
+class PartnerFailureDiagnosis:
+    kind: str
+    title: str
+    hint: str
+
+
+def _display_partner(partner_id: str) -> str:
+    return _PARTNER_LABELS.get(partner_id, partner_id)
+
+
+def _native_command(command: str | None) -> str:
+    value = (command or "").strip()
+    if not value:
+        return "对应 CLI"
+    return shlex.quote(value) if re.search(r"\s", value) else value
+
+
+def _haystack(*parts: object) -> str:
+    return "\n".join(str(part or "") for part in parts).lower()
+
+
+def diagnose_partner_failure(
+    partner_id: str,
+    command: str,
+    *,
+    exit_code: int | None = None,
+    stdout: str = "",
+    stderr: str = "",
+    timed_out: bool = False,
+    missing_binary: bool = False,
+) -> PartnerFailureDiagnosis:
+    """Map common black-box CLI failures to user-actionable categories."""
+    partner = _display_partner(partner_id)
+    native = _native_command(command)
+    text = _haystack(stdout, stderr)
+    if timed_out:
+        return PartnerFailureDiagnosis(
+            "timeout",
+            f"{partner} 执行超时",
+            "可以把任务拆小一点，或调大 OCTOPUS_LOCAL_PARTNER_TIMEOUT 后重试。",
+        )
+    if missing_binary:
+        return PartnerFailureDiagnosis(
+            "missing_binary",
+            f"没有找到 {partner} 命令",
+            f"请确认 {native} 已安装并在 PATH 中，然后重新检测本地伙伴。",
+        )
+    if any(
+        marker in text
+        for marker in (
+            "not logged in",
+            "not login",
+            "please login",
+            "please log in",
+            "sign in",
+            "signin",
+            "unauthenticated",
+            "unauthorized",
+            "authentication",
+            "api key",
+            "token expired",
+            "invalid token",
+        )
+    ):
+        return PartnerFailureDiagnosis(
+            "auth",
+            f"{partner} 需要登录或授权",
+            f"请打开原生 CLI：`{native}`，完成登录/授权后再让 Octopus 派工。",
+        )
+    if any(
+        marker in text
+        for marker in (
+            "no effective model configured",
+            "no model configured",
+            "model not configured",
+            "model_unconfigured",
+            "no available model",
+            "models is empty",
+            "empty models",
+            "invalid model",
+            "unknown model",
+            "unsupported model",
+        )
+    ):
+        if partner_id == "trae-cli":
+            hint = "请先在 Trae CLI 原生终端选择/配置模型，或运行 `trae-cli models --json` 检查账号和企业模型授权。"
+        else:
+            hint = "请在伙伴模型选择器里换一个该 CLI 支持的模型，或在原生 CLI 里配置默认模型。"
+        return PartnerFailureDiagnosis("model", f"{partner} 模型不可用", hint)
+    if any(
+        marker in text
+        for marker in (
+            "permission denied",
+            "eacces",
+            "operation not permitted",
+            "not trusted",
+            "untrusted",
+            "requires approval",
+            "approval required",
+            "sandbox",
+        )
+    ):
+        return PartnerFailureDiagnosis(
+            "permission",
+            f"{partner} 权限或工作区信任不足",
+            "请在原生 CLI 中信任当前项目/调整权限模式，或在 Octopus 里降低本次任务的写入风险后重试。",
+        )
+    if any(
+        marker in text
+        for marker in (
+            "could not resolve host",
+            "enotfound",
+            "econnrefused",
+            "etimedout",
+            "network",
+            "proxy",
+            "tls",
+            "certificate",
+            "unable to reach",
+            "kdc",
+            "dns",
+        )
+    ):
+        return PartnerFailureDiagnosis(
+            "network",
+            f"{partner} 网络或企业环境不可达",
+            "请检查网络、代理、企业 DNS/Kerberos/VPN 后，在原生 CLI 里先跑通再回到 Octopus。",
+        )
+    if any(marker in text for marker in ("quota", "rate limit", "too many requests", "billing")):
+        return PartnerFailureDiagnosis(
+            "quota",
+            f"{partner} 额度或限流不足",
+            "请检查该 CLI 账号的额度/计费/限流状态，稍后重试或换一个可用模型。",
+        )
+    if exit_code == 0 and not (stdout or "").strip():
+        return PartnerFailureDiagnosis(
+            "empty_output",
+            f"{partner} 没有返回可显示内容",
+            "请在原生 CLI 里验证 print/headless 模式是否可用；如果它只进入交互界面，暂不能自动派工。",
+        )
+    return PartnerFailureDiagnosis(
+        "unknown",
+        f"{partner} 返回了未分类错误",
+        f"请先在原生 CLI：`{native}` 中复现；如果原生可用，再把原始错误贴回来继续适配。",
+    )
+
+
+def _format_failure_error(diagnosis: PartnerFailureDiagnosis, raw: str) -> str:
+    raw = (raw or "").strip()
+    if not raw:
+        return f"{diagnosis.title}\n建议：{diagnosis.hint}"
+    return f"{diagnosis.title}\n建议：{diagnosis.hint}\n\n原始错误：\n{raw}"
+
+
+def _partner_slash_help(partner_id: str, *, command: str | None = None) -> str:
+    partner = _display_partner(partner_id)
+    native = _native_command(command)
+    model_line = (
+        "- `/model <模型名>` 换行接任务：本次调用转成该 CLI 的模型参数。"
+        if partner_id in _MODEL_FLAG_PARTNERS
+        else "- `/model <模型名>` 换行接任务：Octopus 会识别这个意图，但本伙伴暂不支持稳定模型参数，本次仍用 CLI 默认模型。"
+    )
+    extra = ""
+    if partner_id == "trae-cli":
+        extra = "\n- Trae 模型为空时，请在原生终端运行 `trae-cli models --json` 检查账号/企业网络/模型授权。"
+    elif partner_id == "codebuddy-cli":
+        extra = "\n- CodeBuddy 可选模型会从 `codebuddy --help` 读取，并显示在伙伴模型菜单里。"
+    return (
+        f"{partner} 的 Octopus 兼容快捷指令：\n"
+        f"这里是 Octopus 的本地伙伴调度入口，不是原生交互终端；原生终端指 {partner} 自己的终端会话。\n"
+        f"{model_line}\n"
+        "- `/models`：说明模型从哪里看/怎么切。\n"
+        "- `/help`：显示这份兼容说明。\n"
+        "- `/clear`、`/compact`、`/resume`：不会转发给外部 CLI；请开启新任务或在原生 CLI 里使用。\n"
+        "- `/login`、`/doctor`、`/status`、`/config`：不会在 headless 派工里执行；请打开原生 CLI 处理。\n"
+        f"\n原生快捷指令仍按 {partner} 自己的规则走。需要完整原生体验时，在终端运行：`{native}`。"
+        f"{extra}"
+    )
+
+
+def _control_slash_guidance(
+    partner_id: str,
+    command: str,
+    *,
+    native_command: str | None = None,
+) -> str:
+    partner = _display_partner(partner_id)
+    native = _native_command(native_command)
+    if command == "help":
+        return _partner_slash_help(partner_id, command=native_command)
+    if command == "models":
+        if partner_id in _MODEL_FLAG_PARTNERS:
+            return (
+                f"{partner} 的模型不使用 Octopus 全局模型列表。请用伙伴模型选择器，"
+                "或输入 `/model <模型名>` 后换行接任务来做一次性覆盖。"
+            )
+        if partner_id == "trae-cli":
+            return (
+                "Trae CLI 的模型由 Trae 自己管理；Octopus 暂不传模型参数。"
+                "可在终端运行 `trae-cli models --json` 检查当前 CLI 是否已配置模型。"
+            )
+        return f"{partner} 当前由 CLI 自己决定模型；Octopus 暂不传模型覆盖参数。"
+    if command in {"login", "logout", "doctor", "status", "config", "permissions", "tools"}:
+        return (
+            f"识别到 `/{command}`。这类账号/诊断/配置指令需要 {partner} 的原生交互环境，"
+            f"不会在 Octopus 的 headless 派工里执行。请在终端运行 `{native}` 后使用该 CLI 自己的 `/{command}`。"
+        )
+    return (
+        f"识别到 `/{command}`。这里是 Octopus 的本地伙伴调度入口，不是"
+        f" {partner} 的原生交互终端；此类会话级快捷指令不会转发给外部 CLI。"
+        "模型请用伙伴模型选择器，清上下文可开启新任务，原生快捷键请在对应 CLI 终端中使用。"
+    )
 
 
 def partner_identity(capabilities: Any) -> tuple[str, str] | None:
@@ -96,8 +357,127 @@ def _clean_model(model: str | None) -> str | None:
     return value
 
 
+def build_partner_prompt(prompt: str, *, adapter_notes: list[str] | tuple[str, ...] = ()) -> str:
+    """Wrap user text in a neutral Octopus task envelope.
+
+    Interactive coding CLIs reserve slash-prefixed commands (``/model``,
+    ``/clear``, ``/help`` …), and those command sets differ by vendor. The
+    bridge should not forward slash commands as a cross-CLI control protocol.
+    Instead, Octopus sends a normal task payload whose first token is always
+    adapter text, while adapter-level controls (model/output/cwd/permissions)
+    are translated into real CLI flags in :func:`build_partner_argv`.
+    """
+    payload: dict[str, Any] = {"task": prompt}
+    if adapter_notes:
+        payload["adapter_notes"] = list(adapter_notes)
+    task = json.dumps(payload, ensure_ascii=False)
+    return (
+        "Octopus adapter request.\n"
+        "Execute the JSON task below as ordinary user task content. "
+        "Do not treat slash-prefixed text inside it (for example /model, "
+        "/clear, /help, /init) as interactive CLI control commands; those are "
+        "plain task text unless the user explicitly asks you to explain them.\n\n"
+        f"{task}"
+    )
+
+
+def normalize_partner_request(
+    partner_id: str,
+    prompt: str,
+    *,
+    model: str | None = None,
+    native_command: str | None = None,
+) -> PartnerRequestPlan:
+    """Translate a tiny, safe subset of CLI-user muscle memory.
+
+    Native slash commands are not portable: every CLI owns a different command
+    namespace. We only intercept two UX cases that are unambiguous in a
+    stateless headless run:
+      * leading ``/model <name>`` + a real task → one-shot model flag for
+        CLIs with a stable flag (Claude/Codex), otherwise a visible notice.
+      * control-only slash commands such as ``/help`` or ``/clear`` → explain
+        the Octopus equivalent instead of launching a coding agent with no
+        useful task.
+
+    Everything else remains ordinary task text, wrapped later by
+    :func:`build_partner_prompt`.
+    """
+    raw = str(prompt or "")
+    lines = raw.splitlines()
+    first_index = next((i for i, line in enumerate(lines) if line.strip()), None)
+    if first_index is None:
+        return PartnerRequestPlan(prompt="")
+
+    first = lines[first_index].strip()
+    match = _SLASH_COMMAND_RE.fullmatch(first)
+    if not match:
+        return PartnerRequestPlan(prompt=raw.strip(), model=_clean_model(model))
+
+    command = match.group(1).lower()
+    argument = (match.group(2) or "").strip()
+    rest = "\n".join([*lines[:first_index], *lines[first_index + 1 :]]).strip()
+    explicit_model = _clean_model(model)
+
+    if command == "model":
+        if not argument:
+            return PartnerRequestPlan(
+                prompt="",
+                model=explicit_model,
+                handled_output=(
+                    "识别到 `/model`。在 Octopus 的本地 CLI 伙伴里，模型切换不是持久交互状态；"
+                    "请用伙伴模型选择器，或写成 `/model <模型名>` 后换行接任务。"
+                    + (
+                        ""
+                        if partner_id in _MODEL_FLAG_PARTNERS
+                        else "当前伙伴暂不支持稳定模型覆盖参数，会继续使用 CLI 默认模型。"
+                    )
+                ),
+            )
+        if not rest:
+            return PartnerRequestPlan(
+                prompt="",
+                model=argument if partner_id in _MODEL_FLAG_PARTNERS else explicit_model,
+                handled_output=(
+                    f"识别到 `/model {argument}`，但这次没有后续任务。Octopus 的本地 CLI "
+                    "伙伴是一次性执行；请在下一行补上要做的事，或在模型选择器里设置默认值。"
+                ),
+            )
+        if partner_id in _MODEL_FLAG_PARTNERS:
+            selected = explicit_model or argument
+            return PartnerRequestPlan(
+                prompt=rest,
+                model=selected,
+                notices=(f"已将开头的模型快捷意图转为本次 {partner_id} 的模型参数：{argument}",),
+            )
+        return PartnerRequestPlan(
+            prompt=rest,
+            model=explicit_model,
+            notices=(
+                f"已识别但未转发模型快捷意图：{partner_id} 的 headless 模式"
+                "暂无稳定模型覆盖参数，本次使用该 CLI 自身默认模型。",
+            ),
+        )
+
+    if command in _CONTROL_ONLY_SLASH_COMMANDS and not rest:
+        return PartnerRequestPlan(
+            prompt="",
+            model=explicit_model,
+            handled_output=_control_slash_guidance(
+                partner_id,
+                command,
+                native_command=native_command,
+            ),
+        )
+
+    return PartnerRequestPlan(prompt=raw.strip(), model=explicit_model)
+
+
 def build_partner_argv(
-    partner_id: str, command: str, prompt: str, model: str | None = None
+    partner_id: str,
+    command: str,
+    prompt: str,
+    model: str | None = None,
+    adapter_notes: list[str] | tuple[str, ...] = (),
 ) -> list[str] | None:
     """Map ``(partner_id, command, prompt[, model])`` to the CLI's own
     non-interactive invocation, or ``None`` for partners we can't drive headless
@@ -110,6 +490,13 @@ def build_partner_argv(
         (non-interactive exec; the skip flag lets it run in any chosen workspace
         — without it codex refuses outside a git repo: "Not inside a trusted
         directory". Octopus already controls/gates the workspace dir.)
+      * ``trae-cli``    → ``trae-cli -p --output-format text "<prompt>"``
+        (print-and-exit mode; prompt remains one argv element).
+      * ``qoder-cli``   → ``qodercli -p "<prompt>"`` (print-and-exit mode).
+      * ``codebuddy-cli`` → ``codebuddy -p [--model <m>] --output-format text "<prompt>"``
+        (official CodeBuddy CLI headless mode). The desktop/IDE ``buddy``
+        launcher is intentionally not driven headless here because it opens UI
+        chat sessions rather than returning an answer on stdout.
 
     ``model`` (when set to a CLI-valid name) overrides the CLI's configured
     default. ``None`` / ``"auto"`` → the CLI keeps its own default.
@@ -120,17 +507,30 @@ def build_partner_argv(
     prompt = (prompt or "").strip()
     if not command or not prompt:
         return None
+    prompt_arg = build_partner_prompt(prompt, adapter_notes=adapter_notes)
     m = _clean_model(model)
     if partner_id == "claude-code":
-        return [command, "-p", *(["--model", m] if m else []), prompt]
+        return [command, "-p", *(["--model", m] if m else []), prompt_arg]
     if partner_id == "codex-cli":
         return [
             command,
             "exec",
             *(["-m", m] if m else []),
             "--skip-git-repo-check",
-            prompt,
+            prompt_arg,
         ]
+    if partner_id == "trae-cli":
+        return [command, "-p", "--output-format", "text", prompt_arg]
+    if partner_id == "qoder-cli":
+        return [command, "-p", prompt_arg]
+    if partner_id == "codebuddy-cli":
+        exe_name = os.path.basename(command).lower()
+        normalized_command = command.replace("\\", "/")
+        if exe_name in {"buddy", "buddy.exe", "buddy.cmd", "buddy.ps1"} or (
+            exe_name == "code" and "/CodeBuddy.app/" in normalized_command
+        ):
+            return None
+        return [command, "-p", *(["--model", m] if m else []), "--output-format", "text", prompt_arg]
     return None
 
 
@@ -179,7 +579,17 @@ def run_local_partner(
     reflected in the returned :class:`LocalPartnerResult`. ``env`` is layered over
     the inherited environment for the default runner (custom runners ignore it).
     ``model`` (a CLI-valid name) overrides the CLI's configured default."""
-    argv = build_partner_argv(partner_id, command, prompt, model)
+    plan = normalize_partner_request(partner_id, prompt, model=model, native_command=command)
+    if plan.handled_output is not None:
+        return LocalPartnerResult(ok=True, output=plan.handled_output)
+
+    argv = build_partner_argv(
+        partner_id,
+        command,
+        plan.prompt,
+        plan.model,
+        adapter_notes=plan.notices,
+    )
     if argv is None:
         return LocalPartnerResult(ok=False, unsupported=True)
 
@@ -192,22 +602,54 @@ def run_local_partner(
     try:
         exit_code, stdout, stderr = run(argv, cwd, timeout)
     except subprocess.TimeoutExpired:
-        return LocalPartnerResult(
-            ok=False,
-            error=f"{command} did not finish within {int(timeout)}s",
-            argv=argv,
+        diagnosis = diagnose_partner_failure(
+            partner_id,
+            command,
             timed_out=True,
         )
-    except FileNotFoundError:
         return LocalPartnerResult(
             ok=False,
-            error=f"{command} is not installed or not on PATH",
+            error=_format_failure_error(
+                diagnosis,
+                f"{command} did not finish within {int(timeout)}s",
+            ),
+            raw_error=f"{command} did not finish within {int(timeout)}s",
             argv=argv,
+            timed_out=True,
+            failure_kind=diagnosis.kind,
+            failure_title=diagnosis.title,
+            fix_hint=diagnosis.hint,
+        )
+    except FileNotFoundError:
+        diagnosis = diagnose_partner_failure(
+            partner_id,
+            command,
+            missing_binary=True,
+        )
+        return LocalPartnerResult(
+            ok=False,
+            error=_format_failure_error(diagnosis, f"{command} is not installed or not on PATH"),
+            raw_error=f"{command} is not installed or not on PATH",
+            argv=argv,
+            failure_kind=diagnosis.kind,
+            failure_title=diagnosis.title,
+            fix_hint=diagnosis.hint,
         )
     except OSError as exc:
-        return LocalPartnerResult(ok=False, error=str(exc), argv=argv)
+        diagnosis = diagnose_partner_failure(partner_id, command, stderr=str(exc))
+        return LocalPartnerResult(
+            ok=False,
+            error=_format_failure_error(diagnosis, str(exc)),
+            raw_error=str(exc),
+            argv=argv,
+            failure_kind=diagnosis.kind,
+            failure_title=diagnosis.title,
+            fix_hint=diagnosis.hint,
+        )
 
     output = (stdout or "").strip()
+    if output and plan.notices:
+        output = "\n".join([*(f"[Octopus adapter] {notice}" for notice in plan.notices), output])
     if len(output) > _MAX_OUTPUT_CHARS:
         output = output[:_MAX_OUTPUT_CHARS].rstrip() + "\n…(truncated)"
     if exit_code == 0 and output:
@@ -217,12 +659,23 @@ def run_local_partner(
     err_tail = (stderr or "").strip() or (output or "exited without output")
     if len(err_tail) > 2_000:
         err_tail = err_tail[-2_000:]
+    diagnosis = diagnose_partner_failure(
+        partner_id,
+        command,
+        exit_code=exit_code,
+        stdout=stdout,
+        stderr=stderr or output,
+    )
     return LocalPartnerResult(
         ok=False,
         output=output,
-        error=err_tail,
+        error=_format_failure_error(diagnosis, err_tail),
+        raw_error=err_tail,
         exit_code=exit_code,
         argv=argv,
+        failure_kind=diagnosis.kind,
+        failure_title=diagnosis.title,
+        fix_hint=diagnosis.hint,
     )
 
 

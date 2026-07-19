@@ -102,6 +102,35 @@ def test_error_reports_plainly_and_fails_turn(monkeypatch) -> None:
     assert turn.status == TurnStatus.FAILED
 
 
+def test_error_reports_structured_diagnosis_once(monkeypatch) -> None:
+    rt = _FakeRuntime()
+    turn = _drive(
+        rt,
+        _agent(partner_id="trae-cli", command="trae-cli", name="Trae CLI 伙伴"),
+        result=LocalPartnerResult(
+            ok=False,
+            error=(
+                "Trae CLI 模型不可用\n"
+                "建议：请先在 Trae CLI 原生终端选择/配置模型。\n\n"
+                "原始错误：\nno effective model configured"
+            ),
+            raw_error="no effective model configured",
+            exit_code=1,
+            failure_kind="model",
+            failure_title="Trae CLI 模型不可用",
+            fix_hint="请先在 Trae CLI 原生终端选择/配置模型。",
+        ),
+        monkeypatch=monkeypatch,
+    )
+
+    message = rt.messages[0]
+    assert "诊断：Trae CLI 模型不可用" in message
+    assert "建议：请先在 Trae CLI 原生终端选择/配置模型。" in message
+    assert "no effective model configured" in message
+    assert message.count("Trae CLI 模型不可用") == 1
+    assert turn.status == TurnStatus.FAILED
+
+
 def test_timeout_reports_plainly(monkeypatch) -> None:
     rt = _FakeRuntime()
     turn = _drive(

@@ -143,17 +143,27 @@ def _avatar_url_for(agent_id: str) -> str | None:
         return None
     agent_dir = root / agent_id
     profile_path = agent_dir / "profile.jsonc"
+    profile_data: dict[str, Any] = {}
     if profile_path.is_file():
         try:
             from runtime.platform.process.utils import parse_jsonc
 
-            profile = parse_jsonc(profile_path.read_text(encoding="utf-8"))
-            if "avatar" in profile and (
-                profile.get("avatar") is None or profile.get("avatar") is False
+            parsed_profile = parse_jsonc(profile_path.read_text(encoding="utf-8"))
+            if isinstance(parsed_profile, dict):
+                profile_data = parsed_profile
+            if "avatar" in profile_data and (
+                profile_data.get("avatar") is None or profile_data.get("avatar") is False
             ):
                 return None
         except (OSError, ValueError, TypeError):  # noqa: BLE001 — best-effort profile parse; fall through to file-extension detection
             pass
+    capabilities = profile_data.get("capabilities") if isinstance(profile_data, dict) else None
+    if isinstance(capabilities, dict) and capabilities.get("local_partner"):
+        partner_id = str(capabilities.get("local_partner_id") or "")
+        spec = _LOCAL_PARTNER_SPECS.get(partner_id) if partner_id else None
+        avatar_url = str((spec or {}).get("avatar_url") or "")
+        if avatar_url:
+            return avatar_url
     for ext in ("png", "webp", "jpg", "jpeg", "svg"):
         path = agent_dir / f"avatar.{ext}"
         if path.is_file():
@@ -209,6 +219,12 @@ from .agents_local_partner import (  # noqa: E402
     partner_model as _partner_model,
 )
 from .agents_local_partner import (  # noqa: E402
+    probe_partner as _probe_local_partner,
+)
+from .agents_local_partner import (  # noqa: E402
+    readiness_for_partner as _local_partner_readiness,
+)
+from .agents_local_partner import (  # noqa: E402
     safe_executable as _safe_local_partner_executable,
 )
 from .agents_local_partner import (  # noqa: E402
@@ -235,6 +251,7 @@ from .agents_models import (  # noqa: E402
     GroupCreate,
     GroupUpdate,
     GroupWire,
+    LocalPartnerProbeResponse,
     LocalPartnerRegisterRequest,
     LocalPartnerRegisterResponse,
     LocalPartnerRegisterResult,
@@ -719,6 +736,39 @@ When making changes, first read the surrounding code.
             raise HTTPException(404, f"unknown local partner: {partner_id}")
         return _partner_model(partner_id)
 
+    @router.post("/api/agents/local-partners/{partner_id}/probe")
+    def probe_local_partner(request: Request, partner_id: str) -> LocalPartnerProbeResponse:
+        # Spawns the local external CLI once, so it is admin-only in deployed
+        # auth mode. Single-user dev mode remains friction-free.
+        _require_admin(request)
+        spec = _LOCAL_PARTNER_SPECS.get(partner_id)
+        if spec is None:
+            raise HTTPException(404, f"unknown local partner: {partner_id}")
+        command, executable = _which_local_partner_command(list(spec["commands"]))
+        if executable and not _safe_local_partner_executable(executable):
+            return LocalPartnerProbeResponse(
+                id=partner_id,
+                agent_id=str(spec["agent_id"]),
+                ok=False,
+                detected=True,
+                ready=False,
+                status="unsafe_executable",
+                command=command,
+                executable=executable,
+                error=f"refusing to run executable from a user-writable location: {executable}",
+                raw_error="",
+                failure_kind="unsafe_executable",
+                failure_title="本地 CLI 路径不安全",
+                fix_hint="请从官方安装位置启动 CLI，并确认 PATH 没有被当前项目目录污染。",
+            )
+        return LocalPartnerProbeResponse(
+            **_probe_local_partner(
+                partner_id,
+                command=command,
+                executable=executable,
+            )
+        )
+
     @router.post("/api/agents/local-partners/register")
     def register_local_partners(
         request: Request,
@@ -787,6 +837,19 @@ When making changes, first read the surrounding code.
                         agent_id=agent_id,
                         status="not_detected",
                         message="local executable was not found on PATH",
+                    )
+                )
+                continue
+
+            readiness = _local_partner_readiness(str(spec["id"]), command, executable)
+            if not readiness.get("ready"):
+                skipped_count += 1
+                results.append(
+                    LocalPartnerRegisterResult(
+                        id=str(spec["id"]),
+                        agent_id=agent_id,
+                        status=str(readiness.get("readiness_status") or "not_ready"),
+                        message=str(readiness.get("readiness_message") or "local partner is not ready"),
                     )
                 )
                 continue

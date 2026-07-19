@@ -69,11 +69,22 @@ export interface LocalAgentPartner {
   name: string;
   default_alias: string;
   description: string;
+  avatar_url?: string | null;
   detected: boolean;
   registered: boolean;
   status: "registered" | "detected" | "missing" | string;
   command?: string | null;
   executable?: string | null;
+  ready?: boolean;
+  headless_supported?: boolean;
+  readiness_status?: string;
+  readiness_message?: string;
+  fix_hint?: string | null;
+  install_command?: string | null;
+  native_command?: string | null;
+  verify_command?: string | null;
+  setup_hint?: string | null;
+  interaction_hint?: string | null;
 }
 
 export interface LocalAgentPartnerRegisterResult {
@@ -89,6 +100,24 @@ export interface LocalAgentPartnerRegisterResponse {
   registered_count: number;
   already_exists_count: number;
   skipped_count: number;
+}
+
+export interface LocalAgentPartnerProbeResponse {
+  id: string;
+  agent_id: string;
+  ok: boolean;
+  detected: boolean;
+  ready: boolean;
+  status: string;
+  command?: string | null;
+  executable?: string | null;
+  output?: string;
+  error?: string;
+  raw_error?: string;
+  failure_kind?: string | null;
+  failure_title?: string;
+  fix_hint?: string | null;
+  elapsed_ms?: number;
 }
 
 export async function listLocalAgentPartners(opts?: {
@@ -122,6 +151,27 @@ export async function registerLocalAgentPartners(
     );
   }
   return (await res.json()) as LocalAgentPartnerRegisterResponse;
+}
+
+export async function probeLocalAgentPartner(
+  partnerId: string,
+): Promise<LocalAgentPartnerProbeResponse> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/agents/local-partners/${encodeURIComponent(
+      partnerId,
+    )}/probe`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+    },
+  );
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(
+      err.detail ?? `Failed to probe local partner: ${res.statusText}`,
+    );
+  }
+  return (await res.json()) as LocalAgentPartnerProbeResponse;
 }
 
 export async function updateAgent(

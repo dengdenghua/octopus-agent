@@ -1,7 +1,7 @@
 """Direct execution of LocalPartner agents on the realtime path.
 
 A LocalPartner agent wraps an external coding-agent CLI detected on this
-machine (Claude Code, Codex). Instead of running it as an LLM agent that
+machine (Claude Code, Codex, Trae, Qoder). Instead of running it as an LLM agent that
 *might* shell out, this drives the CLI itself for the turn — with the user's
 own login/subscription — and returns its answer.
 
@@ -118,9 +118,15 @@ async def drive_local_partner(
 
     if result.timed_out:
         msg = f'Local partner "{label}" timed out (no result within {int(timeout)}s).'
+        if result.fix_hint:
+            msg += f"\n\n建议：{result.fix_hint}"
     else:
-        detail = (result.error or "").strip()
+        detail = (result.raw_error or result.error or "").strip()
         msg = f'Local partner "{label}" couldn\'t finish this one.'
+        if result.failure_title:
+            msg += f"\n\n诊断：{result.failure_title}"
+        if result.fix_hint:
+            msg += f"\n建议：{result.fix_hint}"
         if detail:
             msg += f"\n\n```\n{detail}\n```"
     await runtime._emit_agent_message(turn, log, emitter, msg)

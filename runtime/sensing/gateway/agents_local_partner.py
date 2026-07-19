@@ -2,7 +2,7 @@
 
 Extracted from ``agents_router.py`` (2026-06) to keep that file under
 the god-file threshold. LocalPartner registers external CLI tools
-(Claude Code, Codex, OpenClaw) as agents in the registry so the team
+(Claude Code, Codex, Trae, Qoder, Kimi, OpenClaw) as agents in the registry so the team
 can dispatch tasks to them via shell.
 
 Security model:
@@ -28,12 +28,17 @@ Module organization:
 from __future__ import annotations
 
 import json
+import os
 import re
+import shlex
 import shutil
+import subprocess
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from runtime.execution.agents.local_partner_bridge import build_partner_argv, run_local_partner
 from runtime.execution.misc.agent_avatar import pixel_agent_avatar_svg
 
 from .agents_models import LocalPartnerWire
@@ -159,6 +164,7 @@ LOCAL_PARTNER_SPECS: dict[str, dict[str, Any]] = {
         "tool_groups": ["web_read", "fs_writer", "git", "shell"],
         "tags": ["local", "partner", "coding", "claude"],
         "icon": "CC",
+        "avatar_url": "https://claude.ai/favicon.ico",
     },
     "codex-cli": {
         "id": "codex-cli",
@@ -170,6 +176,7 @@ LOCAL_PARTNER_SPECS: dict[str, dict[str, Any]] = {
         "tool_groups": ["web_read", "fs_writer", "git", "shell"],
         "tags": ["local", "partner", "coding", "codex"],
         "icon": "CX",
+        "avatar_url": "https://chatgpt.com/favicon.ico",
     },
     "openclaw": {
         "id": "openclaw",
@@ -182,10 +189,330 @@ LOCAL_PARTNER_SPECS: dict[str, dict[str, Any]] = {
         "tags": ["local", "partner", "automation", "desktop"],
         "icon": "OC",
     },
+    "trae-cli": {
+        "id": "trae-cli",
+        "agent_id": "local_trae_cli",
+        "name": "Trae CLI",
+        "default_alias": "Trae CLI 伙伴",
+        "description": "检测本机 Trae CLI，注册为可被团队指派的本地工程伙伴。",
+        "commands": [
+            "trae-cli",
+            "traecli",
+            "trae-agent",
+            "ta",
+            "trae",
+            "trae.cmd",
+            "trae.exe",
+            "trae.ps1",
+        ],
+        "tool_groups": ["web_read", "fs_writer", "git", "shell"],
+        "tags": ["local", "partner", "coding", "trae"],
+        "icon": "TR",
+        "avatar_url": "https://lf-static.traecdn.us/obj/trae-ai-tx/trae_website/favicon.png",
+    },
+    "qoder-cli": {
+        "id": "qoder-cli",
+        "agent_id": "local_qoder_cli",
+        "name": "Qoder CLI",
+        "default_alias": "Qoder CLI 伙伴",
+        "description": "检测本机 Qoder CLI，注册为可被团队指派的本地工程伙伴。",
+        "commands": [
+            "qodercli",
+            "qoder",
+            "qoder-cli",
+            "qodercli.cmd",
+            "qodercli.exe",
+            "qodercli.ps1",
+            "qoder.cmd",
+            "qoder.exe",
+            "qoder.ps1",
+        ],
+        "tool_groups": ["web_read", "fs_writer", "git", "shell"],
+        "tags": ["local", "partner", "coding", "qoder"],
+        "icon": "QD",
+        "avatar_url": (
+            "https://img.alicdn.com/imgextra/i3/"
+            "O1CN01KliT1u1jEq947NlKH_!!6000000004517-55-tps-180-180.svg"
+        ),
+    },
+    "kimi-cli": {
+        "id": "kimi-cli",
+        "agent_id": "local_kimi_cli",
+        "name": "Kimi CLI",
+        "default_alias": "Kimi CLI 伙伴",
+        "description": "检测本机 Kimi CLI，注册为可被团队指派的本地工程伙伴。",
+        "commands": [
+            "kimi",
+            "kimi-cli",
+            "kimi-code",
+            "kimi-coding",
+            "kimi-code.cmd",
+            "kimi-code.exe",
+            "kimi-code.ps1",
+            "kimi.cmd",
+            "kimi.exe",
+            "kimi.ps1",
+        ],
+        "tool_groups": ["web_read", "fs_writer", "git", "shell"],
+        "tags": ["local", "partner", "coding", "kimi"],
+        "icon": "KM",
+        "avatar_url": "https://www.kimi.com/favicon.ico",
+    },
+    "codebuddy-cli": {
+        "id": "codebuddy-cli",
+        "agent_id": "local_codebuddy_cli",
+        "name": "CodeBuddy CLI",
+        "default_alias": "CodeBuddy CLI 伙伴",
+        "description": (
+            "检测本机腾讯 CodeBuddy CLI，注册为可被团队指派的本地工程伙伴。"
+            "官方 codebuddy 命令支持 headless 输出；桌面版 buddy 启动器仅作为发现兜底。"
+        ),
+        "commands": [
+            "codebuddy",
+            "codebuddy-code",
+            "cbc",
+            "codebuddy.cmd",
+            "codebuddy.exe",
+            "codebuddy.ps1",
+            "cbc.cmd",
+            "cbc.exe",
+            "cbc.ps1",
+            "~/.codebuddy/bin/buddy",
+        ],
+        "tool_groups": ["web_read", "fs_writer", "git", "shell"],
+        "tags": ["local", "partner", "coding", "codebuddy", "tencent"],
+        "icon": "CB",
+        "avatar_url": "https://codebuddy-1328495429.cos.accelerate.myqcloud.com/web/ide/logo.svg",
+    },
 }
 
 
 # ── Model config (the CLI's OWN model namespace) ───────────────────
+
+
+def _trae_model_label(command: str | None = None) -> tuple[str, str]:
+    if not command:
+        command, _path = which_command(list(LOCAL_PARTNER_SPECS["trae-cli"]["commands"]))
+    if not command:
+        return "", ""
+    try:
+        proc = subprocess.run(  # noqa: S603 — fixed argv list, no shell
+            [command, "models", "--json"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "Trae CLI 默认", command
+    try:
+        models = json.loads(proc.stdout or "[]")
+    except ValueError:
+        models = []
+    if isinstance(models, list) and not models:
+        return "未配置模型", f"{command} models --json"
+    return "Trae CLI 默认", command
+
+
+_CODEBUDDY_MODELS_RE = re.compile(r"Currently supported:\s*\(([^)]*)\)", re.IGNORECASE)
+
+
+def _is_codebuddy_launcher(command: str) -> bool:
+    exe_name = Path(command).name.lower()
+    normalized = command.replace("\\", "/")
+    return exe_name in {"buddy", "buddy.exe", "buddy.cmd", "buddy.ps1"} or (
+        exe_name == "code" and "/CodeBuddy.app/" in normalized
+    )
+
+
+def _parse_codebuddy_models(help_text: str) -> list[str]:
+    match = _CODEBUDDY_MODELS_RE.search(help_text or "")
+    if not match:
+        return []
+    return [item.strip() for item in match.group(1).split(",") if item.strip()]
+
+
+def _codebuddy_model_options(command: str | None = None) -> tuple[list[str], str]:
+    if not command:
+        command, _path = which_command(list(LOCAL_PARTNER_SPECS["codebuddy-cli"]["commands"]))
+    if not command or _is_codebuddy_launcher(command):
+        return [], ""
+    try:
+        proc = subprocess.run(  # noqa: S603 — fixed argv list, no shell
+            [command, "--help"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return [], command
+    models = _parse_codebuddy_models(f"{proc.stdout or ''}\n{proc.stderr or ''}")
+    return models, f"{command} --help" if models else command
+
+
+def _display_command(command: str | None) -> str | None:
+    if not command:
+        return None
+    return shlex.quote(command) if re.search(r"\s", command) else command
+
+
+def _partner_guidance(
+    partner_id: str,
+    command: str | None,
+    *,
+    ready: bool,
+    headless_supported: bool,
+) -> dict[str, str | None]:
+    """Copyable commands/instructions for the connect dialog.
+
+    The UI should not need provider-specific branching for "how do I open this
+    natively?" or "how do I verify it can be driven headless?". Keeping these
+    strings here makes each partner's quirks reviewable with the detection code.
+    """
+    native = _display_command(command) if command else None
+    install: str | None = None
+    setup_hint: str | None = None
+    verify: str | None = None
+
+    if partner_id == "codebuddy-cli":
+        install = "npm install -g @tencent-ai/codebuddy-code"
+        setup_hint = "首次使用请运行原生 CodeBuddy CLI，并按提示登录/授权。"
+        if command and not _is_codebuddy_launcher(command):
+            native = _display_command(command)
+            verify = shlex.join(
+                [
+                    command,
+                    "-p",
+                    "--output-format",
+                    "text",
+                    "--permission-mode",
+                    "plan",
+                    "--max-turns",
+                    "1",
+                    "请只回复 OK，不要修改文件。",
+                ]
+            )
+    elif partner_id == "trae-cli":
+        if command:
+            setup_hint = "Trae CLI 需要在原生 CLI 内完成模型选择；若 models 为空，请先处理账号/企业网络/模型授权。"
+        if command:
+            verify = shlex.join([command, "models", "--json"])
+    elif partner_id == "qoder-cli":
+        if command:
+            setup_hint = "Qoder CLI 会走 -p headless 模式；若不可用，请先在原生 CLI 内完成登录。"
+    elif partner_id == "kimi-cli":
+        if command:
+            setup_hint = "已保留 Kimi 入口；等官方稳定 prompt→stdout headless 参数后再启用自动派工。"
+    elif partner_id == "claude-code":
+        if command:
+            setup_hint = "使用 Claude Code 自己的登录态和模型配置；Octopus 只负责派工。"
+    elif partner_id == "codex-cli":
+        if command:
+            setup_hint = "使用 Codex CLI 自己的登录态和模型配置；Octopus 只负责派工。"
+
+    if command and headless_supported and not verify:
+        argv = build_partner_argv(partner_id, command, "请只回复 OK，不要修改文件。")
+        if argv:
+            verify = shlex.join(argv)
+    if ready and not setup_hint:
+        setup_hint = "已可被 Octopus 自动派工；也可以打开原生 CLI 使用它自己的快捷指令。"
+
+    if partner_id in {"claude-code", "codex-cli", "codebuddy-cli"}:
+        interaction_hint = (
+            "Octopus 这里是一次性派工入口，不是原生交互终端；"
+            "`/model <模型名>` 可转成本次模型覆盖，`/login`、`/doctor`、`/clear` "
+            "等会话/账号指令请回原生 CLI 使用。"
+        )
+    elif partner_id == "trae-cli":
+        interaction_hint = (
+            "Trae 的模型、登录和企业网络状态由 Trae CLI 自己管理；"
+            "Octopus 只做派工，不转发 Trae 原生 `/` 指令。"
+        )
+    elif partner_id in {"qoder-cli", "kimi-cli"}:
+        interaction_hint = (
+            "Octopus 会保留原文任务并尽量走该 CLI 的 headless 能力；"
+            "原生 `/` 指令请在对应 CLI 终端里使用。"
+        )
+    else:
+        interaction_hint = None
+
+    return {
+        "install_command": install if not command else None,
+        "native_command": native,
+        "verify_command": verify,
+        "setup_hint": setup_hint,
+        "interaction_hint": interaction_hint,
+    }
+
+
+def readiness_for_partner(
+    partner_id: str,
+    command: str | None,
+    executable: str | None,
+) -> dict[str, Any]:
+    """Explain whether a detected local partner is actually dispatchable.
+
+    ``detected`` only means "some executable-like entry exists". A polished UI
+    needs the next layer: is it the official headless CLI, an interactive-only
+    TUI, a desktop launcher, or a CLI with no model configured?
+    """
+    if not executable or not command:
+        return {
+            "ready": False,
+            "headless_supported": False,
+            "readiness_status": "missing",
+            "readiness_message": "未发现本机 CLI。",
+            "fix_hint": "安装对应官方 CLI，并确认命令在 PATH 中。",
+        }
+
+    probe_command = executable or command
+    headless_supported = build_partner_argv(partner_id, probe_command, "health check") is not None
+    if not headless_supported:
+        if partner_id == "codebuddy-cli":
+            return {
+                "ready": False,
+                "headless_supported": False,
+                "readiness_status": "launcher_only",
+                "readiness_message": "只发现 CodeBuddy 桌面/IDE 启动器，未发现官方 headless CLI。",
+                "fix_hint": "安装 @tencent-ai/codebuddy-code，使 codebuddy/cbc 命令进入 PATH。",
+            }
+        if partner_id == "kimi-cli":
+            return {
+                "ready": False,
+                "headless_supported": False,
+                "readiness_status": "headless_unsupported",
+                "readiness_message": "已发现 Kimi CLI，但暂未接入稳定的 prompt→stdout headless 形式。",
+                "fix_hint": "等待官方 headless 参数稳定后再启用自动派工。",
+            }
+        return {
+            "ready": False,
+            "headless_supported": False,
+            "readiness_status": "headless_unsupported",
+            "readiness_message": "已发现本机入口，但 Octopus 暂不能用它稳定地非交互执行任务。",
+            "fix_hint": "使用该 CLI 的原生终端，或安装支持 -p/print 的官方 CLI。",
+        }
+
+    if partner_id == "trae-cli":
+        model, source = _trae_model_label(probe_command)
+        if model == "未配置模型":
+            return {
+                "ready": False,
+                "headless_supported": True,
+                "readiness_status": "model_unconfigured",
+                "readiness_message": "Trae CLI 已安装，但当前没有有效模型配置。",
+                "fix_hint": f"在 Trae CLI 中用 /model 选择模型，或检查 {source}。",
+            }
+
+    return {
+        "ready": True,
+        "headless_supported": True,
+        "readiness_status": "ready",
+        "readiness_message": "可作为本地 CLI 伙伴自动派工。",
+        "fix_hint": None,
+    }
 
 
 def partner_model(partner_id: str) -> dict[str, Any]:
@@ -199,6 +526,7 @@ def partner_model(partner_id: str) -> dict[str, Any]:
     home = Path(os.path.expanduser("~"))
     model = ""
     source = ""
+    models: list[str] = []
     try:
         if partner_id == "codex-cli":
             cfg = home / ".codex" / "config.toml"
@@ -218,13 +546,28 @@ def partner_model(partner_id: str) -> dict[str, Any]:
                     data = json.loads(cfg.read_text(encoding="utf-8"))
                     model = str(data.get("model") or "")
                     source = "~/.claude/settings.json" if model else ""
+        elif partner_id == "trae-cli":
+            model, source = _trae_model_label()
+        elif partner_id == "qoder-cli":
+            model = "Qoder CLI 默认"
+            source = "qodercli"
+        elif partner_id == "kimi-cli":
+            model = "Kimi CLI 默认"
+            source = "kimi"
+        elif partner_id == "codebuddy-cli":
+            model = "CodeBuddy 默认"
+            models, source = _codebuddy_model_options()
+            source = source or "codebuddy"
     except (
         OSError,
         ValueError,
         KeyError,
     ):  # best-effort · falls through with model/source left at their defaults
         pass
-    return {"partner_id": partner_id, "model": model, "source": source}
+    payload: dict[str, Any] = {"partner_id": partner_id, "model": model, "source": source}
+    if models:
+        payload["models"] = models
+    return payload
 
 
 # ── Detection ──────────────────────────────────────────────────────
@@ -234,6 +577,14 @@ def which_command(commands: list[str]) -> tuple[str | None, str | None]:
     """Probe a list of candidate commands; return (name, path) for the
     first match, or (None, None) if none found."""
     for command in commands:
+        expanded = os.path.expanduser(command)
+        if expanded != command or "/" in command or "\\" in command:
+            try:
+                candidate = Path(expanded)
+                if candidate.is_file() and os.access(candidate, os.X_OK):
+                    return str(candidate), str(candidate.resolve())
+            except OSError:
+                pass
         path = shutil.which(command)
         if path:
             return command, path
@@ -264,6 +615,13 @@ def to_wire(
     """
     probe = which_fn or which_command
     command, executable = probe(list(spec["commands"]))
+    readiness = readiness_for_partner(str(spec["id"]), command, executable)
+    guidance = _partner_guidance(
+        str(spec["id"]),
+        command,
+        ready=bool(readiness.get("ready")),
+        headless_supported=bool(readiness.get("headless_supported")),
+    )
     agent_id = str(spec["agent_id"])
     in_registry = bool(getattr(registry, "has", lambda _agent_id: False)(agent_id))
     registered = in_registry or dir_registered(agent_id)
@@ -274,11 +632,136 @@ def to_wire(
         name=str(spec["name"]),
         default_alias=str(spec["default_alias"]),
         description=str(spec["description"]),
+        avatar_url=str(spec.get("avatar_url") or "") or None,
         detected=bool(executable),
         registered=registered,
         status=status,
         command=command,
         executable=executable,
+        ready=bool(readiness.get("ready")),
+        headless_supported=bool(readiness.get("headless_supported")),
+        readiness_status=str(readiness.get("readiness_status") or status),
+        readiness_message=str(readiness.get("readiness_message") or ""),
+        fix_hint=str(readiness.get("fix_hint") or "") or None,
+        install_command=guidance.get("install_command"),
+        native_command=guidance.get("native_command"),
+        verify_command=guidance.get("verify_command"),
+        setup_hint=guidance.get("setup_hint"),
+        interaction_hint=guidance.get("interaction_hint"),
+    )
+
+
+_PROBE_PROMPT = "请只回复 OK，不要修改文件。"
+
+
+def probe_partner(
+    partner_id: str,
+    *,
+    command: str | None,
+    executable: str | None,
+    timeout: float = 30.0,
+    runner: Any = None,
+) -> dict[str, Any]:
+    """Run a small real health probe against a detected local partner.
+
+    ``readiness_for_partner`` answers "should this be drivable?" from static
+    signals. The probe answers "does it actually run right now with this user's
+    login/model/network?". It deliberately uses the same bridge and diagnostic
+    path as real dispatch so failures are not a separate, misleading universe.
+    """
+    started = time.monotonic()
+    spec = LOCAL_PARTNER_SPECS.get(partner_id) or {}
+    agent_id = str(spec.get("agent_id") or "")
+
+    def finish(payload: dict[str, Any]) -> dict[str, Any]:
+        payload.setdefault("id", partner_id)
+        payload.setdefault("agent_id", agent_id)
+        payload.setdefault("command", command)
+        payload.setdefault("executable", executable)
+        payload.setdefault("elapsed_ms", int((time.monotonic() - started) * 1000))
+        return payload
+
+    if partner_id not in LOCAL_PARTNER_SPECS:
+        return finish(
+            {
+                "ok": False,
+                "detected": False,
+                "ready": False,
+                "status": "unknown_partner",
+                "error": f"unknown local partner: {partner_id}",
+                "raw_error": "",
+                "failure_kind": "unknown_partner",
+                "failure_title": "未知本地 CLI 伙伴",
+                "fix_hint": "请刷新本地伙伴列表后重试。",
+            }
+        )
+
+    if not command or not executable:
+        return finish(
+            {
+                "ok": False,
+                "detected": False,
+                "ready": False,
+                "status": "missing",
+                "error": "未发现本机 CLI。",
+                "raw_error": "",
+                "failure_kind": "missing_binary",
+                "failure_title": "没有找到本地 CLI 命令",
+                "fix_hint": "安装对应官方 CLI，并确认命令在 PATH 中。",
+            }
+        )
+
+    readiness = readiness_for_partner(partner_id, command, executable)
+    if not readiness.get("ready"):
+        return finish(
+            {
+                "ok": False,
+                "detected": True,
+                "ready": False,
+                "status": str(readiness.get("readiness_status") or "not_ready"),
+                "error": str(readiness.get("readiness_message") or "本地伙伴暂不可派工。"),
+                "raw_error": "",
+                "failure_kind": str(readiness.get("readiness_status") or "not_ready"),
+                "failure_title": str(readiness.get("readiness_message") or "本地伙伴暂不可派工。"),
+                "fix_hint": str(readiness.get("fix_hint") or "") or None,
+            }
+        )
+
+    result = run_local_partner(
+        partner_id=partner_id,
+        command=executable or command,
+        prompt=_PROBE_PROMPT,
+        timeout=timeout,
+        runner=runner,
+    )
+    if result.ok:
+        return finish(
+            {
+                "ok": True,
+                "detected": True,
+                "ready": True,
+                "status": "ok",
+                "output": result.output[:1000],
+                "error": "",
+                "raw_error": "",
+                "failure_kind": None,
+                "failure_title": "",
+                "fix_hint": None,
+            }
+        )
+    return finish(
+        {
+            "ok": False,
+            "detected": True,
+            "ready": True,
+            "status": result.failure_kind or ("timeout" if result.timed_out else "failed"),
+            "output": result.output[:1000],
+            "error": result.error,
+            "raw_error": result.raw_error,
+            "failure_kind": result.failure_kind,
+            "failure_title": result.failure_title,
+            "fix_hint": result.fix_hint or None,
+        }
     )
 
 

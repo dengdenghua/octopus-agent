@@ -84,6 +84,7 @@ REQUIRED_COVERAGE_DOMAINS: tuple[E2ECoverageDomain, ...] = (
         scorecard_dimension_ids=(
             "digital_employee_workflows",
             "subagents_parallelism",
+            "local_cli_partner_interop",
             "differentiated_agent_os",
         ),
         quality_schemas=("octopus.digital_employee_quality.v1",),

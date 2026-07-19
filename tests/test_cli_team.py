@@ -28,6 +28,9 @@ def _git_repo(tmp_path: Path) -> str:
 _MEMBERS = [
     {"agent_id": "a_claude", "partner_id": "claude-code", "command": "claude"},
     {"agent_id": "a_codex", "partner_id": "codex-cli", "command": "codex"},
+    {"agent_id": "a_trae", "partner_id": "trae-cli", "command": "trae-cli"},
+    {"agent_id": "a_qoder", "partner_id": "qoder-cli", "command": "qodercli"},
+    {"agent_id": "a_codebuddy", "partner_id": "codebuddy-cli", "command": "codebuddy"},
 ]
 
 
@@ -45,15 +48,21 @@ def test_each_member_runs_isolated_and_diff_is_captured(tmp_path: Path) -> None:
         "implement X", _MEMBERS, repo_root=repo, turn_id="turn-1", partner_runner=fake_runner
     )
     assert out["ok"] is True
-    assert out["count"] == 2 and out["succeeded"] == 2
+    assert out["count"] == 5 and out["succeeded"] == 5
     by = {m["agent_id"]: m for m in out["members"]}
     assert by["a_claude"]["ok"] and "claude-code.txt" in by["a_claude"]["diff"]
     assert by["a_codex"]["ok"] and "codex-cli.txt" in by["a_codex"]["diff"]
+    assert by["a_trae"]["ok"] and "trae-cli.txt" in by["a_trae"]["diff"]
+    assert by["a_qoder"]["ok"] and "qoder-cli.txt" in by["a_qoder"]["diff"]
+    assert by["a_codebuddy"]["ok"] and "codebuddy-cli.txt" in by["a_codebuddy"]["diff"]
     # every member got the turn env so it can reach `octopus bb`
     assert all(s["env"]["OCTOPUS_TURN_ID"] == "turn-1" for s in seen)
     # ISOLATION: candidate edits never landed in the main repo
     assert not (Path(repo) / "claude-code.txt").exists()
     assert not (Path(repo) / "codex-cli.txt").exists()
+    assert not (Path(repo) / "trae-cli.txt").exists()
+    assert not (Path(repo) / "qoder-cli.txt").exists()
+    assert not (Path(repo) / "codebuddy-cli.txt").exists()
 
 
 def test_outputs_harvested_to_shared_blackboard(tmp_path: Path) -> None:
@@ -75,7 +84,19 @@ def test_one_member_failure_is_isolated(tmp_path: Path) -> None:
 
     def fake_runner(*, partner_id, command, prompt, cwd, timeout=None, env=None):
         if partner_id == "codex-cli":
-            return LocalPartnerResult(ok=False, error="not logged in", exit_code=1)
+            return LocalPartnerResult(
+                ok=False,
+                error=(
+                    "Codex CLI 需要登录或授权\n"
+                    "建议：请打开原生 CLI。\n\n"
+                    "原始错误：\nnot logged in"
+                ),
+                raw_error="not logged in",
+                exit_code=1,
+                failure_kind="auth",
+                failure_title="Codex CLI 需要登录或授权",
+                fix_hint="请打开原生 CLI：`codex`，完成登录/授权后再让 Octopus 派工。",
+            )
         (Path(cwd) / "ok.txt").write_text("done")
         return LocalPartnerResult(ok=True, output="ok", exit_code=0)
 
@@ -83,7 +104,49 @@ def test_one_member_failure_is_isolated(tmp_path: Path) -> None:
     by = {m["agent_id"]: m for m in out["members"]}
     assert by["a_claude"]["ok"] is True
     assert by["a_codex"]["ok"] is False and "not logged in" in by["a_codex"]["error"]
-    assert out["succeeded"] == 1 and out["ok"] is True  # team ok if anyone succeeded
+    assert by["a_codex"]["failure_kind"] == "auth"
+    assert by["a_codex"]["failure_title"] == "Codex CLI 需要登录或授权"
+    assert by["a_codex"]["raw_error"] == "not logged in"
+    assert out["succeeded"] == 4 and out["ok"] is True  # team ok if anyone succeeded
+    assert out["failed"] == 1
+    assert out["next_action"] == "review_successes_retry_failed"
+    assert "4/5 member(s) succeeded" in out["summary"]
+    assert "a_codex → Codex CLI 需要登录或授权" in out["summary"]
+    assert out["failed_members"] == [
+        {
+            "agent_id": "a_codex",
+            "partner_id": "codex-cli",
+            "failure_kind": "auth",
+            "failure_title": "Codex CLI 需要登录或授权",
+            "fix_hint": "请打开原生 CLI：`codex`，完成登录/授权后再让 Octopus 派工。",
+            "error": "not logged in",
+        }
+    ]
+    assert "ok.txt" in out["changed_files"]
+
+
+def test_all_members_failed_recommends_setup_fix(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+
+    def fake_runner(*, partner_id, command, prompt, cwd, timeout=None, env=None):
+        return LocalPartnerResult(
+            ok=False,
+            error="模型不可用\n建议：配置模型。\n\n原始错误：\nno effective model configured",
+            raw_error="no effective model configured",
+            exit_code=1,
+            failure_kind="model",
+            failure_title=f"{partner_id} 模型不可用",
+            fix_hint="请在原生 CLI 中配置模型后重试。",
+        )
+
+    out = run_cli_team("g", _MEMBERS[:2], repo_root=repo, partner_runner=fake_runner)
+
+    assert out["ok"] is False
+    assert out["succeeded"] == 0
+    assert out["failed"] == 2
+    assert out["next_action"] == "fix_cli_setup_and_retry"
+    assert len(out["failed_members"]) == 2
+    assert "Needs attention" in out["summary"]
 
 
 def test_guards(tmp_path: Path) -> None:
@@ -100,10 +163,20 @@ def test_detect_installed_partners(monkeypatch) -> None:
     from runtime.execution.agents import cli_team as ct
 
     monkeypatch.setattr(
-        ct.shutil, "which", lambda c: f"/usr/bin/{c}" if c in ("claude", "codex") else None
+        ct.shutil,
+        "which",
+        lambda c: f"/usr/bin/{c}"
+        if c in ("claude", "codex", "trae-cli", "qodercli", "codebuddy")
+        else None,
     )
     mems = ct.detect_installed_partners()
-    assert {m["partner_id"] for m in mems} == {"claude-code", "codex-cli"}
+    assert {m["partner_id"] for m in mems} == {
+        "claude-code",
+        "codex-cli",
+        "trae-cli",
+        "qoder-cli",
+        "codebuddy-cli",
+    }
     assert all(m["command"].startswith("/usr/bin/") for m in mems)
 
 
@@ -214,6 +287,9 @@ def test_router_requires_auth_when_enabled() -> None:
 _DETECTED = [
     {"agent_id": "local_claude_code", "partner_id": "claude-code", "command": "/b/claude"},
     {"agent_id": "local_codex_cli", "partner_id": "codex-cli", "command": "/b/codex"},
+    {"agent_id": "local_trae_cli", "partner_id": "trae-cli", "command": "/b/trae-cli"},
+    {"agent_id": "local_qoder_cli", "partner_id": "qoder-cli", "command": "/b/qodercli"},
+    {"agent_id": "local_codebuddy_cli", "partner_id": "codebuddy-cli", "command": "/b/codebuddy"},
 ]
 
 
@@ -221,8 +297,8 @@ def test_select_cli_members_filters_to_assigned() -> None:
     from runtime.execution.agents.cli_team import select_cli_members
 
     # only the assigned, installed CLIs come back
-    got = select_cli_members(["local_codex_cli", "ghost"], detected=_DETECTED)
-    assert [m["agent_id"] for m in got] == ["local_codex_cli"]
+    got = select_cli_members(["local_codex_cli", "local_trae_cli", "ghost"], detected=_DETECTED)
+    assert [m["agent_id"] for m in got] == ["local_codex_cli", "local_trae_cli"]
     # no refs / no match → empty (caller falls back to the topology path)
     assert select_cli_members([], detected=_DETECTED) == []
     assert select_cli_members(["planner"], detected=_DETECTED) == []
@@ -287,6 +363,10 @@ def test_cli_team_artifacts_one_per_member_diff_first() -> None:
                     "diff": "",
                     "output": "n/c",
                     "error": "boom",
+                    "raw_error": "raw boom",
+                    "failure_kind": "auth",
+                    "failure_title": "Claude Code 需要登录或授权",
+                    "fix_hint": "打开原生 CLI 登录。",
                 },
             ]
         }
@@ -299,3 +379,8 @@ def test_cli_team_artifacts_one_per_member_diff_first() -> None:
     assert by_id["local_claude_code"]["content"] == "n/c"  # falls back to output
     assert by_id["local_claude_code"]["ok"] is False
     assert by_id["local_claude_code"]["error"] == "boom"
+    assert by_id["local_claude_code"]["raw_error"] == "raw boom"
+    assert by_id["local_claude_code"]["failure_kind"] == "auth"
+    assert by_id["local_claude_code"]["failure_title"] == "Claude Code 需要登录或授权"
+    assert by_id["local_claude_code"]["fix_hint"] == "打开原生 CLI 登录。"
+    assert by_id["local_claude_code"]["summary"] == "Claude Code 需要登录或授权"

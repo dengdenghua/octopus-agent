@@ -1274,6 +1274,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agents/local-partners/{partner_id}/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Probe Local Partner */
+        post: operations["probe_local_partner_api_agents_local_partners__partner_id__probe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agents/parallel/batch/{batch_id}": {
         parameters: {
             query?: never;
@@ -12677,6 +12694,66 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** LocalPartnerProbeResponse */
+        LocalPartnerProbeResponse: {
+            /** Agent Id */
+            agent_id: string;
+            /** Command */
+            command?: string | null;
+            /**
+             * Detected
+             * @default false
+             */
+            detected: boolean;
+            /**
+             * Elapsed Ms
+             * @default 0
+             */
+            elapsed_ms: number;
+            /**
+             * Error
+             * @default
+             */
+            error: string;
+            /** Executable */
+            executable?: string | null;
+            /** Failure Kind */
+            failure_kind?: string | null;
+            /**
+             * Failure Title
+             * @default
+             */
+            failure_title: string;
+            /** Fix Hint */
+            fix_hint?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Ok
+             * @default false
+             */
+            ok: boolean;
+            /**
+             * Output
+             * @default
+             */
+            output: string;
+            /**
+             * Raw Error
+             * @default
+             */
+            raw_error: string;
+            /**
+             * Ready
+             * @default false
+             */
+            ready: boolean;
+            /**
+             * Status
+             * @default missing
+             */
+            status: string;
+        };
         /** LocalPartnerWire */
         LocalPartnerWire: {
             /** Agent Id */
@@ -12694,20 +12771,52 @@ export interface components {
             detected: boolean;
             /** Executable */
             executable?: string | null;
+            /** Fix Hint */
+            fix_hint?: string | null;
+            /**
+             * Headless Supported
+             * @default false
+             */
+            headless_supported: boolean;
             /** Id */
             id: string;
+            /** Install Command */
+            install_command?: string | null;
+            /** Interaction Hint */
+            interaction_hint?: string | null;
             /** Name */
             name: string;
+            /** Native Command */
+            native_command?: string | null;
+            /**
+             * Readiness Message
+             * @default
+             */
+            readiness_message: string;
+            /**
+             * Readiness Status
+             * @default missing
+             */
+            readiness_status: string;
+            /**
+             * Ready
+             * @default false
+             */
+            ready: boolean;
             /**
              * Registered
              * @default false
              */
             registered: boolean;
+            /** Setup Hint */
+            setup_hint?: string | null;
             /**
              * Status
              * @default missing
              */
             status: string;
+            /** Verify Command */
+            verify_command?: string | null;
         };
         /** LoopAttempt */
         LoopAttempt: {
@@ -19645,6 +19754,37 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    probe_local_partner_api_agents_local_partners__partner_id__probe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partner_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalPartnerProbeResponse"];
                 };
             };
             /** @description Validation Error */

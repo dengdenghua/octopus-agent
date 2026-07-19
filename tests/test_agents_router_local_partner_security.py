@@ -200,6 +200,23 @@ def test_register_rejects_unauthenticated_when_auth_required(
     assert resp.status_code == 401
 
 
+def test_probe_rejects_non_admin_when_auth_required(tmp_path: Path) -> None:
+    """Probe spawns a real local CLI process, so it shares register's admin gate."""
+    client, keys = _build_auth_app(tmp_path)
+    resp = client.post(
+        "/api/agents/local-partners/codex-cli/probe",
+        headers=_bearer(keys["regular-user"]),
+    )
+    assert resp.status_code == 403
+    assert "admin role" in resp.json()["detail"]
+
+
+def test_probe_rejects_unauthenticated_when_auth_required(tmp_path: Path) -> None:
+    client, _ = _build_auth_app(tmp_path)
+    resp = client.post("/api/agents/local-partners/codex-cli/probe")
+    assert resp.status_code == 401
+
+
 def test_register_rejects_malformed_alias_400(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

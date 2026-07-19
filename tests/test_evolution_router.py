@@ -102,8 +102,8 @@ def test_agent_scorecard_endpoint() -> None:
     )
     assert data["surpass_summary"] == {
         "schema": "octopus.agent_surpass_summary.v1",
-        "total_dimensions": 14,
-        "surpassed_dimensions": 14,
+        "total_dimensions": 15,
+        "surpassed_dimensions": 15,
         "gap_dimensions": 0,
         "target_gap_dimensions": 0,
         "focus_gap_dimensions": 0,
@@ -706,16 +706,16 @@ def test_agent_scorecard_gaps_can_queue_real_baseline_backlog(
     assert data["scorecard"]["external_gap_count"] == 0
     assert data["scorecard"]["focus_gap_count"] == 5
     assert [item["candidate_kind"] for item in data["items"]] == [
-        "scorecard_gap:digital_employee_workflows",
         "scorecard_gap:long_term_learning",
+        "scorecard_gap:digital_employee_workflows",
         "scorecard_gap:differentiated_agent_os",
     ]
     first = data["items"][0]["metadata"]
-    assert first["dimension_id"] == "digital_employee_workflows"
+    assert first["dimension_id"] == "long_term_learning"
     assert first["gap_to_effective_target"] == 1
     assert first["gap_to_surpass"] == 0
     assert first["best_external_competitor"] == "codex"
-    assert first["best_external_score"] == 96
+    assert first["best_external_score"] == 95
 
     summary = ReviewQueue(tmp_path / "data" / "review_queue.json").summary()
     assert summary["pending_count"] == 3

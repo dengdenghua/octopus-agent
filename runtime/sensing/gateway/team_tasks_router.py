@@ -592,20 +592,28 @@ def create_team_tasks_router(
                         "engine": "cli_team",
                         "members": cli_result.get("count", 0),
                         "succeeded": cli_result.get("succeeded", 0),
+                        "failed": cli_result.get("failed", 0),
+                        "summary": cli_result.get("summary"),
+                        "next_action": cli_result.get("next_action"),
+                        "changed_files": _jsonable(cli_result.get("changed_files", [])),
+                        "failed_members": _jsonable(cli_result.get("failed_members", [])),
                         "note": cli_result.get("note"),
                     },
                 }
                 if final_status == "failed":
                     metadata["error"] = (
-                        cli_result.get("error") or "cli_team reported no successful member"
+                        cli_result.get("error")
+                        or cli_result.get("summary")
+                        or "cli_team reported no successful member"
                     )
                 updates = {
                     "status": final_status,
                     "completed_at": _now(),
                     "metadata": metadata,
                 }
-                if final_status == "done":
-                    updates["produced_artifacts"] = _cli_team_artifacts(cli_result)
+                cli_artifacts = _cli_team_artifacts(cli_result)
+                if cli_artifacts:
+                    updates["produced_artifacts"] = cli_artifacts
                 updated = _build_terminal_task(
                     task.id,
                     updates,
@@ -1639,6 +1647,11 @@ def _cli_team_artifacts(cli_result: dict[str, Any]) -> list[dict[str, Any]]:
                 "ok": bool(member.get("ok")),
                 "files": _jsonable(member.get("files", [])),
                 "error": member.get("error"),
+                "raw_error": member.get("raw_error"),
+                "failure_kind": member.get("failure_kind"),
+                "failure_title": member.get("failure_title"),
+                "fix_hint": member.get("fix_hint"),
+                "summary": member.get("failure_title") if not member.get("ok") else None,
                 "created_at": _now(),
             }
         )

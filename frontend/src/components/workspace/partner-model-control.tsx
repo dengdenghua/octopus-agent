@@ -12,13 +12,14 @@ import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 
 /**
- * Model control for local CLI partners (Codex / Claude Code).
+ * Model control for local CLI partners.
  *
  * The Octopus model selector (mimo…) does NOT apply here — a local partner
  * runs on its own CLI with its own model namespace. This shows the CLI's
- * configured default (read from its config on the backend) and lets the user
- * free-text an override that is passed straight to the CLI via ``-m``. An empty
- * override means "use the CLI's own configured default" (no ``-m``).
+ * configured default (read from its config on the backend). For CLIs with a
+ * stable model override flag (Codex / Claude Code), the user can free-text an
+ * override that is passed straight to that CLI. Other partners keep their own
+ * configured default.
  */
 export function PartnerModelControl({
   partnerId,
@@ -34,6 +35,7 @@ export function PartnerModelControl({
   const { t } = useI18n();
   const [configModel, setConfigModel] = useState("");
   const [source, setSource] = useState("");
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [draft, setDraft] = useState(value ?? "");
   const [open, setOpen] = useState(false);
 
@@ -44,6 +46,9 @@ export function PartnerModelControl({
   useEffect(() => {
     if (!partnerId) return;
     let cancelled = false;
+    setConfigModel("");
+    setSource("");
+    setModelOptions([]);
     void (async () => {
       try {
         const r = await fetch(
@@ -53,10 +58,15 @@ export function PartnerModelControl({
           { headers: jsonAuthHeaders() },
         );
         if (!r.ok || cancelled) return;
-        const j = (await r.json()) as { model?: string; source?: string };
+        const j = (await r.json()) as {
+          model?: string;
+          source?: string;
+          models?: string[];
+        };
         if (cancelled) return;
         setConfigModel(String(j?.model ?? ""));
         setSource(String(j?.source ?? ""));
+        setModelOptions(Array.isArray(j?.models) ? j.models.map(String) : []);
       } catch {
         // best-effort: leave the default empty, the override box still works
       }
@@ -67,9 +77,14 @@ export function PartnerModelControl({
   }, [partnerId]);
 
   const override = (value ?? "").trim();
+  const supportsModelOverride =
+    partnerId === "codex-cli" ||
+    partnerId === "claude-code" ||
+    partnerId === "codebuddy-cli";
   // What the trigger shows: the user's override, else the CLI's configured
   // model, else a neutral placeholder.
-  const label = override || configModel || "CLI 默认";
+  const label =
+    (supportsModelOverride ? override : "") || configModel || "CLI 默认";
 
   const commit = (next: string) => {
     onChange(next.trim());
@@ -109,40 +124,68 @@ export function PartnerModelControl({
           ) : (
             " 未读到默认模型。"
           )}
+          {!supportsModelOverride ? " 此伙伴暂不从 Octopus 传模型覆盖。" : ""}
         </p>
-        <Input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commit(draft);
-            }
-          }}
-          placeholder={
-            configModel ? `留空＝用 ${configModel}` : "留空＝用 CLI 默认"
-          }
-          className="h-7 text-xs"
-        />
-        <div className="flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setDraft("");
-              commit("");
-            }}
-            className="text-[11px] text-muted-foreground transition hover:text-foreground"
-          >
-            用 CLI 默认
-          </button>
-          <button
-            type="button"
-            onClick={() => commit(draft)}
-            className="rounded-md bg-primary px-2 py-1 text-[11px] text-primary-foreground transition hover:opacity-90"
-          >
-            应用
-          </button>
-        </div>
+        {supportsModelOverride ? (
+          <>
+            <Input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commit(draft);
+                }
+              }}
+              placeholder={
+                configModel ? `留空＝用 ${configModel}` : "留空＝用 CLI 默认"
+              }
+              className="h-7 text-xs"
+            />
+            {modelOptions.length > 0 ? (
+              <div className="space-y-1">
+                <div className="text-[10px] text-muted-foreground/70">
+                  CLI 可选模型，也可以继续手填新模型名
+                </div>
+                <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto rounded-md border border-border-default/70 bg-muted/20 p-1">
+                  {modelOptions.map((model) => (
+                    <button
+                      key={model}
+                      type="button"
+                      onClick={() => {
+                        setDraft(model);
+                        commit(model);
+                      }}
+                      className="max-w-full truncate rounded border border-border-default/70 px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:border-primary/50 hover:bg-primary/10 hover:text-foreground"
+                      title={model}
+                    >
+                      {model}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDraft("");
+                  commit("");
+                }}
+                className="text-[11px] text-muted-foreground transition hover:text-foreground"
+              >
+                用 CLI 默认
+              </button>
+              <button
+                type="button"
+                onClick={() => commit(draft)}
+                className="rounded-md bg-primary px-2 py-1 text-[11px] text-primary-foreground transition hover:opacity-90"
+              >
+                应用
+              </button>
+            </div>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

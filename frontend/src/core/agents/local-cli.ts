@@ -20,6 +20,10 @@ interface CliTeamStatus {
 const PARTNER_LABEL: Record<string, string> = {
   "claude-code": "Claude Code",
   "codex-cli": "Codex CLI",
+  "trae-cli": "Trae CLI",
+  "qoder-cli": "Qoder CLI",
+  "kimi-cli": "Kimi CLI",
+  "codebuddy-cli": "CodeBuddy CLI",
   openclaw: "OpenClaw",
   hermes: "Hermes Agent",
 };
@@ -27,9 +31,33 @@ const PARTNER_LABEL: Record<string, string> = {
 const PARTNER_ICON: Record<string, string> = {
   "claude-code": "🟣",
   "codex-cli": "⬛",
+  "trae-cli": "🟦",
+  "qoder-cli": "🟧",
+  "kimi-cli": "🌙",
+  "codebuddy-cli": "🟢",
   openclaw: "🦞",
   hermes: "🪽",
 };
+
+const PARTNER_LOGO_URL: Record<string, string> = {
+  "claude-code": "https://claude.ai/favicon.ico",
+  "codex-cli": "https://chatgpt.com/favicon.ico",
+  "trae-cli":
+    "https://lf-static.traecdn.us/obj/trae-ai-tx/trae_website/favicon.png",
+  "qoder-cli":
+    "https://img.alicdn.com/imgextra/i3/O1CN01KliT1u1jEq947NlKH_!!6000000004517-55-tps-180-180.svg",
+  "kimi-cli": "https://www.kimi.com/favicon.ico",
+  "codebuddy-cli":
+    "https://codebuddy-1328495429.cos.accelerate.myqcloud.com/web/ide/logo.svg",
+};
+
+const DRIVABLE_PARTNERS = new Set([
+  "claude-code",
+  "codex-cli",
+  "trae-cli",
+  "qoder-cli",
+  "codebuddy-cli",
+]);
 
 /** Turn a detected CLI into an `Agent` so it shows up in the team pickers
  * exactly like a built-in agent — addable, leadable, removable. The synthetic
@@ -41,16 +69,21 @@ function partnerToAgent(p: DetectedPartner): Agent {
     display_name: label,
     description: `本机 ${label} · 用你的订阅，在隔离 worktree 里跑、共享团队黑板`,
     icon: PARTNER_ICON[p.partner_id] ?? "🖥️",
-    // Prefer the partner's brand avatar (served once it's registered on disk);
-    // the emoji icon stays as the fallback when the SVG isn't available.
-    avatar_url: `/api/agents/${p.agent_id}/avatar`,
+    // Prefer the partner's brand logo; the emoji icon stays as the fallback.
+    avatar_url:
+      PARTNER_LOGO_URL[p.partner_id] ?? `/api/agents/${p.agent_id}/avatar`,
     model: null,
     tool_groups: null,
+    capabilities: {
+      local_partner: DRIVABLE_PARTNERS.has(p.partner_id),
+      local_partner_id: p.partner_id,
+      local_partner_command: p.command,
+    },
   };
 }
 
 /**
- * Detected local coding-agent CLIs (Claude Code / Codex / …) as addable team
+ * Detected local coding-agent CLIs (Claude Code / Codex / Trae / Qoder / …) as addable team
  * members. Empty when none are installed or the backend is offline — the
  * pickers just fall back to the built-in agents.
  */

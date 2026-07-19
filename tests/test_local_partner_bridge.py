@@ -6,6 +6,9 @@ import subprocess
 
 from runtime.execution.agents.local_partner_bridge import (
     build_partner_argv,
+    build_partner_prompt,
+    diagnose_partner_failure,
+    normalize_partner_request,
     partner_identity,
     run_local_partner,
 )
@@ -46,46 +49,96 @@ def test_partner_identity_rejects_non_partner_or_incomplete() -> None:
 
 
 def test_argv_for_known_clis() -> None:
+    fix_bug = build_partner_prompt("fix the bug")
+    add_test = build_partner_prompt("add a test")
+    review_this = build_partner_prompt("review this")
+    fix_imports = build_partner_prompt("fix imports")
+    codebuddy_task = build_partner_prompt("explain this repo")
     assert build_partner_argv("claude-code", "claude", "fix the bug") == [
         "claude",
         "-p",
-        "fix the bug",
+        fix_bug,
     ]
     assert build_partner_argv("codex-cli", "codex", "add a test") == [
         "codex",
         "exec",
         "--skip-git-repo-check",
-        "add a test",
+        add_test,
+    ]
+    assert build_partner_argv("trae-cli", "trae-cli", "review this") == [
+        "trae-cli",
+        "-p",
+        "--output-format",
+        "text",
+        review_this,
+    ]
+    assert build_partner_argv("qoder-cli", "qodercli", "fix imports") == [
+        "qodercli",
+        "-p",
+        fix_imports,
+    ]
+    assert build_partner_argv("codebuddy-cli", "codebuddy", "explain this repo") == [
+        "codebuddy",
+        "-p",
+        "--output-format",
+        "text",
+        codebuddy_task,
     ]
 
 
 def test_argv_model_override_passes_through_m() -> None:
     # A CLI-valid model name is threaded to the tool's own model flag.
+    go = build_partner_prompt("go")
     assert build_partner_argv("codex-cli", "codex", "go", model="o3") == [
         "codex",
         "exec",
         "-m",
         "o3",
         "--skip-git-repo-check",
-        "go",
+        go,
     ]
     assert build_partner_argv("claude-code", "claude", "go", model="claude-x") == [
         "claude",
         "-p",
         "--model",
         "claude-x",
-        "go",
+        go,
+    ]
+    assert build_partner_argv("codebuddy-cli", "codebuddy", "go", model="hunyuan-code") == [
+        "codebuddy",
+        "-p",
+        "--model",
+        "hunyuan-code",
+        "--output-format",
+        "text",
+        go,
+    ]
+    # Trae CLI's print mode does not expose a stable model flag; keep its own
+    # configured default instead of passing an Octopus model namespace through.
+    assert build_partner_argv("trae-cli", "trae-cli", "go", model="auto") == [
+        "trae-cli",
+        "-p",
+        "--output-format",
+        "text",
+        go,
+    ]
+    # Qoder's print mode keeps its own configured default model.
+    assert build_partner_argv("qoder-cli", "qodercli", "go", model="auto") == [
+        "qodercli",
+        "-p",
+        go,
     ]
 
 
 def test_argv_empty_or_auto_model_keeps_cli_default() -> None:
     # No model / "auto" → omit the flag so the CLI uses its configured default.
+    go = build_partner_prompt("go")
     for m in (None, "", "  ", "auto", "AUTO"):
         assert build_partner_argv("codex-cli", "codex", "go", model=m) == [
             "codex",
             "exec",
             "--skip-git-repo-check",
-            "go",
+            go,
         ]
 
 
@@ -94,12 +147,124 @@ def test_prompt_is_a_separate_argv_element_not_a_shell_string() -> None:
     # text never gets concatenated into a shell command.
     nasty = "ship it; rm -rf / && echo $(whoami) `id`"
     argv = build_partner_argv("claude-code", "claude", nasty)
-    assert argv == ["claude", "-p", nasty]
-    assert argv[-1] == nasty  # untouched, single token
+    assert argv is not None
+    assert argv[:2] == ["claude", "-p"]
+    assert nasty in argv[-1]
+    assert argv[-1] == build_partner_prompt(nasty)  # one prompt token
+    trae_argv = build_partner_argv("trae-cli", "trae-cli", nasty)
+    assert trae_argv is not None
+    assert trae_argv[:-1] == ["trae-cli", "-p", "--output-format", "text"]
+    assert trae_argv[-1] == build_partner_prompt(nasty)
+    qoder_argv = build_partner_argv("qoder-cli", "qodercli", nasty)
+    assert qoder_argv is not None
+    assert qoder_argv[:-1] == ["qodercli", "-p"]
+    assert qoder_argv[-1] == build_partner_prompt(nasty)
+    codebuddy_argv = build_partner_argv("codebuddy-cli", "codebuddy", nasty)
+    assert codebuddy_argv is not None
+    assert codebuddy_argv[:-1] == ["codebuddy", "-p", "--output-format", "text"]
+    assert codebuddy_argv[-1] == build_partner_prompt(nasty)
+
+
+def test_slash_commands_are_wrapped_as_plain_task_content() -> None:
+    slashy = "/model gpt-999\n/help\n请修复导入错误"
+    argv = build_partner_argv("claude-code", "claude", slashy)
+
+    assert argv is not None
+    prompt_arg = argv[-1]
+    assert not prompt_arg.startswith("/")
+    assert "/model gpt-999" in prompt_arg
+    assert "/help" in prompt_arg
+    assert "Do not treat slash-prefixed text" in prompt_arg
+
+
+def test_leading_model_slash_translates_to_model_flag_for_supported_partners() -> None:
+    plan = normalize_partner_request("codex-cli", "/model gpt-5.6-sol\nfix bug")
+
+    assert plan.prompt == "fix bug"
+    assert plan.model == "gpt-5.6-sol"
+    assert "转为本次 codex-cli 的模型参数" in plan.notices[0]
+
+
+def test_explicit_model_override_wins_over_leading_model_slash() -> None:
+    plan = normalize_partner_request(
+        "claude-code",
+        "/model claude-from-text\nfix bug",
+        model="claude-from-ui",
+    )
+
+    assert plan.prompt == "fix bug"
+    assert plan.model == "claude-from-ui"
+
+
+def test_leading_model_slash_is_notice_only_for_default_owned_partners() -> None:
+    plan = normalize_partner_request("qoder-cli", "/model qwen-next\nfix imports")
+
+    assert plan.prompt == "fix imports"
+    assert plan.model is None
+    assert "暂无稳定模型覆盖参数" in plan.notices[0]
+
+
+def test_control_only_slash_command_returns_octopus_guidance() -> None:
+    plan = normalize_partner_request("codex-cli", "/clear", native_command="codex")
+
+    assert plan.prompt == ""
+    assert plan.handled_output is not None
+    assert "不会转发给外部 CLI" in plan.handled_output
+
+
+def test_help_slash_returns_partner_specific_compatibility_guide() -> None:
+    plan = normalize_partner_request("codebuddy-cli", "/help", native_command="codebuddy")
+
+    assert plan.prompt == ""
+    assert plan.handled_output is not None
+    assert "CodeBuddy CLI 的 Octopus 兼容快捷指令" in plan.handled_output
+    assert "`/model <模型名>`" in plan.handled_output
+    assert "`codebuddy`" in plan.handled_output
+    assert "codebuddy --help" in plan.handled_output
+
+
+def test_models_slash_explains_partner_model_namespace() -> None:
+    codex = normalize_partner_request("codex-cli", "/models", native_command="codex")
+    trae = normalize_partner_request("trae-cli", "/models", native_command="trae-cli")
+
+    assert codex.handled_output is not None
+    assert "不使用 Octopus 全局模型列表" in codex.handled_output
+    assert "一次性覆盖" in codex.handled_output
+    assert trae.handled_output is not None
+    assert "trae-cli models --json" in trae.handled_output
+
+
+def test_login_slash_points_to_native_cli_without_spawning() -> None:
+    plan = normalize_partner_request("trae-cli", "/login", native_command="trae-cli")
+
+    assert plan.prompt == ""
+    assert plan.handled_output is not None
+    assert "原生交互环境" in plan.handled_output
+    assert "`trae-cli`" in plan.handled_output
+
+
+def test_unknown_slash_with_task_stays_plain_task_text() -> None:
+    prompt = "/review security\n检查鉴权边界"
+    plan = normalize_partner_request("codex-cli", prompt, native_command="codex")
+
+    assert plan.prompt == prompt
+    assert plan.handled_output is None
 
 
 def test_argv_none_for_unknown_or_empty() -> None:
     assert build_partner_argv("openclaw", "openclaw", "do a thing") is None
+    assert build_partner_argv("kimi-cli", "kimi", "do a thing") is None
+    # CodeBuddy's IDE launcher opens an app chat session and does not provide
+    # the documented headless stdout contract; don't treat it as drivable.
+    assert build_partner_argv("codebuddy-cli", "/Users/me/.codebuddy/bin/buddy", "x") is None
+    assert (
+        build_partner_argv(
+            "codebuddy-cli",
+            "/Volumes/CodeBuddy/CodeBuddy.app/Contents/Resources/app/bin/code",
+            "x",
+        )
+        is None
+    )
     assert build_partner_argv("mystery-cli", "x", "hi") is None
     assert build_partner_argv("claude-code", "claude", "   ") is None
     assert build_partner_argv("claude-code", "", "hi") is None
@@ -131,8 +296,39 @@ def test_run_ok_returns_output() -> None:
     assert res.ok is True
     assert res.output == "done: edited 3 files"
     assert res.exit_code == 0
-    assert seen["argv"] == ["claude", "-p", "go"]
+    assert seen["argv"] == ["claude", "-p", build_partner_prompt("go")]
     assert seen["cwd"] == "/repo"
+
+
+def test_run_translates_leading_model_slash_into_argv_model_flag() -> None:
+    run, seen = _runner((0, "fixed\n", ""))
+    res = run_local_partner(
+        partner_id="codex-cli",
+        command="codex",
+        prompt="/model gpt-5.6-sol\nfix bug",
+        cwd="/repo",
+        runner=run,
+    )
+
+    assert res.ok is True
+    assert seen["argv"][:4] == ["codex", "exec", "-m", "gpt-5.6-sol"]
+    assert "/model gpt-5.6-sol" not in seen["argv"][-1]
+    assert "fix bug" in seen["argv"][-1]
+    assert "[Octopus adapter]" in res.output
+
+
+def test_run_handles_control_only_slash_without_spawning_cli() -> None:
+    called = {"n": 0}
+
+    def run(argv, cwd, timeout):
+        called["n"] += 1
+        return (0, "x", "")
+
+    res = run_local_partner(partner_id="claude-code", command="claude", prompt="/help", runner=run)
+
+    assert res.ok is True
+    assert "不是原生交互终端" in res.output
+    assert called["n"] == 0
 
 
 def test_run_unsupported_partner_short_circuits() -> None:
@@ -155,12 +351,18 @@ def test_run_nonzero_exit_is_failure_with_stderr() -> None:
     assert res.ok is False
     assert res.exit_code == 1
     assert "not logged in" in res.error
+    assert res.raw_error == "Error: not logged in"
+    assert res.failure_kind == "auth"
+    assert "需要登录或授权" in res.failure_title
+    assert "原生 CLI" in res.fix_hint
 
 
 def test_run_exit0_but_empty_output_is_failure() -> None:
     run, _ = _runner((0, "   \n", ""))
     res = run_local_partner(partner_id="claude-code", command="claude", prompt="go", runner=run)
     assert res.ok is False  # exit 0 but nothing to show
+    assert res.failure_kind == "empty_output"
+    assert "没有返回" in res.error
 
 
 def test_run_timeout_flagged() -> None:
@@ -171,6 +373,8 @@ def test_run_timeout_flagged() -> None:
     assert res.ok is False
     assert res.timed_out is True
     assert "240s" in res.error
+    assert res.failure_kind == "timeout"
+    assert "拆小一点" in res.fix_hint
 
 
 def test_run_missing_binary_reported() -> None:
@@ -178,6 +382,8 @@ def test_run_missing_binary_reported() -> None:
     res = run_local_partner(partner_id="codex-cli", command="codex", prompt="go", runner=run)
     assert res.ok is False
     assert "not installed" in res.error
+    assert res.failure_kind == "missing_binary"
+    assert "PATH" in res.fix_hint
 
 
 def test_run_truncates_runaway_output() -> None:
@@ -186,6 +392,50 @@ def test_run_truncates_runaway_output() -> None:
     assert res.ok is True
     assert "…(truncated)" in res.output
     assert len(res.output) < 21_000
+
+
+def test_failure_diagnosis_common_cli_failures() -> None:
+    cases = [
+        (
+            diagnose_partner_failure(
+                "trae-cli",
+                "trae-cli",
+                stderr="no effective model configured",
+            ),
+            "model",
+            "trae-cli models --json",
+        ),
+        (
+            diagnose_partner_failure(
+                "codebuddy-cli",
+                "codebuddy",
+                stderr="Permission denied: untrusted workspace",
+            ),
+            "permission",
+            "信任当前项目",
+        ),
+        (
+            diagnose_partner_failure(
+                "trae-cli",
+                "trae-cli",
+                stderr="curl: Could not resolve host; unable to reach any KDC",
+            ),
+            "network",
+            "DNS/Kerberos/VPN",
+        ),
+        (
+            diagnose_partner_failure(
+                "codebuddy-cli",
+                "codebuddy",
+                stderr="rate limit: quota exhausted, check billing",
+            ),
+            "quota",
+            "额度",
+        ),
+    ]
+    for diagnosis, kind, hint_part in cases:
+        assert diagnosis.kind == kind
+        assert hint_part in diagnosis.hint
 
 
 # ── shared-blackboard envelope + env pass-through ────────────────────
