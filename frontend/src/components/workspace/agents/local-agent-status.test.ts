@@ -25,7 +25,7 @@ function partner(overrides: Partial<LocalAgentPartner>): LocalAgentPartner {
   };
 }
 
-describe("localPartnerBadge", () => {
+describe("local-agent-status localPartnerBadge", () => {
   it("uses effective_status as the source of truth for registered partners", () => {
     expect(
       localPartnerBadge(
