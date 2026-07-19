@@ -69,9 +69,11 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
         ),
         GapBehaviorCheck(
             id="local_partner_router_tests",
-            title="Local partner router covers probe, readiness, and domestic CLI states",
+            title="Local partner router covers probe, readiness, effective status, and domestic CLI states",
             path="tests/test_agents_router.py",
             required_terms=(
+                "test_local_partner_effective_status_reflects_not_ready_state",
+                "effective_status",
                 "test_probe_local_partner_success",
                 "test_probe_local_partner_surfaces_diagnosis",
                 "test_codebuddy_launcher_only_is_detected_but_not_registerable",
