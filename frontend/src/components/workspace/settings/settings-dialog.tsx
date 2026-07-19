@@ -725,20 +725,70 @@ export function SettingsDialog(props: SettingsDialogProps) {
                 </Suspense>
               )}
               {hasSettingsResults && activeSection === "observability" && (
-                <div className="flex flex-col items-center gap-4 py-12 text-center">
-                  <ActivityIcon className="size-10 text-muted-foreground/50" />
-                  <p className="text-sm text-muted-foreground">
-                    {t.settings.sections.observability}
-                  </p>
+                <section
+                  aria-labelledby="settings-observability-title"
+                  className="space-y-6"
+                >
+                  <header className="space-y-1.5">
+                    <h2
+                      id="settings-observability-title"
+                      className="text-lg font-semibold tracking-tight"
+                    >
+                      {settingsUxCopy.observability.title}
+                    </h2>
+                    <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                      {settingsUxCopy.observability.description}
+                    </p>
+                  </header>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {[
+                      {
+                        icon: ActivityIcon,
+                        title: settingsUxCopy.observability.activityTitle,
+                        description:
+                          settingsUxCopy.observability.activityDescription,
+                      },
+                      {
+                        icon: ZapIcon,
+                        title: settingsUxCopy.observability.tracesTitle,
+                        description:
+                          settingsUxCopy.observability.tracesDescription,
+                      },
+                      {
+                        icon: SettingsIcon,
+                        title: settingsUxCopy.observability.healthTitle,
+                        description:
+                          settingsUxCopy.observability.healthDescription,
+                      },
+                    ].map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <div
+                          key={item.title}
+                          className="rounded-xl border border-border bg-muted/20 p-4"
+                        >
+                          <Icon
+                            aria-hidden="true"
+                            className="mb-3 size-4 text-primary"
+                          />
+                          <h3 className="text-sm font-medium">{item.title}</h3>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            {item.description}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
                   <Button
+                    className="w-full sm:w-auto"
                     onClick={() => {
                       dialogProps.onOpenChange?.(false);
                       navigate("/workspace/observability");
                     }}
                   >
-                    {t.settings.sections.observability}
+                    {settingsUxCopy.observability.openDashboard}
                   </Button>
-                </div>
+                </section>
               )}
               {hasSettingsResults && activeSection === "about" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>

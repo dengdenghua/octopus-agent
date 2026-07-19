@@ -83,4 +83,29 @@ describe("SettingsDialog", () => {
       JSON.stringify({ w: 776, h: 576 }),
     );
   });
+
+  it("explains observability before opening its dedicated workspace", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    renderWithProviders(
+      <SettingsDialog
+        open
+        defaultSection="observability"
+        onOpenChange={onOpenChange}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "运行可观测性" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("实时活动")).toBeInTheDocument();
+    expect(screen.getByText("工具与文件轨迹")).toBeInTheDocument();
+    expect(screen.getByText("运行健康")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "打开可观测性工作台" }),
+    );
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
 });

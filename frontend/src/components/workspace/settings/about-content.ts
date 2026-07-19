@@ -30,13 +30,13 @@ Octopus is an open-source **super-agent harness** that coordinates **agents**, *
 
 ## 📜 License
 
-Octopus is open source and distributed under the **MIT License**.
+Octopus is open source and distributed under the **Apache License 2.0**.
 
 ---
 
 ## 🙌 Acknowledgments
 
-Thank you to the open-source projects and contributors who make Octopus possible, including [Next.js](https://nextjs.org/), [FastAPI](https://fastapi.tiangolo.com/), [Shadcn](https://ui.shadcn.com/), and [SToneX](https://github.com/stonexer).
+Thank you to the open-source projects and contributors who make Octopus possible, including [React](https://react.dev/), [Vite](https://vite.dev/), [FastAPI](https://fastapi.tiangolo.com/), [shadcn/ui](https://ui.shadcn.com/), and [SToneX](https://github.com/stonexer).
 
 Special thanks to [Daniel Walnut](https://github.com/hetaoBackend/) and [Henry Li](https://github.com/magiccube/) for their vision and dedication.
 `,
@@ -66,13 +66,13 @@ Octopus 是一个开源的**超级智能体框架**，通过协同**智能体、
 
 ## 📜 开源许可
 
-Octopus 采用 **MIT License** 开源发布。
+Octopus 采用 **Apache License 2.0** 开源发布。
 
 ---
 
 ## 🙌 致谢
 
-感谢所有让 Octopus 成为可能的开源项目与贡献者，包括 [Next.js](https://nextjs.org/)、[FastAPI](https://fastapi.tiangolo.com/)、[Shadcn](https://ui.shadcn.com/) 和 [SToneX](https://github.com/stonexer)。
+感谢所有让 Octopus 成为可能的开源项目与贡献者，包括 [React](https://react.dev/)、[Vite](https://vite.dev/)、[FastAPI](https://fastapi.tiangolo.com/)、[shadcn/ui](https://ui.shadcn.com/) 和 [SToneX](https://github.com/stonexer)。
 
 特别感谢 [Daniel Walnut](https://github.com/hetaoBackend/) 与 [Henry Li](https://github.com/magiccube/) 的愿景、热情和长期投入。
 `,
@@ -102,13 +102,13 @@ Octopus は、**エージェント、メモリ、安全な実行環境**を連�
 
 ## 📜 ライセンス
 
-Octopus は **MIT License** で公開されています。
+Octopus は **Apache License 2.0** で公開されています。
 
 ---
 
 ## 🙌 謝辞
 
-Octopus を支えるすべてのオープンソースプロジェクトと貢献者に感謝します。特に [Next.js](https://nextjs.org/)、[FastAPI](https://fastapi.tiangolo.com/)、[Shadcn](https://ui.shadcn.com/)、[SToneX](https://github.com/stonexer) に感謝します。
+Octopus を支えるすべてのオープンソースプロジェクトと貢献者に感謝します。特に [React](https://react.dev/)、[Vite](https://vite.dev/)、[FastAPI](https://fastapi.tiangolo.com/)、[shadcn/ui](https://ui.shadcn.com/)、[SToneX](https://github.com/stonexer) に感謝します。
 
 ビジョンと継続的な貢献を寄せてくださった [Daniel Walnut](https://github.com/hetaoBackend/) と [Henry Li](https://github.com/magiccube/) に、心より感謝します。
 `,
@@ -138,13 +138,13 @@ Octopus는 **에이전트, 메모리, 안전한 실행 환경**을 조율하고 
 
 ## 📜 라이선스
 
-Octopus는 **MIT License**로 공개됩니다.
+Octopus는 **Apache License 2.0**으로 공개됩니다.
 
 ---
 
 ## 🙌 감사의 말
 
-Octopus를 가능하게 한 모든 오픈 소스 프로젝트와 기여자에게 감사드립니다. 특히 [Next.js](https://nextjs.org/), [FastAPI](https://fastapi.tiangolo.com/), [Shadcn](https://ui.shadcn.com/), [SToneX](https://github.com/stonexer)에 감사드립니다.
+Octopus를 가능하게 한 모든 오픈 소스 프로젝트와 기여자에게 감사드립니다. 특히 [React](https://react.dev/), [Vite](https://vite.dev/), [FastAPI](https://fastapi.tiangolo.com/), [shadcn/ui](https://ui.shadcn.com/), [SToneX](https://github.com/stonexer)에 감사드립니다.
 
 비전과 꾸준한 헌신을 보여 주신 [Daniel Walnut](https://github.com/hetaoBackend/)과 [Henry Li](https://github.com/magiccube/)에게 특별히 감사드립니다.
 `,

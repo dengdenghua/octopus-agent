@@ -4,6 +4,17 @@ type SafetyProfile = "strict" | "normal" | "lax";
 type IdentitySource = "runtime" | "env" | "default";
 
 interface SettingsUxCopy {
+  observability: {
+    title: string;
+    description: string;
+    activityTitle: string;
+    activityDescription: string;
+    tracesTitle: string;
+    tracesDescription: string;
+    healthTitle: string;
+    healthDescription: string;
+    openDashboard: string;
+  };
   privacy: {
     identityTitle: string;
     identityDescription: string;
@@ -56,11 +67,31 @@ interface SettingsUxCopy {
     toggleLabel: (name: string) => string;
     trustLabel: (name: string) => string;
     revokeLabel: (name: string) => string;
+    activationFailed: (name: string, detail?: string) => string;
+    runtimeError: (detail: string) => string;
+    removeLabel: (name: string) => string;
+    removeTitle: string;
+    removeDescription: (name: string) => string;
+    removeConfirm: string;
+    removeSuccess: (name: string) => string;
+    removeFailed: string;
   };
 }
 
 const COPY: Record<Locale, SettingsUxCopy> = {
   "zh-CN": {
+    observability: {
+      title: "运行可观测性",
+      description:
+        "集中查看任务执行、工具调用和运行状态。设置窗口只提供入口，完整数据会在独立工作台中展示。",
+      activityTitle: "实时活动",
+      activityDescription: "跟踪正在执行的任务、步骤与事件。",
+      tracesTitle: "工具与文件轨迹",
+      tracesDescription: "核对工具调用、文件改动和执行结果。",
+      healthTitle: "运行健康",
+      healthDescription: "定位失败、延迟与异常状态。",
+      openDashboard: "打开可观测性工作台",
+    },
     privacy: {
       identityTitle: "产品身份保护",
       identityDescription:
@@ -137,9 +168,31 @@ const COPY: Record<Locale, SettingsUxCopy> = {
       toggleLabel: (name) => `启用或停用 ${name}`,
       trustLabel: (name) => `信任 ${name}`,
       revokeLabel: (name) => `撤销对 ${name} 的信任`,
+      activationFailed: (name, detail) =>
+        `${name} 启动失败${detail ? `：${detail}` : "，请检查服务配置。"}`,
+      runtimeError: (detail) => `运行错误：${detail}`,
+      removeLabel: (name) => `移除 ${name}`,
+      removeTitle: "移除 MCP 服务",
+      removeDescription: (name) =>
+        `将移除“${name}”的连接配置，并撤销信任与已保存的 OAuth 授权。此操作不会删除远程服务本身。`,
+      removeConfirm: "移除服务",
+      removeSuccess: (name) => `已移除 MCP 服务 ${name}`,
+      removeFailed: "移除 MCP 服务失败，当前状态已重新加载。",
     },
   },
   "en-US": {
+    observability: {
+      title: "Runtime observability",
+      description:
+        "Review task execution, tool calls, and runtime health in one place. Full data opens in a dedicated workspace.",
+      activityTitle: "Live activity",
+      activityDescription: "Follow active tasks, steps, and events.",
+      tracesTitle: "Tool and file traces",
+      tracesDescription: "Review tool calls, file changes, and outcomes.",
+      healthTitle: "Runtime health",
+      healthDescription: "Find failures, latency, and abnormal states.",
+      openDashboard: "Open observability workspace",
+    },
     privacy: {
       identityTitle: "Product identity protection",
       identityDescription:
@@ -224,9 +277,32 @@ const COPY: Record<Locale, SettingsUxCopy> = {
       toggleLabel: (name) => `Enable or disable ${name}`,
       trustLabel: (name) => `Trust ${name}`,
       revokeLabel: (name) => `Revoke trust for ${name}`,
+      activationFailed: (name, detail) =>
+        `${name} could not start${detail ? `: ${detail}` : ". Check the service configuration."}`,
+      runtimeError: (detail) => `Runtime error: ${detail}`,
+      removeLabel: (name) => `Remove ${name}`,
+      removeTitle: "Remove MCP service",
+      removeDescription: (name) =>
+        `This removes the connection for “${name}”, revokes trust, and clears saved OAuth authorization. It does not delete the remote service itself.`,
+      removeConfirm: "Remove service",
+      removeSuccess: (name) => `Removed MCP service ${name}`,
+      removeFailed:
+        "The MCP service could not be removed. Its current state was reloaded.",
     },
   },
   "ja-JP": {
+    observability: {
+      title: "実行オブザーバビリティ",
+      description:
+        "タスク実行、ツール呼び出し、実行状態をまとめて確認します。詳細データは専用ワークスペースで開きます。",
+      activityTitle: "リアルタイム活動",
+      activityDescription: "実行中のタスク、手順、イベントを追跡します。",
+      tracesTitle: "ツールとファイルの履歴",
+      tracesDescription: "ツール呼び出し、ファイル変更、結果を確認します。",
+      healthTitle: "実行状態",
+      healthDescription: "失敗、遅延、異常な状態を特定します。",
+      openDashboard: "オブザーバビリティを開く",
+    },
     privacy: {
       identityTitle: "製品アイデンティティ保護",
       identityDescription:
@@ -307,9 +383,32 @@ const COPY: Record<Locale, SettingsUxCopy> = {
       toggleLabel: (name) => `${name} を有効または無効にする`,
       trustLabel: (name) => `${name} を信頼`,
       revokeLabel: (name) => `${name} の信頼を解除`,
+      activationFailed: (name, detail) =>
+        `${name} を起動できませんでした${detail ? `：${detail}` : "。設定を確認してください。"}`,
+      runtimeError: (detail) => `実行エラー：${detail}`,
+      removeLabel: (name) => `${name} を削除`,
+      removeTitle: "MCP サービスを削除",
+      removeDescription: (name) =>
+        `「${name}」の接続設定、信頼、保存済み OAuth 認証を削除します。リモートサービス自体は削除されません。`,
+      removeConfirm: "サービスを削除",
+      removeSuccess: (name) => `MCP サービス ${name} を削除しました`,
+      removeFailed:
+        "MCP サービスを削除できませんでした。現在の状態を再読み込みしました。",
     },
   },
   "ko-KR": {
+    observability: {
+      title: "실행 관측성",
+      description:
+        "작업 실행, 도구 호출과 실행 상태를 한곳에서 확인합니다. 전체 데이터는 전용 작업 공간에서 엽니다.",
+      activityTitle: "실시간 활동",
+      activityDescription: "진행 중인 작업, 단계와 이벤트를 추적합니다.",
+      tracesTitle: "도구 및 파일 기록",
+      tracesDescription: "도구 호출, 파일 변경과 결과를 확인합니다.",
+      healthTitle: "실행 상태",
+      healthDescription: "실패, 지연과 비정상 상태를 찾습니다.",
+      openDashboard: "관측성 작업 공간 열기",
+    },
     privacy: {
       identityTitle: "제품 정체성 보호",
       identityDescription:
@@ -389,6 +488,17 @@ const COPY: Record<Locale, SettingsUxCopy> = {
       toggleLabel: (name) => `${name} 사용 또는 중지`,
       trustLabel: (name) => `${name} 신뢰`,
       revokeLabel: (name) => `${name} 신뢰 취소`,
+      activationFailed: (name, detail) =>
+        `${name} 시작 실패${detail ? `: ${detail}` : ". 서비스 설정을 확인하세요."}`,
+      runtimeError: (detail) => `실행 오류: ${detail}`,
+      removeLabel: (name) => `${name} 제거`,
+      removeTitle: "MCP 서비스 제거",
+      removeDescription: (name) =>
+        `“${name}” 연결 설정과 신뢰, 저장된 OAuth 인증을 제거합니다. 원격 서비스 자체는 삭제하지 않습니다.`,
+      removeConfirm: "서비스 제거",
+      removeSuccess: (name) => `MCP 서비스 ${name} 제거됨`,
+      removeFailed:
+        "MCP 서비스를 제거하지 못했습니다. 현재 상태를 다시 불러왔습니다.",
     },
   },
 };

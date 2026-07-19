@@ -5382,10 +5382,11 @@ export interface Translations {
   // Bundle Info
   bundleInfo: {
     title: string;
+    appVersion: string;
+    license: string;
     environment: string;
     vite: string;
     react: string;
-    sourceModules: string;
   };
 
   // Model Picker

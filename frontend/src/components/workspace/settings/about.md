@@ -24,7 +24,7 @@ If you have any questions or need help, please contact us at [support@octopus.de
 
 ## 📜 License
 
-Octopus is proudly open source and distributed under the **MIT License**.
+Octopus is proudly open source and distributed under the **Apache License 2.0**.
 
 ---
 
@@ -34,7 +34,8 @@ We extend our heartfelt gratitude to the open source projects and contributors w
 
 ### Core Frameworks
 
-- **[Next.js](https://nextjs.org/)**: A cutting-edge framework for building web applications.
+- **[React](https://react.dev/)**: The UI library used throughout the workspace.
+- **[Vite](https://vite.dev/)**: The frontend development and build tool.
 - **[FastAPI](https://fastapi.tiangolo.com/)**: A modern, fast web framework for building APIs with Python.
 
 ### UI Libraries

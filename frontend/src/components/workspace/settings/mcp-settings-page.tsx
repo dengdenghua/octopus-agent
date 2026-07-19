@@ -3,16 +3,26 @@ import {
   ServerIcon,
   ShieldAlertIcon,
   ShieldCheckIcon,
+  Trash2Icon,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   approveMCPTrust,
+  forgetMCPOAuth,
   listMCPTrust,
   loadMCPConfig,
   revokeMCPTrust,
@@ -31,6 +41,7 @@ interface McpServer {
   command?: string;
   url?: string;
   description?: string;
+  error?: string;
 }
 
 type LoadState = "loading" | "ready" | "error";
@@ -49,38 +60,42 @@ export function McpSettingsPage() {
   const [addAuth, setAddAuth] = useState("");
   const [adding, setAdding] = useState(false);
   const [pendingServer, setPendingServer] = useState<string | null>(null);
+  const [serverToRemove, setServerToRemove] = useState<string | null>(null);
 
-  const fetchServers = useCallback(async (showLoading = true) => {
-    if (showLoading) setServersLoadState("loading");
-    try {
-      const data = await loadMCPConfig();
-      setRawConfig(data);
-      const mcpServers = data.mcp_servers || {};
-      setServers(
-        Object.entries(mcpServers).map(([name, cfg]) => {
-          const c = cfg as Partial<{
-            type: string;
-            command: string;
-            url: string;
-            enabled: boolean;
-            description: string;
-          }>;
-          return {
-            name,
-            type: c.type || "stdio",
-            enabled: c.enabled !== false,
-            command: c.command,
-            url: c.url,
-            description: c.description || "",
-          };
-        }),
-      );
-      setServersLoadState("ready");
-    } catch (error) {
-      console.error(error);
-      setServersLoadState("error");
-    }
+  const readServers = useCallback((data: MCPConfig): McpServer[] => {
+    return Object.entries(data.mcp_servers || {}).map(([name, cfg]) => ({
+      name,
+      type:
+        typeof cfg.transport === "string"
+          ? cfg.transport
+          : typeof cfg.command === "string" && cfg.command
+            ? "stdio"
+            : typeof cfg.url === "string" && cfg.url
+              ? "http"
+              : "stdio",
+      enabled: cfg.enabled !== false,
+      command: typeof cfg.command === "string" ? cfg.command : undefined,
+      url: typeof cfg.url === "string" ? cfg.url : undefined,
+      description: typeof cfg.description === "string" ? cfg.description : "",
+      error: typeof cfg.error === "string" ? cfg.error : undefined,
+    }));
   }, []);
+
+  const fetchServers = useCallback(
+    async (showLoading = true) => {
+      if (showLoading) setServersLoadState("loading");
+      try {
+        const data = await loadMCPConfig();
+        setRawConfig(data);
+        setServers(readServers(data));
+        setServersLoadState("ready");
+      } catch (error) {
+        console.error(error);
+        setServersLoadState("error");
+      }
+    },
+    [readServers],
+  );
 
   const fetchTrust = useCallback(async () => {
     setTrustLoadState("loading");
@@ -145,8 +160,15 @@ export function McpSettingsPage() {
         mcpServers[name] = { ...mcpServers[name], enabled };
       }
       const nextConfig = { ...data, mcp_servers: mcpServers };
-      await updateMCPConfig(nextConfig);
-      setRawConfig(nextConfig);
+      const result = await updateMCPConfig(nextConfig);
+      const appliedConfig = { mcp_servers: result.mcp_servers };
+      setRawConfig(appliedConfig);
+      setServers(readServers(appliedConfig));
+      const runtimeStatus = result._status?.[name];
+      if (runtimeStatus?.ok === false) {
+        toast.error(copy.activationFailed(name, runtimeStatus.error));
+        return;
+      }
       toast.success(t.mcpSettings.toastToggleSuccess(name, enabled));
     } catch {
       setServers(previousServers);
@@ -178,25 +200,81 @@ export function McpSettingsPage() {
       const mcpServers = {
         ...data.mcp_servers,
         [name]: {
-          enabled: true,
+          enabled: false,
           description: "",
-          transport: "http",
+          transport: "http" as const,
           url,
           ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
         },
       };
       const nextConfig = { ...data, mcp_servers: mcpServers };
-      await updateMCPConfig(nextConfig);
-      setRawConfig(nextConfig);
+      const result = await updateMCPConfig(nextConfig);
+      const appliedConfig = { mcp_servers: result.mcp_servers };
+      setRawConfig(appliedConfig);
+      setServers(readServers(appliedConfig));
       toast.success(t.mcpSettings.toastAddSuccess(name));
       setAddName("");
       setAddUrl("");
       setAddAuth("");
-      await fetchServers(false);
     } catch {
       toast.error(t.mcpSettings.toastAddFailed);
     } finally {
       setAdding(false);
+    }
+  };
+
+  const removeServer = async (name: string) => {
+    if (pendingServer || serversLoadState !== "ready") return;
+    const server = servers.find((item) => item.name === name);
+    if (!server) return;
+    setPendingServer(name);
+    try {
+      const data = rawConfig ?? (await loadMCPConfig());
+      let workingConfig = data;
+
+      // Revoking trust first also stops any registered tools immediately.
+      if (trustOf(name)) {
+        await revokeMCPTrust(name);
+      }
+      // Persist the disabled state before dropping the entry. If the final
+      // removal request fails, the UI can recover to a truthful safe state
+      // instead of showing an enabled service whose runtime was stopped.
+      if (server.enabled) {
+        const disabledConfig = {
+          ...data,
+          mcp_servers: {
+            ...data.mcp_servers,
+            [name]: {
+              ...data.mcp_servers[name],
+              enabled: false,
+              description: data.mcp_servers[name]?.description ?? "",
+            },
+          },
+        };
+        const disabled = await updateMCPConfig(disabledConfig);
+        workingConfig = { mcp_servers: disabled.mcp_servers };
+      }
+
+      const remainingServers = { ...workingConfig.mcp_servers };
+      delete remainingServers[name];
+      const result = await updateMCPConfig({
+        ...workingConfig,
+        mcp_servers: remainingServers,
+      });
+      const appliedConfig = { mcp_servers: result.mcp_servers };
+      setRawConfig(appliedConfig);
+      setServers(readServers(appliedConfig));
+      setTrustEntries((current) =>
+        current.filter((entry) => entry.server_name !== name),
+      );
+      await forgetMCPOAuth(name).catch(() => undefined);
+      toast.success(copy.removeSuccess(name));
+      setServerToRemove(null);
+    } catch {
+      toast.error(copy.removeFailed);
+      await Promise.all([fetchServers(false), fetchTrust()]);
+    } finally {
+      setPendingServer(null);
     }
   };
 
@@ -244,11 +322,11 @@ export function McpSettingsPage() {
               return (
                 <div
                   key={server.name}
-                  className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border p-3"
+                  className="flex min-w-0 flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div className="flex items-center gap-3">
-                    <ServerIcon className="size-4 text-muted-foreground" />
-                    <div>
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <ServerIcon className="size-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0">
                       <div className="font-medium flex flex-wrap items-center gap-2">
                         {server.name}
                         {!trustKnown ? (
@@ -281,6 +359,14 @@ export function McpSettingsPage() {
                           {server.description}
                         </div>
                       )}
+                      {server.error && (
+                        <div
+                          role="alert"
+                          className="mt-1 text-xs text-destructive"
+                        >
+                          {copy.runtimeError(server.error)}
+                        </div>
+                      )}
                       {trustKnown && !trusted && server.enabled && (
                         <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                           {t.mcpSettings.unapprovedHint}
@@ -288,7 +374,7 @@ export function McpSettingsPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     {trusted ? (
                       <Button
                         size="sm"
@@ -316,13 +402,29 @@ export function McpSettingsPage() {
                       disabled={pendingServer !== null}
                       onCheckedChange={(v) => toggleServer(server.name, v)}
                     />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="size-9 text-muted-foreground hover:text-destructive"
+                      disabled={pendingServer !== null}
+                      onClick={() => setServerToRemove(server.name)}
+                      aria-label={copy.removeLabel(server.name)}
+                    >
+                      <Trash2Icon className="size-4" />
+                    </Button>
                   </div>
                 </div>
               );
             })}
             {servers.length === 0 && (
-              <div className="text-sm text-muted-foreground text-center py-4">
-                {copy.noServers}
+              <div className="flex flex-col items-center rounded-xl border border-dashed bg-muted/15 px-4 py-7 text-center">
+                <span className="mb-2 grid size-9 place-items-center rounded-full bg-muted text-muted-foreground">
+                  <ServerIcon aria-hidden="true" className="size-4" />
+                </span>
+                <p className="max-w-md text-sm leading-6 text-muted-foreground">
+                  {copy.noServers}
+                </p>
               </div>
             )}
           </div>
@@ -423,6 +525,53 @@ export function McpSettingsPage() {
           </Button>
         </form>
       </SettingsSection>
+      <Dialog
+        open={serverToRemove !== null}
+        onOpenChange={(open) => {
+          if (!open && pendingServer === null) setServerToRemove(null);
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="w-[min(380px,calc(100vw-2rem))] gap-3 rounded-lg p-4 shadow-xl sm:max-w-[380px]"
+        >
+          <DialogHeader className="gap-1 text-left">
+            <DialogTitle className="text-[15px]">
+              {copy.removeTitle}
+            </DialogTitle>
+            <DialogDescription className="text-[12.5px] leading-5">
+              {serverToRemove ? copy.removeDescription(serverToRemove) : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-1 flex-row justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={pendingServer !== null}
+              onClick={() => setServerToRemove(null)}
+            >
+              {t.common.cancel}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={pendingServer !== null || !serverToRemove}
+              onClick={() => {
+                if (serverToRemove) void removeServer(serverToRemove);
+              }}
+            >
+              {pendingServer === serverToRemove ? (
+                <LoaderCircleIcon className="size-3.5 animate-spin" />
+              ) : (
+                <Trash2Icon className="size-3.5" />
+              )}
+              {copy.removeConfirm}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

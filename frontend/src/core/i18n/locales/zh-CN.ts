@@ -5992,10 +5992,11 @@ export const zhCN: Translations = {
   // Bundle Info
   bundleInfo: {
     title: "构建信息",
+    appVersion: "Octopus 版本",
+    license: "开源许可",
     environment: "环境",
     vite: "Vite",
     react: "React",
-    sourceModules: "源码模块",
   },
 
   // Model Picker

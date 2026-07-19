@@ -100,6 +100,9 @@ test.describe("Mobile workspace smoke", () => {
       /^(订阅与账单|Plan & Billing)$/,
       /^(外观|Appearance)$/,
       /^(通知|Notification)$/,
+      /^(MCP 服务|MCP services)$/,
+      /^(可观测性|Observability)$/,
+      /^(关于|About)$/,
     ];
     for (const sectionName of sections) {
       const section = dialog.getByRole("button", { name: sectionName });
@@ -112,6 +115,13 @@ test.describe("Mobile workspace smoke", () => {
         `settings section ${sectionName.source}`,
       );
     }
+
+    const aboutSection = dialog.getByRole("button", {
+      name: /^(关于|About)$/,
+    });
+    await expect(aboutSection).toHaveAttribute("aria-current", "page");
+    await expect(dialog.getByText("Apache License 2.0").first()).toBeVisible();
+    await expect(dialog.getByText("MIT License")).toHaveCount(0);
 
     const closeButton = dialog.getByRole("button", {
       name: /^(关闭|Close)$/,

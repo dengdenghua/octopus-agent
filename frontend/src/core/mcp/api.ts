@@ -1,7 +1,7 @@
 import { getBackendBaseURL } from "@/core/config";
 import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 
-import type { MCPConfig } from "./types";
+import type { MCPConfig, MCPConfigUpdateResponse } from "./types";
 
 async function assertOk(response: Response, label: string): Promise<void> {
   if (!response.ok) {
@@ -29,7 +29,15 @@ export async function updateMCPConfig(config: MCPConfig) {
     body: JSON.stringify(config),
   });
   await assertOk(response, "Failed to update MCP config");
-  return response.json();
+  return response.json() as Promise<MCPConfigUpdateResponse>;
+}
+
+export async function forgetMCPOAuth(serverName: string): Promise<void> {
+  const response = await fetch(
+    `${getBackendBaseURL()}/api/mcp/oauth/${encodeURIComponent(serverName)}`,
+    { method: "DELETE", headers: authHeaders() },
+  );
+  await assertOk(response, "Failed to remove MCP OAuth credentials");
 }
 
 // ───────────────────────────── Trust store ─────────────────────────────

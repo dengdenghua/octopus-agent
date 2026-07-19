@@ -6323,10 +6323,11 @@ Strategy:
   // Bundle Info
   bundleInfo: {
     title: "Build Information",
+    appVersion: "Octopus version",
+    license: "License",
     environment: "Environment",
     vite: "Vite",
     react: "React",
-    sourceModules: "Source Modules",
   },
 
   // Model Picker

@@ -6307,11 +6307,12 @@ Strategy:
 
   // Bundle Info
   bundleInfo: {
-    title: "Build Information",
-    environment: "Environment",
+    appVersion: "Octopus 버전",
+    license: "라이선스",
+    title: "빌드 정보",
+    environment: "환경",
     vite: "Vite",
     react: "React",
-    sourceModules: "Source Modules",
   },
 
   // Model Picker
