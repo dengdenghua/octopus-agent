@@ -193,6 +193,9 @@ def trim_text_protocol_for_native(system_prompt: str) -> str:
         line_end = len(system_prompt)
     native_note = (
         "你已获得原生工具调用能力(tools)。直接调用所需工具即可,"
-        "无需输出 Thought/Action/Observation 文本协议;完成后给出最终答案。"
+        "无需输出 Thought/Action/Observation 文本协议。第一批工具前可以保持简洁；"
+        "收到工具结果后若还要继续调用工具，先用普通文本给用户 1-3 句进度，"
+        "概括刚确认的事实以及它如何影响下一步，不要暴露私有思考或工具参数；"
+        "完成后给出最终答案。"
     )
     return system_prompt[:start] + native_note + system_prompt[line_end:]

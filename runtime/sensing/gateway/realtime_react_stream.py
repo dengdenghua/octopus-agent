@@ -112,6 +112,13 @@ def _agentic_stream_event_to_react_event(
         if final and not isinstance(final, str):
             return {"type": "text_delta", "delta": str(final)}
         return {"type": "react_completed"}
+    if kind == "error":
+        payload = delta if isinstance(delta, dict) else {}
+        return {
+            "type": "react_error",
+            "kind": str(payload.get("kind") or "agentic_error"),
+            "message": str(payload.get("message") or delta or "agentic error"),
+        }
     return None
 
 

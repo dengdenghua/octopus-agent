@@ -1738,6 +1738,13 @@ def test_native_model_stream_deadline_recovers_from_silent_provider():
     assert elapsed < 0.5
 
 
+def test_native_convergence_retry_uses_shorter_timeout(monkeypatch):
+    monkeypatch.setenv("OCTOPUS_NATIVE_MODEL_RECOVERY_TIMEOUT_S", "30")
+
+    assert tool_bridge._native_model_recovery_timeout_s(120.0) == 30.0
+    assert tool_bridge._native_model_recovery_timeout_s(12.0) == 12.0
+
+
 def test_agentic_timeout_emits_public_recovery_then_forces_final(monkeypatch):
     monkeypatch.setattr(tool_bridge, "_native_model_round_timeout_s", lambda: 0.03)
 
@@ -1766,6 +1773,29 @@ def test_agentic_timeout_emits_public_recovery_then_forces_final(monkeypatch):
     assert commentary_index < text_index
     assert "超过单轮时限" in events[commentary_index][1]
     assert events[-1] == ("done", "", "Final from saved evidence.")
+
+
+def test_agentic_repeated_timeout_is_terminal_error_not_answer_text(monkeypatch):
+    monkeypatch.setattr(tool_bridge, "_native_model_round_timeout_s", lambda: 0.02)
+
+    class Router:
+        def call_stream(self, _request):
+            threading.Event().wait(timeout=1)
+            if False:
+                yield ModelStreamEvent(type="text_delta", delta="unreachable")
+
+    intent = ParsedIntent(
+        raw="inspect two files",
+        intent_type="task",
+        normalized_goal="inspect two files",
+        user_context={"conversation_id": "repeated-timeout-thread"},
+    )
+
+    events = list(stream_agentic_fallback(_stack(Router()), intent, _agent()))
+
+    assert events[-1][0] == "error"
+    assert events[-1][1]["kind"] == "model_stall"
+    assert all(event[0] != "text" for event in events)
 
 
 def test_agentic_tool_preamble_becomes_commentary_before_execution():
@@ -1869,7 +1899,6 @@ def test_quiet_realtime_tool_batch_gets_model_generated_public_update(
             "mode": "code",
             "workspace_path": str(tmp_path),
             "realtime_public_narrative": True,
-            "public_narrative_silence_s": 0,
         },
     )
 
@@ -1887,13 +1916,22 @@ def test_quiet_realtime_tool_batch_gets_model_generated_public_update(
     assert isinstance(router.requests[2].messages[-1].content, list)
 
 
-def test_fast_realtime_tool_batch_skips_extra_progress_model_call(tmp_path):
+def test_fast_realtime_tool_batch_gets_evidence_progress_by_default(tmp_path):
     class Router:
         def __init__(self):
             self.requests = []
 
         def call_stream(self, request):
             self.requests.append(request)
+            is_progress_request = any(
+                "[PUBLIC PROGRESS UPDATE]" in str(message.content)
+                for message in request.messages
+            )
+            if is_progress_request:
+                update = "目录已经读取完成；我现在根据其中的内容收束最终结论。"
+                yield ModelStreamEvent(type="text_delta", delta=update)
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=update))
+                return
             if len(self.requests) == 1:
                 yield ModelStreamEvent(
                     type="tool_use",
@@ -1926,8 +1964,8 @@ def test_fast_realtime_tool_batch_skips_extra_progress_model_call(tmp_path):
 
     events = list(stream_agentic_fallback(_stack(router), intent, _agent()))
 
-    assert len(router.requests) == 2
-    assert all(event[0] != "commentary" for event in events)
+    assert len(router.requests) == 3
+    assert [event[0] for event in events].count("commentary") == 1
     assert events[-1] == ("done", "", "Fast result complete.")
 
 
@@ -1978,8 +2016,11 @@ def test_likely_long_tool_gets_model_update_while_execution_is_open(
                 "[PUBLIC ACTION UPDATE]" in str(message.content) for message in request.messages
             )
             if is_action_update:
-                assert execution["count"] == 0
-                update = "我正在核对一手资料的关键差异，结果会决定下一步是否继续扩展来源。"
+                update = (
+                    "我正在核对一手资料的关键差异，结果会决定下一步是否继续扩展来源。"
+                    if execution["count"] == 0
+                    else "第一批目录证据已经拿到；我继续核对补充目录，确认结论是否稳定。"
+                )
                 yield ModelStreamEvent(type="text_delta", delta=update)
                 yield ModelStreamEvent(
                     type="done",
@@ -2039,17 +2080,25 @@ def test_likely_long_tool_gets_model_update_while_execution_is_open(
 
     events = list(stream_agentic_fallback(stack, intent, _agent()))
 
-    tool_start_index = next(i for i, event in enumerate(events) if event[0] == "tool_start")
-    commentary_index = next(i for i, event in enumerate(events) if event[0] == "commentary")
-    tool_end_index = next(i for i, event in enumerate(events) if event[0] == "tool_end")
-    assert tool_start_index < commentary_index < tool_end_index
+    tool_start_indexes = [i for i, event in enumerate(events) if event[0] == "tool_start"]
+    commentary_indexes = [i for i, event in enumerate(events) if event[0] == "commentary"]
+    tool_end_indexes = [i for i, event in enumerate(events) if event[0] == "tool_end"]
+    assert len(tool_start_indexes) == len(commentary_indexes) == len(tool_end_indexes) == 2
+    assert all(
+        start < commentary < end
+        for start, commentary, end in zip(
+            tool_start_indexes,
+            commentary_indexes,
+            tool_end_indexes,
+            strict=True,
+        )
+    )
     assert execution["count"] == 2
-    assert "一手资料" in events[commentary_index][1]
-    assert [event[0] for event in events].count("commentary") == 1
-    # First long batch gets a live explanation; the immediate follow-up is
-    # inside the silence window and does not pay for another model call.
-    assert len(router.requests) == 4
+    assert "一手资料" in events[commentary_indexes[0]][1]
+    assert "第一批目录证据" in events[commentary_indexes[1]][1]
+    assert len(router.requests) == 5
     assert router.requests[1].tools == []
+    assert router.requests[3].tools == []
 
 
 def test_native_result_checkpoint_extracts_real_source_titles():

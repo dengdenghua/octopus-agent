@@ -123,11 +123,13 @@ READ_ONLY_ROUND_BUDGET = 80
 DEFAULT_TOOL_ROUND_BUDGET = 96
 CODE_CHANGE_ROUND_BUDGET = 160
 
-# A silent tool batch can run for minutes. Realtime turns ask the model for a
-# short evidence-grounded public update once this interval passes; fast tool
-# rounds pay no extra model call and continue directly.
-PUBLIC_NARRATIVE_SILENCE_S = 8.0
-PUBLIC_NARRATIVE_TIMEOUT_S = 20.0
+# Realtime conversation should not become a silent tool log merely because
+# local reads/searches finish quickly. Every meaningful, otherwise-silent
+# evidence batch gets one model-authored checkpoint by default. The narration
+# call is strictly bounded and optional, so a weak provider cannot stall the
+# underlying task just to produce progress prose.
+PUBLIC_NARRATIVE_SILENCE_S = 0.0
+PUBLIC_NARRATIVE_TIMEOUT_S = 6.0
 _LONG_RUNNING_PUBLIC_NARRATIVE_TOOLS = {
     "exec_shell",
     "run_command",
@@ -168,6 +170,23 @@ def _native_model_round_timeout_s() -> float:
     except (TypeError, ValueError):
         return 120.0
     return max(10.0, min(value, 900.0))
+
+
+def _native_model_recovery_timeout_s(base_timeout_s: float) -> float:
+    """Use a shorter deadline once a native round is already recovering.
+
+    A normal tool round may need the full reasoning allowance. A tools-disabled
+    convergence retry should either synthesize the saved evidence promptly or
+    end truthfully; granting it another full two-minute window makes the
+    timeline look alive while the task is no longer making progress.
+    """
+    raw = os.environ.get("OCTOPUS_NATIVE_MODEL_RECOVERY_TIMEOUT_S", "30")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = 30.0
+    recovery_ceiling = max(10.0, min(value, 120.0))
+    return min(base_timeout_s, recovery_ceiling)
 
 
 _NATIVE_STREAM_DEADLINE = object()
@@ -2099,11 +2118,14 @@ def stream_agentic_fallback(
         _round_redirected = False
 
         _round_stream_event_seen = False
+        _round_timeout_s = _native_model_round_timeout_s()
+        if _round_convergence_mode:
+            _round_timeout_s = _native_model_recovery_timeout_s(_round_timeout_s)
         try:
             for event in _iter_native_model_stream_with_deadline(
                 router,
                 req,
-                _native_model_round_timeout_s(),
+                _round_timeout_s,
                 redirect_probe=_capture_steering,
             ):
                 if event is _NATIVE_STREAM_DEADLINE:
@@ -2111,7 +2133,7 @@ def stream_agentic_fallback(
                     _logger.warning(
                         "agentic round %d exceeded %.1fs; switching to convergence",
                         round_i + 1,
-                        _native_model_round_timeout_s(),
+                        _round_timeout_s,
                     )
                     break
                 if event is _NATIVE_STREAM_REDIRECTED:
@@ -2201,13 +2223,16 @@ def stream_agentic_fallback(
         if _round_timed_out and not round_tool_calls:
             _model_timeout_recoveries += 1
             if _model_timeout_recoveries >= 2:
-                final_text = (
+                stall_message = (
                     "模型连续两次未能在单轮时限内给出可用的下一步或最终答案。"
                     "已经完成的工具结果仍保留在过程记录中，但这次无法可靠完成汇总；"
                     "可以点击继续，从现有进度重新收敛。"
                 )
-                yield ("text", final_text, None)
-                yield ("done", "", final_text)
+                yield (
+                    "error",
+                    {"kind": "model_stall", "message": stall_message},
+                    None,
+                )
                 return
             recovery_update = (
                 "这一轮推理超过单轮时限；已保留前面的有效结果，"
