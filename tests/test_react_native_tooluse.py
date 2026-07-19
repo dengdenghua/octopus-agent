@@ -19,6 +19,7 @@ from runtime.core.cerebrum.react_native import (
     build_loop_tool_specs,
     native_tool_use_active,
     native_tool_use_flag_enabled,
+    require_public_update_on_tool_specs,
     step_from_tool_calls,
     trim_text_protocol_for_native,
 )
@@ -125,6 +126,42 @@ def test_step_from_tool_calls_single() -> None:
     assert step.action == 'read_file({"path": "x.py"})'
     assert step.thought == ""
     assert step.public_update == "reading"
+
+
+def test_first_tool_schema_requires_model_authored_public_update() -> None:
+    original = ToolSpec(
+        name="read_file",
+        input_schema={
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+        },
+    )
+
+    augmented = require_public_update_on_tool_specs([original])[0]
+
+    assert augmented.input_schema["required"] == ["path", "public_update"]
+    assert augmented.input_schema["properties"]["public_update"]["type"] == "string"
+    assert "public_update" not in original.input_schema["properties"]
+
+
+def test_structured_public_update_is_displayed_but_not_sent_to_tool() -> None:
+    step = step_from_tool_calls(
+        [
+            ToolCall(
+                id="a",
+                name="read_file",
+                input={
+                    "path": "x.py",
+                    "public_update": "我先核对 x.py 的实际定义，再给出结论。",
+                },
+            )
+        ],
+        iteration=1,
+    )
+
+    assert step.public_update == "我先核对 x.py 的实际定义，再给出结论。"
+    assert step.action == 'read_file({"path": "x.py"})'
 
 
 def test_step_from_tool_calls_parallel() -> None:

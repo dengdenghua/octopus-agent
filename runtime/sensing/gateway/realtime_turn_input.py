@@ -733,6 +733,9 @@ def _build_intent(
             # prose. The realtime bridge may request one evidence-grounded
             # public update after a genuinely quiet, long-running batch.
             "realtime_public_narrative": True,
+            # Ask the working model itself for one natural public sentence
+            # before its first real tool round; no separate narrator call.
+            "realtime_public_orientation": True,
             # Pass attachments through so react_loop can fold image-typed
             # ones into the user message as OpenAI image_url content
             # blocks (vision models then actually "see" the image).

@@ -122,6 +122,40 @@ def build_loop_tool_specs(
         return []
 
 
+def require_public_update_on_tool_specs(specs: list[Any]) -> list[Any]:
+    """Require one model-authored public sentence on the first tool round.
+
+    Some function-calling providers emit a tool call without any ordinary text,
+    even when explicitly prompted to speak first. Adding a transient schema
+    field gives that same model a structured place to author the sentence. The
+    field is removed before dispatch, so tool handlers never see it.
+    """
+
+    augmented: list[Any] = []
+    for spec in specs:
+        schema = dict(getattr(spec, "input_schema", None) or {})
+        properties = dict(schema.get("properties") or {})
+        properties["public_update"] = {
+            "type": "string",
+            "description": (
+                "One short user-facing sentence in the user's language describing the "
+                "concrete scope this first tool round will inspect or establish. Do not "
+                "include hidden reasoning, stage labels, tool names, or completed claims."
+            ),
+        }
+        required = list(schema.get("required") or [])
+        if "public_update" not in required:
+            required.append("public_update")
+        schema["type"] = "object"
+        schema["properties"] = properties
+        schema["required"] = required
+        try:
+            augmented.append(spec.model_copy(update={"input_schema": schema}))
+        except AttributeError:
+            augmented.append(spec)
+    return augmented
+
+
 def step_from_tool_calls(
     tool_calls: list[Any],
     *,
@@ -140,12 +174,16 @@ def step_from_tool_calls(
     trace.
     """
     actions: list[str] = []
+    structured_public_update = ""
     for call in tool_calls:
         name = str(getattr(call, "name", "") or "").strip()
         if not name:
             continue
         raw_input = getattr(call, "input", None)
-        args = raw_input if isinstance(raw_input, dict) else {}
+        args = dict(raw_input) if isinstance(raw_input, dict) else {}
+        candidate_update = args.pop("public_update", "")
+        if not structured_public_update and isinstance(candidate_update, str):
+            structured_public_update = candidate_update.strip()
         try:
             arg_json = json.dumps(args, ensure_ascii=False)
         except (TypeError, ValueError):
@@ -156,7 +194,7 @@ def step_from_tool_calls(
     return ReActStep(
         iteration=iteration,
         thought=thought,
-        public_update=(text or "").strip(),
+        public_update=(text or "").strip() or structured_public_update,
         action="; ".join(actions),
         observation="",
         raw_llm_output=text or "",
@@ -193,7 +231,8 @@ def trim_text_protocol_for_native(system_prompt: str) -> str:
         line_end = len(system_prompt)
     native_note = (
         "你已获得原生工具调用能力(tools)。直接调用所需工具即可,"
-        "无需输出 Thought/Action/Observation 文本协议。第一批工具前可以保持简洁；"
+        "无需输出 Thought/Action/Observation 文本协议。第一批工具前先用普通文本给用户"
+        "一句具体的范围说明，不写阶段标题、工具名或完成式结论；"
         "收到工具结果后若还要继续调用工具，先用普通文本给用户 1-3 句进度，"
         "概括刚确认的事实以及它如何影响下一步，不要暴露私有思考或工具参数；"
         "完成后给出最终答案。"

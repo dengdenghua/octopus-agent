@@ -365,6 +365,7 @@ def test_code_mode_completion_skips_missing_todo_when_protocol_is_optional() -> 
     "goal",
     [
         "不要读取、查看、修改或创建任何本地文件，只做网页调研。",
+        "只读验证两个文件，不修改文件。",
         "Do not read, inspect, modify, or create local project files; only research the web.",
     ],
 )
@@ -1139,6 +1140,106 @@ def test_realtime_quiet_tool_result_gets_model_authored_evidence_checkpoint() ->
     assert "对比两份流式结果" in checkpoint_input
 
 
+def test_native_first_turn_streams_model_opening_before_first_tool() -> None:
+    from runtime.platform.models.llm import ToolCall
+    from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
+
+    class _Caps:
+        supports_tool_use = True
+
+    class _NativeOpeningRouter:
+        capabilities = _Caps()
+
+        def __init__(self) -> None:
+            self.calls = 0
+            self.requests: list[Any] = []
+
+        def call_stream(self, request: Any):
+            self.calls += 1
+            self.requests.append(request)
+            if self.calls == 1:
+                for chunk in (
+                    "我先核对两条流式路径如何排列公开进度与工具事件，",
+                    "再确认最终回答",
+                    "在哪一层收敛。",
+                ):
+                    yield ModelStreamEvent(type="text_delta", delta=chunk)
+                yield ModelStreamEvent(
+                    type="done",
+                    final=ModelResponse(
+                        text=opening,
+                        model="test-model",
+                        tool_calls=[
+                            ToolCall(
+                                id="echo-1",
+                                name="echo",
+                                input={"text": "timeline signal"},
+                            )
+                        ],
+                    ),
+                )
+                return
+            answer = (
+                "Final Answer: 时间线关系已经确认：第一，公开进度说明本轮范围；"
+                "第二，工具事件记录已发生的取证动作；第三，最终回答汇总已有证据。"
+            )
+            yield ModelStreamEvent(type="text_delta", delta=answer)
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(text=answer, model="test-model"),
+            )
+
+    opening = (
+        "我先核对两条流式路径如何排列公开进度与工具事件，"
+        "再确认最终回答在哪一层收敛。"
+    )
+    router = _NativeOpeningRouter()
+    stack = _build_stack_with_executor(router)
+    intent = _intent(
+        "Read-only inspect runtime/protocol/items.py and return one concise timeline conclusion"
+    )
+    intent.user_context.update(
+        {
+            "mode": "react",
+            "realtime_public_narrative": True,
+            "realtime_public_orientation": True,
+        }
+    )
+
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=3)
+    )
+
+    assert result is not None and result.final_answer.startswith("时间线关系已经确认")
+    assert router.calls == 2
+    public_opening = [
+        event
+        for event in events
+        if event["type"] == "commentary_delta"
+        and event.get("progress_source") == "model"
+    ]
+    assert "".join(event["delta"] for event in public_opening) == opening
+    assert [event["start_new_segment"] for event in public_opening] == [
+        True,
+        False,
+        False,
+    ]
+    assert events.index(public_opening[-1]) < next(
+        index for index, event in enumerate(events) if event["type"] == "tool_start"
+    )
+    first_request_prompt = "\n".join(
+        str(message.content) for message in router.requests[0].messages
+    )
+    assert router.requests[0].tools
+    assert all(
+        "public_update" in tool.input_schema.get("required", [])
+        for tool in router.requests[0].tools
+    )
+    assert "<public-orientation>" in first_request_prompt
+    assert "stage label" in first_request_prompt
+    assert "immediately before the first tool calls" in first_request_prompt
+
+
 def test_model_authored_evidence_checkpoint_streams_into_one_public_beat() -> None:
     narrative = "检查结果已经确认流式链路正常；下一步把这个证据并入最终结论。"
     router = _ChunkedCapturingRouter(
@@ -1689,6 +1790,7 @@ def test_same_phase_fallback_updates_are_throttled() -> None:
 
 def test_explicit_read_only_turn_injects_non_mutation_contract() -> None:
     assert _explicit_read_only_goal("只读调研 coding agent，严禁修改任何文件")
+    assert _explicit_read_only_goal("读取两个项目文件，不修改文件")
     assert _explicit_read_only_goal("Research this read-only; do not create files")
     assert not _explicit_read_only_goal("Implement and test the coding agent UI")
 

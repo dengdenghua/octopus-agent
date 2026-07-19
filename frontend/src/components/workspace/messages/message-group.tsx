@@ -427,7 +427,7 @@ export function MessageGroup({
           key={item.id}
           role="button"
           tabIndex={0}
-          aria-label={`${t.message.thinkingProcess}: ${commentarySummary}`}
+          aria-label={commentarySummary}
           onClick={() =>
             emitOpenAgentWorkbench({
               tab: "agent",
@@ -625,7 +625,7 @@ export function MessageGroup({
             <div
               role="button"
               tabIndex={0}
-              aria-label={`${t.message.thinkingProcess}: ${commentarySummary}`}
+              aria-label={commentarySummary}
               onClick={() =>
                 emitOpenAgentWorkbench({
                   tab: "agent",

@@ -624,7 +624,8 @@ def _explicit_read_only_goal(value: str | None) -> bool:
         )
         or re.search(r"\bwithout\s+(?:modifying|changing|editing|writing|creating)", text)
         or re.search(
-            r"(?:只读|(?:不要|严禁|禁止|不得|不可|不允许)\s*"
+            r"(?:只读|(?:不要|严禁|禁止|不得|不可|不允许|"
+            r"不(?=修改|改动|更改|编辑|写入|创建|新增|添加|删除|提交))\s*"
             r"(?:修改|改动|更改|编辑|写入|创建|新增|添加|删除|提交))",
             text,
         )
@@ -1731,6 +1732,7 @@ def stream_react_loop(
     from runtime.core.cerebrum.react_native import (
         build_loop_tool_specs,
         native_tool_use_active,
+        require_public_update_on_tool_specs,
         step_from_tool_calls,
         trim_text_protocol_for_native,
     )
@@ -1751,6 +1753,15 @@ def stream_react_loop(
         # Spec build came back empty — nothing to call natively, so stay on
         # the proven text protocol rather than passing an empty tools list.
         _native_mode = False
+    _native_orientation_tool_specs = (
+        require_public_update_on_tool_specs(_native_tool_specs)
+        if (
+            _native_mode
+            and bool((intent.user_context or {}).get("realtime_public_orientation"))
+            and _initial_public_checkpoint(intent.normalized_goal)
+        )
+        else _native_tool_specs
+    )
 
     # Expose the live approval provider through the session so the
     # ``exit_plan_mode`` skill can issue an interactive approval
@@ -1812,6 +1823,26 @@ def stream_react_loop(
     )
     _uc = intent.user_context or {}
     _metadata = _uc.get("metadata") or {}
+    _realtime_public_orientation_requested = bool(
+        _uc.get("realtime_public_orientation")
+    )
+    if _realtime_public_orientation_requested:
+        system_parts.append(
+            "\n<public-orientation>\n"
+            "For a non-trivial task that will use tools, begin the first model turn with "
+            "one short ordinary-language sentence addressed to the user. Describe the "
+            "concrete scope you will inspect, compare, change, or verify and what that "
+            "will establish. This sentence is public progress, not hidden reasoning: do "
+            "not use a heading, stage label, tool name, protocol name, generic status "
+            "filler, or claim that work is already complete. In native tool mode, emit "
+            "the sentence as normal text immediately before the first tool calls. In "
+            "addition, when a first-round tool schema contains a public_update field, "
+            "put the same sentence there; the runtime displays it once and removes it "
+            "before tool execution. In "
+            "the text protocol, put it in Update: immediately before the first Action:. "
+            "Skip it when answering directly without tools.\n"
+            "</public-orientation>"
+        )
     # One model for the turn's work-type/scope (project↔personal↔code) — resolved
     # in runtime.core.cerebrum.work_mode instead of scattered inline reads. The
     # locals below stay as thin aliases so downstream call sites are unchanged.
@@ -2935,6 +2966,7 @@ def stream_react_loop(
     _realtime_public_narrative = bool(
         intent.user_context.get("realtime_public_narrative")
     )
+    _realtime_public_orientation = _realtime_public_orientation_requested
     _last_fallback_phase = ""
     _same_phase_tool_rounds = 0
     if resume_from_iter == 0:
@@ -3151,7 +3183,11 @@ def stream_react_loop(
                     )
                 ),
                 tools=(
-                    _native_tool_specs
+                    (
+                        _native_orientation_tool_specs
+                        if i == 0 and not steps
+                        else _native_tool_specs
+                    )
                     if _native_mode and _evidence_convergence_active is None
                     else []
                 ),
@@ -3169,6 +3205,20 @@ def stream_react_loop(
             _streamed_final_chars = 0
             _final_stream_guarded = False
             _final_delta_emitted_this_iteration = False
+            # Native tool models keep private thinking in a separate channel,
+            # so ordinary text before the first tool call is safe public prose.
+            # Stream that model-authored orientation from the main call itself:
+            # an extra narrator request added seconds of latency and frequently
+            # timed out on the same provider before showing anything.
+            _native_orientation_candidate = bool(
+                _native_mode
+                and _realtime_public_orientation
+                and i == 0
+                and not steps
+                and _initial_public_checkpoint(intent.normalized_goal)
+            )
+            _native_orientation_emitted = ""
+            _native_orientation_disabled = False
             _iteration_soft_timed_out = False
             _base_iteration_timeout = _model_iteration_timeout_s()
             _has_tool_evidence = bool(
@@ -3222,6 +3272,70 @@ def stream_react_loop(
                     break
                 if evt.type == "text_delta":
                     text_parts.append(evt.delta)
+                    joined = "".join(text_parts)
+                    if _native_orientation_candidate and not _native_orientation_disabled:
+                        folded = joined.lstrip().casefold()
+                        if (
+                            _FINAL_RE.search(joined)
+                            or _THOUGHT_RE.search(joined)
+                            or _ACTION_RE.search(joined)
+                            or _looks_like_observation_echo(joined)
+                            or "<tool_call" in folded
+                            or "<tool_invocation" in folded
+                            or "<function=" in folded
+                            or _looks_like_special_tool_envelope(joined)
+                        ):
+                            _native_orientation_disabled = True
+                        else:
+                            _orientation = _safe_public_update(joined)[:420].rstrip()
+                            if _orientation and not _native_orientation_emitted:
+                                _orientation_key = re.sub(
+                                    r"\s+", " ", _orientation
+                                ).strip().casefold()
+                                _orientation_ready = (
+                                    len(_orientation) >= _PUBLIC_EVIDENCE_STREAM_GATE_CHARS
+                                    or bool(re.search(r"[。.!！?？；;]\s*$", _orientation))
+                                )
+                                if (
+                                    _orientation_ready
+                                    and _orientation_key != _last_public_update_key
+                                ):
+                                    yield {
+                                        "type": "commentary_delta",
+                                        "delta": _orientation,
+                                        "progress_kind": _public_update_kind(
+                                            _orientation,
+                                            opening=True,
+                                        ),
+                                        "progress_source": "model",
+                                        "start_new_segment": True,
+                                        "iteration": i + 1,
+                                    }
+                                    _native_orientation_emitted = _orientation
+                                    _public_narrative_started = True
+                                    _last_public_update_key = _orientation_key
+                            elif (
+                                _orientation.startswith(_native_orientation_emitted)
+                                and len(_orientation) > len(_native_orientation_emitted)
+                            ):
+                                _orientation_suffix = _orientation[
+                                    len(_native_orientation_emitted) :
+                                ]
+                                yield {
+                                    "type": "commentary_delta",
+                                    "delta": _orientation_suffix,
+                                    "progress_kind": _public_update_kind(
+                                        _orientation,
+                                        opening=True,
+                                    ),
+                                    "progress_source": "model",
+                                    "start_new_segment": False,
+                                    "iteration": i + 1,
+                                }
+                                _native_orientation_emitted = _orientation
+                                _last_public_update_key = re.sub(
+                                    r"\s+", " ", _orientation
+                                ).strip().casefold()
                     if _final_stream_started:
                         # Already past the anchor — every subsequent
                         # token is part of the user-visible answer.
@@ -3310,6 +3424,7 @@ def stream_react_loop(
                                 _visible_stream_state["chars"] = len(answer_so_far)
                         elif (
                             len(joined) >= 120
+                            and not _native_orientation_emitted
                             and not _THOUGHT_RE.search(joined)
                             and not _ACTION_RE.search(joined)
                             and not _looks_like_observation_echo(joined)
