@@ -71,6 +71,7 @@ const api = {
   desktop: {
     listItems: invoke("desktop:listItems"),
     openItem: invoke("desktop:openItem"),
+    trashItem: invoke("desktop:trashItem"),
     installContextMenu: invoke("desktop:installContextMenu"),
     removeContextMenu: invoke("desktop:removeContextMenu"),
     moveItem: invoke("desktop:moveItem"),

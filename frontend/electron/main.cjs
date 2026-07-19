@@ -92,6 +92,12 @@ async function listDesktopItems() {
   return items;
 }
 
+function isDirectDesktopItem(candidate) {
+  const desktop = path.resolve(DESKTOP_DIR);
+  const resolved = path.resolve(String(candidate || ""));
+  return resolved !== desktop && path.dirname(resolved) === desktop;
+}
+
 async function moveDesktopItem(srcPath, destDir) {
   const dest = path.isAbsolute(destDir)
     ? destDir
@@ -375,6 +381,20 @@ function registerIpc() {
   handle("desktop:openItem", async (p) => {
     const error = await shell.openPath(p);
     return error ? { ok: false, error } : { ok: true };
+  });
+  handle("desktop:trashItem", async (p) => {
+    try {
+      // The renderer only receives desktop entries from listItems(). Keep the
+      // destructive bridge equally narrow so it cannot delete arbitrary paths.
+      if (!isDirectDesktopItem(p)) {
+        return { ok: false, error: "Only direct items on the Desktop can be removed" };
+      }
+      if (!fs.existsSync(p)) return { ok: false, error: "Item no longer exists" };
+      await shell.trashItem(p);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
   });
   handle("desktop:moveItem", async (srcPath, destDir) => {
     try {

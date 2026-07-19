@@ -164,6 +164,8 @@ export interface OctopusElectronAPI {
       error?: string;
     }>;
     openItem: (path: string) => Promise<{ ok: boolean; error?: string }>;
+    /** Moves one direct Desktop item to the operating system trash. */
+    trashItem: (path: string) => Promise<{ ok: boolean; error?: string }>;
     installContextMenu: () => Promise<{ ok: boolean; error?: string }>;
     removeContextMenu: () => Promise<{ ok: boolean; error?: string }>;
     moveItem: (

@@ -152,6 +152,7 @@ export default function DesktopShellPage() {
     y: number;
     item: NativeDesktopItem;
   } | null>(null);
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const mousePassthroughRef = useRef(false);
@@ -529,7 +530,25 @@ export default function DesktopShellPage() {
         toast.error(e instanceof Error ? e.message : t.desktop.errors.archive);
       }
     } else if (action === "delete") {
-      toast.info(t.desktop.errors.deleteNotImplemented);
+      if (!window.octopus?.desktop?.trashItem) return;
+      const confirmed = window.confirm(
+        `将「${item.name}」移至系统废纸篓？`,
+      );
+      if (!confirmed) return;
+      setDeletingItemId(item.id);
+      try {
+        const result = await window.octopus.desktop.trashItem(item.path);
+        if (result.ok) {
+          await refreshDesktopItems();
+          toast.success(`已将「${item.name}」移至废纸篓`);
+        } else {
+          toast.error(result.error || t.desktop.errors.move);
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : t.desktop.errors.move);
+      } finally {
+        setDeletingItemId(null);
+      }
     }
   };
 
@@ -1065,13 +1084,16 @@ export default function DesktopShellPage() {
             <div className="my-1 h-px bg-muted" />
             <button
               type="button"
+              disabled={deletingItemId === contextMenu.item.id}
               onClick={() =>
                 handleContextMenuAction("delete", contextMenu.item)
               }
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-600 transition hover:bg-red-50"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-600 transition hover:bg-red-50 disabled:cursor-wait disabled:opacity-60"
             >
               <Trash2Icon className="size-3.5" />
-              {t.desktop.contextMenu.delete}
+              {deletingItemId === contextMenu.item.id
+                ? "正在移至废纸篓…"
+                : t.desktop.contextMenu.delete}
             </button>
           </div>
         )}
