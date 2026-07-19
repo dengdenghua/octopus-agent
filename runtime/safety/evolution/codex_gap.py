@@ -162,6 +162,18 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
                 "review_successes_retry_failed",
             ),
         ),
+        GapBehaviorCheck(
+            id="cli_team_recovery_ui_tests",
+            title="Team task UI renders CLI recovery groups and failure labels",
+            path="frontend/src/components/workspace/collab/team-tasks-panel.test.tsx",
+            required_terms=(
+                "CLI 恢复分组",
+                "failure_label",
+                "recovery_groups",
+                "账号权益",
+                "版本不兼容",
+            ),
+        ),
     ),
     "subagents_parallel_work": (
         GapBehaviorCheck(

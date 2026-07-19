@@ -337,6 +337,7 @@ export function TeamTasksPanel({
     const liveStatus = taskEvent
       ? formatTeamTaskEvent(taskEvent.event, roleLabel)
       : null;
+    const recoveryGroups = cliRecoveryGroups(task);
 
     return (
       <article className="rounded-lg border border-border-default bg-background/85 shadow-[var(--shadow-xs)]">
@@ -405,6 +406,30 @@ export function TeamTasksPanel({
                 </button>
               )}
             </div>
+            {recoveryGroups.length > 0 && (
+              <div className="mt-2 rounded-md border border-amber-200 bg-amber-50/70 px-2 py-1.5 text-[11px] text-amber-900">
+                <div className="font-medium">CLI 恢复分组</div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {recoveryGroups.map((group) => (
+                    <span
+                      key={group.key}
+                      className="inline-flex max-w-full items-center gap-1 rounded border border-amber-200 bg-background/75 px-1.5 py-0.5"
+                      title={group.hints.join("；")}
+                    >
+                      <span className="shrink-0 font-medium">
+                        {group.label}
+                      </span>
+                      <span className="min-w-0 truncate text-amber-800/80">
+                        {group.members.join("、")}
+                      </span>
+                      <span className="shrink-0 rounded bg-amber-100 px-1 font-mono text-[10px]">
+                        {group.count}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -416,6 +441,7 @@ export function TeamTasksPanel({
                 a.title ?? a.agent_id ?? a.type ?? `产出 ${i + 1}`,
               );
               const content = String(a.content ?? "");
+              const failureLabel = String(a.failure_label ?? "");
               const ok = a.ok;
               return (
                 <div
@@ -430,6 +456,11 @@ export function TeamTasksPanel({
                       <XCircleIcon className="size-3 shrink-0 text-amber-500" />
                     )}
                     <span className="truncate">{title}</span>
+                    {failureLabel && ok === false && (
+                      <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">
+                        {failureLabel}
+                      </span>
+                    )}
                   </div>
                   {content && (
                     <pre className="max-h-48 overflow-auto border-t border-border-subtle px-2 py-1.5 text-[11px] leading-snug whitespace-pre-wrap break-words">
@@ -624,6 +655,55 @@ function assigneeNames(task: TeamTask, team: Team | null): string[] {
     .map((assignee) => byRef.get(assignee.ref) ?? assignee.ref)
     .filter(Boolean)
     .slice(0, 3);
+}
+
+function cliRecoveryGroups(task: TeamTask): Array<{
+  key: string;
+  label: string;
+  count: number;
+  members: string[];
+  hints: string[];
+}> {
+  const metadata = task.metadata;
+  const runner =
+    metadata && typeof metadata.runner === "object" && metadata.runner !== null
+      ? (metadata.runner as Record<string, unknown>)
+      : null;
+  const groups = Array.isArray(runner?.recovery_groups)
+    ? runner.recovery_groups
+    : [];
+  return groups
+    .filter((group): group is Record<string, unknown> => {
+      return Boolean(group && typeof group === "object");
+    })
+    .map((group, index) => {
+      const members = Array.isArray(group.members)
+        ? group.members
+            .filter((member): member is Record<string, unknown> =>
+              Boolean(member && typeof member === "object"),
+            )
+            .map((member) =>
+              String(member.label || member.agent_id || member.partner_id || ""),
+            )
+            .filter(Boolean)
+        : [];
+      const hints = Array.isArray(group.fix_hints)
+        ? group.fix_hints.map((hint) => String(hint || "")).filter(Boolean)
+        : [];
+      const failureKind = String(group.failure_kind || `group-${index}`);
+      return {
+        key: failureKind,
+        label: String(group.label || failureKind),
+        count:
+          typeof group.count === "number"
+            ? group.count
+            : Math.max(1, members.length),
+        members,
+        hints,
+      };
+    })
+    .filter((group) => group.label && group.members.length > 0)
+    .slice(0, 4);
 }
 
 function taskProgressValue(
