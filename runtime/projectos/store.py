@@ -272,6 +272,24 @@ class ProjectStore:
                 projects.append(project)
         return projects
 
+    def delete_project(self, project_id: str) -> bool:
+        """Remove a project and all of its owned rows in one transaction."""
+        project = _require_id(project_id, label="project_id")
+        with self._lock, self._conn() as conn:
+            exists = conn.execute("SELECT 1 FROM projects WHERE id=?", (project,)).fetchone()
+            if not exists:
+                return False
+            conn.execute(
+                "DELETE FROM tasks WHERE milestone_id IN "
+                "(SELECT id FROM milestones WHERE project_id=?)",
+                (project,),
+            )
+            conn.execute("DELETE FROM milestones WHERE project_id=?", (project,))
+            conn.execute("DELETE FROM thread_projects WHERE project_id=?", (project,))
+            conn.execute("DELETE FROM project_events WHERE project_id=?", (project,))
+            conn.execute("DELETE FROM projects WHERE id=?", (project,))
+        return True
+
     # ── audit events ────────────────────────────────────────────────────────
     def append_event(
         self,
@@ -381,6 +399,23 @@ class ProjectStore:
             return _require_id(row[0], label="thread_id")
         except ValueError:
             return None
+
+    def thread_project_map(self) -> dict[str, str]:
+        """Return valid thread-to-project bindings for lightweight clients."""
+        with self._lock, self._conn() as conn:
+            rows = conn.execute(
+                "SELECT tp.thread_id, tp.project_id FROM thread_projects tp "
+                "INNER JOIN projects p ON p.id=tp.project_id"
+            ).fetchall()
+        out: dict[str, str] = {}
+        for thread_id, project_id in rows:
+            try:
+                out[_require_id(thread_id, label="thread_id")] = _require_id(
+                    project_id, label="project_id"
+                )
+            except ValueError:
+                continue
+        return out
 
     # ── milestones ───────────────────────────────────────────────────────────
     def save_milestone(

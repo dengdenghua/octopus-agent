@@ -3,13 +3,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { authHeaders, jsonAuthHeaders } from "../auth/api";
 import { getBackendBaseURL } from "../config";
 
-interface Project {
+export interface Project {
   id: string;
   name: string;
-  icon: string;
-  category: string;
-  created_at: string;
-  thread_ids: string[];
+  goal?: string;
+  status?: string;
+  // Existing sidebar-only metadata is optional for Project OS projects.
+  icon?: string;
+  category?: string;
+  created_at?: string;
+  thread_ids?: string[];
 }
 
 const BASE = () => `${getBackendBaseURL()}/api/projects`;
@@ -25,7 +28,15 @@ export function useProjects() {
         throw new Error(`Failed to load projects: ${res.statusText}`);
       }
       const data = (await res.json()) as unknown;
-      return Array.isArray(data) ? (data as Project[]) : [];
+      if (Array.isArray(data)) return data as Project[];
+      if (
+        data &&
+        typeof data === "object" &&
+        Array.isArray((data as { projects?: unknown }).projects)
+      ) {
+        return (data as { projects: Project[] }).projects;
+      }
+      return [];
     },
   });
 }
@@ -35,20 +46,29 @@ export function useCreateProject() {
   return useMutation({
     mutationFn: async (data: {
       name: string;
+      goal?: string;
       icon?: string;
       category?: string;
     }) => {
       const res = await fetch(BASE(), {
         method: "POST",
         headers: jsonAuthHeaders(),
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          name: data.name,
+          // A sidebar project starts as a lightweight plan; users can enrich
+          // its goal later through the Project OS workflow.
+          goal: data.goal?.trim() || data.name,
+        }),
       });
       if (!res.ok) {
         throw new Error(`Failed to create project: ${res.statusText}`);
       }
       return res.json();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["thread-map"] });
+    },
   });
 }
 
@@ -90,6 +110,7 @@ export function useMoveThreadToProject() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["thread-map"] });
       qc.invalidateQueries({ queryKey: ["threads"] });
     },
   });

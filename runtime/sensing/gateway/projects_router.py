@@ -29,6 +29,11 @@ class PlanBody(BaseModel):
     goal: str = Field(min_length=1)
 
 
+class MoveThreadBody(BaseModel):
+    thread_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+
+
 class RunBody(BaseModel):
     max_ticks: int = Field(default=DEFAULT_RUN_MAX_TICKS, ge=1, le=HARD_MAX_RUN_TICKS)
 
@@ -234,6 +239,10 @@ def create_projects_router(
             raise HTTPException(404, "project not found for thread")
         return _full_state(project.id)
 
+    @router.get("/api/projects/thread-map")
+    def thread_project_map() -> dict[str, str]:
+        return project_store.thread_project_map()
+
     @router.get("/api/projects/{project_id}")
     def get_project(project_id: str) -> dict[str, Any]:
         return _full_state(project_id)
@@ -302,6 +311,24 @@ def create_projects_router(
             raise _bad_request(exc) from exc
         _project_to_collaboration(project.id)
         return {"ok": True, **_full_state(project.id)}
+
+    @router.post("/api/projects/move", dependencies=[Depends(_auth_dep)])
+    def move_thread(body: MoveThreadBody) -> dict[str, Any]:
+        project = _project_or_404(body.project_id)
+        try:
+            project_store.bind_thread(body.thread_id, project.id)
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
+        return {"ok": True, "thread_id": body.thread_id, "project_id": project.id}
+
+    @router.delete("/api/projects/{project_id}", dependencies=[Depends(_auth_dep)])
+    def delete_project(project_id: str) -> dict[str, Any]:
+        _project_or_404(project_id)
+        try:
+            project_store.delete_project(project_id)
+        except ValueError as exc:
+            raise _bad_request(exc) from exc
+        return {"ok": True, "project_id": project_id}
 
     @router.post("/api/projects/from-group/{thread_id}", dependencies=[Depends(_auth_dep)])
     def from_group(thread_id: str, body: FromGroupBody) -> dict[str, Any]:

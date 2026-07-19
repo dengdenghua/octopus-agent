@@ -55,6 +55,24 @@ def test_store_binds_thread_to_project(tmp_path) -> None:
     assert s.project_for_thread("missing") is None
 
 
+def test_store_delete_project_cascades_owned_rows_and_bindings(tmp_path) -> None:
+    s = ProjectStore(base_dir=tmp_path)
+    s.save_project(Project(id="P1", name="x", goal="g"))
+    s.save_milestone("P1", Milestone(id="M1", name="m", goal="g"))
+    s.save_task(Task(id="T1", milestone_id="M1", type="code", goal="g"))
+    s.append_event("P1", kind="project.created", payload={})
+    s.bind_thread("thread-1", "P1")
+
+    assert s.thread_project_map() == {"thread-1": "P1"}
+    assert s.delete_project("P1") is True
+    assert s.delete_project("P1") is False
+    assert s.get_project("P1") is None
+    assert s.get_milestone("M1") is None
+    assert s.get_task("T1") is None
+    assert s.events_for_project("P1") == []
+    assert s.thread_project_map() == {}
+
+
 def test_store_project_events_roundtrip_and_limit(tmp_path) -> None:
     s = ProjectStore(base_dir=tmp_path)
     s.save_project(Project(id="P1", name="x", goal="g"))

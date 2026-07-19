@@ -44,6 +44,25 @@ def test_plan_run_report_flow(tmp_path) -> None:
     assert pid in [p["id"] for p in c.get("/api/projects").json()["projects"]]
 
 
+def test_sidebar_project_endpoints_list_move_and_delete(tmp_path) -> None:
+    c = _client(tmp_path)
+    planned = c.post("/api/projects", json={"name": "workspace", "goal": "organize work"})
+    assert planned.status_code == 200
+    project_id = planned.json()["project"]["id"]
+
+    moved = c.post(
+        "/api/projects/move",
+        json={"thread_id": "thread-1", "project_id": project_id},
+    )
+    assert moved.status_code == 200
+    assert c.get("/api/projects/thread-map").json() == {"thread-1": project_id}
+
+    deleted = c.delete(f"/api/projects/{project_id}")
+    assert deleted.status_code == 200
+    assert c.get("/api/projects/thread-map").json() == {}
+    assert c.get(f"/api/projects/{project_id}").status_code == 404
+
+
 def test_run_tick_budget_is_bounded_at_api_boundary(tmp_path) -> None:
     c = _client(tmp_path)
     pid = c.post("/api/projects", json={"name": "sleep", "goal": "smart sleep system"}).json()[
