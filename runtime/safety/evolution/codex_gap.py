@@ -54,6 +54,17 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
             ),
         ),
         GapBehaviorCheck(
+            id="local_partner_docs_entrypoint",
+            title="Docs index exposes the Local CLI partner operator handoff",
+            path="docs/index.md",
+            required_terms=(
+                "Local CLI Partners",
+                "guide/local-cli-partners.md",
+                "readiness checks",
+                "native-command handoff",
+            ),
+        ),
+        GapBehaviorCheck(
             id="local_partner_slash_model_adapter",
             title="Local partner bridge normalizes slash commands and model overrides",
             path="runtime/execution/agents/local_partner_bridge.py",
