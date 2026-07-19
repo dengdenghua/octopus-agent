@@ -149,6 +149,37 @@ def test_all_members_failed_recommends_setup_fix(tmp_path: Path) -> None:
     assert out["next_action"] == "fix_cli_setup_and_retry"
     assert len(out["failed_members"]) == 2
     assert "Needs attention" in out["summary"]
+    assert out["summary"].count("Suggested fix: 请在原生 CLI 中配置模型后重试。") == 1
+
+
+def test_multiple_distinct_failures_surface_labeled_fix_hints(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+
+    def fake_runner(*, partner_id, command, prompt, cwd, timeout=None, env=None):
+        if partner_id == "codex-cli":
+            return LocalPartnerResult(
+                ok=False,
+                raw_error="not logged in",
+                failure_kind="auth",
+                failure_title="Codex CLI 需要登录或授权",
+                fix_hint="打开 codex 完成登录。",
+            )
+        return LocalPartnerResult(
+            ok=False,
+            raw_error="no effective model configured",
+            failure_kind="model",
+            failure_title=f"{partner_id} 模型不可用",
+            fix_hint=f"为 {partner_id} 配置模型。",
+        )
+
+    out = run_cli_team("g", _MEMBERS[1:4], repo_root=repo, partner_runner=fake_runner)
+
+    assert out["ok"] is False
+    assert out["next_action"] == "fix_cli_setup_and_retry"
+    assert "Suggested fixes:" in out["summary"]
+    assert "a_codex: 打开 codex 完成登录。" in out["summary"]
+    assert "a_trae: 为 trae-cli 配置模型。" in out["summary"]
+    assert "a_qoder: 为 qoder-cli 配置模型。" in out["summary"]
 
 
 def test_guards(tmp_path: Path) -> None:
