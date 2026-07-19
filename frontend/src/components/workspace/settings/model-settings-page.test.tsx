@@ -19,7 +19,10 @@ import {
   saveThreadModelName,
 } from "@/core/settings/local";
 
-import ModelSettingsPage from "./model-settings-page";
+import ModelSettingsPage, {
+  customModelMatchesSelection,
+  customModelPreferredSelection,
+} from "./model-settings-page";
 
 // The settings page calls ``useAuth`` for the guest-aware branching
 // in the official-models section. We don't want a real AuthProvider
@@ -115,6 +118,34 @@ function mockModelSettingsFetch({
     return jsonOk({ default: "", models: [] });
   });
 }
+
+describe("custom model selection identity", () => {
+  const model = {
+    id: "provider-entry",
+    name: "provider-alias",
+    models: ["provider-model-fast", "provider-model-strong"],
+  };
+
+  it("recognizes entry ids, aliases, and concrete upstream model ids", () => {
+    expect(customModelMatchesSelection(model, "provider-entry")).toBe(true);
+    expect(customModelMatchesSelection(model, "provider-alias")).toBe(true);
+    expect(customModelMatchesSelection(model, "provider-model-fast")).toBe(
+      true,
+    );
+    expect(customModelMatchesSelection(model, "unrelated-model")).toBe(false);
+  });
+
+  it("uses the first concrete model as the default selection", () => {
+    expect(customModelPreferredSelection(model)).toBe("provider-model-fast");
+    expect(
+      customModelPreferredSelection({
+        id: "empty-entry",
+        name: "empty-alias",
+        models: [],
+      }),
+    ).toBe("empty-alias");
+  });
+});
 
 describe("ModelSettingsPage · custom-model list rendering", () => {
   it("renders the full models list for an entry with multiple slots", async () => {
@@ -398,16 +429,70 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     });
   });
 
-  it("switches the default and clears stale thread overrides when deleting the current model", async () => {
+  it("keeps a failed deletion recoverable and leaves the model visible", async () => {
+    const user = userEvent.setup();
+    const models = [
+      {
+        id: "protected",
+        name: "protected",
+        display_name: "Protected",
+        models: ["protected-model"],
+        provider: "openai",
+        base_url: "https://api.example.test/v1",
+        has_api_key: true,
+      },
+    ];
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("/api/config/custom-models/compat-diagnostics")) {
+          return jsonOk({ diagnostics: [] });
+        }
+        if (url.includes("/api/config/openai-compat-profiles")) {
+          return jsonOk({ diagnostics: [] });
+        }
+        if (
+          url.includes("/api/config/custom-models/protected") &&
+          init?.method === "DELETE"
+        ) {
+          return {
+            ok: false,
+            status: 409,
+            json: async () => ({ detail: "模型正在使用，请稍后重试" }),
+          };
+        }
+        if (url.includes("/api/config/custom-models")) {
+          return jsonOk({ models });
+        }
+        return jsonOk({ default: "", models: [] });
+      },
+    );
+
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+    await screen.findByText("Protected");
+    await user.click(screen.getByRole("button", { name: "删除: Protected" }));
+    const dialog = await screen.findByRole("dialog", { name: "删除模型" });
+    await user.click(within(dialog).getByRole("button", { name: "删除" }));
+
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("button", { name: "删除" }),
+      ).toBeEnabled(),
+    );
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByText("Protected")).toBeInTheDocument();
+  });
+
+  it("switches the default and clears stale thread overrides when the default is a concrete model id", async () => {
     const user = userEvent.setup();
     saveLocalSettings({
       ...getLocalSettings(),
       context: {
         ...getLocalSettings().context,
-        model_name: "disposable",
+        model_name: "gpt-4o-mini",
       },
     });
-    saveThreadModelName("legacy-thread", "disposable");
+    saveThreadModelName("legacy-thread", "gpt-4o-mini");
     let models: unknown[] = [
       {
         id: "disposable",
@@ -455,6 +540,7 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
 
     renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
     await screen.findByText("Disposable");
+    expect(screen.getByText("系统默认")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "删除: Disposable" }));
     const dialog = await screen.findByRole("dialog");
@@ -466,10 +552,58 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     await user.click(within(dialog).getByRole("button", { name: "删除" }));
 
     await waitFor(() => {
-      expect(getLocalSettings().context.model_name).toBe("backup");
+      expect(getLocalSettings().context.model_name).toBe("gpt-4.1-mini");
       expect(getThreadModelName("legacy-thread")).toBeUndefined();
       expect(screen.queryByText("Disposable")).not.toBeInTheDocument();
     });
+  });
+
+  it("distinguishes a load failure from an empty list and retries in place", async () => {
+    const user = userEvent.setup();
+    let listCalls = 0;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/config/custom-models/compat-diagnostics")) {
+        return jsonOk({ diagnostics: [] });
+      }
+      if (url.includes("/api/config/openai-compat-profiles")) {
+        return jsonOk({ diagnostics: [] });
+      }
+      if (url.includes("/api/config/custom-models")) {
+        listCalls += 1;
+        if (listCalls === 1) {
+          return {
+            ok: false,
+            status: 503,
+            json: async () => ({ detail: "offline" }),
+          };
+        }
+        return jsonOk({
+          models:
+            listCalls >= 3
+              ? [
+                  {
+                    id: "recovered",
+                    name: "recovered",
+                    display_name: "Recovered model",
+                    models: ["recovered-model"],
+                  },
+                ]
+              : [],
+        });
+      }
+      return jsonOk({ default: "", models: [] });
+    });
+
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+    const errorState = await screen.findByRole("alert");
+    expect(screen.queryByText("暂无自定义模型")).not.toBeInTheDocument();
+    await user.click(
+      within(errorState).getByRole("button", { name: "重新加载" }),
+    );
+
+    expect(await screen.findByText("Recovered model")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
 

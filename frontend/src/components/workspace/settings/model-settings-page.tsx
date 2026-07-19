@@ -299,6 +299,30 @@ interface ModelConfig {
   max_tokens?: number | null;
 }
 
+function customModelReferences(model: ModelConfig): string[] {
+  return Array.from(
+    new Set(
+      [model.name, model.id, ...model.models]
+        .map((value) => value?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+}
+
+export function customModelMatchesSelection(
+  model: ModelConfig,
+  selection?: string | null,
+): boolean {
+  const normalized = selection?.trim();
+  return Boolean(
+    normalized && customModelReferences(model).includes(normalized),
+  );
+}
+
+export function customModelPreferredSelection(model: ModelConfig): string {
+  return model.models.find((value) => value.trim())?.trim() || model.name;
+}
+
 interface CompatDiagnosticUpstream {
   model: string;
   profile?: string | null;
@@ -504,6 +528,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     deletingDefault: (replacement: string | null) => string;
     deletedAndSwitched: (replacement: string) => string;
     deletedAndReset: string;
+    retryLoad: string;
   }
 > = {
   zh: {
@@ -531,6 +556,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     deletedAndSwitched: (replacement) =>
       `模型已删除，默认模型已切换到“${replacement}”。`,
     deletedAndReset: "模型已删除，默认模型已恢复为自动选择。",
+    retryLoad: "重新加载",
   },
   en: {
     overviewTitle: "Model setup overview",
@@ -558,6 +584,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
       `Model deleted. The default is now “${replacement}”.`,
     deletedAndReset:
       "Model deleted. The default has returned to automatic selection.",
+    retryLoad: "Reload",
   },
   ja: {
     overviewTitle: "モデル設定の概要",
@@ -584,6 +611,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     deletedAndSwitched: (replacement) =>
       `モデルを削除し、既定モデルを「${replacement}」に切り替えました。`,
     deletedAndReset: "モデルを削除し、既定モデルを自動選択に戻しました。",
+    retryLoad: "再読み込み",
   },
   ko: {
     overviewTitle: "모델 설정 개요",
@@ -610,6 +638,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     deletedAndSwitched: (replacement) =>
       `모델을 삭제했고 기본 모델을 “${replacement}”(으)로 전환했습니다.`,
     deletedAndReset: "모델을 삭제했고 기본 모델을 자동 선택으로 되돌렸습니다.",
+    retryLoad: "다시 불러오기",
   },
 };
 
@@ -656,16 +685,26 @@ function ModelSettingsOverview({
             {copy.overviewSubtitle}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={onAddModel}>
+        <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap">
+          <Button size="sm" className="w-full sm:w-auto" onClick={onAddModel}>
             <PlusIcon className="mr-1.5 size-3.5" />
             {copy.addApiModel}
           </Button>
-          <Button size="sm" variant="outline" onClick={onScanLocal}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full sm:w-auto"
+            onClick={onScanLocal}
+          >
             <WifiIcon className="mr-1.5 size-3.5" />
             {copy.scanLocalModels}
           </Button>
-          <Button size="sm" variant="outline" onClick={onDiagnoseGateway}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full sm:w-auto"
+            onClick={onDiagnoseGateway}
+          >
             <SearchIcon className="mr-1.5 size-3.5" />
             {copy.diagnoseGateway}
           </Button>
@@ -728,6 +767,7 @@ export default function ModelSettingsPage() {
       items: [],
     });
   const [loading, setLoading] = useState(true);
+  const [modelsLoadError, setModelsLoadError] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [editingModel, setEditingModel] = useState<string | null>(null);
   const [modelToDelete, setModelToDelete] = useState<string | null>(null);
@@ -829,10 +869,12 @@ export default function ModelSettingsPage() {
       const data = await res.json();
       const list = data.models || [];
       setModels(list);
+      setModelsLoadError(false);
       void fetchCompatDiagnostics();
       void fetchCompatProfileCatalog();
     } catch (error) {
       console.error(error);
+      setModelsLoadError(true);
       toast.error(t.settings.model.loadFailed);
     } finally {
       setLoading(false);
@@ -887,19 +929,35 @@ export default function ModelSettingsPage() {
     }
   };
 
+  const handleRetryModels = () => {
+    if (models.length === 0) setLoading(true);
+    void fetchModels();
+  };
+
   const [deletingModel, setDeletingModel] = useState(false);
 
   const reconcileDeletedModel = useCallback(
     (name: string) => {
-      clearThreadModelReferences(name);
+      const deletedModel = models.find((model) => model.name === name);
+      const deletedReferences = deletedModel
+        ? customModelReferences(deletedModel)
+        : [name];
+      deletedReferences.forEach((reference) =>
+        clearThreadModelReferences(reference),
+      );
       const settings = getLocalSettings();
-      if (settings.context.model_name !== name) {
+      const deletedWasDefault = deletedModel
+        ? customModelMatchesSelection(deletedModel, settings.context.model_name)
+        : settings.context.model_name === name;
+      if (!deletedWasDefault) {
         setModels((current) => current.filter((model) => model.name !== name));
         return null;
       }
 
-      const replacement =
-        models.find((model) => model.name !== name)?.name ?? "";
+      const replacementModel = models.find((model) => model.name !== name);
+      const replacement = replacementModel
+        ? customModelPreferredSelection(replacementModel)
+        : "";
       saveLocalSettings({
         ...settings,
         context: {
@@ -931,7 +989,11 @@ export default function ModelSettingsPage() {
       if (replacement === null) {
         toast.success(t.settings.model.deleteSuccess);
       } else if (replacement) {
-        toast.success(pageCopy.deletedAndSwitched(replacement));
+        const replacementLabel =
+          models.find((model) =>
+            customModelMatchesSelection(model, replacement),
+          )?.display_name || replacement;
+        toast.success(pageCopy.deletedAndSwitched(replacementLabel));
       } else {
         toast.success(pageCopy.deletedAndReset);
       }
@@ -1030,7 +1092,7 @@ export default function ModelSettingsPage() {
             models: model.models,
             supports_thinking: model.supports_thinking,
             supports_vision: model.supports_vision,
-            isDefault: model.name === defaultModelName,
+            isDefault: customModelMatchesSelection(model, defaultModelName),
             compat_diagnostic: compatDiagnostics.byId[model.name] ?? null,
           })),
           builtInCompatProfiles: compatProfileCatalog.items.map((item) => ({
@@ -1120,19 +1182,21 @@ export default function ModelSettingsPage() {
         run: async (input) => {
           const name = String(input?.name || "").trim();
           if (!name) throw new Error("name is required");
-          if (!models.some((model) => model.name === name)) {
+          const model = models.find((candidate) => candidate.name === name);
+          if (!model) {
             throw new Error(`custom model not found: ${name}`);
           }
+          const selection = customModelPreferredSelection(model);
           const settings = getLocalSettings();
           saveLocalSettings({
             ...settings,
             context: {
               ...settings.context,
-              model_name: name,
+              model_name: selection,
             },
           });
           await fetchModels();
-          return { defaultModelName: name };
+          return { defaultModelName: selection };
         },
       }),
       registerPageAgentCapability({
@@ -1190,8 +1254,12 @@ export default function ModelSettingsPage() {
     reconcileDeletedModel,
   ]);
 
-  const deletingCurrentDefault =
-    modelToDelete !== null && modelToDelete === defaultModelName;
+  const deleteModelConfig = modelToDelete
+    ? models.find((model) => model.name === modelToDelete)
+    : undefined;
+  const deletingCurrentDefault = deleteModelConfig
+    ? customModelMatchesSelection(deleteModelConfig, defaultModelName)
+    : modelToDelete !== null && modelToDelete === defaultModelName;
   const deleteReplacementModel = deletingCurrentDefault
     ? models.find((model) => model.name !== modelToDelete)
     : undefined;
@@ -1201,7 +1269,7 @@ export default function ModelSettingsPage() {
     null;
 
   return (
-    <div className="space-y-8">
+    <div className="min-w-0 max-w-full space-y-8 overflow-x-hidden">
       <ModelSettingsOverview
         copy={pageCopy}
         defaultModelName={defaultModelName ?? ""}
@@ -1218,13 +1286,14 @@ export default function ModelSettingsPage() {
         title={
           <div
             id="model-settings-custom"
-            className="flex w-full items-center justify-between"
+            className="flex w-full flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between"
           >
             <span>{t.settings.model.customModels}</span>
             {!showAdd && !editingModel && (
               <Button
                 variant="outline"
                 size="sm"
+                className="w-full sm:w-auto"
                 onClick={() => setShowAdd(true)}
               >
                 <PlusIcon className="mr-1 h-3 w-3" />{" "}
@@ -1239,105 +1308,132 @@ export default function ModelSettingsPage() {
             {t.common.loading}
           </div>
         ) : (
-          <div className="flex w-full flex-col">
+          <div className="flex w-full flex-col gap-3">
+            {modelsLoadError ? (
+              <div
+                role="alert"
+                className="flex flex-col items-start justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/[0.04] px-4 py-3 text-sm sm:flex-row sm:items-center"
+              >
+                <span className="flex items-center gap-2 text-destructive">
+                  <AlertTriangleIcon className="size-4 shrink-0" />
+                  {t.settings.model.loadFailed}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  onClick={handleRetryModels}
+                >
+                  <RefreshCwIcon className="mr-1.5 size-3.5" />
+                  {pageCopy.retryLoad}
+                </Button>
+              </div>
+            ) : null}
             {/* Model list */}
-            <div className="rounded-lg border border-border divide-y divide-border">
-              {models.map((m) => {
-                const list = Array.isArray(m.models) ? m.models : [];
-                const diagnostic = compatDiagnostics.byId[m.name];
-                const displayName = m.display_name || m.name;
-                const isDefault = defaultModelName === m.name;
-                return (
-                  <div
-                    key={m.name}
-                    className={cn(
-                      "flex flex-col items-stretch justify-between gap-4 px-4 py-4 sm:flex-row sm:items-start sm:px-5",
-                      isDefault && "bg-emerald-500/[0.035]",
-                    )}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <div className="truncate text-sm font-medium">
-                          {displayName}
+            {models.length > 0 || !modelsLoadError ? (
+              <div className="divide-y divide-border rounded-lg border border-border">
+                {models.map((m) => {
+                  const list = Array.isArray(m.models) ? m.models : [];
+                  const diagnostic = compatDiagnostics.byId[m.name];
+                  const displayName = m.display_name || m.name;
+                  const isDefault = customModelMatchesSelection(
+                    m,
+                    defaultModelName,
+                  );
+                  return (
+                    <div
+                      key={m.name}
+                      className={cn(
+                        "flex flex-col items-stretch justify-between gap-4 px-4 py-4 sm:flex-row sm:items-start sm:px-5",
+                        isDefault && "bg-emerald-500/[0.035]",
+                      )}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <div className="truncate text-sm font-medium">
+                            {displayName}
+                          </div>
+                          <span
+                            className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground dark:border-muted-foreground/40 dark:bg-muted-foreground/10 dark:text-muted-foreground"
+                            title={t.settings.model.modelList.hint}
+                          >
+                            {t.settings.model.modelCount(list.length)}
+                          </span>
                         </div>
-                        <span
-                          className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground dark:border-muted-foreground/40 dark:bg-muted-foreground/10 dark:text-muted-foreground"
-                          title={t.settings.model.modelList.hint}
-                        >
-                          {t.settings.model.modelCount(list.length)}
-                        </span>
+                        <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {m.name}
+                        </div>
+                        {list.length > 0 && (
+                          <ul className="mt-1.5 space-y-0.5 font-mono text-[11px] text-foreground/80">
+                            {list.map((id, idx) => (
+                              <li
+                                key={`${m.name}:${idx}:${id}`}
+                                className="flex items-center gap-2"
+                              >
+                                <span className="w-4 shrink-0 text-right text-muted-foreground/60 tabular-nums">
+                                  {idx === 0
+                                    ? "★"
+                                    : idx === list.length - 1
+                                      ? "▴"
+                                      : "·"}
+                                </span>
+                                <code className="truncate rounded bg-muted/60 px-1.5 py-0.5">
+                                  {id}
+                                </code>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <CompatDiagnosticSummary
+                          diagnostic={diagnostic}
+                          status={compatDiagnostics.status}
+                        />
                       </div>
-                      <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {m.name}
-                      </div>
-                      {list.length > 0 && (
-                        <ul className="mt-1.5 space-y-0.5 font-mono text-[11px] text-foreground/80">
-                          {list.map((id, idx) => (
-                            <li
-                              key={`${m.name}:${idx}:${id}`}
-                              className="flex items-center gap-2"
-                            >
-                              <span className="w-4 shrink-0 text-right text-muted-foreground/60 tabular-nums">
-                                {idx === 0
-                                  ? "★"
-                                  : idx === list.length - 1
-                                    ? "▴"
-                                    : "·"}
-                              </span>
-                              <code className="truncate rounded bg-muted/60 px-1.5 py-0.5">
-                                {id}
-                              </code>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <CompatDiagnosticSummary
-                        diagnostic={diagnostic}
-                        status={compatDiagnostics.status}
-                      />
-                    </div>
-                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 sm:max-w-64">
-                      {isDefault ? (
-                        <span className="inline-flex items-center rounded-lg bg-green-100 px-3 py-1 text-xs font-medium text-green-700 dark:bg-green-500/20 dark:text-green-400">
-                          {t.settings.model.systemDefault}
-                        </span>
-                      ) : (
+                      <div className="flex shrink-0 flex-wrap items-center justify-start gap-x-3 gap-y-2 sm:max-w-64 sm:justify-end">
+                        {isDefault ? (
+                          <span className="inline-flex items-center rounded-lg bg-green-100 px-3 py-1 text-xs font-medium text-green-700 dark:bg-green-500/20 dark:text-green-400">
+                            {t.settings.model.systemDefault}
+                          </span>
+                        ) : (
+                          <button
+                            className="text-xs font-medium text-muted-foreground hover:text-foreground"
+                            onClick={() =>
+                              handleSetDefault(customModelPreferredSelection(m))
+                            }
+                            aria-label={`${t.settings.model.setAsDefault}: ${displayName}`}
+                          >
+                            {t.settings.model.setAsDefault}
+                          </button>
+                        )}
                         <button
-                          className="text-xs font-medium text-muted-foreground hover:text-foreground"
-                          onClick={() => handleSetDefault(m.name)}
-                          aria-label={`${t.settings.model.setAsDefault}: ${displayName}`}
+                          className="text-xs font-medium text-orange-500 hover:text-orange-600"
+                          onClick={() =>
+                            setEditingModel(
+                              editingModel === m.name ? null : m.name,
+                            )
+                          }
+                          aria-label={`${t.common.edit}: ${displayName}`}
                         >
-                          {t.settings.model.setAsDefault}
+                          {t.common.edit}
                         </button>
-                      )}
-                      <button
-                        className="text-xs font-medium text-orange-500 hover:text-orange-600"
-                        onClick={() =>
-                          setEditingModel(
-                            editingModel === m.name ? null : m.name,
-                          )
-                        }
-                        aria-label={`${t.common.edit}: ${displayName}`}
-                      >
-                        {t.common.edit}
-                      </button>
-                      <button
-                        className="text-xs font-medium text-orange-500 hover:text-orange-600"
-                        onClick={() => handleDelete(m.name)}
-                        aria-label={`${t.common.delete}: ${displayName}`}
-                      >
-                        {t.common.delete}
-                      </button>
+                        <button
+                          className="text-xs font-medium text-orange-500 hover:text-orange-600"
+                          onClick={() => handleDelete(m.name)}
+                          aria-label={`${t.common.delete}: ${displayName}`}
+                        >
+                          {t.common.delete}
+                        </button>
+                      </div>
                     </div>
+                  );
+                })}
+                {models.length === 0 && (
+                  <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+                    {t.settings.model.emptyCustomModels}
                   </div>
-                );
-              })}
-              {models.length === 0 && (
-                <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-                  {t.settings.model.emptyCustomModels}
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            ) : null}
 
             {/* Edit form (inline under the list) */}
             {editingModel && (
@@ -1725,14 +1821,14 @@ function CompatDiagnosticSummary({
     retryReasons.length > 0;
 
   return (
-    <div className="mt-3 space-y-2 border-l border-border pl-3 text-[11px] text-muted-foreground">
+    <div className="mt-3 min-w-0 max-w-full space-y-2 overflow-hidden border-l border-border pl-3 text-[11px] text-muted-foreground">
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="inline-flex items-center gap-1 font-medium text-foreground/80">
           <CheckCircle2Icon className="size-3.5 text-emerald-500" />
           {t.settings.model.compatDiagnostics.title}
         </span>
         {profiles.length > 0 && (
-          <span className="rounded border border-border px-1.5 py-0.5">
+          <span className="max-w-full truncate rounded border border-border px-1.5 py-0.5">
             {profiles.join(", ")}
           </span>
         )}

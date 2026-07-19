@@ -27,7 +27,11 @@ const LABELS = {
     pulling: "拉取中…",
     speedUnit: "tok/s",
     estMem: "约",
-    verdict: { fits: "可运行", tight: "勉强可运行", offload: "需 offload（较慢）" } as Record<string, string>,
+    verdict: {
+      fits: "可运行",
+      tight: "勉强可运行",
+      offload: "需 offload（较慢）",
+    } as Record<string, string>,
     note: "估算仅供参考；带宽表为人工快照，吞吐为粗略估计。",
     sourceLive: "实时 · HuggingFace 热门",
     sourceStatic: "内置快照（正在获取最新…）",
@@ -36,20 +40,27 @@ const LABELS = {
     title: "Local model recommendations",
     subtitle: "Models that fit your hardware — pull in one click via Ollama",
     detecting: "Detecting hardware…",
-    noOllama: "Ollama not detected — install and run it to pull / serve local models.",
+    noOllama:
+      "Ollama not detected — install and run it to pull / serve local models.",
     install: "Pull",
     installed: "Installed",
     pulling: "Pulling…",
     speedUnit: "tok/s",
     estMem: "~",
-    verdict: { fits: "Runs well", tight: "Tight fit", offload: "Needs offload (slower)" } as Record<string, string>,
+    verdict: {
+      fits: "Runs well",
+      tight: "Tight fit",
+      offload: "Needs offload (slower)",
+    } as Record<string, string>,
     note: "Estimates only; bandwidth tables are a snapshot and throughput is approximate.",
     sourceLive: "Live · HuggingFace trending",
     sourceStatic: "Built-in snapshot (fetching latest…)",
   },
 };
 
-function hardwareLine(hw: NonNullable<ReturnType<typeof useCookbook>["snapshot"]>["hardware"]): string {
+function hardwareLine(
+  hw: NonNullable<ReturnType<typeof useCookbook>["snapshot"]>["hardware"],
+): string {
   if (!hw) return "";
   const parts: string[] = [];
   if (hw.gpu_name) parts.push(hw.gpu_name);
@@ -83,20 +94,31 @@ function RecRow({
   const pullState = pulls[rec.tag];
   const isPulling = pullState === "pulling" || pendingTag === rec.tag;
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+    <div className="flex min-w-0 max-w-full items-center justify-between gap-3 overflow-hidden px-3 py-2.5 sm:px-4">
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-sm font-medium">{rec.label}</span>
           <span
-            className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", verdictTone(rec.verdict))}
+            className={cn(
+              "rounded px-1.5 py-0.5 text-[10px] font-medium",
+              verdictTone(rec.verdict),
+            )}
           >
             {t.verdict[rec.verdict] ?? rec.verdict}
           </span>
         </div>
-        <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-          <code>{rec.tag}</code> · {t.estMem}
+        <div
+          className="mt-0.5 max-w-full truncate text-[11px] text-muted-foreground"
+          title={`${rec.tag} · ${t.estMem}${rec.est_mem_gb} GB${rec.est_tokens_per_s ? ` · ~${rec.est_tokens_per_s} ${t.speedUnit}` : ""}`}
+        >
+          <code className="inline-block max-w-full truncate align-bottom">
+            {rec.tag}
+          </code>{" "}
+          · {t.estMem}
           {rec.est_mem_gb} GB
-          {rec.est_tokens_per_s ? ` · ~${rec.est_tokens_per_s} ${t.speedUnit}` : ""}
+          {rec.est_tokens_per_s
+            ? ` · ~${rec.est_tokens_per_s} ${t.speedUnit}`
+            : ""}
         </div>
       </div>
       {rec.installed ? (
@@ -120,7 +142,8 @@ function RecRow({
 
 export function ModelCookbook() {
   const { locale } = useI18n();
-  const t = (locale || "en").slice(0, 2).toLowerCase() === "zh" ? LABELS.zh : LABELS.en;
+  const t =
+    (locale || "en").slice(0, 2).toLowerCase() === "zh" ? LABELS.zh : LABELS.en;
   const { snapshot, isLoading } = useCookbook();
   const { pull, pendingTag } = useCookbookPull();
 
@@ -128,14 +151,16 @@ export function ModelCookbook() {
   const ollamaDown = snapshot ? !snapshot.ollama_available : false;
 
   return (
-    <div className="rounded-lg border border-border-default bg-card/50 p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
+    <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border-default bg-card/50 p-3 sm:p-5">
+      <div className="flex min-w-0 flex-col items-start justify-between gap-2 sm:flex-row sm:gap-4">
+        <div className="min-w-0">
           <h4 className="text-sm font-medium">{t.title}</h4>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">{t.subtitle}</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            {t.subtitle}
+          </p>
         </div>
         {snapshot?.hardware && (
-          <span className="shrink-0 text-right text-[11px] text-muted-foreground">
+          <span className="max-w-full truncate text-left text-[11px] text-muted-foreground sm:max-w-[45%] sm:shrink-0 sm:text-right">
             {hardwareLine(snapshot.hardware)}
           </span>
         )}
@@ -164,7 +189,8 @@ export function ModelCookbook() {
             ))}
           </div>
           <p className="mt-2 text-[10px] text-muted-foreground/70">
-            {snapshot?.source === "huggingface" ? t.sourceLive : t.sourceStatic} · {t.note}
+            {snapshot?.source === "huggingface" ? t.sourceLive : t.sourceStatic}{" "}
+            · {t.note}
           </p>
         </>
       )}

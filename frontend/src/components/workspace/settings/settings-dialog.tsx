@@ -631,8 +631,8 @@ export function SettingsDialog(props: SettingsDialogProps) {
               ) : null}
             </div>
           </nav>
-          <ScrollArea className="h-full min-h-0 min-w-0 rounded-lg border">
-            <div className="space-y-8 p-6">
+          <ScrollArea className="h-full min-h-0 min-w-0 rounded-lg border [&_[data-slot=scroll-area-viewport]>div]:!block [&_[data-slot=scroll-area-viewport]>div]:!w-full [&_[data-slot=scroll-area-viewport]>div]:!min-w-0">
+            <div className="w-full min-w-0 max-w-full space-y-8 overflow-x-hidden p-3 sm:p-6">
               {/* Each tab gets its own Suspense boundary so switching
                   to an uncached tab doesn't blank out the currently
                   mounted one. Combined with preloadSettingsPages() this
