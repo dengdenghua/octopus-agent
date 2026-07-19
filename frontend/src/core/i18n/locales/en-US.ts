@@ -2750,8 +2750,13 @@ export const enUS: Translations = {
   // Agent card
   agentCard: {
     chat: "Chat",
+    chatAriaLabel: (name) => `Chat with ${name}`,
     profile: "Profile",
     profileAriaLabel: (name) => `${name} profile`,
+    deleteAriaLabel: (name) => `Delete role ${name}`,
+    deleteTitle: (name) => `Delete role “${name}”`,
+    deleteConfirm: (name) =>
+      `Role “${name}” will be permanently deleted. This action cannot be undone.`,
   },
 
   // Enterprise assets tab
@@ -4108,6 +4113,11 @@ export const enUS: Translations = {
     toastCapabilityPackInstalled: (name: string, count: number) =>
       `"${name}" installed with ${count} key skills`,
     toastUninstalled: (name: string) => `"${name}" uninstalled`,
+    installAriaLabel: (name: string) => `Add role ${name}`,
+    uninstallAriaLabel: (name: string) => `Uninstall role ${name}`,
+    ratingAriaLabel: (rating: string, count: number) =>
+      `Rated ${rating} from ${count} reviews`,
+    downloadCountAriaLabel: (count: string) => `${count} downloads`,
     authorPrefix: "By",
     packContentLabels: {
       plugins: "Plugins",
@@ -4121,6 +4131,10 @@ export const enUS: Translations = {
 
   // Agent World Unified
   agentWorldUnified: {
+    pageTitle: "Role Hub",
+    pageDescription:
+      "Manage local roles and add new collaborators from the marketplace.",
+    addAgentButton: "Add role",
     roleLibrary: "Role Library",
     roleLibraryDescription:
       "Pick ready-to-use roles; each card represents its responsibilities, tone, and callable abilities.",
@@ -4138,6 +4152,13 @@ export const enUS: Translations = {
     installFailed: "Installation failed, please try again later",
     connectLocalPartner: "Connect Local Partner",
     enterprise: "Enterprise",
+    localTab: "Local",
+    enabledTab: "Enabled",
+    marketplaceTab: "Marketplace",
+    categoryFilterLabel: "Filter by role category",
+    loadingAgents: "Loading roles…",
+    loadAgentsFailed: "Roles could not be loaded. Please try again.",
+    retryAgents: "Reload",
     searchPlaceholderAgents: "Search role name, description, or tags",
     searchPlaceholderPlugins: "Search plugin name, description, or author",
     searchPlaceholderSkills: "Search skill name, description, or tags",

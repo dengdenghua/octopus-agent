@@ -1,9 +1,4 @@
-import {
-  BotIcon,
-  MessageSquareIcon,
-  Trash2Icon,
-  WrenchIcon,
-} from "lucide-react";
+import { BotIcon, MessageSquareIcon, Trash2Icon } from "lucide-react";
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -64,59 +59,64 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
 
   return (
     <>
-      <Card
-        className="group flex cursor-pointer flex-col overflow-hidden rounded-xl border-border-default bg-card/86 py-0 shadow-[var(--shadow-xs)] transition-all duration-200 sm:min-h-[176px] hover:-translate-y-0.5 hover:border-primary/30 hover:bg-card hover:shadow-[var(--shadow-sm)]"
-        onClick={() => onSelect?.(agent)}
-      >
-        <CardHeader className="px-3.5 py-3.5">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border-default bg-muted text-lg leading-none">
-                {agent.avatar_url ? (
-                  <AuthenticatedImage
-                    src={withAgentAvatarVersion(agent.avatar_url)}
-                    alt={displayName}
-                    className="h-full w-full bg-white object-cover [image-rendering:pixelated]"
-                    fallback={
-                      agent.icon ? (
-                        <span className="flex h-full w-full items-center justify-center rounded-lg bg-muted text-foreground/80">
-                          {agent.icon}
-                        </span>
-                      ) : (
-                        <span className="flex h-full w-full items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                          <BotIcon className="h-4 w-4" />
-                        </span>
-                      )
-                    }
-                  />
-                ) : agent.icon ? (
-                  <span className="flex h-full w-full items-center justify-center rounded-lg bg-muted text-foreground/80">
-                    {agent.icon}
-                  </span>
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                    <BotIcon className="h-4 w-4" />
-                  </span>
-                )}
-              </div>
-              <div className="min-w-0">
-                <CardTitle className="truncate text-sm font-semibold leading-5">
-                  {displayName}
-                </CardTitle>
-                {agent.model && (
-                  <Badge variant="secondary" className="mt-0.5 text-xs">
-                    {agent.model}
-                  </Badge>
-                )}
+      <Card className="group flex flex-col overflow-hidden rounded-xl border-border-default bg-card/86 py-0 shadow-[var(--shadow-xs)] transition-all duration-200 sm:min-h-[176px] hover:-translate-y-0.5 hover:border-primary/30 hover:bg-card hover:shadow-[var(--shadow-sm)]">
+        <button
+          type="button"
+          disabled={!onSelect}
+          aria-label={t.agentCard.profileAriaLabel(displayName)}
+          className="block w-full cursor-pointer rounded-t-xl text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-default"
+          onClick={() => onSelect?.(agent)}
+        >
+          <CardHeader className="px-3.5 py-3.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border-default bg-muted text-lg leading-none">
+                  {agent.avatar_url ? (
+                    <AuthenticatedImage
+                      src={withAgentAvatarVersion(agent.avatar_url)}
+                      alt={displayName}
+                      className="h-full w-full bg-white object-cover [image-rendering:pixelated]"
+                      fallback={
+                        agent.icon ? (
+                          <span className="flex h-full w-full items-center justify-center rounded-lg bg-muted text-foreground/80">
+                            {agent.icon}
+                          </span>
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                            <BotIcon className="h-4 w-4" />
+                          </span>
+                        )
+                      }
+                    />
+                  ) : agent.icon ? (
+                    <span className="flex h-full w-full items-center justify-center rounded-lg bg-muted text-foreground/80">
+                      {agent.icon}
+                    </span>
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                      <BotIcon className="h-4 w-4" />
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <CardTitle className="truncate text-sm font-semibold leading-5">
+                    {displayName}
+                  </CardTitle>
+                  {agent.model && (
+                    <Badge variant="secondary" className="mt-0.5 text-xs">
+                      {agent.model}
+                    </Badge>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-          {agent.description && (
-            <CardDescription className="mt-2 line-clamp-2 min-h-8 text-xs leading-4 sm:line-clamp-3 sm:min-h-12">
-              {agent.description}
-            </CardDescription>
-          )}
-        </CardHeader>
+            {agent.description && (
+              <CardDescription className="mt-2 line-clamp-2 min-h-8 text-xs leading-4 sm:line-clamp-3 sm:min-h-12">
+                {agent.description}
+              </CardDescription>
+            )}
+          </CardHeader>
+        </button>
 
         <CardFooter className="mt-auto flex items-center justify-between gap-2 border-t border-border-subtle bg-muted/10 px-3.5 py-2.5">
           <Button
@@ -127,24 +127,12 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
               event.stopPropagation();
               handleChat();
             }}
+            aria-label={t.agentCard.chatAriaLabel(displayName)}
           >
             <MessageSquareIcon className="mr-1.5 h-3.5 w-3.5" />
             {t.agentCard.chat}
           </Button>
           <div className="flex gap-1">
-            <Button
-              size="icon"
-              variant="outline"
-              className="h-8 w-8 shrink-0 border-border-default bg-background/70 text-muted-foreground hover:border-primary/30 hover:bg-muted/60 hover:text-primary"
-              onClick={(event) => {
-                event.stopPropagation();
-                onSelect?.(agent);
-              }}
-              title={t.agentCard.profile}
-              aria-label={t.agentCard.profileAriaLabel(displayName)}
-            >
-              <WrenchIcon className="h-3.5 w-3.5" />
-            </Button>
             {!isDefault && (
               <Button
                 size="icon"
@@ -154,7 +142,8 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
                   event.stopPropagation();
                   setDeleteOpen(true);
                 }}
-                title={t.agents.delete}
+                title={t.agentCard.deleteAriaLabel(displayName)}
+                aria-label={t.agentCard.deleteAriaLabel(displayName)}
               >
                 <Trash2Icon className="h-3.5 w-3.5" />
               </Button>
@@ -164,11 +153,18 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
       </Card>
 
       {/* Delete Confirm */}
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          if (!deleteAgent.isPending) setDeleteOpen(open);
+        }}
+      >
+        <DialogContent showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>{t.agents.delete}</DialogTitle>
-            <DialogDescription>{t.agents.deleteConfirm}</DialogDescription>
+            <DialogTitle>{t.agentCard.deleteTitle(displayName)}</DialogTitle>
+            <DialogDescription>
+              {t.agentCard.deleteConfirm(displayName)}
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button

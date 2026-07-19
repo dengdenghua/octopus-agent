@@ -2554,8 +2554,12 @@ export const zhCN: Translations = {
   // Agent card
   agentCard: {
     chat: "开聊",
+    chatAriaLabel: (name) => `与 ${name} 开聊`,
     profile: "角色档案",
     profileAriaLabel: (name) => `${name} 角色档案`,
+    deleteAriaLabel: (name) => `删除角色 ${name}`,
+    deleteTitle: (name) => `删除角色“${name}”`,
+    deleteConfirm: (name) => `角色“${name}”将被永久删除，此操作无法撤销。`,
   },
 
   // Enterprise assets tab
@@ -3870,6 +3874,11 @@ export const zhCN: Translations = {
     toastCapabilityPackInstalled: (name: string, count: number) =>
       `"${name}" 已安装，并装配 ${count} 项关键技能`,
     toastUninstalled: (name: string) => `"${name}" 已卸载`,
+    installAriaLabel: (name: string) => `添加角色 ${name}`,
+    uninstallAriaLabel: (name: string) => `卸载角色 ${name}`,
+    ratingAriaLabel: (rating: string, count: number) =>
+      `评分 ${rating}，${count} 条评价`,
+    downloadCountAriaLabel: (count: string) => `下载量 ${count}`,
     authorPrefix: "作者:",
     packContentLabels: {
       plugins: "插件",
@@ -3883,6 +3892,9 @@ export const zhCN: Translations = {
 
   // Agent World Unified
   agentWorldUnified: {
+    pageTitle: "角色中心",
+    pageDescription: "管理本地角色，并从商城接入新的协作伙伴。",
+    addAgentButton: "添加角色",
     roleLibrary: "角色库",
     roleLibraryDescription:
       "挑选可直接出场的 Agent；每张卡片代表它的职责、语气和可调用能力。",
@@ -3899,6 +3911,13 @@ export const zhCN: Translations = {
     installFailed: "安装失败，请稍后重试",
     connectLocalPartner: "接入本地伙伴",
     enterprise: "企业版",
+    localTab: "本地",
+    enabledTab: "已启用",
+    marketplaceTab: "商城",
+    categoryFilterLabel: "按角色类型筛选",
+    loadingAgents: "正在加载角色…",
+    loadAgentsFailed: "角色列表加载失败，请稍后重试。",
+    retryAgents: "重新加载",
     searchPlaceholderAgents: "搜索角色名称、描述或标签",
     searchPlaceholderPlugins: "搜索插件名称、描述或作者",
     searchPlaceholderSkills: "搜索技能名称、描述或标签",

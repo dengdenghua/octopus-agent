@@ -74,15 +74,24 @@ export const CATEGORY_STYLES: Record<
 // Star rating helper
 // ---------------------------------------------------------------------------
 
-function StarRating({ rating, count }: { rating: number; count: number }) {
+function StarRating({
+  rating,
+  count,
+  label,
+}: {
+  rating: number;
+  count: number;
+  label: string;
+}) {
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1" role="img" aria-label={label}>
       <div className="flex items-center">
         {Array.from({ length: 5 }).map((_, i) => {
           const filled = i < Math.round(rating);
           return (
             <StarIcon
               key={i}
+              aria-hidden="true"
               className={cn(
                 "h-3 w-3",
                 filled
@@ -178,12 +187,11 @@ export function AgentWorldCard({
   return (
     <Card
       className={cn(
-        "group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border-border-default bg-card/86 py-0 shadow-[var(--shadow-xs)] transition-all duration-200 ease-out sm:min-h-[176px]",
+        "group relative flex flex-col overflow-hidden rounded-xl border-border-default bg-card/86 py-0 shadow-[var(--shadow-xs)] transition-all duration-200 ease-out sm:min-h-[176px]",
         "hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_0_24px_hsl(var(--primary)/0.10)]",
         "before:pointer-events-none before:absolute before:left-0 before:top-0 before:h-3 before:w-3 before:border-l before:border-t before:border-primary/45",
         "after:pointer-events-none after:absolute after:bottom-0 after:right-0 after:h-3 after:w-3 after:border-b after:border-r after:border-primary/30",
       )}
-      onClick={() => onSelect?.(agent)}
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-primary/35" />
       <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity [background-image:linear-gradient(180deg,transparent_0,transparent_94%,hsl(var(--primary)/0.16)_95%,transparent_100%)] [background-size:100%_18px] group-hover:opacity-100" />
@@ -192,78 +200,98 @@ export function AgentWorldCard({
         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-500/60 via-primary/40 to-violet-500/60" />
       )}
 
-      <CardHeader className="flex flex-1 flex-col px-3.5 pb-2.5 pt-3.5">
-        {/* Icon + Title row */}
-        <div className="flex items-start gap-2">
-          <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/25 bg-background text-lg shadow-[0_0_14px_hsl(var(--primary)/0.08)]">
-            {agent.avatar_url ? (
-              <AuthenticatedImage
-                src={withAgentAvatarVersion(agent.avatar_url)}
-                alt={agent.display_name}
-                className="h-full w-full bg-white object-cover [image-rendering:pixelated]"
-                fallback={iconFallback}
-              />
-            ) : (
-              iconFallback
-            )}
-            {agent.is_official && (
-              <div className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 shadow-[var(--shadow-xs)]">
-                <BadgeCheckIcon className="h-2.5 w-2.5 text-white" />
-              </div>
-            )}
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <CardTitle className="truncate text-sm font-semibold leading-5">
-                {agent.display_name}
-              </CardTitle>
-              {agent.is_featured && (
-                <SparklesIcon className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+      <button
+        type="button"
+        disabled={!onSelect}
+        aria-label={t.agentCard.profileAriaLabel(agent.display_name)}
+        className="block w-full cursor-pointer rounded-t-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-default"
+        onClick={() => onSelect?.(agent)}
+      >
+        <CardHeader className="flex flex-1 flex-col px-3.5 pb-2.5 pt-3.5">
+          {/* Icon + Title row */}
+          <div className="flex items-start gap-2">
+            <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/25 bg-background text-lg shadow-[0_0_14px_hsl(var(--primary)/0.08)]">
+              {agent.avatar_url ? (
+                <AuthenticatedImage
+                  src={withAgentAvatarVersion(agent.avatar_url)}
+                  alt={agent.display_name}
+                  className="h-full w-full bg-white object-cover [image-rendering:pixelated]"
+                  fallback={iconFallback}
+                />
+              ) : (
+                iconFallback
+              )}
+              {agent.is_official && (
+                <div className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 shadow-[var(--shadow-xs)]">
+                  <BadgeCheckIcon className="h-2.5 w-2.5 text-white" />
+                </div>
               )}
             </div>
-            <p className="text-muted-foreground mt-0.5 truncate text-xs">
-              {t.agentWorld.authorPrefix} {agent.author}
-            </p>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <CardTitle className="truncate text-sm font-semibold leading-5">
+                  {agent.display_name}
+                </CardTitle>
+                {agent.is_featured && (
+                  <SparklesIcon className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                )}
+              </div>
+              <p className="text-muted-foreground mt-0.5 truncate text-xs">
+                {t.agentWorld.authorPrefix} {agent.author}
+              </p>
+            </div>
           </div>
-        </div>
 
-        {/* Description */}
-        <CardDescription className="mt-2 line-clamp-2 min-h-8 text-xs leading-4 text-muted-foreground/90 sm:line-clamp-3 sm:min-h-12">
-          {agent.description}
-        </CardDescription>
+          {/* Description */}
+          <CardDescription className="mt-2 line-clamp-2 min-h-8 text-xs leading-4 text-muted-foreground/90 sm:line-clamp-3 sm:min-h-12">
+            {agent.description}
+          </CardDescription>
 
-        {/* Category + Rating */}
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <Badge
-            variant="secondary"
-            className={cn(
-              "text-[10px] font-medium",
-              catStyle.bg,
-              catStyle.text,
-            )}
-          >
-            {categoryLabel}
-          </Badge>
-          <StarRating rating={agent.rating} count={agent.rating_count} />
-        </div>
-
-        {keySkillCount > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
+          {/* Category + Rating */}
+          <div className="mt-2 flex items-center justify-between gap-2">
             <Badge
-              variant="outline"
-              className="border-primary/25 bg-primary/5 text-[10px] font-medium text-primary"
+              variant="secondary"
+              className={cn(
+                "text-[10px] font-medium",
+                catStyle.bg,
+                catStyle.text,
+              )}
             >
-              {t.agentWorld.keySkillCount(keySkillCount)}
+              {categoryLabel}
             </Badge>
+            <StarRating
+              rating={agent.rating}
+              count={agent.rating_count}
+              label={t.agentWorld.ratingAriaLabel(
+                agent.rating.toFixed(1),
+                agent.rating_count,
+              )}
+            />
           </div>
-        )}
-      </CardHeader>
+
+          {keySkillCount > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              <Badge
+                variant="outline"
+                className="border-primary/25 bg-primary/5 text-[10px] font-medium text-primary"
+              >
+                {t.agentWorld.keySkillCount(keySkillCount)}
+              </Badge>
+            </div>
+          )}
+        </CardHeader>
+      </button>
 
       <CardFooter className="relative mt-auto flex items-center justify-between gap-2 border-t border-border-default bg-background/54 px-3.5 py-2.5">
         {/* Download count */}
-        <div className="text-muted-foreground flex items-center gap-1 text-xs">
-          <DownloadIcon className="h-3 w-3" />
+        <div
+          className="text-muted-foreground flex items-center gap-1 text-xs"
+          aria-label={t.agentWorld.downloadCountAriaLabel(
+            formatDownloads(agent.downloads),
+          )}
+        >
+          <DownloadIcon className="h-3 w-3" aria-hidden="true" />
           <span>{formatDownloads(agent.downloads)}</span>
         </div>
 
@@ -278,6 +306,11 @@ export function AgentWorldCard({
           )}
           disabled={installing}
           onClick={handleInstallToggle}
+          aria-label={
+            installed
+              ? t.agentWorld.uninstallAriaLabel(agent.display_name)
+              : t.agentWorld.installAriaLabel(agent.display_name)
+          }
         >
           {installing ? (
             <Loader2Icon className="mr-1 h-3 w-3 animate-spin" />

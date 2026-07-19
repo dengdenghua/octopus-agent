@@ -310,24 +310,28 @@ function AgentPackImportPanel({ onImported }: { onImported: () => void }) {
   );
 }
 
-function AgentsTab({
+export function AgentsTab({
   agents,
   filteredAgents,
   loading,
+  loadError,
   activeCategory,
   categoryCounts,
   onCategoryChange,
   onSelectAgent,
   onInstallChange,
+  onRetry,
 }: {
   agents: AgentWorldAgent[];
   filteredAgents: AgentWorldAgent[];
   loading: boolean;
+  loadError: boolean;
   activeCategory: AgentCategoryFilter;
   categoryCounts: Map<AgentCategoryFilter, number>;
   onCategoryChange: (category: AgentCategoryFilter) => void;
   onSelectAgent: (agent: AgentWorldAgent) => void;
   onInstallChange: () => void;
+  onRetry: () => void;
 }) {
   const { t } = useI18n();
   const [installingAll, setInstallingAll] = useState(false);
@@ -393,7 +397,13 @@ function AgentsTab({
 
   if (loading) {
     return (
-      <div data-testid="agents-loading-skeleton" className="space-y-3">
+      <div
+        data-testid="agents-loading-skeleton"
+        className="space-y-3"
+        role="status"
+        aria-live="polite"
+      >
+        <span className="sr-only">{t.agentWorldUnified.loadingAgents}</span>
         <div className="h-8 w-full animate-pulse rounded-lg bg-muted" />
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -406,11 +416,33 @@ function AgentsTab({
 
   return (
     <div className="space-y-3">
+      {loadError && (
+        <div
+          role="alert"
+          className="flex flex-col items-start justify-between gap-3 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-3 text-sm sm:flex-row sm:items-center"
+        >
+          <span className="flex items-center gap-2 text-destructive">
+            <AlertCircleIcon className="size-4 shrink-0" aria-hidden="true" />
+            {t.agentWorldUnified.loadAgentsFailed}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="w-full sm:w-auto"
+            onClick={onRetry}
+          >
+            {t.agentWorldUnified.retryAgents}
+          </Button>
+        </div>
+      )}
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 flex-1">
           <div
             data-testid="agents-category-scroll"
             className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 pr-1 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
+            role="group"
+            aria-label={t.agentWorldUnified.categoryFilterLabel}
           >
             {AGENT_CATEGORY_FILTERS.map((category) => {
               const CategoryIcon = CATEGORY_ICONS[category];
@@ -428,6 +460,7 @@ function AgentsTab({
                   }
                   size="sm"
                   onClick={() => onCategoryChange(category)}
+                  aria-pressed={activeCategory === category}
                   className={cn(
                     "h-8 shrink-0 rounded-lg px-2.5 text-xs",
                     activeCategory === category &&
@@ -437,7 +470,10 @@ function AgentsTab({
                   <CategoryIcon className="mr-1.5 h-3.5 w-3.5" />
                   {label}
                   {category !== "all" && (
-                    <span className="ml-1 text-xs text-muted-foreground">
+                    <span
+                      className="ml-1 text-xs text-muted-foreground"
+                      aria-hidden="true"
+                    >
                       {count}
                     </span>
                   )}
@@ -518,6 +554,7 @@ function AgentsTab({
         <div
           data-testid="agents-empty-state"
           className="flex flex-col items-center py-16"
+          role="status"
         >
           <StoreIcon className="text-muted-foreground/30 mb-3 h-10 w-10" />
           <p className="text-muted-foreground text-sm">
@@ -850,11 +887,11 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
       <Tabs defaultValue="local">
         <TabsList variant="line" className="mb-1">
           <TabsTrigger value="local" className="h-8 gap-1.5 px-3 text-xs">
-            已启用
+            {t.agentWorldUnified.enabledTab}
           </TabsTrigger>
           <TabsTrigger value="registry" className="h-8 gap-1.5 px-3 text-xs">
             <StoreIcon className="h-3.5 w-3.5" />
-            商城
+            {t.agentWorldUnified.marketplaceTab}
           </TabsTrigger>
         </TabsList>
 
@@ -1006,10 +1043,12 @@ export function AgentWorldUnified() {
   // Data
   const [agents, setAgents] = useState<AgentWorldAgent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [agentsLoadError, setAgentsLoadError] = useState(false);
 
   // Fetch agents
   const fetchAgents = useCallback(async () => {
     setLoading(true);
+    setAgentsLoadError(false);
     try {
       const res = await listStoreAgents({
         sort_by: "downloads",
@@ -1019,6 +1058,7 @@ export function AgentWorldUnified() {
     } catch (e) {
       swallow(e);
       setAgents([]);
+      setAgentsLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -1130,52 +1170,65 @@ export function AgentWorldUnified() {
             aria-label={t.common.openSidebarMenu}
             title={t.common.openSidebarMenu}
           />
-          <span className="min-w-0 truncate text-sm font-semibold">
-            {t.agentWorld.title}
-          </span>
+          <h1 className="min-w-0 truncate text-sm font-semibold">
+            {t.agentWorldUnified.pageTitle}
+          </h1>
         </div>
       ) : null}
       {!hudOnly && (
-        <div className="flex flex-col gap-2 rounded-xl border border-border-default bg-card/70 px-3 py-2.5 shadow-[var(--shadow-xs)] md:flex-row md:items-center md:justify-end">
-          <div className="relative w-full md:max-w-[360px]">
-            <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
-            <Input
-              data-testid="agents-search-input"
-              placeholder={
-                searchPlaceholder[activeTab] ?? t.agentWorld.searchPlaceholder
-              }
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-9 rounded-lg border-border-default bg-background/85 pl-8 text-xs shadow-none transition-colors hover:border-border-strong focus-visible:bg-background"
-            />
+        <div className="flex flex-col gap-3 rounded-xl border border-border-default bg-card/70 px-3 py-2.5 shadow-[var(--shadow-xs)] md:flex-row md:items-center md:justify-between">
+          <div className="hidden min-w-0 md:block">
+            <h1 className="truncate text-sm font-semibold text-foreground">
+              {t.agentWorldUnified.pageTitle}
+            </h1>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {t.agentWorldUnified.pageDescription}
+            </p>
           </div>
-          {activeTab === "agents" && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" className="h-9 rounded-lg px-3 shadow-none">
-                  <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
-                  {t.agentWorld.addAgent}
-                  <ChevronDownIcon className="ml-1 h-3.5 w-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem
-                  onSelect={() => navigate("/workspace/agents/new")}
-                >
-                  <PlusIcon className="h-4 w-4" />
-                  {t.agentWorld.newAgent}
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setImportOpen(true)}>
-                  <ImportIcon className="h-4 w-4" />
-                  {t.agentWorld.importAgentPack}
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setConnectOpen(true)}>
-                  <BotIcon className="h-4 w-4" />
-                  {t.agentWorldUnified.connectLocalPartner}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative w-full md:max-w-[360px]">
+              <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
+              <Input
+                data-testid="agents-search-input"
+                aria-label={
+                  searchPlaceholder[activeTab] ?? t.agentWorld.searchPlaceholder
+                }
+                placeholder={
+                  searchPlaceholder[activeTab] ?? t.agentWorld.searchPlaceholder
+                }
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-9 rounded-lg border-border-default bg-background/85 pl-8 text-xs shadow-none transition-colors hover:border-border-strong focus-visible:bg-background"
+              />
+            </div>
+            {activeTab === "agents" && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" className="h-9 rounded-lg px-3 shadow-none">
+                    <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
+                    {t.agentWorldUnified.addAgentButton}
+                    <ChevronDownIcon className="ml-1 h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem
+                    onSelect={() => navigate("/workspace/agents/new")}
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                    {t.agentWorld.newAgent}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setImportOpen(true)}>
+                    <ImportIcon className="h-4 w-4" />
+                    {t.agentWorld.importAgentPack}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setConnectOpen(true)}>
+                    <BotIcon className="h-4 w-4" />
+                    {t.agentWorldUnified.connectLocalPartner}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
       )}
 
@@ -1219,14 +1272,14 @@ export function AgentWorldUnified() {
                     value="local"
                     className="h-8 gap-1.5 px-3 text-xs"
                   >
-                    本地
+                    {t.agentWorldUnified.localTab}
                   </TabsTrigger>
                   <TabsTrigger
                     value="registry"
                     className="h-8 gap-1.5 px-3 text-xs"
                   >
                     <StoreIcon className="h-3.5 w-3.5" />
-                    商城
+                    {t.agentWorldUnified.marketplaceTab}
                   </TabsTrigger>
                 </TabsList>
 
@@ -1235,11 +1288,13 @@ export function AgentWorldUnified() {
                     agents={dedupedAgents}
                     filteredAgents={filteredAgents}
                     loading={loading}
+                    loadError={agentsLoadError}
                     activeCategory={activeCategory}
                     categoryCounts={categoryCounts}
                     onCategoryChange={setActiveCategory}
                     onSelectAgent={handleSelectAgent}
                     onInstallChange={handleInstallChange}
+                    onRetry={() => void fetchAgents()}
                   />
                 </TabsContent>
 
@@ -1260,14 +1315,14 @@ export function AgentWorldUnified() {
                     value="local"
                     className="h-8 gap-1.5 px-3 text-xs"
                   >
-                    已启用
+                    {t.agentWorldUnified.enabledTab}
                   </TabsTrigger>
                   <TabsTrigger
                     value="registry"
                     className="h-8 gap-1.5 px-3 text-xs"
                   >
                     <StoreIcon className="h-3.5 w-3.5" />
-                    商城
+                    {t.agentWorldUnified.marketplaceTab}
                   </TabsTrigger>
                 </TabsList>
 

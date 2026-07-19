@@ -2162,8 +2162,12 @@ export interface Translations {
   // Agent card
   agentCard: {
     chat: string;
+    chatAriaLabel: (name: string) => string;
     profile: string;
     profileAriaLabel: (name: string) => string;
+    deleteAriaLabel: (name: string) => string;
+    deleteTitle: (name: string) => string;
+    deleteConfirm: (name: string) => string;
   };
 
   // Enterprise assets tab
@@ -3399,6 +3403,10 @@ export interface Translations {
     toastInstalled: (name: string) => string;
     toastCapabilityPackInstalled: (name: string, count: number) => string;
     toastUninstalled: (name: string) => string;
+    installAriaLabel: (name: string) => string;
+    uninstallAriaLabel: (name: string) => string;
+    ratingAriaLabel: (rating: string, count: number) => string;
+    downloadCountAriaLabel: (count: string) => string;
     authorPrefix: string;
     packContentLabels: {
       plugins: string;
@@ -3412,6 +3420,9 @@ export interface Translations {
 
   // Agent World Unified
   agentWorldUnified: {
+    pageTitle: string;
+    pageDescription: string;
+    addAgentButton: string;
     roleLibrary: string;
     roleLibraryDescription: string;
     installedLabel: string;
@@ -3425,6 +3436,13 @@ export interface Translations {
     installFailed: string;
     connectLocalPartner: string;
     enterprise: string;
+    localTab: string;
+    enabledTab: string;
+    marketplaceTab: string;
+    categoryFilterLabel: string;
+    loadingAgents: string;
+    loadAgentsFailed: string;
+    retryAgents: string;
     searchPlaceholderAgents: string;
     searchPlaceholderPlugins: string;
     searchPlaceholderSkills: string;
