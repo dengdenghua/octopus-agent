@@ -465,6 +465,56 @@ def _result_checkpoint_is_meaningful(
     )
 
 
+def _quiet_evidence_targets(steps: list[ReActStep]) -> set[str]:
+    """Collect distinct read-only evidence targets that have stayed silent.
+
+    A single successful file read is useful execution detail but usually not
+    worth another public sentence. Two different inspected targets establish
+    enough comparative evidence for the model to say what is now known. The
+    decision is structural: it never classifies prose or invents a phase name.
+    """
+
+    targets: set[str] = set()
+    quiet_tools = {
+        "read_file",
+        "read_text_file",
+        "list_cwd",
+        "glob",
+        "grep",
+        "view_file",
+    }
+    for step in steps:
+        actions = step.actions or ([step.action] if step.action else [])
+        for action in actions:
+            parsed = _parse_action(action)
+            if parsed is None:
+                continue
+            name, args = parsed
+            if name.lower() not in quiet_tools:
+                continue
+            target = ""
+            if isinstance(args, dict):
+                target = next(
+                    (
+                        str(args[key]).strip()
+                        for key in ("path", "file_path", "filepath", "filename")
+                        if isinstance(args.get(key), str) and str(args[key]).strip()
+                    ),
+                    "",
+                )
+                if not target:
+                    target = _public_tool_target(args)
+            if target:
+                targets.add(target.casefold())
+    return targets
+
+
+def _quiet_evidence_checkpoint_due(steps: list[ReActStep]) -> bool:
+    """Whether accumulated quiet reads merit one model-authored public beat."""
+
+    return len(steps) >= 2 and len(_quiet_evidence_targets(steps)) >= 2
+
+
 def _explicit_read_only_goal(value: str | None) -> bool:
     """Whether the current user turn explicitly forbids workspace mutation."""
     text = str(value or "").lower()
@@ -2850,6 +2900,7 @@ def stream_react_loop(
     _last_public_update_key = ""
     _realtime_public_narrative = bool(intent.user_context.get("realtime_public_narrative"))
     _realtime_public_orientation = _realtime_public_orientation_requested
+    _quiet_evidence_steps: list[ReActStep] = []
     _force_convergence_next = False
     _green_verification_convergence_active = False
     _green_convergence_todo_used = False
@@ -4533,12 +4584,25 @@ def stream_react_loop(
                 succeeded=tool_ok,
             )
         )
+        if (
+            tool_action_requested
+            and tool_ok
+            and observation
+            and not _meaningful_result_checkpoint
+            and _quiet_evidence_targets([step])
+        ):
+            _quiet_evidence_steps.append(step)
+            # Keep prompts bounded when a provider repeatedly inspects new
+            # files without producing a checkpoint of its own.
+            _quiet_evidence_steps = _quiet_evidence_steps[-4:]
+        _quiet_evidence_due = _quiet_evidence_checkpoint_due(_quiet_evidence_steps)
         _model_result_update = ""
         if (
             _realtime_public_narrative
-            and not _model_supplied_update
+            and (not _model_supplied_update or _quiet_evidence_due)
             and (
                 _meaningful_result_checkpoint
+                or _quiet_evidence_due
                 or (
                     _evidence_convergence_became_active
                     and _evidence_convergence_active is not None
@@ -4557,7 +4621,9 @@ def stream_react_loop(
                         if _evidence_convergence_became_active
                         else None
                     ),
-                    evidence_steps=steps + [step],
+                    evidence_steps=(
+                        _quiet_evidence_steps if _quiet_evidence_due else steps + [step]
+                    ),
                     iteration=i + 1,
                     previous_key=_last_public_update_key,
                     succeeded=tool_ok,
@@ -4565,6 +4631,11 @@ def stream_react_loop(
             except Exception as exc:  # noqa: BLE001 — optional public narration
                 _logger.warning("public evidence narration failed: %s", exc)
                 _model_result_update = ""
+            if _quiet_evidence_due:
+                # Whether the narrator spoke or returned SKIP, this evidence
+                # window has been considered. Start a fresh window so long
+                # read-only tasks get bounded beats rather than one per file.
+                _quiet_evidence_steps = []
             _model_result_update_key = re.sub(r"\s+", " ", _model_result_update).strip().casefold()
             if _model_result_update and _model_result_update_key != _last_public_update_key:
                 _last_public_update_key = _model_result_update_key
