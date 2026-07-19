@@ -909,6 +909,7 @@ class TestLocalPartners:
         assert partners["codex-cli"]["headless_supported"] is True
         assert partners["codex-cli"]["readiness_status"] == "ready"
         assert partners["codex-cli"]["native_command"] == "codex"
+        assert partners["codex-cli"]["native_launch_cwd"] == str(project_root())
         assert partners["codex-cli"]["native_launch_command"].startswith("cd ")
         assert partners["codex-cli"]["native_launch_command"].endswith(" && codex")
         assert "codex exec" in partners["codex-cli"]["verify_command"]
@@ -922,6 +923,7 @@ class TestLocalPartners:
         assert partners["trae-cli"]["agent_id"] == "local_trae_cli"
         assert "traecdn" in partners["trae-cli"]["avatar_url"]
         assert partners["trae-cli"]["native_command"] == "trae-cli"
+        assert partners["trae-cli"]["native_launch_cwd"] == str(project_root())
         assert partners["trae-cli"]["native_launch_command"].endswith(" && trae-cli")
         assert partners["trae-cli"]["verify_command"] == "trae-cli models --json"
         assert "模型选择" in partners["trae-cli"]["setup_hint"]
@@ -941,6 +943,7 @@ class TestLocalPartners:
         assert "codebuddy" in partners["codebuddy-cli"]["avatar_url"]
         assert partners["codebuddy-cli"]["ready"] is True
         assert partners["codebuddy-cli"]["native_command"] == "codebuddy"
+        assert partners["codebuddy-cli"]["native_launch_cwd"] == str(project_root())
         assert partners["codebuddy-cli"]["native_launch_command"].endswith(" && codebuddy")
         assert "codebuddy -p --output-format text" in partners["codebuddy-cli"]["verify_command"]
         assert partners["codebuddy-cli"]["install_command"] is None
@@ -980,6 +983,7 @@ class TestLocalPartners:
         codebuddy = partners["codebuddy-cli"]
         assert codebuddy["native_command"].startswith("'")
         assert "Code Buddy (Beta)" in codebuddy["native_command"]
+        assert codebuddy["native_launch_cwd"] == str(repo_root)
         assert codebuddy["native_launch_command"].startswith(
             f"cd {shlex.quote(str(repo_root))} && "
         )
@@ -1140,6 +1144,10 @@ class TestLocalPartners:
         }
         command_hints = schemas["LocalPartnerWire"]["properties"]["command_hints"]
         assert command_hints["items"]["$ref"] == "#/components/schemas/LocalPartnerCommandHint"
+        assert schemas["LocalPartnerWire"]["properties"]["native_launch_cwd"] == {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "title": "Native Launch Cwd",
+        }
 
     def test_probe_local_partner_success(
         self,

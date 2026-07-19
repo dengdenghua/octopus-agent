@@ -443,12 +443,14 @@ def _partner_guidance(
     else:
         interaction_hint = None
 
+    launch_cwd = str(project_root()) if native else None
     return {
         "install_command": install if not command else None,
         "native_command": native,
         "native_launch_command": (
-            f"cd {shlex.quote(str(project_root()))} && {native}" if native else None
+            f"cd {shlex.quote(launch_cwd)} && {native}" if native and launch_cwd else None
         ),
+        "native_launch_cwd": launch_cwd,
         "verify_command": verify,
         "setup_hint": setup_hint,
         "interaction_hint": interaction_hint,
@@ -711,6 +713,7 @@ def to_wire(
         install_command=guidance.get("install_command"),
         native_command=guidance.get("native_command"),
         native_launch_command=guidance.get("native_launch_command"),
+        native_launch_cwd=guidance.get("native_launch_cwd"),
         verify_command=guidance.get("verify_command"),
         setup_hint=guidance.get("setup_hint"),
         interaction_hint=guidance.get("interaction_hint"),

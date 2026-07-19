@@ -12801,6 +12801,8 @@ export interface components {
             native_command?: string | null;
             /** Native Launch Command */
             native_launch_command?: string | null;
+            /** Native Launch Cwd */
+            native_launch_cwd?: string | null;
             /**
              * Readiness Message
              * @default

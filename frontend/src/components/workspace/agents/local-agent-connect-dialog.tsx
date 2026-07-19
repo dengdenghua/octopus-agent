@@ -396,6 +396,17 @@ export function LocalAgentConnectDialog({
                             ))}
                           </span>
                         ) : null}
+                        {partner.native_launch_cwd ? (
+                          <span className="block truncate rounded border border-border-default/60 bg-background/70 px-2 py-1 text-[10px] text-muted-foreground">
+                            工作目录：
+                            <code
+                              className="font-mono text-foreground"
+                              title={partner.native_launch_cwd}
+                            >
+                              {partner.native_launch_cwd}
+                            </code>
+                          </span>
+                        ) : null}
                         {commandRows.length > 0 ? (
                           <span className="flex flex-wrap gap-1">
                             {partner.detected ? (
