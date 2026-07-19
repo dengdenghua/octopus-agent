@@ -606,7 +606,10 @@ export function ChatInputBox({
     if (
       tryLocalSlash(text, {
         onModeChange: onModeChange ? (mode) => onModeChange(mode) : undefined,
-        onModelChange,
+        // Local partners own their model namespace. Preserve `/model ...` as
+        // task text so the partner adapter can translate it to that CLI's
+        // one-shot model flag (or explain why the CLI cannot override it).
+        onModelChange: partnerId ? undefined : onModelChange,
         onPermissionModeChange,
         onCompact: onCompressContext
           ? () => {
@@ -718,6 +721,7 @@ export function ChatInputBox({
     maxSearches,
     onModeChange,
     onModelChange,
+    partnerId,
     onPermissionModeChange,
     onCompressContext,
     pendingImages,

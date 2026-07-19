@@ -264,6 +264,35 @@ describe("<ChatInputBox /> cowork materials", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
+  it("preserves partner /model commands for the CLI adapter", () => {
+    const onSubmit = vi.fn();
+    const onModelChange = vi.fn();
+    const onPartnerModelChange = vi.fn();
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-1"
+        partnerId="trae-cli"
+        onSubmit={onSubmit}
+        onModelChange={onModelChange}
+        onPartnerModelChange={onPartnerModelChange}
+      />,
+    );
+
+    fireEvent.change(textarea(), {
+      target: { value: "/model doubao-seed\nInspect this repository" },
+    });
+    fireEvent.click(screen.getByTitle("Send"));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      text: "/model doubao-seed\nInspect this repository",
+      images: undefined,
+      files: undefined,
+    });
+    expect(onModelChange).not.toHaveBeenCalled();
+    expect(onPartnerModelChange).not.toHaveBeenCalled();
+  });
+
   it("allows sending a pasted image without typed text", async () => {
     const onSubmit = vi.fn();
     renderWithProviders(
