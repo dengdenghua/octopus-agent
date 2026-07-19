@@ -3513,6 +3513,8 @@ export const zhCN: Translations = {
     title: "任务看板",
     description: "后台任务、Quest 任务、定时任务和订阅任务的统一视图",
     refresh: "刷新",
+    retry: "重试",
+    loadFailed: "任务数据暂时无法加载，请稍后重试。",
     noTasks: "暂无任务",
     noTasksDesc: "当前没有可显示的任务",
     kanban: "看板",
@@ -3556,6 +3558,10 @@ export const zhCN: Translations = {
     minutesAgo: "分钟前",
     hoursAgo: "小时前",
     daysAgo: "天前",
+    filterByType: "按任务类型筛选",
+    taskDetails: (name: string) => `查看任务详情：${name}`,
+    timelineChart: "任务执行时间线",
+    zoomReset: (percent: number) => `重置时间线缩放，当前 ${percent}%`,
   },
 
   // Arena

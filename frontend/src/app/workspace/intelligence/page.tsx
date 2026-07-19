@@ -10,9 +10,9 @@ import {
 import { IntelligencePanel } from "@/components/workspace/intelligence-panel";
 import { useI18n } from "@/core/i18n/hooks";
 
-const TaskBoard = lazy(() =>
-  import("@/components/workspace/task-board").then((m) => ({
-    default: m.TaskBoard,
+const CronSettingsPage = lazy(() =>
+  import("@/components/workspace/settings/cron-settings-page").then((m) => ({
+    default: m.CronSettingsPage,
   })),
 );
 
@@ -54,11 +54,7 @@ export default function IntelligencePage() {
                   </div>
                 }
               >
-                <TaskBoard
-                  compact
-                  initialViewMode="schedules"
-                  initialTypeFilter="scheduled"
-                />
+                <CronSettingsPage />
               </Suspense>
             )}
           </div>

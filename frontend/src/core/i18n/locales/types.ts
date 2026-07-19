@@ -3078,6 +3078,8 @@ export interface Translations {
     title: string;
     description: string;
     refresh: string;
+    retry: string;
+    loadFailed: string;
     noTasks: string;
     noTasksDesc: string;
     kanban: string;
@@ -3121,6 +3123,10 @@ export interface Translations {
     minutesAgo: string;
     hoursAgo: string;
     daysAgo: string;
+    filterByType: string;
+    taskDetails: (name: string) => string;
+    timelineChart: string;
+    zoomReset: (percent: number) => string;
   };
 
   // Arena

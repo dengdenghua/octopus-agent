@@ -64,6 +64,7 @@ function computeTicks(
   startMs: number,
   endMs: number,
   _viewWidth: number,
+  locale: string,
 ): TickMark[] {
   const rangeMs = endMs - startMs;
   if (rangeMs <= 0) return [];
@@ -125,21 +126,10 @@ function computeTicks(
     } else if (cfg.format === "HH:mm") {
       label = `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
     } else {
-      const months = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ];
-      label = `${months[d.getMonth()]} ${d.getDate()}`;
+      label = new Intl.DateTimeFormat(locale, {
+        month: "short",
+        day: "numeric",
+      }).format(d);
     }
 
     ticks.push({
@@ -174,7 +164,7 @@ export function TimelineView({
   data: TaskBoardTimelineResponse;
   loading?: boolean;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
@@ -229,8 +219,22 @@ export function TimelineView({
 
   const ticks = useMemo(() => {
     if (!layout) return [];
-    return computeTicks(layout.startMs, layout.endMs, layout.timelineWidth);
-  }, [layout]);
+    return computeTicks(
+      layout.startMs,
+      layout.endMs,
+      layout.timelineWidth,
+      locale,
+    );
+  }, [layout, locale]);
+
+  const STATUS_LABELS: Record<string, string> = {
+    queued: t.taskBoard.queued,
+    running: t.taskBoard.running,
+    paused: t.taskBoard.paused,
+    completed: t.taskBoard.completed,
+    failed: t.taskBoard.failed,
+    cancelled: t.taskBoard.cancelled,
+  };
 
   const msToX = useCallback(
     (ms: number) => {
@@ -245,8 +249,9 @@ export function TimelineView({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div role="status" className="flex items-center justify-center py-20">
         <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+        <span className="sr-only">{t.common.loading}</span>
       </div>
     );
   }
@@ -270,6 +275,7 @@ export function TimelineView({
           className="size-7"
           onClick={handleZoomOut}
           title={t.taskBoard.zoomOut}
+          aria-label={t.taskBoard.zoomOut}
         >
           <ZoomOutIcon className="size-3.5" />
         </Button>
@@ -278,6 +284,7 @@ export function TimelineView({
           size="sm"
           className="h-7 px-2 text-xs tabular-nums"
           onClick={handleZoomReset}
+          aria-label={t.taskBoard.zoomReset(Math.round(zoom * 100))}
         >
           {Math.round(zoom * 100)}%
         </Button>
@@ -287,6 +294,7 @@ export function TimelineView({
           className="size-7"
           onClick={handleZoomIn}
           title={t.taskBoard.zoomIn}
+          aria-label={t.taskBoard.zoomIn}
         >
           <ZoomInIcon className="size-3.5" />
         </Button>
@@ -303,6 +311,8 @@ export function TimelineView({
           width={layout.totalWidth}
           height={layout.totalHeight}
           className="select-none"
+          role="img"
+          aria-label={t.taskBoard.timelineChart}
         >
           {/* Defs for animations & gradients */}
           <defs>
@@ -413,6 +423,7 @@ export function TimelineView({
                 }}
                 onMouseLeave={() => setTooltip(null)}
               >
+                <title>{`${task.name} · ${STATUS_LABELS[task.status] ?? task.status} · ${formatDurationMs(task.duration_ms)}`}</title>
                 {/* Row background on hover */}
                 <rect
                   x={0}
@@ -515,7 +526,7 @@ export function TimelineView({
                   {TYPE_LABELS[tooltip.task.type]}
                 </span>
                 {" -- "}
-                {tooltip.task.status}
+                {STATUS_LABELS[tooltip.task.status] ?? tooltip.task.status}
               </p>
               <p>
                 {t.taskBoard.duration}:{" "}
@@ -530,6 +541,15 @@ export function TimelineView({
           </div>
         )}
       </div>
+      <ul className="sr-only">
+        {tasks.map((task) => (
+          <li key={task.id}>
+            {task.name}, {TYPE_LABELS[task.type]},{" "}
+            {STATUS_LABELS[task.status] ?? task.status},{" "}
+            {formatDurationMs(task.duration_ms)}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

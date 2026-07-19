@@ -78,28 +78,24 @@ const VIEW_MODES: ViewMode[] = ["kanban", "timeline", "list", "schedules"];
 
 const COLUMN_CONFIG: Record<
   KanbanColumnId,
-  { label: string; color: string; bgColor: string; icon: React.ReactNode }
+  { color: string; bgColor: string; icon: React.ReactNode }
 > = {
   queued: {
-    label: "Queued",
     color: "text-muted-foreground",
     bgColor: "bg-muted-foreground/5 border-muted-foreground/20",
     icon: <ClockIcon className="size-3.5" />,
   },
   running: {
-    label: "Running",
     color: "text-amber-600 dark:text-amber-400",
     bgColor: "bg-amber-500/5 border-amber-500/20",
     icon: <Loader2Icon className="size-3.5 animate-spin" />,
   },
   completed: {
-    label: "Completed",
     color: "text-emerald-600 dark:text-emerald-400",
     bgColor: "bg-emerald-500/5 border-emerald-500/20",
     icon: <CheckCircle2Icon className="size-3.5" />,
   },
   failed: {
-    label: "Failed",
     color: "text-red-600 dark:text-red-400",
     bgColor: "bg-red-500/5 border-red-500/20",
     icon: <AlertCircleIcon className="size-3.5" />,
@@ -292,16 +288,26 @@ function ListView({ tasks }: { tasks: UnifiedTask[] }) {
             {columns.map((col) => (
               <th
                 key={col.key}
+                aria-sort={
+                  sortKey === col.key
+                    ? sortDir === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
                 className={cn(
-                  "px-3 py-2 text-left font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors",
+                  "px-1 py-1 text-left font-medium text-muted-foreground",
                   col.className,
                 )}
-                onClick={() => handleSort(col.key)}
               >
-                <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="flex min-h-8 w-full select-none items-center gap-1 rounded-md px-2 text-left transition-colors hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => handleSort(col.key)}
+                >
                   {col.label}
                   <SortIcon active={sortKey === col.key} dir={sortDir} />
-                </div>
+                </button>
               </th>
             ))}
           </tr>
@@ -434,7 +440,11 @@ function TypeFilterPills({
   ];
 
   return (
-    <div className="flex items-center gap-1">
+    <div
+      className="flex max-w-full items-center gap-1 overflow-x-auto pb-1"
+      role="group"
+      aria-label={i18n.taskBoard.filterByType}
+    >
       {options.map((opt) => (
         <Button
           key={opt.key}
@@ -445,10 +455,14 @@ function TypeFilterPills({
             value === opt.key && "font-semibold",
           )}
           onClick={() => onChange(opt.key)}
+          aria-pressed={value === opt.key}
         >
           {opt.label}
           {(counts[opt.key] ?? 0) > 0 && (
-            <span className="ml-1 text-[10px] text-muted-foreground">
+            <span
+              aria-hidden="true"
+              className="ml-1 text-[10px] text-muted-foreground"
+            >
               {counts[opt.key]}
             </span>
           )}
@@ -512,8 +526,8 @@ export function TaskBoard({
       )}
     >
       {/* Page header */}
-      <div className="ui-density-panel flex items-center justify-between rounded-lg border border-border-default bg-card/60">
-        <div>
+      <div className="ui-density-panel flex flex-col items-stretch justify-between gap-3 rounded-lg border border-border-default bg-card/60 sm:flex-row sm:items-center">
+        <div className="min-w-0">
           <h1 className="text-xl font-bold tracking-tight">
             {t.taskBoard.title}
           </h1>
@@ -522,12 +536,13 @@ export function TaskBoard({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 sm:shrink-0">
           <Button
             variant="outline"
             size="sm"
-            className="h-8"
+            className="h-8 w-full sm:w-auto"
             onClick={handleRefresh}
+            disabled={tasksLoading}
           >
             <RefreshCwIcon className="size-3.5 mr-1.5" />
             {t.taskBoard.refresh}
@@ -539,7 +554,7 @@ export function TaskBoard({
       <StatsBar stats={stats} loading={statsLoading} />
 
       {/* Toolbar: view mode + filters */}
-      <div className="ui-density-panel flex items-center justify-between gap-4 rounded-lg border border-border-subtle bg-card/40">
+      <div className="ui-density-panel flex flex-col items-stretch justify-between gap-3 rounded-lg border border-border-subtle bg-card/40 xl:flex-row xl:items-center">
         <TypeFilterPills
           value={typeFilter}
           onChange={setTypeFilter}
@@ -549,8 +564,9 @@ export function TaskBoard({
         <Tabs
           value={viewMode}
           onValueChange={(v) => setViewMode(v as ViewMode)}
+          className="max-w-full overflow-x-auto pb-1"
         >
-          <TabsList className="h-8">
+          <TabsList className="h-8 w-max min-w-full sm:min-w-0">
             {VIEW_MODES.map((vm) => (
               <TabsTrigger
                 key={vm}
@@ -566,28 +582,44 @@ export function TaskBoard({
       </div>
 
       {/* Error state */}
-      {tasksError && (
-        <div className="ui-density-panel rounded-lg border border-red-500/20 bg-red-500/5 text-sm text-red-600 dark:text-red-400">
-          <AlertCircleIcon className="mr-2 inline-block size-4" />
-          {tasksError}
+      {tasksError && viewMode !== "schedules" && (
+        <div
+          role="alert"
+          className="ui-density-panel flex flex-col items-start justify-between gap-3 rounded-lg border border-red-500/20 bg-red-500/5 text-sm text-red-600 dark:text-red-400 sm:flex-row sm:items-center"
+        >
+          <span className="flex items-center gap-2">
+            <AlertCircleIcon className="size-4 shrink-0" />
+            {t.taskBoard.loadFailed}
+          </span>
+          <Button variant="outline" size="sm" onClick={handleRefresh}>
+            <RefreshCwIcon className="mr-1.5 size-3.5" />
+            {t.taskBoard.retry}
+          </Button>
         </div>
       )}
 
       {/* Loading state */}
-      {tasksLoading && tasks.length === 0 && (
-        <div className="flex items-center justify-center rounded-lg border border-border-subtle bg-card/40 py-20">
+      {tasksLoading && tasks.length === 0 && viewMode !== "schedules" && (
+        <div
+          role="status"
+          className="flex items-center justify-center rounded-lg border border-border-subtle bg-card/40 py-20"
+        >
           <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+          <span className="sr-only">{t.common.loading}</span>
         </div>
       )}
 
       {/* Empty state */}
-      {!tasksLoading && tasks.length === 0 && !tasksError && (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border-default bg-card/30 py-20 text-muted-foreground">
-          <KanbanIcon className="size-12 mb-3 opacity-30" />
-          <p className="text-lg font-medium">{t.taskBoard.noTasks}</p>
-          <p className="text-sm">{t.taskBoard.noTasksDescription}</p>
-        </div>
-      )}
+      {!tasksLoading &&
+        tasks.length === 0 &&
+        !tasksError &&
+        viewMode !== "schedules" && (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border-default bg-card/30 py-20 text-muted-foreground">
+            <KanbanIcon className="size-12 mb-3 opacity-30" />
+            <p className="text-lg font-medium">{t.taskBoard.noTasks}</p>
+            <p className="text-sm">{t.taskBoard.noTasksDescription}</p>
+          </div>
+        )}
 
       {/* View content */}
       {viewMode === "schedules" ? (
@@ -596,6 +628,7 @@ export function TaskBoard({
             fallback={
               <div className="flex items-center justify-center py-20">
                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                <span className="sr-only">{t.common.loading}</span>
               </div>
             }
           >

@@ -198,6 +198,10 @@ export function TaskCard({
   return (
     <TooltipProvider delayDuration={400}>
       <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={onClick ? undefined : expanded}
+        aria-label={t.taskBoard.taskDetails(task.name || task.id)}
         className={cn(
           "ui-dense-row group relative cursor-pointer rounded-lg border bg-card transition-all duration-200",
           "hover:shadow-[var(--shadow-sm)] hover:border-border-strong hover:-translate-y-0.5",
@@ -206,6 +210,12 @@ export function TaskCard({
           task.status === "completed" && "border-emerald-500/20",
         )}
         onClick={handleClick}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            handleClick();
+          }
+        }}
       >
         {/* Running indicator pulse */}
         {isRunning && (

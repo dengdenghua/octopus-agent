@@ -3741,6 +3741,8 @@ export const enUS: Translations = {
     description:
       "Unified view of background tasks, Quest tasks, scheduled tasks, and subscription tasks",
     refresh: "Refresh",
+    retry: "Retry",
+    loadFailed: "Task data is temporarily unavailable. Please try again.",
     noTasks: "No tasks",
     noTasksDesc: "No tasks to display right now",
     kanban: "Kanban",
@@ -3784,6 +3786,11 @@ export const enUS: Translations = {
     minutesAgo: "m ago",
     hoursAgo: "h ago",
     daysAgo: "d ago",
+    filterByType: "Filter by task type",
+    taskDetails: (name: string) => `View task details: ${name}`,
+    timelineChart: "Task execution timeline",
+    zoomReset: (percent: number) =>
+      `Reset timeline zoom, currently ${percent}%`,
   },
 
   // Arena
