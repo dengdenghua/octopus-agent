@@ -43,6 +43,17 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
             ),
         ),
         GapBehaviorCheck(
+            id="local_partner_operator_guide",
+            title="Local CLI partner guide documents status, native boundaries, and merge checks",
+            path="docs/guide/local-cli-partners.md",
+            required_terms=(
+                "effective_status",
+                "native_launch_command",
+                "CLI team summaries",
+                "Merge-check commands",
+            ),
+        ),
+        GapBehaviorCheck(
             id="local_partner_slash_model_adapter",
             title="Local partner bridge normalizes slash commands and model overrides",
             path="runtime/execution/agents/local_partner_bridge.py",
