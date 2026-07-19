@@ -162,6 +162,16 @@ class _ReactBridgeState:
         self._on_background_task_start = on_background_task_start
         self._timeline_binder = timeline_binder
 
+    @staticmethod
+    def prose_status_for_turn(turn_status: TurnStatus) -> ItemStatus:
+        """Map the authoritative turn outcome onto any still-open prose."""
+
+        if turn_status == TurnStatus.INTERRUPTED:
+            return ItemStatus.INTERRUPTED
+        if turn_status == TurnStatus.FAILED:
+            return ItemStatus.FAILED
+        return ItemStatus.COMPLETED
+
     # ── Lifecycle helpers ──────────────────────────────────────────────
     # Every method in this class emits item lifecycle events as a pair:
     # journal write + WS notify. Inlining the 5-line ``notify`` payload
@@ -700,20 +710,36 @@ class _ReactBridgeState:
                 await self._emit_started(turn, log, emitter, verification_item)
                 await self._emit_completed(turn, log, emitter, verification_item)
 
-    async def flush(self, turn: Turn, log: EventLog, emitter: EventEmitter) -> None:
+    async def flush(
+        self,
+        turn: Turn,
+        log: EventLog,
+        emitter: EventEmitter,
+        *,
+        status: ItemStatus = ItemStatus.COMPLETED,
+    ) -> None:
+        """Close the currently open prose lane with its true outcome.
+
+        A transport item can be fully flushed without being a valid final
+        answer.  Cancellation and failure used to call this same method and
+        stamp partial prose as ``completed``, which made a source fragment or
+        half sentence look authoritative after replay.  Callers that end the
+        turn early now pass the corresponding terminal item status.
+        """
+
         # Drain coalesced deltas BEFORE finalizing: completing an item
         # nulls the slot the pending tail would attach to.
         await self._flush_pending_delta()
         if self.agent_message is not None:
-            self.agent_message.status = ItemStatus.COMPLETED
+            self.agent_message.status = status
             await self._emit_completed(turn, log, emitter, self.agent_message)
             self.agent_message = None
         if self.commentary_message is not None:
-            self.commentary_message.status = ItemStatus.COMPLETED
+            self.commentary_message.status = status
             await self._emit_completed(turn, log, emitter, self.commentary_message)
             self.commentary_message = None
         if self.reasoning is not None:
-            self.reasoning.status = ItemStatus.COMPLETED
+            self.reasoning.status = status
             await self._emit_completed(turn, log, emitter, self.reasoning)
             self.reasoning = None
 

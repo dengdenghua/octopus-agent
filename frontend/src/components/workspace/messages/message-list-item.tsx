@@ -553,6 +553,15 @@ function MessageContent_({
     publicThinkingSummary ||
     (files?.length ?? 0) > 0,
   );
+  const responseState = (
+    message.additional_kwargs as { response_state?: unknown } | undefined
+  )?.response_state;
+  const legacyRunStatus = (
+    message.additional_kwargs as { run_status?: unknown } | undefined
+  )?.run_status;
+  const showInterruptedReceipt =
+    responseState === "interrupted" ||
+    (legacyRunStatus === "streaming" && hasVisibleBody);
   const filesList =
     files && files.length > 0 && thread_id ? (
       <RichFilesList files={files} threadId={thread_id} />
@@ -743,23 +752,15 @@ function MessageContent_({
         active={enableClarificationActions && !isCurrentlyStreaming}
         messageId={message.id}
       />
-      {/* Dead-streaming badge · surfaces when a persisted message
-          was tagged ``run_status: "streaming"`` (periodic partial
-          flush) but the current render isn't actively streaming it
-          anymore. Happens on page refresh mid-turn: the backend
-          flushed a partial with run_status, then the tab closed,
-          the run completed (or died), but the persisted state
-          still carries the streaming tag. Without this badge the
-          user sees a truncated response and can't tell whether
-          it's done, interrupted, or still in flight. */}
-      {!isCurrentlyStreaming &&
-        hasVisibleBody &&
-        (message.additional_kwargs as { run_status?: unknown } | undefined)
-          ?.run_status === "streaming" && (
-          <div className="mt-2 text-xs text-muted-foreground italic">
-            ⚠️ {t.conversation.interruptedMessage}
-          </div>
-        )}
+      {/* Terminal receipt for an interrupted answer. The incomplete draft is
+          intentionally absent from the transcript; tools and checkpoints
+          remain available through the process workbench. Legacy persisted
+          `run_status=streaming` messages retain the same honest receipt. */}
+      {!isCurrentlyStreaming && showInterruptedReceipt && (
+        <div className="mt-2 text-[11px] leading-5 text-muted-foreground/70">
+          {t.conversation.interruptedMessage}
+        </div>
+      )}
       {/* Strategy badge · reveals which reply path produced this
           bubble (reflex / ReAct / direct_llm / plan). Helps users
           and devs spot when a long query accidentally hit the cache

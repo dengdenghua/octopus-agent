@@ -459,8 +459,13 @@ async def _drive_team_topology(
                     )
                     streamed_chars["count"] += len(chunk)
             elif ekind == "team_role_end":
-                await state.flush(turn, log, emitter)
                 if evt.get("status") == "error":
+                    await state.flush(
+                        turn,
+                        log,
+                        emitter,
+                        status=ItemStatus.FAILED,
+                    )
                     err_text = str(evt.get("error") or "role failed")
                     body = f"[{evt.get('role')}] FAILED · {err_text}"
                     item = AgentMessageItem(
@@ -471,6 +476,7 @@ async def _drive_team_topology(
                     await _safe_emit_started(turn, log, item)
                     await _safe_emit_completed(turn, log, item)
                 else:
+                    await state.flush(turn, log, emitter)
                     # Two completion paths:
                     #
                     # 1. ``streamed_chars["count"] > 0``: text already
@@ -558,7 +564,12 @@ async def _drive_team_topology(
                     },
                 )
             elif ekind == "team_runner_error":
-                await state.flush(turn, log, emitter)
+                await state.flush(
+                    turn,
+                    log,
+                    emitter,
+                    status=ItemStatus.FAILED,
+                )
                 err = ErrorItem(
                     message=str(evt.get("message") or "team runner error"),
                     will_retry=False,
@@ -578,7 +589,12 @@ async def _drive_team_topology(
         with contextlib.suppress(asyncio.CancelledError):
             await watcher
         with contextlib.suppress(Exception):
-            await state.flush(turn, log, emitter)
+            await state.flush(
+                turn,
+                log,
+                emitter,
+                status=state.prose_status_for_turn(turn.status),
+            )
         # Always reap the worker so the thread can't outlive the turn.
         with contextlib.suppress(Exception):
             run_result = await worker

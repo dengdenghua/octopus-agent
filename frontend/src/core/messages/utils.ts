@@ -150,6 +150,12 @@ export function groupMessages<T>(
             messages: [message],
           });
         }
+      } else if (message.additional_kwargs?.response_state === "interrupted") {
+        // The final draft is intentionally blank in the transcript, but the
+        // turn still needs a small terminal receipt. Keep this as an ordinary
+        // assistant group so MessageListItem can render that status without
+        // inventing user-visible answer text.
+        groups.push({ id: message.id, type: "assistant", messages: [message] });
       } else if (hasContent(message)) {
         // Plain AI response (with or without reasoning). Render as a
         // normal assistant message — MessageListItem will draw a

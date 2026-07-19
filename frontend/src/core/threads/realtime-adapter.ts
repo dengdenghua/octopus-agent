@@ -243,6 +243,21 @@ function stableDeepEqual(a: unknown, b: unknown): boolean {
 function turnToMessages(turn: Turn): Message[] {
   const out: Message[] = [];
 
+  // A cancelled turn may contain a final agentMessage snapshot whose bytes
+  // were flushed just before the interruption. It is a recoverable draft,
+  // not an authoritative response. Target only the last prose item; earlier
+  // public checkpoints and completed tool evidence stay visible.
+  let interruptedMessageId: string | null = null;
+  if (turn.status === "interrupted") {
+    for (let index = turn.items.length - 1; index >= 0; index -= 1) {
+      const item = turn.items[index];
+      if (item?.type === "agentMessage") {
+        interruptedMessageId = item.id;
+        break;
+      }
+    }
+  }
+
   // We accumulate reasoning + plan + tool calls into the AIMessage that
   // FOLLOWS them. ``pending`` holds the so-far-collected metadata that
   // the next agentMessage (or end-of-turn synthetic AI) will absorb.
@@ -386,6 +401,7 @@ function turnToMessages(turn: Turn): Message[] {
       }
       case "agentMessage": {
         const am = item as AgentMessageItem;
+        const isInterruptedMessage = am.id === interruptedMessageId;
         // The backend's ReAct loop streams the LLM's raw trajectory:
         // "Thought: ...\nAction: tool(...)\nFinal Answer: ..." into
         // a single ``agentMessage`` item. Rendering that verbatim dumps
@@ -435,7 +451,15 @@ function turnToMessages(turn: Turn): Message[] {
         if (typeof am.timelineSequence === "number") {
           kwargs.timeline_sequence = am.timelineSequence;
         }
-        if (am.messageKind === "commentary") {
+        if (isInterruptedMessage) {
+          kwargs.response_state = "interrupted";
+          if (split.finalAnswer?.trim()) {
+            // Keep the draft available to the workbench/replay layer without
+            // presenting it as the assistant's settled answer in chat.
+            kwargs.interrupted_draft = split.finalAnswer;
+          }
+        }
+        if (am.messageKind === "commentary" && !isInterruptedMessage) {
           kwargs.public_progress = true;
           kwargs.message_kind = "commentary";
           if (am.progressKind) {
@@ -445,7 +469,7 @@ function turnToMessages(turn: Turn): Message[] {
         const ai: AIMessage = {
           type: "ai",
           id: am.id,
-          content: split.finalAnswer ?? "",
+          content: isInterruptedMessage ? "" : (split.finalAnswer ?? ""),
           additional_kwargs: kwargs,
           ...(pending.toolCalls.length > 0
             ? { tool_calls: pending.toolCalls }

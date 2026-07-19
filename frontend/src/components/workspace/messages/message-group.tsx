@@ -276,6 +276,13 @@ export function MessageGroup({
     () => convertToSteps(messages, t, isLoading),
     [messages, t, isLoading],
   );
+  const showInterruptedReceipt =
+    !isLoading &&
+    messages.some(
+      (message) =>
+        message.type === "ai" &&
+        message.additional_kwargs?.response_state === "interrupted",
+    );
   const clarificationContent = useMemo(
     () =>
       steps
@@ -948,6 +955,14 @@ export function MessageGroup({
           content={clarificationContent}
           messageId={messages[messages.length - 1]?.id}
         />
+      )}
+      {showInterruptedReceipt && (
+        <div
+          className="mt-1 text-[11px] leading-5 text-muted-foreground/70"
+          data-testid="process-interrupted-receipt"
+        >
+          {t.conversation.interruptedMessage}
+        </div>
       )}
     </ChainOfThought>
   );

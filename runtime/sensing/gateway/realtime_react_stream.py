@@ -29,6 +29,7 @@ from runtime.platform.models import ParsedIntent
 from runtime.protocol import (
     ErrorItem,
     GroundingSource,
+    ItemStatus,
     ServerMethod,
     TurnParams,
     TurnStatus,
@@ -446,7 +447,12 @@ async def _drive_reflection_fast_path(
         with contextlib.suppress(Exception):
             await worker
     with contextlib.suppress(Exception):
-        await state.flush(turn, log, emitter)
+        await state.flush(
+            turn,
+            log,
+            emitter,
+            status=state.prose_status_for_turn(turn.status),
+        )
 
 
 def _try_reflex_reply(runtime: CerebrumRuntime, intent: ParsedIntent) -> str | None:
@@ -765,7 +771,12 @@ async def _drive_react(
                 },
             )
     with contextlib.suppress(Exception):
-        await state.flush(turn, log, emitter)
+        await state.flush(
+            turn,
+            log,
+            emitter,
+            status=state.prose_status_for_turn(turn.status),
+        )
     if turn.status == TurnStatus.IN_PROGRESS:
         with contextlib.suppress(Exception):
             await state.finalize_workbench(
@@ -833,7 +844,12 @@ async def _apply_react_event(
         # Producer already decided the loop is done. Flush any open
         # prose and mark the turn as interrupted so the gateway's
         # turn/completed wrapper preserves that status.
-        await state.flush(turn, log, emitter)
+        await state.flush(
+            turn,
+            log,
+            emitter,
+            status=ItemStatus.INTERRUPTED,
+        )
         turn.status = TurnStatus.INTERRUPTED
         return
     if kind == "throughput":
@@ -901,12 +917,23 @@ async def _apply_react_event(
         await state.flush(turn, log, emitter)
         return
     if kind == "react_completed":
-        await state.flush(turn, log, emitter)
-        if evt.get("success") is False:
+        success = evt.get("success") is not False
+        await state.flush(
+            turn,
+            log,
+            emitter,
+            status=ItemStatus.COMPLETED if success else ItemStatus.FAILED,
+        )
+        if not success:
             turn.status = TurnStatus.FAILED
         return
     if kind == "react_paused":
-        await state.flush(turn, log, emitter)
+        await state.flush(
+            turn,
+            log,
+            emitter,
+            status=ItemStatus.INTERRUPTED,
+        )
         turn.status = TurnStatus.INTERRUPTED
         return
     if kind == "react_resumed":
@@ -927,7 +954,12 @@ async def _apply_react_event(
         )
         return
     if kind in ("react_error",):
-        await state.flush(turn, log, emitter)
+        await state.flush(
+            turn,
+            log,
+            emitter,
+            status=ItemStatus.FAILED,
+        )
         err = ErrorItem(
             message=str(evt.get("message") or evt.get("kind") or "react error"),
             will_retry=False,

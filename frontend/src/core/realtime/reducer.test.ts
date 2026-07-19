@@ -138,6 +138,36 @@ describe("reducer", () => {
     expect(state.turns[0].items[0].status).toBe("interrupted");
   });
 
+  it("repairs a legacy completed public draft in an interrupted snapshot", () => {
+    const withTurn = apply(emptyConversation("th"), {
+      method: "turn/started",
+      params: { threadId: "th", turn: blankTurn("trn-1", "th") },
+    });
+    const state = reduce(withTurn, {
+      method: "turn/completed",
+      params: {
+        threadId: "th",
+        turn: {
+          ...blankTurn("trn-1", "th"),
+          status: "interrupted",
+          completedAt: T0_ISO,
+          items: [
+            {
+              id: "draft-answer",
+              type: "agentMessage",
+              status: "completed",
+              createdAt: T0_ISO,
+              text: 'str = ""',
+              messageKind: "commentary",
+            },
+          ],
+        },
+      },
+    }).next;
+
+    expect(state.turns[0].items[0].status).toBe("interrupted");
+  });
+
   it("turn/interrupted optimistically closes the active turn", () => {
     const withItem = apply(
       emptyConversation("th"),
@@ -168,6 +198,60 @@ describe("reducer", () => {
     expect(state.turns[0].status).toBe("interrupted");
     expect(state.turns[0].completedAt).toBe(T0_ISO);
     expect(state.turns[0].items[0].status).toBe("interrupted");
+  });
+
+  it("turn/interrupted invalidates only the last prose item, not completed evidence", () => {
+    const withItems = apply(
+      emptyConversation("th"),
+      {
+        method: "turn/started",
+        params: { threadId: "th", turn: blankTurn("trn-1", "th") },
+      },
+      {
+        method: "item/started",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          item: {
+            id: "tool-1",
+            type: "commandExecution",
+            status: "completed",
+            createdAt: T0_ISO,
+            command: "read_file",
+            cwd: null,
+            aggregatedOutput: "source",
+            exitCode: 0,
+            processId: null,
+            networkAccess: false,
+          },
+        },
+      },
+      {
+        method: "item/started",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          item: {
+            id: "draft-answer",
+            type: "agentMessage",
+            status: "completed",
+            createdAt: T0_ISO,
+            text: "unfinished",
+          },
+        },
+      },
+    );
+    const state = reduce(withItems, {
+      method: "turn/interrupted",
+      params: { threadId: "th", turnId: "trn-1", completedAt: T0_ISO },
+    }).next;
+
+    expect(
+      state.turns[0].items.find((item) => item.id === "tool-1")?.status,
+    ).toBe("completed");
+    expect(
+      state.turns[0].items.find((item) => item.id === "draft-answer")?.status,
+    ).toBe("interrupted");
   });
 
   it("item/started inserts, item delta accumulates, item/completed replaces", () => {

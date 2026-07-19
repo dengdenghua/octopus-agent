@@ -807,6 +807,40 @@ describe("MessageList stalled-run warning", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("keeps a quiet interruption receipt inside the existing process group", () => {
+    const thread = mockThread({
+      messages: [
+        message("user-1", "human", "Inspect the runtime"),
+        {
+          id: "assistant-1",
+          type: "ai",
+          content: "",
+          additional_kwargs: {
+            response_state: "interrupted",
+            interrupted_draft: 'str = ""',
+          },
+          tool_calls: [
+            {
+              id: "read-1",
+              name: "read_file",
+              args: { path: "runtime/protocol/items.py" },
+            },
+          ],
+        } as AIMessage,
+      ],
+    });
+
+    renderMessageList({ thread });
+
+    expect(
+      screen.getByText(/This response was interrupted during generation/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("process-interrupted-receipt"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('str = ""')).not.toBeInTheDocument();
+  });
+
   test("does not leave an orphan assistant avatar for hidden auto-verification steps", () => {
     const thread = mockThread({
       messages: [

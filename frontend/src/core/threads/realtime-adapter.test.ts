@@ -748,31 +748,35 @@ describe("conversationToAgentThreadState · interrupted turn", () => {
     expect(ai.tool_calls).toHaveLength(1);
   });
 
-  it("preserves agent_message + tool_call ordering when interrupted mid-stream", () => {
-    // P0-2 regression: a turn that produced text + a tool call but
-    // got interrupted before the next reasoning step should still
-    // surface BOTH the ai-message and the tool_call. The adapter
-    // emits the agent message first (as a complete AI message) and
-    // flushes the trailing tool_call as a synthetic second AI
-    // message; the LiveToolTimeline reads both.
+  it("keeps interrupted answer drafts out of chat while preserving tool evidence", () => {
     const state = conversationToAgentThreadState(
       makeConv([
         makeTurn(
-          [userMsg("q"), agentMsg("partial answer"), cmd("ls")],
+          [
+            userMsg("q"),
+            { ...agentMsg("partial answer"), messageKind: "commentary" },
+            cmd("ls"),
+          ],
           "interrupted",
         ),
       ]),
     );
     const aiMessages = state.messages.filter((m) => m.type === "ai") as Array<{
       content: string;
+      additional_kwargs?: Record<string, unknown>;
       tool_calls?: unknown[];
     }>;
-    // Two AI messages: the polished agent response, plus a synthetic
-    // flush carrying the trailing tool_call.
     expect(aiMessages.length).toBeGreaterThanOrEqual(2);
-    expect(aiMessages.some((ai) => ai.content.includes("partial answer"))).toBe(
-      true,
-    );
+    expect(
+      aiMessages.every((ai) => !ai.content.includes("partial answer")),
+    ).toBe(true);
+    expect(
+      aiMessages.some(
+        (ai) =>
+          ai.additional_kwargs?.response_state === "interrupted" &&
+          ai.additional_kwargs?.interrupted_draft === "partial answer",
+      ),
+    ).toBe(true);
     expect(
       aiMessages.some(
         (ai) => Array.isArray(ai.tool_calls) && ai.tool_calls.length > 0,

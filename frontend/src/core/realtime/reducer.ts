@@ -260,10 +260,7 @@ export function reduce(
         const merged = mergeCompletedTurn(t, incoming);
         for (const item of merged.items) {
           const previous = t.items.find((it) => it.id === item.id);
-          if (
-            previous?.status === "inProgress" &&
-            item.status !== "inProgress"
-          ) {
+          if (previous && previous.status !== item.status) {
             changedItemIds.push(item.id);
           }
         }
@@ -280,11 +277,13 @@ export function reduce(
       const completedAt = evt.params.completedAt ?? new Date().toISOString();
       const turns = state.turns.map((t) => {
         if (t.id !== evt.params.turnId) return t;
-        const items = t.items.map((item) => {
-          if (item.status !== "inProgress") return item;
-          changedItemIds.push(item.id);
-          return { ...item, status: "interrupted" } as Item;
-        });
+        const items = closeItemsForTurn(t.items, "interrupted");
+        for (let index = 0; index < items.length; index += 1) {
+          const item = items[index];
+          if (item && item !== t.items[index]) {
+            changedItemIds.push(item.id);
+          }
+        }
         return { ...t, status: "interrupted" as const, completedAt, items };
       });
       return {
@@ -506,11 +505,53 @@ function mergeCompletedTurn(existing: Turn, incoming: Turn): Turn {
   });
   const existingIds = new Set(existing.items.map((item) => item.id));
   const appended = incomingItems.filter((item) => !existingIds.has(item.id));
+  const items = closeItemsForTurn(
+    orderTimelineItems([...existingItems, ...appended]),
+    incoming.status,
+  );
   return {
     ...existing,
     ...incoming,
-    items: orderTimelineItems([...existingItems, ...appended]),
+    items,
   };
+}
+
+/**
+ * Reconcile item transport completion with the authoritative turn outcome.
+ *
+ * Older backends flushed an open public message as ``completed`` immediately
+ * before publishing ``turn/interrupted``. The bytes arrived, but the final
+ * message never became authoritative. Preserve earlier tools/checkpoints
+ * while marking the last prose draft and every still-open item with the real
+ * turn outcome. This also repairs persisted historical turns during replay.
+ */
+function closeItemsForTurn(
+  items: readonly Item[],
+  turnStatus: Turn["status"],
+): Item[] {
+  let interruptedMessageId: string | null = null;
+  if (turnStatus === "interrupted") {
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const item = items[index];
+      if (item?.type === "agentMessage") {
+        interruptedMessageId = item.id;
+        break;
+      }
+    }
+  }
+
+  const terminalStatus = itemTerminalStatus(turnStatus);
+  return items.map((item) => {
+    const nextStatus =
+      item.id === interruptedMessageId
+        ? "interrupted"
+        : item.status === "inProgress"
+          ? terminalStatus
+          : item.status;
+    return nextStatus === item.status
+      ? item
+      : ({ ...item, status: nextStatus } as Item);
+  });
 }
 
 function itemTerminalStatus(turnStatus: Turn["status"]): Item["status"] {

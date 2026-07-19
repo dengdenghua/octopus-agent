@@ -14,8 +14,9 @@ import asyncio
 
 import pytest
 
-from runtime.protocol import Turn, TurnParams
+from runtime.protocol import ItemStatus, Turn, TurnParams, TurnStatus
 from runtime.sensing.gateway.realtime_cerebrum import _ReactBridgeState
+from runtime.sensing.gateway.realtime_react_stream import _apply_react_event
 
 
 class _StubLog:
@@ -41,6 +42,11 @@ class _StubEmitter:
 
     def deltas(self, method_suffix: str = "delta") -> list[str]:
         return [p["delta"] for m, p in self.notified if method_suffix.lower() in m.lower()]
+
+
+class _StubRuntime:
+    def _record_react_trace_event(self, turn, event) -> None:  # noqa: ARG002
+        pass
 
 
 def _make_turn() -> Turn:
@@ -84,6 +90,52 @@ async def test_small_chunks_coalesce_until_flush() -> None:
     # Completed snapshot carries the full text.
     completed = [p for m, p in emitter.notified if m.endswith("item/completed")]
     assert completed and completed[0]["item"]["text"] == "abcdefg"
+
+
+@pytest.mark.asyncio
+async def test_cancelled_turn_does_not_complete_open_answer_draft() -> None:
+    state = _ReactBridgeState()
+    turn = _make_turn()
+    emitter = _StubEmitter()
+    log = _StubLog()
+
+    await state.append_agent_message(turn, log, emitter, 'str = ""')
+    await _apply_react_event(
+        _StubRuntime(),  # type: ignore[arg-type]
+        turn,
+        log,  # type: ignore[arg-type]
+        emitter,  # type: ignore[arg-type]
+        state,
+        {"type": "react_cancelled"},
+    )
+
+    assert turn.status == TurnStatus.INTERRUPTED
+    assert turn.items[0].status == ItemStatus.INTERRUPTED
+    completed = [p for m, p in emitter.notified if m.endswith("item/completed")]
+    assert completed[0]["item"]["status"] == "interrupted"
+
+
+@pytest.mark.asyncio
+async def test_failed_completion_does_not_complete_open_answer_draft() -> None:
+    state = _ReactBridgeState()
+    turn = _make_turn()
+    emitter = _StubEmitter()
+    log = _StubLog()
+
+    await state.append_agent_message(turn, log, emitter, "unfinished answer")
+    await _apply_react_event(
+        _StubRuntime(),  # type: ignore[arg-type]
+        turn,
+        log,  # type: ignore[arg-type]
+        emitter,  # type: ignore[arg-type]
+        state,
+        {"type": "react_completed", "success": False},
+    )
+
+    assert turn.status == TurnStatus.FAILED
+    assert turn.items[0].status == ItemStatus.FAILED
+    completed = [p for m, p in emitter.notified if m.endswith("item/completed")]
+    assert completed[0]["item"]["status"] == "failed"
 
 
 @pytest.mark.asyncio
