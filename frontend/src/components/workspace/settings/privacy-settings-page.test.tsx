@@ -28,7 +28,14 @@ const CONSTITUTION_PROFILE_RESPONSE = {
 const AI_MODE_RESPONSE = {
   mode: "efficiency",
   recommended: "efficiency",
-  device: "macbook-air-m1",
+  device: {
+    has_local_model: true,
+    has_gpu: true,
+    ram_gb: 16,
+    cpu_count: 8,
+    cloud_reachable: true,
+    notes: [],
+  },
   modes: [
     {
       id: "efficiency",
@@ -62,12 +69,14 @@ function jsonResponse(body: unknown, status = 200) {
  * GETs on mount; we register a tiny router so tests don't have to
  * babysit the call order.
  */
-function installFetchRouter(routes: Record<string, () => unknown>) {
+function installFetchRouter(
+  routes: Record<string, (init?: RequestInit) => unknown>,
+) {
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
     for (const [substr, handler] of Object.entries(routes)) {
       if (typeof url === "string" && url.includes(substr)) {
         const method = init?.method ?? "GET";
-        const body = handler();
+        const body = handler(init);
         // Allow handlers to return a status-tagged tuple.
         if (
           Array.isArray(body) &&
@@ -113,13 +122,22 @@ describe("PrivacySettingsPage · AI mode section", () => {
     expect(
       screen.getByText(/根据本机设备配置.*推荐使用.*效率模式/),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "docs/constitution.md" }),
+    ).toHaveAttribute(
+      "href",
+      "https://github.com/octopus-agent/octopus-agent/blob/main/docs/constitution.md",
+    );
   });
 
   it("clicking 隐私模式 sends POST /api/ai-mode with mode=privacy", async () => {
     installFetchRouter({
       "/api/config/identity-lock": () => IDENTITY_LOCK_RESPONSE,
       "/api/safety/constitution-profile": () => CONSTITUTION_PROFILE_RESPONSE,
-      "/api/ai-mode": () => AI_MODE_RESPONSE,
+      "/api/ai-mode": (init) =>
+        init?.method === "POST"
+          ? { mode: "privacy", ok: true }
+          : AI_MODE_RESPONSE,
       "/api/path-denylist": () => DENYLIST_RESPONSE,
     });
 
@@ -142,6 +160,8 @@ describe("PrivacySettingsPage · AI mode section", () => {
       const body = JSON.parse(String(postCall![1]?.body));
       expect(body).toEqual({ mode: "privacy" });
     });
+    expect(await screen.findByText(/16 GB RAM/)).toBeInTheDocument();
+    expect(screen.getByText(/本地模型可用/)).toBeInTheDocument();
   });
 });
 

@@ -15,6 +15,7 @@ import {
 } from "@/core/mcp/api";
 import type { MCPConfig } from "@/core/mcp/types";
 import { SettingsSection } from "./settings-section";
+import { isSupportedMcpUrl } from "./settings-resilience";
 
 interface McpServer {
   name: string;
@@ -123,7 +124,7 @@ export function McpSettingsPage() {
   const addServer = async () => {
     const name = addName.trim();
     const url = addUrl.trim();
-    if (!name || !url) {
+    if (!name || !isSupportedMcpUrl(url)) {
       toast.error(t.mcpSettings.toastAddInvalid);
       return;
     }
@@ -240,30 +241,51 @@ export function McpSettingsPage() {
         </div>
       </SettingsSection>
       <SettingsSection title={t.mcpSettings.addRemoteTitle}>
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <form
+          className="flex flex-col gap-2 sm:flex-row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void addServer();
+          }}
+        >
           <Input
+            name="mcp-server-name"
+            autoComplete="off"
             placeholder={t.mcpSettings.addNamePlaceholder}
             value={addName}
             onChange={(e) => setAddName(e.target.value)}
             className="sm:w-40"
+            disabled={adding}
           />
           <Input
+            name="mcp-server-url"
+            type="url"
+            inputMode="url"
+            autoComplete="url"
+            autoCapitalize="none"
+            spellCheck={false}
             placeholder={t.mcpSettings.addUrlPlaceholder}
             value={addUrl}
             onChange={(e) => setAddUrl(e.target.value)}
             className="flex-1"
+            disabled={adding}
           />
           <Input
+            name="mcp-server-token"
             type="password"
+            autoComplete="new-password"
+            autoCapitalize="none"
+            spellCheck={false}
             placeholder={t.mcpSettings.addAuthPlaceholder}
             value={addAuth}
             onChange={(e) => setAddAuth(e.target.value)}
             className="sm:w-48"
+            disabled={adding}
           />
-          <Button onClick={addServer} disabled={adding}>
+          <Button type="submit" disabled={adding}>
             {t.mcpSettings.addButton}
           </Button>
-        </div>
+        </form>
       </SettingsSection>
     </div>
   );

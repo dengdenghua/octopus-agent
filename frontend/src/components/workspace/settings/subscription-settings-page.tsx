@@ -20,13 +20,12 @@ import {
 } from "@/core/account";
 import { formatDate } from "@/core/utils/datetime";
 import { useI18n } from "@/core/i18n/hooks";
-import {
-  useCreateOrder,
-  useOctGoods,
-  useOctLink,
-} from "@/core/oct/hooks";
+import { useCreateOrder, useOctGoods, useOctLink } from "@/core/oct/hooks";
 import type { OctGoods } from "@/core/oct/api";
 import { PayOrderDialog } from "@/components/workspace/pay-order-dialog";
+import { useAuth } from "@/providers/AuthProvider";
+
+import { resolvePricingAccountLabel } from "./settings-resilience";
 
 export default function SubscriptionSettingsPage() {
   const { t } = useI18n();
@@ -193,12 +192,20 @@ interface PayState {
 
 function OfficialPricingSection() {
   const { t } = useI18n();
+  const { user, isGuest } = useAuth();
   const link = useOctLink();
   const linked = Boolean(link.data);
   const goodsQuery = useOctGoods(linked);
   const createOrder = useCreateOrder();
   const { data: profile } = useProfile();
-  const isLoggedIn = Boolean(profile?.username);
+  const accountLabel = resolvePricingAccountLabel({
+    profileName: profile?.display_name || profile?.username,
+    userName: user?.username,
+    userEmail: user?.email,
+    isGuest,
+    fallback: t.auth.currentAccount,
+  });
+  const isLoggedIn = Boolean(accountLabel);
   const [pay, setPay] = useState<PayState>({
     open: false,
     paymentLink: null,
@@ -209,7 +216,10 @@ function OfficialPricingSection() {
   const onBuy = async (g: OctGoods) => {
     setPendingId(g.id);
     try {
-      const o = await createOrder.mutateAsync({ goodsId: g.id, currency: "CNY" });
+      const o = await createOrder.mutateAsync({
+        goodsId: g.id,
+        currency: "CNY",
+      });
       if (!o?.payUrl || !o?.orderNo) {
         toast.error(t.payOrder.goodsFailed);
         return;
@@ -243,9 +253,7 @@ function OfficialPricingSection() {
           <>
             <div className="flex items-center justify-center gap-2 text-sm">
               <UserIcon className="size-4 text-muted-foreground" />
-              <span className="font-medium">
-                {profile?.display_name || profile?.username}
-              </span>
+              <span className="font-medium">{accountLabel}</span>
               <Badge variant="secondary" className="text-[10px]">
                 {t.auth.currentAccount}
               </Badge>
@@ -362,9 +370,15 @@ function OfficialPricingSection() {
                   ¥{originalYuan}
                 </p>
               )}
-              {formatCreditsSummary((g.credits ?? 0) + (g.bonusCredits ?? 0), t) && (
+              {formatCreditsSummary(
+                (g.credits ?? 0) + (g.bonusCredits ?? 0),
+                t,
+              ) && (
                 <p className="text-muted-foreground text-xs text-center mt-1">
-                  {formatCreditsSummary((g.credits ?? 0) + (g.bonusCredits ?? 0), t)}
+                  {formatCreditsSummary(
+                    (g.credits ?? 0) + (g.bonusCredits ?? 0),
+                    t,
+                  )}
                 </p>
               )}
 

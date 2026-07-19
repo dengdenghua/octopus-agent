@@ -1,8 +1,10 @@
 import {
+  AlertTriangleIcon,
   DownloadIcon,
   Loader2Icon,
   PenLineIcon,
   PlusIcon,
+  RefreshCwIcon,
   SearchIcon,
   Trash2Icon,
   UploadIcon,
@@ -54,8 +56,10 @@ import type {
 import { useStreamdownPlugins } from "@/core/streamdown";
 import { pathOfThread } from "@/core/threads/utils";
 import { formatTimeAgo } from "@/core/utils/datetime";
+import { cn } from "@/lib/utils";
 
 import { SettingsSection } from "./settings-section";
+import { getMemoryLoadErrorCopy } from "./settings-resilience";
 
 const LazyStreamdown = lazy(
   () => import("@/components/ai-elements/streamdown-host"),
@@ -323,9 +327,9 @@ function isThreadSource(source: string) {
 }
 
 export default function MemorySettingsPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const streamdownPlugins = useStreamdownPlugins();
-  const { memory, isLoading, error } = useMemory();
+  const { memory, isLoading, error, refetch, isRefreshing } = useMemory();
   const { config: memoryConfig } = useMemoryConfig();
   const updateMemoryConfig = useUpdateMemoryConfig();
   const clearMemory = useClearMemory();
@@ -660,8 +664,30 @@ export default function MemorySettingsPage() {
             {t.common.loading}
           </div>
         ) : error ? (
-          <div>
-            {t.common.error}: {error.message}
+          <div
+            role="alert"
+            className="flex flex-col items-start justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/[0.04] px-4 py-3 sm:flex-row sm:items-center"
+          >
+            <div className="flex min-w-0 items-start gap-2 text-sm text-destructive">
+              <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
+              <span>{getMemoryLoadErrorCopy(locale)}</span>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="w-full shrink-0 sm:w-auto"
+              disabled={isRefreshing}
+              onClick={() => void refetch()}
+            >
+              <RefreshCwIcon
+                className={cn(
+                  "mr-1.5 size-3.5",
+                  isRefreshing && "animate-spin",
+                )}
+              />
+              {t.errorBoundary.retry}
+            </Button>
           </div>
         ) : !memory ? (
           <div className="text-muted-foreground text-sm">

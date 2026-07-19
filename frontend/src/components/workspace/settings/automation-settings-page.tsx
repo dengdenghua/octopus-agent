@@ -55,6 +55,7 @@ import {
   type RuleEffect,
 } from "@/core/settings/permissions-api";
 import { useI18n } from "@/core/i18n/hooks";
+import { cn } from "@/lib/utils";
 
 function useCapabilities() {
   return useQuery({
@@ -77,7 +78,7 @@ function useSaveCapabilities() {
 export default function AutomationSettingsPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const { data, isLoading, error } = useCapabilities();
+  const { data, isLoading, error, refetch, isFetching } = useCapabilities();
   const save = useSaveCapabilities();
 
   const [browserOn, setBrowserOn] = useState<boolean>(true);
@@ -148,9 +149,27 @@ export default function AutomationSettingsPage() {
   if (error) {
     return (
       <div className="space-y-6">
-        <div className="py-6 text-sm text-destructive">
-          {t.settings.automation.loadFailed}:{" "}
-          {error instanceof Error ? error.message : String(error)}
+        <div
+          role="alert"
+          className="flex flex-col items-start justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/[0.04] px-4 py-3 sm:flex-row sm:items-center"
+        >
+          <span className="flex items-center gap-2 text-sm text-destructive">
+            <AlertTriangleIcon className="size-4 shrink-0" />
+            {t.settings.automation.loadFailed}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="w-full shrink-0 sm:w-auto"
+            disabled={isFetching}
+            onClick={() => void refetch()}
+          >
+            <RefreshCwIcon
+              className={cn("mr-1.5 size-3.5", isFetching && "animate-spin")}
+            />
+            {t.errorBoundary.retry}
+          </Button>
         </div>
         <LocalToolsSection />
       </div>
@@ -407,6 +426,8 @@ function ApprovalRulesSection() {
     data: rules = [],
     isLoading,
     error,
+    isFetching,
+    refetch,
   } = useQuery({
     queryKey: ["approval-rules"],
     queryFn: () => listPermissionRules(),
@@ -496,9 +517,26 @@ function ApprovalRulesSection() {
           {t.settings.automation.rules.loading}
         </div>
       ) : error ? (
-        <div className="text-sm text-destructive">
-          {t.settings.automation.rules.loadFailed}:{" "}
-          {error instanceof Error ? error.message : String(error)}
+        <div
+          role="alert"
+          className="flex flex-col items-start justify-between gap-2 rounded-lg border border-destructive/20 bg-destructive/[0.04] p-3 sm:flex-row sm:items-center"
+        >
+          <span className="text-sm text-destructive">
+            {t.settings.automation.rules.loadFailed}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="w-full sm:w-auto"
+            disabled={isFetching}
+            onClick={() => void refetch()}
+          >
+            <RefreshCwIcon
+              className={cn("mr-1.5 size-3.5", isFetching && "animate-spin")}
+            />
+            {t.errorBoundary.retry}
+          </Button>
         </div>
       ) : rules.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border-default bg-muted/30 p-3 text-xs text-muted-foreground">

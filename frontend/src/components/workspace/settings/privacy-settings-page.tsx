@@ -43,6 +43,8 @@ import { SearxngControl } from "@/components/workspace/searxng-control";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { formatAiModeDevice, type AiModeDevice } from "./settings-resilience";
+
 // ─── Local API types · narrow to what the UI actually uses ──────
 //
 // These mirror the backend wire shape (see ``runtime/web/ai_mode_router.py``
@@ -61,7 +63,7 @@ interface AiModeOption {
 interface AiModeStatus {
   mode: AiModeId;
   recommended: AiModeId;
-  device?: string | null;
+  device?: AiModeDevice;
   modes: AiModeOption[];
 }
 
@@ -113,7 +115,7 @@ type JudgeStatus = {
 };
 
 export default function PrivacySettingsPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   // Blurbs resolve live against the selected locale.
@@ -198,7 +200,19 @@ export default function PrivacySettingsPage() {
         body: JSON.stringify({ mode }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const next = (await res.json()) as AiModeStatus;
+      const payload = (await res.json()) as Partial<AiModeStatus>;
+      const resolvedMode =
+        payload.mode === "efficiency" || payload.mode === "privacy"
+          ? payload.mode
+          : mode;
+      const next: AiModeStatus = {
+        ...prev,
+        ...payload,
+        mode: resolvedMode,
+        recommended: payload.recommended ?? prev.recommended,
+        device: payload.device ?? prev.device,
+        modes: Array.isArray(payload.modes) ? payload.modes : prev.modes,
+      };
       setAiMode(next);
       const label = next.modes.find((m) => m.id === mode)?.label ?? mode;
       toast.success(t.privacySettings.toastAiModeSwitched(label));
@@ -531,9 +545,10 @@ export default function PrivacySettingsPage() {
             );
           })}
         </div>
-        {aiMode?.device && (
+        {formatAiModeDevice(aiMode?.device, locale) && (
           <div className="mt-3 text-[11px] text-muted-foreground/80">
-            {t.privacySettings.deviceLabel} <code>{aiMode.device}</code>
+            {t.privacySettings.deviceLabel}{" "}
+            <code>{formatAiModeDevice(aiMode?.device, locale)}</code>
           </div>
         )}
       </div>
@@ -621,7 +636,7 @@ export default function PrivacySettingsPage() {
         <p className="mt-1 text-xs text-muted-foreground">
           {t.privacySettings.profileDescPrefix}
           <a
-            href="https://github.com/your-org/octopus-agent/blob/main/docs/constitution.md"
+            href="https://github.com/octopus-agent/octopus-agent/blob/main/docs/constitution.md"
             className="underline underline-offset-2"
           >
             {t.privacySettings.profileDescDocLink}

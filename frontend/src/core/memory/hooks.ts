@@ -34,11 +34,17 @@ export function useSearchMemory(query: string, limit = 50) {
 }
 
 export function useMemory() {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["memory"],
     queryFn: () => loadMemory(),
   });
-  return { memory: data ?? null, isLoading, error };
+  return {
+    memory: data ?? null,
+    isLoading,
+    error,
+    refetch,
+    isRefreshing: isFetching && !isLoading,
+  };
 }
 
 export function useMemoryConfig() {
