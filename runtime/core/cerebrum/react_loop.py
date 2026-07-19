@@ -1753,12 +1753,14 @@ def stream_react_loop(
         # Spec build came back empty — nothing to call natively, so stay on
         # the proven text protocol rather than passing an empty tools list.
         _native_mode = False
-    _native_orientation_tool_specs = (
+    _native_public_update_tool_specs = (
         require_public_update_on_tool_specs(_native_tool_specs)
         if (
             _native_mode
-            and bool((intent.user_context or {}).get("realtime_public_orientation"))
-            and _initial_public_checkpoint(intent.normalized_goal)
+            and bool(
+                (intent.user_context or {}).get("realtime_public_orientation")
+                or (intent.user_context or {}).get("realtime_public_narrative")
+            )
         )
         else _native_tool_specs
     )
@@ -1836,9 +1838,11 @@ def stream_react_loop(
             "not use a heading, stage label, tool name, protocol name, generic status "
             "filler, or claim that work is already complete. In native tool mode, emit "
             "the sentence as normal text immediately before the first tool calls. In "
-            "addition, when a first-round tool schema contains a public_update field, "
-            "put the same sentence there; the runtime displays it once and removes it "
-            "before tool execution. In "
+            "addition, whenever a native tool schema contains a public_update field, "
+            "fill it on every tool round; after the first round, briefly state the new "
+            "fact established by the preceding result and what the next action will "
+            "clarify. Do not repeat the previous sentence. The runtime displays each "
+            "update once and removes it before tool execution. In "
             "the text protocol, put it in Update: immediately before the first Action:. "
             "Skip it when answering directly without tools.\n"
             "</public-orientation>"
@@ -3183,11 +3187,7 @@ def stream_react_loop(
                     )
                 ),
                 tools=(
-                    (
-                        _native_orientation_tool_specs
-                        if i == 0 and not steps
-                        else _native_tool_specs
-                    )
+                    _native_public_update_tool_specs
                     if _native_mode and _evidence_convergence_active is None
                     else []
                 ),

@@ -128,7 +128,7 @@ def test_step_from_tool_calls_single() -> None:
     assert step.public_update == "reading"
 
 
-def test_first_tool_schema_requires_model_authored_public_update() -> None:
+def test_native_tool_schema_requires_model_authored_public_update() -> None:
     original = ToolSpec(
         name="read_file",
         input_schema={
@@ -142,6 +142,8 @@ def test_first_tool_schema_requires_model_authored_public_update() -> None:
 
     assert augmented.input_schema["required"] == ["path", "public_update"]
     assert augmented.input_schema["properties"]["public_update"]["type"] == "string"
+    assert augmented.input_schema["properties"]["public_update"]["maxLength"] == 420
+    assert "later rounds" in augmented.input_schema["properties"]["public_update"]["description"]
     assert "public_update" not in original.input_schema["properties"]
 
 
@@ -325,6 +327,103 @@ def test_native_mode_passes_tools_and_consumes_tool_calls() -> None:
     ), "turn-1 tool call should appear in the assistant history"
     assert result is not None
     assert "已读取配置" in (result.final_answer or "")
+
+
+def test_every_native_tool_round_requires_a_fresh_public_update() -> None:
+    from runtime.core.cerebrum.react_loop import stream_react_loop
+
+    router = _Router(
+        [
+            (
+                "",
+                [
+                    ToolCall(
+                        id="t1",
+                        name="read_file",
+                        input={
+                            "path": "backend.py",
+                            "public_update": "我先核对后端事件定义，确认时间线的源字段。",
+                        },
+                    )
+                ],
+            ),
+            (
+                "",
+                [
+                    ToolCall(
+                        id="t2",
+                        name="read_file",
+                        input={
+                            "path": "frontend.ts",
+                            "public_update": "后端字段已经确认；我再核对前端映射，确定两端是否逐项对应。",
+                        },
+                    )
+                ],
+            ),
+            ("Final Answer: 两端字段逐项对应。", []),
+        ]
+    )
+    fake_spec = ToolSpec(
+        name="read_file",
+        input_schema={
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+        },
+    )
+    intent = _intent("只读比较后端事件与前端映射")
+    intent.user_context.update(
+        {
+            "realtime_public_narrative": True,
+            "realtime_public_orientation": True,
+        }
+    )
+
+    with (
+        patch(
+            "runtime.core.cerebrum.react_native.native_tool_use_active",
+            return_value=True,
+        ),
+        patch(
+            "runtime.core.cerebrum.react_native.build_loop_tool_specs",
+            return_value=[fake_spec],
+        ),
+    ):
+        stream = stream_react_loop(
+            _Stack(router),
+            intent,
+            agent=None,
+            max_iterations=5,
+        )
+        events: list[dict[str, Any]] = []
+        while True:
+            try:
+                events.append(next(stream))
+            except StopIteration as stop:
+                result = stop.value
+                break
+
+    tool_requests = [request for request in router.requests if request.tools]
+    assert len(tool_requests) >= 2
+    assert all(
+        "public_update" in request.tools[0].input_schema.get("required", [])
+        for request in tool_requests[:2]
+    )
+    assert result is not None
+    assert [step.public_update for step in result.steps[:2]] == [
+        "我先核对后端事件定义，确认时间线的源字段。",
+        "后端字段已经确认；我再核对前端映射，确定两端是否逐项对应。",
+    ]
+    model_updates = [
+        event
+        for event in events
+        if event.get("type") == "commentary_delta"
+        and event.get("progress_source") == "model"
+    ]
+    assert [event["delta"] for event in model_updates] == [
+        "我先核对后端事件定义，确认时间线的源字段。",
+        "后端字段已经确认；我再核对前端映射，确定两端是否逐项对应。",
+    ]
 
 
 def test_escape_hatch_forces_text_mode(monkeypatch) -> None:

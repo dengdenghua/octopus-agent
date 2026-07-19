@@ -123,12 +123,12 @@ def build_loop_tool_specs(
 
 
 def require_public_update_on_tool_specs(specs: list[Any]) -> list[Any]:
-    """Require one model-authored public sentence on the first tool round.
+    """Require one model-authored public sentence on every native tool round.
 
     Some function-calling providers emit a tool call without any ordinary text,
-    even when explicitly prompted to speak first. Adding a transient schema
-    field gives that same model a structured place to author the sentence. The
-    field is removed before dispatch, so tool handlers never see it.
+    even when explicitly prompted to keep the user informed. Adding a transient
+    schema field gives that same model a structured place to author each public
+    beat. The field is removed before dispatch, so tool handlers never see it.
     """
 
     augmented: list[Any] = []
@@ -137,10 +137,14 @@ def require_public_update_on_tool_specs(specs: list[Any]) -> list[Any]:
         properties = dict(schema.get("properties") or {})
         properties["public_update"] = {
             "type": "string",
+            "maxLength": 420,
             "description": (
-                "One short user-facing sentence in the user's language describing the "
-                "concrete scope this first tool round will inspect or establish. Do not "
-                "include hidden reasoning, stage labels, tool names, or completed claims."
+                "One short user-facing sentence in the user's language. On the first "
+                "tool round, name the concrete scope being inspected or changed. On "
+                "later rounds, state the useful fact the previous result confirmed or "
+                "changed and what this next action will establish. Do not include hidden "
+                "reasoning, stage labels, tool or protocol names, generic status filler, "
+                "repeated wording, or an unsupported completion claim."
             ),
         }
         required = list(schema.get("required") or [])
