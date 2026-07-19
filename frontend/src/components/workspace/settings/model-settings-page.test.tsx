@@ -343,10 +343,12 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
 
     renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
 
-    expect(
-      await screen.findByText("OpenAI-compatible profile matrix"),
-    ).toBeInTheDocument();
-    expect(await screen.findByText("2 profiles")).toBeInTheDocument();
+    expect(await screen.findByText("OpenAI 兼容配置矩阵")).toBeInTheDocument();
+    expect(await screen.findByText("2 个配置")).toBeInTheDocument();
+    expect(screen.getByText("高级")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("同源代理")).toBeInTheDocument();
+    expect(screen.queryByText("Advanced")).not.toBeInTheDocument();
+    expect(await screen.findByText(/无需配置 API Key/)).toBeInTheDocument();
     expect(await screen.findByText("Kimi Coding")).toBeInTheDocument();
     expect(await screen.findByText("kimi-k2.7-code")).toBeInTheDocument();
     expect(
@@ -359,6 +361,11 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     expect(
       (await screen.findAllByText(/rename_max_tokens/)).length,
     ).toBeGreaterThan(0);
+    expect(await screen.findByText("兼容分 82")).toBeInTheDocument();
+    expect(await screen.findByText("2 次回退")).toBeInTheDocument();
+    expect((await screen.findAllByText(/归一化：/)).length).toBeGreaterThan(1);
+    expect(await screen.findByText(/移除：/)).toBeInTheDocument();
+    expect((await screen.findAllByText(/重试：/)).length).toBeGreaterThan(1);
   });
 
   it("renders a single-model entry without a trailing junk chip", async () => {

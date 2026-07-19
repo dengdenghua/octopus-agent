@@ -543,7 +543,20 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     diagnoseGateway: string;
     advancedTitle: string;
     advancedSubtitle: string;
+    advancedBadge: string;
+    sameOriginProxy: string;
     compatDetails: string;
+    compatMatrixTitle: string;
+    compatMatrixDescription: string;
+    compatProfileCount: (count: number) => string;
+    compatProfilesLoading: string;
+    compatProfilesUnavailable: string;
+    compatScore: (score: string) => string;
+    compatFallbacks: (count: number) => string;
+    compatNormalize: (values: string) => string;
+    compatDrops: (values: string) => string;
+    compatRetries: (values: string) => string;
+    compatRemaining: (count: number) => string;
     deletingDefault: (replacement: string | null) => string;
     deletedAndSwitched: (replacement: string) => string;
     deletedAndReset: string;
@@ -567,7 +580,21 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     advancedTitle: "高级能力与兼容诊断",
     advancedSubtitle:
       "Cookbook、Octopus Mix 和 OpenAI-compatible 矩阵偏专家向，默认收在这里，避免干扰日常配置。",
+    advancedBadge: "高级",
+    sameOriginProxy: "同源代理",
     compatDetails: "查看兼容处理规则",
+    compatMatrixTitle: "OpenAI 兼容配置矩阵",
+    compatMatrixDescription:
+      "内置的 OpenAI 兼容提供方预检矩阵。无需配置 API Key，即可查看请求归一化规则和失败后的兼容重试策略。",
+    compatProfileCount: (count) => `${count} 个配置`,
+    compatProfilesLoading: "正在加载兼容配置",
+    compatProfilesUnavailable: "兼容配置目录暂不可用",
+    compatScore: (score) => `兼容分 ${score}`,
+    compatFallbacks: (count) => `${count} 次回退`,
+    compatNormalize: (values) => `归一化：${values}`,
+    compatDrops: (values) => `移除：${values}`,
+    compatRetries: (values) => `重试：${values}`,
+    compatRemaining: (count) => `后端目录中还有 ${count} 个配置。`,
     deletingDefault: (replacement) =>
       replacement
         ? `这是当前默认模型。删除后将自动切换到“${replacement}”。`
@@ -594,7 +621,22 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     advancedTitle: "Advanced capabilities and diagnostics",
     advancedSubtitle:
       "Cookbook, Octopus Mix, and the OpenAI-compatible matrix are expert tools, so they stay grouped away from everyday setup.",
+    advancedBadge: "Advanced",
+    sameOriginProxy: "Same-origin proxy",
     compatDetails: "View compatibility rules",
+    compatMatrixTitle: "OpenAI-compatible profile matrix",
+    compatMatrixDescription:
+      "Built-in preflight matrix for OpenAI-compatible providers. Review request normalization and compatibility retries before configuring an API key.",
+    compatProfileCount: (count) => `${count} profile${count === 1 ? "" : "s"}`,
+    compatProfilesLoading: "Loading compatibility profiles",
+    compatProfilesUnavailable: "Compatibility profile catalog unavailable",
+    compatScore: (score) => `Compatibility ${score}`,
+    compatFallbacks: (count) => `${count} fallback${count === 1 ? "" : "s"}`,
+    compatNormalize: (values) => `Normalize: ${values}`,
+    compatDrops: (values) => `Remove: ${values}`,
+    compatRetries: (values) => `Retry: ${values}`,
+    compatRemaining: (count) =>
+      `${count} more profile${count === 1 ? "" : "s"} in the backend catalog.`,
     deletingDefault: (replacement) =>
       replacement
         ? `This is the current default. Deleting it will switch the default to “${replacement}”.`
@@ -622,7 +664,22 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     advancedTitle: "高度な機能と互換診断",
     advancedSubtitle:
       "Cookbook、Octopus Mix、OpenAI 互換マトリクスは上級者向けなので、日常設定とは分けています。",
+    advancedBadge: "上級",
+    sameOriginProxy: "同一オリジンプロキシ",
     compatDetails: "互換処理ルールを表示",
+    compatMatrixTitle: "OpenAI 互換プロファイル一覧",
+    compatMatrixDescription:
+      "OpenAI 互換プロバイダー向けの組み込み事前確認一覧です。API キーを設定する前に、リクエストの正規化と互換リトライを確認できます。",
+    compatProfileCount: (count) => `${count} 件のプロファイル`,
+    compatProfilesLoading: "互換プロファイルを読み込み中",
+    compatProfilesUnavailable: "互換プロファイル一覧を利用できません",
+    compatScore: (score) => `互換性 ${score}`,
+    compatFallbacks: (count) => `${count} 回のフォールバック`,
+    compatNormalize: (values) => `正規化：${values}`,
+    compatDrops: (values) => `削除：${values}`,
+    compatRetries: (values) => `再試行：${values}`,
+    compatRemaining: (count) =>
+      `バックエンドの一覧に残り ${count} 件あります。`,
     deletingDefault: (replacement) =>
       replacement
         ? `現在の既定モデルです。削除後は「${replacement}」へ自動的に切り替わります。`
@@ -649,7 +706,21 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     advancedTitle: "고급 기능 및 호환성 진단",
     advancedSubtitle:
       "Cookbook, Octopus Mix, OpenAI 호환 매트릭스는 전문가용 도구이므로 일반 설정과 분리했습니다.",
+    advancedBadge: "고급",
+    sameOriginProxy: "동일 출처 프록시",
     compatDetails: "호환 처리 규칙 보기",
+    compatMatrixTitle: "OpenAI 호환 프로필 목록",
+    compatMatrixDescription:
+      "OpenAI 호환 제공자를 위한 내장 사전 점검 목록입니다. API 키를 설정하기 전에 요청 정규화와 호환 재시도 규칙을 확인할 수 있습니다.",
+    compatProfileCount: (count) => `프로필 ${count}개`,
+    compatProfilesLoading: "호환 프로필 불러오는 중",
+    compatProfilesUnavailable: "호환 프로필 목록을 사용할 수 없음",
+    compatScore: (score) => `호환성 ${score}`,
+    compatFallbacks: (count) => `대체 시도 ${count}회`,
+    compatNormalize: (values) => `정규화: ${values}`,
+    compatDrops: (values) => `제거: ${values}`,
+    compatRetries: (values) => `재시도: ${values}`,
+    compatRemaining: (count) => `백엔드 목록에 프로필 ${count}개 더 있음.`,
     deletingDefault: (replacement) =>
       replacement
         ? `현재 기본 모델입니다. 삭제하면 기본 모델이 “${replacement}”(으)로 자동 전환됩니다.`
@@ -1582,7 +1653,7 @@ export default function ModelSettingsPage() {
               </div>
               <Input
                 className="w-56 text-right"
-                value={getBackendBaseURL() || "same-origin proxy"}
+                value={getBackendBaseURL() || pageCopy.sameOriginProxy}
                 readOnly
               />
             </div>
@@ -1614,7 +1685,7 @@ export default function ModelSettingsPage() {
               </div>
             </div>
             <span className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors group-open:bg-muted">
-              Advanced
+              {pageCopy.advancedBadge}
             </span>
           </div>
         </summary>
@@ -1625,7 +1696,10 @@ export default function ModelSettingsPage() {
           {/* Octopus Mix · mixture-of-agents composer */}
           <MixSettingsSection />
 
-          <BuiltInCompatProfilesCard catalog={compatProfileCatalog} />
+          <BuiltInCompatProfilesCard
+            catalog={compatProfileCatalog}
+            copy={pageCopy}
+          />
         </div>
       </details>
 
@@ -1695,8 +1769,10 @@ export default function ModelSettingsPage() {
 
 function BuiltInCompatProfilesCard({
   catalog,
+  copy,
 }: {
   catalog: CompatProfileCatalogState;
+  copy: ReturnType<typeof modelSettingsPageCopy>;
 }) {
   const visible = catalog.items.slice(0, 8);
   const remaining = Math.max(0, catalog.items.length - visible.length);
@@ -1706,28 +1782,28 @@ function BuiltInCompatProfilesCard({
     <SettingsSection
       title={
         <div className="flex w-full items-center justify-between gap-3">
-          <span>OpenAI-compatible profile matrix</span>
+          <span>{copy.compatMatrixTitle}</span>
           <span className="text-xs font-normal text-muted-foreground">
-            {loaded ? `${catalog.items.length} profiles` : "loading"}
+            {loaded
+              ? copy.compatProfileCount(catalog.items.length)
+              : copy.compatProfilesLoading}
           </span>
         </div>
       }
     >
       <div className="space-y-3">
         <div className="text-sm leading-6 text-muted-foreground">
-          Built-in dry-run matrix for domestic and proxy OpenAI-compatible
-          providers. It shows request normalization and fallback retries before
-          an API key is configured.
+          {copy.compatMatrixDescription}
         </div>
         {catalog.status === "loading" && catalog.items.length === 0 ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2Icon className="size-4 animate-spin" />
-            Loading compatibility profiles
+            {copy.compatProfilesLoading}
           </div>
         ) : catalog.status === "error" && catalog.items.length === 0 ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <AlertTriangleIcon className="size-4 text-amber-500" />
-            Compatibility profile catalog unavailable
+            {copy.compatProfilesUnavailable}
           </div>
         ) : (
           <div className="grid gap-2 xl:grid-cols-2">
@@ -1753,10 +1829,11 @@ function BuiltInCompatProfilesCard({
                         </span>
                         {score && (
                           <span className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                            compat{" "}
-                            {score.min === score.max
-                              ? score.min
-                              : `${score.min}-${score.max}`}
+                            {copy.compatScore(
+                              score.min === score.max
+                                ? `${score.min}`
+                                : `${score.min}-${score.max}`,
+                            )}
                           </span>
                         )}
                       </div>
@@ -1765,26 +1842,29 @@ function BuiltInCompatProfilesCard({
                       </div>
                     </div>
                     <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                      {countCompatRetries(item)} fallback
+                      {copy.compatFallbacks(countCompatRetries(item))}
                     </span>
                   </div>
                   <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
                     {hints.length > 0 && (
                       <div title={hints.join(", ")}>
-                        normalize {hints.slice(0, 4).join(", ")}
-                        {hints.length > 4 ? "..." : ""}
+                        {copy.compatNormalize(
+                          `${hints.slice(0, 4).join(", ")}${hints.length > 4 ? "…" : ""}`,
+                        )}
                       </div>
                     )}
                     {removed.length > 0 && (
                       <div title={removed.join(", ")}>
-                        drops {removed.slice(0, 5).join(", ")}
-                        {removed.length > 5 ? "..." : ""}
+                        {copy.compatDrops(
+                          `${removed.slice(0, 5).join(", ")}${removed.length > 5 ? "…" : ""}`,
+                        )}
                       </div>
                     )}
                     {retryReasons.length > 0 && (
                       <div title={retryReasons.join(", ")}>
-                        retries {retryReasons.slice(0, 4).join(", ")}
-                        {retryReasons.length > 4 ? "..." : ""}
+                        {copy.compatRetries(
+                          `${retryReasons.slice(0, 4).join(", ")}${retryReasons.length > 4 ? "…" : ""}`,
+                        )}
                       </div>
                     )}
                   </div>
@@ -1795,7 +1875,7 @@ function BuiltInCompatProfilesCard({
         )}
         {remaining > 0 && (
           <div className="text-xs text-muted-foreground">
-            +{remaining} more profiles in the backend catalog.
+            {copy.compatRemaining(remaining)}
           </div>
         )}
       </div>
