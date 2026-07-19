@@ -6,14 +6,25 @@ import {
   pauseTask,
   resumeTask,
   type PauseReason,
+  type TasksListResponse,
 } from "./api";
 
 const TASKS_KEY = ["tasks"] as const;
 
-function tasksRefetchInterval(query: { state: { data?: { active?: Array<unknown>; pending?: Array<unknown> } } }) {
-  const d = query.state.data;
-  const hasHot = (d?.active?.length ?? 0) > 0 || (d?.pending?.length ?? 0) > 0;
-  return hasHot ? 2000 : 5000;
+export function getTasksRefetchInterval(
+  data?: TasksListResponse,
+): number | false {
+  // `pending` contains pause requests, not queued/running work. Those records
+  // can remain in storage for a long time, so treating them as hot keeps every
+  // workspace polling forever. Only live tasks need the two-second cadence.
+  const hasHot = (data?.active?.length ?? 0) > 0;
+  return hasHot ? 2000 : false;
+}
+
+function tasksRefetchInterval(query: {
+  state: { data?: TasksListResponse };
+}): number | false {
+  return getTasksRefetchInterval(query.state.data);
 }
 
 export function useTasks(status?: "paused" | "pending" | "active" | "all") {
@@ -23,6 +34,8 @@ export function useTasks(status?: "paused" | "pending" | "active" | "all") {
     queryFn: ({ signal }) => listTasks(statusValue, signal),
     refetchInterval: tasksRefetchInterval,
     refetchIntervalInBackground: true,
+    refetchOnReconnect: "always",
+    refetchOnWindowFocus: "always",
     staleTime: 2000,
     gcTime: 30000,
   });

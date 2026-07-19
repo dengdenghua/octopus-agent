@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { env } from "@/env";
+import { getWorkspaceArtifactRefetchInterval } from "@/core/artifacts/polling";
 import { listWorkspaceArtifactRefs } from "@/core/artifacts/workspace-outputs";
 import { cn } from "@/lib/utils";
 
@@ -28,15 +29,35 @@ const ChatBox: React.FC<{
   threadId: string;
 }> = ({ artifactPanelMode = "drawer", children, threadId }) => {
   const { thread } = useThread();
+  const queryClient = useQueryClient();
   const threadIdRef = useRef(threadId);
+  const previousRunRef = useRef({
+    isLoading: thread.isLoading,
+    threadId,
+  });
   const { data: workspaceArtifacts = EMPTY_ARTIFACTS } = useQuery({
     queryKey: ["workspace-artifacts", threadId],
     queryFn: ({ signal }) => listWorkspaceArtifactRefs(threadId, signal),
     enabled: Boolean(threadId && threadId !== "new"),
-    refetchInterval: 5000,
+    refetchInterval: getWorkspaceArtifactRefetchInterval(thread.isLoading),
+    refetchIntervalInBackground: true,
     staleTime: 3000,
     gcTime: 30000,
   });
+
+  useEffect(() => {
+    const previous = previousRunRef.current;
+    const runJustFinished =
+      previous.threadId === threadId && previous.isLoading && !thread.isLoading;
+
+    previousRunRef.current = { isLoading: thread.isLoading, threadId };
+
+    if (!runJustFinished || !threadId || threadId === "new") return;
+    void queryClient.invalidateQueries({
+      exact: true,
+      queryKey: ["workspace-artifacts", threadId],
+    });
+  }, [queryClient, thread.isLoading, threadId]);
 
   const {
     artifacts,

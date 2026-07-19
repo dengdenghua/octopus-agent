@@ -46,6 +46,10 @@ import { cn } from "@/lib/utils";
 
 import { BROWSER_HOME_URL, type BrowserTab } from "./browser-store";
 import { BrowserHome } from "./browser-home";
+import {
+  RELAY_STATUS_REFRESH_MS,
+  getRelayStatusRetryDelay,
+} from "./relay-polling";
 
 interface Props {
   tab: BrowserTab;
@@ -268,11 +272,27 @@ function moveDesktopApp(
   return next;
 }
 
+class BrowserHttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "BrowserHttpError";
+  }
+}
+
 async function browserJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${getBackendBaseURL()}${path}`, init);
   if (!res.ok) {
-    const data = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(data.detail || `HTTP ${res.status}`);
+    const data = (await res
+      .json()
+      .catch(() => ({ detail: res.statusText }))) as { detail?: unknown };
+    const detail = typeof data.detail === "string" ? data.detail : "";
+    throw new BrowserHttpError(
+      res.status,
+      detail || res.statusText || `HTTP ${res.status}`,
+    );
   }
   return res.json();
 }
@@ -546,6 +566,14 @@ function BackendBrowserTab({
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
+    let timer: number | undefined;
+    let consecutiveFailures = 0;
+
+    const schedule = (delay: number) => {
+      if (cancelled) return;
+      timer = window.setTimeout(() => void tick(), delay);
+    };
+
     const tick = async () => {
       try {
         const status = await browserJson<BrowserRelayStatus>(
@@ -554,17 +582,29 @@ function BackendBrowserTab({
             headers: authHeaders(),
           },
         );
-        if (!cancelled) setRelayStatus(status);
+        if (!cancelled) {
+          consecutiveFailures = 0;
+          setRelayStatus(status);
+          schedule(RELAY_STATUS_REFRESH_MS);
+        }
       } catch (e) {
         swallow(e);
-        if (!cancelled) setRelayStatus(null);
+        if (!cancelled) {
+          consecutiveFailures += 1;
+          setRelayStatus(null);
+          schedule(
+            getRelayStatusRetryDelay(
+              e instanceof BrowserHttpError ? e.status : null,
+              consecutiveFailures,
+            ),
+          );
+        }
       }
     };
     void tick();
-    const timer = window.setInterval(() => void tick(), 3000);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [active]);
 
