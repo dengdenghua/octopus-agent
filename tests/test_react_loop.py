@@ -1398,6 +1398,12 @@ def test_repeated_hidden_reasoning_timeout_is_reported_as_failure(monkeypatch) -
     assert result.terminated_reason == "model_stall"
     assert result.success is False
     assert completed["success"] is False
+    stall_error = next(event for event in events if event["type"] == "react_error")
+    assert stall_error["kind"] == "model_stall"
+    assert not any(
+        event["type"] == "text_delta" and "模型连续两次" in event["delta"]
+        for event in events
+    )
 
 
 def test_forced_convergence_salvages_plain_report_without_protocol_label() -> None:

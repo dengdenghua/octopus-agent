@@ -716,6 +716,7 @@ describe("conversationToAgentThreadState · error", () => {
       additional_kwargs?: Record<string, unknown>;
     };
     expect(ai.type).toBe("ai");
+    expect(ai.content).toBe("");
     const err = ai.additional_kwargs?.error as
       | Record<string, unknown>
       | undefined;

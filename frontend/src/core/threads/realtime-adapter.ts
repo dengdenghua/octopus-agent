@@ -810,7 +810,11 @@ function errorToAi(item: ErrorItem): AIMessage {
   return {
     type: "ai",
     id: item.id,
-    content: `出错了：${message}`,
+    // Error details belong to the terminal receipt rendered after the turn's
+    // chronological work lane. Keeping this synthetic message body empty
+    // prevents a failure sentence from appearing before tool events merely
+    // because an agentMessage item was opened earlier in the stream.
+    content: "",
     additional_kwargs: {
       error: {
         message,

@@ -3253,19 +3253,19 @@ def stream_react_loop(
         if _iteration_soft_timed_out and not step.action and maybe_final is None:
             _model_timeout_recoveries += 1
             if _model_timeout_recoveries >= 2:
-                final_answer = (
+                stall_message = (
                     "模型连续两次在单轮推理时限内未能给出下一步操作或最终答案。"
                     "前面已完成的工具结果仍保留在执行记录中，但这次无法可靠完成最终汇总。"
                     "你可以点击继续，系统会从已保存的进度重新收敛。"
                 )
                 yield {
-                    "type": "text_delta",
-                    "delta": final_answer,
+                    "type": "react_error",
+                    "kind": "model_stall",
+                    "message": stall_message,
                     "iteration": i + 1,
                 }
                 step.observation = "[model-iteration-timeout] convergence retry also timed out"
                 steps.append(step)
-                final_answer_emitted = True
                 terminated_reason = "model_stall"
                 break
             recovery_update = (
