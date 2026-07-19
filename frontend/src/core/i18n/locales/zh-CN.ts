@@ -5881,8 +5881,12 @@ export const zhCN: Translations = {
     noTasks: "暂无定时任务",
     last: "上次",
     jobName: "任务名称",
-    commandToRun: "要执行的命令",
-    cronExpression: "Cron 表达式 (例如 0 * * * *)",
+    jobNamePlaceholder: "例如：每小时同步报告",
+    commandToRun: "执行命令",
+    commandPlaceholder: "例如：python scripts/report.py",
+    cronExpression: "执行频率（Cron）",
+    cronPlaceholder: "例如：0 * * * *",
+    cronHint: "按当前设备时区执行，依次填写分钟、小时、日期、月份和星期。",
     create: "创建",
     cancel: "取消",
     addTask: "添加任务",
@@ -5900,6 +5904,7 @@ export const zhCN: Translations = {
     deleteConfirmTitle: "删除定时任务",
     deleteConfirmDescription: (name: string) =>
       `确定删除定时任务「${name}」吗？此操作不可撤销。`,
+    deleteTask: (name: string) => `删除定时任务：${name}`,
   },
 
   // Team Input

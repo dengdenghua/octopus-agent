@@ -5277,8 +5277,12 @@ export interface Translations {
     noTasks: string;
     last: string;
     jobName: string;
+    jobNamePlaceholder: string;
     commandToRun: string;
+    commandPlaceholder: string;
     cronExpression: string;
+    cronPlaceholder: string;
+    cronHint: string;
     create: string;
     cancel: string;
     addTask: string;
@@ -5295,6 +5299,7 @@ export interface Translations {
     cronInvalid: string;
     deleteConfirmTitle: string;
     deleteConfirmDescription: (name: string) => string;
+    deleteTask: (name: string) => string;
   };
 
   // Team Input

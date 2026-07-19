@@ -6206,8 +6206,13 @@ Strategy:
     noTasks: "No scheduled tasks",
     last: "Last",
     jobName: "Job name",
+    jobNamePlaceholder: "For example: Hourly report sync",
     commandToRun: "Command to run",
-    cronExpression: "Cron expression (e.g. 0 * * * *)",
+    commandPlaceholder: "For example: python scripts/report.py",
+    cronExpression: "Schedule (Cron)",
+    cronPlaceholder: "For example: 0 * * * *",
+    cronHint:
+      "Runs in this device's time zone. Enter minute, hour, day, month, and weekday.",
     create: "Create",
     cancel: "Cancel",
     addTask: "Add Task",
@@ -6226,6 +6231,7 @@ Strategy:
     deleteConfirmTitle: "Delete scheduled task",
     deleteConfirmDescription: (name: string) =>
       `Delete scheduled task "${name}"? This action cannot be undone.`,
+    deleteTask: (name: string) => `Delete scheduled task: ${name}`,
   },
 
   // Team Input
