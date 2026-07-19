@@ -2956,6 +2956,8 @@ export const zhCN: Translations = {
       groupLabel: "group:",
       reset: "重置",
       save: "保存",
+      saveSuccess: "执行能力设置已保存",
+      saveFailed: "保存失败，原有设置没有被更改。",
       saveDescription:
         "重启后端后新配置才会生效 — 新启动的 skill registry 会读这份文件。",
       nextStepSaveTitle: "下一步：保存变更",
@@ -2964,6 +2966,8 @@ export const zhCN: Translations = {
         "保存后按提示重启，让新的浏览器/电脑自动化开关在下一轮生效。",
       nextStepVerifyHint:
         "开关已同步。进入电脑自动化页观察屏幕、生成计划，确认本机能力可执行。",
+      nextStepDisabledTitle: "浏览器和桌面操作均已关闭",
+      nextStepDisabledHint: "如需使用本机自动化，请先开启至少一项能力并保存。",
       openComputerTool: "打开电脑自动化",
       loading: "加载自动化能力配置...",
       loadFailed: "加载失败",
@@ -2973,12 +2977,12 @@ export const zhCN: Translations = {
       restartNow: "立即重启",
       restarting: "正在重启后端...",
       restartFailed: "重启失败",
+      restartManualOnly: "网页模式无法代为重启，请稍后手动重启后端。",
       rules: {
         sectionTitle: "审批规则",
         sectionDescription:
           "在能力组开启的前提下，按工具名做单条放行 / 拒绝。规则按顺序匹配，命中第一条即生效。命不中则交给 UI 审批弹窗（未配置时默认拒绝）。",
-        emptyState:
-          "尚未配置任何规则。可以从仓库根的 permissions.example.json 拷贝一份模板到 data/permissions.json。",
+        emptyState: "尚未配置审批规则，可直接使用下方表单添加第一条。",
         loading: "加载规则...",
         loadFailed: "加载规则失败",
         addTitle: "新增规则",
@@ -2995,6 +2999,8 @@ export const zhCN: Translations = {
         adding: "添加中...",
         addError: "添加规则失败",
         deleteButton: "删除",
+        deleteConfirmTitle: "删除审批规则",
+        deleteConfirmHint: "删除后，下一次工具调用将立即采用新的规则顺序。",
         deleteError: "删除规则失败",
         moveUpButton: "上移",
         moveDownButton: "下移",

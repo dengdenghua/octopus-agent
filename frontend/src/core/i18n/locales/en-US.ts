@@ -3166,6 +3166,9 @@ export const enUS: Translations = {
       groupLabel: "group:",
       reset: "Reset",
       save: "Save",
+      saveSuccess: "Execution capability settings saved",
+      saveFailed:
+        "The settings could not be saved. Existing settings were not changed.",
       saveDescription:
         "Restart the backend afterwards — the new skill registry reads this file at boot.",
       nextStepSaveTitle: "Next: save your changes",
@@ -3174,6 +3177,9 @@ export const enUS: Translations = {
         "Save, then restart when prompted so the new browser/desktop automation toggles take effect.",
       nextStepVerifyHint:
         "Toggles are in sync. Open the computer automation page to watch the screen, generate a plan, and confirm local capabilities run.",
+      nextStepDisabledTitle: "Browser and desktop control are off",
+      nextStepDisabledHint:
+        "Turn on at least one capability and save before using local automation.",
       openComputerTool: "Open computer automation",
       loading: "Loading automation capabilities...",
       loadFailed: "Load failed",
@@ -3184,12 +3190,13 @@ export const enUS: Translations = {
       restartNow: "Restart now",
       restarting: "Restarting backend...",
       restartFailed: "Restart failed",
+      restartManualOnly:
+        "Web mode cannot restart the backend for you. Restart it manually when ready.",
       rules: {
         sectionTitle: "Approval rules",
         sectionDescription:
           "Per-tool allow / deny rules layered on top of the capability switches. Rules are scanned in order; the first match wins. A miss falls through to the UI approval prompt (or AutoDeny if no UI is wired).",
-        emptyState:
-          "No rules configured. Copy permissions.example.json from the repo root into data/permissions.json to start from a balanced template.",
+        emptyState: "No approval rules yet. Add the first one below.",
         loading: "Loading rules...",
         loadFailed: "Failed to load rules",
         addTitle: "Add rule",
@@ -3206,6 +3213,9 @@ export const enUS: Translations = {
         adding: "Adding...",
         addError: "Failed to add rule",
         deleteButton: "Delete",
+        deleteConfirmTitle: "Delete approval rule",
+        deleteConfirmHint:
+          "The new rule order applies to the next tool call immediately.",
         deleteError: "Failed to delete rule",
         moveUpButton: "Move up",
         moveDownButton: "Move down",

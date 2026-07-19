@@ -2559,11 +2559,15 @@ export interface Translations {
       groupLabel: string;
       reset: string;
       save: string;
+      saveSuccess: string;
+      saveFailed: string;
       saveDescription: string;
       nextStepSaveTitle: string;
       nextStepVerifyTitle: string;
       nextStepSaveHint: string;
       nextStepVerifyHint: string;
+      nextStepDisabledTitle: string;
+      nextStepDisabledHint: string;
       openComputerTool: string;
       loading: string;
       loadFailed: string;
@@ -2573,6 +2577,7 @@ export interface Translations {
       restartNow: string;
       restarting: string;
       restartFailed: string;
+      restartManualOnly: string;
       rules: {
         sectionTitle: string;
         sectionDescription: string;
@@ -2593,6 +2598,8 @@ export interface Translations {
         adding: string;
         addError: string;
         deleteButton: string;
+        deleteConfirmTitle: string;
+        deleteConfirmHint: string;
         deleteError: string;
         moveUpButton: string;
         moveDownButton: string;
