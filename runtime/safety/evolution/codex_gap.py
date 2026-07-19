@@ -61,6 +61,7 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
                 "probeLocalAgentPartner",
                 "command_hints",
                 "interaction_hint",
+                "native_launch_cwd",
                 "健康检查",
                 "打开原生 CLI",
                 "修复建议",
@@ -89,11 +90,12 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
         ),
         GapBehaviorCheck(
             id="cli_team_summary_tests",
-            title="CLI team results summarize successes, failures, and next action",
+            title="CLI team results summarize successes, failures, fix hints, and next action",
             path="tests/test_cli_team.py",
             required_terms=(
                 "test_one_member_failure_is_isolated",
                 "failed_members",
+                "Suggested fix",
                 "next_action",
                 "review_successes_retry_failed",
             ),
