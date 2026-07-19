@@ -39,9 +39,7 @@ const MAX_RECENT_WORKDIRS = 6;
 const MENU_WIDTH = 360;
 const MENU_MARGIN = 12;
 
-// Native folder picker via Electron preload(`window.octopus.dialog`)·
-// Implementation note.
-// Implementation note.
+// Native folder picker via the Electron preload bridge.
 async function openNativeFolderPicker(
   currentDir: string,
 ): Promise<string | null> {
@@ -266,7 +264,7 @@ export function WorkDirSelector({
   );
   const lockedCopy = lockedWorkdirText(locale);
   const isEmpty = !workDir;
-  const isWorkDirLocked = lockToCurrentThread && !isEmpty;
+  const isWorkDirLocked = lockToCurrentThread;
   const emptyTriggerLabel = isMutedVariant
     ? t.codeMode.personalSpace
     : t.codeMode.chooseWorkspaceFolder;

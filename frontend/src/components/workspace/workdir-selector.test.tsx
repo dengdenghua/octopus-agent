@@ -137,6 +137,33 @@ describe("<WorkDirSelector />", () => {
     );
   });
 
+  it("keeps an existing personal-space thread bound when a workspace is selected", async () => {
+    const onWorkDirChange = vi.fn();
+    const onOpenWorkDirInNewTask = vi.fn();
+    localStorage.setItem(
+      "octopus:recentWorkdirs",
+      JSON.stringify(["/Users/dangbei/NewProject"]),
+    );
+
+    renderWithProviders(
+      <WorkDirSelector
+        workDir=""
+        onWorkDirChange={onWorkDirChange}
+        lockToCurrentThread
+        onOpenWorkDirInNewTask={onOpenWorkDirInNewTask}
+        variant="muted"
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle("Personal space"));
+    fireEvent.click(await screen.findByText("NewProject"));
+
+    expect(onWorkDirChange).not.toHaveBeenCalled();
+    expect(onOpenWorkDirInNewTask).toHaveBeenCalledWith(
+      "/Users/dangbei/NewProject",
+    );
+  });
+
   it("offers manual path entry in web mode and binds a pasted absolute path", async () => {
     const onWorkDirChange = vi.fn();
 

@@ -1141,17 +1141,6 @@ function RealtimePageContent({
     threadWorkspaceQuery.isPending,
   ]);
 
-  useEffect(() => {
-    const handler = (event: Event) => {
-      const path = (event as CustomEvent<{ path?: string }>).detail?.path;
-      if (path && isAbsolutePath(path)) {
-        handleWorkDirChange(path);
-      }
-    };
-    window.addEventListener("octopus:workdir-selected", handler);
-    return () =>
-      window.removeEventListener("octopus:workdir-selected", handler);
-  }, [handleWorkDirChange]);
   const { models } = useModels();
   const { agents: builtinAgents } = useAgents();
   const { cliAgents } = useLocalCliAgents();
@@ -1779,6 +1768,27 @@ function RealtimePageContent({
     },
     [effectiveAgentId],
   );
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const path = (event as CustomEvent<{ path?: string }>).detail?.path;
+      if (!path || !isAbsolutePath(path)) return;
+      if (isNewThread) {
+        handleWorkDirChange(path);
+        return;
+      }
+      if (normalizeWorkDirKey(path) !== normalizeWorkDirKey(effectiveWorkDir)) {
+        openWorkDirInNewTask(path);
+      }
+    };
+    window.addEventListener("octopus:workdir-selected", handler);
+    return () =>
+      window.removeEventListener("octopus:workdir-selected", handler);
+  }, [
+    effectiveWorkDir,
+    handleWorkDirChange,
+    isNewThread,
+    openWorkDirInNewTask,
+  ]);
   const routeWorkspaceHintKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!isNewThread || !hintedWorkspacePath) return;
@@ -2984,7 +2994,7 @@ function RealtimePageContent({
                         displayAgent={composerDisplayAgent}
                         showWorkDirSelector
                         onWorkDirChange={handleWorkDirChange}
-                        lockWorkDirToThread={!isNewThread && isProjectCodeMode}
+                        lockWorkDirToThread={!isNewThread}
                         onOpenWorkDirInNewTask={openWorkDirInNewTask}
                         codeModeUnlocked={codeModeUnlocked}
                         projectAgentMode={projectAgentMode}
