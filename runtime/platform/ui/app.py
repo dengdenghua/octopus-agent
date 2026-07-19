@@ -388,6 +388,8 @@ def create_app(
             stack.executor.journal = state.journal
         if getattr(getattr(stack, "runtime", None), "journal", None) is not state.journal:
             stack.runtime.journal = state.journal
+        if hasattr(getattr(stack, "executor", None), "configure_effect_store"):
+            stack.executor.configure_effect_store(_paths.tool_effects_path)
 
         try:
             from runtime.core.cerebrum.pause_control import get_pause_controller

@@ -49,6 +49,12 @@ class AppPaths:
         return self.data_dir / "agent_trace.sqlite"
 
     @property
+    def tool_effects_path(self) -> Path:
+        """Transactional receipts shared by all local server workers."""
+
+        return self.data_dir / "tool_effects.sqlite3"
+
+    @property
     def experience_ledger_path(self) -> Path:
         return self.data_dir / "experience_ledger.json"
 

@@ -6,9 +6,14 @@ from uuid import uuid4
 
 from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.tool_engine import ToolExecutor
-from runtime.execution.tool_engine.effect_receipts import args_fingerprint, effect_key
+from runtime.execution.tool_engine.effect_receipts import (
+    args_fingerprint,
+    effect_key,
+    is_side_effecting,
+)
 from runtime.memory.journal import InMemoryJournal, JSONLJournal, ToolEffectIntentEvent
 from runtime.platform.models import ArmId, Budget, BudgetLimits, SkillId, TaskId
+from runtime.platform.process.session import Session
 from runtime.safety.auth import TrustEngine
 
 
@@ -245,3 +250,38 @@ def test_concurrent_duplicate_delivery_waits_and_reuses_owner_result():
     assert calls == 1
     assert all(step.success for step in results)
     assert sum("durable_effect_replay" in step.result.stderr_tags for step in results) == 1
+
+
+def test_runtime_session_fields_do_not_change_effect_identity():
+    first = args_fingerprint(
+        {
+            "path": "result.txt",
+            "value": "same",
+            "session": Session(turn_id="turn-a", started_at=1),
+        }
+    )
+    resumed = args_fingerprint(
+        {
+            "path": "result.txt",
+            "value": "same",
+            "session": Session(turn_id="turn-b", started_at=2),
+        }
+    )
+    changed = args_fingerprint(
+        {
+            "path": "result.txt",
+            "value": "different",
+            "session": Session(turn_id="turn-c", started_at=3),
+        }
+    )
+
+    assert resumed == first
+    assert changed != first
+
+
+def test_unknown_affinity_fails_closed_as_side_effecting():
+    assert is_side_effecting(None) is True
+    assert is_side_effecting([]) is True
+    assert is_side_effecting(["custom"]) is True
+    assert is_side_effecting(["read"]) is False
+    assert is_side_effecting(["read", "write"]) is True

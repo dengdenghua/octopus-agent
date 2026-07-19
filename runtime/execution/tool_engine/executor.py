@@ -28,6 +28,7 @@ from runtime.execution.tool_engine.effect_receipts import (
     indeterminate_step,
     is_side_effecting,
 )
+from runtime.execution.tool_engine.effect_store import SQLiteEffectStore
 from runtime.execution.tool_engine.skill_gate import (
     antigen_for,
     canonical_tool_path,
@@ -507,16 +508,17 @@ class ToolExecutor:
         *,
         hooks: HookManager | None = None,
         budget_tracker: Any = None,
+        effect_store_path: str | Path | None = None,
     ) -> None:
         self.registry = registry
         self.immunity = immunity
         self.journal = journal if journal is not None else InMemoryJournal()
-        self._effect_receipts = (
-            ToolEffectReceiptIndex(self.journal)
-            if hasattr(self.journal, "read_all")
-            and hasattr(self.journal, "write_tool_effect_intent")
+        self._effect_store_path = (
+            Path(effect_store_path).expanduser().resolve(strict=False)
+            if effect_store_path is not None
             else None
         )
+        self._effect_receipts = self._build_effect_receipts()
         self._effect_receipts_journal = self.journal
         self.hooks = hooks  # Implementation note.
         # Session-level cumulative budget tracker (Round 18 primitive).
@@ -526,17 +528,32 @@ class ToolExecutor:
         # tracking, only per-task ``Budget`` accounting.
         self._budget_tracker = budget_tracker
 
+    def _build_effect_receipts(self) -> ToolEffectReceiptIndex | None:
+        if not (
+            hasattr(self.journal, "read_all") and hasattr(self.journal, "write_tool_effect_intent")
+        ):
+            return None
+        store_path = self._effect_store_path
+        if store_path is None:
+            journal_path = getattr(self.journal, "_path", None)
+            if isinstance(journal_path, Path):
+                store_path = journal_path.with_suffix(journal_path.suffix + ".effects.sqlite3")
+        store = SQLiteEffectStore(store_path) if store_path is not None else None
+        return ToolEffectReceiptIndex(self.journal, store=store)
+
+    def configure_effect_store(self, path: str | Path) -> None:
+        """Attach the process-shared receipt plane used by server workers."""
+
+        self._effect_store_path = Path(path).expanduser().resolve(strict=False)
+        self._effect_receipts = self._build_effect_receipts()
+        self._effect_receipts_journal = self.journal
+
     def _current_effect_receipts(self) -> ToolEffectReceiptIndex | None:
         """Keep the receipt index aligned when a test/runtime swaps journals."""
 
         if self._effect_receipts_journal is not self.journal:
             self._effect_receipts_journal = self.journal
-            self._effect_receipts = (
-                ToolEffectReceiptIndex(self.journal)
-                if hasattr(self.journal, "read_all")
-                and hasattr(self.journal, "write_tool_effect_intent")
-                else None
-            )
+            self._effect_receipts = self._build_effect_receipts()
         return self._effect_receipts
 
     def execute_step(
@@ -924,7 +941,7 @@ class ToolExecutor:
                                 f"write skill {sucker_id!r} blocked by "
                                 f"file-safety: {_fs_verdict.reason}"
                             )
-                    _effect_side = is_side_effecting(list(skill.affinity or []))
+                    _effect_side = is_side_effecting(skill.affinity)
                     if caller == "react_loop" and _effect_receipt_index is not None:
                         _effect_resolution = _effect_receipt_index.begin(
                             task_id=task_id,
@@ -988,7 +1005,10 @@ class ToolExecutor:
                             side_effecting=_effect_side,
                             actor=actor,
                         )
-                        _effect_receipt_index.mark_intent(intent_event)
+                        _effect_receipt_index.mark_intent(
+                            intent_event,
+                            _effect_resolution,
+                        )
                     # Bind the runtime TrustEngine as the ambient engine for
                     # the handler call. A meta-skill (use_capability / forged
                     # composite) dispatches to an inner handler DIRECTLY,
@@ -999,7 +1019,7 @@ class ToolExecutor:
                         output, retry_tags = _call_handler_with_transient_retry(
                             skill.handler,
                             args,
-                            allow_retry=not _effect_side,
+                            allow_retry=(caller != "react_loop" or not _effect_side),
                         )
                     status: ExecutionStatus = "success"
                     error_type: str | None = None
@@ -1280,6 +1300,13 @@ class ToolExecutor:
                 result=result,
                 immune_verdict=report.verdict,
             )
+            # Commit the cross-process receipt as soon as the complete Step
+            # exists.  The journal append and secondary diagnostics below can
+            # be replayed; the external side effect cannot.  Persisting the
+            # receipt first closes the dangerous handler-return → journal
+            # window where a process crash used to leave the result unknown.
+            if _effect_resolution is not None and _effect_receipt_index is not None:
+                _effect_receipt_index.finish(_effect_resolution, step)
 
             # Beak-level metrics. Increment counters + record latency
             # so the /metrics endpoint reflects skill-execution shape
@@ -1389,8 +1416,6 @@ class ToolExecutor:
                         step = step.model_copy(update={"result": result})
 
             self.journal.write_step(task_id, arm_id, step, actor=actor)
-            if _effect_resolution is not None and _effect_receipt_index is not None:
-                _effect_receipt_index.finish(_effect_resolution, step)
 
             span.set_attribute("octopus.execution.status", status)
             span.set_attribute("octopus.execution.latency_ms", latency_ms)

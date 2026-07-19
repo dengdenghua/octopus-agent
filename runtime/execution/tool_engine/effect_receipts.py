@@ -2,13 +2,15 @@
 
 The journal already records a completed :class:`StepEvent`, but a process can
 die after a handler mutates external state and before that event is appended.
-This module adds a write-ahead intent and a small in-memory coordinator:
+This module adds a write-ahead intent and a fenced receipt coordinator:
 
 * committed calls are replayed without invoking the handler again;
 * an unfinished side-effecting intent is reported as indeterminate instead of
   being retried blindly;
-* concurrent deliveries of the same logical step wait for the owner and then
-  reuse its receipt.
+* concurrent deliveries in one or many processes wait for the owner and then
+  reuse its receipt;
+* live owners renew their lease, while an expired pre-handler claim may be
+  safely taken over.
 
 The identity is scoped to ``task_id + step_id + tool + canonical arguments``.
 New user actions get a new task or step, so normal repeated tool use is not
@@ -19,20 +21,49 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import socket
 import threading
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal
+from uuid import uuid4
 
+from runtime.execution.tool_engine.effect_store import SQLiteEffectStore
 from runtime.memory.journal import Journal, StepEvent, ToolEffectIntentEvent
 from runtime.platform.models import CostEntry, ExecutionResult, Step, ToolCall, now_utc
 
 _SIDE_EFFECT_AFFINITIES = frozenset({"write", "edit", "exec", "delete", "dangerous"})
+_READ_ONLY_AFFINITIES = frozenset(
+    {
+        "read",
+        "readonly",
+        "observe",
+        "search",
+        "find",
+        "list",
+        "analysis",
+        "math",
+        "verify",
+        "lint",
+        "format",
+    }
+)
+_VOLATILE_RUNTIME_ARG_KEYS = frozenset(
+    {
+        "session",
+        "_session",
+        "cancel_event",
+        "cancellation_token",
+    }
+)
 
 
 def args_fingerprint(args: dict[str, Any]) -> str:
     encoded = json.dumps(
-        args,
+        _canonical_effect_value(args),
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -54,9 +85,12 @@ def effect_key(
 def is_side_effecting(affinity: list[str] | None) -> bool:
     """Fail closed for unknown affinity; known read-only tags may retry."""
 
-    if affinity is None:
+    if not affinity:
         return True
-    return bool(set(affinity) & _SIDE_EFFECT_AFFINITIES)
+    tags = {str(tag).strip().lower() for tag in affinity}
+    if tags & _SIDE_EFFECT_AFFINITIES:
+        return True
+    return not bool(tags & _READ_ONLY_AFFINITIES)
 
 
 @dataclass(frozen=True)
@@ -66,19 +100,42 @@ class EffectResolution:
     args_fingerprint: str
     step: Step | None = None
     reason: str = ""
+    holder_id: str = ""
+    fencing_token: int = 0
+    side_effecting: bool = False
+
+
+class EffectLeaseLost(RuntimeError):
+    """The caller lost its fenced claim before entering the handler."""
 
 
 class ToolEffectReceiptIndex:
-    """Journal-backed receipt index with in-process duplicate coordination."""
+    """Journal-backed receipts plus optional cross-process coordination."""
 
-    def __init__(self, journal: Journal, *, wait_timeout_s: float = 30.0) -> None:
+    def __init__(
+        self,
+        journal: Journal,
+        *,
+        wait_timeout_s: float = 120.0,
+        store: SQLiteEffectStore | None = None,
+        lease_ttl_s: float = 30.0,
+        poll_interval_s: float = 0.05,
+        holder_id: str | None = None,
+    ) -> None:
         self._journal = journal
         self._wait_timeout_s = max(0.0, float(wait_timeout_s))
+        self._store = store
+        self._lease_ttl_s = max(0.15, float(lease_ttl_s))
+        self._poll_interval_s = max(0.01, float(poll_interval_s))
+        self._holder_id = holder_id or (f"{socket.gethostname()}:{os.getpid()}:{uuid4().hex}")
         self._condition = threading.Condition(threading.RLock())
-        self._loaded = False
         self._intents: dict[str, ToolEffectIntentEvent] = {}
         self._committed: dict[str, Step] = {}
         self._live: set[str] = set()
+        self._seen_event_ids: set[str] = set()
+        self._steps_by_call_id: dict[str, Step] = {}
+        self._effect_by_call_id: dict[str, str] = {}
+        self._heartbeats: dict[str, threading.Event] = {}
 
     def begin(
         self,
@@ -93,7 +150,7 @@ class ToolEffectReceiptIndex:
         key = effect_key(task_id, step_id, sucker_id, args)
         deadline = time.monotonic() + self._wait_timeout_s
         with self._condition:
-            self._ensure_loaded()
+            self._refresh_from_journal()
             while key in self._live:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -104,9 +161,12 @@ class ToolEffectReceiptIndex:
                         reason="another delivery is still executing this tool effect",
                     )
                 self._condition.wait(timeout=remaining)
+                self._refresh_from_journal()
 
             committed = self._committed.get(key)
             if committed is not None:
+                if self._store is not None:
+                    self._store.record_committed(effect_key=key, step=committed)
                 return EffectResolution(
                     "replay",
                     key,
@@ -115,6 +175,72 @@ class ToolEffectReceiptIndex:
                 )
 
             intent = self._intents.get(key)
+            if self._store is not None:
+                while True:
+                    decision = self._store.claim(
+                        effect_key=key,
+                        task_id=str(task_id),
+                        step_id=step_id,
+                        sucker_id=str(sucker_id),
+                        args_fingerprint=fingerprint,
+                        side_effecting=side_effecting,
+                        holder_id=self._holder_id,
+                        lease_ttl_s=self._lease_ttl_s,
+                        observed_durable_intent=intent is not None,
+                    )
+                    if decision.kind == "execute":
+                        resolution = EffectResolution(
+                            "execute",
+                            key,
+                            fingerprint,
+                            holder_id=self._holder_id,
+                            fencing_token=decision.fencing_token,
+                            side_effecting=side_effecting,
+                        )
+                        self._live.add(key)
+                        return resolution
+                    if decision.kind == "replay":
+                        assert decision.step is not None
+                        self._committed[key] = decision.step
+                        return EffectResolution(
+                            "replay",
+                            key,
+                            fingerprint,
+                            step=_replayed_step(decision.step),
+                        )
+                    if decision.kind == "indeterminate":
+                        return EffectResolution(
+                            "indeterminate",
+                            key,
+                            fingerprint,
+                            reason=decision.reason,
+                            side_effecting=side_effecting,
+                        )
+
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        return EffectResolution(
+                            "indeterminate",
+                            key,
+                            fingerprint,
+                            reason="another process is still executing this tool effect",
+                            side_effecting=side_effecting,
+                        )
+                    self._condition.wait(
+                        timeout=min(self._poll_interval_s, remaining),
+                    )
+                    self._refresh_from_journal()
+                    committed = self._committed.get(key)
+                    if committed is not None:
+                        self._store.record_committed(effect_key=key, step=committed)
+                        return EffectResolution(
+                            "replay",
+                            key,
+                            fingerprint,
+                            step=_replayed_step(committed),
+                        )
+                    intent = self._intents.get(key)
+
             if intent is not None and (side_effecting or intent.side_effecting):
                 return EffectResolution(
                     "indeterminate",
@@ -127,19 +253,73 @@ class ToolEffectReceiptIndex:
                 )
 
             self._live.add(key)
-            return EffectResolution("execute", key, fingerprint)
+            return EffectResolution(
+                "execute",
+                key,
+                fingerprint,
+                side_effecting=side_effecting,
+            )
 
-    def mark_intent(self, event: ToolEffectIntentEvent) -> None:
+    def mark_intent(
+        self,
+        event: ToolEffectIntentEvent,
+        resolution: EffectResolution,
+    ) -> None:
         with self._condition:
-            self._ensure_loaded()
+            self._refresh_from_journal()
             self._intents[event.effect_key] = event
+            self._effect_by_call_id[event.call_id] = event.effect_key
+            if self._store is not None:
+                started = self._store.mark_started(
+                    effect_key=resolution.key,
+                    holder_id=resolution.holder_id,
+                    fencing_token=resolution.fencing_token,
+                    call_id=event.call_id,
+                    lease_ttl_s=self._lease_ttl_s,
+                )
+                if not started:
+                    self._live.discard(resolution.key)
+                    self._condition.notify_all()
+                    raise EffectLeaseLost("tool-effect lease was lost before handler entry")
+                self._start_heartbeat(resolution)
 
     def finish(self, resolution: EffectResolution, step: Step) -> None:
         with self._condition:
+            self._stop_heartbeat(resolution.key)
             if step.success:
                 self._committed[resolution.key] = step
+                if self._store is not None:
+                    committed = self._store.commit(
+                        effect_key=resolution.key,
+                        holder_id=resolution.holder_id,
+                        fencing_token=resolution.fencing_token,
+                        step=step,
+                    )
+                    if not committed:
+                        self._store.record_committed(
+                            effect_key=resolution.key,
+                            step=step,
+                        )
             elif not self._intent_is_side_effecting(resolution.key):
                 self._intents.pop(resolution.key, None)
+                if self._store is not None:
+                    self._store.finish_failed(
+                        effect_key=resolution.key,
+                        holder_id=resolution.holder_id,
+                        fencing_token=resolution.fencing_token,
+                        side_effecting=False,
+                        reason=str(step.result.error_type or "tool execution failed"),
+                    )
+            elif self._store is not None:
+                self._store.finish_failed(
+                    effect_key=resolution.key,
+                    holder_id=resolution.holder_id,
+                    fencing_token=resolution.fencing_token,
+                    side_effecting=True,
+                    reason=(
+                        "the side-effecting handler returned without a successful durable result"
+                    ),
+                )
             self._live.discard(resolution.key)
             self._condition.notify_all()
 
@@ -147,6 +327,13 @@ class ToolEffectReceiptIndex:
         """Release an execution claim while retaining any durable intent."""
 
         with self._condition:
+            self._stop_heartbeat(resolution.key)
+            if self._store is not None and resolution.key not in self._intents:
+                self._store.release_unstarted(
+                    effect_key=resolution.key,
+                    holder_id=resolution.holder_id,
+                    fencing_token=resolution.fencing_token,
+                )
             self._live.discard(resolution.key)
             self._condition.notify_all()
 
@@ -154,21 +341,54 @@ class ToolEffectReceiptIndex:
         intent = self._intents.get(key)
         return bool(intent and intent.side_effecting)
 
-    def _ensure_loaded(self) -> None:
-        if self._loaded:
-            return
+    def _refresh_from_journal(self) -> None:
         events = self._journal.read_all()
-        steps_by_call_id: dict[str, Step] = {}
         for event in events:
+            event_id = str(event.event_id)
+            if event_id in self._seen_event_ids:
+                continue
+            self._seen_event_ids.add(event_id)
             if isinstance(event, StepEvent):
-                steps_by_call_id[str(event.step.action.call_id)] = event.step
+                call_id = str(event.step.action.call_id)
+                self._steps_by_call_id[call_id] = event.step
+                key = self._effect_by_call_id.get(call_id)
+                if key is not None and event.step.success:
+                    self._committed[key] = event.step
             elif isinstance(event, ToolEffectIntentEvent):
                 self._intents[event.effect_key] = event
-        for key, intent in self._intents.items():
-            step = steps_by_call_id.get(intent.call_id)
-            if step is not None and step.success:
-                self._committed[key] = step
-        self._loaded = True
+                self._effect_by_call_id[event.call_id] = event.effect_key
+                step = self._steps_by_call_id.get(event.call_id)
+                if step is not None and step.success:
+                    self._committed[event.effect_key] = step
+
+    def _start_heartbeat(self, resolution: EffectResolution) -> None:
+        if self._store is None or resolution.fencing_token <= 0:
+            return
+        stop = threading.Event()
+        self._heartbeats[resolution.key] = stop
+        interval = max(0.05, self._lease_ttl_s / 3)
+
+        def _renew() -> None:
+            while not stop.wait(interval):
+                assert self._store is not None
+                if not self._store.renew(
+                    effect_key=resolution.key,
+                    holder_id=resolution.holder_id,
+                    fencing_token=resolution.fencing_token,
+                    lease_ttl_s=self._lease_ttl_s,
+                ):
+                    return
+
+        threading.Thread(
+            target=_renew,
+            name=f"effect-lease-{resolution.key[-8:]}",
+            daemon=True,
+        ).start()
+
+    def _stop_heartbeat(self, key: str) -> None:
+        stop = self._heartbeats.pop(key, None)
+        if stop is not None:
+            stop.set()
 
 
 def indeterminate_step(
@@ -225,7 +445,41 @@ def _stable_default(value: Any) -> str:
     return str(value)
 
 
+def _canonical_effect_value(value: Any) -> Any:
+    """Remove volatile runtime plumbing from a logical tool identity."""
+
+    if isinstance(value, Mapping):
+        return {
+            str(key): _canonical_effect_value(item)
+            for key, item in value.items()
+            if str(key) not in _VOLATILE_RUNTIME_ARG_KEYS
+        }
+    if isinstance(value, (list, tuple)):
+        return [_canonical_effect_value(item) for item in value]
+    if isinstance(value, (set, frozenset)):
+        canonical = [_canonical_effect_value(item) for item in value]
+        return sorted(
+            canonical,
+            key=lambda item: json.dumps(
+                item,
+                ensure_ascii=False,
+                sort_keys=True,
+                default=_stable_default,
+            ),
+        )
+    if isinstance(value, Path):
+        return str(value.expanduser().resolve(strict=False))
+    if hasattr(value, "model_dump"):
+        return _canonical_effect_value(value.model_dump(mode="json"))
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return {
+        "__runtime_type__": f"{type(value).__module__}.{type(value).__qualname__}",
+    }
+
+
 __all__ = [
+    "EffectLeaseLost",
     "EffectResolution",
     "ToolEffectReceiptIndex",
     "args_fingerprint",
