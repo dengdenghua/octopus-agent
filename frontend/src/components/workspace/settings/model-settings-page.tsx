@@ -479,9 +479,202 @@ function collectCompatProfileText(
   return Array.from(seen).sort();
 }
 
+const MODEL_SETTINGS_PAGE_COPY: Record<
+  "zh" | "en" | "ja" | "ko",
+  {
+    overviewTitle: string;
+    overviewSubtitle: string;
+    currentDefault: string;
+    noDefault: string;
+    configuredModels: string;
+    gateway: string;
+    gatewayConnected: string;
+    gatewayDisconnected: string;
+    gatewayChecking: string;
+    addApiModel: string;
+    scanLocalModels: string;
+    diagnoseGateway: string;
+    advancedTitle: string;
+    advancedSubtitle: string;
+  }
+> = {
+  zh: {
+    overviewTitle: "模型入口总览",
+    overviewSubtitle:
+      "先决定 Octopus 默认用哪个模型；需要接 API 就添加自定义模型，需要本地推理就扫描本地模型，高级兼容诊断放在下方。",
+    currentDefault: "当前默认",
+    noDefault: "未设置",
+    configuredModels: "已接入模型",
+    gateway: "模型网关",
+    gatewayConnected: "已连接",
+    gatewayDisconnected: "未连接",
+    gatewayChecking: "检查中",
+    addApiModel: "接入 API 模型",
+    scanLocalModels: "扫描本地模型",
+    diagnoseGateway: "诊断网关",
+    advancedTitle: "高级能力与兼容诊断",
+    advancedSubtitle:
+      "Cookbook、Octopus Mix 和 OpenAI-compatible 矩阵偏专家向，默认收在这里，避免干扰日常配置。",
+  },
+  en: {
+    overviewTitle: "Model setup overview",
+    overviewSubtitle:
+      "Pick the default model first. Add a custom API model for hosted providers, scan local models for on-device inference, and keep compatibility diagnostics below.",
+    currentDefault: "Current default",
+    noDefault: "Not set",
+    configuredModels: "Configured models",
+    gateway: "Model gateway",
+    gatewayConnected: "Connected",
+    gatewayDisconnected: "Disconnected",
+    gatewayChecking: "Checking",
+    addApiModel: "Add API model",
+    scanLocalModels: "Scan local models",
+    diagnoseGateway: "Diagnose gateway",
+    advancedTitle: "Advanced capabilities and diagnostics",
+    advancedSubtitle:
+      "Cookbook, Octopus Mix, and the OpenAI-compatible matrix are expert tools, so they stay grouped away from everyday setup.",
+  },
+  ja: {
+    overviewTitle: "モデル設定の概要",
+    overviewSubtitle:
+      "まず既定モデルを決めます。API 接続はカスタムモデル、ローカル推論はローカルスキャン、互換診断は下の高度な設定にまとめています。",
+    currentDefault: "現在の既定",
+    noDefault: "未設定",
+    configuredModels: "設定済みモデル",
+    gateway: "モデルゲートウェイ",
+    gatewayConnected: "接続済み",
+    gatewayDisconnected: "未接続",
+    gatewayChecking: "確認中",
+    addApiModel: "API モデルを追加",
+    scanLocalModels: "ローカルモデルをスキャン",
+    diagnoseGateway: "ゲートウェイ診断",
+    advancedTitle: "高度な機能と互換診断",
+    advancedSubtitle:
+      "Cookbook、Octopus Mix、OpenAI 互換マトリクスは上級者向けなので、日常設定とは分けています。",
+  },
+  ko: {
+    overviewTitle: "모델 설정 개요",
+    overviewSubtitle:
+      "먼저 기본 모델을 정하세요. API 제공자는 사용자 모델 추가, 로컬 추론은 로컬 모델 스캔, 호환성 진단은 아래 고급 영역에 모았습니다.",
+    currentDefault: "현재 기본값",
+    noDefault: "미설정",
+    configuredModels: "설정된 모델",
+    gateway: "모델 게이트웨이",
+    gatewayConnected: "연결됨",
+    gatewayDisconnected: "연결 안 됨",
+    gatewayChecking: "확인 중",
+    addApiModel: "API 모델 추가",
+    scanLocalModels: "로컬 모델 스캔",
+    diagnoseGateway: "게이트웨이 진단",
+    advancedTitle: "고급 기능 및 호환성 진단",
+    advancedSubtitle:
+      "Cookbook, Octopus Mix, OpenAI 호환 매트릭스는 전문가용 도구이므로 일반 설정과 분리했습니다.",
+  },
+};
+
+function modelSettingsPageCopy(locale: string) {
+  const lang = (locale || "en").slice(0, 2).toLowerCase();
+  if (lang === "zh") return MODEL_SETTINGS_PAGE_COPY.zh;
+  if (lang === "ja") return MODEL_SETTINGS_PAGE_COPY.ja;
+  if (lang === "ko") return MODEL_SETTINGS_PAGE_COPY.ko;
+  return MODEL_SETTINGS_PAGE_COPY.en;
+}
+
+const LOCAL_MODEL_SCAN_EVENT = "octopus:model-settings:scan-local";
+
+function ModelSettingsOverview({
+  copy,
+  defaultModelName,
+  customModelCount,
+  gatewayStatus,
+  onAddModel,
+  onScanLocal,
+  onDiagnoseGateway,
+}: {
+  copy: ReturnType<typeof modelSettingsPageCopy>;
+  defaultModelName: string;
+  customModelCount: number;
+  gatewayStatus: "connected" | "disconnected" | "checking";
+  onAddModel: () => void;
+  onScanLocal: () => void;
+  onDiagnoseGateway: () => void;
+}) {
+  const gatewayLabel =
+    gatewayStatus === "connected"
+      ? copy.gatewayConnected
+      : gatewayStatus === "checking"
+        ? copy.gatewayChecking
+        : copy.gatewayDisconnected;
+
+  return (
+    <section className="rounded-2xl border border-border bg-card/60 p-4 shadow-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold">{copy.overviewTitle}</h2>
+          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+            {copy.overviewSubtitle}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={onAddModel}>
+            <PlusIcon className="mr-1.5 size-3.5" />
+            {copy.addApiModel}
+          </Button>
+          <Button size="sm" variant="outline" onClick={onScanLocal}>
+            <WifiIcon className="mr-1.5 size-3.5" />
+            {copy.scanLocalModels}
+          </Button>
+          <Button size="sm" variant="outline" onClick={onDiagnoseGateway}>
+            <SearchIcon className="mr-1.5 size-3.5" />
+            {copy.diagnoseGateway}
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        <div className="rounded-xl border border-border bg-background/65 p-3">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {copy.currentDefault}
+          </div>
+          <div className="mt-1 truncate font-mono text-sm text-foreground">
+            {defaultModelName || copy.noDefault}
+          </div>
+        </div>
+        <div className="rounded-xl border border-border bg-background/65 p-3">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {copy.configuredModels}
+          </div>
+          <div className="mt-1 text-sm font-semibold text-foreground">
+            {customModelCount}
+          </div>
+        </div>
+        <div className="rounded-xl border border-border bg-background/65 p-3">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {copy.gateway}
+          </div>
+          <div
+            className={cn(
+              "mt-1 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium",
+              gatewayStatus === "connected" &&
+                "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400",
+              gatewayStatus === "checking" &&
+                "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+              gatewayStatus === "disconnected" &&
+                "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+            )}
+          >
+            {gatewayLabel}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────
 export default function ModelSettingsPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const pageCopy = modelSettingsPageCopy(locale);
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [compatDiagnostics, setCompatDiagnostics] =
     useState<CompatDiagnosticState>({
@@ -713,6 +906,30 @@ export default function ModelSettingsPage() {
     }
   };
 
+  const scrollToSection = useCallback((id: string) => {
+    requestAnimationFrame(() => {
+      document
+        .getElementById(id)
+        ?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+  }, []);
+
+  const handleOverviewAddModel = useCallback(() => {
+    setEditingModel(null);
+    setShowAdd(true);
+    scrollToSection("model-settings-custom");
+  }, [scrollToSection]);
+
+  const handleOverviewScanLocal = useCallback(() => {
+    scrollToSection("model-settings-local");
+    window.dispatchEvent(new Event(LOCAL_MODEL_SCAN_EVENT));
+  }, [scrollToSection]);
+
+  const handleOverviewDiagnoseGateway = useCallback(() => {
+    scrollToSection("model-settings-gateway");
+    void handleDiagnose();
+  }, [handleDiagnose, scrollToSection]);
+
   const { isGuest } = useAuth();
 
   // Implementation note.
@@ -895,21 +1112,24 @@ export default function ModelSettingsPage() {
 
   return (
     <div className="space-y-8">
-      {/* Hardware-aware local-model recommendations + one-click pull */}
-      <ModelCookbook />
-
-      {/* Octopus Mix · mixture-of-agents composer */}
-      <MixSettingsSection />
-
-      {/* Official models */}
-      {!isGuest && <OfficialModelsSection />}
-
-      <BuiltInCompatProfilesCard catalog={compatProfileCatalog} />
+      <ModelSettingsOverview
+        copy={pageCopy}
+        defaultModelName={defaultModelName ?? ""}
+        customModelCount={models.length}
+        gatewayStatus={gatewayStatus}
+        onAddModel={handleOverviewAddModel}
+        onScanLocal={handleOverviewScanLocal}
+        onDiagnoseGateway={handleOverviewDiagnoseGateway}
+      />
 
       {/* ── Models Section ── */}
       <SettingsSection
+        className="scroll-mt-6"
         title={
-          <div className="flex items-center justify-between w-full">
+          <div
+            id="model-settings-custom"
+            className="flex w-full items-center justify-between"
+          >
             <span>{t.settings.model.customModels}</span>
             {!showAdd && !editingModel && (
               <Button
@@ -1057,10 +1277,20 @@ export default function ModelSettingsPage() {
           custom-models list — a successful import re-runs
           ``fetchModels`` via ``onImported`` so the new row appears
           in the section above without a manual refresh. */}
-      <LocalModelsSection onImported={fetchModels} />
+      <div id="model-settings-local" className="scroll-mt-6">
+        <LocalModelsSection onImported={fetchModels} />
+      </div>
+
+      {/* Official models */}
+      {!isGuest && <OfficialModelsSection />}
 
       {/* ── Gateway Connection Section ── */}
-      <SettingsSection title={t.settings.model.gatewayUrl}>
+      <SettingsSection
+        className="scroll-mt-6"
+        title={
+          <span id="model-settings-gateway">{t.settings.model.gatewayUrl}</span>
+        }
+      >
         <div className="space-y-4">
           {/* Status bar */}
           <div className="flex items-center justify-between">
@@ -1129,6 +1359,33 @@ export default function ModelSettingsPage() {
           </div>
         </div>
       </SettingsSection>
+
+      <details className="group rounded-2xl border border-border bg-card/40 p-4">
+        <summary className="cursor-pointer list-none">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-lg font-semibold">
+                {pageCopy.advancedTitle}
+              </div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {pageCopy.advancedSubtitle}
+              </div>
+            </div>
+            <span className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors group-open:bg-muted">
+              Advanced
+            </span>
+          </div>
+        </summary>
+        <div className="mt-6 space-y-8">
+          {/* Hardware-aware local-model recommendations + one-click pull */}
+          <ModelCookbook />
+
+          {/* Octopus Mix · mixture-of-agents composer */}
+          <MixSettingsSection />
+
+          <BuiltInCompatProfilesCard catalog={compatProfileCatalog} />
+        </div>
+      </details>
 
       <Dialog
         open={modelToDelete !== null}
@@ -2586,6 +2843,14 @@ function LocalModelsSection({ onImported }: { onImported?: () => void }) {
       setScanStatus("error");
     }
   }, []);
+
+  useEffect(() => {
+    const handler = () => {
+      void handleScan();
+    };
+    window.addEventListener(LOCAL_MODEL_SCAN_EVENT, handler);
+    return () => window.removeEventListener(LOCAL_MODEL_SCAN_EVENT, handler);
+  }, [handleScan]);
 
   const handleImport = useCallback(
     async (svc: DiscoveredService) => {
