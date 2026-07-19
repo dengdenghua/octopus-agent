@@ -1,5 +1,9 @@
 import { getBackendBaseURL } from "@/core/config";
-import { authHeaders, authedEventSource, jsonAuthHeaders } from "@/core/auth/api";
+import {
+  authHeaders,
+  authedEventSource,
+  jsonAuthHeaders,
+} from "@/core/auth/api";
 
 import type {
   ActiveAlert,
@@ -107,6 +111,60 @@ export async function getObservabilityHealth(): Promise<
   if (!res.ok)
     throw new Error(`Failed to get observability health: ${res.statusText}`);
   return (await res.json()) as Record<string, unknown>;
+}
+
+export type ToolEffectState =
+  | "claimed"
+  | "started"
+  | "committed"
+  | "indeterminate"
+  | "retry_authorized";
+
+export interface ToolEffectReceipt {
+  effect_key: string;
+  task_id: string;
+  step_id: number;
+  sucker_id: string;
+  side_effecting: boolean;
+  state: ToolEffectState;
+  holder_id: string;
+  fencing_token: number;
+  lease_expires_at: number;
+  call_id: string;
+  reason: string;
+  updated_at: number;
+  has_result: boolean;
+}
+
+export interface ToolEffectsSnapshot {
+  backend: string;
+  shared_across_hosts: boolean;
+  count: number;
+  state_counts: Partial<Record<ToolEffectState, number>>;
+  receipts: ToolEffectReceipt[];
+}
+
+export async function authorizeToolEffectRetry(
+  receipt: ToolEffectReceipt,
+  reason: string,
+): Promise<void> {
+  const path = encodeURIComponent(receipt.effect_key);
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/tool-effects/${path}/authorize-retry`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({
+        confirm: "AUTHORIZE RETRY",
+        fencing_token: receipt.fencing_token,
+        reason,
+      }),
+    },
+  );
+  if (!res.ok) {
+    const error = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(error.detail ?? `Failed to authorize retry: ${res.status}`);
+  }
 }
 
 // Implementation note.

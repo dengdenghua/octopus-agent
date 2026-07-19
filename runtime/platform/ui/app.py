@@ -1899,6 +1899,11 @@ def create_app(
             journal=state.journal,
             registry=state.registry,
             planner=getattr(stack, "planner", None) if stack is not None else None,
+            effect_store=(
+                stack.executor.effect_store
+                if stack is not None and getattr(stack, "executor", None) is not None
+                else None
+            ),
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
             jwt_secret=cocoloop_jwt_secret,

@@ -20,7 +20,7 @@ from typing import Any
 
 from runtime.core.hearts.coordinator import Lease
 from runtime.core.hearts.redis_coordinator import RedisCoordinator
-from runtime.execution.tool_engine.effect_store import StoreDecision
+from runtime.execution.tool_engine.effect_store import EffectReceipt, StoreDecision
 from runtime.platform.models import Step
 
 _FENCED_SET_RETAIN_LUA = """
@@ -65,6 +65,30 @@ redis.call('SET', KEYS[2], ARGV[1])
 return 1
 """
 
+_AUTHORIZE_RETRY_LUA = """
+-- octopus_effect_authorize_retry_v1
+if redis.call('EXISTS', KEYS[1]) == 1 then
+  return 0
+end
+local raw = redis.call('GET', KEYS[2])
+if not raw then
+  return 0
+end
+local ok, receipt = pcall(cjson.decode, raw)
+if not ok or receipt['state'] ~= 'indeterminate' then
+  return 0
+end
+if tonumber(receipt['fencing_token'] or 0) ~= tonumber(ARGV[1]) then
+  return 0
+end
+receipt['state'] = 'retry_authorized'
+receipt['holder_id'] = ARGV[2]
+receipt['reason'] = ARGV[3]
+receipt['updated_at'] = tonumber(ARGV[4])
+redis.call('SET', KEYS[2], cjson.encode(receipt))
+return 1
+"""
+
 
 class RedisEffectStore:
     backend_name = "redis"
@@ -92,6 +116,7 @@ class RedisEffectStore:
         self._set_release = client.register_script(_FENCED_SET_RELEASE_LUA)
         self._delete_release = client.register_script(_FENCED_DELETE_RELEASE_LUA)
         self._repair_committed = client.register_script(_REPAIR_COMMITTED_LUA)
+        self._authorize_retry = client.register_script(_AUTHORIZE_RETRY_LUA)
 
     @classmethod
     def from_url(
@@ -221,8 +246,11 @@ class RedisEffectStore:
 
             prior_state = str((receipt or {}).get("state") or "")
             prior_side_effecting = bool((receipt or {}).get("side_effecting"))
-            unsafe = (prior_state == "started" or observed_durable_intent) and (
-                side_effecting or prior_side_effecting
+            retry_authorized = prior_state == "retry_authorized"
+            unsafe = (
+                not retry_authorized
+                and (prior_state == "started" or observed_durable_intent)
+                and (side_effecting or prior_side_effecting)
             )
             if unsafe:
                 reason = _dangling_intent_reason()
@@ -439,6 +467,91 @@ class RedisEffectStore:
             return bool(self.client.ping())
         except Exception:
             return False
+
+    def list_receipts(
+        self,
+        *,
+        state: str | None = None,
+        limit: int = 100,
+    ) -> list[EffectReceipt]:
+        safe_limit = max(1, min(int(limit), 500))
+        rows: list[EffectReceipt] = []
+        pattern = f"{self.key_prefix}receipt:*"
+        scanned = 0
+        max_scan = max(2_000, safe_limit * 20)
+        for key in self.client.scan_iter(match=pattern, count=100):
+            scanned += 1
+            if scanned > max_scan or len(rows) >= safe_limit * 4:
+                break
+            if isinstance(key, bytes):
+                key = key.decode("utf-8", errors="replace")
+            raw = self.client.get(key)
+            receipt = self._decode_receipt(raw)
+            if receipt is None or (state is not None and receipt.state != state):
+                continue
+            rows.append(receipt)
+        priority = {
+            "indeterminate": 0,
+            "started": 1,
+            "claimed": 2,
+            "retry_authorized": 3,
+            "committed": 4,
+        }
+        rows.sort(
+            key=lambda item: (
+                priority.get(item.state, 5),
+                -item.updated_at,
+            )
+        )
+        return rows[:safe_limit]
+
+    def authorize_retry(
+        self,
+        *,
+        effect_key: str,
+        expected_fencing_token: int,
+        actor: str,
+        reason: str,
+    ) -> bool:
+        with self._lock:
+            result = self._authorize_retry(
+                keys=[self._lease_key(effect_key), self._receipt_key(effect_key)],
+                args=[
+                    expected_fencing_token,
+                    actor,
+                    reason,
+                    time.time(),
+                ],
+            )
+            return bool(result)
+
+    @staticmethod
+    def _decode_receipt(raw: object) -> EffectReceipt | None:
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8", errors="replace")
+        if not isinstance(raw, str):
+            return None
+        try:
+            receipt = json.loads(raw)
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(receipt, dict):
+            return None
+        return EffectReceipt(
+            effect_key=str(receipt.get("effect_key") or ""),
+            task_id=str(receipt.get("task_id") or ""),
+            step_id=int(receipt.get("step_id") or 0),
+            sucker_id=str(receipt.get("sucker_id") or ""),
+            side_effecting=bool(receipt.get("side_effecting")),
+            state=str(receipt.get("state") or ""),
+            holder_id=str(receipt.get("holder_id") or ""),
+            fencing_token=int(receipt.get("fencing_token") or 0),
+            lease_expires_at=0.0,
+            call_id=str(receipt.get("call_id") or ""),
+            reason=str(receipt.get("reason") or ""),
+            updated_at=float(receipt.get("updated_at") or 0.0),
+            has_result=bool(receipt.get("step_json")),
+        )
 
     def _fenced_set_retain(
         self,

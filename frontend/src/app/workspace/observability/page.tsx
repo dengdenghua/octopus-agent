@@ -8,18 +8,30 @@ import {
   GaugeIcon,
   NetworkIcon,
   RefreshCwIcon,
+  RotateCcwIcon,
+  ShieldAlertIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
-import { authedEventSource } from "@/core/auth/api";
+import { authHeaders, authedEventSource } from "@/core/auth/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
   WorkspaceBody,
   WorkspaceContainer,
@@ -29,6 +41,11 @@ import { AgentOperatorPanel } from "@/components/workspace/agent-operator-panel"
 import { RunReviewPanel } from "@/components/workspace/run-review-panel";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
+import {
+  authorizeToolEffectRetry,
+  type ToolEffectReceipt,
+  type ToolEffectsSnapshot,
+} from "@/core/observability/api";
 import { DiagnosticsContent } from "../diagnostics/page";
 
 // ─── Shared polling helper ───────────────────────────────────
@@ -55,7 +72,7 @@ function useHeartbeat<T>(
   const fetchOnce = useCallback(async () => {
     const my = ++tickRef.current;
     try {
-      const r = await fetch(url);
+      const r = await fetch(url, { headers: authHeaders() });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const j = (await r.json()) as T;
       // Drop stale responses if a newer request was started.
@@ -216,6 +233,7 @@ export default function ObservabilityPage({
                 title="把后台状态和自进化收口"
                 description="诊断不再单独占一个孤岛标签，而是和自进化一起作为系统视图。"
               >
+                <ToolEffectsPanel />
                 <RegenerationPanel />
                 <DiagnosticsContent />
               </PanelGroup>
@@ -840,6 +858,223 @@ function JournalPanel() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// PANEL 4 · FENCED TOOL EFFECTS
+// ═══════════════════════════════════════════════════════════
+
+const EMPTY_TOOL_EFFECTS: ToolEffectsSnapshot = {
+  backend: "disabled",
+  shared_across_hosts: false,
+  count: 0,
+  state_counts: {},
+  receipts: [],
+};
+
+export function ToolEffectsPanel() {
+  const base = getBackendBaseURL();
+  const { data, loading, error, refresh } = useHeartbeat<ToolEffectsSnapshot>(
+    `${base}/api/tool-effects?limit=100`,
+    3000,
+    EMPTY_TOOL_EFFECTS,
+  );
+  const [selected, setSelected] = useState<ToolEffectReceipt | null>(null);
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const indeterminate = data.state_counts.indeterminate ?? 0;
+  const visibleReceipts = useMemo(
+    () =>
+      data.receipts.filter(
+        (receipt, index) => receipt.state !== "committed" || index < 6,
+      ),
+    [data.receipts],
+  );
+  const hasCollapsedReceipts = visibleReceipts.length < data.receipts.length;
+
+  const authorize = useCallback(async () => {
+    if (!selected || reason.trim().length < 8) return;
+    setSubmitting(true);
+    try {
+      await authorizeToolEffectRetry(selected, reason.trim());
+      toast.success("已允许一次受 fencing token 保护的重试");
+      setSelected(null);
+      setReason("");
+      refresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "放行失败");
+    } finally {
+      setSubmitting(false);
+    }
+  }, [reason, refresh, selected]);
+
+  return (
+    <>
+      <Card className="border-border-default/80 shadow-none">
+        <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <ShieldAlertIcon className="size-4 text-amber-500" />
+              外部动作回执
+            </CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">
+              识别重复执行、节点接管和必须人工核对的外部副作用。
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant={indeterminate > 0 ? "destructive" : "secondary"}>
+              {indeterminate > 0 ? `${indeterminate} 项待核对` : "无待核对项"}
+            </Badge>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-8"
+              onClick={refresh}
+              aria-label="刷新外部动作回执"
+            >
+              <RefreshCwIcon
+                className={cn("size-3.5", loading && "animate-spin")}
+              />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="mb-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+            <span className="rounded-full bg-muted px-2.5 py-1">
+              后端 · {data.backend}
+            </span>
+            <span className="rounded-full bg-muted px-2.5 py-1">
+              {data.shared_across_hosts ? "跨节点共享" : "本机协调"}
+            </span>
+            <span className="rounded-full bg-muted px-2.5 py-1">
+              已提交 · {data.state_counts.committed ?? 0}
+            </span>
+            <span className="rounded-full bg-muted px-2.5 py-1">
+              执行中 ·{" "}
+              {(data.state_counts.claimed ?? 0) +
+                (data.state_counts.started ?? 0)}
+            </span>
+          </div>
+
+          {error ? (
+            <div className="rounded-xl bg-destructive/8 px-3 py-3 text-xs text-destructive">
+              回执状态读取失败：{error}
+            </div>
+          ) : data.receipts.length === 0 ? (
+            <div className="rounded-xl bg-muted/30 px-3 py-5 text-center text-xs text-muted-foreground">
+              暂无外部动作回执；工具执行后会自动出现在这里。
+            </div>
+          ) : (
+            <div className="divide-y divide-border-default/70 rounded-xl border border-border-default/70">
+              {visibleReceipts.map((receipt) => (
+                <div
+                  key={receipt.effect_key}
+                  className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-xs font-medium">
+                        {receipt.sucker_id || "未知工具"}
+                      </span>
+                      <EffectStateBadge state={receipt.state} />
+                    </div>
+                    <div className="mt-1 truncate text-[11px] text-muted-foreground">
+                      任务 {receipt.task_id.slice(0, 12) || "—"} · 步骤{" "}
+                      {receipt.step_id} · token {receipt.fencing_token}
+                    </div>
+                    {receipt.reason && (
+                      <p className="mt-1 line-clamp-2 text-[11px] text-amber-700 dark:text-amber-300">
+                        {receipt.reason}
+                      </p>
+                    )}
+                  </div>
+                  {receipt.state === "indeterminate" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 shrink-0 rounded-full text-xs"
+                      onClick={() => {
+                        setSelected(receipt);
+                        setReason("");
+                      }}
+                    >
+                      <RotateCcwIcon className="mr-1.5 size-3" />
+                      核对后重试
+                    </Button>
+                  )}
+                </div>
+              ))}
+              {hasCollapsedReceipts && (
+                <div className="px-3 py-2 text-center text-[11px] text-muted-foreground">
+                  已收起历史提交记录，仅保留需关注项与最近 6 条
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={selected !== null}
+        onOpenChange={(open) => {
+          if (!open && !submitting) setSelected(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认外部动作没有发生</DialogTitle>
+            <DialogDescription>
+              只有在外部系统、文件或远程服务中确认该动作没有成功后才能放行。系统会核对
+              fencing token，页面过期时不会误操作新回执。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+            {selected?.sucker_id} · token {selected?.fencing_token}
+          </div>
+          <Textarea
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="填写核对依据，例如：支付平台确认没有生成订单。"
+            className="min-h-24"
+          />
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setSelected(null)}
+              disabled={submitting}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void authorize()}
+              disabled={submitting || reason.trim().length < 8}
+            >
+              {submitting ? "正在核对状态…" : "确认未发生并允许重试"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function EffectStateBadge({ state }: { state: ToolEffectReceipt["state"] }) {
+  const labels: Record<ToolEffectReceipt["state"], string> = {
+    claimed: "已占用",
+    started: "执行中",
+    committed: "已提交",
+    indeterminate: "需核对",
+    retry_authorized: "已放行一次",
+  };
+  return (
+    <Badge
+      variant={state === "indeterminate" ? "destructive" : "secondary"}
+      className="h-5 px-1.5 text-[10px]"
+    >
+      {labels[state]}
+    </Badge>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // PANEL 4 · REGENERATION SUMMARY
 // ═══════════════════════════════════════════════════════════
 
@@ -1263,7 +1498,10 @@ function CostPanel() {
                 </thead>
                 <tbody className="font-mono">
                   {data.tasks.map((tk) => (
-                    <tr key={tk.task_id} className="border-b border-border-subtle">
+                    <tr
+                      key={tk.task_id}
+                      className="border-b border-border-subtle"
+                    >
                       <td
                         className="py-1 max-w-[12rem] truncate"
                         title={tk.task_id}

@@ -63,6 +63,42 @@ class StoreDecision:
     reason: str = ""
 
 
+@dataclass(frozen=True)
+class EffectReceipt:
+    """Operator-safe view of one durable tool-effect receipt."""
+
+    effect_key: str
+    task_id: str
+    step_id: int
+    sucker_id: str
+    side_effecting: bool
+    state: str
+    holder_id: str
+    fencing_token: int
+    lease_expires_at: float
+    call_id: str
+    reason: str
+    updated_at: float
+    has_result: bool
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "effect_key": self.effect_key,
+            "task_id": self.task_id,
+            "step_id": self.step_id,
+            "sucker_id": self.sucker_id,
+            "side_effecting": self.side_effecting,
+            "state": self.state,
+            "holder_id": self.holder_id,
+            "fencing_token": self.fencing_token,
+            "lease_expires_at": self.lease_expires_at,
+            "call_id": self.call_id,
+            "reason": self.reason,
+            "updated_at": self.updated_at,
+            "has_result": self.has_result,
+        }
+
+
 @runtime_checkable
 class EffectStore(Protocol):
     """Shared contract for local and cluster receipt planes."""
@@ -134,6 +170,22 @@ class EffectStore(Protocol):
 
     def ping(self) -> bool: ...
 
+    def list_receipts(
+        self,
+        *,
+        state: str | None = None,
+        limit: int = 100,
+    ) -> list[EffectReceipt]: ...
+
+    def authorize_retry(
+        self,
+        *,
+        effect_key: str,
+        expected_fencing_token: int,
+        actor: str,
+        reason: str,
+    ) -> bool: ...
+
 
 class SQLiteEffectStore:
     """A fork-safe SQLite receipt store.
@@ -186,6 +238,64 @@ class SQLiteEffectStore:
                 return conn.execute("SELECT 1").fetchone()[0] == 1
         except sqlite3.Error:
             return False
+
+    def list_receipts(
+        self,
+        *,
+        state: str | None = None,
+        limit: int = 100,
+    ) -> list[EffectReceipt]:
+        safe_limit = max(1, min(int(limit), 500))
+        query = "SELECT * FROM tool_effect_receipts"
+        params: tuple[object, ...]
+        if state is not None:
+            query += " WHERE state = ?"
+            params = (state, safe_limit)
+        else:
+            params = (safe_limit,)
+        query += """
+            ORDER BY CASE state
+                WHEN 'indeterminate' THEN 0
+                WHEN 'started' THEN 1
+                WHEN 'claimed' THEN 2
+                WHEN 'retry_authorized' THEN 3
+                ELSE 4
+            END, updated_at DESC LIMIT ?
+        """
+        with contextlib.closing(self._connect()) as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [_receipt_from_sqlite_row(row) for row in rows]
+
+    def authorize_retry(
+        self,
+        *,
+        effect_key: str,
+        expected_fencing_token: int,
+        actor: str,
+        reason: str,
+    ) -> bool:
+        """Allow one explicitly reviewed retry of an indeterminate effect."""
+
+        now = time.time()
+        with contextlib.closing(self._connect()) as conn:
+            cursor = conn.execute(
+                """
+                UPDATE tool_effect_receipts
+                SET state = 'retry_authorized', holder_id = ?, reason = ?,
+                    lease_expires_at = 0, updated_at = ?
+                WHERE effect_key = ? AND state = 'indeterminate'
+                  AND fencing_token = ? AND lease_expires_at <= ?
+                """,
+                (
+                    actor,
+                    reason,
+                    now,
+                    effect_key,
+                    expected_fencing_token,
+                    now,
+                ),
+            )
+            return cursor.rowcount == 1
 
     def claim(
         self,
@@ -292,8 +402,17 @@ class SQLiteEffectStore:
                 return StoreDecision("execute", token, lease_expires)
 
             prior_side_effecting = bool(row["side_effecting"])
-            unsafe_started = state == "started" and (side_effecting or prior_side_effecting)
-            unsafe_intent = observed_durable_intent and (side_effecting or prior_side_effecting)
+            retry_authorized = state == "retry_authorized"
+            unsafe_started = (
+                not retry_authorized
+                and state == "started"
+                and (side_effecting or prior_side_effecting)
+            )
+            unsafe_intent = (
+                not retry_authorized
+                and observed_durable_intent
+                and (side_effecting or prior_side_effecting)
+            )
             if unsafe_started or unsafe_intent:
                 reason = _dangling_intent_reason()
                 self._mark_indeterminate_tx(conn, effect_key, reason, now)
@@ -532,10 +651,28 @@ def _decode_step(raw: object) -> Step | None:
         return None
 
 
+def _receipt_from_sqlite_row(row: sqlite3.Row) -> EffectReceipt:
+    return EffectReceipt(
+        effect_key=str(row["effect_key"]),
+        task_id=str(row["task_id"]),
+        step_id=int(row["step_id"]),
+        sucker_id=str(row["sucker_id"]),
+        side_effecting=bool(row["side_effecting"]),
+        state=str(row["state"]),
+        holder_id=str(row["holder_id"] or ""),
+        fencing_token=int(row["fencing_token"]),
+        lease_expires_at=float(row["lease_expires_at"] or 0.0),
+        call_id=str(row["call_id"] or ""),
+        reason=str(row["reason"] or ""),
+        updated_at=float(row["updated_at"] or 0.0),
+        has_result=bool(row["step_json"]),
+    )
+
+
 def _dangling_intent_reason() -> str:
     return (
         "a previous process entered this side-effecting tool but did not durably record its result"
     )
 
 
-__all__ = ["EffectStore", "SQLiteEffectStore", "StoreDecision"]
+__all__ = ["EffectReceipt", "EffectStore", "SQLiteEffectStore", "StoreDecision"]

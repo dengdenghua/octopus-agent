@@ -45,6 +45,7 @@ JournalEventType = Literal[
     "task_checkpoint",
     "react_checkpoint",
     "tool_effect_intent",
+    "tool_effect_reconciliation",
     "task_paused",
     "task_resumed",
     "token_usage",
@@ -210,6 +211,16 @@ class ToolEffectIntentEvent(JournalEvent):
     sucker_id: str = ""
     args_fingerprint: str = ""
     side_effecting: bool = False
+
+
+class ToolEffectReconciliationEvent(JournalEvent):
+    """Auditable operator decision for an indeterminate external effect."""
+
+    event_type: Literal["tool_effect_reconciliation"] = "tool_effect_reconciliation"
+    effect_key: str
+    fencing_token: int
+    action: Literal["authorize_retry"] = "authorize_retry"
+    reason: str
 
 
 class TaskPausedEvent(JournalEvent):
@@ -776,6 +787,27 @@ class Journal:
             sucker_id=sucker_id,
             args_fingerprint=args_fingerprint,
             side_effecting=side_effecting,
+            agent_id=current_agent_id(),
+            conversation_id=current_conversation_id(),
+        )
+        self.write(event)
+        return event
+
+    def write_tool_effect_reconciliation(
+        self,
+        *,
+        effect_key: str,
+        fencing_token: int,
+        action: Literal["authorize_retry"],
+        reason: str,
+        actor: str,
+    ) -> ToolEffectReconciliationEvent:
+        event = ToolEffectReconciliationEvent(
+            actor=actor,
+            effect_key=effect_key,
+            fencing_token=fencing_token,
+            action=action,
+            reason=reason,
             agent_id=current_agent_id(),
             conversation_id=current_conversation_id(),
         )
@@ -1555,6 +1587,7 @@ _EVENT_CLASSES: dict[str, type[JournalEvent]] = {
     "task_checkpoint": TaskCheckpointEvent,
     "react_checkpoint": ReactCheckpointEvent,
     "tool_effect_intent": ToolEffectIntentEvent,
+    "tool_effect_reconciliation": ToolEffectReconciliationEvent,
     "task_paused": TaskPausedEvent,
     "task_resumed": TaskResumedEvent,
     "token_usage": TokenUsageEvent,

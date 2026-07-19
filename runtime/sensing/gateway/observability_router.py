@@ -191,6 +191,7 @@ def create_observability_router(
     journal: Any,
     registry: Any,
     planner: Any = None,
+    effect_store: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
     jwt_secret: str | None = None,
@@ -257,6 +258,42 @@ def create_observability_router(
 
     router = APIRouter(tags=["observability"], dependencies=[Depends(_auth_dep)])
 
+    def _operator_actor(request: Request) -> str:
+        """Resolve an operator and require admin for receipt mutations."""
+
+        from runtime.adapters.web_auth import _resolve_actor
+
+        actor = _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+        if not require_auth:
+            return str(actor or "local_operator")
+
+        auth = request.headers.get("Authorization") or ""
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        identity = None
+        if identity_store is not None and token:
+            if jwt_secret and token.count(".") == 2:
+                with contextlib.suppress(Exception):
+                    identity = identity_store.verify_jwt(
+                        token,
+                        secret=jwt_secret,
+                        required_issuer=jwt_issuer,
+                        required_audience=jwt_audience,
+                    )
+            if identity is None:
+                with contextlib.suppress(Exception):
+                    identity = identity_store.verify_api_key(token)
+        roles = getattr(identity, "roles", ()) or ()
+        if "admin" not in {str(role).lower() for role in roles}:
+            raise HTTPException(403, "admin role required")
+        return str(actor or "authenticated_operator")
+
     # Progress tracker owns incremental O(N_tasks) snapshots · build
     # once per app, not per request.
     from runtime.memory.journal import TaskProgressTracker
@@ -268,6 +305,101 @@ def create_observability_router(
         "report": None,
     }
     kg_sync_ttl_seconds = 3.0
+
+    @router.get("/api/tool-effects")
+    def api_tool_effects(
+        state: str | None = Query(default=None),
+        limit: int = Query(default=100, ge=1, le=500),
+    ) -> dict[str, Any]:
+        """List fenced external-effect receipts without exposing arguments/results."""
+
+        allowed_states = {
+            "claimed",
+            "started",
+            "committed",
+            "indeterminate",
+            "retry_authorized",
+        }
+        if state is not None and state not in allowed_states:
+            raise HTTPException(400, "invalid tool-effect state")
+        if effect_store is None:
+            return {
+                "backend": "disabled",
+                "shared_across_hosts": False,
+                "count": 0,
+                "state_counts": {},
+                "receipts": [],
+            }
+        receipts = effect_store.list_receipts(state=state, limit=limit)
+        sampled = effect_store.list_receipts(limit=500)
+        counts: dict[str, int] = {}
+        for receipt in sampled:
+            counts[receipt.state] = counts.get(receipt.state, 0) + 1
+        return {
+            "backend": str(getattr(effect_store, "backend_name", "unknown")),
+            "shared_across_hosts": bool(getattr(effect_store, "shared_across_hosts", False)),
+            "count": len(receipts),
+            "state_counts": counts,
+            "receipts": [receipt.to_dict() for receipt in receipts],
+        }
+
+    @router.post("/api/tool-effects/{effect_key:path}/authorize-retry")
+    def api_tool_effect_authorize_retry(
+        effect_key: str,
+        body: dict[str, Any],
+        request: Request,
+    ) -> dict[str, Any]:
+        """Authorize one retry after an operator verifies no effect occurred."""
+
+        actor = _operator_actor(request)
+        if effect_store is None:
+            raise HTTPException(503, "tool-effect receipt backend unavailable")
+        if not effect_key or len(effect_key) > 512:
+            raise HTTPException(400, "invalid effect_key")
+        if body.get("confirm") != "AUTHORIZE RETRY":
+            raise HTTPException(400, 'confirm must equal "AUTHORIZE RETRY"')
+        reason = str(body.get("reason") or "").strip()
+        if len(reason) < 8 or len(reason) > 500:
+            raise HTTPException(400, "reason must be between 8 and 500 characters")
+        token_value = body.get("fencing_token")
+        if not isinstance(token_value, (str, int)) or isinstance(token_value, bool):
+            raise HTTPException(400, "fencing_token must be an integer")
+        try:
+            expected_token = int(token_value)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, "fencing_token must be an integer") from exc
+        if expected_token < 0:
+            raise HTTPException(400, "fencing_token must be non-negative")
+        changed = effect_store.authorize_retry(
+            effect_key=effect_key,
+            expected_fencing_token=expected_token,
+            actor=actor,
+            reason=reason,
+        )
+        if not changed:
+            raise HTTPException(
+                409,
+                "receipt changed, is not indeterminate, or has a live owner",
+            )
+        audit_warning = ""
+        try:
+            journal.write_tool_effect_reconciliation(
+                effect_key=effect_key,
+                fencing_token=expected_token,
+                action="authorize_retry",
+                reason=reason,
+                actor=actor,
+            )
+        except Exception as exc:
+            audit_warning = f"journal audit append failed: {type(exc).__name__}"
+        return {
+            "ok": True,
+            "effect_key": effect_key,
+            "state": "retry_authorized",
+            "fencing_token": expected_token,
+            "actor": actor,
+            "audit_warning": audit_warning,
+        }
 
     def _rollback_file_events(
         *,

@@ -23,6 +23,7 @@ from .journal import (
     TaskCheckpointEvent,
     TaskStartedEvent,
     ToolEffectIntentEvent,
+    ToolEffectReconciliationEvent,
     TrajectoryEvent,
 )
 from .journal_context import (
@@ -71,6 +72,7 @@ __all__ = [
     "TaskProgressTracker",
     "TaskStartedEvent",
     "ToolEffectIntentEvent",
+    "ToolEffectReconciliationEvent",
     "TrajectoryEvent",
     "all_task_progress",
     "current_agent_id",

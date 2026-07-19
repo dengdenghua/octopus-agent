@@ -18,7 +18,7 @@ from runtime.execution.tool_engine.effect_receipts import (
 )
 from runtime.execution.tool_engine.effect_store import SQLiteEffectStore
 from runtime.execution.tool_engine.redis_effect_store import RedisEffectStore
-from runtime.memory.journal import InMemoryJournal, StepEvent
+from runtime.memory.journal import InMemoryJournal, JSONLJournal, StepEvent
 from runtime.platform.models import (
     ArmId,
     Budget,
@@ -99,6 +99,25 @@ class _FakeRedisScript:
 
     def __call__(self, *, keys: list[str], args: list[Any]) -> int:
         with self.client.lock:
+            if "octopus_effect_authorize_retry_v1" in self.source:
+                if self.client.get(keys[0]) is not None:
+                    return 0
+                raw = self.client.get(keys[1])
+                if raw is None:
+                    return 0
+                import json
+
+                receipt = json.loads(raw)
+                if receipt.get("state") != "indeterminate":
+                    return 0
+                if int(receipt.get("fencing_token") or 0) != int(args[0]):
+                    return 0
+                receipt["state"] = "retry_authorized"
+                receipt["holder_id"] = args[1]
+                receipt["reason"] = args[2]
+                receipt["updated_at"] = float(args[3])
+                self.client.set(keys[1], json.dumps(receipt))
+                return 1
             if "octopus_effect_repair_committed_v1" in self.source:
                 if self.client.get(keys[0]) is not None:
                     return 0
@@ -195,6 +214,17 @@ class _FakeRedis:
 
     def register_script(self, source: str) -> _FakeRedisScript:
         return _FakeRedisScript(source, self)
+
+    def scan_iter(self, *, match: str, count: int = 100):
+        del count
+        import fnmatch
+
+        with self.lock:
+            keys = list(self.values)
+        for key in keys:
+            self._expire(key)
+            if fnmatch.fnmatch(key, match) and key in self.values:
+                yield key.encode()
 
     def ping(self) -> bool:
         return True
@@ -667,6 +697,184 @@ def test_redis_started_side_effect_fails_closed_after_host_loss() -> None:
     )
 
     assert recovered.kind == "indeterminate"
+
+
+@pytest.mark.parametrize("backend", ["sqlite", "redis"])
+def test_operator_can_authorize_one_fenced_retry(
+    backend: str,
+    tmp_path: Path,
+) -> None:
+    store = (
+        SQLiteEffectStore(tmp_path / "effects.sqlite3")
+        if backend == "sqlite"
+        else RedisEffectStore(_FakeRedis(), key_prefix="test:effects:")
+    )
+    claim = store.claim(
+        effect_key="effect:payment",
+        task_id="task",
+        step_id=1,
+        sucker_id="payment_tool",
+        args_fingerprint="args",
+        side_effecting=True,
+        holder_id="host-a",
+        lease_ttl_s=1,
+        observed_durable_intent=False,
+    )
+    assert store.mark_started(
+        effect_key="effect:payment",
+        holder_id="host-a",
+        fencing_token=claim.fencing_token,
+        call_id="call-a",
+        lease_ttl_s=1,
+    )
+    store.finish_failed(
+        effect_key="effect:payment",
+        holder_id="host-a",
+        fencing_token=claim.fencing_token,
+        side_effecting=True,
+        reason="payment provider timed out after request submission",
+    )
+
+    receipts = store.list_receipts(state="indeterminate")
+    assert len(receipts) == 1
+    assert receipts[0].effect_key == "effect:payment"
+    assert (
+        store.authorize_retry(
+            effect_key="effect:payment",
+            expected_fencing_token=claim.fencing_token + 1,
+            actor="operator",
+            reason="provider confirms no payment was created",
+        )
+        is False
+    )
+    assert store.authorize_retry(
+        effect_key="effect:payment",
+        expected_fencing_token=claim.fencing_token,
+        actor="operator",
+        reason="provider confirms no payment was created",
+    )
+    assert (
+        store.authorize_retry(
+            effect_key="effect:payment",
+            expected_fencing_token=claim.fencing_token,
+            actor="operator",
+            reason="duplicate authorization must not be accepted",
+        )
+        is False
+    )
+    authorized = store.list_receipts(state="retry_authorized")
+    assert len(authorized) == 1
+    assert authorized[0].holder_id == "operator"
+
+    retry_store = (
+        RedisEffectStore(store.client, key_prefix="test:effects:")
+        if isinstance(store, RedisEffectStore)
+        else store
+    )
+    retry = retry_store.claim(
+        effect_key="effect:payment",
+        task_id="task",
+        step_id=1,
+        sucker_id="payment_tool",
+        args_fingerprint="args",
+        side_effecting=True,
+        holder_id="host-b",
+        lease_ttl_s=1,
+        observed_durable_intent=True,
+    )
+    assert retry.kind == "execute"
+    assert retry.fencing_token > claim.fencing_token
+
+
+def test_tool_effect_reconciliation_api_is_admin_fenced_and_audited(
+    tmp_path: Path,
+) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from runtime.sensing.gateway.observability_router import (
+        create_observability_router,
+    )
+
+    class _Identity:
+        def __init__(self, actor_id: str, roles: tuple[str, ...]) -> None:
+            self.actor_id = actor_id
+            self.roles = roles
+
+    class _Identities:
+        def verify_api_key(self, token: str):
+            if token == "admin-token":
+                return _Identity("admin-user", ("admin",))
+            if token == "user-token":
+                return _Identity("regular-user", ("user",))
+            return None
+
+    store = SQLiteEffectStore(tmp_path / "effects.sqlite3")
+    claim = store.claim(
+        effect_key="effect:payment",
+        task_id="task",
+        step_id=1,
+        sucker_id="payment_tool",
+        args_fingerprint="args",
+        side_effecting=True,
+        holder_id="host-a",
+        lease_ttl_s=1,
+        observed_durable_intent=False,
+    )
+    store.finish_failed(
+        effect_key="effect:payment",
+        holder_id="host-a",
+        fencing_token=claim.fencing_token,
+        side_effecting=True,
+        reason="unknown provider outcome",
+    )
+    journal = JSONLJournal(tmp_path / "events.jsonl")
+    app = FastAPI()
+    app.include_router(
+        create_observability_router(
+            journal=journal,
+            registry=SkillRegistry(),
+            effect_store=store,
+            identity_store=_Identities(),
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+
+    assert client.get("/api/tool-effects").status_code == 401
+    listed = client.get(
+        "/api/tool-effects?state=indeterminate",
+        headers={"Authorization": "Bearer user-token"},
+    )
+    assert listed.status_code == 200
+    assert listed.json()["state_counts"]["indeterminate"] == 1
+    body = {
+        "confirm": "AUTHORIZE RETRY",
+        "fencing_token": claim.fencing_token,
+        "reason": "provider dashboard confirms no payment was created",
+    }
+    forbidden = client.post(
+        "/api/tool-effects/effect:payment/authorize-retry",
+        headers={"Authorization": "Bearer user-token"},
+        json=body,
+    )
+    assert forbidden.status_code == 403
+    stale = client.post(
+        "/api/tool-effects/effect:payment/authorize-retry",
+        headers={"Authorization": "Bearer admin-token"},
+        json={**body, "fencing_token": claim.fencing_token + 1},
+    )
+    assert stale.status_code == 409
+    resolved = client.post(
+        "/api/tool-effects/effect:payment/authorize-retry",
+        headers={"Authorization": "Bearer admin-token"},
+        json=body,
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["state"] == "retry_authorized"
+    events = journal.read_by_type("tool_effect_reconciliation")
+    assert len(events) == 1
+    assert events[0].actor == "admin-user"
 
 
 def test_distributed_readiness_rejects_local_only_store(tmp_path: Path) -> None:
