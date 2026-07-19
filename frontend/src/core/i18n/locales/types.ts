@@ -2667,6 +2667,7 @@ export interface Translations {
       importConfirmDescription: string;
       importFileLabel: string;
       importInvalidFile: string;
+      importFileTooLarge: string;
       importSuccess: string;
       manualFactSource: string;
       addFact: string;
@@ -2688,6 +2689,7 @@ export interface Translations {
       factCategoryPlaceholder: string;
       factConfidenceHint: string;
       factSave: string;
+      factEditorDescription: string;
       factValidationContent: string;
       factValidationConfidence: string;
       noFacts: string;
@@ -2695,6 +2697,7 @@ export interface Translations {
       memoryFullyEmpty: string;
       factPreviewLabel: string;
       searchPlaceholder: string;
+      filterLabel: string;
       filterAll: string;
       filterFacts: string;
       filterSummaries: string;
@@ -2703,6 +2706,9 @@ export interface Translations {
       agentScope: string;
       globalScope: string;
       saved: string;
+      actionFailed: string;
+      configLoading: string;
+      configLoadFailed: string;
       enableMemory: string;
       enableMemoryDesc: string;
       autoCapture: string;

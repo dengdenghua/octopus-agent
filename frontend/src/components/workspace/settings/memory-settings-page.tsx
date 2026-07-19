@@ -84,8 +84,20 @@ type PendingImport = {
   memory: UserMemory;
 };
 
+export const MAX_MEMORY_IMPORT_BYTES = 5 * 1024 * 1024;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isMemoryTimestamp(
+  value: unknown,
+  allowEmpty = false,
+): value is string {
+  return (
+    typeof value === "string" &&
+    ((allowEmpty && value.length === 0) || Number.isFinite(Date.parse(value)))
+  );
 }
 
 function isMemorySection(value: unknown): value is {
@@ -95,7 +107,7 @@ function isMemorySection(value: unknown): value is {
   return (
     isRecord(value) &&
     typeof value.summary === "string" &&
-    typeof value.updatedAt === "string"
+    isMemoryTimestamp(value.updatedAt, true)
   );
 }
 
@@ -103,27 +115,42 @@ function isMemoryFact(value: unknown): value is UserMemory["facts"][number] {
   return (
     isRecord(value) &&
     typeof value.id === "string" &&
+    value.id.trim().length > 0 &&
     typeof value.content === "string" &&
+    value.content.trim().length > 0 &&
     typeof value.category === "string" &&
+    value.category.trim().length > 0 &&
     typeof value.confidence === "number" &&
     Number.isFinite(value.confidence) &&
-    typeof value.createdAt === "string" &&
-    typeof value.source === "string"
+    value.confidence >= 0 &&
+    value.confidence <= 1 &&
+    isMemoryTimestamp(value.createdAt) &&
+    typeof value.source === "string" &&
+    value.source.trim().length > 0
   );
 }
 
-function isImportedMemory(value: unknown): value is UserMemory {
+export function isImportedMemory(value: unknown): value is UserMemory {
   if (!isRecord(value)) {
     return false;
   }
 
   if (
     typeof value.version !== "string" ||
-    typeof value.lastUpdated !== "string" ||
+    value.version.trim().length === 0 ||
+    !isMemoryTimestamp(value.lastUpdated, true) ||
     !isRecord(value.user) ||
     !isRecord(value.history) ||
     !Array.isArray(value.facts)
   ) {
+    return false;
+  }
+
+  if (!value.facts.every(isMemoryFact)) {
+    return false;
+  }
+  const factIds = new Set(value.facts.map((fact) => fact.id));
+  if (factIds.size !== value.facts.length) {
     return false;
   }
 
@@ -133,8 +160,7 @@ function isImportedMemory(value: unknown): value is UserMemory {
     isMemorySection(value.user.topOfMind) &&
     isMemorySection(value.history.recentMonths) &&
     isMemorySection(value.history.earlierContext) &&
-    isMemorySection(value.history.longTermBackground) &&
-    value.facts.every(isMemoryFact)
+    isMemorySection(value.history.longTermBackground)
   );
 }
 
@@ -330,7 +356,13 @@ export default function MemorySettingsPage() {
   const { t, locale } = useI18n();
   const streamdownPlugins = useStreamdownPlugins();
   const { memory, isLoading, error, refetch, isRefreshing } = useMemory();
-  const { config: memoryConfig } = useMemoryConfig();
+  const {
+    config: memoryConfig,
+    isLoading: isMemoryConfigLoading,
+    error: memoryConfigError,
+    refetch: refetchMemoryConfig,
+    isRefreshing: isMemoryConfigRefreshing,
+  } = useMemoryConfig();
   const updateMemoryConfig = useUpdateMemoryConfig();
   const clearMemory = useClearMemory();
   const createMemoryFact = useCreateMemoryFact();
@@ -361,15 +393,17 @@ export default function MemorySettingsPage() {
 
   // Debounced backend FTS5 search
   useEffect(() => {
+    searchAbortRef.current?.abort();
+    searchAbortRef.current = null;
     if (!normalizedQuery) {
       setBackendSearchResults(null);
       setIsSearching(false);
       return;
     }
 
+    setBackendSearchResults(null);
     setIsSearching(true);
     const timer = window.setTimeout(() => {
-      searchAbortRef.current?.abort();
       const controller = new AbortController();
       searchAbortRef.current = controller;
 
@@ -391,6 +425,7 @@ export default function MemorySettingsPage() {
 
     return () => {
       window.clearTimeout(timer);
+      searchAbortRef.current?.abort();
     };
   }, [normalizedQuery, deferredQuery]);
 
@@ -445,16 +480,19 @@ export default function MemorySettingsPage() {
     t.settings.memory.exportSuccess ?? t.common.exportSuccess;
   const importButton = t.settings.memory.importButton ?? t.common.import;
   const importSuccess = t.settings.memory.importSuccess ?? "Memory imported";
-  const memoryConfigEnabled = memoryConfig?.enabled ?? true;
-  const autoCaptureEnabled = memoryConfig?.auto_capture_enabled ?? true;
-  const injectionEnabled = memoryConfig?.injection_enabled ?? true;
+  const memoryConfigEnabled = memoryConfig?.enabled ?? false;
+  const autoCaptureEnabled = memoryConfig?.auto_capture_enabled ?? false;
+  const injectionEnabled = memoryConfig?.injection_enabled ?? false;
+  const memoryConfigUnavailable =
+    isMemoryConfigLoading || Boolean(memoryConfigError) || !memoryConfig;
 
   async function handleMemoryConfigChange(patch: MemoryConfigPatch) {
+    if (memoryConfigUnavailable) return;
     try {
       await updateMemoryConfig.mutateAsync(patch);
       toast.success(t.settings.memory.saved);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+    } catch {
+      toast.error(t.settings.memory.actionFailed);
     }
   }
 
@@ -522,10 +560,10 @@ export default function MemorySettingsPage() {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
       toast.success(exportSuccess);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+    } catch {
+      toast.error(t.settings.memory.actionFailed);
     } finally {
       setIsExporting(false);
     }
@@ -537,6 +575,11 @@ export default function MemorySettingsPage() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) {
+      return;
+    }
+
+    if (file.size > MAX_MEMORY_IMPORT_BYTES) {
+      toast.error(t.settings.memory.importFileTooLarge);
       return;
     }
 
@@ -564,8 +607,8 @@ export default function MemorySettingsPage() {
       await importMemoryMutation.mutateAsync(pendingImport.memory);
       toast.success(importSuccess);
       setPendingImport(null);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+    } catch {
+      toast.error(t.settings.memory.actionFailed);
     }
   }
 
@@ -574,8 +617,8 @@ export default function MemorySettingsPage() {
       await clearMemory.mutateAsync();
       toast.success(clearAllSuccess);
       setClearDialogOpen(false);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+    } catch {
+      toast.error(t.settings.memory.actionFailed);
     }
   }
 
@@ -586,8 +629,8 @@ export default function MemorySettingsPage() {
       await deleteMemoryFact.mutateAsync(factToDelete.id);
       toast.success(factDeleteSuccess);
       setFactToDelete(null);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+    } catch {
+      toast.error(t.settings.memory.actionFailed);
     }
   }
 
@@ -645,13 +688,20 @@ export default function MemorySettingsPage() {
       setFactEditorOpen(false);
       setFactToEdit(null);
       setFactForm(DEFAULT_FACT_FORM_STATE);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+    } catch {
+      toast.error(t.settings.memory.actionFailed);
     }
   }
 
   const isFactFormPending =
     createMemoryFact.isPending || updateMemoryFact.isPending;
+  const factFormConfidence = Number(factForm.confidence);
+  const factFormConfidenceValid =
+    Number.isFinite(factFormConfidence) &&
+    factFormConfidence >= 0 &&
+    factFormConfidence <= 1;
+  const factFormValid =
+    factForm.content.trim().length > 0 && factFormConfidenceValid;
 
   return (
     <>
@@ -695,6 +745,41 @@ export default function MemorySettingsPage() {
           </div>
         ) : (
           <div className="space-y-4">
+            {isMemoryConfigLoading ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+              >
+                <Loader2Icon className="size-3.5 animate-spin" />
+                {t.settings.memory.configLoading}
+              </div>
+            ) : memoryConfigError ? (
+              <div
+                role="alert"
+                className="flex flex-col items-start justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/[0.04] px-3 py-2 text-xs sm:flex-row sm:items-center"
+              >
+                <span className="text-destructive">
+                  {t.settings.memory.configLoadFailed}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 w-full px-2 text-xs sm:w-auto"
+                  disabled={isMemoryConfigRefreshing}
+                  onClick={() => void refetchMemoryConfig?.()}
+                >
+                  <RefreshCwIcon
+                    className={cn(
+                      "mr-1.5 size-3.5",
+                      isMemoryConfigRefreshing && "animate-spin",
+                    )}
+                  />
+                  {t.errorBoundary.retry}
+                </Button>
+              </div>
+            ) : null}
             <div className="rounded-lg border p-4">
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 p-3">
@@ -709,7 +794,9 @@ export default function MemorySettingsPage() {
                   <Switch
                     aria-label={t.settings.memory.enableMemory}
                     checked={memoryConfigEnabled}
-                    disabled={updateMemoryConfig.isPending}
+                    disabled={
+                      memoryConfigUnavailable || updateMemoryConfig.isPending
+                    }
                     onCheckedChange={(enabled) =>
                       void handleMemoryConfigChange({ enabled })
                     }
@@ -729,7 +816,9 @@ export default function MemorySettingsPage() {
                     aria-label={t.settings.memory.autoCapture}
                     checked={memoryConfigEnabled && autoCaptureEnabled}
                     disabled={
-                      !memoryConfigEnabled || updateMemoryConfig.isPending
+                      !memoryConfigEnabled ||
+                      updateMemoryConfig.isPending ||
+                      memoryConfigUnavailable
                     }
                     onCheckedChange={(auto_capture_enabled) =>
                       void handleMemoryConfigChange({ auto_capture_enabled })
@@ -750,7 +839,9 @@ export default function MemorySettingsPage() {
                     aria-label={t.settings.memory.injectOnReply}
                     checked={memoryConfigEnabled && injectionEnabled}
                     disabled={
-                      !memoryConfigEnabled || updateMemoryConfig.isPending
+                      !memoryConfigEnabled ||
+                      updateMemoryConfig.isPending ||
+                      memoryConfigUnavailable
                     }
                     onCheckedChange={(injection_enabled) =>
                       void handleMemoryConfigChange({ injection_enabled })
@@ -771,6 +862,7 @@ export default function MemorySettingsPage() {
                 <div className="relative sm:max-w-xs w-full">
                   <SearchIcon className="text-muted-foreground absolute left-2.5 top-2.5 size-4" />
                   <Input
+                    aria-label={searchPlaceholder}
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder={searchPlaceholder}
@@ -781,6 +873,7 @@ export default function MemorySettingsPage() {
                   ) : null}
                 </div>
                 <ToggleGroup
+                  aria-label={t.settings.memory.filterLabel}
                   type="single"
                   value={filter}
                   onValueChange={(value) => {
@@ -827,7 +920,10 @@ export default function MemorySettingsPage() {
                 <Button
                   variant="destructive"
                   onClick={() => setClearDialogOpen(true)}
-                  disabled={clearMemory.isPending}
+                  disabled={
+                    clearMemory.isPending ||
+                    (isMemorySummaryEmpty(memory) && memory.facts.length === 0)
+                  }
                 >
                   {clearMemory.isPending ? t.common.loading : clearAllLabel}
                 </Button>
@@ -1011,6 +1107,9 @@ export default function MemorySettingsPage() {
             <DialogTitle>
               {factToEdit ? editFactTitle : addFactTitle}
             </DialogTitle>
+            <DialogDescription>
+              {t.settings.memory.factEditorDescription}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -1022,6 +1121,7 @@ export default function MemorySettingsPage() {
               </label>
               <Textarea
                 id={factContentInputId}
+                required
                 value={factForm.content}
                 onChange={(event) =>
                   setFactForm((current) => ({
@@ -1064,7 +1164,13 @@ export default function MemorySettingsPage() {
                 </label>
                 <Input
                   id={factConfidenceInputId}
+                  required
                   aria-describedby={factConfidenceHintId}
+                  aria-invalid={
+                    factForm.confidence.length > 0 && !factFormConfidenceValid
+                      ? true
+                      : undefined
+                  }
                   type="number"
                   min="0"
                   max="1"
@@ -1100,7 +1206,7 @@ export default function MemorySettingsPage() {
             </Button>
             <Button
               onClick={() => void handleSaveFact()}
-              disabled={isFactFormPending}
+              disabled={isFactFormPending || !factFormValid}
             >
               {isFactFormPending ? t.common.loading : factSave}
             </Button>

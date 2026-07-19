@@ -48,11 +48,17 @@ export function useMemory() {
 }
 
 export function useMemoryConfig() {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["memory-config"],
     queryFn: () => getMemoryConfig(),
   });
-  return { config: data ?? null, isLoading, error };
+  return {
+    config: data ?? null,
+    isLoading,
+    error,
+    refetch,
+    isRefreshing: isFetching && !isLoading,
+  };
 }
 
 export function useUpdateMemoryConfig() {

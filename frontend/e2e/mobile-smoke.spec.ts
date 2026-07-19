@@ -100,6 +100,7 @@ test.describe("Mobile workspace smoke", () => {
       /^(订阅与账单|Plan & Billing)$/,
       /^(外观|Appearance)$/,
       /^(通知|Notification)$/,
+      /^(记忆与历史|Memory & History)$/,
       /^(MCP 服务|MCP services)$/,
       /^(可观测性|Observability)$/,
       /^(关于|About)$/,

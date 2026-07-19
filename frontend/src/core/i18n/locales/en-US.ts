@@ -3276,7 +3276,7 @@ export const enUS: Translations = {
     memory: {
       title: "Memory",
       description:
-        "Octopus automatically learns from your conversations in the background. These memories help Octopus understand you better and deliver a more personalized experience.",
+        "Manage saved facts and conversation summaries, and control when Octopus records and uses them.",
       empty: "No memory data to display.",
       rawJson: "Raw JSON",
       exportButton: "Export memory",
@@ -3288,6 +3288,7 @@ export const enUS: Translations = {
       importFileLabel: "Selected file",
       importInvalidFile:
         "Failed to read the selected memory file. Please choose a valid JSON export.",
+      importFileTooLarge: "The memory file must be 5 MB or smaller.",
       importSuccess: "Memory imported",
       manualFactSource: "Manual",
       addFact: "Add fact",
@@ -3311,6 +3312,8 @@ export const enUS: Translations = {
       factCategoryPlaceholder: "context",
       factConfidenceHint: "Use a number between 0 and 1.",
       factSave: "Save fact",
+      factEditorDescription:
+        "Save a searchable fact. Higher confidence makes it more likely to be used in relevant conversations.",
       factValidationContent: "Fact content cannot be empty.",
       factValidationConfidence: "Confidence must be a number between 0 and 1.",
       noFacts: "No saved facts yet.",
@@ -3319,6 +3322,7 @@ export const enUS: Translations = {
       memoryFullyEmpty: "No memory saved yet.",
       factPreviewLabel: "Fact to delete",
       searchPlaceholder: "Search memory",
+      filterLabel: "Filter memory type",
       filterAll: "All",
       filterFacts: "Facts",
       filterSummaries: "Summaries",
@@ -3327,6 +3331,11 @@ export const enUS: Translations = {
       agentScope: "Agent: ",
       globalScope: "Global",
       saved: "Saved",
+      actionFailed:
+        "The action failed. Existing memory was not changed. Try again.",
+      configLoading: "Loading memory controls…",
+      configLoadFailed:
+        "Memory controls could not be loaded. Their current state was not changed.",
       enableMemory: "Enable Memory",
       enableMemoryDesc: "When off, memory is neither read nor written.",
       autoCapture: "Auto Capture",
