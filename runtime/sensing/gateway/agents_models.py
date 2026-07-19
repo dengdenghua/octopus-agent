@@ -102,6 +102,12 @@ class CapabilitiesWire(BaseModel):
     desktop_automation: bool = True
 
 
+class LocalPartnerCommandHint(BaseModel):
+    command: str
+    scope: str
+    behavior: str
+
+
 class LocalPartnerWire(BaseModel):
     id: str
     agent_id: str
@@ -125,7 +131,7 @@ class LocalPartnerWire(BaseModel):
     verify_command: str | None = None
     setup_hint: str | None = None
     interaction_hint: str | None = None
-    command_hints: list[dict[str, str]] = Field(default_factory=list)
+    command_hints: list[LocalPartnerCommandHint] = Field(default_factory=list)
 
 
 class LocalPartnerRegisterItem(BaseModel):

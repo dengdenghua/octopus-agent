@@ -12754,14 +12754,21 @@ export interface components {
              */
             status: string;
         };
+        /** LocalPartnerCommandHint */
+        LocalPartnerCommandHint: {
+            /** Behavior */
+            behavior: string;
+            /** Command */
+            command: string;
+            /** Scope */
+            scope: string;
+        };
         /** LocalPartnerWire */
         LocalPartnerWire: {
             /** Agent Id */
             agent_id: string;
             /** Command Hints */
-            command_hints: {
-                [key: string]: string;
-            }[];
+            command_hints: components["schemas"]["LocalPartnerCommandHint"][];
             /** Command */
             command?: string | null;
             /** Default Alias */

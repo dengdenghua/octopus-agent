@@ -1120,6 +1120,20 @@ class TestLocalPartners:
         assert partners["codebuddy-cli"]["native_command"] is None
         assert partners["codebuddy-cli"]["verify_command"] is None
 
+    def test_local_partner_command_hints_have_explicit_openapi_schema(self):
+        app = FastAPI()
+        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
+
+        schemas = app.openapi()["components"]["schemas"]
+
+        assert schemas["LocalPartnerCommandHint"]["properties"] == {
+            "command": {"title": "Command", "type": "string"},
+            "scope": {"title": "Scope", "type": "string"},
+            "behavior": {"title": "Behavior", "type": "string"},
+        }
+        command_hints = schemas["LocalPartnerWire"]["properties"]["command_hints"]
+        assert command_hints["items"]["$ref"] == "#/components/schemas/LocalPartnerCommandHint"
+
     def test_probe_local_partner_success(
         self,
         tmp_path: Path,
