@@ -406,6 +406,14 @@ export function hasContent(message: Message) {
 }
 
 export function isLikelyFinalAnswerContent(message: Message) {
+  const messageKind = message.additional_kwargs?.message_kind;
+  // Realtime protocol semantics are authoritative. This keeps a short answer
+  // in one stable lane from its first streamed token and prevents commentary
+  // from being promoted merely because it contains a heading or grows long.
+  if (messageKind === "answer") return hasContent(message);
+  if (messageKind === "commentary") return false;
+
+  // Compatibility only for legacy/API messages that predate messageKind.
   const text = extractContentFromMessage(message);
   if (!text) return false;
   if (text.length > 320) return true;

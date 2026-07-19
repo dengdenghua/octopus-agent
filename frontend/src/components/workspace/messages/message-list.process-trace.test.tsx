@@ -491,6 +491,46 @@ describe("MessageList process trace lifecycle", () => {
     expect(container.querySelector(".kimi-streaming-tail")).toBeNull();
   });
 
+  test("keeps a short tool-backed answer in one stable streaming lane", () => {
+    const assistant: AIMessage = {
+      id: "assistant-stream",
+      type: "ai",
+      content: "正在收束结论",
+      additional_kwargs: {
+        message_kind: "answer",
+        agent_id: "general",
+        agent_display_name: "Eve",
+      },
+      tool_calls: [
+        {
+          id: "read-1",
+          name: "read_file",
+          args: { path: "runtime/protocol/items.py" },
+        },
+      ],
+    };
+    const thread = mockThread({
+      messages: [message("user-1", "human", "继续"), assistant],
+      streamingMessage: assistant,
+      isLoading: true,
+    });
+    const { container } = renderMessageList({
+      thread,
+      currentAgent: {
+        name: "general",
+        display_name: "Eve",
+        avatar_url: "/api/agents/general/avatar",
+      },
+    });
+
+    expect(screen.getAllByText("正在收束结论")).toHaveLength(1);
+    expect(container.querySelectorAll(".kimi-streaming-tail")).toHaveLength(1);
+    expect(
+      screen.getAllByTestId("process-timeline-event-execution").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByAltText("Eve")).toHaveLength(1);
+  });
+
   test("keeps a conversational activity pulse visible before the first answer token", () => {
     const activeThread = mockThread({
       messages: [message("user-1", "human", "帮我检查项目")],

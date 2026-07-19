@@ -402,6 +402,7 @@ function turnToMessages(turn: Turn): Message[] {
       case "agentMessage": {
         const am = item as AgentMessageItem;
         const isInterruptedMessage = am.id === interruptedMessageId;
+        const messageKind = am.messageKind ?? "answer";
         // The backend's ReAct loop streams the LLM's raw trajectory:
         // "Thought: ...\nAction: tool(...)\nFinal Answer: ..." into
         // a single ``agentMessage`` item. Rendering that verbatim dumps
@@ -451,6 +452,11 @@ function turnToMessages(turn: Turn): Message[] {
         if (typeof am.timelineSequence === "number") {
           kwargs.timeline_sequence = am.timelineSequence;
         }
+        // Current realtime messages carry an explicit protocol lane. Expose
+        // it to the grouping layer so the very first answer token renders in
+        // the answer lane instead of being reclassified later by text length
+        // or Markdown shape. The fallback above keeps old logs compatible.
+        kwargs.message_kind = messageKind;
         if (isInterruptedMessage) {
           kwargs.response_state = "interrupted";
           if (split.finalAnswer?.trim()) {
@@ -459,9 +465,8 @@ function turnToMessages(turn: Turn): Message[] {
             kwargs.interrupted_draft = split.finalAnswer;
           }
         }
-        if (am.messageKind === "commentary" && !isInterruptedMessage) {
+        if (messageKind === "commentary" && !isInterruptedMessage) {
           kwargs.public_progress = true;
-          kwargs.message_kind = "commentary";
           if (am.progressKind) {
             kwargs.progress_kind = am.progressKind;
           }

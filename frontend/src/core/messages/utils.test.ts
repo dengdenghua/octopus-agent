@@ -85,6 +85,39 @@ describe("groupMessages", () => {
     ]);
   });
 
+  it("routes a short protocol answer beside its process from the first token", () => {
+    const answer = {
+      id: "2",
+      type: "ai",
+      content: "结论正在生成",
+      additional_kwargs: { message_kind: "answer" },
+      tool_calls: [{ id: "tc1", name: "read_file", args: {} }],
+    } as Message;
+    const result = groupMessages(
+      [{ id: "1", type: "human", content: "检查" } as Message, answer],
+      (group) => group,
+    );
+
+    expect(result.map((group) => group.type)).toEqual([
+      "human",
+      "assistant:processing",
+      "assistant",
+    ]);
+    expect(result[1]?.messages).toContain(answer);
+    expect(result[2]?.messages).toContain(answer);
+  });
+
+  it("never promotes protocol commentary by Markdown shape", () => {
+    const commentary = {
+      id: "2",
+      type: "ai",
+      content: "# 已完成调查\n\n这是很长的阶段性说明。".repeat(30),
+      additional_kwargs: { message_kind: "commentary" },
+    } as Message;
+
+    expect(isLikelyFinalAnswerContent(commentary)).toBe(false);
+  });
+
   it("groups tool messages with preceding processing group", () => {
     const result = groupMessages(
       [

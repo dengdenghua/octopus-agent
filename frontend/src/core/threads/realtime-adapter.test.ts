@@ -351,6 +351,7 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     expect(ai.type).toBe("ai");
     expect(ai.content).toBe("answer");
     expect(ai.additional_kwargs?.reasoning_content).toBe("step 1\nstep 2");
+    expect(ai.additional_kwargs?.message_kind).toBe("answer");
   });
 
   it("merges multiple reasoning items into one block separated by blank lines", () => {

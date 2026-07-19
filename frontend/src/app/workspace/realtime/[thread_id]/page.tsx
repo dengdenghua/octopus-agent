@@ -108,6 +108,7 @@ import { copyTextToClipboard } from "@/core/clipboard";
 import { threadCollaborationLink } from "@/core/collaboration/thread-collaboration-link";
 import { toHashRouterShellUrl } from "@/core/router/hash-shell-url";
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
+import { useDeferredRouteCommit } from "@/core/router/use-deferred-route-commit";
 import { useThreadSettings } from "@/core/settings";
 import { useThreadStream } from "@/core/threads/hooks";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -1799,7 +1800,8 @@ function RealtimePageContent({
   // mount) — only react to actual changes.
   const [composerSeed, setComposerSeed] = useState(initialPrompt);
   const prevAgentRef = useRef<string | null>(null);
-  const pendingRouteSyncRef = useRef<string | null>(null);
+  const { stageRoute: stageThreadRoute, commitRoute: commitThreadRoute } =
+    useDeferredRouteCommit();
   useEffect(() => {
     if (initialPrompt) setComposerSeed(initialPrompt);
   }, [initialPrompt]);
@@ -1944,24 +1946,16 @@ function RealtimePageContent({
         threadId: startedThreadId,
       });
       void qc.invalidateQueries({ queryKey: ["threads", "search"] });
-      const currentPath =
-        typeof window === "undefined"
-          ? ""
-          : window.location.hash.replace(/^#/, "") || window.location.pathname;
-      if (currentPath !== targetPath && typeof window !== "undefined") {
-        // Avoid React Router remounting the page while the SSE stream is
-        // active. A remount aborts the stream and looks like a full reload.
-        window.history.replaceState(window.history.state, "", `#${targetPath}`);
-        pendingRouteSyncRef.current = targetPath;
-      }
+      // Keep the /new route mounted for the lifetime of the first turn.
+      // Changing the hash here still notifies the desktop HashRouter and
+      // tears down its WebSocket, even when history.replaceState is used.
+      // The sidebar already follows thread:route-sync; commit the actual URL
+      // once onFinish confirms that the server-owned turn is terminal.
+      stageThreadRoute(targetPath);
     },
     onFinish: () => {
       void qc.invalidateQueries({ queryKey: ["threads", "search"] });
-      const targetPath = pendingRouteSyncRef.current;
-      pendingRouteSyncRef.current = null;
-      if (targetPath) {
-        navigate(targetPath, { replace: true });
-      }
+      commitThreadRoute();
     },
   });
   const [isCompressingContext, setIsCompressingContext] = useState(false);
@@ -2031,20 +2025,20 @@ function RealtimePageContent({
     if (isNewThread && thread.messages.length > 0) {
       setIsNewThread(false);
       const targetPath = threadRouteFor(threadId);
-      if (
-        typeof window !== "undefined" &&
-        (window.location.hash.replace(/^#/, "") || window.location.pathname) !==
-          targetPath
-      ) {
-        window.history.replaceState(window.history.state, "", `#${targetPath}`);
-        pendingRouteSyncRef.current = targetPath;
-      }
+      // Same deferred route commit as onStart. This fallback can run before
+      // the loading-edge callback on a fast first item; mutating the hash here
+      // used to remount the page and interrupt the turn before any answer.
+      stageThreadRoute(targetPath);
+      eventBus.emit("thread:route-sync", {
+        href: targetPath,
+        threadId,
+      });
     }
   }, [
     isNewThread,
-    navigate,
     thread.messages.length,
     setIsNewThread,
+    stageThreadRoute,
     threadId,
     threadRouteFor,
   ]);
