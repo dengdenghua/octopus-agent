@@ -12,6 +12,7 @@ import time
 import uuid
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from runtime.core.cerebrum.react_checkpointing import (
@@ -126,6 +127,7 @@ from runtime.core.cerebrum.react_types import (
     ReActStep,
 )
 from runtime.core.cerebrum.todo_protocol import (
+    _is_narrow_read_only_command,
     context_mode,
     render_todo_protocol_guidance,
     should_require_todo_protocol,
@@ -180,6 +182,15 @@ _PUBLIC_UPDATE_BOILERPLATE_RE = re.compile(
 
 _PUBLIC_EVIDENCE_NARRATIVE_TIMEOUT_S = 6.0
 _PUBLIC_EVIDENCE_STREAM_GATE_CHARS = 24
+_EXPLICIT_READ_RECOVERY_PATH_RE = re.compile(
+    r"(?<![\w./-])(?:\.{0,2}/)?(?:[A-Za-z0-9_@.-]+/)*[A-Za-z0-9_@.-]+\."
+    r"(?:py|tsx|ts|jsx|json|js|ya?ml|toml|md|css|html|go|rs)\b",
+    re.IGNORECASE,
+)
+_FUTURE_READ_INTENT_RE = re.compile(
+    r"\b(?:read|open|inspect)\b|(?:读取|查看|打开)",
+    re.IGNORECASE,
+)
 
 
 def _safe_public_update(value: str | None) -> str:
@@ -199,6 +210,174 @@ def _safe_public_update(value: str | None) -> str:
     if _PUBLIC_UPDATE_BOILERPLATE_RE.fullmatch(cleaned):
         return ""
     return cleaned[:1200].rstrip()
+
+
+def _narrow_command_direct_answer(
+    *,
+    goal: str,
+    step: ReActStep,
+    beak_step: Step | None,
+    resolved_name: str | None,
+    succeeded: bool,
+) -> str | None:
+    """Return trustworthy stdout for a bounded one-command result turn.
+
+    The model already chose the command and the executor already produced a
+    structured receipt. When the user explicitly asked for only that output,
+    a second model round adds latency and can pull unrelated conversation
+    history into an otherwise exact answer. Keep the shortcut deliberately
+    narrow; every broader task continues through normal model synthesis.
+    """
+
+    if (
+        not succeeded
+        or resolved_name != "exec_shell"
+        or not _is_narrow_read_only_command(goal)
+    ):
+        return None
+    actions = step.actions or ([step.action] if step.action else [])
+    if len(actions) != 1 or beak_step is None:
+        return None
+    parsed = _parse_action(actions[0])
+    if parsed is None:
+        return None
+    _name, args = parsed
+    if args.get("run_in_background") is True or args.get("background") is True:
+        return None
+    result = getattr(beak_step, "result", None)
+    output = getattr(result, "output", None)
+    if not isinstance(output, dict):
+        return None
+    if output.get("success") is False:
+        return None
+    exit_code = output.get("exit_code")
+    if isinstance(exit_code, int) and exit_code != 0:
+        return None
+    stdout = output.get("stdout")
+    if not isinstance(stdout, str):
+        return None
+    answer = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", stdout).strip()
+    if not answer or "\x00" in answer or len(answer) > 2000:
+        return None
+    return answer
+
+
+def _recover_explicit_read_actions(
+    *,
+    goal: str,
+    model_text: str,
+    workspace_path: str | None,
+    steps: list[ReActStep],
+    executor: Any,
+    read_only: bool,
+) -> list[str]:
+    """Recover bounded reads when prose announces them but omits tool calls.
+
+    This is intentionally limited to user-named, workspace-contained files in
+    an explicit read-only turn. It repairs a common weak-provider failure mode
+    without inferring writes, commands, searches, or any path the user did not
+    provide. Oversized source files start with a bounded first slice so the
+    ordinary reader does not reject the call before the model can refine it.
+    """
+
+    if (
+        not read_only
+        or not workspace_path
+        or not _FUTURE_READ_INTENT_RE.search(model_text or "")
+        or executor is None
+    ):
+        return []
+    registry = getattr(executor, "registry", None)
+    if registry is None or not registry.has("read_file"):
+        return []
+    requested = list(
+        dict.fromkeys(
+            match.group(0).replace("\\", "/").lstrip("./")
+            for match in _EXPLICIT_READ_RECOVERY_PATH_RE.finditer(goal or "")
+        )
+    )
+    if not requested or len(requested) > 6:
+        return []
+    from runtime.core.cerebrum.react_guards import _successful_read_paths
+
+    already_read = _successful_read_paths(steps)
+    try:
+        root = Path(workspace_path).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return []
+    actions: list[str] = []
+    for relative in requested:
+        normalized = relative.strip("/").lower()
+        if normalized in already_read:
+            continue
+        try:
+            candidate = (root / relative).resolve()
+            if not candidate.is_relative_to(root) or not candidate.is_file():
+                continue
+            size = candidate.stat().st_size
+        except (OSError, RuntimeError):
+            continue
+        args: dict[str, Any] = {"path": relative}
+        if size > 100 * 1024:
+            args.update({"offset": 0, "limit": 400})
+        actions.append(f"read_file({json.dumps(args, ensure_ascii=False)})")
+    return actions
+
+
+def _bound_explicit_large_reads(
+    *,
+    goal: str,
+    workspace_path: str | None,
+    actions: list[str],
+    read_only: bool,
+) -> list[str]:
+    """Add a first-slice range to user-named oversized read_file calls."""
+
+    if not read_only or not workspace_path or not actions:
+        return actions
+    requested = {
+        match.group(0).replace("\\", "/").lstrip("./")
+        for match in _EXPLICIT_READ_RECOVERY_PATH_RE.finditer(goal or "")
+    }
+    if not requested:
+        return actions
+    try:
+        root = Path(workspace_path).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return actions
+    bounded: list[str] = []
+    for action in actions:
+        parsed = _parse_action(action)
+        if parsed is None:
+            bounded.append(action)
+            continue
+        name, args = parsed
+        path = args.get("path") if isinstance(args, dict) else None
+        if (
+            name != "read_file"
+            or not isinstance(path, str)
+            or path.replace("\\", "/").lstrip("./") not in requested
+            or "offset" in args
+            or "limit" in args
+        ):
+            bounded.append(action)
+            continue
+        try:
+            candidate = (root / path).resolve()
+            oversized = (
+                candidate.is_relative_to(root)
+                and candidate.is_file()
+                and candidate.stat().st_size > 100 * 1024
+            )
+        except (OSError, RuntimeError):
+            oversized = False
+        if not oversized:
+            bounded.append(action)
+            continue
+        ranged_args = dict(args)
+        ranged_args.update({"offset": 0, "limit": 400})
+        bounded.append(f"read_file({json.dumps(ranged_args, ensure_ascii=False)})")
+    return bounded
 
 
 def _bounded_public_evidence_excerpt(value: Any, *, max_chars: int = 700) -> str:
@@ -3787,6 +3966,24 @@ def stream_react_loop(
                 steps.append(step)
                 break
 
+        if maybe_final is None and not step.action and not step.observation:
+            _recovered_read_actions = _recover_explicit_read_actions(
+                goal=intent.normalized_goal,
+                model_text=step.thought or text,
+                workspace_path=(
+                    _effective_wp if isinstance(_effective_wp, str) else None
+                ),
+                steps=steps,
+                executor=executor,
+                read_only=_read_only_turn,
+            )
+            if _recovered_read_actions:
+                step.actions = _recovered_read_actions
+                step.action = "; ".join(_recovered_read_actions)
+                if not step.thought:
+                    step.thought = text
+                consecutive_format_violations = 0
+
         if _is_format_violation(step, maybe_final):
             # Length-limited generation gets a free pass on the
             # zero-anchor format violation. The model didn't emit a
@@ -3961,6 +4158,7 @@ def stream_react_loop(
         observation: str | None = step.observation or None
         resolved_name: str | None = None
         action_args: dict[str, Any] | None = None
+        beak_step: Step | None = None
         tool_ok = False
         tool_action_requested = (
             tools_active and step.action and step.action.lower() not in {"none", "n/a", ""}
@@ -3970,6 +4168,18 @@ def stream_react_loop(
             step.actions, _duplicate_action_count = _deduplicate_actions(step.actions)
             step.action = "; ".join(step.actions)
             tool_action_requested = bool(step.actions)
+        if tool_action_requested:
+            _candidate_actions = step.actions or [step.action]
+            _candidate_actions = _bound_explicit_large_reads(
+                goal=intent.normalized_goal,
+                workspace_path=(
+                    _effective_wp if isinstance(_effective_wp, str) else None
+                ),
+                actions=_candidate_actions,
+                read_only=_read_only_turn,
+            )
+            step.actions = _candidate_actions
+            step.action = "; ".join(_candidate_actions)
         _current_action_fingerprint = ""
         _repeated_failure_skipped = False
         if tool_action_requested and len(step.actions or [step.action]) == 1:
@@ -4484,6 +4694,16 @@ def stream_react_loop(
                 observation = _placeholder_observation(step.action)
             step.observation = observation
 
+        _direct_command_answer = _narrow_command_direct_answer(
+            goal=intent.normalized_goal,
+            step=step,
+            beak_step=beak_step,
+            resolved_name=resolved_name,
+            succeeded=tool_ok,
+        )
+        if _direct_command_answer is not None:
+            maybe_final = _direct_command_answer
+
         if _duplicate_action_count and step.observation:
             step.observation += (
                 "\n\n[duplicate-tools-collapsed] The provider emitted "
@@ -4601,6 +4821,7 @@ def stream_react_loop(
         _model_result_update = ""
         if (
             _realtime_public_narrative
+            and maybe_final is None
             and (not _model_supplied_update or _quiet_evidence_due)
             and (
                 _meaningful_result_checkpoint

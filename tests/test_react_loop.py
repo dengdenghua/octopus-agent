@@ -1764,6 +1764,96 @@ def test_shell_command_location_is_not_misclassified_as_project_inspection() -> 
     assert _goal_requests_project_inspection(inspection_goal)
 
 
+def test_read_only_progress_updates_do_not_require_code_mutation() -> None:
+    goal = (
+        "只读分析 runtime/core/cerebrum/react_loop.py 与 "
+        "runtime/core/cerebrum/todo_protocol.py，不修改文件；"
+        "过程中基于实际证据自然更新进展，最后用三点回答。"
+    )
+    assert not _goal_requests_code_mutation(goal)
+    assert _goal_requests_code_mutation("更新 runtime/core/cerebrum/todo_protocol.py 并运行测试")
+
+
+def test_narrow_read_only_command_finishes_from_receipt_without_second_model_round() -> None:
+    router = _ScriptedRouter(
+        ['Thought: run the requested probe\nAction: exec_shell({"command": "pwd"})']
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent(
+        "只读权限语义验收：必须使用 exec_shell 在当前项目执行 pwd，"
+        "不修改任何文件；命令结束后只回答输出目录。"
+    )
+    intent.user_context.update({"mode": "code", "auto_approve": True})
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=3))
+
+    assert result is not None and result.success
+    assert result.final_answer == "ok"
+    assert router.calls == 1
+    assert "".join(event["delta"] for event in events if event["type"] == "text_delta") == "ok"
+    assert not any(
+        event.get("type") == "tool_start" and event.get("tool_name") == "todo_write"
+        for event in events
+    )
+
+
+def test_read_only_named_files_recover_from_prose_without_tool_call(tmp_path: Any) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "large.py").write_text("value = 1\n" * 12_000, encoding="utf-8")
+    (source / "small.py").write_text("flag = True\n", encoding="utf-8")
+    router = _ScriptedRouter(
+        [
+            "Thought: I need to read both named files first. Let me open them now.",
+            "Final Answer: 两个文件都已读取，复杂任务继续走正常综合路径。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent(
+        "只读分析 src/large.py 与 src/small.py，必须读取两个文件后回答；不要修改文件。"
+    )
+    intent.user_context.update(
+        {"mode": "code", "workspace_path": str(tmp_path), "auto_approve": True}
+    )
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=3))
+
+    assert result is not None and result.success
+    assert router.calls == 2
+    starts = [event for event in events if event.get("type") == "tool_start"]
+    assert [event["tool_name"] for event in starts] == ["read_file", "read_file"]
+    previews = [event["input_preview"] for event in starts]
+    assert previews[0] == {"path": "src/large.py", "offset": 0, "limit": 400}
+    assert previews[1] == {"path": "src/small.py"}
+
+
+def test_model_large_named_read_is_bounded_before_dispatch(tmp_path: Any) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "large.py").write_text("value = 1\n" * 12_000, encoding="utf-8")
+    router = _ScriptedRouter(
+        [
+            'Thought: read it\nAction: read_file({"path": "src/large.py"})',
+            "Final Answer: 已完成有界读取。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("只读分析 src/large.py 后回答；不要修改文件。")
+    intent.user_context.update(
+        {"mode": "code", "workspace_path": str(tmp_path), "auto_approve": True}
+    )
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=3))
+
+    assert result is not None and result.success
+    start = next(event for event in events if event.get("type") == "tool_start")
+    assert start["input_preview"] == {
+        "path": "src/large.py",
+        "offset": 0,
+        "limit": 400,
+    }
+
+
 def test_hidden_reasoning_timeout_retries_once_without_extended_thinking(monkeypatch) -> None:
     from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
 
@@ -3098,7 +3188,7 @@ def _build_registry_with_skills() -> SkillRegistry:
     def _list_cwd(path: str = ".") -> dict:
         return {"path": path, "entries": ["runtime", "frontend", "tests"]}
 
-    def _read_file(path: str = "") -> dict:
+    def _read_file(path: str = "", **_kwargs: Any) -> dict:
         return {"path": path, "content": "mock content"}
 
     def _todo_write(todos: list[dict] | None = None) -> dict:

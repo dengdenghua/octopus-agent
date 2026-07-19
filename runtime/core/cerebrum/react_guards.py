@@ -298,6 +298,21 @@ def _goal_requests_code_mutation(goal: str) -> bool:
         " ",
         lowered,
     )
+    # Progress narration is conversation output, not a workspace mutation.
+    # Phrases such as “自然更新进展” previously matched the bare 更新 marker
+    # and forced read-only analysis turns behind the implementation-write gate.
+    lowered = re.sub(
+        r"(?:自然|持续|及时|实时|定期)?\s*更新\s*(?:进展|进度|状态|过程|消息|说明)",
+        " ",
+        lowered,
+    )
+    lowered = re.sub(
+        r"\b(?:update|post|share|provide)\s+(?:the\s+)?"
+        r"(?:progress|status)(?:\s+updates?)?\b|"
+        r"\b(?:progress|status)\s+updates?\b",
+        " ",
+        lowered,
+    )
     markers = (
         "implement",
         "change",
