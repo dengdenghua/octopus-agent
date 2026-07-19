@@ -13,7 +13,8 @@
  *   - 左上汉堡菜单 → 弹出左侧抽屉（新建对话 + 历史对话）
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AppWindowIcon,
   BookOpenIcon,
@@ -79,6 +80,7 @@ import {
 } from "@/core/tentacle/api";
 import { useScreenStream } from "@/core/tentacle/use-screen-stream";
 import { usePcScreenStream } from "@/core/tentacle/use-pc-screen-stream";
+import { useAuth } from "@/providers/AuthProvider";
 
 // ── Types ──────────────────────────────────────────────
 
@@ -198,6 +200,8 @@ function deriveTitle(messages: ChatMessage[]): string {
 
 export default function MobilePage() {
   const [tab, setTab] = useState<Tab>("chat");
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   // Active device (shared across tabs)
   const [activeDevice, setActiveDevice] = useState<ActiveDevice>({
@@ -223,6 +227,14 @@ export default function MobilePage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] =
     useState<string>(newConversationId());
+
+  const accountName =
+    user?.username || user?.email || user?.mobile || user?.actor_id || "访客";
+
+  const handleLogout = useCallback(async () => {
+    await logout();
+    navigate("/");
+  }, [logout, navigate]);
 
   // 派生当前对话
   const activeConversation = useMemo(
@@ -453,6 +465,9 @@ export default function MobilePage() {
               onOpenDrawer={() => setDrawerOpen(true)}
               onOpenDevicePreview={() => setDevicePreviewOpen(true)}
               onRefresh={refresh}
+              displayName={accountName}
+              onOpenSkills={() => setTab("skills")}
+              onLogout={handleLogout}
             />
           )}
         </div>
@@ -493,10 +508,6 @@ export default function MobilePage() {
     </div>
   );
 }
-
-// ── useMemo fallback ───────────────────────────────────
-
-import { useMemo } from "react";
 
 // ── Status Bar (mockup) ────────────────────────────────
 
@@ -696,7 +707,9 @@ function Drawer({
                     <MessageCircleIcon
                       className={cn(
                         "size-3.5 shrink-0",
-                        c.isActive ? "text-blue-500" : "text-muted-foreground/70",
+                        c.isActive
+                          ? "text-blue-500"
+                          : "text-muted-foreground/70",
                       )}
                     />
                     <span
@@ -884,7 +897,9 @@ function DeviceItem({
           {label}
         </div>
         {sub && (
-          <div className="truncate text-[10px] text-muted-foreground/70">{sub}</div>
+          <div className="truncate text-[10px] text-muted-foreground/70">
+            {sub}
+          </div>
         )}
       </div>
       <div className="flex items-center gap-1.5">
@@ -1024,7 +1039,9 @@ function PreviewCard({
         <div className="truncate text-[13px] font-medium leading-tight">
           {label}
         </div>
-        <div className="truncate text-[10px] text-muted-foreground/70">{sub}</div>
+        <div className="truncate text-[10px] text-muted-foreground/70">
+          {sub}
+        </div>
       </div>
       <div
         className={cn(
@@ -1070,12 +1087,7 @@ function BottomTabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
                   : "text-muted-foreground/70 dark:text-muted-foreground",
               )}
             >
-              <Icon
-                className={cn(
-                  "size-5",
-                  active && "fill-foreground",
-                )}
-              />
+              <Icon className={cn("size-5", active && "fill-foreground")} />
               <span className="text-[11px] font-medium">{label}</span>
             </button>
           );
@@ -1297,7 +1309,9 @@ function TasksTab({
                     >
                       <Icon className="size-5 shrink-0 text-muted-foreground dark:text-muted-foreground/70" />
                       <span className="flex-1 text-sm">{task.label}</span>
-                      <span className="text-xs text-muted-foreground/70">{task.tag}</span>
+                      <span className="text-xs text-muted-foreground/70">
+                        {task.tag}
+                      </span>
                     </div>
                   );
                 })}
@@ -1432,6 +1446,9 @@ function MeTab({
   onOpenDrawer,
   onOpenDevicePreview,
   onRefresh,
+  displayName,
+  onOpenSkills,
+  onLogout,
 }: {
   activeDevice: ActiveDevice;
   devices: TentacleDevice[];
@@ -1440,6 +1457,9 @@ function MeTab({
   onOpenDrawer: () => void;
   onOpenDevicePreview: () => void;
   onRefresh: () => Promise<void>;
+  displayName: string;
+  onOpenSkills: () => void;
+  onLogout: () => Promise<void>;
 }) {
   return (
     <>
@@ -1447,6 +1467,7 @@ function MeTab({
         <div className="flex items-center gap-3">
           <button
             onClick={onOpenDrawer}
+            aria-label="打开侧栏菜单"
             className="rounded-lg p-1.5 hover:bg-muted dark:hover:bg-muted-foreground"
           >
             <MenuIcon className="size-5" />
@@ -1463,7 +1484,7 @@ function MeTab({
                 登
               </div>
             </div>
-            <div className="text-sm font-medium">登华</div>
+            <div className="text-sm font-medium">{displayName}</div>
           </div>
 
           <div className="rounded-2xl border border-border bg-white p-4 dark:border-border dark:bg-card">
@@ -1484,7 +1505,11 @@ function MeTab({
             </div>
 
             <div className="mt-4 space-y-3">
-              <MeRow icon={WrenchIcon} label="我的技能" onClick={() => {}} />
+              <MeRow
+                icon={WrenchIcon}
+                label="我的技能"
+                onClick={onOpenSkills}
+              />
               <MeRow
                 icon={MonitorSmartphoneIcon}
                 label="管理我的设备"
@@ -1508,7 +1533,9 @@ function MeTab({
               <div
                 className={cn(
                   "text-[11px]",
-                  pcScreenStats?.running ? "text-green-500" : "text-muted-foreground/70",
+                  pcScreenStats?.running
+                    ? "text-green-500"
+                    : "text-muted-foreground/70",
                 )}
               >
                 {pcScreenStats?.running ? "运行中" : "未启动"}
@@ -1544,6 +1571,8 @@ function MeTab({
             <MeRow
               icon={HelpCircleIcon}
               label="帮助与反馈"
+              rightText="暂未开放"
+              disabled
               onClick={() => {}}
             />
             <hr className="mx-4 border-border dark:border-border" />
@@ -1551,11 +1580,16 @@ function MeTab({
               icon={InfoIcon}
               label="关于"
               rightText={APP_VERSION}
+              disabled
               onClick={() => {}}
             />
           </div>
 
-          <button className="w-full rounded-2xl bg-white py-3.5 text-sm font-medium text-red-500 hover:bg-red-50 dark:bg-card dark:hover:bg-red-500/10">
+          <button
+            type="button"
+            onClick={() => void onLogout()}
+            className="w-full rounded-2xl bg-white py-3.5 text-sm font-medium text-red-500 hover:bg-red-50 dark:bg-card dark:hover:bg-red-500/10"
+          >
             退出登录
           </button>
         </div>
@@ -1569,21 +1603,29 @@ function MeRow({
   label,
   rightText,
   onClick,
+  disabled = false,
 }: {
   icon: typeof WrenchIcon;
   label: string;
   rightText?: string;
   onClick: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-3 px-1 py-2 text-left"
+      disabled={disabled}
+      className="flex w-full items-center gap-3 px-1 py-2 text-left disabled:cursor-not-allowed disabled:opacity-60"
     >
       <Icon className="size-4 shrink-0 text-muted-foreground dark:text-muted-foreground/70" />
       <span className="flex-1 text-sm">{label}</span>
-      {rightText && <span className="text-xs text-muted-foreground/70">{rightText}</span>}
-      <ChevronRightIcon className="size-4 text-muted-foreground/50" />
+      {rightText && (
+        <span className="text-xs text-muted-foreground/70">{rightText}</span>
+      )}
+      {!disabled && (
+        <ChevronRightIcon className="size-4 text-muted-foreground/50" />
+      )}
     </button>
   );
 }
