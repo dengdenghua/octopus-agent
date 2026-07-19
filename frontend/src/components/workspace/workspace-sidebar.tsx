@@ -665,6 +665,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { pathname, search } = useLocation();
   const { t } = useI18n();
   const { materialTheme } = useAppearance();
+  const { isMobile, openMobile, setOpenMobile } = useSidebar();
   const queryClient = useQueryClient();
   const apiClient = useMemo(() => getAPIClient(), []);
   // Starting from `/new` swaps in a server thread id before the live page can
@@ -721,27 +722,82 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     | "automation"
     | "privacy"
   >("appearance");
+  const pendingSettingsOpenRef = useRef<number | null>(null);
+  const pendingSettingsFocusRef = useRef<number | null>(null);
+  const restoreSettingsFocusRef = useRef(false);
 
-  const openSettingsSection = useCallback((tab?: string) => {
-    const next =
-      tab === "account" ||
-      tab === "appearance" ||
-      tab === "models" ||
-      tab === "memory" ||
-      tab === "notification" ||
-      tab === "about" ||
-      tab === "automation" ||
-      tab === "privacy"
-        ? tab
-        : "appearance";
-    setSettingsDefaultSection(next);
-    setSettingsOpen(true);
+  const openSettingsSection = useCallback(
+    (tab?: string) => {
+      const next =
+        tab === "account" ||
+        tab === "appearance" ||
+        tab === "models" ||
+        tab === "memory" ||
+        tab === "notification" ||
+        tab === "about" ||
+        tab === "automation" ||
+        tab === "privacy"
+          ? tab
+          : "appearance";
+
+      const openDialog = () => {
+        pendingSettingsOpenRef.current = null;
+        setSettingsDefaultSection(next);
+        setSettingsOpen(true);
+      };
+
+      if (isMobile && openMobile) {
+        restoreSettingsFocusRef.current = true;
+        setOpenMobile(false);
+        if (pendingSettingsOpenRef.current !== null) {
+          window.clearTimeout(pendingSettingsOpenRef.current);
+        }
+        // Radix needs one event turn to release the Sheet's focus guards.
+        // Opening the settings Dialog in the same turn leaves two modal roots
+        // mounted and can immediately dismiss or trap focus behind the dialog.
+        pendingSettingsOpenRef.current = window.setTimeout(openDialog, 0);
+        return;
+      }
+
+      openDialog();
+    },
+    [isMobile, openMobile, setOpenMobile],
+  );
+
+  useEffect(
+    () => () => {
+      if (pendingSettingsOpenRef.current !== null) {
+        window.clearTimeout(pendingSettingsOpenRef.current);
+      }
+      if (pendingSettingsFocusRef.current !== null) {
+        window.clearTimeout(pendingSettingsFocusRef.current);
+      }
+    },
+    [],
+  );
+
+  const handleSettingsOpenChange = useCallback((nextOpen: boolean) => {
+    setSettingsOpen(nextOpen);
+    if (nextOpen || !restoreSettingsFocusRef.current) return;
+
+    restoreSettingsFocusRef.current = false;
+    pendingSettingsFocusRef.current = window.setTimeout(() => {
+      pendingSettingsFocusRef.current = null;
+      const trigger = document.querySelector<HTMLElement>(
+        '[data-sidebar="trigger"]',
+      );
+      if (trigger && trigger.getClientRects().length > 0) trigger.focus();
+    }, 0);
   }, []);
 
   // Listen for open-settings event via EventBus
-  useEvent("ui:open-settings", (payload) => {
-    openSettingsSection(payload.tab);
-  });
+  useEvent(
+    "ui:open-settings",
+    (payload) => {
+      openSettingsSection(payload.tab);
+    },
+    [],
+  );
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -756,10 +812,10 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   }, [openSettingsSection]);
 
   useEffect(() => {
-    const handler = () => setSettingsOpen(false);
+    const handler = () => handleSettingsOpenChange(false);
     window.addEventListener("octopus:close-settings", handler);
     return () => window.removeEventListener("octopus:close-settings", handler);
-  }, []);
+  }, [handleSettingsOpenChange]);
 
   // Conversation history stays scoped to the currently-active agent
   // so the left-bottom persona switch only affects the current chat lane.
@@ -1279,7 +1335,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
           no-op. */}
       <SettingsDialog
         open={settingsOpen}
-        onOpenChange={setSettingsOpen}
+        onOpenChange={handleSettingsOpenChange}
         defaultSection={settingsDefaultSection}
       />
     </>

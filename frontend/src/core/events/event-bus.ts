@@ -6,7 +6,7 @@
  */
 
 import { swallow } from "@/core/utils/log";
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 
 // 事件类型定义
 export interface EventMap {
@@ -171,8 +171,11 @@ export function useEvent<T extends EventName>(
   listener: Listener<T>,
   deps: React.DependencyList = [],
 ): void {
+  const listenerRef = useRef(listener);
+  listenerRef.current = listener;
+
   useEffect(() => {
-    return eventBus.on(event, listener);
+    return eventBus.on(event, (payload) => listenerRef.current(payload));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event, ...deps]);
 }
