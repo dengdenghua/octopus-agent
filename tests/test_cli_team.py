@@ -112,6 +112,8 @@ def test_one_member_failure_is_isolated(tmp_path: Path) -> None:
     assert out["next_action"] == "review_successes_retry_failed"
     assert "4/5 member(s) succeeded" in out["summary"]
     assert "a_codex → Codex CLI 需要登录或授权" in out["summary"]
+    assert "Suggested fix: 请打开原生 CLI：`codex`" in out["summary"]
+    assert any(line.startswith("Suggested fix: ") for line in out["summary_lines"])
     assert out["failed_members"] == [
         {
             "agent_id": "a_codex",

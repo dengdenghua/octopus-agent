@@ -166,6 +166,9 @@ def _summarize_cli_team(goal: str, results: list[dict[str, Any]]) -> dict[str, A
             failure_bits.append(f"{label} → {title}")
         extra = "" if len(failed_members) <= 4 else f", +{len(failed_members) - 4} more"
         lines.append(f"Needs attention: {', '.join(failure_bits)}{extra}.")
+        first_hint = next((m["fix_hint"] for m in failed_members if m["fix_hint"]), "")
+        if first_hint:
+            lines.append(f"Suggested fix: {first_hint}")
     lines.append("Diffs are isolated worktree candidates; nothing was auto-merged.")
     return {
         "summary": " ".join(lines),
