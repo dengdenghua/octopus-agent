@@ -43,15 +43,11 @@ import {
   agentRunStatusLightClass,
   agentRunStatusLightPulseClass,
 } from "../agent-run-status";
-import {
-  TAORBadge,
-  IterationDivider,
-} from "@/components/workspace/taor-indicator";
+import { IterationDivider } from "@/components/workspace/taor-indicator";
 import { useI18n } from "@/core/i18n/hooks";
 import { useToolEffects } from "@/core/observability/tool-effects-context";
 import {
   extractContentFromMessage,
-  extractReasoningContentFromMessage,
   findToolCallResult,
   hasToolCalls,
   isLikelyFinalAnswerContent,
@@ -70,12 +66,6 @@ import { ClarificationChoiceCard } from "./clarification-choice-card";
 import { GroundingChip } from "./grounding-chip";
 import { MarkdownContent } from "./markdown-content";
 import { stripTraceLabelPrefixes } from "./trace-labels";
-import {
-  actionStateLabel,
-  inferToolActionKind,
-  inferToolActionKindFromText,
-  reasoningStateLabel,
-} from "../tool-action-kind";
 
 const INTERNAL_PROGRESS_PATTERNS = [
   /我会先调用必要工具/,
@@ -147,9 +137,6 @@ const HIDDEN_TIMELINE_TOOL_NAMES = new Set([
   "recall",
 ]);
 
-const PUBLIC_TRACE_TOOL_RE =
-  /\b(web_search|image_search|fetch_url|web_fetch|read_file|read_file_range|write_file|str_replace|edit_code|ls|list_cwd|glob_files|call_agent_parallel|call_agent|bb_keys|query_skill|skill_search|apply_skill|deep-research|deep_research|deep-research-swarm|recall|todo_write|write_todos)\b/i;
-
 function isHiddenTimelineToolName(name: string): boolean {
   const normalized = name.toLowerCase();
   return (
@@ -166,41 +153,6 @@ function isTeamCallToolName(name: string): boolean {
     normalized === "delegate_agent" ||
     normalized === "spawn_agent"
   );
-}
-
-function extractTraceToolName(text: string): string | null {
-  const functionMatch = text.match(/function=([A-Za-z0-9_-]+)/i);
-  if (functionMatch?.[1]) return functionMatch[1];
-  const directMatch = text.match(PUBLIC_TRACE_TOOL_RE);
-  if (directMatch?.[1]) return directMatch[1];
-  const callMatch = text.match(/\b([A-Za-z_][A-Za-z0-9_-]*)\s*\(/);
-  return callMatch?.[1] ?? null;
-}
-
-function extractTraceTarget(text: string, name: string): string | undefined {
-  const targetKey = /search|glob/i.test(name)
-    ? "query"
-    : /fetch|url|web/i.test(name)
-      ? "url"
-      : /read|write|edit|list|ls|path|file/i.test(name)
-        ? "path"
-        : "target";
-  const xmlMatch = text.match(
-    new RegExp(`<parameter=${targetKey}>([\\s\\S]*?)<\\/parameter>`, "i"),
-  );
-  if (xmlMatch?.[1]?.trim()) return xmlMatch[1].trim();
-  const jsonMatch =
-    text.match(new RegExp(`"${targetKey}"\\s*:\\s*"([^"]+)"`, "i")) ??
-    text.match(/"query"\s*:\s*"([^"]+)"/i) ??
-    text.match(/"url"\s*:\s*"([^"]+)"/i) ??
-    text.match(/"path"\s*:\s*"([^"]+)"/i) ??
-    text.match(/"name"\s*:\s*"([^"]+)"/i) ??
-    text.match(/"role"\s*:\s*"([^"]+)"/i);
-  if (jsonMatch?.[1]?.trim()) return jsonMatch[1].trim();
-  const knownAgentMatch = text.match(
-    /(Zero|Eve|Kane|Raven|Noah|Luna|Shion|Leon|Market Researcher|Coder|Vibe Selling|Ecommerce Mind)/i,
-  );
-  return knownAgentMatch?.[1];
 }
 
 function publicActionTextFromTraceTool(
@@ -240,73 +192,7 @@ function publicActionTextFromTraceTool(
   return null;
 }
 
-function publicStatusFromPrivateReasoning(
-  text: string,
-  t: ReturnType<typeof useI18n>["t"] | undefined,
-): string | null {
-  if (!t) return null;
-  if (
-    /SOUL\.md|hard system rule|system prompt|hidden chain-of-thought/i.test(
-      text,
-    )
-  ) {
-    return null;
-  }
-  if (
-    /sub-?agent.*(?:round cap|timeout|exceeded)|round cap|timeout/i.test(text)
-  ) {
-    return t.messageGrouping.teammateTimeout;
-  }
-  if (/\u5b50\s*agent.*\u8d85\u65f6|\u8d85\u65f6.*\u63a5\u7ba1/.test(text)) {
-    return t.messageGrouping.teammateTimeout;
-  }
-  if (/\b(?:the user|user asks|request|objective)\b/i.test(text)) {
-    return t.messageGrouping.clarifyTaskDirection;
-  }
-  if (
-    /\b(?:write|draft|synthesize|compile|report)\b/i.test(text) ||
-    /\u62a5\u544a|\u64b0\u5199|\u6574\u7406/.test(text)
-  ) {
-    return t.messageGrouping.synthesizeFindings;
-  }
-  if (
-    /\b(?:search|query|look up|fetch|source)\b/i.test(text) ||
-    /\u641c\u7d22|\u8d44\u6599|\u7f51\u9875/.test(text)
-  ) {
-    return t.messageGrouping.searchSources;
-  }
-  if (
-    /\b(?:plan|todo|next step)\b/i.test(text) ||
-    /\u8ba1\u5212|\u4e0b\u4e00\u6b65|\u89c4\u5212/.test(text)
-  ) {
-    return t.messageGrouping.planNextStep;
-  }
-  if (
-    /\b(?:call_agent|teammate|colleague|Market Researcher)\b/i.test(text) ||
-    /\u53ec\u5524|\u56e2\u961f|\u540c\u4e8b/.test(text)
-  ) {
-    return t.messageGrouping.callTeammate;
-  }
-  return null;
-}
-
-function looksLikePrivateReasoningText(text: string): boolean {
-  return (
-    /\b(?:let me|i(?:'ll| will| need to| should| can)|actually|looking at|since the user|my memory|blackboard|ddg|backend|todo|skill|tool|web_search|fetch_url|query_skill|bb_keys|call_agent_parallel)\b/i.test(
-      text,
-    ) ||
-    /\u8ba9\u6211|\u6211\u9700\u8981|\u6211\u5e94\u8be5|\u5b9e\u9645\u4e0a|\u9ed1\u677f|\u641c\u7d22\u540e\u7aef|\u5de5\u5177|\u6280\u80fd|todo/.test(
-      text,
-    )
-  );
-}
-
-function normalizePublicTimelineChunk(
-  chunk: string,
-  t: ReturnType<typeof useI18n>["t"] | undefined,
-  options: { allowPlainThoughts: boolean },
-): string | null {
-  if (!t) return null;
+function normalizePublicTimelineChunk(chunk: string): string | null {
   const stripped = stripTraceLabelPrefixes(
     chunk
       .replace(/<\/?(?:tool|tool_call|function|thought|thinking)[^>]*>/gi, " ")
@@ -317,30 +203,13 @@ function normalizePublicTimelineChunk(
   if (FIRST_PHASE_RE.test(stripped)) {
     return compactReasoningSummary(stripped, 120);
   }
-  const toolName = extractTraceToolName(chunk);
-  if (toolName) {
-    const actionText = publicActionTextFromTraceTool(
-      toolName,
-      extractTraceTarget(chunk, toolName),
-      t,
-    );
-    return actionText ? t.message.actionLabel(actionText) : null;
-  }
-  if (!options.allowPlainThoughts) {
-    const publicStatus = publicStatusFromPrivateReasoning(stripped, t);
-    if (publicStatus) return publicStatus;
-  }
   if (
     /^\s*Observation\s*:/i.test(chunk) ||
     /\(real tool execution/i.test(chunk)
   ) {
     return null;
   }
-  if (!options.allowPlainThoughts && looksLikePrivateReasoningText(stripped)) {
-    return null;
-  }
-  if (options.allowPlainThoughts) return stripped;
-  return null;
+  return stripped;
 }
 
 function dedupeTimelineChunks(chunks: string[]): string[] {
@@ -928,20 +797,10 @@ function ReasoningStepGroup({
     <div key={group.id}>
       {renderIterationDivider()}
       <Collapsible open={open} onOpenChange={onOpenChange}>
-        <div className="mb-1 flex min-w-0 items-center gap-2">
-          <TAORBadge
-            phase="think"
-            active={active}
-            labelOverride={reasoningStateLabel(summary, active, t.taor.think)}
-            className="shrink-0"
-          />
-          {group.steps.length > 1 && (
-            <CollapsibleTrigger
-              className={cn(
-                "group flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left",
-                "text-sm text-foreground/85 transition-colors hover:bg-muted/40 hover:text-foreground",
-              )}
-            >
+        {group.steps.length > 1 && (
+          <div className="mb-1 flex min-w-0 items-center gap-2">
+            <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-[11px] leading-4 text-muted-foreground/60 transition-colors hover:text-muted-foreground">
+              <ProcessStateDot active={active} />
               <span className="text-muted-foreground/70 shrink-0 text-xs font-medium">
                 {countLabel.trim()}
               </span>
@@ -953,8 +812,8 @@ function ReasoningStepGroup({
                 )}
               />
             </CollapsibleTrigger>
-          )}
-        </div>
+          </div>
+        )}
         {group.steps.length === 1 ? (
           <NumberedReasoningStep
             index={1}
@@ -1005,26 +864,14 @@ function ActionCallbackGroup({
       : "";
   const onlyStep = group.steps[0];
   if (!onlyStep) return null;
-  const labelStep = active ? group.steps[group.steps.length - 1] : onlyStep;
-  const activeKind = inferToolActionKindFromText(labelStep?.actionText ?? "");
   return (
     <div key={group.id}>
       {renderIterationDivider()}
       <Collapsible open={open} onOpenChange={onOpenChange}>
-        <div className="mb-1 flex min-w-0 items-center gap-2">
-          <TAORBadge
-            phase="act"
-            active={active}
-            labelOverride={actionStateLabel(activeKind, active, t.taor.think)}
-            className="shrink-0"
-          />
-          {group.steps.length > 1 && (
-            <CollapsibleTrigger
-              className={cn(
-                "group flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left",
-                "text-[11px] text-muted-foreground/70 transition-colors hover:bg-muted/40 hover:text-muted-foreground",
-              )}
-            >
+        {group.steps.length > 1 && (
+          <div className="mb-1 flex min-w-0 items-center gap-2">
+            <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-[11px] leading-4 text-muted-foreground/60 transition-colors hover:text-muted-foreground">
+              <ProcessStateDot active={active} />
               <span className="shrink-0 font-medium text-muted-foreground/60">
                 {countLabel.trim()}
               </span>
@@ -1036,8 +883,8 @@ function ActionCallbackGroup({
                 )}
               />
             </CollapsibleTrigger>
-          )}
-        </div>
+          </div>
+        )}
         {group.steps.length === 1 ? (
           <NumberedActionStep
             index={1}
@@ -1060,6 +907,22 @@ function ActionCallbackGroup({
         )}
       </Collapsible>
     </div>
+  );
+}
+
+function ProcessStateDot({ active }: { active: boolean }) {
+  return (
+    <span className="relative flex size-1.5 shrink-0 items-center justify-center">
+      {active && (
+        <span className="absolute inline-flex size-1.5 animate-pulse rounded-full bg-primary/25" />
+      )}
+      <span
+        className={cn(
+          "relative inline-flex size-1 rounded-full",
+          active ? "bg-primary/60" : "bg-muted-foreground/30",
+        )}
+      />
+    </span>
   );
 }
 
@@ -1299,7 +1162,6 @@ function ToolCall({
   const { t } = useI18n();
   const { setOpen, autoOpen, autoSelect, selectedArtifact, select } =
     useArtifacts();
-  const isActive = isLoading && isLast;
 
   if (name === "web_search") {
     let label: React.ReactNode = t.toolCalls.searchForRelatedInfo;
@@ -1312,16 +1174,6 @@ function ToolCall({
         key={id}
         label={
           <div className="flex min-w-0 items-center gap-2">
-            <TAORBadge
-              phase="act"
-              active={isActive}
-              labelOverride={actionStateLabel(
-                inferToolActionKind(name, args),
-                isActive,
-                t.taor.think,
-              )}
-              className="shrink-0"
-            />
             <span className="min-w-0 truncate">{label}</span>
           </div>
         }
@@ -1350,16 +1202,6 @@ function ToolCall({
         key={id}
         label={
           <div className="flex min-w-0 items-center gap-2">
-            <TAORBadge
-              phase="act"
-              active={isActive}
-              labelOverride={actionStateLabel(
-                inferToolActionKind(name, args),
-                isActive,
-                t.taor.think,
-              )}
-              className="shrink-0"
-            />
             <span className="min-w-0 truncate">{label}</span>
           </div>
         }
@@ -1406,16 +1248,6 @@ function ToolCall({
         key={id}
         label={
           <div className="flex min-w-0 items-center gap-2">
-            <TAORBadge
-              phase="act"
-              active={isActive}
-              labelOverride={actionStateLabel(
-                inferToolActionKind(name, args),
-                isActive,
-                t.taor.think,
-              )}
-              className="shrink-0"
-            />
             <span className="min-w-0 truncate">{t.toolCalls.viewWebPage}</span>
           </div>
         }
@@ -1444,16 +1276,6 @@ function ToolCall({
         key={id}
         label={
           <div className="flex min-w-0 items-center gap-2">
-            <TAORBadge
-              phase="act"
-              active={isActive}
-              labelOverride={actionStateLabel(
-                inferToolActionKind(name, args),
-                isActive,
-                t.taor.think,
-              )}
-              className="shrink-0"
-            />
             {inlineActionLabel(description, path)}
           </div>
         }
@@ -1471,16 +1293,6 @@ function ToolCall({
         key={id}
         label={
           <div className="flex min-w-0 items-center gap-2">
-            <TAORBadge
-              phase="act"
-              active={isActive}
-              labelOverride={actionStateLabel(
-                inferToolActionKind(name, args),
-                isActive,
-                t.taor.think,
-              )}
-              className="shrink-0"
-            />
             {inlineActionLabel(description, path)}
           </div>
         }
@@ -1535,16 +1347,6 @@ function ToolCall({
         className="cursor-pointer"
         label={
           <div className="flex min-w-0 items-center gap-2">
-            <TAORBadge
-              phase="act"
-              active={isActive}
-              labelOverride={actionStateLabel(
-                inferToolActionKind(name, args),
-                isActive,
-                t.taor.think,
-              )}
-              className="shrink-0"
-            />
             {inlineActionLabel(description, path)}
           </div>
         }
@@ -1593,16 +1395,6 @@ function ToolCall({
         key={id}
         label={
           <div className="flex min-w-0 items-center gap-2">
-            <TAORBadge
-              phase="act"
-              active={isActive}
-              labelOverride={actionStateLabel(
-                inferToolActionKind(name, args),
-                isActive,
-                t.taor.think,
-              )}
-              className="shrink-0"
-            />
             {inlineActionLabel(description, command)}
           </div>
         }
@@ -1627,16 +1419,6 @@ function ToolCall({
         key={id}
         label={
           <div className="flex min-w-0 items-center gap-2">
-            <TAORBadge
-              phase="act"
-              active={isActive}
-              labelOverride={actionStateLabel(
-                inferToolActionKind(name, args),
-                isActive,
-                t.taor.think,
-              )}
-              className="shrink-0"
-            />
             <span className="min-w-0 truncate">{t.toolCalls.needYourHelp}</span>
           </div>
         }
@@ -1651,12 +1433,6 @@ function ToolCall({
         key={id}
         label={
           <div className="flex min-w-0 items-center gap-2">
-            <TAORBadge
-              phase="act"
-              active={isActive}
-              labelOverride={actionStateLabel("call", isActive, t.taor.think)}
-              className="shrink-0"
-            />
             {inlineActionLabel(description, target)}
           </div>
         }
@@ -1669,16 +1445,6 @@ function ToolCall({
         key={id}
         label={
           <div className="flex min-w-0 items-center gap-2">
-            <TAORBadge
-              phase="act"
-              active={isActive}
-              labelOverride={actionStateLabel(
-                inferToolActionKind(name, args),
-                isActive,
-                t.taor.think,
-              )}
-              className="shrink-0"
-            />
             <span className="min-w-0 truncate">{t.toolCalls.writeTodos}</span>
           </div>
         }
@@ -1694,16 +1460,6 @@ function ToolCall({
         key={id}
         label={
           <div className="flex min-w-0 items-center gap-2">
-            <TAORBadge
-              phase="act"
-              active={isActive}
-              labelOverride={actionStateLabel(
-                inferToolActionKind(name, args),
-                isActive,
-                t.taor.think,
-              )}
-              className="shrink-0"
-            />
             {inlineActionLabel(description, path)}
           </div>
         }
@@ -2302,6 +2058,18 @@ function compactReasoningSummary(
   return `${normalized.slice(0, max).trimEnd()}...`;
 }
 
+function extractPublicReasoningSummary(message: Message): string | null {
+  if (message.type !== "ai") return null;
+  const additional = message.additional_kwargs;
+  const direct = additional?.public_reasoning_summary;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+
+  const octopus = additional?.octopus;
+  if (typeof octopus !== "object" || octopus === null) return null;
+  const nested = (octopus as Record<string, unknown>).public_reasoning_summary;
+  return typeof nested === "string" && nested.trim() ? nested.trim() : null;
+}
+
 function convertToSteps(
   messages: Message[],
   t?: ReturnType<typeof useI18n>["t"],
@@ -2368,22 +2136,15 @@ function convertToSteps(
       const visibleToolCalls = (tc ?? []).filter(
         (tool_call) => !isHiddenTimelineToolName(tool_call.name),
       );
-      const hasExplicitReasoningContent = Boolean(
-        message.additional_kwargs &&
-        "reasoning_content" in message.additional_kwargs,
-      );
-      const rawReasoning = extractReasoningContentFromMessage(message);
-      const reasoning = isInternalProgressText(rawReasoning)
-        ? null
-        : rawReasoning;
-      // When streaming, the text is already rendered as a bubble above the
-      // timeline by MessageGroup — don't also chop it into reasoning chunks
-      // or it will appear twice. Non-streaming (settled) turns keep the
-      // original behaviour so short preambles still show in the fold.
+      // Raw reasoning_content is private model state. It must never be used
+      // to invent public "thinking" or execution rows. Only an explicitly
+      // public summary, public checkpoint, or an actual tool call belongs in
+      // the conversation timeline.
+      const publicReasoning = extractPublicReasoningSummary(message);
       const rawPublicPreamble =
         tc &&
         tc.length > 0 &&
-        !reasoning &&
+        !publicReasoning &&
         !isLikelyFinalAnswerContent(message) &&
         !isLoading
           ? extractContentFromMessage(message)
@@ -2391,15 +2152,11 @@ function convertToSteps(
       const publicPreamble = isInternalProgressText(rawPublicPreamble)
         ? null
         : rawPublicPreamble;
-      const reasoningText = reasoning ?? publicPreamble;
+      const reasoningText = publicReasoning ?? publicPreamble;
       const reasoningChunks = dedupeTimelineChunks(
         reasoningText
           ? splitReasoningIntoTimelineChunks(reasoningText)
-              .map((chunk) =>
-                normalizePublicTimelineChunk(chunk, t, {
-                  allowPlainThoughts: !hasExplicitReasoningContent,
-                }),
-              )
+              .map((chunk) => normalizePublicTimelineChunk(chunk))
               .filter((chunk): chunk is string => Boolean(chunk?.trim()))
           : [],
       );

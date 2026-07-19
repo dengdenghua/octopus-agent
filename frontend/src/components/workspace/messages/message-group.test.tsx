@@ -232,12 +232,16 @@ describe("MessageGroup reasoning grouping", () => {
       {
         id: "ai-1",
         type: "ai",
-        content: [{ type: "thinking", thinking: "先扫一遍上下文" }],
+        content: "",
+        additional_kwargs: { public_reasoning_summary: "先扫一遍上下文" },
       },
       {
         id: "ai-2",
         type: "ai",
-        content: [{ type: "thinking", thinking: "再整理成可执行步骤" }],
+        content: "",
+        additional_kwargs: {
+          public_reasoning_summary: "再整理成可执行步骤",
+        },
       },
     ];
 
@@ -270,12 +274,10 @@ describe("MessageGroup reasoning grouping", () => {
     const messages: AIMessage[] = Array.from({ length: 4 }, (_, index) => ({
       id: `ai-${index + 1}`,
       type: "ai",
-      content: [
-        {
-          type: "thinking",
-          thinking: `Latest trace thought ${index + 1}.`,
-        },
-      ],
+      content: "",
+      additional_kwargs: {
+        public_reasoning_summary: `Latest trace thought ${index + 1}.`,
+      },
     }));
 
     renderWithProviders(
@@ -301,7 +303,7 @@ describe("MessageGroup reasoning grouping", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("classifies obvious search and tool-protocol chunks as actions", () => {
+  it("never turns private reasoning tool protocol into public actions", () => {
     const message: AIMessage = {
       id: "ai-search",
       type: "ai",
@@ -320,21 +322,17 @@ describe("MessageGroup reasoning grouping", () => {
     });
 
     expect(
-      screen.getByTestId("process-timeline-event-execution"),
-    ).toBeInTheDocument();
+      screen.queryByTestId("process-timeline-event-execution"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Thought")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Let me search for more specific data on this."),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle("Replay 1 previous steps"));
-
+    expect(screen.queryByTitle(/Replay/)).not.toBeInTheDocument();
     expect(
-      screen.queryByText("Let me search for more specific data on this."),
+      screen.queryByText("Search sources: AI Agent SMB opportunity"),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getAllByText("Search sources: AI Agent SMB opportunity").length,
-    ).toBeGreaterThan(0);
     expect(screen.queryByText(/web_search/)).not.toBeInTheDocument();
   });
 
@@ -344,22 +342,19 @@ describe("MessageGroup reasoning grouping", () => {
       {
         id: "ai-1",
         type: "ai",
-        content: [
-          {
-            type: "thinking",
-            thinking: `First I will inspect the request and summarize the path before touching the UI. ${"extra context ".repeat(24)} ${hiddenTail}`,
-          },
-        ],
+        content: "",
+        additional_kwargs: {
+          public_reasoning_summary: `First I will inspect the request and summarize the path before touching the UI. ${"extra context ".repeat(24)} ${hiddenTail}`,
+        },
       },
       {
         id: "ai-2",
         type: "ai",
-        content: [
-          {
-            type: "thinking",
-            thinking: "Second I will choose the next interface step.",
-          },
-        ],
+        content: "",
+        additional_kwargs: {
+          public_reasoning_summary:
+            "Second I will choose the next interface step.",
+        },
       },
     ];
 
@@ -406,16 +401,16 @@ describe("MessageGroup reasoning grouping", () => {
       locale: "en-US",
     });
 
-    expect(screen.getByTitle("View 2 saved steps")).toBeInTheDocument();
+    expect(screen.getByTitle("View 1 saved steps")).toBeInTheDocument();
     expect(screen.queryByText("01")).not.toBeInTheDocument();
     expect(screen.getByText(/laser engraving market 2025/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle("View 2 saved steps"));
+    fireEvent.click(screen.getByTitle("View 1 saved steps"));
 
     expect(screen.getByTitle("Hide saved steps")).toBeInTheDocument();
     expect(
-      screen.getAllByText("Clarify task direction").length,
-    ).toBeGreaterThan(0);
+      screen.queryByText("Clarify task direction"),
+    ).not.toBeInTheDocument();
     expect(
       screen.getAllByText(/laser engraving market 2025/).length,
     ).toBeGreaterThan(0);
@@ -452,7 +447,7 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    expect(screen.getByTitle("View 2 saved steps")).toBeInTheDocument();
+    expect(screen.getByTitle("View 1 saved steps")).toBeInTheDocument();
     expect(
       screen.queryByText("Inspect the user request before editing."),
     ).not.toBeInTheDocument();
@@ -492,14 +487,16 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    expect(screen.getByTitle("Replay 1 previous steps")).toBeInTheDocument();
+    expect(screen.queryByTitle(/Replay/)).not.toBeInTheDocument();
     expect(screen.getByText(/frontend route structure/)).toBeInTheDocument();
 
     rerender(<MessageGroup codeMode messages={messages as never} />);
 
-    expect(screen.getByTitle("View 2 saved steps")).toBeInTheDocument();
+    expect(screen.getByTitle("View 1 saved steps")).toBeInTheDocument();
     expect(screen.queryByTitle("Hide saved steps")).not.toBeInTheDocument();
-    expect(screen.getByText("Clarify task direction")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Clarify task direction"),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByTestId("interleaved-process-timeline"),
     ).toBeInTheDocument();
@@ -543,7 +540,7 @@ describe("MessageGroup reasoning grouping", () => {
       screen.getByTestId("interleaved-process-timeline"),
     ).toBeInTheDocument();
     expect(screen.queryByText("Live process")).not.toBeInTheDocument();
-    expect(screen.getByTitle("Replay 1 previous steps")).toBeInTheDocument();
+    expect(screen.queryByTitle(/Replay/)).not.toBeInTheDocument();
     expect(screen.getByText(/frontend route structure/)).toBeInTheDocument();
   });
 
@@ -640,17 +637,15 @@ describe("MessageGroup reasoning grouping", () => {
     );
 
     expect(screen.queryByTitle("View 2 saved steps")).not.toBeInTheDocument();
-    expect(screen.getByTitle("Replay 1 previous steps")).toBeInTheDocument();
+    expect(screen.queryByTitle(/Replay/)).not.toBeInTheDocument();
     expect(
       screen.queryByText("First inspect the request."),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/laser engraving market 2025/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle("Replay 1 previous steps"));
-
     expect(
-      screen.getAllByText("Clarify task direction").length,
-    ).toBeGreaterThan(0);
+      screen.queryByText("Clarify task direction"),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the lead-in before Phase 1 visible during live streaming", () => {
@@ -660,7 +655,8 @@ describe("MessageGroup reasoning grouping", () => {
         type: "ai",
         content: "",
         additional_kwargs: {
-          reasoning_content: "这个问题需要先确认赛道边界，否则机会点会太泛。",
+          public_reasoning_summary:
+            "这个问题需要先确认赛道边界，否则机会点会太泛。",
         },
       },
       {
@@ -668,7 +664,7 @@ describe("MessageGroup reasoning grouping", () => {
         type: "ai",
         content: "",
         additional_kwargs: {
-          reasoning_content: "Phase 1: 先拆分候选细分赛道。",
+          public_reasoning_summary: "Phase 1: 先拆分候选细分赛道。",
         },
       },
     ];
@@ -723,7 +719,7 @@ describe("MessageGroup reasoning grouping", () => {
     expect(screen.queryByText("更想看哪个行业方向？")).not.toBeInTheDocument();
   });
 
-  it("uses completed labels for historical steps and active labels for the latest step", () => {
+  it("uses a live status dot without synthetic thinking labels", () => {
     const message: AIMessage = {
       id: "ai-1",
       type: "ai",
@@ -744,17 +740,13 @@ describe("MessageGroup reasoning grouping", () => {
       locale: "zh-CN",
     });
 
-    expect(screen.getByTitle("过程回放 1 步")).toBeInTheDocument();
+    expect(screen.queryByTitle(/过程回放/)).not.toBeInTheDocument();
     expect(
       screen.getAllByTestId("process-timeline-event-execution").length,
     ).toBeGreaterThan(0);
     expect(screen.queryByText("思考中")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle("过程回放 1 步"));
-
-    expect(
-      screen.getAllByText("\u641c\u7d22\u8d44\u6599").length,
-    ).toBeGreaterThan(0);
+    expect(screen.getByText(/smart sleep market/)).toBeInTheDocument();
     expect(screen.queryByText("思考中")).not.toBeInTheDocument();
   });
 
@@ -856,13 +848,13 @@ describe("MessageGroup reasoning grouping", () => {
     expect(screen.queryByText(/ipython/)).not.toBeInTheDocument();
     expect(screen.queryByText("继续检查输出文件。")).not.toBeInTheDocument();
     expect(screen.queryByText("执行动作")).not.toBeInTheDocument();
-    expect(screen.getAllByText("整理调研结果").length).toBeGreaterThan(0);
+    expect(screen.queryByText("整理调研结果")).not.toBeInTheDocument();
     expect(screen.queryByText(/ipython/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Action:/)).not.toBeInTheDocument();
     expect(screen.queryByText("执行中")).not.toBeInTheDocument();
   });
 
-  it("uses specific labels for common action categories", () => {
+  it("uses tool targets without synthetic action badges", () => {
     const messages: AIMessage[] = [
       {
         id: "ai-1",
@@ -903,8 +895,10 @@ describe("MessageGroup reasoning grouping", () => {
 
     fireEvent.click(screen.getByTitle("过程回放 2 步"));
 
-    expect(screen.getByText("已浏览目录")).toBeInTheDocument();
-    expect(screen.getByText("已读取")).toBeInTheDocument();
+    expect(screen.queryByText("已浏览目录")).not.toBeInTheDocument();
+    expect(screen.queryByText("已读取")).not.toBeInTheDocument();
+    expect(screen.getAllByText("src").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("src/app.tsx").length).toBeGreaterThan(0);
   });
 });
 
@@ -914,7 +908,10 @@ describe("MessageGroup streaming lifecycle", () => {
       {
         id: "ai-thinking",
         type: "ai",
-        content: [{ type: "thinking", thinking: "先确认需求和现有上下文" }],
+        content: "",
+        additional_kwargs: {
+          public_reasoning_summary: "先确认需求和现有上下文",
+        },
       },
       {
         id: "ai-answer-and-tool",
@@ -978,7 +975,8 @@ describe("MessageGroup streaming lifecycle", () => {
       {
         id: "ai-thinking-anchor",
         type: "ai",
-        content: [{ type: "thinking", thinking: "先梳理架构边界" }],
+        content: "",
+        additional_kwargs: { public_reasoning_summary: "先梳理架构边界" },
       },
       {
         id: "ai-long-tool-run",
@@ -1059,13 +1057,13 @@ describe("MessageGroup streaming lifecycle", () => {
     expect(screen.getAllByText(/notes\.md/).length).toBeGreaterThan(0);
   });
 
-  it("keeps reasoning content stable when streaming tokens arrive", () => {
+  it("keeps public reasoning summaries stable when streaming tokens arrive", () => {
     const makeMessages = (reasoning: string): AIMessage[] => [
       {
         id: "ai-1",
         type: "ai",
         content: "",
-        additional_kwargs: { reasoning_content: reasoning },
+        additional_kwargs: { public_reasoning_summary: reasoning },
       },
     ];
 
@@ -1169,19 +1167,18 @@ describe("MessageGroup streaming lifecycle", () => {
       {
         id: "ai-1",
         type: "ai",
-        content: [
-          {
-            type: "thinking",
-            thinking: "First thinking step that is visible.",
-          },
-        ],
+        content: "",
+        additional_kwargs: {
+          public_reasoning_summary: "First thinking step that is visible.",
+        },
       },
       {
         id: "ai-2",
         type: "ai",
-        content: [
-          { type: "thinking", thinking: `Second thinking step. ${extraText}` },
-        ],
+        content: "",
+        additional_kwargs: {
+          public_reasoning_summary: `Second thinking step. ${extraText}`,
+        },
       },
     ];
 

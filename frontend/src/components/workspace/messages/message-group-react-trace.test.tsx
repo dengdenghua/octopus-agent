@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AIMessage } from "@/core/api/types";
@@ -16,8 +16,8 @@ vi.mock("../artifacts", () => ({
   }),
 }));
 
-describe("MessageGroup labelled ReAct trace rendering", () => {
-  it("splits labelled traces into action and observation rows", () => {
+describe("MessageGroup labelled ReAct trace privacy", () => {
+  it("does not manufacture public actions from a private labelled trace", () => {
     const hiddenTail = "UNIQUE_OBSERVATION_TAIL_SHOULD_BE_COMPACTED";
     const message: AIMessage = {
       id: "ai-1",
@@ -45,9 +45,9 @@ describe("MessageGroup labelled ReAct trace rendering", () => {
     });
 
     expect(
-      screen.getByTestId("process-timeline-event-execution"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Search sources")).toBeInTheDocument();
+      screen.queryByTestId("process-timeline-event-execution"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Search sources")).not.toBeInTheDocument();
     expect(screen.queryByText(/web_search/)).not.toBeInTheDocument();
     expect(screen.queryByText(/fetch_url/)).not.toBeInTheDocument();
     expect(
@@ -55,13 +55,12 @@ describe("MessageGroup labelled ReAct trace rendering", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText(new RegExp(hiddenTail))).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle("Replay 2 previous steps"));
-
     expect(
-      screen.getAllByText("Search sources: silver economy market").length,
-    ).toBeGreaterThan(0);
+      screen.queryByText("Search sources: silver economy market"),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getAllByText("Read webpage: https://example.com/report").length,
-    ).toBeGreaterThan(0);
+      screen.queryByText("Read webpage: https://example.com/report"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/Replay/)).not.toBeInTheDocument();
   });
 });

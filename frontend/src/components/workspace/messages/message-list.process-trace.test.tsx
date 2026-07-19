@@ -357,7 +357,7 @@ describe("MessageList process trace lifecycle", () => {
 
     renderMessageList({ thread });
 
-    const savedStepToggles = screen.getAllByText("View 2 saved steps");
+    const savedStepToggles = screen.getAllByText("View 1 saved steps");
     expect(savedStepToggles).toHaveLength(2);
     expect(screen.getByText(/old market query/)).toBeInTheDocument();
     expect(
@@ -419,7 +419,7 @@ describe("MessageList process trace lifecycle", () => {
 
     renderMessageList({ thread });
 
-    expect(screen.getByText("View 2 saved steps")).toBeInTheDocument();
+    expect(screen.getByText("View 1 saved steps")).toBeInTheDocument();
     expect(
       screen.getAllByTestId("process-timeline-event-execution").length,
     ).toBeGreaterThan(0);
