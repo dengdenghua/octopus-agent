@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { LocalAgentPartner } from "@/core/agents/api";
 
-import { localPartnerBadge, localPartnerSetupSteps } from "./local-agent-status";
+import {
+  localPartnerBadge,
+  localPartnerFailureKindLabel,
+  localPartnerSetupSteps,
+} from "./local-agent-status";
 
 const LABELS = {
   connected: "已连接",
@@ -168,5 +172,16 @@ describe("local-agent-status localPartnerSetupSteps", () => {
       "注册为团队伙伴",
     ]);
     expect(steps[0].tone).toBe("ready");
+  });
+});
+
+describe("local-agent-status localPartnerFailureKindLabel", () => {
+  it("maps actionable probe failure kinds to short labels", () => {
+    expect(localPartnerFailureKindLabel("entitlement")).toBe("账号权益");
+    expect(localPartnerFailureKindLabel("version")).toBe("版本不兼容");
+    expect(localPartnerFailureKindLabel("missing_binary")).toBe("命令缺失");
+    expect(localPartnerFailureKindLabel("")).toBe("");
+    expect(localPartnerFailureKindLabel(null)).toBe("");
+    expect(localPartnerFailureKindLabel("vendor_specific")).toBe("检查失败");
   });
 });

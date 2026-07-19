@@ -33,6 +33,7 @@ import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import {
   localPartnerBadge,
+  localPartnerFailureKindLabel,
   localPartnerSetupSteps,
 } from "./local-agent-status";
 
@@ -231,6 +232,9 @@ export function LocalAgentConnectDialog({
               const badge = localPartnerBadge(partner, partnerBadgeLabels);
               const setupSteps = localPartnerSetupSteps(partner);
               const probeResult = probeResults[partner.id];
+              const probeFailureKindLabel = localPartnerFailureKindLabel(
+                probeResult?.failure_kind,
+              );
               const isProbing = probingId === partner.id;
               const commandRows = [
                 partner.install_command
@@ -462,6 +466,11 @@ export function LocalAgentConnectDialog({
                             )}
                           >
                             <span className="block font-medium">
+                              {!probeResult.ok && probeFailureKindLabel ? (
+                                <span className="mr-1 inline-flex rounded bg-background/80 px-1.5 py-0.5 text-[10px] font-medium">
+                                  {probeFailureKindLabel}
+                                </span>
+                              ) : null}
                               {probeResult.ok
                                 ? "健康检查通过，可真实派工"
                                 : probeResult.failure_title ||

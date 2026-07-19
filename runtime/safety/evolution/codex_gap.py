@@ -88,6 +88,7 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
                 "command_hints",
                 "interaction_hint",
                 "localPartnerBadge",
+                "localPartnerFailureKindLabel",
                 "localPartnerSetupSteps",
                 "native_launch_cwd",
                 "连接步骤",

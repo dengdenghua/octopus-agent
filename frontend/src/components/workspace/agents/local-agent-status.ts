@@ -179,3 +179,32 @@ export function localPartnerSetupSteps(
 
   return [];
 }
+
+export function localPartnerFailureKindLabel(kind?: string | null): string {
+  switch (kind) {
+    case "missing_binary":
+      return "命令缺失";
+    case "auth":
+      return "需要登录";
+    case "entitlement":
+      return "账号权益";
+    case "model":
+      return "模型配置";
+    case "permission":
+      return "权限/信任";
+    case "network":
+      return "网络环境";
+    case "quota":
+      return "额度/限流";
+    case "version":
+      return "版本不兼容";
+    case "empty_output":
+      return "无输出";
+    case "timeout":
+      return "执行超时";
+    case "unknown":
+      return "未分类";
+    default:
+      return kind ? "检查失败" : "";
+  }
+}
