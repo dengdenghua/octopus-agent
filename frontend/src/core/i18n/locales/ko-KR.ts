@@ -70,6 +70,7 @@ export const koKR: Translations = {
       `${method} ${path} returned stub data. Treat this workspace state as a development fallback until the real backend endpoint is enabled.`,
     openSidebarMenu: "사이드바 메뉴 열기",
     localPartnerModel: "로컬 파트너 모델(CLI가 관리)",
+    loadingWorkspace: "작업 공간 불러오는 중...",
   },
 
   // Home
@@ -120,9 +121,11 @@ export const koKR: Translations = {
     placeholder: "How can I assist you today?",
     createSkillPrompt:
       "We're going to build a new skill step by step with `skill-creator`. To start, what do you want this skill to do?",
-    addAttachments: "Add attachments",
-    stop: "Stop",
-    send: "Send",
+    addAttachments: "첨부 파일 추가",
+    startVoiceInput: "음성 입력 시작",
+    stopVoiceInput: "음성 입력 중지",
+    stop: "중지",
+    send: "보내기",
     mode: "Mode",
     flashMode: "Chat",
     flashModeDescription: "Fast response",
@@ -303,6 +306,12 @@ export const koKR: Translations = {
     useTopicInAgent: "Agent 에서 이 주제 사용",
     actionLabel: (action: string) => `액션: ${action}`,
     attachmentFallback: "첨부 파일",
+    imageAttachment: "이미지 첨부 파일",
+    attachmentPreview: "첨부 파일 미리보기",
+    removeAttachment: "첨부 파일 제거",
+    previousBranch: "이전 답변 버전",
+    nextBranch: "다음 답변 버전",
+    branchPosition: (current, total) => `${current} / ${total}번째`,
     grounding: {
       summary: (docs: number, sources: number) =>
         `사전 참조: 프로젝트 문서 ${docs}건 · 코드 ${sources}곳`,

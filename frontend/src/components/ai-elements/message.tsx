@@ -6,6 +6,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import type { FileUIPart, UIMessage } from "ai";
 import {
@@ -22,6 +23,7 @@ import {
   memo,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -210,7 +212,10 @@ export const MessageBranchContent = ({
   ...props
 }: MessageBranchContentProps) => {
   const { currentBranch, setBranches, branches } = useMessageBranch();
-  const childrenArray = Array.isArray(children) ? children : [children];
+  const childrenArray = useMemo(
+    () => (Array.isArray(children) ? children : [children]),
+    [children],
+  );
 
   // Use useEffect to update branches when they change
   useEffect(() => {
@@ -251,7 +256,11 @@ export const MessageBranchSelector = ({
 
   return (
     <ButtonGroup
-      className="[&>*:not(:first-child)]:rounded-l-md [&>*:not(:last-child)]:rounded-r-md"
+      className={cn(
+        "[&>*:not(:first-child)]:rounded-l-md [&>*:not(:last-child)]:rounded-r-md",
+        className,
+      )}
+      data-from={from}
       orientation="horizontal"
       {...props}
     />
@@ -265,10 +274,11 @@ export const MessageBranchPrevious = ({
   ...props
 }: MessageBranchPreviousProps) => {
   const { goToPrevious, totalBranches } = useMessageBranch();
+  const { t } = useI18n();
 
   return (
     <Button
-      aria-label="Previous branch"
+      aria-label={t.message.previousBranch}
       disabled={totalBranches <= 1}
       onClick={goToPrevious}
       size="icon-sm"
@@ -289,10 +299,12 @@ export const MessageBranchNext = ({
   ...props
 }: MessageBranchNextProps) => {
   const { goToNext, totalBranches } = useMessageBranch();
+  const { t } = useI18n();
 
   return (
     <Button
-      aria-label="Next branch"
+      aria-label={t.message.nextBranch}
+      className={className}
       disabled={totalBranches <= 1}
       onClick={goToNext}
       size="icon-sm"
@@ -312,6 +324,7 @@ export const MessageBranchPage = ({
   ...props
 }: MessageBranchPageProps) => {
   const { currentBranch, totalBranches } = useMessageBranch();
+  const { t } = useI18n();
 
   return (
     <ButtonGroupText
@@ -321,7 +334,7 @@ export const MessageBranchPage = ({
       )}
       {...props}
     >
-      {currentBranch + 1} of {totalBranches}
+      {t.message.branchPosition(currentBranch + 1, totalBranches)}
     </ButtonGroupText>
   );
 };
@@ -367,11 +380,14 @@ export function MessageAttachment({
   onRemove,
   ...props
 }: MessageAttachmentProps) {
+  const { t } = useI18n();
   const filename = data.filename || "";
   const mediaType =
     data.mediaType?.startsWith("image/") && data.url ? "image" : "file";
   const isImage = mediaType === "image";
-  const attachmentLabel = filename || (isImage ? "Image" : "Attachment");
+  const attachmentLabel =
+    filename ||
+    (isImage ? t.message.imageAttachment : t.message.attachmentFallback);
 
   return (
     <div
@@ -384,7 +400,7 @@ export function MessageAttachment({
       {isImage ? (
         <>
           <img
-            alt={filename || "attachment"}
+            alt={filename || t.message.imageAttachment}
             className="size-full object-cover"
             height={100}
             src={data.url}
@@ -392,7 +408,7 @@ export function MessageAttachment({
           />
           {onRemove && (
             <Button
-              aria-label="Remove attachment"
+              aria-label={t.message.removeAttachment}
               className="bg-background/80 hover:bg-background absolute top-2 right-2 size-6 p-0 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 [&>svg]:size-3"
               onClick={(e) => {
                 e.stopPropagation();
@@ -402,7 +418,7 @@ export function MessageAttachment({
               variant="ghost"
             >
               <XIcon />
-              <span className="sr-only">Remove</span>
+              <span className="sr-only">{t.message.removeAttachment}</span>
             </Button>
           )}
         </>
@@ -420,7 +436,7 @@ export function MessageAttachment({
           </Tooltip>
           {onRemove && (
             <Button
-              aria-label="Remove attachment"
+              aria-label={t.message.removeAttachment}
               className="hover:bg-accent size-6 shrink-0 p-0 opacity-0 transition-opacity group-hover:opacity-100 [&>svg]:size-3"
               onClick={(e) => {
                 e.stopPropagation();
@@ -430,7 +446,7 @@ export function MessageAttachment({
               variant="ghost"
             >
               <XIcon />
-              <span className="sr-only">Remove</span>
+              <span className="sr-only">{t.message.removeAttachment}</span>
             </Button>
           )}
         </>

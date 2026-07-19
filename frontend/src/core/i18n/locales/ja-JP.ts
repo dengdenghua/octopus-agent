@@ -70,6 +70,7 @@ export const jaJP: Translations = {
       `${method} ${path} returned stub data. Treat this workspace state as a development fallback until the real backend endpoint is enabled.`,
     openSidebarMenu: "サイドバーメニューを開く",
     localPartnerModel: "ローカルパートナーモデル(CLI が管理)",
+    loadingWorkspace: "ワークスペースを読み込み中...",
   },
 
   // Home
@@ -120,9 +121,11 @@ export const jaJP: Translations = {
     placeholder: "How can I assist you today?",
     createSkillPrompt:
       "We're going to build a new skill step by step with `skill-creator`. To start, what do you want this skill to do?",
-    addAttachments: "Add attachments",
-    stop: "Stop",
-    send: "Send",
+    addAttachments: "添付ファイルを追加",
+    startVoiceInput: "音声入力を開始",
+    stopVoiceInput: "音声入力を停止",
+    stop: "停止",
+    send: "送信",
     mode: "Mode",
     flashMode: "Chat",
     flashModeDescription: "Fast response",
@@ -303,6 +306,12 @@ export const jaJP: Translations = {
     useTopicInAgent: "Agent でこのトピックを使用",
     actionLabel: (action: string) => `アクション: ${action}`,
     attachmentFallback: "添付ファイル",
+    imageAttachment: "画像の添付ファイル",
+    attachmentPreview: "添付ファイルのプレビュー",
+    removeAttachment: "添付ファイルを削除",
+    previousBranch: "前の回答バージョン",
+    nextBranch: "次の回答バージョン",
+    branchPosition: (current, total) => `${current} / ${total} 件目`,
     grounding: {
       summary: (docs: number, sources: number) =>
         `事前参照: プロジェクト文書 ${docs} 件 · コード ${sources} 箇所`,

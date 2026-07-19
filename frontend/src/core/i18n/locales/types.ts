@@ -58,6 +58,7 @@ export interface Translations {
     stubResponseDescription: (method: string, path: string) => string;
     openSidebarMenu: string;
     localPartnerModel: string;
+    loadingWorkspace: string;
   };
 
   home: {
@@ -103,6 +104,8 @@ export interface Translations {
     placeholder: string;
     createSkillPrompt: string;
     addAttachments: string;
+    startVoiceInput: string;
+    stopVoiceInput: string;
     stop: string;
     send: string;
     mode: string;
@@ -243,6 +246,12 @@ export interface Translations {
     useTopicInAgent: string;
     actionLabel: (action: string) => string;
     attachmentFallback: string;
+    imageAttachment: string;
+    attachmentPreview: string;
+    removeAttachment: string;
+    previousBranch: string;
+    nextBranch: string;
+    branchPosition: (current: number, total: number) => string;
     grounding: {
       /** Describe auto-prefetched context separately from explicit tool work. */
       summary: (docs: number, sources: number) => string;

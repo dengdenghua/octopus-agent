@@ -9,6 +9,7 @@ import {
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
 /**
@@ -57,6 +58,7 @@ export function Banner({
   onDismiss,
   className,
 }: BannerProps) {
+  const { t } = useI18n();
   const Icon = icon ?? TONE_ICONS[tone];
   return (
     <div
@@ -88,7 +90,7 @@ export function Banner({
           variant="ghost"
           size="icon-sm"
           onClick={onDismiss}
-          aria-label="Dismiss"
+          aria-label={t.common.close}
           className="-mr-1 -mt-0.5 size-7 shrink-0 opacity-60 hover:opacity-100"
         >
           <XIcon className="size-3.5" />

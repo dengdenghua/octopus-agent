@@ -70,6 +70,7 @@ export const enUS: Translations = {
       `${method} ${path} returned stub data. Treat this workspace state as a development fallback until the real backend endpoint is enabled.`,
     openSidebarMenu: "Open sidebar menu",
     localPartnerModel: "Local partner model (owned by the CLI)",
+    loadingWorkspace: "Loading workspace...",
   },
 
   // Home
@@ -121,6 +122,8 @@ export const enUS: Translations = {
     createSkillPrompt:
       "We're going to build a new skill step by step with `skill-creator`. To start, what do you want this skill to do?",
     addAttachments: "Add attachments",
+    startVoiceInput: "Start voice input",
+    stopVoiceInput: "Stop voice input",
     stop: "Stop",
     send: "Send",
     mode: "Mode",
@@ -306,6 +309,12 @@ export const enUS: Translations = {
     useTopicInAgent: "Use this topic in Agent",
     actionLabel: (action: string) => `Action: ${action}`,
     attachmentFallback: "attachment",
+    imageAttachment: "Image attachment",
+    attachmentPreview: "Attachment preview",
+    removeAttachment: "Remove attachment",
+    previousBranch: "Previous response version",
+    nextBranch: "Next response version",
+    branchPosition: (current, total) => `${current} of ${total}`,
     grounding: {
       summary: (docs: number, sources: number) =>
         `Prefetched ${docs} project doc${docs === 1 ? "" : "s"} · ${sources} code location${sources === 1 ? "" : "s"}`,

@@ -70,6 +70,7 @@ export const zhCN: Translations = {
       `${method} ${path} 返回了桩数据。在真实后端接口启用前，请把当前工作区状态视为开发 fallback。`,
     openSidebarMenu: "打开侧栏菜单",
     localPartnerModel: "本地伙伴模型(由 CLI 自身决定)",
+    loadingWorkspace: "正在加载工作区...",
   },
 
   // Home
@@ -119,6 +120,8 @@ export const zhCN: Translations = {
     createSkillPrompt:
       "你可以使用 skill-creator 技能来创建自定义技能。请描述你想要创建的技能的功能:",
     addAttachments: "添加附件",
+    startVoiceInput: "开始语音输入",
+    stopVoiceInput: "停止语音输入",
     stop: "停止",
     send: "发送",
     mode: "模式",
@@ -295,6 +298,12 @@ export const zhCN: Translations = {
     useTopicInAgent: "在 Agent 中使用该主题",
     actionLabel: (action: string) => `Action: ${action}`,
     attachmentFallback: "附件",
+    imageAttachment: "图片附件",
+    attachmentPreview: "附件预览",
+    removeAttachment: "移除附件",
+    previousBranch: "上一个回复版本",
+    nextBranch: "下一个回复版本",
+    branchPosition: (current, total) => `第 ${current} / ${total} 个版本`,
     grounding: {
       summary: (docs: number, sources: number) =>
         `预读了 ${docs} 篇项目文档 · ${sources} 处代码`,

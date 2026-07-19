@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useI18n } from "@/core/i18n/hooks";
 import { swallow } from "@/core/utils/log";
 import type { PromptInputFilePart } from "@/core/uploads";
 import { splitUnsupportedUploadFiles } from "@/core/uploads";
@@ -40,20 +41,17 @@ import { cn } from "@/lib/utils";
 import type { ChatStatus } from "ai";
 import {
   ArrowUpIcon,
-  ImageIcon,
   Loader2Icon,
   MicIcon,
   PaperclipIcon,
   PlusIcon,
   SquareIcon,
-  UploadIcon,
   XIcon,
 } from "lucide-react";
 import { nanoid } from "nanoid";
 import {
   type ChangeEvent,
   type ChangeEventHandler,
-  Children,
   type ClipboardEventHandler,
   type ComponentProps,
   createContext,
@@ -296,6 +294,7 @@ export function PromptInputAttachment({
   ...props
 }: PromptInputAttachmentProps) {
   const attachments = usePromptInputAttachments();
+  const { t } = useI18n();
 
   const filename = data.filename || "";
 
@@ -303,7 +302,9 @@ export function PromptInputAttachment({
     data.mediaType?.startsWith("image/") && data.url ? "image" : "file";
   const isImage = mediaType === "image";
 
-  const attachmentLabel = filename || (isImage ? "Image" : "Attachment");
+  const attachmentLabel =
+    filename ||
+    (isImage ? t.message.imageAttachment : t.message.attachmentFallback);
 
   return (
     <PromptInputHoverCard>
@@ -320,7 +321,7 @@ export function PromptInputAttachment({
             <div className="bg-background absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded transition-opacity group-hover:opacity-0">
               {isImage ? (
                 <img
-                  alt={filename || "attachment"}
+                  alt={filename || t.message.imageAttachment}
                   className="size-5 object-cover"
                   height={20}
                   src={data.url}
@@ -333,7 +334,7 @@ export function PromptInputAttachment({
               )}
             </div>
             <Button
-              aria-label="Remove attachment"
+              aria-label={t.message.removeAttachment}
               className="absolute inset-0 size-5 cursor-pointer rounded p-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 [&>svg]:size-2.5"
               onClick={(e) => {
                 e.stopPropagation();
@@ -343,7 +344,7 @@ export function PromptInputAttachment({
               variant="ghost"
             >
               <XIcon />
-              <span className="sr-only">Remove</span>
+              <span className="sr-only">{t.message.removeAttachment}</span>
             </Button>
           </div>
 
@@ -355,7 +356,7 @@ export function PromptInputAttachment({
           {isImage && (
             <div className="flex max-h-96 w-96 items-center justify-center overflow-hidden rounded-lg border">
               <img
-                alt={filename || "attachment preview"}
+                alt={filename || t.message.attachmentPreview}
                 className="max-h-full max-w-full object-contain"
                 height={384}
                 src={data.url}
@@ -366,7 +367,7 @@ export function PromptInputAttachment({
           <div className="flex items-center gap-2.5">
             <div className="min-w-0 flex-1 space-y-1 px-0.5">
               <h4 className="truncate text-sm leading-none font-semibold">
-                {filename || (isImage ? "Image" : "Attachment")}
+                {attachmentLabel}
               </h4>
               {data.mediaType && (
                 <p className="text-muted-foreground truncate font-mono text-xs">
@@ -420,10 +421,11 @@ export type PromptInputActionAddAttachmentsProps = ComponentProps<
 };
 
 export const PromptInputActionAddAttachments = ({
-  label = "Add photos or files",
+  label,
   ...props
 }: PromptInputActionAddAttachmentsProps) => {
   const attachments = usePromptInputAttachments();
+  const { t } = useI18n();
 
   return (
     <DropdownMenuItem
@@ -433,7 +435,8 @@ export const PromptInputActionAddAttachments = ({
         attachments.openFileDialog();
       }}
     >
-      <PaperclipIcon className="mr-2 size-4" /> {label}
+      <PaperclipIcon className="mr-2 size-4" />
+      {label ?? t.inputBox.addAttachments}
     </DropdownMenuItem>
   );
 };
@@ -481,6 +484,7 @@ export const PromptInput = ({
   children,
   ...props
 }: PromptInputProps) => {
+  const { t } = useI18n();
   // Try to use a provider controller if present
   const controller = useOptionalPromptInputController();
   const usingProvider = !!controller;
@@ -611,6 +615,7 @@ export const PromptInput = ({
 
   const sanitizeIncomingFiles = useCallback(
     (fileList: File[] | FileList) => {
+      if (disabled) return [];
       const { accepted, message } = splitUnsupportedUploadFiles(fileList);
       if (message) {
         onError?.({
@@ -623,7 +628,7 @@ export const PromptInput = ({
       }
       return accepted;
     },
-    [onError],
+    [disabled, onError],
   );
 
   // Let provider know about our hidden file input so external menus can call openFileDialog()
@@ -705,7 +710,6 @@ export const PromptInput = ({
         }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- cleanup only on unmount; filesRef always current
     [usingProvider],
   );
 
@@ -769,7 +773,7 @@ export const PromptInput = ({
 
     // Convert blob URLs to data URLs asynchronously
     Promise.all(
-      files.map(async ({ id, ...item }) => {
+      files.map(async ({ id: _id, ...item }) => {
         if (item.file instanceof File) {
           // Downstream upload prep reads the preserved File directly.
           return item;
@@ -822,12 +826,13 @@ export const PromptInput = ({
     <PromptInputValidationContext.Provider value={sanitizeIncomingFiles}>
       <input
         accept={accept}
-        aria-label="Upload files"
+        aria-label={t.inputBox.addAttachments}
         className="hidden"
+        disabled={disabled}
         multiple={multiple}
         onChange={handleChange}
         ref={inputRef}
-        title="Upload files"
+        title={t.inputBox.addAttachments}
         type="file"
       />
       <form
@@ -1017,13 +1022,13 @@ export type PromptInputButtonProps = ComponentProps<typeof InputGroupButton>;
 export const PromptInputButton = ({
   variant = "ghost",
   className,
-  size,
+  size = "sm",
   ...props
 }: PromptInputButtonProps) => {
   return (
     <InputGroupButton
       className={cn(className)}
-      size="sm"
+      size={size}
       type="button"
       variant={variant}
       {...props}
@@ -1087,7 +1092,10 @@ export const PromptInputSubmit = ({
   children,
   ...props
 }: PromptInputSubmitProps) => {
+  const { t } = useI18n();
   let Icon = <ArrowUpIcon className="size-4" />;
+  const defaultLabel =
+    status === "streaming" ? t.inputBox.stop : t.inputBox.send;
 
   if (status === "submitted") {
     Icon = <Loader2Icon className="size-4 animate-spin" />;
@@ -1104,8 +1112,8 @@ export const PromptInputSubmit = ({
         className,
       )}
       size={size}
-      aria-label={ariaLabel ?? "Submit"}
-      title={title ?? ariaLabel ?? "Submit"}
+      aria-label={ariaLabel ?? defaultLabel}
+      title={title ?? ariaLabel ?? defaultLabel}
       type="submit"
       variant={variant}
       {...props}
@@ -1121,13 +1129,13 @@ interface SpeechRecognition extends EventTarget {
   lang: string;
   start(): void;
   stop(): void;
-  onstart: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onend: ((this: SpeechRecognition, ev: Event) => any) | null;
+  onstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => void) | null;
   onresult:
-    | ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any)
+    | ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void)
     | null;
   onerror:
-    | ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => any)
+    | ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void)
     | null;
 }
 
@@ -1182,6 +1190,7 @@ export const PromptInputSpeechButton = ({
   onTranscriptionChange,
   ...props
 }: PromptInputSpeechButtonProps) => {
+  const { locale, t } = useI18n();
   const [isListening, setIsListening] = useState(false);
   const [recognition, setRecognition] = useState<SpeechRecognition | null>(
     null,
@@ -1201,7 +1210,7 @@ export const PromptInputSpeechButton = ({
 
       speechRecognition.continuous = true;
       speechRecognition.interimResults = true;
-      speechRecognition.lang = "en-US";
+      speechRecognition.lang = locale;
 
       speechRecognition.onstart = () => {
         setIsListening(true);
@@ -1251,7 +1260,7 @@ export const PromptInputSpeechButton = ({
         recognitionRef.current.stop();
       }
     };
-  }, []);
+  }, [locale]);
 
   const toggleListening = useCallback(() => {
     if (!recognition) {
@@ -1274,6 +1283,12 @@ export const PromptInputSpeechButton = ({
       )}
       disabled={!recognition}
       onClick={toggleListening}
+      aria-label={
+        isListening ? t.inputBox.stopVoiceInput : t.inputBox.startVoiceInput
+      }
+      title={
+        isListening ? t.inputBox.stopVoiceInput : t.inputBox.startVoiceInput
+      }
       {...props}
     >
       <MicIcon className="size-4" />
