@@ -112,6 +112,7 @@ from runtime.core.cerebrum.react_parsing import (
 )
 from runtime.core.cerebrum.react_types import (
     REACT_NO_TOOLS_NOTE,
+    REACT_OBSERVATION_FOLLOWUP,
     REACT_SYSTEM_PROMPT_BASE,
     ReActResult,
     ReActStep,
@@ -793,7 +794,12 @@ def _record_rejected_step(
     step.observation = observation
     steps.append(step)
     messages.append(Message(role="assistant", content=step.action))
-    messages.append(Message(role="user", content=f"Observation: {observation}\n\n继续下一轮推理。"))
+    messages.append(
+        Message(
+            role="user",
+            content=f"Observation: {observation}\n\n{REACT_OBSERVATION_FOLLOWUP}",
+        )
+    )
 
 
 def _looks_like_observation_echo(text: str) -> bool:
@@ -4643,7 +4649,13 @@ def stream_react_loop(
             except (ImportError, ValueError, TypeError):
                 _logger.debug("token_juice unavailable", exc_info=True)
             messages.append(
-                Message(role="user", content=f"Observation: {_obs_for_model}\n\n继续下一轮推理。")
+                Message(
+                    role="user",
+                    content=(
+                        f"Observation: {_obs_for_model}\n\n"
+                        f"{REACT_OBSERVATION_FOLLOWUP}"
+                    ),
+                )
             )
 
         messages = _compress_context(

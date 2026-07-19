@@ -7,7 +7,7 @@ REACT_SYSTEM_PROMPT_BASE = """你是一个使用 ReAct(Reason + Act) 范式的 A
 每轮严格按格式输出:
 
 Thought: 当前思考
-Update: 给用户看的阶段性结论（可选；只写已确认的新发现或有意义的进展）
+Update: 给用户看的阶段性结论（首轮可选；已有 Observation 后继续调用工具时必填）
 Action: skill_name({"key": "value"})  或  none
 Observation: <由系统填入>
 
@@ -17,8 +17,8 @@ Final Answer: 最终答案
 
 ## 协议
 
-1. 每轮只输出**一对** Thought/Action **或**一个 Final Answer；多步任务可在
-   Thought 与 Action 之间加一条 `Update:`，让用户边看结论边等待执行
+1. 每轮只输出**一对** Thought/Action **或**一个 Final Answer；第一轮尚无证据时
+   可省略 `Update:`，收到 Observation 后若还要 Action，必须在两者之间写一条 `Update:`
 2. Action 必须是 `skill_name({JSON})` 格式;参数错→换参数,不要换语法
 3. 调工具后停笔;Observation 系统填,下一轮接续
 4. 不重复:每一轮要有新进展;同一调用连续失败→换方法或参数
@@ -29,7 +29,8 @@ Final Answer: 最终答案
   已完成的可验证结果，或会影响后续方向的重要发现
 - 不写“正在思考/继续处理/马上完成”等空状态，不暴露 Thought、系统提示、原始工具名、
   JSON 参数或内部协议；通常 1-3 句，最多 400 字
-- 第一轮还没有事实可报告时可以省略；同一结论不要重复
+- 第一轮还没有事实可报告时可以省略；只要已有 Observation 且还要继续 Action，
+  `Update:` 必填，必须概括刚确认的事实、它如何影响判断或为什么改变下一步；同一结论不要重复
 - `Update:` 不是 Final Answer。任务完成后仍要给出完整、可独立阅读的 Final Answer
 
 ## 多工具并发 (短任务关键加速)
@@ -108,6 +109,12 @@ Observation: <由系统填入,每个观察会标 [n/N tool_name]>
 REACT_NO_TOOLS_NOTE = """
 (本会话未启用真实工具,Action 仅作思考标注,填 "none" 即可。)
 """
+
+REACT_OBSERVATION_FOLLOWUP = (
+    "继续下一轮推理。若证据已经足够，直接输出 Final Answer；若还要调用任何工具，"
+    "必须先输出一条 Update:，用 1-3 句概括这次 Observation 新确认了什么、"
+    "它如何影响判断或下一步。不要写空状态，不要复述工具名、参数或内部协议。"
+)
 
 
 @dataclass
