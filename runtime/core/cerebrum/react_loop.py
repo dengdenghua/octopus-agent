@@ -397,6 +397,26 @@ def _model_iteration_timeout_s() -> float:
     return max(10.0, min(value, 900.0))
 
 
+def _model_recovery_timeout_s(base_timeout_s: float) -> float:
+    """Shorter ceiling for the no-extended-thinking convergence retry.
+
+    The first model round may legitimately spend time on deep reasoning. Once
+    that round has already exceeded its deadline, the recovery request is a
+    bounded direct-answer attempt; granting it the full original allowance can
+    make one silent turn block for another two minutes. Keep the value tunable,
+    never lengthen the operator's ordinary iteration timeout, and preserve tiny
+    injected deadlines used by deterministic tests.
+    """
+
+    raw = os.environ.get("OCTOPUS_REACT_MODEL_RECOVERY_TIMEOUT_S", "30")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = 30.0
+    recovery_ceiling = max(10.0, min(value, 120.0))
+    return min(base_timeout_s, recovery_ceiling)
+
+
 _MODEL_STREAM_DEADLINE = object()
 
 
@@ -2648,6 +2668,7 @@ def stream_react_loop(
                 "type": "commentary_delta",
                 "delta": _opening_update,
                 "progress_kind": _public_update_kind(_opening_update, opening=True),
+                "progress_source": "runtime",
                 "iteration": 1,
             }
             _last_public_update_key = re.sub(
@@ -2824,7 +2845,12 @@ def stream_react_loop(
             _final_stream_guarded = False
             _final_delta_emitted_this_iteration = False
             _iteration_soft_timed_out = False
-            _iteration_timeout = _model_iteration_timeout_s()
+            _base_iteration_timeout = _model_iteration_timeout_s()
+            _iteration_timeout = (
+                _model_recovery_timeout_s(_base_iteration_timeout)
+                if _iteration_recovery_mode
+                else _base_iteration_timeout
+            )
 
             def _maybe_emit_throughput(chars: int) -> dict[str, Any] | None:
                 nonlocal _throughput_last_emit
@@ -3249,6 +3275,7 @@ def stream_react_loop(
             yield {
                 "type": "commentary_delta",
                 "delta": recovery_update,
+                "progress_source": "runtime",
                 "iteration": i + 1,
             }
             step.public_update = recovery_update
@@ -3401,6 +3428,7 @@ def stream_react_loop(
                 yield {
                     "type": "commentary_delta",
                     "delta": "检测到尚未完成的实现诊断；已保留结论，下一轮直接执行修复。",
+                    "progress_source": "runtime",
                     "iteration": i + 1,
                 }
             else:
