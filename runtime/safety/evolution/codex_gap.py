@@ -55,10 +55,12 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
         ),
         GapBehaviorCheck(
             id="local_partner_connect_ui_probe",
-            title="Connect dialog exposes copyable native commands and health checks",
+            title="Connect dialog exposes native commands, slash-command mapping, and health checks",
             path="frontend/src/components/workspace/agents/local-agent-connect-dialog.tsx",
             required_terms=(
                 "probeLocalAgentPartner",
+                "command_hints",
+                "interaction_hint",
                 "健康检查",
                 "打开原生 CLI",
                 "修复建议",
