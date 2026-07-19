@@ -909,6 +909,11 @@ class TestLocalPartners:
         assert partners["codex-cli"]["native_command"] == "codex"
         assert "codex exec" in partners["codex-cli"]["verify_command"]
         assert "/model <模型名>" in partners["codex-cli"]["interaction_hint"]
+        assert partners["codex-cli"]["command_hints"][0] == {
+            "command": "/model <模型名>",
+            "scope": "一次性覆盖",
+            "behavior": "换行接任务时，转成该 CLI 本次调用的模型参数。",
+        }
         assert partners["trae-cli"]["detected"] is True
         assert partners["trae-cli"]["agent_id"] == "local_trae_cli"
         assert "traecdn" in partners["trae-cli"]["avatar_url"]
@@ -916,6 +921,8 @@ class TestLocalPartners:
         assert partners["trae-cli"]["verify_command"] == "trae-cli models --json"
         assert "模型选择" in partners["trae-cli"]["setup_hint"]
         assert "Trae CLI 自己管理" in partners["trae-cli"]["interaction_hint"]
+        assert partners["trae-cli"]["command_hints"][0]["scope"] == "CLI 默认"
+        assert partners["trae-cli"]["command_hints"][-1]["command"] == "trae-cli models --json"
         assert partners["qoder-cli"]["detected"] is False
         assert partners["qoder-cli"]["agent_id"] == "local_qoder_cli"
         assert "alicdn" in partners["qoder-cli"]["avatar_url"]
@@ -932,6 +939,7 @@ class TestLocalPartners:
         assert "codebuddy -p --output-format text" in partners["codebuddy-cli"]["verify_command"]
         assert partners["codebuddy-cli"]["install_command"] is None
         assert "原生 CLI 使用" in partners["codebuddy-cli"]["interaction_hint"]
+        assert partners["codebuddy-cli"]["command_hints"][0]["scope"] == "一次性覆盖"
         assert partners["openclaw"]["detected"] is False
         assert partners["openclaw"]["readiness_status"] == "missing"
 

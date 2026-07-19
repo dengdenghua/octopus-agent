@@ -124,6 +124,7 @@ class LocalPartnerWire(BaseModel):
     verify_command: str | None = None
     setup_hint: str | None = None
     interaction_hint: str | None = None
+    command_hints: list[dict[str, str]] = Field(default_factory=list)
 
 
 class LocalPartnerRegisterItem(BaseModel):

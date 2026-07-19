@@ -280,6 +280,7 @@ export function LocalAgentConnectDialog({
                 (item): item is { label: string; command: string } =>
                   Boolean(item?.command),
               );
+              const commandHints = (partner.command_hints ?? []).slice(0, 3);
               const activate = () => togglePartner(partner);
               return (
                 <div
@@ -370,6 +371,26 @@ export function LocalAgentConnectDialog({
                         {partner.interaction_hint ? (
                           <span className="block text-[11px] leading-relaxed text-muted-foreground">
                             {partner.interaction_hint}
+                          </span>
+                        ) : null}
+                        {commandHints.length > 0 ? (
+                          <span className="block space-y-1">
+                            {commandHints.map((hint) => (
+                              <span
+                                key={`${partner.id}-${hint.command}`}
+                                className="flex gap-2 rounded border border-border-default/60 bg-background/70 px-2 py-1 text-[10px]"
+                              >
+                                <code className="shrink-0 font-mono text-foreground">
+                                  {hint.command}
+                                </code>
+                                <span className="shrink-0 text-muted-foreground/80">
+                                  {hint.scope}
+                                </span>
+                                <span className="min-w-0 text-muted-foreground">
+                                  {hint.behavior}
+                                </span>
+                              </span>
+                            ))}
                           </span>
                         ) : null}
                         {commandRows.length > 0 ? (

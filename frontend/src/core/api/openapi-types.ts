@@ -12758,6 +12758,10 @@ export interface components {
         LocalPartnerWire: {
             /** Agent Id */
             agent_id: string;
+            /** Command Hints */
+            command_hints: {
+                [key: string]: string;
+            }[];
             /** Command */
             command?: string | null;
             /** Default Alias */

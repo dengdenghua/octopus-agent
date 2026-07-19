@@ -85,6 +85,11 @@ export interface LocalAgentPartner {
   verify_command?: string | null;
   setup_hint?: string | null;
   interaction_hint?: string | null;
+  command_hints?: Array<{
+    command: string;
+    scope: string;
+    behavior: string;
+  }>;
 }
 
 export interface LocalAgentPartnerRegisterResult {

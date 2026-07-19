@@ -448,6 +448,64 @@ def _partner_guidance(
     }
 
 
+def _partner_command_hints(partner_id: str) -> list[dict[str, str]]:
+    """Small UX map for native-CLI muscle memory in Octopus.
+
+    These are intentionally product-facing, not exhaustive vendor docs. They
+    answer the question users hit first: "If I type a familiar / command here,
+    will Octopus run it, translate it, or tell me to open the native CLI?"
+    """
+    hints = [
+        {
+            "command": "/help",
+            "scope": "Octopus 说明",
+            "behavior": "显示本地伙伴兼容说明，不转发给外部 CLI。",
+        },
+        {
+            "command": "/models",
+            "scope": "Octopus 说明",
+            "behavior": "解释模型来源；不会调用外部 CLI 的交互式模型菜单。",
+        },
+        {
+            "command": "/login /doctor /status",
+            "scope": "原生 CLI",
+            "behavior": "账号、诊断、状态类命令请在原生 CLI 终端里执行。",
+        },
+        {
+            "command": "/clear /compact /resume",
+            "scope": "原生 CLI",
+            "behavior": "会话类命令不转发；在 Octopus 里请开启新任务或回原生 CLI。",
+        },
+    ]
+    if partner_id in {"claude-code", "codex-cli", "codebuddy-cli"}:
+        hints.insert(
+            0,
+            {
+                "command": "/model <模型名>",
+                "scope": "一次性覆盖",
+                "behavior": "换行接任务时，转成该 CLI 本次调用的模型参数。",
+            },
+        )
+    else:
+        hints.insert(
+            0,
+            {
+                "command": "/model <模型名>",
+                "scope": "CLI 默认",
+                "behavior": "Octopus 会识别意图，但本伙伴暂不支持稳定模型参数，仍使用 CLI 默认模型。",
+            },
+        )
+    if partner_id == "trae-cli":
+        hints.append(
+            {
+                "command": "trae-cli models --json",
+                "scope": "原生 CLI",
+                "behavior": "用于确认 Trae CLI 账号/企业网络下是否已经分配可用模型。",
+            }
+        )
+    return hints
+
+
 def readiness_for_partner(
     partner_id: str,
     command: str | None,
@@ -648,6 +706,7 @@ def to_wire(
         verify_command=guidance.get("verify_command"),
         setup_hint=guidance.get("setup_hint"),
         interaction_hint=guidance.get("interaction_hint"),
+        command_hints=_partner_command_hints(str(spec["id"])),
     )
 
 
