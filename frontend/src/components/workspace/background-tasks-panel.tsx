@@ -20,7 +20,7 @@ import {
   XIcon,
   ZapIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,7 @@ import type {
 import { swallow } from "@/core/utils/log";
 import { isActiveStatus, isTerminalStatus } from "@/core/background/types";
 import { useI18n } from "@/core/i18n/hooks";
+import type { Translations } from "@/core/i18n/locales";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -52,40 +53,33 @@ import { cn } from "@/lib/utils";
 
 const STATUS_CONFIG: Record<
   BackgroundTaskStatus,
-  { label: string; color: string; icon: React.ReactNode }
+  { color: string; icon: React.ReactNode }
 > = {
   queued: {
-    label: "Queued",
     color: "bg-muted-foreground/15 text-muted-foreground",
     icon: <ClockIcon className="size-3" />,
   },
   running: {
-    label: "Running",
     color: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
     icon: <Loader2Icon className="size-3 animate-spin" />,
   },
   paused: {
-    label: "Paused",
     color: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
     icon: <PauseIcon className="size-3" />,
   },
   completed: {
-    label: "Completed",
     color: "bg-green-500/15 text-green-600 dark:text-green-400",
     icon: <CheckCircle2Icon className="size-3" />,
   },
   failed: {
-    label: "Failed",
     color: "bg-red-500/15 text-red-600 dark:text-red-400",
     icon: <AlertCircleIcon className="size-3" />,
   },
   cancelled: {
-    label: "Cancelled",
     color: "bg-muted-foreground/15 text-muted-foreground",
     icon: <XIcon className="size-3" />,
   },
   interrupted: {
-    label: "Interrupted",
     color: "bg-orange-500/15 text-orange-600 dark:text-orange-400",
     icon: <AlertCircleIcon className="size-3" />,
   },
@@ -94,15 +88,6 @@ const STATUS_CONFIG: Record<
 function StatusBadge({ status }: { status: BackgroundTaskStatus }) {
   const { t } = useI18n();
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.queued;
-  const statusLabels: Record<BackgroundTaskStatus, string> = {
-    queued: t.backgroundTasks.queued,
-    running: t.backgroundTasks.running,
-    paused: t.backgroundTasks.paused,
-    completed: t.backgroundTasks.completed,
-    failed: t.backgroundTasks.failed,
-    cancelled: t.backgroundTasks.cancelled,
-    interrupted: t.backgroundTasks.interrupted,
-  };
   return (
     <span
       className={cn(
@@ -111,19 +96,46 @@ function StatusBadge({ status }: { status: BackgroundTaskStatus }) {
       )}
     >
       {cfg.icon}
-      {statusLabels[status]}
+      {statusLabel(status, t.backgroundTasks)}
     </span>
   );
 }
 
-function formatRelativeTime(isoString: string): string {
+function formatRelativeTime(
+  isoString: string,
+  copy: Translations["backgroundTasks"],
+): string {
   const now = Date.now();
   const ts = new Date(isoString).getTime();
   const diff = now - ts;
-  if (diff < 60_000) return "just now";
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return `${Math.floor(diff / 86_400_000)}d ago`;
+  if (diff < 60_000) return copy.justNow;
+  if (diff < 3_600_000) return copy.minutesAgo(Math.floor(diff / 60_000));
+  if (diff < 86_400_000) return copy.hoursAgo(Math.floor(diff / 3_600_000));
+  return copy.daysAgo(Math.floor(diff / 86_400_000));
+}
+
+function statusLabel(
+  status: string,
+  copy: Translations["backgroundTasks"],
+): string {
+  switch (status) {
+    case "queued":
+      return copy.queued;
+    case "running":
+      return copy.running;
+    case "paused":
+      return copy.paused;
+    case "completed":
+      return copy.completed;
+    case "failed":
+      return copy.failed;
+    case "cancelled":
+      return copy.cancelled;
+    case "interrupted":
+      return copy.interrupted;
+    default:
+      return status;
+  }
 }
 
 function formatDuration(startIso: string, endIso?: string | null): string {
@@ -157,20 +169,25 @@ function TaskListItem({
   onCancel: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useI18n();
+  const taskLabel =
+    task.name || task.prompt.slice(0, 50) || t.backgroundTasks.unnamedTask;
+
   return (
     <div
       className={cn(
-        "group cursor-pointer rounded-lg border p-3 transition-colors hover:bg-accent/50",
+        "group rounded-lg border p-3 transition-colors hover:bg-accent/50",
         isSelected && "border-primary/30 bg-accent/30",
       )}
-      onClick={onSelect}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
+        <button
+          type="button"
+          className="min-w-0 flex-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={onSelect}
+        >
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium">
-              {task.name || task.prompt.slice(0, 50)}
-            </span>
+            <span className="truncate text-sm font-medium">{taskLabel}</span>
           </div>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {task.prompt.length > 80
@@ -180,7 +197,7 @@ function TaskListItem({
           <div className="mt-1.5 flex items-center gap-2">
             <StatusBadge status={task.status} />
             <span className="text-[10px] text-muted-foreground">
-              {formatRelativeTime(task.updated_at)}
+              {formatRelativeTime(task.updated_at, t.backgroundTasks)}
             </span>
             {task.started_at && (
               <span className="text-[10px] text-muted-foreground">
@@ -188,20 +205,18 @@ function TaskListItem({
               </span>
             )}
           </div>
-        </div>
+        </button>
 
         {/* Action buttons */}
-        <div
-          className="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div className="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
           {task.status === "running" && (
             <Button
               variant="ghost"
               size="icon"
               className="size-7"
               onClick={onPause}
-              title="Pause"
+              aria-label={t.backgroundTasks.pause}
+              title={t.backgroundTasks.pause}
             >
               <PauseIcon className="size-3.5" />
             </Button>
@@ -212,7 +227,8 @@ function TaskListItem({
               size="icon"
               className="size-7"
               onClick={onResume}
-              title="Resume"
+              aria-label={t.backgroundTasks.resume}
+              title={t.backgroundTasks.resume}
             >
               <PlayIcon className="size-3.5" />
             </Button>
@@ -222,8 +238,15 @@ function TaskListItem({
               variant="ghost"
               size="icon"
               className="size-7 text-destructive hover:text-destructive"
-              onClick={onCancel}
-              title="Cancel"
+              onClick={() => {
+                if (
+                  window.confirm(t.backgroundTasks.cancelConfirm(taskLabel))
+                ) {
+                  onCancel();
+                }
+              }}
+              aria-label={t.backgroundTasks.cancel}
+              title={t.backgroundTasks.cancel}
             >
               <SquareIcon className="size-3.5" />
             </Button>
@@ -233,8 +256,15 @@ function TaskListItem({
               variant="ghost"
               size="icon"
               className="size-7 text-destructive hover:text-destructive"
-              onClick={onDelete}
-              title="Delete"
+              onClick={() => {
+                if (
+                  window.confirm(t.backgroundTasks.deleteConfirm(taskLabel))
+                ) {
+                  onDelete();
+                }
+              }}
+              aria-label={t.backgroundTasks.delete}
+              title={t.backgroundTasks.delete}
             >
               <Trash2Icon className="size-3.5" />
             </Button>
@@ -265,6 +295,7 @@ function TaskDetailView({
   const { t } = useI18n();
   const { messages, done, doneStatus } = useBackgroundTaskOutput(task.task_id);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const taskLabel = task.name || task.prompt || t.backgroundTasks.unnamedTask;
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -282,7 +313,8 @@ function TaskDetailView({
           size="icon"
           className="size-7"
           onClick={onBack}
-          aria-label="Back"
+          aria-label={t.backgroundTasks.back}
+          title={t.backgroundTasks.back}
         >
           <ChevronLeftIcon className="size-4" />
         </Button>
@@ -315,7 +347,13 @@ function TaskDetailView({
               variant="outline"
               size="sm"
               className="text-destructive border-destructive/30 hover:bg-destructive/10"
-              onClick={onCancel}
+              onClick={() => {
+                if (
+                  window.confirm(t.backgroundTasks.cancelConfirm(taskLabel))
+                ) {
+                  onCancel();
+                }
+              }}
             >
               <SquareIcon className="size-3.5 mr-1" />
               {t.backgroundTasks.cancel}
@@ -328,11 +366,12 @@ function TaskDetailView({
       <div className="border-b px-4 py-2 text-xs">
         <div className="flex items-center gap-4 text-muted-foreground">
           <span>
-            Agent: <span className="text-foreground">{task.assistant_id}</span>
+            {t.backgroundTasks.agentLabel}:{" "}
+            <span className="text-foreground">{task.assistant_id}</span>
           </span>
           {task.thread_id && (
             <span>
-              Thread:{" "}
+              {t.backgroundTasks.threadLabel}:{" "}
               <span className="font-mono text-foreground">
                 {task.thread_id.slice(0, 8)}
               </span>
@@ -340,7 +379,7 @@ function TaskDetailView({
           )}
           {task.started_at && (
             <span>
-              Duration:{" "}
+              {t.backgroundTasks.durationLabel}:{" "}
               <span className="text-foreground">
                 {formatDuration(task.started_at, task.finished_at)}
               </span>
@@ -384,7 +423,11 @@ function TaskDetailView({
             ) : (
               <AlertCircleIcon className="size-4 text-red-500" />
             )}
-            <span>Task {doneStatus}</span>
+            <span>
+              {t.backgroundTasks.taskFinished(
+                statusLabel(doneStatus, t.backgroundTasks),
+              )}
+            </span>
           </div>
         )}
       </div>
@@ -393,6 +436,7 @@ function TaskDetailView({
 }
 
 function OutputMessageItem({ message }: { message: BackgroundTaskOutput }) {
+  const { t } = useI18n();
   const isStatus = message.role === "status";
   const isError = message.role === "error";
 
@@ -414,7 +458,7 @@ function OutputMessageItem({ message }: { message: BackgroundTaskOutput }) {
         {message.content}
       </div>
       <div className="mt-1 text-[10px] text-muted-foreground">
-        {formatRelativeTime(message.timestamp)}
+        {formatRelativeTime(message.timestamp, t.backgroundTasks)}
       </div>
     </div>
   );
@@ -434,14 +478,20 @@ function NewTaskForm({
   const { t } = useI18n();
   const [prompt, setPrompt] = useState("");
   const [name, setName] = useState("");
+  const nameId = useId();
+  const promptId = useId();
 
   return (
     <div className="space-y-3 p-4">
       <div>
-        <label className="text-xs font-medium text-muted-foreground">
+        <label
+          htmlFor={nameId}
+          className="text-xs font-medium text-muted-foreground"
+        >
           {t.backgroundTasks.taskName}
         </label>
         <Input
+          id={nameId}
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder={t.backgroundTasks.taskNamePlaceholder}
@@ -449,10 +499,14 @@ function NewTaskForm({
         />
       </div>
       <div>
-        <label className="text-xs font-medium text-muted-foreground">
+        <label
+          htmlFor={promptId}
+          className="text-xs font-medium text-muted-foreground"
+        >
           {t.backgroundTasks.promptLabel}
         </label>
         <textarea
+          id={promptId}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder={t.backgroundTasks.promptPlaceholder}
@@ -535,7 +589,8 @@ function BackgroundTasksPanelContent() {
             size="icon"
             className="size-7"
             onClick={() => setShowNewForm(false)}
-            aria-label="Back"
+            aria-label={t.backgroundTasks.back}
+            title={t.backgroundTasks.back}
           >
             <ChevronLeftIcon className="size-4" />
           </Button>
@@ -558,7 +613,9 @@ function BackgroundTasksPanelContent() {
           <h3 className="text-sm font-medium">{t.backgroundTasks.title}</h3>
           {tasks.filter((t) => isActiveStatus(t.status)).length > 0 && (
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-              {tasks.filter((t) => isActiveStatus(t.status)).length} active
+              {t.backgroundTasks.activeCount(
+                tasks.filter((task) => isActiveStatus(task.status)).length,
+              )}
             </Badge>
           )}
         </div>
@@ -568,7 +625,8 @@ function BackgroundTasksPanelContent() {
             size="icon"
             className="size-7"
             onClick={refresh}
-            title="Refresh"
+            aria-label={t.backgroundTasks.refresh}
+            title={t.backgroundTasks.refresh}
           >
             <RefreshCwIcon className="size-3.5" />
           </Button>
@@ -577,7 +635,8 @@ function BackgroundTasksPanelContent() {
             size="icon"
             className="size-7"
             onClick={() => setShowNewForm(true)}
-            title="New task"
+            aria-label={t.backgroundTasks.newTask}
+            title={t.backgroundTasks.newTask}
           >
             <PlusIcon className="size-3.5" />
           </Button>
@@ -588,9 +647,22 @@ function BackgroundTasksPanelContent() {
       {loading && tasks.length === 0 ? (
         <div className="flex items-center justify-center py-12">
           <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+          <span className="sr-only">{t.backgroundTasks.loading}</span>
         </div>
       ) : error ? (
-        <div className="p-4 text-sm text-destructive">{error}</div>
+        <div
+          role="alert"
+          className="flex flex-col items-center justify-center gap-3 px-4 py-12 text-center"
+        >
+          <AlertCircleIcon className="size-7 text-destructive/70" />
+          <p className="text-sm text-destructive">
+            {t.backgroundTasks.loadFailed}
+          </p>
+          <Button variant="outline" size="sm" onClick={refresh}>
+            <RefreshCwIcon className="mr-1 size-3.5" />
+            {t.backgroundTasks.retry}
+          </Button>
+        </div>
       ) : tasks.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
           <ZapIcon className="size-8 text-muted-foreground/40 mb-3" />
@@ -660,7 +732,8 @@ export function BackgroundTasksPanel({
  * Standalone trigger button that opens the background tasks panel.
  * Shows a badge with the active task count.
  */
-export function BackgroundTasksTrigger() {
+export function BackgroundTasksTrigger({ className }: { className?: string }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
 
   return (
@@ -668,9 +741,10 @@ export function BackgroundTasksTrigger() {
       <Button
         variant="ghost"
         size="icon"
-        className="size-8 relative"
+        className={cn("relative size-8", className)}
         onClick={() => setOpen(true)}
-        title="Background Tasks"
+        aria-label={t.backgroundTasks.title}
+        title={t.backgroundTasks.title}
       >
         <ZapIcon className="size-4" />
       </Button>

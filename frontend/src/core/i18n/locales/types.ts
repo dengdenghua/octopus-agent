@@ -3249,6 +3249,9 @@ export interface Translations {
     pause: string;
     resume: string;
     cancel: string;
+    delete: string;
+    back: string;
+    refresh: string;
     newTask: string;
     taskPlaceholder: string;
     waitingOutput: string;
@@ -3260,6 +3263,21 @@ export interface Translations {
     runInBackground: string;
     noTasks: string;
     noTasksDescription: string;
+    loading: string;
+    loadFailed: string;
+    retry: string;
+    activeCount: (count: number) => string;
+    agentLabel: string;
+    threadLabel: string;
+    durationLabel: string;
+    taskFinished: (status: string) => string;
+    justNow: string;
+    minutesAgo: (count: number) => string;
+    hoursAgo: (count: number) => string;
+    daysAgo: (count: number) => string;
+    unnamedTask: string;
+    cancelConfirm: (name: string) => string;
+    deleteConfirm: (name: string) => string;
   };
 
   unifiedStore: {
