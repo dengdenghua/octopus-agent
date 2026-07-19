@@ -103,6 +103,40 @@ describe("<WorkDirSelector />", () => {
     expect(onWorkDirChange).toHaveBeenCalledWith("/Users/dangbei/Public");
   });
 
+  it("opens a different recent workspace in a new task when the current thread is locked", async () => {
+    const onWorkDirChange = vi.fn();
+    const onOpenWorkDirInNewTask = vi.fn();
+    localStorage.setItem(
+      "octopus:recentWorkdirs",
+      JSON.stringify([
+        "/Users/dangbei/OtherProject",
+        "/Users/dangbei/Public/octopus-agent",
+      ]),
+    );
+
+    renderWithProviders(
+      <WorkDirSelector
+        workDir="/Users/dangbei/Public/octopus-agent"
+        onWorkDirChange={onWorkDirChange}
+        lockToCurrentThread
+        onOpenWorkDirInNewTask={onOpenWorkDirInNewTask}
+        variant="muted"
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByTitle(
+        "Current task is bound to this workspace: /Users/dangbei/Public/octopus-agent",
+      ),
+    );
+    fireEvent.click(await screen.findByText("OtherProject"));
+
+    expect(onWorkDirChange).not.toHaveBeenCalled();
+    expect(onOpenWorkDirInNewTask).toHaveBeenCalledWith(
+      "/Users/dangbei/OtherProject",
+    );
+  });
+
   it("offers manual path entry in web mode and binds a pasted absolute path", async () => {
     const onWorkDirChange = vi.fn();
 
@@ -150,9 +184,7 @@ describe("<WorkDirSelector />", () => {
     fireEvent.click(
       screen.getByTitle("Choose workspace folder: F:/work/octopus-agent"),
     );
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Open folder" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Open folder" }));
 
     await waitFor(() => {
       expect(onWorkDirChange).toHaveBeenCalledWith("F:\\picked\\project");

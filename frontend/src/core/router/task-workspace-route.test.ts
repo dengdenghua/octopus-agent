@@ -21,4 +21,14 @@ describe("task workspace route", () => {
       }),
     ).toBe("/workspace/realtime/new?prompt=fix+localhost%2F127&agent=coder");
   });
+
+  test("carries a workspace path for a new workspace-bound task", () => {
+    expect(
+      taskWorkspaceRoute({
+        workspacePath: "/Users/dangbei/Public/octopus-agent",
+      }),
+    ).toBe(
+      "/workspace/realtime/new?workspace_path=%2FUsers%2Fdangbei%2FPublic%2Foctopus-agent",
+    );
+  });
 });

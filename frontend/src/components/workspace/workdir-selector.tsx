@@ -26,6 +26,8 @@ import { cn } from "@/lib/utils";
 interface WorkDirSelectorProps {
   workDir: string;
   onWorkDirChange?: (dir: string) => void;
+  lockToCurrentThread?: boolean;
+  onOpenWorkDirInNewTask?: (dir: string) => void;
   className?: string;
   variant?: "default" | "muted";
   chromeless?: boolean;
@@ -164,6 +166,32 @@ const WEB_PICKER_HINT: Record<"zh" | "en" | "ja" | "ko", string> = {
   ko: "웹 버전은 로컬 폴더를 직접 선택할 수 없습니다. 최근 작업 공간을 선택하거나 아래에 전체 경로를 붙여넣으세요(폴더 선택기는 데스크톱 앱).",
 };
 
+const LOCKED_WORKDIR_TEXT: Record<
+  "zh" | "en" | "ja" | "ko",
+  { triggerTitle: string; hint: string; openFolder: string }
+> = {
+  zh: {
+    triggerTitle: "当前任务已绑定工作区",
+    hint: "当前对话已绑定这个工作区。选择其他工作区会打开一个新任务，避免上下文和权限混在一起。",
+    openFolder: "在新任务打开其他工作区",
+  },
+  en: {
+    triggerTitle: "Current task is bound to this workspace",
+    hint: "This conversation is bound to its workspace. Choosing another workspace opens a new task so context and permissions stay separate.",
+    openFolder: "Open another workspace in a new task",
+  },
+  ja: {
+    triggerTitle: "このタスクは現在のワークスペースに固定されています",
+    hint: "この会話は現在のワークスペースに固定されています。別のワークスペースは新しいタスクで開き、文脈と権限を分けます。",
+    openFolder: "別のワークスペースを新しいタスクで開く",
+  },
+  ko: {
+    triggerTitle: "현재 작업은 이 작업 공간에 고정되어 있습니다",
+    hint: "이 대화는 현재 작업 공간에 고정되어 있습니다. 다른 작업 공간은 새 작업으로 열어 컨텍스트와 권한을 분리합니다.",
+    openFolder: "다른 작업 공간을 새 작업으로 열기",
+  },
+};
+
 function webPickerHint(locale: string): string {
   const lang = (locale || "en").slice(0, 2).toLowerCase();
   if (lang === "zh") return WEB_PICKER_HINT.zh;
@@ -172,9 +200,19 @@ function webPickerHint(locale: string): string {
   return WEB_PICKER_HINT.en;
 }
 
+function lockedWorkdirText(locale: string) {
+  const lang = (locale || "en").slice(0, 2).toLowerCase();
+  if (lang === "zh") return LOCKED_WORKDIR_TEXT.zh;
+  if (lang === "ja") return LOCKED_WORKDIR_TEXT.ja;
+  if (lang === "ko") return LOCKED_WORKDIR_TEXT.ko;
+  return LOCKED_WORKDIR_TEXT.en;
+}
+
 export function WorkDirSelector({
   workDir,
   onWorkDirChange,
+  lockToCurrentThread = false,
+  onOpenWorkDirInNewTask,
   className,
   variant = "default",
   chromeless = false,
@@ -226,7 +264,9 @@ export function WorkDirSelector({
     () => (workDir ? basename(workDir) : ""),
     [workDir],
   );
+  const lockedCopy = lockedWorkdirText(locale);
   const isEmpty = !workDir;
+  const isWorkDirLocked = lockToCurrentThread && !isEmpty;
   const emptyTriggerLabel = isMutedVariant
     ? t.codeMode.personalSpace
     : t.codeMode.chooseWorkspaceFolder;
@@ -236,12 +276,16 @@ export function WorkDirSelector({
       : isEmpty
         ? emptyTriggerLabel
         : folderName;
-  const folderPickerLabel = isMutedVariant
-    ? t.codeMode.chooseWorkspaceFolder
-    : t.codeMode.openFolderCta;
+  const folderPickerLabel = isWorkDirLocked
+    ? lockedCopy.openFolder
+    : isMutedVariant
+      ? t.codeMode.chooseWorkspaceFolder
+      : t.codeMode.openFolderCta;
   const triggerTitle = isEmpty
     ? emptyTriggerLabel
-    : `${t.codeMode.chooseWorkspaceFolder}: ${workDir}`;
+    : isWorkDirLocked
+      ? `${lockedCopy.triggerTitle}: ${workDir}`
+      : `${t.codeMode.chooseWorkspaceFolder}: ${workDir}`;
   const _menuToggleTitle = isMutedVariant
     ? t.codeMode.chooseWorkspaceFolder
     : t.codeMode.recentWorkspaces;
@@ -256,6 +300,14 @@ export function WorkDirSelector({
     (dir: string) => {
       const next = dir.trim();
       if (!next || !isAbsolutePath(next)) return;
+      if (isWorkDirLocked) {
+        if (normalizePathKey(next) !== normalizePathKey(workDir)) {
+          onOpenWorkDirInNewTask?.(next);
+        }
+        setShowMenu(false);
+        setNoBridgeHint(false);
+        return;
+      }
       onWorkDirChange?.(next);
       setBrowsePath(next);
       setRecentWorkdirs((prev) => {
@@ -269,7 +321,7 @@ export function WorkDirSelector({
       setShowMenu(false);
       setNoBridgeHint(false);
     },
-    [onWorkDirChange],
+    [isWorkDirLocked, onOpenWorkDirInNewTask, onWorkDirChange, workDir],
   );
 
   const clearWorkDir = useCallback(() => {
@@ -544,14 +596,21 @@ export function WorkDirSelector({
     <div
       className={cn(
         "flex max-h-full flex-col overflow-hidden border border-border-default bg-popover/95 backdrop-blur",
-        isMutedVariant ? "rounded-lg shadow-[var(--shadow-md)]" : "rounded-xl shadow-2xl",
+        isMutedVariant
+          ? "rounded-lg shadow-[var(--shadow-md)]"
+          : "rounded-xl shadow-2xl",
       )}
     >
       {/* Primary entry point for adding a workspace. Only meaningful with a
           native picker (Electron); web mode leans on recents + manual paste. */}
       <div className={cn("shrink-0", isMutedVariant ? "p-1.5" : "p-2.5")}>
         {hasNativePicker && folderPickerCta}
-        {workDir && (
+        {isWorkDirLocked && (
+          <div className="mt-1.5 rounded-md border border-primary/15 bg-primary/5 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+            {lockedCopy.hint}
+          </div>
+        )}
+        {workDir && !isWorkDirLocked && (
           <button
             type="button"
             onClick={clearWorkDir}
@@ -763,9 +822,7 @@ export function WorkDirSelector({
           chromeless
             ? "h-8 rounded-lg px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
             : "h-8 rounded-lg border border-transparent bg-transparent px-2 text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",
-          isEmpty
-            ? emptyTriggerClass
-            : activeTriggerClass,
+          isEmpty ? emptyTriggerClass : activeTriggerClass,
           isPicking && "cursor-wait opacity-50",
         )}
         onClick={workDir ? handleMenuToggle : handlePrimaryAction}
@@ -794,9 +851,7 @@ export function WorkDirSelector({
               className="fixed z-[100]"
               style={{
                 top:
-                  menuRect.top !== undefined
-                    ? `${menuRect.top}px`
-                    : undefined,
+                  menuRect.top !== undefined ? `${menuRect.top}px` : undefined,
                 bottom:
                   menuRect.bottom !== undefined
                     ? `${menuRect.bottom}px`

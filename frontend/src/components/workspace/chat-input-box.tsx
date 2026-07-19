@@ -107,6 +107,8 @@ export interface ChatInputBoxProps {
    * that read/edit local files. */
   showWorkDirSelector?: boolean;
   onWorkDirChange?: (dir: string) => void;
+  lockWorkDirToThread?: boolean;
+  onOpenWorkDirInNewTask?: (dir: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
   defaultValue?: string;
@@ -298,6 +300,8 @@ export function ChatInputBox({
   displayAgent,
   showWorkDirSelector = false,
   onWorkDirChange,
+  lockWorkDirToThread = false,
+  onOpenWorkDirInNewTask,
   placeholder,
   autoFocus,
   defaultValue = "",
@@ -1672,6 +1676,8 @@ export function ChatInputBox({
                 <WorkDirSelector
                   workDir={workDir ?? ""}
                   onWorkDirChange={onWorkDirChange}
+                  lockToCurrentThread={lockWorkDirToThread}
+                  onOpenWorkDirInNewTask={onOpenWorkDirInNewTask}
                   variant="muted"
                   chromeless
                 />

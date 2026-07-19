@@ -105,6 +105,7 @@ import { SubtasksProvider } from "@/core/tasks/context";
 import { getAPIClient } from "@/core/api";
 import { copyTextToClipboard } from "@/core/clipboard";
 import { threadCollaborationLink } from "@/core/collaboration/thread-collaboration-link";
+import { toHashRouterShellUrl } from "@/core/router/hash-shell-url";
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { useThreadSettings } from "@/core/settings";
 import { useThreadStream } from "@/core/threads/hooks";
@@ -1209,6 +1210,7 @@ function RealtimePageContent({
   const isAgentRoute = !!routeAgentName;
   const isRealtimeRoute = location.pathname.startsWith("/workspace/realtime");
   const memoryMode = searchParams.get("memory") ?? "";
+  const queryWorkspacePath = searchParams.get("workspace_path") ?? "";
 
   // Unified task routes carry the selected persona in ?agent= while every chat
   // thread stays on the /workspace/realtime/* surface.
@@ -1219,7 +1221,9 @@ function RealtimePageContent({
     typeof routeState?.workspacePath === "string" &&
     isAbsolutePath(routeState.workspacePath)
       ? routeState.workspacePath
-      : "";
+      : isAbsolutePath(queryWorkspacePath)
+        ? queryWorkspacePath
+        : "";
   const threadOwnerAgentId = useMemo(
     () =>
       threadOwnerAgentFromMetadata(
@@ -1750,6 +1754,31 @@ function RealtimePageContent({
     },
     [activeAgentId],
   );
+  const openWorkDirInNewTask = useCallback(
+    (dir: string) => {
+      const next = dir.trim();
+      if (!isAbsolutePath(next)) return;
+      const route = taskWorkspaceRoute({
+        agentId: effectiveAgentId,
+        workspacePath: next,
+      });
+      const opened = window.open(
+        new URL(toHashRouterShellUrl(route), window.location.origin).toString(),
+        "_blank",
+        "noopener,noreferrer",
+      );
+      if (opened) opened.opener = null;
+    },
+    [effectiveAgentId],
+  );
+  const routeWorkspaceHintKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isNewThread || !hintedWorkspacePath) return;
+    const key = normalizeWorkDirKey(hintedWorkspacePath);
+    if (routeWorkspaceHintKeyRef.current === key) return;
+    routeWorkspaceHintKeyRef.current = key;
+    handleWorkDirChange(hintedWorkspacePath);
+  }, [handleWorkDirChange, hintedWorkspacePath, isNewThread]);
 
   // ── Agent-switch refresh ───────────────────────────────────
   // When the user picks a different agent in the footer dropdown while
@@ -2952,6 +2981,8 @@ function RealtimePageContent({
                         displayAgent={composerDisplayAgent}
                         showWorkDirSelector
                         onWorkDirChange={handleWorkDirChange}
+                        lockWorkDirToThread={!isNewThread && isProjectCodeMode}
+                        onOpenWorkDirInNewTask={openWorkDirInNewTask}
                         codeModeUnlocked={codeModeUnlocked}
                         projectAgentMode={projectAgentMode}
                         auditIntensity={auditIntensity}
