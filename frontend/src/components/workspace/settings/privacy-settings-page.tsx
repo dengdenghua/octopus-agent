@@ -1,17 +1,4 @@
-/**
- * Privacy / Developer Mode settings.
- *
- * Today this page hosts a single toggle: the **identity lock**. When
- * enabled (default), the runtime scrubs vendor / model self-identification
- * from LLM replies (``"I'm Claude"`` → ``"I'm Octopus"``). Operators
- * who need to see which underlying model is responding (debugging prompt
- * behavior, verifying a provider switch, etc.) can disable it here.
- *
- * The toggle calls ``PUT /api/config/identity-lock`` · `GET` on mount.
- * Two other unlock paths exist outside this UI (documented in-page):
- *   • env ``OCTOPUS_IDENTITY_LOCK=0`` at server start
- *   • user prompt starts with ``/raw`` (per-turn)
- */
+/** Privacy and security controls backed by live runtime policy endpoints. */
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -70,6 +57,10 @@ interface AiModeStatus {
 
 interface PathDenylistStatus {
   paths: string[];
+}
+
+interface FactoryResetResult {
+  ok: boolean;
 }
 
 // Pulled from the auto-generated OpenAPI types so backend changes
@@ -141,7 +132,12 @@ export default function PrivacySettingsPage() {
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const next = (await res.json()) as LockStatus;
-      if (typeof next?.locked !== "boolean") throw new Error("invalid data");
+      if (
+        typeof next?.locked !== "boolean" ||
+        !(["runtime", "env", "default"] as string[]).includes(next?.source)
+      ) {
+        throw new Error("invalid data");
+      }
       setStatus(next);
       setStatusLoadState("ready");
     } catch {
@@ -158,9 +154,7 @@ export default function PrivacySettingsPage() {
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const next = (await res.json()) as ConstitutionProfileStatus;
-      if (!(["strict", "normal", "lax"] as string[]).includes(next?.profile)) {
-        throw new Error("invalid data");
-      }
+      if (!isConstitutionProfileStatus(next)) throw new Error("invalid data");
       setProfile(next);
       setProfileLoadState("ready");
     } catch {
@@ -197,8 +191,11 @@ export default function PrivacySettingsPage() {
       const data = (await res.json()) as AiModeStatus;
       if (
         (data?.mode !== "efficiency" && data?.mode !== "privacy") ||
+        (data?.recommended !== "efficiency" &&
+          data?.recommended !== "privacy") ||
         !Array.isArray(data.modes) ||
-        data.modes.length === 0
+        !data.modes.some((mode) => mode?.id === "efficiency") ||
+        !data.modes.some((mode) => mode?.id === "privacy")
       ) {
         throw new Error("invalid data");
       }
@@ -216,7 +213,8 @@ export default function PrivacySettingsPage() {
       const res = await fetch(`${getBackendBaseURL()}/api/path-denylist`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as PathDenylistStatus;
-      setDenylist({ paths: Array.isArray(data?.paths) ? data.paths : [] });
+      if (!isPathList(data?.paths)) throw new Error("invalid data");
+      setDenylist({ paths: data.paths });
       setDenylistLoadState("ready");
     } catch {
       setDenylist(null);
@@ -260,7 +258,10 @@ export default function PrivacySettingsPage() {
         modes: Array.isArray(payload.modes) ? payload.modes : prev.modes,
       };
       setAiMode(next);
-      const label = next.modes.find((m) => m.id === mode)?.label ?? mode;
+      const label =
+        mode === "efficiency"
+          ? t.privacySettings.efficiencyMode
+          : t.privacySettings.privacyMode;
       toast.success(t.privacySettings.toastAiModeSwitched(label));
     } catch {
       setAiMode(prev);
@@ -272,7 +273,7 @@ export default function PrivacySettingsPage() {
 
   async function addDenylistPath() {
     const path = newPath.trim();
-    if (!path) {
+    if (!isAbsoluteLikePath(path)) {
       toast.error(t.privacySettings.toastInvalidPath);
       return;
     }
@@ -284,10 +285,15 @@ export default function PrivacySettingsPage() {
         body: JSON.stringify({ path }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const payload = (await res.json()) as Partial<PathDenylistStatus>;
+      if (isPathList(payload.paths)) {
+        setDenylist({ paths: payload.paths });
+      } else {
+        await fetchDenylist();
+      }
       toast.success(t.privacySettings.toastPathAdded(path));
       setNewPath("");
       setShowAddPathDialog(false);
-      await fetchDenylist();
     } catch {
       toast.error(copy.restoreFailed);
     } finally {
@@ -304,8 +310,13 @@ export default function PrivacySettingsPage() {
         body: JSON.stringify({ path }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const payload = (await res.json()) as Partial<PathDenylistStatus>;
+      if (isPathList(payload.paths)) {
+        setDenylist({ paths: payload.paths });
+      } else {
+        await fetchDenylist();
+      }
       toast.success(t.privacySettings.toastPathRemoved(path));
-      await fetchDenylist();
       return true;
     } catch {
       toast.error(copy.restoreFailed);
@@ -328,6 +339,7 @@ export default function PrivacySettingsPage() {
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const next: ConstitutionProfileStatus = await res.json();
+      if (!isConstitutionProfileStatus(next)) throw new Error("invalid data");
       setProfile(next);
       setProfileLoadState("ready");
       toast.success(t.privacySettings.toastProfileSwitched(name));
@@ -349,6 +361,12 @@ export default function PrivacySettingsPage() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const next: JudgeStatus = await res.json();
+      if (
+        typeof next?.enabled !== "boolean" ||
+        typeof next?.available !== "boolean"
+      ) {
+        throw new Error("invalid data");
+      }
       setJudge(next);
       setJudgeLoadState("ready");
       toast.success(
@@ -376,6 +394,12 @@ export default function PrivacySettingsPage() {
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const next: LockStatus = await res.json();
+      if (
+        typeof next?.locked !== "boolean" ||
+        !(["runtime", "env", "default"] as string[]).includes(next?.source)
+      ) {
+        throw new Error("invalid data");
+      }
       setStatus(next);
       setStatusLoadState("ready");
       toast.success(
@@ -411,6 +435,8 @@ export default function PrivacySettingsPage() {
         },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const result = (await res.json()) as FactoryResetResult;
+      if (result?.ok !== true) throw new Error("factory reset incomplete");
       clearOctopusBrowserState();
       queryClient.removeQueries({ queryKey: ["threads"] });
       queryClient.removeQueries({ queryKey: ["projects"] });
@@ -516,11 +542,9 @@ export default function PrivacySettingsPage() {
               {(() => {
                 if (!aiMode) return t.privacySettings.aiModeDescScanning;
                 const recLabel =
-                  aiMode.modes.find((m) => m.id === aiMode.recommended)
-                    ?.label ??
-                  (aiMode.recommended === "efficiency"
+                  aiMode.recommended === "efficiency"
                     ? t.privacySettings.efficiencyMode
-                    : t.privacySettings.privacyMode);
+                    : t.privacySettings.privacyMode;
                 return t.privacySettings.aiModeRecommended(recLabel);
               })()}
             </p>
@@ -547,46 +571,58 @@ export default function PrivacySettingsPage() {
         {aiModeLoadState === "ready" && aiMode ? (
           <>
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {aiMode.modes.map((opt) => {
-                const active = aiMode?.mode === opt.id;
-                const recommended =
-                  !!opt.recommended_default || aiMode?.recommended === opt.id;
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => selectAiMode(opt.id)}
-                    disabled={aiModeBusy}
-                    aria-pressed={active}
-                    className={cn(
-                      "flex flex-col gap-2 rounded-lg border p-4 text-left transition",
-                      active
-                        ? "border-primary bg-primary/5 ring-1 ring-primary/40"
-                        : "border-border-default hover:border-primary/40",
-                      aiModeBusy && "opacity-60 cursor-not-allowed",
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium">{opt.label}</span>
-                      <div className="flex items-center gap-1.5">
-                        {recommended && (
-                          <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                            {t.privacySettings.recommendedTag}
-                          </span>
-                        )}
-                        {active && (
-                          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                            {t.privacySettings.enabledTag}
-                          </span>
-                        )}
+              {aiMode.modes
+                .filter(
+                  (opt) => opt.id === "efficiency" || opt.id === "privacy",
+                )
+                .map((opt) => {
+                  const active = aiMode?.mode === opt.id;
+                  const recommended =
+                    !!opt.recommended_default || aiMode?.recommended === opt.id;
+                  const label =
+                    opt.id === "efficiency"
+                      ? t.privacySettings.efficiencyMode
+                      : t.privacySettings.privacyMode;
+                  const description =
+                    opt.id === "efficiency"
+                      ? t.privacySettings.efficiencyModeDesc
+                      : t.privacySettings.privacyModeDesc;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => selectAiMode(opt.id)}
+                      disabled={aiModeBusy}
+                      aria-pressed={active}
+                      className={cn(
+                        "flex flex-col gap-2 rounded-lg border p-4 text-left transition",
+                        active
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/40"
+                          : "border-border-default hover:border-primary/40",
+                        aiModeBusy && "opacity-60 cursor-not-allowed",
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium">{label}</span>
+                        <div className="flex items-center gap-1.5">
+                          {recommended && (
+                            <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                              {t.privacySettings.recommendedTag}
+                            </span>
+                          )}
+                          {active && (
+                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                              {t.privacySettings.enabledTag}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <p className="text-[11px] leading-snug text-muted-foreground">
-                      {opt.description}
-                    </p>
-                  </button>
-                );
-              })}
+                      <p className="text-[11px] leading-snug text-muted-foreground">
+                        {description}
+                      </p>
+                    </button>
+                  );
+                })}
             </div>
             {formatAiModeDevice(aiMode.device, locale) && (
               <div className="mt-3 text-[11px] text-muted-foreground/80">
@@ -693,41 +729,39 @@ export default function PrivacySettingsPage() {
         {profileLoadState === "ready" && profile ? (
           <>
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {(["strict", "normal", "lax"] as ConstitutionProfile[]).map(
-                (name) => {
-                  const active = profile.profile === name;
-                  return (
-                    <button
-                      key={name}
-                      type="button"
-                      onClick={() => setConstitutionProfile(name)}
-                      disabled={profileBusy || active}
-                      aria-pressed={active}
-                      className={cn(
-                        "flex flex-col gap-1 rounded-lg border p-3 text-left transition",
-                        active
-                          ? "border-primary bg-primary/5 ring-1 ring-primary/40"
-                          : "border-border-default hover:border-primary/40",
-                        profileBusy && "opacity-60 cursor-not-allowed",
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium">
-                          {copy.profiles[name].label}
+              {profile.available.map((name) => {
+                const active = profile.profile === name;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => setConstitutionProfile(name)}
+                    disabled={profileBusy || active}
+                    aria-pressed={active}
+                    className={cn(
+                      "flex flex-col gap-1 rounded-lg border p-3 text-left transition",
+                      active
+                        ? "border-primary bg-primary/5 ring-1 ring-primary/40"
+                        : "border-border-default hover:border-primary/40",
+                      profileBusy && "opacity-60 cursor-not-allowed",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">
+                        {copy.profiles[name].label}
+                      </span>
+                      {active && (
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                          {copy.active}
                         </span>
-                        {active && (
-                          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                            {copy.active}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground leading-snug">
-                        {copy.profiles[name].description}
-                      </div>
-                    </button>
-                  );
-                },
-              )}
+                      )}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground leading-snug">
+                      {copy.profiles[name].description}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
 
             <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-border-default p-3">
@@ -823,7 +857,12 @@ export default function PrivacySettingsPage() {
         </div>
       </div>
 
-      <Dialog open={showAddPathDialog} onOpenChange={setShowAddPathDialog}>
+      <Dialog
+        open={showAddPathDialog}
+        onOpenChange={(open) => {
+          if (!denylistBusy) setShowAddPathDialog(open);
+        }}
+      >
         <DialogContent closeLabel={t.common.close} className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>{t.privacySettings.addPathDialogTitle}</DialogTitle>
@@ -831,7 +870,15 @@ export default function PrivacySettingsPage() {
               {t.privacySettings.addPathDialogDesc}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-4">
+          <form
+            className="space-y-3 py-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!denylistBusy && isAbsoluteLikePath(newPath.trim())) {
+                void addDenylistPath();
+              }
+            }}
+          >
             <Label htmlFor="denylist-path-input" className="text-sm">
               {t.privacySettings.pathLabel}
             </Label>
@@ -842,23 +889,28 @@ export default function PrivacySettingsPage() {
               placeholder="C:\\Users\\you\\secrets"
               className="h-9 font-mono text-xs"
               autoFocus
+              required
+              aria-invalid={
+                newPath.trim().length > 0 && !isAbsoluteLikePath(newPath.trim())
+              }
             />
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => setShowAddPathDialog(false)}
-              disabled={denylistBusy}
-            >
-              {t.common.cancel}
-            </Button>
-            <Button
-              onClick={addDenylistPath}
-              disabled={denylistBusy || !newPath.trim()}
-            >
-              {denylistBusy ? t.common.loading : t.common.confirm}
-            </Button>
-          </DialogFooter>
+            <DialogFooter className="gap-2 pt-1 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowAddPathDialog(false)}
+                disabled={denylistBusy}
+              >
+                {t.common.cancel}
+              </Button>
+              <Button
+                type="submit"
+                disabled={denylistBusy || !isAbsoluteLikePath(newPath.trim())}
+              >
+                {denylistBusy ? t.common.loading : t.common.confirm}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -902,7 +954,9 @@ export default function PrivacySettingsPage() {
 
       <Dialog
         open={showFactoryResetDialog}
-        onOpenChange={setShowFactoryResetDialog}
+        onOpenChange={(open) => {
+          if (!factoryResetPending) setShowFactoryResetDialog(open);
+        }}
       >
         <DialogContent closeLabel={t.common.close} className="sm:max-w-[420px]">
           <DialogHeader>
@@ -928,8 +982,10 @@ export default function PrivacySettingsPage() {
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button
+              type="button"
               variant="outline"
               onClick={() => setShowFactoryResetDialog(false)}
+              disabled={factoryResetPending}
             >
               {t.common.cancel}
             </Button>
@@ -1023,4 +1079,36 @@ function clearOctopusBrowserState(): void {
     }
   }
   window.dispatchEvent(new Event("storage"));
+}
+
+function isPathList(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((path) => typeof path === "string")
+  );
+}
+
+function isConstitutionProfileStatus(
+  value: ConstitutionProfileStatus,
+): boolean {
+  const allowed = new Set<ConstitutionProfile>(["strict", "normal", "lax"]);
+  return (
+    allowed.has(value?.profile) &&
+    Array.isArray(value.available) &&
+    value.available.length > 0 &&
+    value.available.every((profile) => allowed.has(profile)) &&
+    value.available.includes(value.profile)
+  );
+}
+
+function isAbsoluteLikePath(path: string): boolean {
+  if (!path) return false;
+  return (
+    path.startsWith("/") ||
+    path.startsWith("~/") ||
+    path.startsWith("$HOME/") ||
+    path.startsWith("%USERPROFILE%") ||
+    path.startsWith("%APPDATA%") ||
+    /^[a-zA-Z]:[\\/]/.test(path) ||
+    path.startsWith("\\\\")
+  );
 }

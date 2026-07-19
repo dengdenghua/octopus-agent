@@ -21,22 +21,27 @@ export interface SearxngStatus {
   url?: string;
   port?: string;
   restart_count?: number;
+  error?: string;
 }
 
 const STATUS_KEY = ["searxng-status"] as const;
 
-const EMPTY: SearxngStatus = {
-  up: false,
-  heartbeat: false,
-  docker_present: false,
-  managed: false,
-  autostart: false,
-};
-
-async function fetchSearxngStatus(signal?: AbortSignal): Promise<SearxngStatus> {
-  const res = await fetch(`${getBackendBaseURL()}/api/searxng/status`, { signal });
-  if (!res.ok) return EMPTY;
+async function fetchSearxngStatus(
+  signal?: AbortSignal,
+): Promise<SearxngStatus> {
+  const res = await fetch(`${getBackendBaseURL()}/api/searxng/status`, {
+    signal,
+  });
+  if (!res.ok) throw new Error(`searxng status failed: ${res.status}`);
   const d = (await res.json()) as Partial<SearxngStatus>;
+  if (d.error) throw new Error("searxng status unavailable");
+  if (
+    typeof d.up !== "boolean" ||
+    typeof d.docker_present !== "boolean" ||
+    typeof d.managed !== "boolean"
+  ) {
+    throw new Error("invalid searxng status");
+  }
   return {
     up: Boolean(d.up),
     heartbeat: Boolean(d.heartbeat),
@@ -52,8 +57,10 @@ async function fetchSearxngStatus(signal?: AbortSignal): Promise<SearxngStatus> 
 export function useSearxngStatus(): {
   status: SearxngStatus | undefined;
   isLoading: boolean;
+  isError: boolean;
+  refetch: () => void;
 } {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: STATUS_KEY,
     queryFn: ({ signal }) => fetchSearxngStatus(signal),
     // Poll fast while a managed container is still coming up (image pull + boot),
@@ -65,29 +72,49 @@ export function useSearxngStatus(): {
     staleTime: 4_000,
     refetchOnWindowFocus: false,
   });
-  return { status: data, isLoading };
+  return { status: data, isLoading, isError, refetch: () => void refetch() };
 }
 
 export function useSearxngControl(): {
-  enable: () => void;
-  disable: () => void;
+  setEnabled: (enabled: boolean) => Promise<void>;
   isPending: boolean;
 } {
   const qc = useQueryClient();
-  const post = async (action: "enable" | "disable"): Promise<void> => {
+  const post = async (action: "enable" | "disable"): Promise<SearxngStatus> => {
     const res = await fetch(`${getBackendBaseURL()}/api/searxng/${action}`, {
       method: "POST",
     });
     if (!res.ok) throw new Error(`searxng ${action} failed: ${res.status}`);
+    const data = (await res.json()) as SearxngStatus & { status?: string };
+    if (
+      data.status === "error" ||
+      data.status === "docker_missing" ||
+      data.status === "docker_not_running"
+    ) {
+      throw new Error(`searxng ${data.status}`);
+    }
+    return data;
   };
-  const invalidate = () => {
+  const onSuccess = (status: SearxngStatus) => {
+    qc.setQueryData(STATUS_KEY, status);
+  };
+  const onSettled = () => {
     void qc.invalidateQueries({ queryKey: STATUS_KEY });
   };
-  const enable = useMutation({ mutationFn: () => post("enable"), onSettled: invalidate });
-  const disable = useMutation({ mutationFn: () => post("disable"), onSettled: invalidate });
+  const enable = useMutation({
+    mutationFn: () => post("enable"),
+    onSuccess,
+    onSettled,
+  });
+  const disable = useMutation({
+    mutationFn: () => post("disable"),
+    onSuccess,
+    onSettled,
+  });
   return {
-    enable: () => enable.mutate(),
-    disable: () => disable.mutate(),
+    setEnabled: async (enabled) => {
+      await (enabled ? enable.mutateAsync() : disable.mutateAsync());
+    },
     isPending: enable.isPending || disable.isPending,
   };
 }

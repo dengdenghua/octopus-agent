@@ -179,6 +179,25 @@ describe("PrivacySettingsPage · AI mode section", () => {
     expect(await screen.findByText(/16 GB RAM/)).toBeInTheDocument();
     expect(screen.getByText(/本地模型可用/)).toBeInTheDocument();
   });
+
+  it("uses the selected locale instead of backend-provided Chinese labels", async () => {
+    installFetchRouter({
+      "/api/config/identity-lock": () => IDENTITY_LOCK_RESPONSE,
+      "/api/safety/constitution-profile": () => CONSTITUTION_PROFILE_RESPONSE,
+      "/api/safety/llm-judge": () => JUDGE_RESPONSE,
+      "/api/ai-mode": () => AI_MODE_RESPONSE,
+      "/api/path-denylist": () => DENYLIST_RESPONSE,
+    });
+
+    renderWithProviders(<PrivacySettingsPage />, { locale: "en-US" });
+
+    expect(
+      await screen.findByRole("button", { name: /Efficiency/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Privacy/ })).toBeInTheDocument();
+    expect(screen.queryByText("效率模式")).not.toBeInTheDocument();
+    expect(screen.queryByText("隐私模式")).not.toBeInTheDocument();
+  });
 });
 
 describe("PrivacySettingsPage · path denylist section", () => {
@@ -300,6 +319,68 @@ describe("PrivacySettingsPage · path denylist section", () => {
     await waitFor(() =>
       expect(screen.getByText("/tmp/new-secret")).toBeInTheDocument(),
     );
+  });
+
+  it("rejects relative paths that would resolve against the server directory", async () => {
+    installFetchRouter({
+      "/api/config/identity-lock": () => IDENTITY_LOCK_RESPONSE,
+      "/api/safety/constitution-profile": () => CONSTITUTION_PROFILE_RESPONSE,
+      "/api/safety/llm-judge": () => JUDGE_RESPONSE,
+      "/api/ai-mode": () => AI_MODE_RESPONSE,
+      "/api/path-denylist": () => DENYLIST_RESPONSE,
+    });
+
+    renderWithProviders(<PrivacySettingsPage />, { locale: "zh-CN" });
+    await screen.findByText("C:/Users/me/secrets");
+    fireEvent.click(screen.getByRole("button", { name: /新增/ }));
+
+    const dialog = await screen.findByRole("dialog");
+    const input = within(dialog).getByLabelText(/路径/);
+    fireEvent.change(input, { target: { value: "relative/secrets" } });
+
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(within(dialog).getByRole("button", { name: /确认/ })).toBeDisabled();
+  });
+});
+
+describe("PrivacySettingsPage · factory reset", () => {
+  it("keeps browser state and the dialog open when the backend reports an incomplete reset", async () => {
+    installFetchRouter({
+      "/api/config/identity-lock": () => IDENTITY_LOCK_RESPONSE,
+      "/api/safety/constitution-profile": () => CONSTITUTION_PROFILE_RESPONSE,
+      "/api/safety/llm-judge": () => JUDGE_RESPONSE,
+      "/api/ai-mode": () => AI_MODE_RESPONSE,
+      "/api/path-denylist": () => DENYLIST_RESPONSE,
+      "/api/system/factory-reset": () => ({
+        ok: false,
+        errors: ["data directory busy"],
+      }),
+    });
+    window.localStorage.setItem("octopus:test-state", "preserve-me");
+
+    renderWithProviders(<PrivacySettingsPage />, { locale: "zh-CN" });
+    await screen.findByText("效率模式");
+    fireEvent.click(screen.getAllByRole("button", { name: "恢复出厂设置" })[0]);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "恢复出厂设置",
+    });
+    fireEvent.change(within(dialog).getByLabelText(/RESET OCTOPUS/), {
+      target: { value: "RESET OCTOPUS" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "确认恢复" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/system/factory-reset"),
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    expect(screen.getByRole("dialog", { name: "恢复出厂设置" })).toBeVisible();
+    expect(window.localStorage.getItem("octopus:test-state")).toBe(
+      "preserve-me",
+    );
+    window.localStorage.removeItem("octopus:test-state");
   });
 });
 
