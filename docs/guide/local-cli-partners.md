@@ -57,6 +57,20 @@ Health checks and CLI-team runs surface structured failures:
 - `fix_hint`
 - `raw_error`
 
+Failure kinds should map to user actions instead of leaking raw stderr first:
+
+| `failure_kind` | User-facing recovery |
+| --- | --- |
+| `missing_binary` | Install the official CLI and restore the command in `PATH`. |
+| `auth` | Open the native CLI and complete login or token authorization. |
+| `entitlement` | Confirm the CLI account has subscription, enterprise, or model access; desktop entitlements may not apply. |
+| `model` | Pick/configure a model in the native CLI or partner model selector. |
+| `permission` | Trust the workspace or adjust the CLI's permission mode. |
+| `network` | Fix proxy, DNS, Kerberos, VPN, or enterprise network access in the native CLI first. |
+| `quota` | Check billing, rate limits, or switch to an available model/account. |
+| `version` | Upgrade the CLI or confirm the documented headless/print flags are supported by `--help`. |
+| `empty_output` | Confirm the CLI has a real prompt-to-stdout mode instead of launching an interactive TUI. |
+
 CLI team summaries surface one or more deduplicated repair hints, so a mixed
 failure such as "Codex not logged in" plus "Trae model not configured" does not
 collapse into a single misleading next step.
