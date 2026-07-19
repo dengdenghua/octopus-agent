@@ -121,6 +121,7 @@ import type { RecordingStatus } from "@/core/teach-repeat/types";
 import { ACTIVE_AGENT_EVENT, ACTIVE_AGENT_KEY } from "@/core/agents/active";
 import {
   dedupeAgentsByName,
+  dedupePersonaAgentsByDisplayName,
   useAgent,
   useAgents,
   useLocalCliAgents,
@@ -1152,7 +1153,10 @@ function RealtimePageContent({
   const { cliAgents } = useLocalCliAgents();
   const { mobileAgents } = useMobileDevices();
   const allTaskCollaboratorAgents = useMemo(
-    () => dedupeAgentsByName([...mobileAgents, ...cliAgents, ...builtinAgents]),
+    () =>
+      dedupePersonaAgentsByDisplayName(
+        dedupeAgentsByName([...mobileAgents, ...cliAgents, ...builtinAgents]),
+      ),
     [builtinAgents, cliAgents, mobileAgents],
   );
   const [selectedCollaboratorIds, setSelectedCollaboratorIds] = useState<

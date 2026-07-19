@@ -64,6 +64,14 @@ function rightHint(m: PickerModel): string {
     ["gpt", "OpenAI"],
     ["openai", "OpenAI"],
     ["gemini", "Gemini"],
+    ["kimi", "Kimi"],
+    ["moonshot", "Kimi"],
+    ["ark", "Ark"],
+    ["volc", "Ark"],
+    ["qwen", "Qwen"],
+    ["deepseek", "DeepSeek"],
+    ["minimax", "MiniMax"],
+    ["glm", "GLM"],
     ["mistral", "Mistral"],
     ["llama", "Llama"],
   ] as const) {
@@ -443,14 +451,22 @@ export function ModelPicker({
     <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
   );
 
-  // Guests can inspect official models, but only custom models are
-  // selectable before login, so land them on Custom when possible.
+  // Open on the category containing the current model. Previously every
+  // signed-in user landed on Official even while a custom model was selected,
+  // making the highlighted current row invisible until an extra tab switch.
+  const selectedIsCustom = customEntries.some(
+    (entry) => entry.name === selectedForDisplay?.name,
+  );
   const defaultTab =
     isGuest && customEntries.length > 0
       ? "custom"
-      : officialEntries.length > 0
+      : selectedMetaForDisplay
         ? "official"
-        : "custom";
+        : selectedIsCustom
+          ? "custom"
+          : officialEntries.length > 0
+            ? "official"
+            : "custom";
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>

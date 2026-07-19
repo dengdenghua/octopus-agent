@@ -2,6 +2,7 @@ import {
   CheckIcon,
   CoinsIcon,
   LogOutIcon,
+  RefreshCwIcon,
   SettingsIcon,
   UsersRoundIcon,
   UserCircleIcon,
@@ -23,6 +24,7 @@ import {
   useAgents,
   useLocalCliAgents,
   dedupeAgentsByName,
+  dedupePersonaAgentsByDisplayName,
 } from "@/core/agents";
 import type { Agent } from "@/core/agents";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
@@ -98,6 +100,8 @@ export function AgentAvatar({
   className?: string;
 }) {
   const avatar = resolveAvatarUrl(agent?.avatar_url);
+  const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
+  const showAvatar = Boolean(avatar && failedAvatar !== avatar);
   const emoji = agent?.icon?.trim() || "";
   const initial = (agent?.display_name || agent?.name || "?")
     .trim()
@@ -105,18 +109,20 @@ export function AgentAvatar({
     .toUpperCase();
   return (
     <span
+      aria-hidden="true"
       className={cn(
         "flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border-default bg-muted text-[13px] leading-none",
         !emoji && !avatar && "font-semibold text-muted-foreground text-[11px]",
         className,
       )}
     >
-      {avatar ? (
+      {showAvatar ? (
         <img
-          src={avatar}
-          alt={agent?.display_name || agent?.name || ""}
+          src={avatar ?? undefined}
+          alt=""
           className="size-full object-cover"
           loading="lazy"
+          onError={() => setFailedAvatar(avatar)}
         />
       ) : emoji ? (
         emoji
@@ -131,7 +137,12 @@ export function AgentAvatar({
 
 export function AgentFooter() {
   const { agents } = useAgents();
-  const { cliAgents } = useLocalCliAgents();
+  const {
+    cliAgents,
+    isFetching: isFetchingCliAgents,
+    isError: cliAgentsFailed,
+    refresh: refreshCliAgents,
+  } = useLocalCliAgents();
   const { user, isGuest, logout } = useAuth();
   const _navigate = useNavigate();
   const { pathname, search } = useLocation();
@@ -158,12 +169,11 @@ export function AgentFooter() {
     if (tab) params.set("tab", tab);
     return `/workspace/agents?${params.toString()}`;
   };
-  // Merge on-disk agents with detected-but-unregistered local CLIs (Claude
-  // Code, Codex, …). Registered first so a CLI that already has a profile keeps
-  // its custom alias/avatar; the synthetic entry only fills in CLIs that were
-  // detected but never written to disk. See dedupeAgentsByName for why.
+  // Prefer the live detector for local CLIs so stale on-disk profiles cannot
+  // leak an old alias, avatar, model, or capability identity into the picker.
+  // Non-CLI profiles still come from the regular agent registry.
   const footerAgents = useMemo(
-    () => dedupeAgentsByName([...agents, ...cliAgents]),
+    () => dedupeAgentsByName([...cliAgents, ...agents]),
     [agents, cliAgents],
   );
   // A local-partner CLI is either a synthetic `local_*` entry or an on-disk
@@ -182,18 +192,7 @@ export function AgentFooter() {
     // Dedupe by base display name: "Eve / Siren" and "Eve" share the base
     // "Eve". Hub-defaults win, so the echo_* variants of the same character
     // don't show up as duplicates next to the general agent.
-    const seenBases = new Set<string>();
-    const result: Agent[] = [];
-    for (const a of [...hubAgents, ...customAgents]) {
-      const base = (a.display_name || a.name)
-        .split(/\s*\/\s*/)[0]
-        ?.trim()
-        .toLowerCase();
-      if (base && seenBases.has(base)) continue;
-      if (base) seenBases.add(base);
-      result.push(a);
-    }
-    return result;
+    return dedupePersonaAgentsByDisplayName([...hubAgents, ...customAgents]);
   }, [footerAgents]);
   const cliPartnerAgents = useMemo(
     () => footerAgents.filter(isLocalCliAgent),
@@ -274,6 +273,11 @@ export function AgentFooter() {
                   )
                 : displayAgent?.description || t.sidebar.switchAgentLabel
             }
+            aria-label={
+              displayAgent?.display_name ||
+              displayAgent?.name ||
+              t.sidebar.switchAgentLabel
+            }
             className={cn(
               "group/agent flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left",
               "opacity-85 transition-[opacity,background-color] duration-150",
@@ -314,30 +318,60 @@ export function AgentFooter() {
           side="top"
           align="start"
           sideOffset={6}
-          className="w-72 rounded-xl border-border-default p-1.5 shadow-xl shadow-black/10"
+          className="max-h-[calc(100vh-1rem)] w-72 overflow-y-auto overscroll-contain rounded-xl border-border-default p-1.5 shadow-xl shadow-black/10"
         >
           <DropdownMenuLabel className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
             {t.sidebar.switchAgentMenuTitle}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {footerAgents.length === 0 ? (
-            <div className="px-2 py-3 text-center text-[11px] text-muted-foreground">
+          {personaAgents.length > 0 ? (
+            personaAgents.map(renderAgentItem)
+          ) : (
+            <div className="px-2 py-2 text-[11px] text-muted-foreground">
               {t.sidebar.noAgents}
             </div>
-          ) : (
-            <>
-              {personaAgents.map(renderAgentItem)}
-              {cliPartnerAgents.length > 0 && (
-                <>
-                  {personaAgents.length > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuLabel className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                    {t.sidebar.localCliPartners}
-                  </DropdownMenuLabel>
-                  {cliPartnerAgents.map(renderAgentItem)}
-                </>
-              )}
-            </>
           )}
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="flex items-center gap-2 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            <span className="min-w-0 flex-1 truncate">
+              {t.sidebar.localCliPartners}
+            </span>
+            <button
+              type="button"
+              disabled={isFetchingCliAgents}
+              title={t.localAgentConnect.retryDetect}
+              aria-label={t.localAgentConnect.retryDetect}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void refreshCliAgents();
+              }}
+              className="-mr-1 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-wait disabled:opacity-50"
+            >
+              <RefreshCwIcon
+                className={cn(
+                  "size-3.5",
+                  isFetchingCliAgents && "animate-spin",
+                )}
+              />
+            </button>
+          </DropdownMenuLabel>
+          <div aria-live="polite">
+            {cliAgentsFailed ? (
+              <div className="px-2.5 py-2 text-[11px] text-destructive">
+                {t.localAgentConnect.detectFailed}
+              </div>
+            ) : isFetchingCliAgents && cliPartnerAgents.length === 0 ? (
+              <div className="px-2.5 py-2 text-[11px] text-muted-foreground">
+                {t.localAgentConnect.detecting}
+              </div>
+            ) : cliPartnerAgents.length === 0 ? (
+              <div className="px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                {t.localAgentConnect.noPartnersAvailable}
+              </div>
+            ) : null}
+          </div>
+          {cliPartnerAgents.map(renderAgentItem)}
           <DropdownMenuSeparator />
           {displayAgent ? (
             <>

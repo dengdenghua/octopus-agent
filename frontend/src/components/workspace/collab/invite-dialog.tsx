@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   dedupeAgentsByName,
+  dedupePersonaAgentsByDisplayName,
   useAgents,
   useLocalCliAgents,
   useMobileDevices,
@@ -83,7 +84,10 @@ export function InviteDialog({
   // Detected local CLIs + connected phones sit alongside built-in agents in
   // the picker, so 拉群 can pull them in like any other member.
   const agents = useMemo(
-    () => dedupeAgentsByName([...mobileAgents, ...cliAgents, ...builtinAgents]),
+    () =>
+      dedupePersonaAgentsByDisplayName(
+        dedupeAgentsByName([...mobileAgents, ...cliAgents, ...builtinAgents]),
+      ),
     [mobileAgents, cliAgents, builtinAgents],
   );
   const [copied, setCopied] = useState(false);
@@ -171,7 +175,11 @@ export function InviteDialog({
       onTeamChange?.(updated);
       toast.success(t.collab.inviteAgents.toastAdded(additions.length));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t.collab.inviteAgents.toastFailed);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t.collab.inviteAgents.toastFailed,
+      );
     } finally {
       setAddingAgentIds(new Set());
     }

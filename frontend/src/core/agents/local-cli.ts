@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
+import { authHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 
 import type { Agent } from "./types";
@@ -90,25 +91,34 @@ function partnerToAgent(p: DetectedPartner): Agent {
 export function useLocalCliAgents(): {
   cliAgents: Agent[];
   isLoading: boolean;
+  isFetching: boolean;
+  isError: boolean;
+  refresh: () => Promise<unknown>;
 } {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: ["cli-team-status"],
-    queryFn: async ({ signal }): Promise<CliTeamStatus | null> => {
-      try {
-        const res = await fetch(`${getBackendBaseURL()}/api/cli-team/status`, {
-          signal,
-        });
-        if (!res.ok) return null;
-        return (await res.json()) as CliTeamStatus;
-      } catch {
-        return null;
+    queryFn: async ({ signal }): Promise<CliTeamStatus> => {
+      const res = await fetch(`${getBackendBaseURL()}/api/cli-team/status`, {
+        cache: "no-store",
+        headers: authHeaders(),
+        signal,
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to detect local CLI partners: ${res.status}`);
       }
+      return (await res.json()) as CliTeamStatus;
     },
     refetchOnWindowFocus: false,
     staleTime: 30_000,
   });
   const cliAgents = (data?.detected ?? []).map(partnerToAgent);
-  return { cliAgents, isLoading };
+  return {
+    cliAgents,
+    isLoading,
+    isFetching,
+    isError,
+    refresh: refetch,
+  };
 }
 
 /**
@@ -132,4 +142,49 @@ export function dedupeAgentsByName(agents: Agent[]): Agent[] {
     seen.add(a.name);
     return true;
   });
+}
+
+/**
+ * Collapse duplicate persona profiles that differ only by a slash suffix such
+ * as `Eve` and `Eve / Siren`. Local CLIs and connected devices deliberately
+ * keep their stable ids because two external runtimes may share a friendly
+ * label while still being different execution targets.
+ */
+export function dedupePersonaAgentsByDisplayName(agents: Agent[]): Agent[] {
+  const result: Agent[] = [];
+  const personaIndexByLabel = new Map<string, number>();
+  for (const agent of agents) {
+    const isExternalRuntime =
+      agent.name.startsWith("local_") ||
+      agent.name.startsWith("mobile_") ||
+      Boolean(agent.capabilities?.local_partner);
+    if (isExternalRuntime) {
+      result.push(agent);
+      continue;
+    }
+
+    const displayName = agent.display_name || agent.name;
+    const label = displayName
+      .split(/\s*\/\s*/)[0]
+      ?.trim()
+      .toLowerCase();
+    if (!label) continue;
+
+    const existingIndex = personaIndexByLabel.get(label);
+    if (existingIndex === undefined) {
+      personaIndexByLabel.set(label, result.length);
+      result.push(agent);
+      continue;
+    }
+
+    const existing = result[existingIndex];
+    const existingHasAlias = (existing?.display_name || existing?.name || "")
+      .trim()
+      .includes("/");
+    const nextHasAlias = displayName.includes("/");
+    if (existingHasAlias && !nextHasAlias) {
+      result[existingIndex] = agent;
+    }
+  }
+  return result;
 }

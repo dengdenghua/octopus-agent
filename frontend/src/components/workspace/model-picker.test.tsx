@@ -54,7 +54,7 @@ function withProviders(node: React.ReactNode) {
 const withRouter = withProviders;
 
 // MODELS includes octopus-mix (official) plus several custom models.
-// The official tab is active by default when octopus-mix is present.
+// The picker opens on the category that contains the current selection.
 const MODELS: PickerModel[] = [
   { name: "octopus-mix", display_name: "Octopus Mix", provider: "octopus" },
   { name: "kimi-k2.5", display_name: "Kimi K2.5", model: "kimi" },
@@ -88,16 +88,16 @@ describe("<ModelPicker />", () => {
     );
   });
 
-  it("opens the dropdown with the official tab active by default", async () => {
+  it("opens on the custom tab when the current model is custom", async () => {
     const user = userEvent.setup();
     setup();
 
     await user.click(screen.getByTestId("model-picker-trigger"));
     const menu = await screen.findByTestId("model-picker-menu");
     expect(menu).toBeInTheDocument();
-    const officialTab = await screen.findByTestId("model-picker-tab-official");
-    expect(officialTab).toHaveAttribute("data-state", "active");
-    expect(screen.getByTestId("model-picker-tab-custom")).toBeInTheDocument();
+    const customTab = await screen.findByTestId("model-picker-tab-custom");
+    expect(customTab).toHaveAttribute("data-state", "active");
+    expect(screen.getByTestId("model-picker-tab-official")).toBeInTheDocument();
   });
 
   it("keeps reasoning effort inside the model dropdown", async () => {
@@ -133,6 +133,7 @@ describe("<ModelPicker />", () => {
     const user = userEvent.setup();
     setup();
     await user.click(screen.getByRole("button", { name: "选择模型" }));
+    await user.click(screen.getByRole("tab", { name: "官方模型" }));
 
     const menu = await screen.findByRole("menu");
     const root = menu.parentElement ?? menu;
@@ -146,6 +147,7 @@ describe("<ModelPicker />", () => {
     const user = userEvent.setup();
     setup("kimi-k2.5");
     await user.click(screen.getByRole("button", { name: "选择模型" }));
+    await user.click(screen.getByRole("tab", { name: "官方模型" }));
     const menu = await screen.findByRole("menu");
     const root = menu.parentElement ?? menu;
     const badges = root.querySelectorAll('[title="推荐"]');
@@ -156,6 +158,7 @@ describe("<ModelPicker />", () => {
     const user = userEvent.setup();
     const { onChange } = setup("kimi-k2.5");
     await user.click(screen.getByRole("button", { name: "选择模型" }));
+    await user.click(screen.getByRole("tab", { name: "官方模型" }));
 
     const menu = await screen.findByRole("menu");
     const root = menu.parentElement ?? menu;
@@ -263,6 +266,17 @@ describe("<ModelPicker />", () => {
     expect(screen.getByRole("button", { name: "选择模型" })).toHaveTextContent(
       "Octopus Mix",
     );
+  });
+
+  it("opens on the official tab when the current model is official", async () => {
+    const user = userEvent.setup();
+    setup("octopus-mix");
+
+    await user.click(screen.getByRole("button", { name: "选择模型" }));
+
+    expect(
+      await screen.findByTestId("model-picker-tab-official"),
+    ).toHaveAttribute("data-state", "active");
   });
 
   it("falls back to 自定义 tab when no official models exist", async () => {
