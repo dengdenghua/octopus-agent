@@ -461,6 +461,7 @@ def test_cli_team_artifacts_one_per_member_diff_first() -> None:
     assert by_id["local_claude_code"]["error"] == "boom"
     assert by_id["local_claude_code"]["raw_error"] == "raw boom"
     assert by_id["local_claude_code"]["failure_kind"] == "auth"
+    assert by_id["local_claude_code"]["failure_label"] == "需要登录"
     assert by_id["local_claude_code"]["failure_title"] == "Claude Code 需要登录或授权"
     assert by_id["local_claude_code"]["fix_hint"] == "打开原生 CLI 登录。"
     assert by_id["local_claude_code"]["summary"] == "Claude Code 需要登录或授权"

@@ -1637,6 +1637,8 @@ def _cli_team_artifacts(cli_result: dict[str, Any]) -> list[dict[str, Any]]:
         if not isinstance(member, dict):
             continue
         agent_id = str(member.get("agent_id") or "agent")
+        failure_kind = str(member.get("failure_kind") or "")
+        failure_label = _cli_failure_kind_label(failure_kind) if failure_kind else None
         artifacts.append(
             {
                 "id": f"artifact-{uuid4().hex[:12]}",
@@ -1650,6 +1652,7 @@ def _cli_team_artifacts(cli_result: dict[str, Any]) -> list[dict[str, Any]]:
                 "error": member.get("error"),
                 "raw_error": member.get("raw_error"),
                 "failure_kind": member.get("failure_kind"),
+                "failure_label": failure_label,
                 "failure_title": member.get("failure_title"),
                 "fix_hint": member.get("fix_hint"),
                 "summary": member.get("failure_title") if not member.get("ok") else None,
@@ -1657,6 +1660,24 @@ def _cli_team_artifacts(cli_result: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return artifacts
+
+
+def _cli_failure_kind_label(kind: str) -> str:
+    labels = {
+        "auth": "需要登录",
+        "empty_output": "无输出",
+        "entitlement": "账号权益",
+        "execution_exception": "执行异常",
+        "missing_binary": "命令缺失",
+        "model": "模型配置",
+        "network": "网络环境",
+        "permission": "权限/信任",
+        "quota": "额度/限流",
+        "timeout": "执行超时",
+        "unknown": "未分类",
+        "version": "版本不兼容",
+    }
+    return labels.get(kind, kind or "未分类")
 
 
 def _runner_artifacts(result: Any, prepared: dict[str, Any]) -> list[dict[str, Any]]:
