@@ -37,6 +37,9 @@ decide whether the partner can run now.
 The connect dialog exposes both copyable native commands and Octopus-compatible
 slash-command hints.
 
+- Desktop apps and CLIs do not always share accounts, subscriptions, enterprise
+  network state, or free entitlements. A desktop app being usable is not enough
+  evidence that its CLI can run headless from Octopus.
 - `/model <model>` is translated to a one-shot model override only for partners
   with stable model flags: Claude Code, Codex CLI, and CodeBuddy CLI.
 - `/login`, `/doctor`, `/status`, `/config`, `/clear`, `/compact`, and

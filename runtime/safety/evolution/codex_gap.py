@@ -49,6 +49,7 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
             required_terms=(
                 "effective_status",
                 "native_launch_command",
+                "free entitlements",
                 "CLI team summaries",
                 "Merge-check commands",
             ),

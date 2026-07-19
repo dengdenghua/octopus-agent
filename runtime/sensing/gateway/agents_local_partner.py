@@ -383,7 +383,10 @@ def _partner_guidance(
 
     if partner_id == "codebuddy-cli":
         install = "npm install -g @tencent-ai/codebuddy-code"
-        setup_hint = "首次使用请运行原生 CodeBuddy CLI，并按提示登录/授权。"
+        setup_hint = (
+            "首次使用请运行原生 CodeBuddy CLI，并按提示登录/授权；"
+            "桌面端账号或免费权益不一定会同步到 CLI。"
+        )
         if command and not _is_codebuddy_launcher(command):
             native = _display_command(command)
             verify = shlex.join(
@@ -401,21 +404,27 @@ def _partner_guidance(
             )
     elif partner_id == "trae-cli":
         if command:
-            setup_hint = "Trae CLI 需要在原生 CLI 内完成模型选择；若 models 为空，请先处理账号/企业网络/模型授权。"
+            setup_hint = (
+                "Trae CLI 需要在原生 CLI 内完成模型选择；若 models 为空，请先处理 CLI 账号、"
+                "企业网络或模型授权。桌面端可用不代表 CLI 已获得同一权益。"
+            )
         if command:
             verify = shlex.join([command, "models", "--json"])
     elif partner_id == "qoder-cli":
         if command:
-            setup_hint = "Qoder CLI 会走 -p headless 模式；若不可用，请先在原生 CLI 内完成登录。"
+            setup_hint = (
+                "Qoder CLI 会走 -p headless 模式；若不可用，请先在原生 CLI 内完成登录/授权，"
+                "并确认 CLI 账号权益可用。"
+            )
     elif partner_id == "kimi-cli":
         if command:
             setup_hint = "已保留 Kimi 入口；等官方稳定 prompt→stdout headless 参数后再启用自动派工。"
     elif partner_id == "claude-code":
         if command:
-            setup_hint = "使用 Claude Code 自己的登录态和模型配置；Octopus 只负责派工。"
+            setup_hint = "使用 Claude Code 自己的登录态、订阅权益和模型配置；Octopus 只负责派工。"
     elif partner_id == "codex-cli":
         if command:
-            setup_hint = "使用 Codex CLI 自己的登录态和模型配置；Octopus 只负责派工。"
+            setup_hint = "使用 Codex CLI 自己的登录态、订阅权益和模型配置；Octopus 只负责派工。"
 
     if command and headless_supported and not verify:
         argv = build_partner_argv(partner_id, command, "请只回复 OK，不要修改文件。")
@@ -433,7 +442,7 @@ def _partner_guidance(
     elif partner_id == "trae-cli":
         interaction_hint = (
             "Trae 的模型、登录和企业网络状态由 Trae CLI 自己管理；"
-            "Octopus 只做派工，不转发 Trae 原生 `/` 指令。"
+            "Octopus 只做派工，不转发 Trae 原生 `/` 指令，也不会继承 Trae 桌面端免费额度。"
         )
     elif partner_id in {"qoder-cli", "kimi-cli"}:
         interaction_hint = (
@@ -570,7 +579,10 @@ def readiness_for_partner(
                 "headless_supported": True,
                 "readiness_status": "model_unconfigured",
                 "readiness_message": "Trae CLI 已安装，但当前没有有效模型配置。",
-                "fix_hint": f"在 Trae CLI 中用 /model 选择模型，或检查 {source}。",
+                "fix_hint": (
+                    f"在 Trae CLI 中用 /model 选择模型，或检查 {source}；"
+                    "如果桌面端可用但 CLI models 为空，通常需要单独完成 CLI 登录/企业网络/模型授权。"
+                ),
             }
 
     return {
