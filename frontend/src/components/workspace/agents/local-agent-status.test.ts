@@ -135,6 +135,24 @@ describe("local-agent-status localPartnerSetupSteps", () => {
     expect(steps[1].tone).toBe("blocked");
   });
 
+  it("prioritizes repair guidance for registered partners that became unavailable", () => {
+    const steps = localPartnerSetupSteps(
+      partner({
+        detected: false,
+        registered: true,
+        status: "registered",
+        effective_status: "missing",
+        fix_hint: "恢复 codex 命令到 PATH。",
+      }),
+    );
+
+    expect(steps.map((step) => step.label)).toEqual([
+      "修复本机 CLI 状态",
+      "重新健康检查",
+    ]);
+    expect(steps[0].detail).toBe("恢复 codex 命令到 PATH。");
+  });
+
   it("keeps ready partners on the shortest connect path", () => {
     const steps = localPartnerSetupSteps(
       partner({

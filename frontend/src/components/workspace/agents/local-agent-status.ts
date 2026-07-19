@@ -72,6 +72,21 @@ export function localPartnerSetupSteps(
   const effectiveStatus =
     partner.effective_status || partner.readiness_status || partner.status;
 
+  if (partner.registered && effectiveStatus !== "registered") {
+    return [
+      {
+        label: "修复本机 CLI 状态",
+        detail: partner.fix_hint || "重新登录、选择模型，或恢复 PATH 中的官方 CLI 命令。",
+        tone: "blocked",
+      },
+      {
+        label: "重新健康检查",
+        detail: "检查通过后，团队派工才会恢复稳定。",
+        tone: "action",
+      },
+    ];
+  }
+
   if (!partner.detected) {
     return [
       {
@@ -122,21 +137,6 @@ export function localPartnerSetupSteps(
       {
         label: "安装 headless CLI",
         detail: "如厂商提供 -p/print/headless 模式，安装官方命令后重新检测。",
-        tone: "action",
-      },
-    ];
-  }
-
-  if (partner.registered && effectiveStatus !== "registered") {
-    return [
-      {
-        label: "修复本机 CLI 状态",
-        detail: partner.fix_hint || "重新登录、选择模型，或恢复 PATH 中的官方 CLI 命令。",
-        tone: "blocked",
-      },
-      {
-        label: "重新健康检查",
-        detail: "检查通过后，团队派工才会恢复稳定。",
         tone: "action",
       },
     ];
