@@ -7961,6 +7961,8 @@ export const zhCN: Translations = {
       open: "打开",
       archiveToCategory: "归档到分类",
       delete: "删除",
+      confirmTrash: (name) => `将「${name}」移至系统废纸篓？`,
+      trashing: "正在移至废纸篓…",
     },
     dock: {
       desktopFiles: "桌面文件",
@@ -8004,7 +8006,7 @@ export const zhCN: Translations = {
       undo: "撤销失败",
       move: "移动失败",
       archiveOnlyFiles: "仅支持归档文件",
-      deleteNotImplemented: "删除功能暂未实现",
+      trash: "移至废纸篓失败",
     },
     toasts: {
       noFilesToArchive: "桌面上没有可整理的文件",
@@ -8013,6 +8015,7 @@ export const zhCN: Translations = {
       noUndoOperations: "没有可撤销的操作",
       fileMoved: "文件已移动",
       fileArchived: (name, folder) => `已将 "${name}" 归档到 ${folder}`,
+      trashed: (name) => `已将「${name}」移至废纸篓`,
     },
   },
 };

@@ -556,7 +556,7 @@ function OfficialCreditsCard() {
               onClick={onRefresh}
               disabled={refresh.isPending}
               className="size-8"
-              aria-label="Refresh"
+              aria-label={t.accountSettings.refresh}
             >
               <RefreshCwIcon
                 className={refresh.isPending ? "animate-spin size-4" : "size-4"}

@@ -8328,6 +8328,8 @@ Strategy:
       open: "開く",
       archiveToCategory: "カテゴリにアーカイブ",
       delete: "削除",
+      confirmTrash: (name) => `「${name}」をシステムのゴミ箱に移動しますか？`,
+      trashing: "ゴミ箱に移動中...",
     },
     dock: {
       desktopFiles: "デスクトップファイル",
@@ -8380,7 +8382,7 @@ Strategy:
       undo: "取り消しに失敗",
       move: "移動に失敗",
       archiveOnlyFiles: "ファイルのみアーカイブできます",
-      deleteNotImplemented: "削除機能は未実装です",
+      trash: "ゴミ箱への移動に失敗しました",
     },
     toasts: {
       noFilesToArchive: "整理できるファイルがありません",
@@ -8390,6 +8392,7 @@ Strategy:
       fileMoved: "ファイルを移動しました",
       fileArchived: (name, folder) =>
         `"${name}" を ${folder} にアーカイブしました`,
+      trashed: (name) => `「${name}」をゴミ箱に移動しました`,
     },
   },
 };

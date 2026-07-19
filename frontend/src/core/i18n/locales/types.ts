@@ -7187,6 +7187,8 @@ export interface Translations {
       open: string;
       archiveToCategory: string;
       delete: string;
+      confirmTrash: (name: string) => string;
+      trashing: string;
     };
     dock: {
       desktopFiles: string;
@@ -7222,7 +7224,7 @@ export interface Translations {
       undo: string;
       move: string;
       archiveOnlyFiles: string;
-      deleteNotImplemented: string;
+      trash: string;
     };
     toasts: {
       noFilesToArchive: string;
@@ -7231,6 +7233,7 @@ export interface Translations {
       noUndoOperations: string;
       fileMoved: string;
       fileArchived: (name: string, folder: string) => string;
+      trashed: (name: string) => string;
     };
   };
 }

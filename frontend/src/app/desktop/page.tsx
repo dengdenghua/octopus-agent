@@ -532,7 +532,7 @@ export default function DesktopShellPage() {
     } else if (action === "delete") {
       if (!window.octopus?.desktop?.trashItem) return;
       const confirmed = window.confirm(
-        `将「${item.name}」移至系统废纸篓？`,
+        t.desktop.contextMenu.confirmTrash(item.name),
       );
       if (!confirmed) return;
       setDeletingItemId(item.id);
@@ -540,12 +540,12 @@ export default function DesktopShellPage() {
         const result = await window.octopus.desktop.trashItem(item.path);
         if (result.ok) {
           await refreshDesktopItems();
-          toast.success(`已将「${item.name}」移至废纸篓`);
+          toast.success(t.desktop.toasts.trashed(item.name));
         } else {
-          toast.error(result.error || t.desktop.errors.move);
+          toast.error(result.error || t.desktop.errors.trash);
         }
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : t.desktop.errors.move);
+        toast.error(e instanceof Error ? e.message : t.desktop.errors.trash);
       } finally {
         setDeletingItemId(null);
       }
@@ -1092,7 +1092,7 @@ export default function DesktopShellPage() {
             >
               <Trash2Icon className="size-3.5" />
               {deletingItemId === contextMenu.item.id
-                ? "正在移至废纸篓…"
+                ? t.desktop.contextMenu.trashing
                 : t.desktop.contextMenu.delete}
             </button>
           </div>

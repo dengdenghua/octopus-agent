@@ -217,7 +217,7 @@ export function KnowledgeGraphPanel() {
               variant="outline"
               size="icon"
               onClick={() => void loadData()}
-              aria-label="Refresh"
+              aria-label={t.knowledgeGraph.refresh}
             >
               <RefreshCwIcon className="h-4 w-4" />
             </Button>

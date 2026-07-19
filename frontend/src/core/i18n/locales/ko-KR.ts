@@ -8319,6 +8319,8 @@ Strategy:
       open: "열기",
       archiveToCategory: "카테고리로 보관",
       delete: "삭제",
+      confirmTrash: (name) => `“${name}”을(를) 시스템 휴지통으로 이동할까요?`,
+      trashing: "휴지통으로 이동 중...",
     },
     dock: {
       desktopFiles: "데스크톱 파일",
@@ -8362,7 +8364,7 @@ Strategy:
       undo: "실행 취소 실패",
       move: "이동 실패",
       archiveOnlyFiles: "파일만 보관할 수 있습니다",
-      deleteNotImplemented: "삭제 기능은 아직 구현되지 않았습니다",
+      trash: "휴지통으로 이동하지 못했습니다",
     },
     toasts: {
       noFilesToArchive: "데스크톱에 정리할 파일이 없습니다",
@@ -8372,6 +8374,7 @@ Strategy:
       fileMoved: "파일을 이동했습니다",
       fileArchived: (name, folder) =>
         `"${name}"을(를) ${folder}(으)로 보관했습니다`,
+      trashed: (name) => `“${name}”을(를) 휴지통으로 이동했습니다`,
     },
   },
 };

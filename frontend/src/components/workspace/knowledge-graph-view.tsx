@@ -1198,7 +1198,7 @@ function KnowledgeGraph3DContent() {
           size="icon"
           className="size-9 border-border-default bg-background/90 text-foreground/90 hover:bg-muted hover:text-foreground"
           onClick={() => void loadGraph()}
-          aria-label="Refresh"
+          aria-label={t.knowledgeGraph.refresh}
         >
           <RefreshCwIcon className="size-4" />
         </Button>

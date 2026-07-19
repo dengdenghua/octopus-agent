@@ -8329,6 +8329,8 @@ Strategy:
       open: "Open",
       archiveToCategory: "Archive to category",
       delete: "Delete",
+      confirmTrash: (name) => `Move “${name}” to the system trash?`,
+      trashing: "Moving to trash...",
     },
     dock: {
       desktopFiles: "Desktop Files",
@@ -8372,7 +8374,7 @@ Strategy:
       undo: "Undo failed",
       move: "Move failed",
       archiveOnlyFiles: "Only files can be archived",
-      deleteNotImplemented: "Delete feature is not implemented yet",
+      trash: "Failed to move item to trash",
     },
     toasts: {
       noFilesToArchive: "No files to organize on the desktop",
@@ -8381,6 +8383,7 @@ Strategy:
       noUndoOperations: "Nothing to undo",
       fileMoved: "File moved",
       fileArchived: (name, folder) => `Archived "${name}" to ${folder}`,
+      trashed: (name) => `Moved “${name}” to trash`,
     },
   },
 };
