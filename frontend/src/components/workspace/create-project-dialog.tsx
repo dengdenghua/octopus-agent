@@ -53,6 +53,17 @@ export function CreateProjectDialog({
   const [selectedIcon, setSelectedIcon] = useState<string>("📁");
   const { mutate: createProject, isPending } = useCreateProject();
 
+  const resetForm = () => {
+    setName("");
+    setSelectedCategory(null);
+    setSelectedIcon("📁");
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) resetForm();
+    onOpenChange(nextOpen);
+  };
+
   const handleCategorySelect = (preset: (typeof CATEGORY_PRESETS)[number]) => {
     if (selectedCategory === preset.category) {
       setSelectedCategory(null);
@@ -67,7 +78,7 @@ export function CreateProjectDialog({
   };
 
   const handleSubmit = () => {
-    if (!name.trim()) return;
+    if (!name.trim() || isPending) return;
     createProject(
       {
         name: name.trim(),
@@ -76,9 +87,7 @@ export function CreateProjectDialog({
       },
       {
         onSuccess: () => {
-          setName("");
-          setSelectedCategory(null);
-          setSelectedIcon("📁");
+          resetForm();
           onOpenChange(false);
         },
       },
@@ -86,7 +95,7 @@ export function CreateProjectDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>{t.createProjectDialog.title}</DialogTitle>
@@ -128,7 +137,7 @@ export function CreateProjectDialog({
           </p>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
             {t.createProjectDialog.cancel}
           </Button>
           <Button onClick={handleSubmit} disabled={!name.trim() || isPending}>
