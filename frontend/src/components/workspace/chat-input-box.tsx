@@ -1117,6 +1117,7 @@ export function ChatInputBox({
                   onClick={() => removePendingFile(file.id)}
                   className="flex size-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-60 transition-colors hover:bg-muted/70 hover:text-foreground hover:opacity-100"
                   title={t.chatInputBox.removeImage}
+                  aria-label={`${t.chatInputBox.removeImage}: ${file.name}`}
                 >
                   <Trash2Icon className="size-3.5" />
                 </button>

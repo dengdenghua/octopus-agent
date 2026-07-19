@@ -415,9 +415,11 @@ export function RecentChatList() {
                 </CollapsibleTrigger>
                 {showNewProjectButton && (
                   <button
+                    type="button"
                     onClick={() => setCreateProjectDialogOpen(true)}
                     className="text-muted-foreground hover:text-foreground transition-colors"
                     title={t.sidebar.newProject}
+                    aria-label={t.sidebar.newProject}
                   >
                     <PlusIcon className="size-4" />
                   </button>
@@ -426,8 +428,10 @@ export function RecentChatList() {
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
+                        type="button"
                         className="text-muted-foreground hover:text-foreground transition-colors"
                         title={t.common.more}
+                        aria-label={`${t.common.more}: ${group.label}`}
                       >
                         <MoreHorizontal className="size-4" />
                       </button>
