@@ -3092,8 +3092,10 @@ function RealtimePageContent({
                     <div className="flex items-center justify-between border-b border-border-default px-3 py-2">
                       <span className="text-sm font-medium">Agent</span>
                       <button
+                        type="button"
                         onClick={() => setShowResearch(false)}
                         className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                        aria-label={t.common.close}
                       >
                         <XIcon className="size-3.5" />
                       </button>
