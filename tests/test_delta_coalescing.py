@@ -180,3 +180,48 @@ async def test_public_timeline_coordinates_interleave_commentary_tool_and_answer
     assert commentary.phase_id
     assert tool.phase_id == commentary.phase_id
     assert answer.phase_id == commentary.phase_id
+
+
+@pytest.mark.asyncio
+async def test_tool_effect_signal_is_persisted_on_completed_realtime_item() -> None:
+    state = _ReactBridgeState()
+    turn = _make_turn()
+    emitter = _StubEmitter()
+    log = _StubLog()
+
+    await state.start_tool(
+        turn,
+        log,
+        emitter,
+        {"tool_call_id": "write-1", "tool_name": "write_file"},
+    )
+    await state.complete_tool(
+        turn,
+        log,
+        emitter,
+        {
+            "tool_call_id": "write-1",
+            "tool_name": "write_file",
+            "status": "error",
+            "output_preview": "outcome unknown",
+            "effect_receipt": {
+                "effect_key": "effect:v1:abc",
+                "call_id": "write-1",
+                "state": "indeterminate",
+                "reason": "outcome unknown",
+                "fencing_token": 7,
+            },
+        },
+    )
+
+    tool = turn.items[0]
+    assert tool.effect_receipt is not None
+    assert tool.effect_receipt.effect_key == "effect:v1:abc"
+    completed = [p for m, p in emitter.notified if m.endswith("item/completed")]
+    assert completed[-1]["item"]["effectReceipt"] == {
+        "effectKey": "effect:v1:abc",
+        "callId": "write-1",
+        "state": "indeterminate",
+        "reason": "outcome unknown",
+        "fencingToken": 7,
+    }

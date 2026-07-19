@@ -3,6 +3,7 @@ from runtime.protocol import (
     AgentMessageItem,
     CommandExecutionItem,
     ItemStatus,
+    ToolEffectSignal,
     Turn,
     TurnParams,
 )
@@ -66,3 +67,32 @@ def test_replay_uses_timeline_sequence_and_never_regresses_completed_item(tmp_pa
     assert [item.id for item in replayed.items] == ["earlier", "later"]
     assert replayed.items[1].status == ItemStatus.COMPLETED
     assert replayed.items[1].text == "final"
+
+
+def test_replay_preserves_thread_scoped_tool_effect_signal(tmp_path) -> None:
+    log = EventLog(tmp_path / "thread-1.jsonl")
+    turn = _turn()
+    log.turn_started("thread-1", turn)
+    log.item_completed(
+        "thread-1",
+        turn.id,
+        CommandExecutionItem(
+            id="write-1",
+            command="write_file",
+            status=ItemStatus.FAILED,
+            effect_receipt=ToolEffectSignal(
+                effectKey="effect:v1:abc",
+                callId="write-1",
+                state="indeterminate",
+                reason="outcome unknown",
+                fencingToken=11,
+            ),
+        ),
+    )
+
+    replayed = log.replay()[0]
+    item = replayed.items[0]
+    assert isinstance(item, CommandExecutionItem)
+    assert item.effect_receipt is not None
+    assert item.effect_receipt.effect_key == "effect:v1:abc"
+    assert item.effect_receipt.fencing_token == 11

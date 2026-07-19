@@ -2782,7 +2782,7 @@ function RealtimePageContent({
   return (
     <SubtasksProvider>
       <ThreadProviders thread={thread} isMock={false}>
-        <ToolEffectsProvider enabled={!isNewThread}>
+        <ToolEffectsProvider enabled={!isNewThread} active={thread.isLoading}>
           <RealtimeApprovalToasts
             approvals={realtimeApprovals.pendingApprovals}
             resolveApproval={realtimeApprovals.resolveApproval}

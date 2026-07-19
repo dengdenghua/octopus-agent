@@ -548,13 +548,26 @@ describe("conversationToAgentThreadState · tool calls", () => {
       makeConv([
         makeTurn([
           userMsg("ls"),
-          cmd("list_cwd", "c1", { inputPreview: { path: "/tmp" } }),
+          cmd("list_cwd", "c1", {
+            inputPreview: { path: "/tmp" },
+            effectReceipt: {
+              effectKey: "effect:v1:c1",
+              callId: "c1",
+              state: "indeterminate",
+              reason: "outcome unknown",
+              fencingToken: 4,
+            },
+          }),
           agentMsg("see output above"),
         ]),
       ]),
     );
     const ai = state.messages[1] as {
-      tool_calls?: Array<{ name: string; args: Record<string, unknown> }>;
+      tool_calls?: Array<{
+        name: string;
+        args: Record<string, unknown>;
+        effectReceipt?: { effectKey: string };
+      }>;
     };
     expect(ai.tool_calls).toHaveLength(1);
     expect(ai.tool_calls?.[0]?.name).toBe("list_cwd");
@@ -563,6 +576,7 @@ describe("conversationToAgentThreadState · tool calls", () => {
       command: "list_cwd",
       exit_code: 0,
     });
+    expect(ai.tool_calls?.[0]?.effectReceipt?.effectKey).toBe("effect:v1:c1");
   });
 
   it("turns mcpToolCall into a tool_call with server.tool name", () => {

@@ -26,6 +26,7 @@ from runtime.protocol import (
     ItemStatus,
     ReasoningItem,
     ServerMethod,
+    ToolEffectSignal,
     Turn,
     TurnStatus,
     VerificationItem,
@@ -628,6 +629,10 @@ class _ReactBridgeState:
             # streamed text — ``output_preview`` is a *summary* that loses
             # detail, so overwriting would regress the live view.
             item.aggregated_output = _append_capped_output("", evt["output_preview"])
+        effect_receipt = evt.get("effect_receipt")
+        if isinstance(effect_receipt, dict):
+            with contextlib.suppress(TypeError, ValueError):
+                item.effect_receipt = ToolEffectSignal.model_validate(effect_receipt)
         await self._emit_completed(turn, log, emitter, item)
         # Apply-patch first-class item: when a file-editing tool ran
         # successfully and surfaced a unified diff, promote it to a

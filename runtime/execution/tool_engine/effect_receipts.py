@@ -221,6 +221,7 @@ class ToolEffectReceiptIndex:
                             key,
                             fingerprint,
                             reason=decision.reason,
+                            fencing_token=decision.fencing_token,
                             side_effecting=side_effecting,
                         )
 
@@ -400,6 +401,8 @@ def indeterminate_step(
     step_id: int,
     node_id: str,
     call: ToolCall,
+    effect_key: str,
+    fencing_token: int = 0,
     reason: str,
 ) -> Step:
     result = ExecutionResult(
@@ -410,6 +413,18 @@ def indeterminate_step(
             "status": "indeterminate",
             "side_effect_may_have_happened": True,
             "retry_safe": False,
+            # Operator-safe signal for the realtime item protocol. Keep
+            # arguments and handler output out of this envelope: the main
+            # timeline needs only identity + state to surface the incident
+            # immediately, while the authenticated detail endpoint remains
+            # authoritative for mutation controls.
+            "effect_receipt": {
+                "effect_key": effect_key,
+                "call_id": str(call.call_id),
+                "state": "indeterminate",
+                "reason": reason,
+                "fencing_token": max(0, int(fencing_token)),
+            },
         },
         error_type="indeterminate_side_effect",
         stderr_tags=["durable_effect_indeterminate", "manual_reconciliation_required"],

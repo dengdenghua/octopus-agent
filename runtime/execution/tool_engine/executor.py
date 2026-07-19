@@ -981,6 +981,8 @@ class ToolExecutor:
                                 step_id=step_id,
                                 node_id=node_id,
                                 call=call,
+                                effect_key=_effect_resolution.key,
+                                fencing_token=_effect_resolution.fencing_token,
                                 reason=_effect_resolution.reason,
                             )
                             self.journal.write_step(task_id, arm_id, uncertain, actor=actor)

@@ -15,25 +15,9 @@ const snapshot = {
   backend: "redis",
   shared_across_hosts: true,
   can_authorize_retry: true,
-  count: 1,
-  state_counts: { indeterminate: 1 },
-  receipts: [
-    {
-      effect_key: "effect:risky-write",
-      task_id: "task-1",
-      step_id: 3,
-      sucker_id: "write_file",
-      side_effecting: true,
-      state: "indeterminate",
-      holder_id: "host-a",
-      fencing_token: 9,
-      lease_expires_at: 0,
-      call_id: "call-risk",
-      reason: "remote write outcome unknown",
-      updated_at: 1,
-      has_result: false,
-    },
-  ],
+  count: 0,
+  state_counts: {},
+  receipts: [],
 };
 
 describe("MessageGroup external-effect receipts", () => {
@@ -55,6 +39,13 @@ describe("MessageGroup external-effect receipts", () => {
           id: "call-risk",
           name: "write_file",
           args: { path: "result.txt", content: "done" },
+          effectReceipt: {
+            effectKey: "effect:risky-write",
+            callId: "call-risk",
+            state: "indeterminate",
+            reason: "remote write outcome unknown",
+            fencingToken: 9,
+          },
         },
         ...Array.from({ length: 6 }, (_, index) => ({
           id: `call-safe-${index}`,

@@ -4,6 +4,7 @@ import threading
 import time
 from uuid import uuid4
 
+from runtime.core.cerebrum.react_execution import _tool_event_extras_from_beak_step
 from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.tool_engine import ToolExecutor
 from runtime.execution.tool_engine.effect_receipts import (
@@ -74,10 +75,11 @@ def test_dangling_side_effect_intent_fails_closed_after_restart():
     journal = InMemoryJournal()
     task_id = TaskId(uuid4())
     args = {"value": "x"}
+    expected_effect_key = effect_key(task_id, 1, "durable_tool", args)
     journal.write_tool_effect_intent(
         task_id,
         ArmId("react_arm"),
-        effect_key=effect_key(task_id, 1, "durable_tool", args),
+        effect_key=expected_effect_key,
         call_id=str(uuid4()),
         step_id=1,
         node_id="react_n1",
@@ -97,6 +99,17 @@ def test_dangling_side_effect_intent_fails_closed_after_restart():
     assert result.success is False
     assert result.result.error_type == "indeterminate_side_effect"
     assert result.result.output["retry_safe"] is False
+    assert result.result.output["effect_receipt"] == {
+        "effect_key": expected_effect_key,
+        "call_id": str(result.action.call_id),
+        "state": "indeterminate",
+        "reason": result.result.output["error"],
+        "fencing_token": 0,
+    }
+    assert (
+        _tool_event_extras_from_beak_step(result, "durable_tool")["effect_receipt"]
+        == result.result.output["effect_receipt"]
+    )
     assert calls == 0
 
 

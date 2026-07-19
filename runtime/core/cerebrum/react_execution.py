@@ -669,6 +669,32 @@ def _tool_event_extras_from_beak_step(
         return {}
 
     extras: dict[str, Any] = {}
+    effect_receipt = output.get("effect_receipt")
+    if isinstance(effect_receipt, dict):
+        effect_key = effect_receipt.get("effect_key")
+        call_id = effect_receipt.get("call_id")
+        state = effect_receipt.get("state")
+        reason = effect_receipt.get("reason")
+        fencing_token = effect_receipt.get("fencing_token")
+        if (
+            isinstance(effect_key, str)
+            and effect_key
+            and isinstance(call_id, str)
+            and call_id
+            and state == "indeterminate"
+            and isinstance(reason, str)
+        ):
+            extras["effect_receipt"] = {
+                "effect_key": effect_key,
+                "call_id": call_id,
+                "state": "indeterminate",
+                "reason": reason,
+                "fencing_token": (
+                    fencing_token
+                    if isinstance(fencing_token, int) and not isinstance(fencing_token, bool)
+                    else 0
+                ),
+            }
     diff = output.get("diff_preview") or output.get("diff")
     if isinstance(diff, str) and diff.strip():
         extras["diff"] = diff

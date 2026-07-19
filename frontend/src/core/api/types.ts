@@ -54,6 +54,13 @@ export interface ToolCall {
   timelineSequence?: number | null;
   parentItemId?: string | null;
   phaseId?: string | null;
+  effectReceipt?: {
+    effectKey: string;
+    callId: string;
+    state: "indeterminate";
+    reason: string;
+    fencingToken: number;
+  } | null;
 }
 
 export interface UsageMetadata {

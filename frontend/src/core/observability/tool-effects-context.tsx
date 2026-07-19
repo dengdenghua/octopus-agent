@@ -43,12 +43,24 @@ const EMPTY_CONTEXT: ToolEffectsContextValue = {
 const ToolEffectsContext =
   createContext<ToolEffectsContextValue>(EMPTY_CONTEXT);
 
+export function toolEffectsRefetchInterval(
+  active: boolean,
+  receipts: readonly Pick<ToolEffectReceipt, "state">[],
+): number | false {
+  if (!active) return false;
+  return receipts.some((receipt) => receipt.state !== "committed")
+    ? 2_000
+    : 10_000;
+}
+
 export function ToolEffectsProvider({
   children,
   enabled = true,
+  active = false,
 }: {
   children: ReactNode;
   enabled?: boolean;
+  active?: boolean;
 }) {
   const query = useQuery({
     queryKey: TOOL_EFFECTS_QUERY_KEY,
@@ -59,9 +71,7 @@ export function ToolEffectsProvider({
     refetchIntervalInBackground: true,
     refetchInterval: (current) => {
       const receipts = current.state.data?.receipts ?? EMPTY_RECEIPTS;
-      return receipts.some((receipt) => receipt.state !== "committed")
-        ? 2_000
-        : 10_000;
+      return toolEffectsRefetchInterval(active, receipts);
     },
   });
   const snapshot = enabled ? (query.data ?? EMPTY_SNAPSHOT) : EMPTY_SNAPSHOT;

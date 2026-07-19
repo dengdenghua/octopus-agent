@@ -235,6 +235,30 @@ def test_tool_lifecycle_event_renders_react_shape():
     }
 
 
+def test_tool_lifecycle_event_preserves_operator_safe_effect_signal():
+    signal = {
+        "effect_key": "effect:v1:abc",
+        "call_id": "call-1",
+        "state": "indeterminate",
+        "reason": "outcome unknown",
+        "fencing_token": 3,
+    }
+    event = normalize_tool_lifecycle_event(
+        "tool_end",
+        {
+            "tool_call_id": "call-1",
+            "tool_name": "write_file",
+            "status": "error",
+            "output_preview": "outcome unknown",
+            "effect_receipt": signal,
+        },
+        origin="react_compat",
+    )
+
+    assert event.extras["effect_receipt"] == signal
+    assert tool_lifecycle_event_to_react_event(event)["effect_receipt"] == signal
+
+
 def test_tool_lifecycle_event_renders_trace_payload_with_aliases():
     event = normalize_tool_lifecycle_event(
         "tool_end",

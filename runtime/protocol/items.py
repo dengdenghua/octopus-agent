@@ -235,6 +235,18 @@ class CommandAction(BaseModel):
     kind: str = "shell"
 
 
+class ToolEffectSignal(BaseModel):
+    """Small operator-safe receipt carried beside a realtime tool item."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    effect_key: str = Field(alias="effectKey")
+    call_id: str = Field(alias="callId")
+    state: Literal["indeterminate"]
+    reason: str
+    fencing_token: int = Field(default=0, alias="fencingToken", ge=0)
+
+
 class CommandExecutionItem(_ItemBase):
     type: Literal[ItemType.COMMAND_EXECUTION] = ItemType.COMMAND_EXECUTION
     command: str
@@ -245,6 +257,7 @@ class CommandExecutionItem(_ItemBase):
     exit_code: int | None = Field(default=None, alias="exitCode")
     process_id: str | None = Field(default=None, alias="processId")
     network_access: bool = Field(default=False, alias="networkAccess")
+    effect_receipt: ToolEffectSignal | None = Field(default=None, alias="effectReceipt")
 
 
 class FileHunk(BaseModel):

@@ -142,6 +142,15 @@ export interface CommandExecutionItem extends ItemBase {
   exitCode: number | null;
   processId: string | null;
   networkAccess: boolean;
+  effectReceipt?: ToolEffectSignal | null;
+}
+
+export interface ToolEffectSignal {
+  effectKey: string;
+  callId: string;
+  state: "indeterminate";
+  reason: string;
+  fencingToken: number;
 }
 
 export interface FileHunk {

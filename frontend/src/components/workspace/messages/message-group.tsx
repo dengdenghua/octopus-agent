@@ -728,9 +728,9 @@ export function MessageGroup({
       const count = item.type === "toolCall" ? 1 : item.steps.length;
       const workbenchEventId =
         item.type === "toolCall" ? item.step.id : step.messageId;
-      const effectReceipt = workbenchEventId
-        ? receiptsByCallId.get(workbenchEventId)
-        : undefined;
+      const effectReceipt =
+        (item.type === "toolCall" ? item.step.effectReceipt : undefined) ??
+        (workbenchEventId ? receiptsByCallId.get(workbenchEventId) : undefined);
       const needsEffectReview = effectReceipt?.state === "indeterminate";
 
       return (
@@ -747,7 +747,9 @@ export function MessageGroup({
                 eventKind: isThinking ? "thinking" : "execution",
                 view: isThinking ? "summary" : "trace",
                 effectKey: needsEffectReview
-                  ? effectReceipt.effect_key
+                  ? "effect_key" in effectReceipt
+                    ? effectReceipt.effect_key
+                    : effectReceipt.effectKey
                   : undefined,
               })
             }
@@ -1967,6 +1969,9 @@ interface CoTToolCallStep extends GenericCoTStep<"toolCall"> {
   name: string;
   args: Record<string, unknown>;
   result?: string | Record<string, unknown> | unknown[];
+  effectReceipt?: NonNullable<
+    NonNullable<AIMessage["tool_calls"]>[number]["effectReceipt"]
+  >;
 }
 
 type CoTStep =
@@ -2113,7 +2118,8 @@ function retainIndeterminateToolCalls(
       selected.has(item) ||
       (item.type === "toolCall" &&
         Boolean(item.step.id) &&
-        receiptsByCallId.get(item.step.id!)?.state === "indeterminate"),
+        (item.step.effectReceipt?.state === "indeterminate" ||
+          receiptsByCallId.get(item.step.id!)?.state === "indeterminate")),
   );
 }
 
@@ -2338,6 +2344,7 @@ function convertToSteps(
       phaseId: toolCall.phaseId ?? undefined,
       parentItemId: toolCall.parentItemId ?? undefined,
       timelineSequence: toolCall.timelineSequence ?? undefined,
+      effectReceipt: toolCall.effectReceipt ?? undefined,
     };
     const toolCallId = toolCall.id;
     if (toolCallId) {

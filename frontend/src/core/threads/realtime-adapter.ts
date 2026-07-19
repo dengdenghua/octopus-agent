@@ -348,6 +348,7 @@ function turnToMessages(turn: Turn): Message[] {
             exit_code: ce.exitCode,
           },
           type: "tool_call",
+          effectReceipt: ce.effectReceipt ?? undefined,
           ...toolCallTimelineCoordinates(ce),
         });
         break;
