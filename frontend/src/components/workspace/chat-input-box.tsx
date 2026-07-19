@@ -351,6 +351,7 @@ export function ChatInputBox({
   const [uploadingMaterials, setUploadingMaterials] = useState(false);
   const [materialError, setMaterialError] = useState<string | null>(null);
   const [researchConfigOpen, setResearchConfigOpen] = useState(false);
+  const submitLockRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Images attached to the next message via paste / drop / image-picker.
@@ -592,6 +593,13 @@ export function ChatInputBox({
     ) {
       return;
     }
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
+    const releaseSubmitLock = () => {
+      window.setTimeout(() => {
+        submitLockRef.current = false;
+      }, 250);
+    };
     // Fast path: client-side slash commands (mode/model/permission/
     // compact/settings) resolve locally with no LLM round-trip.
     // Falls through for anything not handled here.
@@ -608,6 +616,7 @@ export function ChatInputBox({
       })
     ) {
       setDraft("");
+      releaseSubmitLock();
       return;
     }
     if (isDeepResearchMode) {
@@ -626,6 +635,7 @@ export function ChatInputBox({
       if (pendingBrowserFiles.length > 0) {
         if (!threadId) {
           setMaterialError(t.chatInputBox.startThreadBeforeUpload);
+          releaseSubmitLock();
           return;
         }
         setUploadingMaterials(true);
@@ -640,29 +650,33 @@ export function ChatInputBox({
           }));
         } catch (err) {
           swallow(err);
-          setMaterialError(
-            err instanceof Error ? err.message : t.chatInputBox.uploadFailed,
-          );
+          setMaterialError(t.chatInputBox.uploadFailed);
+          releaseSubmitLock();
           return;
         } finally {
           setUploadingMaterials(false);
         }
       }
-      const result = await onDeepResearch(
-        appendReferencedFiles(text, pendingFiles),
-        {
-          urls: parsedResearchUrls,
-          materials: [
-            ...researchMaterials
-              .filter((item) => item.enabled)
-              .map((item) => item.material),
-            ...localFileMaterials,
-            ...uploadedFileMaterials,
-          ],
-          sourceKinds: researchSources,
-          maxSearches,
-        },
-      );
+      let result: void | boolean;
+      try {
+        result = await onDeepResearch(
+          appendReferencedFiles(text, pendingFiles),
+          {
+            urls: parsedResearchUrls,
+            materials: [
+              ...researchMaterials
+                .filter((item) => item.enabled)
+                .map((item) => item.material),
+              ...localFileMaterials,
+              ...uploadedFileMaterials,
+            ],
+            sourceKinds: researchSources,
+            maxSearches,
+          },
+        );
+      } finally {
+        releaseSubmitLock();
+      }
       if (result !== false) {
         setDraft("");
         setPendingFiles([]);
@@ -672,11 +686,15 @@ export function ChatInputBox({
     const browserUploadFiles = pendingFiles
       .map((file) => file.file)
       .filter((file): file is File => file instanceof File);
-    onSubmit?.({
-      text: appendReferencedFiles(text, pendingFiles),
-      images: pendingImages.length > 0 ? pendingImages : undefined,
-      files: browserUploadFiles.length > 0 ? browserUploadFiles : undefined,
-    });
+    try {
+      onSubmit?.({
+        text: appendReferencedFiles(text, pendingFiles),
+        images: pendingImages.length > 0 ? pendingImages : undefined,
+        files: browserUploadFiles.length > 0 ? browserUploadFiles : undefined,
+      });
+    } finally {
+      releaseSubmitLock();
+    }
     setDraft("");
     if (pendingFiles.length > 0) {
       setPendingFiles([]);
@@ -772,9 +790,7 @@ export function ChatInputBox({
         setResearchNote("");
       } catch (err) {
         swallow(err);
-        setMaterialError(
-          err instanceof Error ? err.message : t.chatInputBox.uploadFailed,
-        );
+        setMaterialError(t.chatInputBox.uploadFailed);
       } finally {
         setUploadingMaterials(false);
         if (fileInputRef.current) fileInputRef.current.value = "";

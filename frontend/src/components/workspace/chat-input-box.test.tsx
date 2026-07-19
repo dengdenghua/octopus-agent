@@ -250,6 +250,20 @@ describe("<ChatInputBox /> cowork materials", () => {
     expect(textarea().value).toBe("");
   });
 
+  it("suppresses duplicate submissions before the parent status updates", () => {
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <ChatInputBox mode="react" threadId="thread-1" onSubmit={onSubmit} />,
+    );
+
+    fireEvent.change(textarea(), { target: { value: "Run once" } });
+    const send = screen.getByTitle("Send");
+    fireEvent.click(send);
+    fireEvent.click(send);
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it("allows sending a pasted image without typed text", async () => {
     const onSubmit = vi.fn();
     renderWithProviders(
@@ -601,6 +615,35 @@ describe("<ChatInputBox /> cowork materials", () => {
         path: "F:/uploads/thread-1/brief.md",
       }),
     ]);
+  });
+
+  it("does not expose raw upload errors in the composer", async () => {
+    uploadFilesMock.mockRejectedValueOnce(
+      new Error("S3 credential token leaked from upstream"),
+    );
+    renderWithProviders(
+      <ChatInputBox
+        mode="deep"
+        threadId="thread-1"
+        allowAgentModes
+        onDeepResearch={vi.fn()}
+      />,
+    );
+
+    await openAgentSettings();
+    const fileInput = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: {
+        files: [new File(["hello"], "brief.md", { type: "text/markdown" })],
+      },
+    });
+
+    expect(await screen.findByText("Upload failed")).toBeInTheDocument();
+    expect(
+      screen.queryByText("S3 credential token leaked from upstream"),
+    ).not.toBeInTheDocument();
   });
 
   it("lets the planner choose research roles instead of sending a fixed template", async () => {
