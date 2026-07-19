@@ -2270,9 +2270,12 @@ def stream_agentic_fallback(
                 _round_commentary_emitted = True
                 _last_public_checkpoint_at = time.monotonic()
 
+        _action_narration_pool: ThreadPoolExecutor | None = None
+        _action_narration_future: Any = None
         if (
             round_tool_calls
             and not _round_commentary_emitted
+            and not _round_redirected
             and _realtime_public_narrative
             and _batch_needs_live_public_narrative(round_tool_calls)
             and (
@@ -2280,27 +2283,43 @@ def stream_agentic_fallback(
                 or time.monotonic() - _last_public_checkpoint_at >= _public_narrative_interval
             )
         ):
+            _action_narration_pool = ThreadPoolExecutor(
+                max_workers=1,
+                thread_name_prefix="tool-bridge-public-action",
+            )
+            _action_narration_future = _action_narration_pool.submit(
+                contextvars.copy_context().run,
+                _generate_native_action_checkpoint,
+                router,
+                model=effective_model,
+                messages=messages,
+                calls=round_tool_calls,
+            )
+
+        def _take_action_narration(*, wait_for_completion: bool = False) -> str:
+            """Collect one in-flight action update without delaying tool start."""
+            nonlocal _action_narration_future, _action_narration_pool
+            nonlocal _last_public_checkpoint_at, _round_commentary_emitted
+            nonlocal _total_in_tokens, _total_out_tokens
+            future = _action_narration_future
+            if future is None or (not wait_for_completion and not future.done()):
+                return ""
             try:
-                checkpoint, checkpoint_in_tokens, checkpoint_out_tokens = (
-                    _generate_native_action_checkpoint(
-                        router,
-                        model=effective_model,
-                        messages=messages,
-                        calls=round_tool_calls,
-                    )
-                )
+                checkpoint, checkpoint_in_tokens, checkpoint_out_tokens = future.result()
                 _total_in_tokens += checkpoint_in_tokens
                 _total_out_tokens += checkpoint_out_tokens
             except Exception as exc:  # noqa: BLE001 — optional narration
                 _logger.warning("public action narration failed: %s", exc)
                 checkpoint = ""
+            finally:
+                if _action_narration_pool is not None:
+                    _action_narration_pool.shutdown(wait=False, cancel_futures=True)
+                _action_narration_future = None
+                _action_narration_pool = None
             if checkpoint:
-                # tool_start has already entered the timeline, while the
-                # handler itself has not run yet. This places the model update
-                # inside the execution interval without altering tool context.
-                yield ("commentary", checkpoint, None)
                 _round_commentary_emitted = True
                 _last_public_checkpoint_at = time.monotonic()
+            return checkpoint
 
         if not round_tool_calls:
             # Close the narrow race where the user steers while the model is
@@ -2649,6 +2668,14 @@ def stream_agentic_fallback(
                             )
                             _tool_batch_source.cancel(reason="user redirected active tool batch")
 
+                        checkpoint = _take_action_narration()
+                        if checkpoint:
+                            yield ("commentary", checkpoint, None)
+
+            checkpoint = _take_action_narration(wait_for_completion=True)
+            if checkpoint:
+                yield ("commentary", checkpoint, None)
+
             # Cleanup the contextvar marker the parent set.
             _session_obj.metadata.pop("_active_parent_tool_use_id", None)
 
@@ -2725,7 +2752,10 @@ def stream_agentic_fallback(
             # direct path.
             serial_pool = (
                 ThreadPoolExecutor(max_workers=1, thread_name_prefix="tool-bridge-steerable")
-                if steering_drain is not None and not _tool_batch_redirected
+                if (
+                    steering_drain is not None or _action_narration_future is not None
+                )
+                and not _tool_batch_redirected
                 else None
             )
             try:
@@ -2750,6 +2780,9 @@ def stream_agentic_fallback(
                         )
                         while not future.done():
                             wait((future,), timeout=0.1)
+                            checkpoint = _take_action_narration()
+                            if checkpoint:
+                                yield ("commentary", checkpoint, None)
                             if not future.done() and _capture_steering():
                                 _tool_batch_redirected = True
                                 _redirected_tool_ids.update(
@@ -2764,6 +2797,9 @@ def stream_agentic_fallback(
                         except Exception as exc:  # noqa: BLE001 — surface as tool failure
                             output, is_error = f"(serial exec error: {exc})", True
                             _logger.warning("serial tool exec future failed: %s", exc)
+                    checkpoint = _take_action_narration(wait_for_completion=True)
+                    if checkpoint:
+                        yield ("commentary", checkpoint, None)
                     if call.id in _redirected_tool_ids:
                         is_error = True
                     _observe_code_tool_result(call, is_error, output, round_i + 1)

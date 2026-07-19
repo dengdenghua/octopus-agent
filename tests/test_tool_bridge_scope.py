@@ -1989,9 +1989,14 @@ def test_likely_long_tool_gets_model_update_while_execution_is_open(
     monkeypatch,
 ):
     execution = {"count": 0}
+    tool_started = [threading.Event(), threading.Event()]
+    narration_started = [threading.Event(), threading.Event()]
 
     def inspect_directory(path: str = "."):
+        batch_index = execution["count"]
         execution["count"] += 1
+        tool_started[batch_index].set()
+        assert narration_started[batch_index].wait(timeout=1)
         return {"path": path, "finding": "diagnostic completed"}
 
     registry = SkillRegistry()
@@ -2009,6 +2014,7 @@ def test_likely_long_tool_gets_model_update_while_execution_is_open(
     class Router:
         def __init__(self):
             self.requests = []
+            self.action_updates = 0
 
         def call_stream(self, request):
             self.requests.append(request)
@@ -2016,9 +2022,13 @@ def test_likely_long_tool_gets_model_update_while_execution_is_open(
                 "[PUBLIC ACTION UPDATE]" in str(message.content) for message in request.messages
             )
             if is_action_update:
+                batch_index = self.action_updates
+                self.action_updates += 1
+                narration_started[batch_index].set()
+                assert tool_started[batch_index].wait(timeout=1)
                 update = (
                     "我正在核对一手资料的关键差异，结果会决定下一步是否继续扩展来源。"
-                    if execution["count"] == 0
+                    if batch_index == 0
                     else "第一批目录证据已经拿到；我继续核对补充目录，确认结论是否稳定。"
                 )
                 yield ModelStreamEvent(type="text_delta", delta=update)
