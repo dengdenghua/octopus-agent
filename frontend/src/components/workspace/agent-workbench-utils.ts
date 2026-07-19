@@ -652,9 +652,11 @@ export function diffEntriesFromBlocks(blocks: WorkBlock[]): DiffEntry[] {
   const entries = blocks
     .filter(
       (block) =>
-        // Only include actual file write/edit operations
+        // Diff/changed-file surfaces must represent mutations, not every
+        // event that happens to carry a path. Read blocks expose their input
+        // path too; admitting them here made a read-only audit appear to have
+        // edited every inspected source file.
         block.kind === "file" ||
-        block.kind === "read" ||
         /file_change|write_file|edit_file|create_file|patch_file/i.test(
           block.event.name,
         ),

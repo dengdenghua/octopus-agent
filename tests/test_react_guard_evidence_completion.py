@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from runtime.core.cerebrum.react_guards import (
+    _code_mode_inspection_answer_fragment_guard,
     _code_mode_missing_inspection_tool_guard,
     _explicit_source_paths,
     _incomplete_final_answer_guard,
@@ -128,6 +129,42 @@ def test_incomplete_final_answer_accepts_concrete_conclusion() -> None:
 
 def test_incomplete_final_answer_accepts_short_concrete_reply() -> None:
     assert _incomplete_final_answer_guard("已思考") is None
+
+
+def test_inspection_answer_fragment_guard_rejects_bare_source_line() -> None:
+    message = _code_mode_inspection_answer_fragment_guard(
+        'str = ""',
+        goal="只读核对 runtime/core/cerebrum/react_loop.py，说明 public_update 如何进入公开时间线",
+        file_tools_visible=True,
+    )
+
+    assert message is not None
+    assert "bare source-code fragment" in message
+
+
+def test_inspection_answer_fragment_guard_accepts_concrete_conclusion() -> None:
+    assert (
+        _code_mode_inspection_answer_fragment_guard(
+            "结论：两个 realtime 标志会让每轮 public_update 进入公开时间线。",
+            goal=(
+                "只读核对 runtime/core/cerebrum/react_loop.py，"
+                "说明 public_update 如何进入公开时间线"
+            ),
+            file_tools_visible=True,
+        )
+        is None
+    )
+
+
+def test_inspection_answer_fragment_guard_is_scoped_to_project_inspection() -> None:
+    assert (
+        _code_mode_inspection_answer_fragment_guard(
+            'str = ""',
+            goal="解释 Python 类型注解语法",
+            file_tools_visible=True,
+        )
+        is None
+    )
 
 
 def test_pre_emit_buffers_preparatory_chat_but_not_conclusion() -> None:

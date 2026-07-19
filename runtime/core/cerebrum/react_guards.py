@@ -651,6 +651,52 @@ def _code_mode_missing_inspection_tool_guard(
     return None
 
 
+_SOURCE_FRAGMENT_ONLY_RE = re.compile(
+    r"^(?:"
+    r"(?:export\s+)?(?:const|let|var|type)\s+[A-Za-z_$][\w$]*\s*(?::[^=]+)?=.+"
+    r"|[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*(?::[^=]+)?=.+"
+    r"|(?:async\s+)?def\s+[A-Za-z_]\w*\s*\([^\n]*\)\s*(?:->[^:]+)?\s*:"
+    r"|(?:export\s+)?(?:interface|class|type)\s+[A-Za-z_$][\w$]*(?:\s*[={].*)?"
+    r"|return\s+.+"
+    r")$",
+    re.IGNORECASE,
+)
+
+
+def _code_mode_inspection_answer_fragment_guard(
+    final_answer: str,
+    *,
+    goal: str,
+    file_tools_visible: bool,
+) -> str | None:
+    """Reject a raw source line masquerading as an inspection report.
+
+    Read-only code analysis often ends immediately after a large file result.
+    Weak providers occasionally echo the last visible declaration (for
+    example ``str = ""``) as plain prose.  The evidence gate proves the files
+    were read, but not that the model actually answered the question.  Keep
+    genuine concise conclusions valid; only source-shaped, explanation-free
+    fragments are rejected.
+    """
+
+    if not file_tools_visible or not _goal_requests_project_inspection(goal):
+        return None
+    if _final_answer_requests_user_help(final_answer):
+        return None
+    visible = str(final_answer or "").strip()
+    visible = re.sub(r"^```[A-Za-z0-9_+-]*\s*|\s*```$", "", visible).strip()
+    visible = visible.strip("`").strip().rstrip(";")
+    if not visible or "\n" in visible or len(visible) > 180:
+        return None
+    if not _SOURCE_FRAGMENT_ONLY_RE.fullmatch(visible):
+        return None
+    return (
+        "Code mode cannot finish this project-inspection task with a bare source-code "
+        "fragment. Explain what the observed declaration means and answer the user's "
+        "actual comparison or architecture question using the completed read evidence."
+    )
+
+
 def _incomplete_final_answer_guard(final_answer: str) -> str | None:
     """Reject placeholder/preparatory prose presented as a terminal answer."""
 
@@ -3462,6 +3508,16 @@ def _invoke_missing_inspection(ctx: GuardContext) -> str | None:
     )
 
 
+def _invoke_inspection_answer_fragment(ctx: GuardContext) -> str | None:
+    if not ctx.is_code_mode:
+        return None
+    return _code_mode_inspection_answer_fragment_guard(
+        ctx.final_answer,
+        goal=ctx.goal,
+        file_tools_visible=ctx.file_inspection_tools_visible,
+    )
+
+
 def _invoke_incomplete_final(ctx: GuardContext) -> str | None:
     return _incomplete_final_answer_guard(ctx.final_answer)
 
@@ -3627,6 +3683,11 @@ GUARD_REGISTRY: list[GuardSpec] = [
     # ── Tool-availability / inspection-evidence ──
     GuardSpec("final-answer completeness guard", "protocol", _invoke_incomplete_final),
     GuardSpec("inspection-evidence guard", "protocol", _invoke_missing_inspection),
+    GuardSpec(
+        "inspection-answer-fragment guard",
+        "protocol",
+        _invoke_inspection_answer_fragment,
+    ),
     GuardSpec("tool-availability guard", "protocol", _invoke_false_no_tool),
     GuardSpec("tool-result guard", "protocol", _invoke_false_tool_result),
     GuardSpec("implementation-write guard", "protocol", _invoke_missing_write),
