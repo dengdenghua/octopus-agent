@@ -94,8 +94,10 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
             path="tests/test_cli_team.py",
             required_terms=(
                 "test_one_member_failure_is_isolated",
+                "test_multiple_distinct_failures_surface_labeled_fix_hints",
                 "failed_members",
                 "Suggested fix",
+                "Suggested fixes",
                 "next_action",
                 "review_successes_retry_failed",
             ),
