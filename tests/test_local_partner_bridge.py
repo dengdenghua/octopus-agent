@@ -432,6 +432,24 @@ def test_failure_diagnosis_common_cli_failures() -> None:
             "quota",
             "额度",
         ),
+        (
+            diagnose_partner_failure(
+                "trae-cli",
+                "trae-cli",
+                stderr="model access denied: not available for this account",
+            ),
+            "entitlement",
+            "桌面端可用不代表 CLI",
+        ),
+        (
+            diagnose_partner_failure(
+                "codebuddy-cli",
+                "codebuddy",
+                stderr="unknown option --output-format; please upgrade",
+            ),
+            "version",
+            "headless/print 参数",
+        ),
     ]
     for diagnosis, kind, hint_part in cases:
         assert diagnosis.kind == kind

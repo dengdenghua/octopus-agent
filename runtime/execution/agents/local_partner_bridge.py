@@ -162,6 +162,34 @@ def diagnose_partner_failure(
     if any(
         marker in text
         for marker in (
+            "not entitled",
+            "entitlement",
+            "subscription",
+            "license",
+            "plan does not include",
+            "not available for your account",
+            "not available for this account",
+            "not enabled for your account",
+            "account is not enabled",
+            "no permission to use model",
+            "no access to model",
+            "model access denied",
+            "未开通",
+            "无权益",
+            "没有权益",
+            "暂无权益",
+            "账号无权限",
+            "没有模型权限",
+        )
+    ):
+        return PartnerFailureDiagnosis(
+            "entitlement",
+            f"{partner} 账号权益不足或未开通",
+            "桌面端可用不代表 CLI 账号已获得同一权益；请在原生 CLI 中确认订阅/企业授权/模型权限后重试。",
+        )
+    if any(
+        marker in text
+        for marker in (
             "not logged in",
             "not login",
             "please login",
@@ -245,6 +273,29 @@ def diagnose_partner_failure(
             "quota",
             f"{partner} 额度或限流不足",
             "请检查该 CLI 账号的额度/计费/限流状态，稍后重试或换一个可用模型。",
+        )
+    if any(
+        marker in text
+        for marker in (
+            "unknown option",
+            "unrecognized option",
+            "invalid option",
+            "no such option",
+            "unknown flag",
+            "unrecognized flag",
+            "flag provided but not defined",
+            "unexpected argument",
+            "unexpected option",
+            "requires a newer version",
+            "unsupported cli version",
+            "please upgrade",
+            "upgrade required",
+        )
+    ):
+        return PartnerFailureDiagnosis(
+            "version",
+            f"{partner} CLI 版本或 headless 参数不兼容",
+            f"请先升级原生 CLI，或在终端运行 `{native} --help` 确认当前版本是否支持 Octopus 使用的 headless/print 参数。",
         )
     if exit_code == 0 and not (stdout or "").strip():
         return PartnerFailureDiagnosis(
