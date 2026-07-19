@@ -40,6 +40,12 @@ from runtime.core.cerebrum.react_context import (
     _serialize_messages_for_checkpoint,
     context_budget_tokens_for_model,
 )
+from runtime.core.cerebrum.react_convergence import (
+    EvidenceConvergence,
+    build_direct_answer_directive,
+    evidence_answer_conflicts_with_goal,
+    read_only_evidence_convergence,
+)
 from runtime.core.cerebrum.react_execution import (
     _background_task_info_from_observation,
     _beak_step_effective_success,
@@ -2707,6 +2713,7 @@ def stream_react_loop(
     _force_convergence_next = False
     _green_verification_convergence_active = False
     _green_convergence_todo_used = False
+    _evidence_convergence_active: EvidenceConvergence | None = None
     # Persistent execution-state evidence. Recomputing green rounds from the
     # whole trajectory is useful as a fallback, but long turns can decorate
     # old observations with recovery nudges. Track clean verifier rounds at
@@ -2902,7 +2909,11 @@ def stream_react_loop(
                         _max_tokens_per_iter,
                     )
                 ),
-                tools=_native_tool_specs if _native_mode else [],
+                tools=(
+                    _native_tool_specs
+                    if _native_mode and _evidence_convergence_active is None
+                    else []
+                ),
             )
             text_parts: list[str] = []
             thinking_parts: list[str] = []
@@ -3024,7 +3035,8 @@ def stream_react_loop(
                                 pass
                             elif answer_so_far:
                                 if (
-                                    (_todo_protocol_required and _todo_protocol_visible)
+                                    _evidence_convergence_active is not None
+                                    or (_todo_protocol_required and _todo_protocol_visible)
                                     or _final_answer_needs_pre_emit_guard(
                                         answer_so_far,
                                         is_code_mode=_is_code_mode,
@@ -3076,7 +3088,8 @@ def stream_react_loop(
                             # user sees text streaming the moment it's
                             # clear ReAct format isn't coming.
                             if (
-                                (_todo_protocol_required and _todo_protocol_visible)
+                                _evidence_convergence_active is not None
+                                or (_todo_protocol_required and _todo_protocol_visible)
                                 or _final_answer_needs_pre_emit_guard(
                                     joined,
                                     is_code_mode=_is_code_mode,
@@ -3359,9 +3372,28 @@ def stream_react_loop(
             and maybe_final is None
         ):
             step.observation = text
-        if _iteration_soft_timed_out and not step.action and maybe_final is None:
+        if (
+            _iteration_soft_timed_out
+            and maybe_final is None
+            and (not step.action or _evidence_convergence_active is not None)
+        ):
             _model_timeout_recoveries += 1
             if _model_timeout_recoveries >= 2:
+                if _evidence_convergence_active is not None:
+                    # A provider can ignore tools=[] and finish a timed-out
+                    # convergence round with another phantom tool call. That
+                    # action is unusable once the requested evidence is
+                    # complete and must not reset the stall counter. Surface a
+                    # truthful handoff as ordinary answer text before the
+                    # terminal receipt; emitting react_error first makes the
+                    # realtime gateway close the turn and drop that text.
+                    final_answer = _stage_update_timeout_fallback(steps)
+                    step.observation = (
+                        "[model-iteration-timeout] evidence synthesis retry also timed out"
+                    )
+                    steps.append(step)
+                    terminated_reason = "model_stall"
+                    break
                 stall_message = (
                     "模型连续两次在单轮推理时限内未能给出下一步操作或最终答案。"
                     "前面已完成的工具结果仍保留在执行记录中，但这次无法可靠完成最终汇总。"
@@ -3403,7 +3435,7 @@ def stream_react_loop(
                     "attempt": _model_failovers,
                 }
             step.public_update = recovery_update
-            step.observation = (
+            _timeout_recovery_observation = (
                 "[model-iteration-timeout] The previous model stream kept producing "
                 "private reasoning without a usable Action or Final Answer. Preserve "
                 "all completed tool results. A backup model may now be active. "
@@ -3411,6 +3443,15 @@ def stream_react_loop(
                 "length: emit one concrete Update plus the next necessary Action, or "
                 "emit the complete Final Answer directly."
             )
+            if _evidence_convergence_active is not None:
+                _recovery_directive = build_direct_answer_directive(
+                    goal=intent.normalized_goal,
+                    decision=_evidence_convergence_active,
+                    steps=steps,
+                )
+                if _recovery_directive:
+                    _timeout_recovery_observation += f"\n\n{_recovery_directive}"
+            step.observation = _timeout_recovery_observation
             _force_convergence_next = True
         elif step.action or maybe_final is not None:
             _model_timeout_recoveries = 0
@@ -3420,6 +3461,7 @@ def stream_react_loop(
         if (
             maybe_final
             and not _final_stream_started
+            and _evidence_convergence_active is None
             and not (_todo_protocol_required and _todo_protocol_visible)
             and not _final_answer_needs_pre_emit_guard(
                 maybe_final,
@@ -3716,6 +3758,18 @@ def stream_react_loop(
                 tool_action_requested = False
                 maybe_final = None
                 _repeated_failure_skipped = True
+        if _evidence_convergence_active is not None and tool_action_requested:
+            observation = (
+                "The read-only evidence requested by the user is already complete, so "
+                "the runtime did not execute this additional tool call. Answer now from "
+                "the recorded observations; do not broaden the search or call another tool."
+            )
+            step.observation = observation
+            step.action = ""
+            step.actions = []
+            tool_action_requested = False
+            maybe_final = None
+            _force_convergence_next = True
         if _is_code_mode and tool_action_requested:
             # A deterministic source-level concurrency defect is stronger
             # evidence than another green/red probe.  Do not let providers
@@ -4283,6 +4337,29 @@ def stream_react_loop(
                     "emit Final Answer."
                 )
 
+        if _evidence_convergence_active is None and tool_action_requested:
+            _evidence_convergence_active = read_only_evidence_convergence(
+                goal=intent.normalized_goal,
+                steps=steps + [step],
+                read_only=_read_only_turn,
+            )
+            if _evidence_convergence_active is not None:
+                _force_convergence_next = True
+                _coverage = ", ".join(_evidence_convergence_active.covered[:6])
+                _coverage_note = f" Covered evidence: {_coverage}." if _coverage else ""
+                _direct_answer_directive = build_direct_answer_directive(
+                    goal=intent.normalized_goal,
+                    decision=_evidence_convergence_active,
+                    steps=steps + [step],
+                )
+                step.observation = (step.observation or observation or "") + (
+                    "\n\nThe user's requested read-only evidence is complete."
+                    + _coverage_note
+                    + " The next response must answer directly from these observations. "
+                    "Do not call another tool or expand the investigation."
+                    + (f"\n\n{_direct_answer_directive}" if _direct_answer_directive else "")
+                )
+
         if (
             tool_action_requested
             and observation
@@ -4429,9 +4506,31 @@ def stream_react_loop(
                 ((step.observation or "") + "\n\n") if step.observation else ""
             ) + "\n\n".join(_midflight_nudges)
 
+        if (
+            maybe_final
+            and _evidence_convergence_active is not None
+            and evidence_answer_conflicts_with_goal(
+                goal=intent.normalized_goal,
+                answer=maybe_final,
+            )
+        ):
+            # Bounded evidence exists, so an idle/greeting answer claiming
+            # there was no task is objectively contradictory. Keep it out of
+            # the answer stream and retry with the original request attached.
+            step.observation = (
+                (((step.observation or "") + "\n\n") if step.observation else "")
+                + "[evidence-answer-conflict]\n"
+                + "The proposed answer falsely denied the active user request or the "
+                + "completed evidence. Discard it and answer the original request "
+                + "directly from the bounded evidence already supplied."
+            )
+            maybe_final = None
+            _force_convergence_next = True
+
         if maybe_final:
             _deferred_final_emit = not _final_stream_started and (
-                (_todo_protocol_required and _todo_protocol_visible)
+                _evidence_convergence_active is not None
+                or (_todo_protocol_required and _todo_protocol_visible)
                 or _final_answer_needs_pre_emit_guard(
                     maybe_final,
                     is_code_mode=_is_code_mode,

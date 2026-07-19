@@ -52,15 +52,26 @@ def test_todo_protocol_skips_narrow_named_file_inspection_in_code_mode() -> None
     )
 
 
+def test_todo_protocol_skips_bounded_basename_inspection_in_code_mode() -> None:
+    assert not should_require_todo_protocol(
+        "只读读取 package.json，只用一句话告诉我项目名称；不要修改文件。",
+        {"mode": "code", "capability_mode": "code"},
+    )
+
+
 def test_todo_protocol_keeps_broad_or_mutating_file_comparison() -> None:
     assert should_require_todo_protocol(
         "比较 runtime/protocol/items.py 与 frontend/src/core/realtime/items.ts，"
         "然后修改前端并运行测试。",
         {"mode": "code"},
     )
-    assert should_require_todo_protocol(
+    assert not should_require_todo_protocol(
         "只读比较 runtime/a.py、runtime/b.py、runtime/c.py 和 runtime/d.py，"
         "用一句话回答。不要修改文件。",
+        {"mode": "code"},
+    )
+    assert should_require_todo_protocol(
+        "只读审计当前项目的实时消息架构，找出所有相关实现并形成完整报告。不要修改文件。",
         {"mode": "code"},
     )
 

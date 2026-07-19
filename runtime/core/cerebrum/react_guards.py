@@ -502,7 +502,7 @@ def _goal_requires_file_content(goal: str) -> bool:
 _EXPLICIT_SOURCE_PATH_RE = re.compile(
     r"(?<![\w.-])(?:\.{0,2}/)?(?:[A-Za-z0-9_@.-]+/)*"
     r"[A-Za-z0-9_@.-]+\."
-    r"(?:py|ts|tsx|js|jsx|json|ya?ml|toml|md|css|html|go|rs)"
+    r"(?:py|tsx|ts|jsx|json|js|ya?ml|toml|md|css|html|go|rs)"
     r"(?::\d+(?::\d+)?)?",
     re.IGNORECASE,
 )

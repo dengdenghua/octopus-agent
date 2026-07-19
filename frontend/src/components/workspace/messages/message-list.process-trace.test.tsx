@@ -243,6 +243,45 @@ describe("MessageList process trace lifecycle", () => {
     expect(screen.getByText("两个文件的字段定义一致。")).toBeInTheDocument();
   });
 
+  test("does not repeat an avatar when visual metadata arrives mid-turn", () => {
+    const thread = mockThread({
+      messages: [
+        message("user-1", "human", "检查文件"),
+        {
+          id: "assistant-progress",
+          type: "ai",
+          content: "正在检查。",
+          additional_kwargs: {
+            public_progress: true,
+            agent_id: "general",
+            agent_display_name: "Eve",
+          },
+        } as AIMessage,
+        {
+          id: "assistant-final",
+          type: "ai",
+          content: "检查完成。",
+          additional_kwargs: {
+            agent_id: "general",
+            agent_display_name: "Eve",
+            agent_avatar_url: "/api/agents/general/avatar-v2",
+          },
+        } as AIMessage,
+      ],
+    });
+
+    renderMessageList({
+      thread,
+      currentAgent: {
+        name: "general",
+        display_name: "Eve",
+        avatar_url: "/api/agents/general/avatar-v1",
+      },
+    });
+
+    expect(screen.getAllByAltText("Eve")).toHaveLength(1);
+  });
+
   test("shows a new avatar when the speaking agent changes within a turn", () => {
     const thread = mockThread({
       messages: [

@@ -1161,6 +1161,146 @@ def test_code_chat_placeholder_final_must_continue_to_file_evidence(tmp_path) ->
     assert visible_answer == result.final_answer
 
 
+def test_read_only_evidence_convergence_suppresses_scope_expansion(tmp_path) -> None:
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    (frontend / "package.json").write_text(
+        '{"name":"octopus-frontend"}',
+        encoding="utf-8",
+    )
+    router = _CapturingRouter(
+        [
+            (
+                "Thought: read the requested manifest\n"
+                'Action: read_file({"path":"frontend/package.json"})'
+            ),
+            ('Thought: broaden the search anyway\nAction: echo({"text":"should-not-run"})'),
+            "Final Answer: 项目名称是 octopus-frontend。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("只读读取当前项目的 package.json，只用一句话告诉我项目名称；不要修改文件。")
+    intent.user_context.update({"mode": "code", "workspace_path": str(tmp_path)})
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=4))
+
+    assert result is not None and result.success
+    assert result.final_answer == "项目名称是 octopus-frontend。"
+    assert router.calls == 3
+    assert router.requests[1].tools == []
+    synthesis_context = "\n".join(str(message.content) for message in router.requests[1].messages)
+    assert "[bounded-read-evidence]" in synthesis_context
+    assert "package.json" in synthesis_context
+    assert not any(
+        event.get("type") == "tool_start" and event.get("tool_name") == "echo" for event in events
+    )
+    assert any("already complete" in step.observation for step in result.steps)
+
+
+def test_evidence_convergence_rejects_fallback_that_forgot_the_user_task(tmp_path) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"name":"octopus-agent"}',
+        encoding="utf-8",
+    )
+    forgotten_task = (
+        "Final Answer: 这一轮没有正在进行的任务，也没有工具结果需要收尾。"
+        "如果你有具体需求，直接说一句，我就开工。"
+    )
+    router = _CapturingRouter(
+        [
+            'Thought: read it\nAction: read_file({"path":"package.json"})',
+            forgotten_task,
+            "Final Answer: 项目名称是 octopus-agent。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("只读读取 package.json，只用一句话告诉我项目名称；不要修改文件。")
+    intent.user_context.update({"mode": "code", "workspace_path": str(tmp_path)})
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=4))
+
+    assert result is not None and result.success
+    assert result.final_answer == "项目名称是 octopus-agent。"
+    assert router.calls == 3
+    assert all(request.tools == [] for request in router.requests[1:])
+    synthesis_context = "\n".join(str(message.content) for message in router.requests[1].messages)
+    assert "[original-user-request]" in synthesis_context
+    assert "告诉我项目名称" in synthesis_context
+    visible_answer = "".join(event["delta"] for event in events if event["type"] == "text_delta")
+    assert "没有正在进行的任务" not in visible_answer
+    assert visible_answer == result.final_answer
+    assert any("evidence-answer-conflict" in step.observation for step in result.steps)
+
+
+def test_evidence_synthesis_stall_emits_visible_handoff_without_phantom_tool_loops(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
+
+    (tmp_path / "package.json").write_text(
+        '{"name":"octopus-agent"}',
+        encoding="utf-8",
+    )
+
+    class EvidenceThenStallingRouter:
+        def __init__(self) -> None:
+            self.requests: list[Any] = []
+
+        def call_stream(self, request: Any):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                text = 'Thought: read it\nAction: read_file({"path":"package.json"})'
+                yield ModelStreamEvent(type="text_delta", delta=text)
+                yield ModelStreamEvent(
+                    type="done",
+                    final=ModelResponse(text=text, model=request.model),
+                )
+                return
+            # A tools-disabled provider may still hallucinate an action while
+            # keeping the stream alive with private reasoning. The phantom
+            # action must not reset the bounded synthesis retry counter.
+            yield ModelStreamEvent(
+                type="text_delta",
+                delta='Thought: keep exploring\nAction: read_file({"path":"extra.txt"})',
+            )
+            for _ in range(10):
+                time.sleep(0.01)
+                yield ModelStreamEvent(type="thinking_delta", delta="private")
+
+    monkeypatch.setattr(
+        "runtime.core.cerebrum.react_loop._model_iteration_timeout_s",
+        lambda: 0.025,
+    )
+    monkeypatch.setattr(
+        "runtime.core.cerebrum.react_loop.next_custom_model_fallback",
+        lambda *_args, **_kwargs: None,
+    )
+    router = EvidenceThenStallingRouter()
+    stack = _build_stack_with_executor(router)  # type: ignore[arg-type]
+    intent = _intent("只读读取 package.json，只用一句话告诉我项目名称；不要修改文件。")
+    intent.user_context.update({"mode": "code", "workspace_path": str(tmp_path)})
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=8))
+
+    assert result is not None
+    assert result.terminated_reason == "model_stall"
+    assert result.success is False
+    assert len(router.requests) == 3
+    assert router.requests[1].tools == []
+    assert router.requests[2].tools == []
+    retry_context = "\n".join(str(message.content) for message in router.requests[2].messages)
+    assert "[original-user-request]" in retry_context
+    assert "告诉我项目名称" in retry_context
+    assert "最终汇总模型" in (result.final_answer or "")
+    assert any(
+        event["type"] == "text_delta" and event["delta"] == result.final_answer for event in events
+    )
+    assert not any(
+        event["type"] == "react_error" and event.get("kind") == "model_stall" for event in events
+    )
+
+
 def test_research_placeholder_continues_to_fetched_source_and_grounded_answer() -> None:
     placeholder = (
         "我先搜索并核对官方资料，接下来再整理关键变化；当前只是准备开始调研，"

@@ -268,6 +268,10 @@ describe("MessageGroup reasoning grouping", () => {
     expect(screen.getByTitle("收起过程回放")).toBeInTheDocument();
     const previousFrame = screen.getByText("先扫一遍上下文");
     expect(previousFrame).toBeInTheDocument();
+    expect(screen.getAllByText("再整理成可执行步骤")).toHaveLength(1);
+    expect(
+      screen.queryByTestId("interleaved-process-timeline"),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps kept-open traces on the current frame and replays prior steps on demand", () => {

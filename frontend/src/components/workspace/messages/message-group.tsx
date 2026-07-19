@@ -714,7 +714,7 @@ export function MessageGroup({
       open={true}
       data-process-mode={codeMode ? "code" : "chat"}
     >
-      {compactItemsBeforeAnswer.length > 0 && (
+      {!timelineExpanded && compactItemsBeforeAnswer.length > 0 && (
         <div className="space-y-0.5" data-testid="interleaved-process-timeline">
           {renderCompactTimelineItems(compactItemsBeforeAnswer, "before")}
         </div>
@@ -727,7 +727,27 @@ export function MessageGroup({
           className="kimi-streaming-tail"
         />
       )}
-      {compactItemsAfterAnswer.length > 0 && (
+      {timelineExpanded && showTimelineToggle && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              if (isLiveTimeline) {
+                setShowSteps(false);
+              } else {
+                setSavedStepsOpen(false);
+              }
+            }}
+            className="inline-flex items-center gap-1 py-0.5 text-[11px] leading-4 text-muted-foreground/45 transition-colors hover:text-muted-foreground"
+            aria-label={timelineToggleLabel}
+            title={timelineToggleLabel}
+          >
+            <span className="sr-only">{timelineToggleLabel}</span>
+            <ChevronUp className="size-3 rotate-180" />
+          </button>
+        </div>
+      )}
+      {!timelineExpanded && compactItemsAfterAnswer.length > 0 && (
         <div
           className="mt-0.5 space-y-0.5"
           data-testid="interleaved-process-timeline"

@@ -1271,9 +1271,7 @@ export function MessageList({
       let injectedBeforeContent = false;
       const renderedMessages = group.messages.map((msg) => {
         const beforeContent =
-          beforeAssistantContent &&
-          msg.type === "ai" &&
-          !injectedBeforeContent
+          beforeAssistantContent && msg.type === "ai" && !injectedBeforeContent
             ? beforeAssistantContent
             : undefined;
         if (beforeContent) injectedBeforeContent = true;
@@ -1430,18 +1428,23 @@ export function MessageList({
   const assistantFrameIdentity = (
     group: (typeof groupedMessages)[number],
   ): string | null => {
-    if (
-      group.type !== "assistant" &&
-      group.type !== "assistant:processing"
-    ) {
+    if (group.type !== "assistant" && group.type !== "assistant:processing") {
       return null;
     }
     const aiMessage = group.messages.find(
       (message): message is AIMessage => message.type === "ai",
     );
     const identity = resolveAgentIdentity(aiMessage);
-    return [identity.id, identity.name, identity.avatar, identity.icon]
-      .map((value) => value ?? "")
+    // Avatar URLs and icons are presentation metadata and can arrive a frame
+    // later than the stable agent id/name. Including them in the speaker key
+    // made one uninterrupted reply grow a second avatar during streaming.
+    // Prefer semantic identity and use visual metadata only as a last resort.
+    const stableId = identityKey(identity.id);
+    if (stableId) return `id:${stableId}`;
+    const stableName = identityKey(identity.name);
+    if (stableName) return `name:${stableName}`;
+    return [identityKey(identity.avatar), identityKey(identity.icon)]
+      .filter((value): value is string => Boolean(value))
       .join("|");
   };
 

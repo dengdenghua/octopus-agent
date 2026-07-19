@@ -65,7 +65,8 @@ _LEADING_EXECUTION_RE = re.compile(
     re.IGNORECASE,
 )
 _EXPLICIT_SOURCE_PATH_RE = re.compile(
-    r"(?<![\w./-])(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+\.(?:py|ts|tsx|js|jsx|json|yaml|yml|md|css|html|go|rs)\b",
+    r"(?<![\w./-])(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\."
+    r"(?:py|tsx|ts|jsx|json|js|yaml|yml|md|css|html|go|rs)\b",
     re.IGNORECASE,
 )
 _READ_ONLY_RE = re.compile(
@@ -95,10 +96,11 @@ def _is_narrow_single_source_lookup(text: str) -> bool:
 def _is_narrow_local_inspection(text: str) -> bool:
     """Return whether a turn is a bounded read-only comparison of named files.
 
-    A code workspace should not turn a one-sentence inspection of a handful of
-    explicit files into a project checklist. Exact source evidence is enforced
-    separately by the final-answer guards, so skipping the checklist here does
-    not permit an answer before the requested files have been read.
+    A code workspace should not turn inspection of a finite, explicit file set
+    into a project checklist. Exact source evidence is enforced separately by
+    the final-answer guards, so skipping the checklist here does not permit an
+    answer before the requested files have been read. Open-ended audits and any
+    task that continues into execution still require a checklist.
     """
 
     source_paths = {
@@ -106,9 +108,8 @@ def _is_narrow_local_inspection(text: str) -> bool:
         for match in _EXPLICIT_SOURCE_PATH_RE.finditer(text)
     }
     return bool(
-        1 <= len(source_paths) <= 3
+        1 <= len(source_paths) <= 6
         and _READ_ONLY_RE.search(text)
-        and _CONCISE_RESULT_RE.search(text)
         and not _LEADING_EXECUTION_RE.search(text)
         and not _FOLLOWUP_EXECUTION_RE.search(text)
     )
