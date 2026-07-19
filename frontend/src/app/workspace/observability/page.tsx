@@ -864,6 +864,7 @@ function JournalPanel() {
 const EMPTY_TOOL_EFFECTS: ToolEffectsSnapshot = {
   backend: "disabled",
   shared_across_hosts: false,
+  can_authorize_retry: false,
   count: 0,
   state_counts: {},
   receipts: [],
@@ -985,20 +986,21 @@ export function ToolEffectsPanel() {
                       </p>
                     )}
                   </div>
-                  {receipt.state === "indeterminate" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 shrink-0 rounded-full text-xs"
-                      onClick={() => {
-                        setSelected(receipt);
-                        setReason("");
-                      }}
-                    >
-                      <RotateCcwIcon className="mr-1.5 size-3" />
-                      核对后重试
-                    </Button>
-                  )}
+                  {receipt.state === "indeterminate" &&
+                    data.can_authorize_retry && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 shrink-0 rounded-full text-xs"
+                        onClick={() => {
+                          setSelected(receipt);
+                          setReason("");
+                        }}
+                      >
+                        <RotateCcwIcon className="mr-1.5 size-3" />
+                        核对后重试
+                      </Button>
+                    )}
                 </div>
               ))}
               {hasCollapsedReceipts && (

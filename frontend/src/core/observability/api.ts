@@ -139,15 +139,43 @@ export interface ToolEffectReceipt {
 export interface ToolEffectsSnapshot {
   backend: string;
   shared_across_hosts: boolean;
+  can_authorize_retry: boolean;
   count: number;
   state_counts: Partial<Record<ToolEffectState, number>>;
   receipts: ToolEffectReceipt[];
 }
 
+export interface ToolEffectAuthorizationResponse {
+  ok: boolean;
+  effect_key: string;
+  state: "retry_authorized";
+  fencing_token: number;
+  actor: string;
+  audit_warning: string;
+}
+
+export async function getToolEffectsSnapshot({
+  limit = 100,
+  signal,
+}: {
+  limit?: number;
+  signal?: AbortSignal;
+} = {}): Promise<ToolEffectsSnapshot> {
+  const safeLimit = Math.max(1, Math.min(Math.trunc(limit), 500));
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/tool-effects?limit=${safeLimit}`,
+    { headers: authHeaders(), signal },
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to load tool effects: ${res.status}`);
+  }
+  return (await res.json()) as ToolEffectsSnapshot;
+}
+
 export async function authorizeToolEffectRetry(
   receipt: ToolEffectReceipt,
   reason: string,
-): Promise<void> {
+): Promise<ToolEffectAuthorizationResponse> {
   const path = encodeURIComponent(receipt.effect_key);
   const res = await fetch(
     `${getBackendBaseURL()}/api/tool-effects/${path}/authorize-retry`,
@@ -165,6 +193,7 @@ export async function authorizeToolEffectRetry(
     const error = (await res.json().catch(() => ({}))) as { detail?: string };
     throw new Error(error.detail ?? `Failed to authorize retry: ${res.status}`);
   }
+  return (await res.json()) as ToolEffectAuthorizationResponse;
 }
 
 // Implementation note.

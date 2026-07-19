@@ -44,10 +44,31 @@ const LOW_LEVEL_EVENTS = new Set([
 ]);
 
 export function toWorkBlocks(events: LiveToolEvent[]): WorkBlock[] {
-  return events
+  return coalesceWorkEvents(events)
     .filter(isVisibleWorkEvent)
     .sort((a, b) => a.startedAt - b.startedAt)
     .map(toWorkBlock);
+}
+
+function coalesceWorkEvents(events: LiveToolEvent[]): LiveToolEvent[] {
+  const byId = new Map<string, LiveToolEvent>();
+  for (const event of events) {
+    const previous = byId.get(event.id);
+    if (!previous) {
+      byId.set(event.id, event);
+      continue;
+    }
+    byId.set(event.id, {
+      ...previous,
+      ...event,
+      input: event.input ?? previous.input,
+      output: event.output ?? previous.output,
+      startedAt: Math.min(previous.startedAt, event.startedAt),
+      finishedAt: event.finishedAt ?? previous.finishedAt,
+      durationMs: event.durationMs ?? previous.durationMs,
+    });
+  }
+  return [...byId.values()];
 }
 
 export function normalizeEventsForSettledDisplay(

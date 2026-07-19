@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
 import { TerminalPanel } from "@/components/workspace/terminal-panel";
+import { ToolEffectDetailPanel } from "@/components/workspace/tool-effect-detail-panel";
 import type {
   AgentWorkbenchEventView,
   AgentWorkbenchProcessEventKind,
@@ -201,6 +202,7 @@ export function AgentWorkbenchPanel({
   focusedEventKind,
   focusedEventView,
   focusedEventNonce,
+  focusedEffectKey,
   hasAnswer,
   isLoading,
   onSelectTab,
@@ -230,6 +232,8 @@ export function AgentWorkbenchPanel({
   focusedEventKind?: AgentWorkbenchProcessEventKind | null;
   focusedEventView?: AgentWorkbenchEventView | null;
   focusedEventNonce?: number;
+  /** Durable effect receipt selected from the transcript timeline. */
+  focusedEffectKey?: string | null;
   hasAnswer?: boolean;
   /** A turn is in flight. The panel is otherwise driven purely by tool
    * events, so between "turn started" and "first tool ran" it has no
@@ -280,6 +284,9 @@ export function AgentWorkbenchPanel({
     visibleDiffEntries,
   } = workbenchSnapshot;
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [selectedEffectKey, setSelectedEffectKey] = useState<string | null>(
+    null,
+  );
   const [manualBlockSelection, setManualBlockSelection] = useState(false);
   const [activityView, setActivityView] = useState<
     "summary" | "trace" | "screen"
@@ -396,6 +403,7 @@ export function AgentWorkbenchPanel({
   }, [selectableAgentIds]);
 
   const openMainProcess = useCallback(() => {
+    setSelectedEffectKey(null);
     setSelectedAgentId(null);
     setSelectedRosterSeatId(null);
     setActivityView("screen");
@@ -405,6 +413,7 @@ export function AgentWorkbenchPanel({
 
   const openSubagentProcess = useCallback(
     (agentId: string) => {
+      setSelectedEffectKey(null);
       setSelectedAgentId(agentId);
       setSelectedRosterSeatId(null);
       setActivityView("screen");
@@ -444,6 +453,10 @@ export function AgentWorkbenchPanel({
   // opening the panel. Thinking summaries intentionally have no private block
   // payload, so they land on the public summary surface.
   const consumedFocusedEventRef = useRef<string | null>(null);
+  useEffect(() => {
+    setSelectedEffectKey(focusedEffectKey?.trim() || null);
+  }, [focusedEffectKey, focusedEventNonce]);
+
   useEffect(() => {
     if (!focusedEventId && !focusedEventView) {
       consumedFocusedEventRef.current = null;
@@ -516,6 +529,7 @@ export function AgentWorkbenchPanel({
   }, [rosterSeats]);
   const openRosterProcess = useCallback(
     (seatId: string) => {
+      setSelectedEffectKey(null);
       setSelectedAgentId(null);
       setSelectedRosterSeatId(seatId);
       setActivityView("screen");
@@ -690,7 +704,7 @@ export function AgentWorkbenchPanel({
   );
 
   // Workbench view: summary / computer view.
-  if (emptyShell) {
+  if (emptyShell && !selectedEffectKey) {
     const emptyEmbeddedPage =
       effectiveActiveTab === "diff" ? (
         <AgentDiffPage
@@ -1132,7 +1146,12 @@ export function AgentWorkbenchPanel({
   );
 
   const effectiveEmbeddedPage =
-    effectiveActiveTab === "diff" ? (
+    selectedEffectKey && effectiveActiveTab === "agent" ? (
+      <ToolEffectDetailPanel
+        effectKey={selectedEffectKey}
+        onBack={() => setSelectedEffectKey(null)}
+      />
+    ) : effectiveActiveTab === "diff" ? (
       <AgentDiffPage
         entries={visibleDiffEntries}
         onBackToSummary={() => handleOpenTab("agent")}
@@ -1161,6 +1180,7 @@ export function AgentWorkbenchPanel({
           <MainComputerStatusButton
             active={
               effectiveActiveTab === "agent" &&
+              !selectedEffectKey &&
               !selectedAgent &&
               !selectedRosterSeat
             }

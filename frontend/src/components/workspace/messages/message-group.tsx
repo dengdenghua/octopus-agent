@@ -48,6 +48,7 @@ import {
   IterationDivider,
 } from "@/components/workspace/taor-indicator";
 import { useI18n } from "@/core/i18n/hooks";
+import { useToolEffects } from "@/core/observability/tool-effects-context";
 import {
   extractContentFromMessage,
   extractReasoningContentFromMessage,
@@ -390,6 +391,7 @@ export function MessageGroup({
   codeMode?: boolean;
 }) {
   const { t } = useI18n();
+  const { receiptsByCallId } = useToolEffects();
   // Keep the live turn focused on the current frame. Older steps move behind
   // a replay disclosure so streaming never becomes a long historical pile.
   const isLiveTimeline = isLoading || keepOpen;
@@ -656,7 +658,11 @@ export function MessageGroup({
   // Keep process events on the same chronological lane as the answer while
   // letting the answer retain visual priority. The main transcript shows only
   // compact public summaries; complete event payloads live in the workbench.
-  const compactTimelineItems = selectCompactTimelineItems(timelineItems, 4);
+  const compactTimelineItems = retainIndeterminateToolCalls(
+    timelineItems,
+    selectCompactTimelineItems(timelineItems, 4),
+    receiptsByCallId,
+  );
   const hasPublicCommentary = compactTimelineItems.some(
     (item) => item.type === "commentary",
   );
@@ -722,6 +728,10 @@ export function MessageGroup({
       const count = item.type === "toolCall" ? 1 : item.steps.length;
       const workbenchEventId =
         item.type === "toolCall" ? item.step.id : step.messageId;
+      const effectReceipt = workbenchEventId
+        ? receiptsByCallId.get(workbenchEventId)
+        : undefined;
+      const needsEffectReview = effectReceipt?.state === "indeterminate";
 
       return (
         <div
@@ -736,12 +746,21 @@ export function MessageGroup({
                 eventId: workbenchEventId,
                 eventKind: isThinking ? "thinking" : "execution",
                 view: isThinking ? "summary" : "trace",
+                effectKey: needsEffectReview
+                  ? effectReceipt.effect_key
+                  : undefined,
               })
             }
-            className="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs leading-[18px] text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs leading-[18px] transition-colors",
+              needsEffectReview
+                ? "text-amber-700/80 hover:text-amber-800 dark:text-amber-300/80 dark:hover:text-amber-200"
+                : "text-muted-foreground/60 hover:text-muted-foreground",
+            )}
             data-process-event-id={workbenchEventId}
             data-process-event-kind={isThinking ? "thinking" : "execution"}
             data-process-event-status={state}
+            data-effect-receipt-state={effectReceipt?.state}
             data-phase-id={step.phaseId}
             data-parent-item-id={step.parentItemId}
             data-timeline-sequence={step.timelineSequence}
@@ -751,14 +770,20 @@ export function MessageGroup({
               <span
                 className={cn(
                   "absolute inline-flex size-1.5 rounded-full opacity-25",
-                  agentRunStatusLightClass(state),
-                  agentRunStatusLightPulseClass(state),
+                  needsEffectReview
+                    ? "bg-amber-500"
+                    : agentRunStatusLightClass(state),
+                  needsEffectReview
+                    ? "animate-pulse"
+                    : agentRunStatusLightPulseClass(state),
                 )}
               />
               <span
                 className={cn(
                   "relative inline-flex size-1 rounded-full",
-                  agentRunStatusLightClass(state),
+                  needsEffectReview
+                    ? "bg-amber-500"
+                    : agentRunStatusLightClass(state),
                 )}
               />
             </span>
@@ -767,6 +792,14 @@ export function MessageGroup({
               {count > 1 && (
                 <span className="shrink-0 tabular-nums opacity-60">
                   ×{count}
+                </span>
+              )}
+              {needsEffectReview && (
+                <span
+                  className="shrink-0 rounded-full bg-amber-500/10 px-1.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+                  data-testid="tool-effect-review-badge"
+                >
+                  需核对
                 </span>
               )}
             </span>
@@ -2066,6 +2099,21 @@ function selectCompactTimelineItems(
   const selected = new Set(compactProcess);
   return items.filter(
     (item) => item.type === "commentary" || selected.has(item),
+  );
+}
+
+function retainIndeterminateToolCalls(
+  timelineItems: TimelineItem[],
+  compactItems: TimelineItem[],
+  receiptsByCallId: ReadonlyMap<string, { state: string }>,
+): TimelineItem[] {
+  const selected = new Set(compactItems);
+  return timelineItems.filter(
+    (item) =>
+      selected.has(item) ||
+      (item.type === "toolCall" &&
+        Boolean(item.step.id) &&
+        receiptsByCallId.get(item.step.id!)?.state === "indeterminate"),
   );
 }
 

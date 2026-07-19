@@ -6,6 +6,7 @@ import { ToolEffectsPanel } from "./page";
 const snapshot = {
   backend: "redis",
   shared_across_hosts: true,
+  can_authorize_retry: true,
   count: 1,
   state_counts: { indeterminate: 1 },
   receipts: [

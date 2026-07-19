@@ -848,6 +848,13 @@ def test_tool_effect_reconciliation_api_is_admin_fenced_and_audited(
     )
     assert listed.status_code == 200
     assert listed.json()["state_counts"]["indeterminate"] == 1
+    assert listed.json()["can_authorize_retry"] is False
+    admin_listed = client.get(
+        "/api/tool-effects?state=indeterminate",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+    assert admin_listed.status_code == 200
+    assert admin_listed.json()["can_authorize_retry"] is True
     body = {
         "confirm": "AUTHORIZE RETRY",
         "fencing_token": claim.fencing_token,

@@ -148,6 +148,7 @@ import {
 import { usePauseTask, useTasks } from "@/core/tasks/hooks";
 import { isAIMessage, isHumanMessage, type Message } from "@/core/api/types";
 import { useI18n } from "@/core/i18n/hooks";
+import { ToolEffectsProvider } from "@/core/observability/tool-effects-context";
 import {
   extractContentFromMessage,
   extractTextFromMessage,
@@ -1042,6 +1043,9 @@ function RealtimePageContent({
     useState<AgentWorkbenchEventView | null>(null);
   const [focusedWorkbenchEventNonce, setFocusedWorkbenchEventNonce] =
     useState(0);
+  const [focusedWorkbenchEffectKey, setFocusedWorkbenchEffectKey] = useState<
+    string | null
+  >(null);
   const settledWorkbenchAutoDismissedRef = useRef<string | null>(null);
   const [discussionOnly, setDiscussionOnly] = useState(false);
   const [chatsDrawerOpen, setChatsDrawerOpen] = useState(false);
@@ -1175,6 +1179,7 @@ function RealtimePageContent({
     setFocusedWorkbenchEventId(null);
     setFocusedWorkbenchEventKind(null);
     setFocusedWorkbenchEventView(null);
+    setFocusedWorkbenchEffectKey(null);
     setAgentWorkbenchManuallyOpened(false);
   }, [threadId]);
 
@@ -2273,8 +2278,7 @@ function RealtimePageContent({
     canOpenAgentWorkbench &&
     (agentWorkbenchManuallyOpened ||
       (collaborationEnabled && !agentWorkbenchDismissed) ||
-      (hasRenderableAgentWorkbench &&
-        (artifactsOpen || showAgentPlan))) &&
+      (hasRenderableAgentWorkbench && (artifactsOpen || showAgentPlan))) &&
     !showResearchHistory &&
     !(showResearch && (!!researchJob || !!researchError));
   const artifactCount = artifacts?.length ?? 0;
@@ -2402,6 +2406,7 @@ function RealtimePageContent({
       setFocusedWorkbenchEventId(null);
       setFocusedWorkbenchEventKind(null);
       setFocusedWorkbenchEventView(null);
+      setFocusedWorkbenchEffectKey(null);
       setArtifactsOpen(false);
       setShowAgentPlan(false);
       setAgentWorkbenchDismissed(false);
@@ -2425,6 +2430,7 @@ function RealtimePageContent({
       setFocusedWorkbenchEventId(detail?.eventId?.trim() || null);
       setFocusedWorkbenchEventKind(detail?.eventKind ?? null);
       setFocusedWorkbenchEventView(detail?.view ?? null);
+      setFocusedWorkbenchEffectKey(detail?.effectKey?.trim() || null);
       setFocusedWorkbenchEventNonce((n) => n + 1);
       setArtifactsOpen(false);
       setShowAgentPlan(false);
@@ -2637,6 +2643,7 @@ function RealtimePageContent({
             : null;
 
   const openAgentPanel = useCallback(() => {
+    setFocusedWorkbenchEffectKey(null);
     setArtifactsOpen(false);
     setShowAgentPlan(false);
     setAgentWorkbenchDismissed(false);
@@ -2775,344 +2782,353 @@ function RealtimePageContent({
   return (
     <SubtasksProvider>
       <ThreadProviders thread={thread} isMock={false}>
-        <RealtimeApprovalToasts
-          approvals={realtimeApprovals.pendingApprovals}
-          resolveApproval={realtimeApprovals.resolveApproval}
-        />
-        <ChatBox artifactPanelMode="external" threadId={threadId}>
-          <ChatPageLayout
-            isNewThread={isNewThread}
-            pageTitle={
-              thread?.values?.title ||
-              initialPrompt ||
-              (isNewThread ? t.sidebar.actionNewTask : "Octopus")
-            }
-            header={
-              <>
-                <ChatHeaderMenuButton
-                  onClick={() => setChatsDrawerOpen(true)}
-                  className="absolute left-3 top-1/2 -translate-y-1/2"
-                />
-                <ChatHeaderAgentBadge
-                  agent={displayAgent}
-                  agentId={effectiveAgentId}
-                />
-                <div className="min-w-0 flex-1">
-                  <ThreadTitle
-                    threadId={threadId}
-                    thread={thread}
-                    className="border-0 bg-transparent px-0 py-0 text-sm"
+        <ToolEffectsProvider enabled={!isNewThread}>
+          <RealtimeApprovalToasts
+            approvals={realtimeApprovals.pendingApprovals}
+            resolveApproval={realtimeApprovals.resolveApproval}
+          />
+          <ChatBox artifactPanelMode="external" threadId={threadId}>
+            <ChatPageLayout
+              isNewThread={isNewThread}
+              pageTitle={
+                thread?.values?.title ||
+                initialPrompt ||
+                (isNewThread ? t.sidebar.actionNewTask : "Octopus")
+              }
+              header={
+                <>
+                  <ChatHeaderMenuButton
+                    onClick={() => setChatsDrawerOpen(true)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2"
                   />
-                </div>
-                <div className="ml-auto flex shrink-0 items-center gap-1">
-                  <TaskCollaboratorControl
-                    agents={allTaskCollaboratorAgents}
-                    selectedAgents={selectedCollaborators}
-                    selectedAgentIds={selectedCollaboratorIds}
-                    currentAgentName={currentTaskAgentName}
-                    teamMode={teamModeIntent}
-                    open={collaboratorPickerOpen}
-                    onOpenChange={setCollaboratorPickerOpen}
-                    onSelectedAgentIdsChange={
-                      handleSelectedCollaboratorIdsChange
-                    }
-                    onTeamModeChange={handleTeamModeIntentChange}
-                    roster={visibleCollaborationRoster}
-                    threadId={threadId}
-                    isNewThread={isNewThread}
+                  <ChatHeaderAgentBadge
+                    agent={displayAgent}
+                    agentId={effectiveAgentId}
                   />
-                  <ChatHeaderRecButton
-                    threadId={threadId}
-                    onOpen={() => setRecOverlayOpen(true)}
-                    isRecording={recIsRecording}
-                  />
-                  {(thread?.values?.title || initialPrompt) && (
-                    <ShareMenu
-                      iconOnly
-                      title={
-                        thread?.values?.title || initialPrompt || "Octopus"
-                      }
-                      prompt={initialPrompt || undefined}
-                      onExportReplay={
-                        replayBlocks.length > 0 ? handleExportReplay : undefined
-                      }
-                    />
-                  )}
-                  <RightPanelMenu
-                    activePage={activeRightPanel}
-                    artifactCount={artifactCount}
-                    hasAgentWorkbench={canOpenAgentWorkbench}
-                    hasPlan={hasRenderableAgentWorkbench}
-                    hasPreview={!!previewBlocks}
-                    hasResearch={!!researchJob || !!researchError}
-                    hasResearchHistory={!!researchJob || !!researchError}
-                    onClosePanel={closeRightPanel}
-                    onOpenAgent={openAgentPanel}
-                    onOpenArtifacts={openArtifactsPanel}
-                    onOpenPlan={openAgentPlanPanel}
-                    onOpenPreview={openPreviewPanel}
-                    onOpenResearch={openResearchPanel}
-                    onOpenResearchHistory={openResearchHistoryPanel}
-                  />
-                </div>
-              </>
-            }
-            messageList={
-              <MessageList
-                className="size-full"
-                threadId={threadId}
-                thread={thread}
-                header={
-                  realtimeApprovals.hasMoreTurns ? (
-                    <LoadOlderTurnsBanner
-                      onLoad={realtimeApprovals.loadOlderTurns}
-                    />
-                  ) : null
-                }
-                paddingBottom={MESSAGE_LIST_DEFAULT_PADDING_BOTTOM}
-                mode={effectiveMode}
-                liveToolEvents={lastTurnToolEvents}
-                lastTurnToolEvents={lastTurnToolEvents}
-                completedAgentOutput={hasCompletedAgentOutput}
-                currentAgent={{
-                  name: effectiveAgentId,
-                  display_name: displayAgent?.display_name || effectiveAgentId,
-                  avatar_url:
-                    displayAgent?.avatar_url ||
-                    (threadOwnerAgentId
-                      ? `/api/agents/${encodeURIComponent(threadOwnerAgentId)}/avatar`
-                      : null),
-                  icon: displayAgent?.icon || null,
-                }}
-                agentRoster={
-                  visibleCollaborationEnabled
-                    ? visibleCollaborationRoster
-                    : undefined
-                }
-                footer={
-                  hasCompletedAgentOutput &&
-                  hasFinalArtifact &&
-                  !hasReportArtifact ? (
-                    <FinalArtifactCompletionNotice
-                      entries={finalArtifactEntries}
-                      onOpen={openFinalArtifactPanel}
-                    />
-                  ) : null
-                }
-              />
-            }
-            inputArea={
-              <div
-                className={cn(
-                  "relative w-full transition-[max-width,transform] duration-300",
-                  isNewThread && "md:-translate-y-[calc(50vh-168px)]",
-                  isNewThread ? "max-w-3xl" : "max-w-(--container-width-md)",
-                )}
-              >
-                {mounted ? (
-                  <div className="flex flex-col gap-2">
-                    {isNewThread &&
-                      (isAgentRoute ? (
-                        <AgentWelcome
-                          agent={activeAgent}
-                          agentName={effectiveAgentId}
-                        />
-                      ) : (
-                        <Welcome mode={effectiveMode} />
-                      ))}
-                    <ChatInputBox
-                      key={composerSeed || "empty-composer"}
-                      status={
-                        thread.error && !hasCompletedAgentOutput
-                          ? "error"
-                          : thread.isLoading
-                            ? "streaming"
-                            : "ready"
-                      }
-                      modelName={settings.context.model_name}
-                      partnerId={partnerId}
-                      partnerModel={partnerModel}
-                      onPartnerModelChange={setPartnerModel}
-                      mode={effectiveMode}
-                      reasoningEffort={effectiveReasoningEffort}
+                  <div className="min-w-0 flex-1">
+                    <ThreadTitle
                       threadId={threadId}
-                      disabled={researchLoading}
-                      workDir={effectiveWorkDir}
-                      displayAgent={composerDisplayAgent}
-                      showWorkDirSelector
-                      onWorkDirChange={handleWorkDirChange}
-                      codeModeUnlocked={codeModeUnlocked}
-                      projectAgentMode={projectAgentMode}
-                      auditIntensity={auditIntensity}
-                      personalMode={personalMode}
-                      projectDetection={projectDetection}
-                      onProjectAgentModeChange={setProjectAgentMode}
-                      onAuditIntensityChange={setAuditIntensity}
-                      onPersonalModeChange={setPersonalMode}
-                      onProjectDetectionChange={setProjectDetection}
-                      contextTokens={contextTokens}
-                      maxContextTokens={maxContextTokens}
-                      isCompressingContext={isCompressingContext}
-                      onCompressContext={handleCompressContext}
-                      onModelChange={(modelName) =>
-                        setSettings("context", {
-                          ...settings.context,
-                          model_name: modelName,
-                        })
-                      }
-                      onReasoningEffortChange={(reasoningEffort) =>
-                        setSettings("context", {
-                          ...settings.context,
-                          reasoning_effort:
-                            normalizeReasoningEffortForUi(reasoningEffort),
-                        })
-                      }
-                      onModeChange={handleModeChange}
-                      permissionMode={normalizePermissionMode(
-                        settings.context.permission_mode,
-                      )}
-                      onPermissionModeChange={(permissionMode) => {
-                        const permissionRuntime =
-                          permissionRuntimeConfig(permissionMode);
-                        setSettings("context", {
-                          ...settings.context,
-                          permission_mode: permissionRuntime.mode,
-                          execution_environment:
-                            permissionRuntime.execution_environment,
-                        });
-                      }}
-                      onSubmit={handleSubmit}
-                      onDeepResearch={handleDeepResearch}
-                      showInspirationToggle
-                      allowAgentModes
-                      onStop={handleStop}
-                      autoFocus={isNewThread}
-                      defaultValue={composerSeed}
-                      placeholder={
-                        isProjectCodeMode
-                          ? t.realtime.composer.placeholderCode
-                          : isNewThread
-                            ? t.realtime.composer.placeholderNew
-                            : undefined
-                      }
-                      className={cn(
-                        isNewThread &&
-                          "border-border-default bg-card/95 shadow-[0_18px_56px_-34px_rgba(15,23,42,0.45)]",
-                      )}
+                      thread={thread}
+                      className="border-0 bg-transparent px-0 py-0 text-sm"
                     />
-                    {isNewThread && !isAgentRoute && !composerSeed && (
-                      <NewChatStarterGrid
-                        onPick={(prompt) => {
-                          setComposerSeed(prompt);
-                        }}
+                  </div>
+                  <div className="ml-auto flex shrink-0 items-center gap-1">
+                    <TaskCollaboratorControl
+                      agents={allTaskCollaboratorAgents}
+                      selectedAgents={selectedCollaborators}
+                      selectedAgentIds={selectedCollaboratorIds}
+                      currentAgentName={currentTaskAgentName}
+                      teamMode={teamModeIntent}
+                      open={collaboratorPickerOpen}
+                      onOpenChange={setCollaboratorPickerOpen}
+                      onSelectedAgentIdsChange={
+                        handleSelectedCollaboratorIdsChange
+                      }
+                      onTeamModeChange={handleTeamModeIntentChange}
+                      roster={visibleCollaborationRoster}
+                      threadId={threadId}
+                      isNewThread={isNewThread}
+                    />
+                    <ChatHeaderRecButton
+                      threadId={threadId}
+                      onOpen={() => setRecOverlayOpen(true)}
+                      isRecording={recIsRecording}
+                    />
+                    {(thread?.values?.title || initialPrompt) && (
+                      <ShareMenu
+                        iconOnly
+                        title={
+                          thread?.values?.title || initialPrompt || "Octopus"
+                        }
+                        prompt={initialPrompt || undefined}
+                        onExportReplay={
+                          replayBlocks.length > 0
+                            ? handleExportReplay
+                            : undefined
+                        }
                       />
                     )}
+                    <RightPanelMenu
+                      activePage={activeRightPanel}
+                      artifactCount={artifactCount}
+                      hasAgentWorkbench={canOpenAgentWorkbench}
+                      hasPlan={hasRenderableAgentWorkbench}
+                      hasPreview={!!previewBlocks}
+                      hasResearch={!!researchJob || !!researchError}
+                      hasResearchHistory={!!researchJob || !!researchError}
+                      onClosePanel={closeRightPanel}
+                      onOpenAgent={openAgentPanel}
+                      onOpenArtifacts={openArtifactsPanel}
+                      onOpenPlan={openAgentPlanPanel}
+                      onOpenPreview={openPreviewPanel}
+                      onOpenResearch={openResearchPanel}
+                      onOpenResearchHistory={openResearchHistoryPanel}
+                    />
                   </div>
-                ) : (
-                  <div
-                    aria-hidden="true"
-                    className="workspace-panel h-32 w-full rounded-lg"
-                  />
-                )}
-              </div>
-            }
-            sidebar={
-              showResearchHistory ? (
-                <DeepResearchHistoryPanel
-                  activeJobId={researchJob?.job_id}
-                  onSelect={(job) => {
-                    setResearchJob(job);
-                    setResearchError(null);
-                    setShowResearch(true);
-                    setShowResearchHistory(false);
-                    setShowPreview(false);
-                  }}
-                  onClose={() => setShowResearchHistory(false)}
-                />
-              ) : showResearch && researchJob ? (
-                <DeepResearchPanel
-                  job={researchJob}
-                  loading={researchLoading}
-                  error={researchError}
-                  onClose={() => setShowResearch(false)}
-                />
-              ) : showResearch && researchError ? (
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                  <div className="flex items-center justify-between border-b border-border-default px-3 py-2">
-                    <span className="text-sm font-medium">Agent</span>
-                    <button
-                      onClick={() => setShowResearch(false)}
-                      className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-                    >
-                      <XIcon className="size-3.5" />
-                    </button>
-                  </div>
-                  <div className="p-3 text-xs text-destructive">
-                    {researchError}
-                  </div>
-                </div>
-              ) : artifactsOpen ? (
-                <ArtifactPanel className="size-full" threadId={threadId} />
-              ) : showAgentPlan ? (
-                <PlanPanel
-                  className="size-full rounded-none border-0 shadow-none"
-                  messages={thread.messages}
-                  open
-                  onClose={() => setShowAgentPlan(false)}
-                />
-              ) : undefined
-            }
-            secondaryPanel={
-              showAgentWorkbench ? (
-                <AgentWorkbenchPanel
-                  activeTab={agentWorkbenchTab}
-                  events={agentDisplayEvents}
-                  focusedAgentId={focusedWorkbenchAgentId}
-                  focusedAgentView={focusedWorkbenchAgentView}
-                  focusedAgentNonce={focusedWorkbenchAgentNonce}
-                  focusedEventId={focusedWorkbenchEventId}
-                  focusedEventKind={focusedWorkbenchEventKind}
-                  focusedEventView={focusedWorkbenchEventView}
-                  focusedEventNonce={focusedWorkbenchEventNonce}
-                  hasAnswer={hasCompletedAgentOutput}
-                  isLoading={thread.isLoading}
-                  runSettled={agentRunSettled}
-                  runFailed={agentRunFailed}
-                  paused={hasPausedOrPendingBackgroundTask}
+                </>
+              }
+              messageList={
+                <MessageList
+                  className="size-full"
                   threadId={threadId}
-                  workDir={workDir}
-                  browserPreviewBlocks={previewBlocks}
-                  resultPreviewUrl={resultPreviewUrl}
-                  rosterSeats={collaborationRosterSeats}
-                  onSelectTab={selectAgentWorkbenchTab}
-                  onOpenArtifact={openWorkbenchArtifact}
+                  thread={thread}
+                  header={
+                    realtimeApprovals.hasMoreTurns ? (
+                      <LoadOlderTurnsBanner
+                        onLoad={realtimeApprovals.loadOlderTurns}
+                      />
+                    ) : null
+                  }
+                  paddingBottom={MESSAGE_LIST_DEFAULT_PADDING_BOTTOM}
+                  mode={effectiveMode}
+                  liveToolEvents={lastTurnToolEvents}
+                  lastTurnToolEvents={lastTurnToolEvents}
+                  completedAgentOutput={hasCompletedAgentOutput}
+                  currentAgent={{
+                    name: effectiveAgentId,
+                    display_name:
+                      displayAgent?.display_name || effectiveAgentId,
+                    avatar_url:
+                      displayAgent?.avatar_url ||
+                      (threadOwnerAgentId
+                        ? `/api/agents/${encodeURIComponent(threadOwnerAgentId)}/avatar`
+                        : null),
+                    icon: displayAgent?.icon || null,
+                  }}
+                  agentRoster={
+                    visibleCollaborationEnabled
+                      ? visibleCollaborationRoster
+                      : undefined
+                  }
+                  footer={
+                    hasCompletedAgentOutput &&
+                    hasFinalArtifact &&
+                    !hasReportArtifact ? (
+                      <FinalArtifactCompletionNotice
+                        entries={finalArtifactEntries}
+                        onOpen={openFinalArtifactPanel}
+                      />
+                    ) : null
+                  }
                 />
-              ) : undefined
-            }
-            onSecondaryClose={closeAgentWorkbenchPanel}
-            showSidebar={
-              artifactsOpen ||
-              showAgentPlan ||
-              showResearchHistory ||
-              (showResearch && (!!researchJob || !!researchError))
-            }
-            sidebarWidth="min(420px, 40vw)"
-            secondaryPanelWidth="min(600px, 42vw)"
+              }
+              inputArea={
+                <div
+                  className={cn(
+                    "relative w-full transition-[max-width,transform] duration-300",
+                    isNewThread && "md:-translate-y-[calc(50vh-168px)]",
+                    isNewThread ? "max-w-3xl" : "max-w-(--container-width-md)",
+                  )}
+                >
+                  {mounted ? (
+                    <div className="flex flex-col gap-2">
+                      {isNewThread &&
+                        (isAgentRoute ? (
+                          <AgentWelcome
+                            agent={activeAgent}
+                            agentName={effectiveAgentId}
+                          />
+                        ) : (
+                          <Welcome mode={effectiveMode} />
+                        ))}
+                      <ChatInputBox
+                        key={composerSeed || "empty-composer"}
+                        status={
+                          thread.error && !hasCompletedAgentOutput
+                            ? "error"
+                            : thread.isLoading
+                              ? "streaming"
+                              : "ready"
+                        }
+                        modelName={settings.context.model_name}
+                        partnerId={partnerId}
+                        partnerModel={partnerModel}
+                        onPartnerModelChange={setPartnerModel}
+                        mode={effectiveMode}
+                        reasoningEffort={effectiveReasoningEffort}
+                        threadId={threadId}
+                        disabled={researchLoading}
+                        workDir={effectiveWorkDir}
+                        displayAgent={composerDisplayAgent}
+                        showWorkDirSelector
+                        onWorkDirChange={handleWorkDirChange}
+                        codeModeUnlocked={codeModeUnlocked}
+                        projectAgentMode={projectAgentMode}
+                        auditIntensity={auditIntensity}
+                        personalMode={personalMode}
+                        projectDetection={projectDetection}
+                        onProjectAgentModeChange={setProjectAgentMode}
+                        onAuditIntensityChange={setAuditIntensity}
+                        onPersonalModeChange={setPersonalMode}
+                        onProjectDetectionChange={setProjectDetection}
+                        contextTokens={contextTokens}
+                        maxContextTokens={maxContextTokens}
+                        isCompressingContext={isCompressingContext}
+                        onCompressContext={handleCompressContext}
+                        onModelChange={(modelName) =>
+                          setSettings("context", {
+                            ...settings.context,
+                            model_name: modelName,
+                          })
+                        }
+                        onReasoningEffortChange={(reasoningEffort) =>
+                          setSettings("context", {
+                            ...settings.context,
+                            reasoning_effort:
+                              normalizeReasoningEffortForUi(reasoningEffort),
+                          })
+                        }
+                        onModeChange={handleModeChange}
+                        permissionMode={normalizePermissionMode(
+                          settings.context.permission_mode,
+                        )}
+                        onPermissionModeChange={(permissionMode) => {
+                          const permissionRuntime =
+                            permissionRuntimeConfig(permissionMode);
+                          setSettings("context", {
+                            ...settings.context,
+                            permission_mode: permissionRuntime.mode,
+                            execution_environment:
+                              permissionRuntime.execution_environment,
+                          });
+                        }}
+                        onSubmit={handleSubmit}
+                        onDeepResearch={handleDeepResearch}
+                        showInspirationToggle
+                        allowAgentModes
+                        onStop={handleStop}
+                        autoFocus={isNewThread}
+                        defaultValue={composerSeed}
+                        placeholder={
+                          isProjectCodeMode
+                            ? t.realtime.composer.placeholderCode
+                            : isNewThread
+                              ? t.realtime.composer.placeholderNew
+                              : undefined
+                        }
+                        className={cn(
+                          isNewThread &&
+                            "border-border-default bg-card/95 shadow-[0_18px_56px_-34px_rgba(15,23,42,0.45)]",
+                        )}
+                      />
+                      {isNewThread && !isAgentRoute && !composerSeed && (
+                        <NewChatStarterGrid
+                          onPick={(prompt) => {
+                            setComposerSeed(prompt);
+                          }}
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      aria-hidden="true"
+                      className="workspace-panel h-32 w-full rounded-lg"
+                    />
+                  )}
+                </div>
+              }
+              sidebar={
+                showResearchHistory ? (
+                  <DeepResearchHistoryPanel
+                    activeJobId={researchJob?.job_id}
+                    onSelect={(job) => {
+                      setResearchJob(job);
+                      setResearchError(null);
+                      setShowResearch(true);
+                      setShowResearchHistory(false);
+                      setShowPreview(false);
+                    }}
+                    onClose={() => setShowResearchHistory(false)}
+                  />
+                ) : showResearch && researchJob ? (
+                  <DeepResearchPanel
+                    job={researchJob}
+                    loading={researchLoading}
+                    error={researchError}
+                    onClose={() => setShowResearch(false)}
+                  />
+                ) : showResearch && researchError ? (
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="flex items-center justify-between border-b border-border-default px-3 py-2">
+                      <span className="text-sm font-medium">Agent</span>
+                      <button
+                        onClick={() => setShowResearch(false)}
+                        className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                      >
+                        <XIcon className="size-3.5" />
+                      </button>
+                    </div>
+                    <div className="p-3 text-xs text-destructive">
+                      {researchError}
+                    </div>
+                  </div>
+                ) : artifactsOpen ? (
+                  <ArtifactPanel className="size-full" threadId={threadId} />
+                ) : showAgentPlan ? (
+                  <PlanPanel
+                    className="size-full rounded-none border-0 shadow-none"
+                    messages={thread.messages}
+                    open
+                    onClose={() => setShowAgentPlan(false)}
+                  />
+                ) : undefined
+              }
+              secondaryPanel={
+                showAgentWorkbench ? (
+                  <AgentWorkbenchPanel
+                    activeTab={agentWorkbenchTab}
+                    events={agentDisplayEvents}
+                    focusedAgentId={focusedWorkbenchAgentId}
+                    focusedAgentView={focusedWorkbenchAgentView}
+                    focusedAgentNonce={focusedWorkbenchAgentNonce}
+                    focusedEventId={focusedWorkbenchEventId}
+                    focusedEventKind={focusedWorkbenchEventKind}
+                    focusedEventView={focusedWorkbenchEventView}
+                    focusedEventNonce={focusedWorkbenchEventNonce}
+                    focusedEffectKey={focusedWorkbenchEffectKey}
+                    hasAnswer={hasCompletedAgentOutput}
+                    isLoading={thread.isLoading}
+                    runSettled={agentRunSettled}
+                    runFailed={agentRunFailed}
+                    paused={hasPausedOrPendingBackgroundTask}
+                    threadId={threadId}
+                    workDir={workDir}
+                    browserPreviewBlocks={previewBlocks}
+                    resultPreviewUrl={resultPreviewUrl}
+                    rosterSeats={collaborationRosterSeats}
+                    onSelectTab={selectAgentWorkbenchTab}
+                    onOpenArtifact={openWorkbenchArtifact}
+                  />
+                ) : undefined
+              }
+              onSecondaryClose={closeAgentWorkbenchPanel}
+              showSidebar={
+                artifactsOpen ||
+                showAgentPlan ||
+                showResearchHistory ||
+                (showResearch && (!!researchJob || !!researchError))
+              }
+              sidebarWidth="min(420px, 40vw)"
+              secondaryPanelWidth="min(600px, 42vw)"
+            />
+          </ChatBox>
+          <ChatsDrawer
+            open={chatsDrawerOpen}
+            onOpenChange={setChatsDrawerOpen}
           />
-        </ChatBox>
-        <ChatsDrawer open={chatsDrawerOpen} onOpenChange={setChatsDrawerOpen} />
-        <RecRecorderOverlay
-          open={recOverlayOpen}
-          threadId={threadId}
-          defaultName={
-            thread?.values?.title ||
-            initialPrompt ||
-            t.realtime.recorder.defaultName
-          }
-          initiallyRecording={recIsRecording}
-          onClose={() => setRecOverlayOpen(false)}
-          onRecordingChange={setRecIsRecording}
-        />
+          <RecRecorderOverlay
+            open={recOverlayOpen}
+            threadId={threadId}
+            defaultName={
+              thread?.values?.title ||
+              initialPrompt ||
+              t.realtime.recorder.defaultName
+            }
+            initiallyRecording={recIsRecording}
+            onClose={() => setRecOverlayOpen(false)}
+            onRecordingChange={setRecIsRecording}
+          />
+        </ToolEffectsProvider>
       </ThreadProviders>
     </SubtasksProvider>
   );

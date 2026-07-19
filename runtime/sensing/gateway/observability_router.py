@@ -258,9 +258,7 @@ def create_observability_router(
 
     router = APIRouter(tags=["observability"], dependencies=[Depends(_auth_dep)])
 
-    def _operator_actor(request: Request) -> str:
-        """Resolve an operator and require admin for receipt mutations."""
-
+    def _operator_identity(request: Request) -> tuple[str, Any]:
         from runtime.adapters.web_auth import _resolve_actor
 
         actor = _resolve_actor(
@@ -272,7 +270,7 @@ def create_observability_router(
             jwt_audience=jwt_audience,
         )
         if not require_auth:
-            return str(actor or "local_operator")
+            return str(actor or "local_operator"), None
 
         auth = request.headers.get("Authorization") or ""
         token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
@@ -289,10 +287,25 @@ def create_observability_router(
             if identity is None:
                 with contextlib.suppress(Exception):
                     identity = identity_store.verify_api_key(token)
+        return str(actor or "authenticated_operator"), identity
+
+    def _identity_is_admin(identity: Any) -> bool:
         roles = getattr(identity, "roles", ()) or ()
-        if "admin" not in {str(role).lower() for role in roles}:
+        return "admin" in {str(role).lower() for role in roles}
+
+    def _can_authorize_retry(request: Request) -> bool:
+        if not require_auth:
+            return True
+        _, identity = _operator_identity(request)
+        return _identity_is_admin(identity)
+
+    def _operator_actor(request: Request) -> str:
+        """Resolve an operator and require admin for receipt mutations."""
+
+        actor, identity = _operator_identity(request)
+        if require_auth and not _identity_is_admin(identity):
             raise HTTPException(403, "admin role required")
-        return str(actor or "authenticated_operator")
+        return actor
 
     # Progress tracker owns incremental O(N_tasks) snapshots · build
     # once per app, not per request.
@@ -308,6 +321,7 @@ def create_observability_router(
 
     @router.get("/api/tool-effects")
     def api_tool_effects(
+        request: Request,
         state: str | None = Query(default=None),
         limit: int = Query(default=100, ge=1, le=500),
     ) -> dict[str, Any]:
@@ -326,18 +340,24 @@ def create_observability_router(
             return {
                 "backend": "disabled",
                 "shared_across_hosts": False,
+                "can_authorize_retry": _can_authorize_retry(request),
                 "count": 0,
                 "state_counts": {},
                 "receipts": [],
             }
-        receipts = effect_store.list_receipts(state=state, limit=limit)
         sampled = effect_store.list_receipts(limit=500)
+        receipts = (
+            sampled[:limit]
+            if state is None
+            else effect_store.list_receipts(state=state, limit=limit)
+        )
         counts: dict[str, int] = {}
         for receipt in sampled:
             counts[receipt.state] = counts.get(receipt.state, 0) + 1
         return {
             "backend": str(getattr(effect_store, "backend_name", "unknown")),
             "shared_across_hosts": bool(getattr(effect_store, "shared_across_hosts", False)),
+            "can_authorize_retry": _can_authorize_retry(request),
             "count": len(receipts),
             "state_counts": counts,
             "receipts": [receipt.to_dict() for receipt in receipts],

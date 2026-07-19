@@ -26,6 +26,8 @@ export type AgentWorkbenchOpenDetail = {
   tab?: AgentWorkbenchTab;
   /** Stable id shared by the transcript event and its workbench block. */
   eventId?: string;
+  /** Durable external-effect receipt selected from the transcript. */
+  effectKey?: string;
   eventKind?: AgentWorkbenchProcessEventKind;
   /** The workbench surface that best explains the selected event. */
   view?: AgentWorkbenchEventView;

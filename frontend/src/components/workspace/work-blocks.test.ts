@@ -43,6 +43,33 @@ describe("work blocks", () => {
     });
   });
 
+  test("coalesces restored start and result records for one tool call", () => {
+    const blocks = toWorkBlocks([
+      event({
+        id: "same-call",
+        status: "running",
+        startedAt: 1000,
+        input: { path: "src/app.tsx" },
+      }),
+      event({
+        id: "same-call",
+        status: "done",
+        startedAt: 1010,
+        finishedAt: 1020,
+        output: { content: "source" },
+      }),
+    ]);
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toMatchObject({
+      id: "same-call",
+      status: "done",
+      startedAt: 1000,
+      target: "app.tsx",
+    });
+    expect(blocks[0].outputText).toContain("source");
+  });
+
   test("uses active todo text and running block for progress", () => {
     const blocks = toWorkBlocks([
       event({
