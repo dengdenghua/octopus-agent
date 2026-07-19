@@ -124,6 +124,23 @@ def test_one_member_failure_is_isolated(tmp_path: Path) -> None:
             "error": "not logged in",
         }
     ]
+    assert out["recovery_groups"] == [
+        {
+            "failure_kind": "auth",
+            "label": "需要登录",
+            "count": 1,
+            "members": [
+                {
+                    "agent_id": "a_codex",
+                    "partner_id": "codex-cli",
+                    "label": "a_codex",
+                    "failure_title": "Codex CLI 需要登录或授权",
+                    "fix_hint": "请打开原生 CLI：`codex`，完成登录/授权后再让 Octopus 派工。",
+                }
+            ],
+            "fix_hints": ["请打开原生 CLI：`codex`，完成登录/授权后再让 Octopus 派工。"],
+        }
+    ]
     assert "ok.txt" in out["changed_files"]
 
 
@@ -148,8 +165,11 @@ def test_all_members_failed_recommends_setup_fix(tmp_path: Path) -> None:
     assert out["failed"] == 2
     assert out["next_action"] == "fix_cli_setup_and_retry"
     assert len(out["failed_members"]) == 2
+    assert out["recovery_groups"][0]["failure_kind"] == "model"
+    assert out["recovery_groups"][0]["count"] == 2
     assert "Needs attention" in out["summary"]
     assert out["summary"].count("Suggested fix: 请在原生 CLI 中配置模型后重试。") == 1
+    assert "Recovery groups: 模型配置: a_claude, a_codex." in out["summary"]
 
 
 def test_multiple_distinct_failures_surface_labeled_fix_hints(tmp_path: Path) -> None:
@@ -180,6 +200,33 @@ def test_multiple_distinct_failures_surface_labeled_fix_hints(tmp_path: Path) ->
     assert "a_codex: 打开 codex 完成登录。" in out["summary"]
     assert "a_trae: 为 trae-cli 配置模型。" in out["summary"]
     assert "a_qoder: 为 qoder-cli 配置模型。" in out["summary"]
+    assert [group["failure_kind"] for group in out["recovery_groups"]] == ["auth", "model"]
+    assert out["recovery_groups"][1]["count"] == 2
+
+
+def test_cli_team_next_action_handles_entitlement_and_version_failures(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+
+    def fake_runner(*, partner_id, command, prompt, cwd, timeout=None, env=None):
+        kind = "entitlement" if partner_id == "trae-cli" else "version"
+        return LocalPartnerResult(
+            ok=False,
+            raw_error=kind,
+            failure_kind=kind,
+            failure_title=f"{partner_id} {kind}",
+            fix_hint=f"修复 {kind}。",
+        )
+
+    out = run_cli_team("g", _MEMBERS[2:4], repo_root=repo, partner_runner=fake_runner)
+
+    assert out["ok"] is False
+    assert out["next_action"] == "fix_cli_setup_and_retry"
+    assert {
+        group["failure_kind"]: group["label"] for group in out["recovery_groups"]
+    } == {
+        "entitlement": "账号权益",
+        "version": "版本不兼容",
+    }
 
 
 def test_guards(tmp_path: Path) -> None:

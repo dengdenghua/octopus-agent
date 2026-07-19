@@ -53,6 +53,7 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
                 "failure_kind",
                 "entitlement",
                 "version",
+                "recovery_groups",
                 "CLI team summaries",
                 "Merge-check commands",
             ),

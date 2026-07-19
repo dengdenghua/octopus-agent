@@ -31,6 +31,34 @@ from runtime.execution.subagents.worktree_loop import is_git_repo, worktree_scop
 _MAX_MEMBERS = 6
 _DIFF_PREVIEW_CHARS = 1200
 
+_FIX_SETUP_KINDS = frozenset(
+    {
+        "auth",
+        "entitlement",
+        "missing_binary",
+        "model",
+        "network",
+        "permission",
+        "quota",
+        "version",
+    }
+)
+
+_FAILURE_KIND_LABELS = {
+    "auth": "需要登录",
+    "empty_output": "无输出",
+    "entitlement": "账号权益",
+    "execution_exception": "执行异常",
+    "missing_binary": "命令缺失",
+    "model": "模型配置",
+    "network": "网络环境",
+    "permission": "权限/信任",
+    "quota": "额度/限流",
+    "timeout": "执行超时",
+    "unknown": "未分类",
+    "version": "版本不兼容",
+}
+
 # Matches run_local_partner's keyword call shape; injectable for tests.
 PartnerRunner = Callable[..., LocalPartnerResult]
 
@@ -111,6 +139,43 @@ def _member_label(member: dict[str, Any]) -> str:
     return agent_id or partner_id or "member"
 
 
+def _failure_kind_label(kind: str) -> str:
+    return _FAILURE_KIND_LABELS.get(kind, kind or "未分类")
+
+
+def _recovery_groups(failed_members: list[dict[str, str]]) -> list[dict[str, Any]]:
+    groups: list[dict[str, Any]] = []
+    by_kind: dict[str, dict[str, Any]] = {}
+    for member in failed_members:
+        kind = str(member.get("failure_kind") or "unknown")
+        group = by_kind.get(kind)
+        if group is None:
+            group = {
+                "failure_kind": kind,
+                "label": _failure_kind_label(kind),
+                "count": 0,
+                "members": [],
+                "fix_hints": [],
+            }
+            by_kind[kind] = group
+            groups.append(group)
+        label = member.get("agent_id") or member.get("partner_id") or "member"
+        group["count"] += 1
+        group["members"].append(
+            {
+                "agent_id": str(member.get("agent_id") or ""),
+                "partner_id": str(member.get("partner_id") or ""),
+                "label": label,
+                "failure_title": str(member.get("failure_title") or ""),
+                "fix_hint": str(member.get("fix_hint") or ""),
+            }
+        )
+        hint = str(member.get("fix_hint") or "").strip()
+        if hint and hint not in group["fix_hints"]:
+            group["fix_hints"].append(hint)
+    return groups
+
+
 def _summarize_cli_team(goal: str, results: list[dict[str, Any]]) -> dict[str, Any]:
     count = len(results)
     succeeded = sum(1 for r in results if r.get("ok"))
@@ -136,16 +201,14 @@ def _summarize_cli_team(goal: str, results: list[dict[str, Any]]) -> dict[str, A
         for r in results
         if not r.get("ok")
     ]
+    recovery_groups = _recovery_groups(failed_members)
     if succeeded and failed:
         next_action = "review_successes_retry_failed"
     elif succeeded and changed_files:
         next_action = "review_diffs_choose_winner"
     elif succeeded:
         next_action = "review_outputs"
-    elif failed_members and any(
-        m["failure_kind"] in {"auth", "model", "missing_binary", "network", "permission"}
-        for m in failed_members
-    ):
+    elif failed_members and any(m["failure_kind"] in _FIX_SETUP_KINDS for m in failed_members):
         next_action = "fix_cli_setup_and_retry"
     else:
         next_action = "open_native_cli_or_retry"
@@ -184,6 +247,17 @@ def _summarize_cli_team(goal: str, results: list[dict[str, Any]]) -> dict[str, A
         elif fix_bits:
             extra = " ..." if truncated_fixes else ""
             lines.append(f"Suggested fixes: {'; '.join(fix_bits)}{extra}")
+        if recovery_groups:
+            group_bits = []
+            for group in recovery_groups[:4]:
+                members = ", ".join(
+                    str(member.get("label") or "member") for member in group["members"][:4]
+                )
+                if len(group["members"]) > 4:
+                    members += f", +{len(group['members']) - 4} more"
+                group_bits.append(f"{group['label']}: {members}")
+            extra = "" if len(recovery_groups) <= 4 else f", +{len(recovery_groups) - 4} more"
+            lines.append(f"Recovery groups: {'; '.join(group_bits)}{extra}.")
     lines.append("Diffs are isolated worktree candidates; nothing was auto-merged.")
     return {
         "summary": " ".join(lines),
@@ -192,6 +266,7 @@ def _summarize_cli_team(goal: str, results: list[dict[str, Any]]) -> dict[str, A
         "changed_files": changed_files,
         "successful_members": successful_members,
         "failed_members": failed_members,
+        "recovery_groups": recovery_groups,
         "failed": failed,
         "goal": goal[:240],
     }
@@ -302,5 +377,6 @@ def run_cli_team(
         "changed_files": summary["changed_files"],
         "successful_members": summary["successful_members"],
         "failed_members": summary["failed_members"],
+        "recovery_groups": summary["recovery_groups"],
         "note": "diffs are NOT merged — review each, or use tournament to judge a winner",
     }

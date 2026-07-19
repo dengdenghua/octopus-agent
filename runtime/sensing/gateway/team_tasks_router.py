@@ -597,6 +597,7 @@ def create_team_tasks_router(
                         "next_action": cli_result.get("next_action"),
                         "changed_files": _jsonable(cli_result.get("changed_files", [])),
                         "failed_members": _jsonable(cli_result.get("failed_members", [])),
+                        "recovery_groups": _jsonable(cli_result.get("recovery_groups", [])),
                         "note": cli_result.get("note"),
                     },
                 }

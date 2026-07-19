@@ -75,6 +75,12 @@ CLI team summaries surface one or more deduplicated repair hints, so a mixed
 failure such as "Codex not logged in" plus "Trae model not configured" does not
 collapse into a single misleading next step.
 
+CLI team runs also return `recovery_groups`: failed members are grouped by
+`failure_kind` with a short label, member list, and deduplicated `fix_hints`.
+Team task metadata preserves those groups so the UI can show "auth failures",
+"model setup failures", or "entitlement failures" separately instead of making
+the operator parse raw stderr.
+
 ## Merge-check commands
 
 Run this focused set before merging local CLI partner work:
