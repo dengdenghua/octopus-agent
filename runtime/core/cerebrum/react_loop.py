@@ -55,6 +55,7 @@ from runtime.core.cerebrum.react_execution import (
     _detect_phase,
     _execute_action_via_beak,
     _format_background_task_heartbeat,
+    _has_unrecovered_beak_failure,
     _is_scoped_artifact_write,
     _normalized_tool_call_from_react_action,
     _persist_react_trajectory,
@@ -4116,6 +4117,7 @@ def stream_react_loop(
                 react_task_id=react_task_id,
                 agent=agent,
                 intent=intent,
+                beak_step_sink=executed_beak_steps,
             )
             if _parallel_obs is not None:
                 observation = _parallel_obs
@@ -5327,8 +5329,8 @@ def stream_react_loop(
         }
         final_answer_emitted = True
 
-    any_step_failed = any(not _beak_step_effective_success(s) for s in executed_beak_steps)
-    effective_success = not any_step_failed and terminated_reason != "model_stall"
+    unresolved_tool_failure = _has_unrecovered_beak_failure(executed_beak_steps)
+    effective_success = not unresolved_tool_failure and terminated_reason != "model_stall"
     final_success = effective_success and terminated_reason not in {
         "paused",
         "cancelled",

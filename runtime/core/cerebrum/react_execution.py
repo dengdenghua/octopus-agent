@@ -741,6 +741,40 @@ def _beak_step_effective_success(step: Any) -> bool:
     return True
 
 
+def _has_unrecovered_beak_failure(steps: list[Any]) -> bool:
+    """Return True only when the last failed tool has no later recovery.
+
+    A ReAct turn is allowed to recover by changing tools or arguments.  The
+    former all-or-nothing aggregation marked the entire turn failed forever
+    after one transient error, even when later verification succeeded and a
+    guarded final answer was produced.  Checklist/blackboard bookkeeping does
+    not count as recovery; a later substantive tool execution must succeed.
+    """
+
+    last_failure = -1
+    for index, step in enumerate(steps):
+        if not _beak_step_effective_success(step):
+            last_failure = index
+    if last_failure < 0:
+        return False
+
+    bookkeeping = {
+        "todo_write",
+        "bb_write",
+        "bb_read",
+        "bb_keys",
+        "search_capabilities",
+        "query_capability",
+        "query_skill",
+    }
+    for step in steps[last_failure + 1 :]:
+        action = getattr(step, "action", None)
+        name = str(getattr(action, "name", "") or "").strip()
+        if name not in bookkeeping and _beak_step_effective_success(step):
+            return False
+    return True
+
+
 def _format_background_task_heartbeat(task_ids: list[str]) -> str:
     """Render the periodic 'background tasks still running' nudge.
 

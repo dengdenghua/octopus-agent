@@ -67,6 +67,7 @@ def _dispatch_parallel_actions(
     react_task_id: Any,
     agent: Any,
     intent: ParsedIntent,
+    beak_step_sink: list[Any] | None = None,
 ) -> Generator[Any, None, tuple[str, list[dict[str, object]]]]:
     """Concurrent multi-action dispatcher (口子 2).
 
@@ -276,6 +277,12 @@ def _dispatch_parallel_actions(
     for idx in range(n):
         obs = observations[idx]
         bk = beak_steps[idx]
+        if bk is not None and beak_step_sink is not None:
+            # The main loop uses this ordered ledger to decide whether an
+            # earlier tool failure was later recovered.  Parallel executions
+            # used to disappear from that ledger, so a successful fallback
+            # batch could still leave a complete answer marked as failed.
+            beak_step_sink.append(bk)
         name = resolved_names[idx] or (parsed_pairs[idx][0] if parsed_pairs[idx] else "unknown")
         _ok = not (
             obs is not None
