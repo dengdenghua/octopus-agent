@@ -179,6 +179,7 @@ _PUBLIC_UPDATE_BOILERPLATE_RE = re.compile(
 
 _FINAL_SYNTHESIS_UPDATE = "现有信息已经够了；我现在把关键点收束成最终回答。"
 _PUBLIC_EVIDENCE_NARRATIVE_TIMEOUT_S = 6.0
+_PUBLIC_EVIDENCE_STREAM_GATE_CHARS = 24
 
 
 def _safe_public_update(value: str | None) -> str:
@@ -280,7 +281,7 @@ def _build_public_evidence_narrative_input(
     return "\n\n".join(part for part in sections if part)
 
 
-def _generate_public_evidence_narrative(
+def _stream_public_evidence_narrative(
     router: Any,
     *,
     model: str,
@@ -288,8 +289,17 @@ def _generate_public_evidence_narrative(
     step: ReActStep,
     convergence: EvidenceConvergence | None,
     evidence_steps: list[ReActStep] | None = None,
-) -> str:
-    """Ask the working model for one factual, tools-disabled public update."""
+    iteration: int,
+    previous_key: str = "",
+    succeeded: bool | None = None,
+) -> Generator[dict[str, Any], None, str]:
+    """Stream one evidence-grounded public update into a single timeline item.
+
+    The narrator is tools-disabled and receives completed evidence only.  A
+    short prefix gate prevents control values such as ``SKIP`` from flashing
+    in the conversation, then later deltas extend the same commentary item
+    instead of manufacturing one avatar/message per provider chunk.
+    """
     from runtime.platform.models.llm import Message, ModelRequest
 
     request = ModelRequest(
@@ -322,20 +332,108 @@ def _generate_public_evidence_narrative(
         enable_thinking=False,
         tools=[],
     )
-    result = _collect_model_stream_text_with_deadline(
+
+    raw_text = ""
+    emitted = ""
+    final_response = None
+    visible_state = {"chars": 0}
+
+    def _checkpoint(value: str) -> str:
+        checkpoint = _safe_public_update(value)[:420].rstrip()
+        if checkpoint.strip().casefold() == "skip":
+            return ""
+        return checkpoint
+
+    def _ready_to_start(checkpoint: str) -> bool:
+        key = re.sub(r"\s+", " ", checkpoint).strip().casefold()
+        if not key:
+            return False
+        # A duplicate may arrive token by token. Wait until it either diverges
+        # from the previous checkpoint or proves to be new content.
+        if previous_key and previous_key.startswith(key):
+            return False
+        if len(checkpoint) >= _PUBLIC_EVIDENCE_STREAM_GATE_CHARS:
+            return True
+        return bool(re.search(r"[。.!！?？；;]\s*$", checkpoint))
+
+    def _event(delta: str, *, start_new_segment: bool, full_text: str) -> dict[str, Any]:
+        return {
+            "type": "commentary_delta",
+            "delta": delta,
+            "progress_kind": _public_update_kind(full_text, succeeded=succeeded),
+            "progress_source": "model",
+            "start_new_segment": start_new_segment,
+            "iteration": iteration,
+        }
+
+    for event in _iter_model_stream_with_deadline(
         router,
         request,
         _PUBLIC_EVIDENCE_NARRATIVE_TIMEOUT_S,
-    )
-    if result is _MODEL_STREAM_DEADLINE:
-        return ""
-    text, _response = result
-    checkpoint = _safe_public_update(text)
-    if checkpoint.strip().casefold() == "skip":
-        return ""
-    # This is a conversational beat, not a second answer. A short hard cap
-    # keeps weak models from turning the checkpoint into a mini-report.
-    return checkpoint[:420].rstrip()
+        lambda state=visible_state: state["chars"],
+    ):
+        if event is _MODEL_STREAM_DEADLINE:
+            return emitted
+        event_type = getattr(event, "type", "")
+        if event_type == "text_delta":
+            delta = str(getattr(event, "delta", "") or "")
+            if not delta:
+                continue
+            raw_text += delta
+            visible_state["chars"] = len(raw_text)
+
+            # Do not render a partial sentinel (S → SK → SKIP).
+            folded_raw = raw_text.strip().casefold()
+            if folded_raw and "skip".startswith(folded_raw):
+                continue
+            checkpoint = _checkpoint(raw_text)
+            if not checkpoint:
+                continue
+            if not emitted:
+                if not _ready_to_start(checkpoint):
+                    continue
+                yield _event(
+                    checkpoint,
+                    start_new_segment=True,
+                    full_text=checkpoint,
+                )
+                emitted = checkpoint
+                continue
+            if checkpoint.startswith(emitted) and len(checkpoint) > len(emitted):
+                suffix = checkpoint[len(emitted) :]
+                yield _event(
+                    suffix,
+                    start_new_segment=False,
+                    full_text=checkpoint,
+                )
+                emitted = checkpoint
+        elif event_type in {"done", "response_end"}:
+            final_response = getattr(event, "final", None) or getattr(
+                event, "response", None
+            )
+
+    # Most providers send text deltas, but preserve the final-response fallback
+    # for adapters that only attach text to the terminal event.
+    if not raw_text and final_response is not None:
+        raw_text = str(getattr(final_response, "text", "") or "")
+    checkpoint = _checkpoint(raw_text)
+    if not emitted:
+        if checkpoint and _ready_to_start(checkpoint):
+            yield _event(
+                checkpoint,
+                start_new_segment=True,
+                full_text=checkpoint,
+            )
+            emitted = checkpoint
+    elif checkpoint.startswith(emitted) and len(checkpoint) > len(emitted):
+        suffix = checkpoint[len(emitted) :]
+        yield _event(
+            suffix,
+            start_new_segment=False,
+            full_text=checkpoint,
+        )
+        emitted = checkpoint
+    return emitted
 
 
 def _public_tool_target(args: dict[str, Any]) -> str:
@@ -4527,7 +4625,7 @@ def stream_react_loop(
             )
         ):
             try:
-                _model_result_update = _generate_public_evidence_narrative(
+                _model_result_update = yield from _stream_public_evidence_narrative(
                     router,
                     model=effective_model,
                     goal=intent.normalized_goal,
@@ -4538,6 +4636,9 @@ def stream_react_loop(
                         else None
                     ),
                     evidence_steps=steps + [step],
+                    iteration=i + 1,
+                    previous_key=_last_public_update_key,
+                    succeeded=tool_ok,
                 )
             except Exception as exc:  # noqa: BLE001 — optional public narration
                 _logger.warning("public evidence narration failed: %s", exc)
@@ -4554,13 +4655,6 @@ def stream_react_loop(
                     succeeded=tool_ok,
                 )
                 _public_narrative_started = True
-                yield {
-                    "type": "commentary_delta",
-                    "delta": _model_result_update,
-                    "progress_kind": _model_result_update_kind,
-                    "progress_source": "model",
-                    "iteration": i + 1,
-                }
                 if _model_result_update_kind == "synthesize":
                     _synthesis_update_emitted = True
                 _last_public_update_key = _model_result_update_key

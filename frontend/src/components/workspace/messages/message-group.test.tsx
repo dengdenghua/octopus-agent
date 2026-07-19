@@ -165,12 +165,18 @@ describe("MessageGroup reasoning grouping", () => {
     });
 
     expect(screen.getAllByTestId("public-progress-event")).toHaveLength(1);
-    expect(
-      screen.getAllByTestId("process-timeline-event-execution"),
-    ).toHaveLength(4);
+    const visibleExecution = screen.getByTestId(
+      "process-timeline-event-execution",
+    );
+    expect(visibleExecution).toHaveAttribute("data-process-event-id", "read-3");
     expect(
       screen.queryByTestId("process-timeline-event-thinking"),
     ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle("查看 5 个历史步骤"));
+    for (const path of paths) {
+      expect(screen.getAllByText(path).length).toBeGreaterThan(0);
+    }
   });
 
   it("renders public checkpoints inline between thinking and execution", () => {

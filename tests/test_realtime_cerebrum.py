@@ -403,6 +403,56 @@ def test_commentary_event_boundary_starts_a_new_timeline_item(gateway: Any) -> N
     assert messages[2]["parentItemId"] == messages[1]["id"]
 
 
+def test_commentary_stream_chunks_extend_one_timeline_item(gateway: Any) -> None:
+    client, _ = gateway
+    _set_script(
+        [
+            {
+                "type": "commentary_delta",
+                "delta": "四个目标文件均已",
+                "progress_source": "model",
+                "start_new_segment": True,
+            },
+            {
+                "type": "commentary_delta",
+                "delta": "读取，事件顺序已经确认。",
+                "progress_source": "model",
+                "start_new_segment": False,
+            },
+            {"type": "text_delta", "delta": "最终答案"},
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-commentary-stream",
+                "input": [{"type": "text", "text": "inspect event ordering"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    messages = [
+        item for item in out["response"].result["turn"]["items"]
+        if item["type"] == "agentMessage"
+    ]
+    assert [message["text"] for message in messages] == [
+        "四个目标文件均已读取，事件顺序已经确认。",
+        "最终答案",
+    ]
+    assert messages[0]["messageKind"] == "commentary"
+    assert messages[0]["progressSequence"] == 1
+    commentary_deltas = [
+        notification.params["delta"]
+        for notification in out["notifications"]
+        if notification.method == "item/agentMessage/delta"
+        and notification.params["itemId"] == messages[0]["id"]
+    ]
+    assert "".join(commentary_deltas) == "四个目标文件均已读取，事件顺序已经确认。"
+
+
 def test_duplicate_public_commentary_is_collapsed(gateway: Any) -> None:
     client, _ = gateway
     _set_script(

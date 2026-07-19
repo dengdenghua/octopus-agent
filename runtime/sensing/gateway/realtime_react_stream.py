@@ -808,10 +808,10 @@ async def _apply_react_event(
             log,
             emitter,
             evt.get("delta", ""),
-            # A commentary event is already a complete public checkpoint.
-            # Its event boundary — not keyword classification of its prose —
-            # starts the next timeline segment.
-            start_new_segment=True,
+            # Complete checkpoints default to a new conversational beat. A
+            # provider may explicitly continue the current beat so token
+            # chunks grow one message/avatar instead of producing a log row.
+            start_new_segment=bool(evt.get("start_new_segment", True)),
         )
         return
     if kind == "thinking_delta":

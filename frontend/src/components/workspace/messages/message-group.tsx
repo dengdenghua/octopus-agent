@@ -451,7 +451,7 @@ export function MessageGroup({
             event.preventDefault();
             event.currentTarget.click();
           }}
-          className="group/progress-row my-1.5 flex min-w-0 cursor-pointer items-start gap-1 text-[13px] leading-5 text-foreground/85 outline-none transition-colors hover:text-foreground focus-visible:text-foreground"
+          className="group/progress-row my-1 flex min-w-0 cursor-pointer items-start gap-1.5 text-xs leading-5 text-foreground/75 outline-none transition-colors hover:text-foreground focus-visible:text-foreground"
           data-testid="public-progress-event"
           data-process-event-id={item.step.messageId ?? item.step.id}
           data-process-event-kind="thinking"
@@ -463,6 +463,21 @@ export function MessageGroup({
           data-timeline-sequence={item.step.timelineSequence}
         >
           {renderIterationDivider(prevStep, item.step)}
+          <span className="relative mt-[7px] flex size-1.5 shrink-0 items-center justify-center">
+            <span
+              className={cn(
+                "absolute inline-flex size-1.5 rounded-full opacity-25",
+                agentRunStatusLightClass(commentaryState),
+                agentRunStatusLightPulseClass(commentaryState),
+              )}
+            />
+            <span
+              className={cn(
+                "relative inline-flex size-1 rounded-full",
+                agentRunStatusLightClass(commentaryState),
+              )}
+            />
+          </span>
           <div className="min-w-0 flex-1">
             <MarkdownContent
               content={item.step.commentary}
@@ -559,9 +574,15 @@ export function MessageGroup({
   // Keep process events on the same chronological lane as the answer while
   // letting the answer retain visual priority. The main transcript shows only
   // compact public summaries; complete event payloads live in the workbench.
+  const hasTimelineCommentary = timelineItems.some(
+    (item) => item.type === "commentary",
+  );
   const compactTimelineItems = retainIndeterminateToolCalls(
     timelineItems,
-    selectCompactTimelineItems(timelineItems, 4),
+    // Once the model is narrating evidence in plain language, only the current
+    // execution event belongs beside it. Older tool rows remain available in
+    // replay/workbench instead of restating the same file reads four times.
+    selectCompactTimelineItems(timelineItems, hasTimelineCommentary ? 1 : 4),
     receiptsByCallId,
   );
   const hasPublicCommentary = compactTimelineItems.some(
@@ -599,54 +620,96 @@ export function MessageGroup({
         return (
           <div
             key={`${keyPrefix}-${item.id}`}
-            role="button"
-            tabIndex={0}
-            aria-label={`${t.message.thinkingProcess}: ${commentarySummary}`}
-            onClick={() =>
-              emitOpenAgentWorkbench({
-                tab: "agent",
-                eventId: item.step.messageId ?? item.step.id,
-                eventKind: "thinking",
-                view: "summary",
-                processEvent: {
-                  kind: "thinking",
-                  summary: commentarySummary,
-                  detail: item.step.commentary,
-                  status: state,
-                  count: 1,
-                  phaseId: item.step.phaseId,
-                  parentItemId: item.step.parentItemId,
-                  timelineSequence: item.step.timelineSequence,
-                },
-              })
-            }
-            onKeyDown={(event) => {
-              if (event.key !== "Enter" && event.key !== " ") return;
-              event.preventDefault();
-              event.currentTarget.click();
-            }}
-            className="group/progress-row my-1.5 flex min-w-0 cursor-pointer items-start gap-1 text-[13px] leading-5 text-foreground/85 outline-none transition-colors hover:text-foreground focus-visible:text-foreground"
-            data-testid="public-progress-event"
-            data-process-event-id={item.step.messageId ?? item.step.id}
-            data-process-event-kind="thinking"
-            data-process-event-status={state}
-            data-progress-kind={item.step.progressKind}
-            data-phase-id={item.step.phaseId}
-            data-parent-item-id={item.step.parentItemId}
-            data-progress-sequence={item.step.progressSequence}
-            data-timeline-sequence={item.step.timelineSequence}
+            className="flex min-w-0 items-start gap-0.5"
           >
-            <div className="min-w-0 flex-1">
-              <MarkdownContent
-                content={item.step.commentary}
-                isLoading={isLiveTimeline && isLastOverall && isLoading}
-                rehypePlugins={rehypePlugins}
-              />
-              {item.step.groundingMessage && (
-                <GroundingChip message={item.step.groundingMessage} />
-              )}
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label={`${t.message.thinkingProcess}: ${commentarySummary}`}
+              onClick={() =>
+                emitOpenAgentWorkbench({
+                  tab: "agent",
+                  eventId: item.step.messageId ?? item.step.id,
+                  eventKind: "thinking",
+                  view: "summary",
+                  processEvent: {
+                    kind: "thinking",
+                    summary: commentarySummary,
+                    detail: item.step.commentary,
+                    status: state,
+                    count: 1,
+                    phaseId: item.step.phaseId,
+                    parentItemId: item.step.parentItemId,
+                    timelineSequence: item.step.timelineSequence,
+                  },
+                })
+              }
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                event.currentTarget.click();
+              }}
+              className="group/progress-row my-1 flex min-w-0 flex-1 cursor-pointer items-start gap-1.5 text-xs leading-5 text-foreground/75 outline-none transition-colors hover:text-foreground focus-visible:text-foreground"
+              data-testid="public-progress-event"
+              data-process-event-id={item.step.messageId ?? item.step.id}
+              data-process-event-kind="thinking"
+              data-process-event-status={state}
+              data-progress-kind={item.step.progressKind}
+              data-phase-id={item.step.phaseId}
+              data-parent-item-id={item.step.parentItemId}
+              data-progress-sequence={item.step.progressSequence}
+              data-timeline-sequence={item.step.timelineSequence}
+            >
+              <span className="relative mt-[7px] flex size-1.5 shrink-0 items-center justify-center">
+                <span
+                  className={cn(
+                    "absolute inline-flex size-1.5 rounded-full opacity-25",
+                    agentRunStatusLightClass(state),
+                    agentRunStatusLightPulseClass(state),
+                  )}
+                />
+                <span
+                  className={cn(
+                    "relative inline-flex size-1 rounded-full",
+                    agentRunStatusLightClass(state),
+                  )}
+                />
+              </span>
+              <div className="min-w-0 flex-1">
+                <MarkdownContent
+                  content={item.step.commentary}
+                  isLoading={isLiveTimeline && isLastOverall && isLoading}
+                  rehypePlugins={rehypePlugins}
+                />
+                {item.step.groundingMessage && (
+                  <GroundingChip message={item.step.groundingMessage} />
+                )}
+              </div>
+              <PanelRightOpenIcon className="mt-1 size-3 shrink-0 opacity-0 transition-opacity group-hover/progress-row:opacity-40 group-focus-visible/progress-row:opacity-40" />
             </div>
-            <PanelRightOpenIcon className="mt-1 size-3 shrink-0 opacity-0 transition-opacity group-hover/progress-row:opacity-40 group-focus-visible/progress-row:opacity-40" />
+            {isLastOverall && showTimelineToggle && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (isLiveTimeline) {
+                    setShowSteps((value) => !value);
+                  } else {
+                    setSavedStepsOpen((value) => !value);
+                  }
+                }}
+                className="mt-1 p-0.5 text-muted-foreground/35 transition-colors hover:text-muted-foreground"
+                aria-label={timelineToggleLabel}
+                title={timelineToggleLabel}
+              >
+                <span className="sr-only">{timelineToggleLabel}</span>
+                <ChevronUp
+                  className={cn(
+                    "size-3 transition-transform duration-200",
+                    timelineExpanded ? "rotate-180" : "",
+                  )}
+                />
+              </button>
+            )}
           </div>
         );
       }

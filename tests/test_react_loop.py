@@ -464,6 +464,40 @@ class _CapturingRouter(_ScriptedRouter):
         return super().call(req)
 
 
+class _ChunkedCapturingRouter(_CapturingRouter):
+    """Expose selected scripted calls as real provider-sized text chunks."""
+
+    def __init__(
+        self,
+        scripts: list[str],
+        *,
+        chunks_by_call: dict[int, list[str]],
+    ) -> None:
+        super().__init__(scripts)
+        self.chunks_by_call = chunks_by_call
+
+    def call_stream(self, req: Any):
+        from runtime.sensing.model_router.models import CostEntry, ModelResponse, ModelStreamEvent
+
+        response = self.call(req)
+        chunks = self.chunks_by_call.get(self.calls, [response.text])
+        assert "".join(chunks) == response.text
+        for chunk in chunks:
+            if chunk:
+                yield ModelStreamEvent(type="text_delta", delta=chunk)
+        yield ModelStreamEvent(
+            type="done",
+            final=ModelResponse(
+                text=response.text,
+                model="test-model",
+                input_tokens=response.input_tokens,
+                output_tokens=response.output_tokens,
+                finish_reason=response.finish_reason,
+                cost=CostEntry(),
+            ),
+        )
+
+
 class _TransientFailureRouter(_ScriptedRouter):
     def __init__(self) -> None:
         super().__init__([])
@@ -1103,6 +1137,52 @@ def test_realtime_quiet_tool_result_gets_model_authored_evidence_checkpoint() ->
     assert "stream state stable" in checkpoint_input
     assert "timeline order stable" in checkpoint_input
     assert "对比两份流式结果" in checkpoint_input
+
+
+def test_model_authored_evidence_checkpoint_streams_into_one_public_beat() -> None:
+    narrative = "检查结果已经确认流式链路正常；下一步把这个证据并入最终结论。"
+    router = _ChunkedCapturingRouter(
+        [
+            (
+                "Thought: compare the completed evidence\n"
+                'Action: echo({"text": "stream state stable"})\n'
+                'Action: echo({"text": "timeline order stable"})'
+            ),
+            narrative,
+            "Final Answer: 流式链路验证通过。",
+        ],
+        chunks_by_call={
+            2: [
+                "检查结果已经确认",
+                "流式链路正常；",
+                "下一步把这个证据",
+                "并入最终结论。",
+            ]
+        },
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("对比两份流式结果并给出结论")
+    intent.user_context.update({"mode": "react", "realtime_public_narrative": True})
+
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=3)
+    )
+
+    assert result is not None and result.final_answer == "流式链路验证通过。"
+    chunks = [
+        event
+        for event in events
+        if event["type"] == "commentary_delta"
+        and event.get("progress_source") == "model"
+    ]
+    assert "".join(event["delta"] for event in chunks) == narrative
+    assert len(chunks) >= 2
+    assert [event["start_new_segment"] for event in chunks] == [True] + [
+        False
+    ] * (len(chunks) - 1)
+    assert events.index(chunks[-1]) < next(
+        index for index, event in enumerate(events) if event["type"] == "text_delta"
+    )
 
 
 def test_model_supplied_update_skips_extra_evidence_narration_call() -> None:
