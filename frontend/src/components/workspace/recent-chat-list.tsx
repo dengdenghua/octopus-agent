@@ -271,15 +271,16 @@ export function RecentChatList() {
       }
     }
 
-    const projectGroups: ThreadGroup[] = projects
-      .filter((p) => byProject.has(p.id))
-      .map((p) => ({
-        key: `project:${p.id}`,
-        label: p.name,
-        icon: p.icon,
-        project: p,
-        threads: byProject.get(p.id)!,
-      }));
+    // Keep empty projects visible. Otherwise a freshly created project vanishes
+    // from the sidebar until its first task is moved into it, which looks like
+    // the create action failed.
+    const projectGroups: ThreadGroup[] = projects.map((p) => ({
+      key: `project:${p.id}`,
+      label: p.name,
+      icon: p.icon,
+      project: p,
+      threads: byProject.get(p.id) ?? [],
+    }));
 
     const result: ThreadGroup[] = [...projectGroups];
     if (uncategorized.length > 0 || projectGroups.length === 0) {
