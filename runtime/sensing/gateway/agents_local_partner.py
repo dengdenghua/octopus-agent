@@ -353,10 +353,13 @@ def _codebuddy_model_options(command: str | None = None) -> tuple[list[str], str
     return models, f"{command} --help" if models else command
 
 
+_SHELL_BARE_COMMAND_RE = re.compile(r"^[A-Za-z0-9_@%+=:,./~-]+$")
+
+
 def _display_command(command: str | None) -> str | None:
     if not command:
         return None
-    return shlex.quote(command) if re.search(r"\s", command) else command
+    return command if _SHELL_BARE_COMMAND_RE.fullmatch(command) else shlex.quote(command)
 
 
 def _partner_guidance(

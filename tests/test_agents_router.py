@@ -947,6 +947,39 @@ class TestLocalPartners:
         assert partners["openclaw"]["detected"] is False
         assert partners["openclaw"]["readiness_status"] == "missing"
 
+    def test_local_partner_copy_commands_quote_shell_special_paths(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        executable = tmp_path / "Code Buddy (Beta)" / "codebuddy"
+        executable.parent.mkdir()
+        executable.touch()
+
+        def fake_which(commands: list[str]) -> tuple[str | None, str | None]:
+            if "codebuddy" in commands:
+                return str(executable), str(executable)
+            return None, None
+
+        monkeypatch.setattr(
+            agents_router_module,
+            "_which_local_partner_command",
+            fake_which,
+        )
+        app = FastAPI()
+        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
+
+        r = TestClient(app).get("/api/agents/local-partners")
+
+        assert r.status_code == 200
+        partners = {p["id"]: p for p in r.json()["partners"]}
+        codebuddy = partners["codebuddy-cli"]
+        assert codebuddy["native_command"].startswith("'")
+        assert "Code Buddy (Beta)" in codebuddy["native_command"]
+        assert codebuddy["native_launch_command"].endswith(
+            f" && {codebuddy['native_command']}"
+        )
+
     def test_register_local_partner_creates_real_agent(
         self,
         tmp_path: Path,
