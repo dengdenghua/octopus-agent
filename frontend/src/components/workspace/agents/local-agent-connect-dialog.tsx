@@ -273,6 +273,9 @@ export function LocalAgentConnectDialog({
                 partner.native_command
                   ? { label: "打开原生 CLI", command: partner.native_command }
                   : null,
+                partner.native_launch_command
+                  ? { label: "进入项目", command: partner.native_launch_command }
+                  : null,
                 partner.verify_command
                   ? { label: "验证", command: partner.verify_command }
                   : null,

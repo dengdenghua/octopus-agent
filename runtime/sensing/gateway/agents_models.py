@@ -121,6 +121,7 @@ class LocalPartnerWire(BaseModel):
     fix_hint: str | None = None
     install_command: str | None = None
     native_command: str | None = None
+    native_launch_command: str | None = None
     verify_command: str | None = None
     setup_hint: str | None = None
     interaction_hint: str | None = None

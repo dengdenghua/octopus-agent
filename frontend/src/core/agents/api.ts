@@ -82,6 +82,7 @@ export interface LocalAgentPartner {
   fix_hint?: string | null;
   install_command?: string | null;
   native_command?: string | null;
+  native_launch_command?: string | null;
   verify_command?: string | null;
   setup_hint?: string | null;
   interaction_hint?: string | null;

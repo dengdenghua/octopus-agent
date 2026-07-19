@@ -12792,6 +12792,8 @@ export interface components {
             name: string;
             /** Native Command */
             native_command?: string | null;
+            /** Native Launch Command */
+            native_launch_command?: string | null;
             /**
              * Readiness Message
              * @default

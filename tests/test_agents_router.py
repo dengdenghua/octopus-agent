@@ -907,6 +907,8 @@ class TestLocalPartners:
         assert partners["codex-cli"]["headless_supported"] is True
         assert partners["codex-cli"]["readiness_status"] == "ready"
         assert partners["codex-cli"]["native_command"] == "codex"
+        assert partners["codex-cli"]["native_launch_command"].startswith("cd ")
+        assert partners["codex-cli"]["native_launch_command"].endswith(" && codex")
         assert "codex exec" in partners["codex-cli"]["verify_command"]
         assert "/model <模型名>" in partners["codex-cli"]["interaction_hint"]
         assert partners["codex-cli"]["command_hints"][0] == {
@@ -918,6 +920,7 @@ class TestLocalPartners:
         assert partners["trae-cli"]["agent_id"] == "local_trae_cli"
         assert "traecdn" in partners["trae-cli"]["avatar_url"]
         assert partners["trae-cli"]["native_command"] == "trae-cli"
+        assert partners["trae-cli"]["native_launch_command"].endswith(" && trae-cli")
         assert partners["trae-cli"]["verify_command"] == "trae-cli models --json"
         assert "模型选择" in partners["trae-cli"]["setup_hint"]
         assert "Trae CLI 自己管理" in partners["trae-cli"]["interaction_hint"]
@@ -936,6 +939,7 @@ class TestLocalPartners:
         assert "codebuddy" in partners["codebuddy-cli"]["avatar_url"]
         assert partners["codebuddy-cli"]["ready"] is True
         assert partners["codebuddy-cli"]["native_command"] == "codebuddy"
+        assert partners["codebuddy-cli"]["native_launch_command"].endswith(" && codebuddy")
         assert "codebuddy -p --output-format text" in partners["codebuddy-cli"]["verify_command"]
         assert partners["codebuddy-cli"]["install_command"] is None
         assert "原生 CLI 使用" in partners["codebuddy-cli"]["interaction_hint"]
