@@ -33,6 +33,99 @@ async function expectNoHorizontalOverflow(
 test.describe("Mobile workspace smoke", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
+  test("Settings dialog stays usable across core sections", async ({
+    page,
+  }) => {
+    await page.goto("/#/workspace/agents");
+    await page.waitForLoadState("domcontentloaded");
+
+    const settingsButton = page.getByRole("button", {
+      name: /^(设置|Settings)$/,
+    });
+    if (!(await settingsButton.isVisible())) {
+      await page
+        .getByRole("button", { name: /打开侧栏菜单|Open sidebar menu/ })
+        .click();
+    }
+    await expect(settingsButton).toBeVisible({ timeout: 15_000 });
+    await settingsButton.click();
+
+    const dialog = page.getByRole("dialog", { name: /设置|Settings/ });
+    await expect(dialog).toBeVisible();
+    await expectNoHorizontalOverflow(page, dialog, "settings dialog");
+
+    const sectionStrip = dialog.getByTestId("settings-section-scroll");
+    const dialogLayout = await dialog.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      const current = node.querySelectorAll('[aria-current="page"]');
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        height: rect.height,
+        viewportHeight: window.innerHeight,
+        scrollWidth: node.scrollWidth,
+        clientWidth: node.clientWidth,
+        currentCount: current.length,
+      };
+    });
+    const sectionStripLayout = await sectionStrip.evaluate((node) => ({
+      scrollWidth: node.scrollWidth,
+      clientWidth: node.clientWidth,
+    }));
+    expect(dialogLayout.top).toBeGreaterThanOrEqual(15);
+    expect(dialogLayout.bottom).toBeLessThanOrEqual(
+      dialogLayout.viewportHeight - 15,
+    );
+    expect(dialogLayout.scrollWidth).toBeLessThanOrEqual(
+      dialogLayout.clientWidth + 1,
+    );
+    expect(dialogLayout.currentCount).toBe(1);
+    expect(sectionStripLayout.scrollWidth).toBeGreaterThan(
+      sectionStripLayout.clientWidth,
+    );
+    const sectionTargetHeights = await sectionStrip
+      .getByRole("button")
+      .evaluateAll((buttons) =>
+        buttons.map((button) => button.getBoundingClientRect().height),
+      );
+    expect(Math.min(...sectionTargetHeights)).toBeGreaterThanOrEqual(44);
+
+    const resizeHandle = dialog.getByRole("separator", {
+      name: /拖动调整大小|Drag to resize/,
+    });
+    await expect(resizeHandle).toBeHidden();
+
+    const sections = [
+      /^(账户|Account)$/,
+      /^(订阅与账单|Plan & Billing)$/,
+      /^(外观|Appearance)$/,
+      /^(通知|Notification)$/,
+    ];
+    for (const sectionName of sections) {
+      const section = dialog.getByRole("button", { name: sectionName });
+      await section.scrollIntoViewIfNeeded();
+      await section.click();
+      await expect(section).toHaveAttribute("aria-current", "page");
+      await expectNoHorizontalOverflow(
+        page,
+        dialog,
+        `settings section ${sectionName.source}`,
+      );
+    }
+
+    const closeButton = dialog.getByRole("button", {
+      name: /^(关闭|Close)$/,
+    });
+    await expect(closeButton).toBeVisible();
+    expect(
+      await closeButton.evaluate(
+        (button) => button.getBoundingClientRect().height,
+      ),
+    ).toBeGreaterThanOrEqual(44);
+    await closeButton.click();
+    await expect(dialog).toBeHidden();
+  });
+
   test("Realtime composer fits mobile width", async ({ page }) => {
     await page.goto("/#/workspace/realtime/new");
     await page.waitForLoadState("domcontentloaded");

@@ -1,4 +1,4 @@
-import { waitFor, screen } from "@testing-library/react";
+import { fireEvent, waitFor, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -18,6 +18,7 @@ vi.mock("@/providers/AuthProvider", () => ({
 
 describe("SettingsDialog", () => {
   beforeEach(() => {
+    window.localStorage.removeItem("octopus_settings_dialog_size");
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
       callback(0);
       return 1;
@@ -57,6 +58,29 @@ describe("SettingsDialog", () => {
     );
     expect(screen.getByRole("button", { name: "外观" })).not.toHaveAttribute(
       "aria-current",
+    );
+  });
+
+  it("resizes one axis at a time from the keyboard handle", () => {
+    renderWithProviders(
+      <SettingsDialog
+        open
+        defaultSection="appearance"
+        onOpenChange={vi.fn()}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "设置" });
+    const handle = screen.getByRole("separator", { name: "拖动调整大小" });
+
+    fireEvent.keyDown(handle, { key: "ArrowRight" });
+    expect(dialog).toHaveStyle({ width: "776px", height: "560px" });
+
+    fireEvent.keyDown(handle, { key: "ArrowDown" });
+    expect(dialog).toHaveStyle({ width: "776px", height: "576px" });
+    expect(window.localStorage.getItem("octopus_settings_dialog_size")).toBe(
+      JSON.stringify({ w: 776, h: 576 }),
     );
   });
 });

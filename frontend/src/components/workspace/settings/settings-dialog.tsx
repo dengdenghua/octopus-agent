@@ -601,8 +601,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
                 </span>
               ) : null}
             </div>
-            <div className="min-h-0 flex-1 overflow-auto">
-              <ul className="flex flex-wrap gap-1 pr-1 md:block md:space-y-1">
+            <div
+              data-testid="settings-section-scroll"
+              className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden pb-1 md:overflow-x-hidden md:overflow-y-auto md:pb-0"
+            >
+              <ul className="flex w-max flex-nowrap gap-1 pr-1 md:block md:w-full md:space-y-1">
                 {visibleSections.map(
                   ({ id, label, icon: Icon, disabled, disabledReason }) => {
                     const active = activeSection === id;
@@ -621,7 +624,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                           className={cn(
                             // Match sidebar NavRow: opacity + leading 2px
                             // accent bar instead of a full primary fill.
-                            "group/sec relative flex w-auto min-w-max items-center gap-2 rounded-md px-3 py-2 text-sm transition-[opacity,background-color] md:w-full md:gap-3",
+                            "group/sec relative flex min-h-[46px] w-auto min-w-max items-center gap-2 rounded-md px-3 py-2 text-sm transition-[opacity,background-color] md:min-h-0 md:w-full md:gap-3",
                             disabled
                               ? "cursor-not-allowed opacity-40"
                               : "opacity-75 hover:opacity-100 hover:bg-muted/50",
@@ -767,13 +770,15 @@ export function SettingsDialog(props: SettingsDialogProps) {
             let nextH = current.h;
             switch (e.key) {
               case "ArrowRight":
-              case "ArrowDown":
                 nextW = Math.min(maxW, current.w + step);
-                nextH = Math.min(maxH, current.h + step);
                 break;
               case "ArrowLeft":
-              case "ArrowUp":
                 nextW = Math.max(MIN_W, current.w - step);
+                break;
+              case "ArrowDown":
+                nextH = Math.min(maxH, current.h + step);
+                break;
+              case "ArrowUp":
                 nextH = Math.max(MIN_H, current.h - step);
                 break;
               case "Home":
@@ -809,7 +814,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
           }
           title={t.settings.dialog.dragToResize}
           tabIndex={0}
-          className="absolute bottom-0 right-0 z-50 flex size-5 cursor-nwse-resize items-end justify-end rounded-sm p-1 text-muted-foreground/40 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+          className="absolute bottom-0 right-0 z-50 hidden size-5 cursor-nwse-resize items-end justify-end rounded-sm p-1 text-muted-foreground/40 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 md:flex"
         >
           <svg viewBox="0 0 10 10" className="size-2.5" aria-hidden="true">
             <path
