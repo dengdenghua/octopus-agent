@@ -234,16 +234,19 @@ export function LocalAgentConnectDialog({
               const isProbing = probingId === partner.id;
               const commandRows = [
                 partner.install_command
-                  ? { label: "安装", command: partner.install_command }
-                  : null,
-                partner.native_command
-                  ? { label: "打开原生 CLI", command: partner.native_command }
+                  ? { label: "复制安装命令", command: partner.install_command }
                   : null,
                 partner.native_launch_command
-                  ? { label: "进入项目", command: partner.native_launch_command }
+                  ? {
+                      label: "复制进入项目命令",
+                      command: partner.native_launch_command,
+                    }
+                  : null,
+                partner.native_command
+                  ? { label: "复制原生命令", command: partner.native_command }
                   : null,
                 partner.verify_command
-                  ? { label: "验证", command: partner.verify_command }
+                  ? { label: "复制验证命令", command: partner.verify_command }
                   : null,
               ].filter(
                 (item): item is { label: string; command: string } =>
