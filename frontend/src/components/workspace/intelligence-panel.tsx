@@ -12,12 +12,21 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -178,10 +187,10 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-function fmtDate(value?: string | null) {
+function fmtDate(value: string | null | undefined, locale: string) {
   if (!value) return "";
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleString(locale);
 }
 
 function safeDate(value?: string | null) {
@@ -431,12 +440,26 @@ function ReportTimelineItem({
 }
 
 export function IntelligencePanel() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const queryClient = useQueryClient();
   const [goal, setGoal] = useState("");
   const [draft, setDraft] = useState<SubscriptionDraft | null>(null);
   const [builderOpen, setBuilderOpen] = useState(true);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const [subscriptionToDelete, setSubscriptionToDelete] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
+  const builderRegionId = useId();
+  const goalId = useId();
+  const draftNameId = useId();
+  const draftKeywordsId = useId();
+  const draftCadenceId = useId();
+  const draftSourcesId = useId();
+  const draftTimeId = useId();
+  const draftDayId = useId();
+  const draftTimezoneId = useId();
+  const draftInstructionsId = useId();
 
   const cadenceOptions = useMemo(
     () => [
@@ -567,7 +590,7 @@ export function IntelligencePanel() {
     onSuccess: () => {
       toast.success(t.intelligence.subscriptionDeleted);
       void queryClient.invalidateQueries({ queryKey: subscriptionsKey });
-      setSelectedReportId((current) => (current ? current : null));
+      setSubscriptionToDelete(null);
     },
     onError: () => toast.error(t.intelligence.deleteFailed),
   });
@@ -617,7 +640,21 @@ export function IntelligencePanel() {
   const enabledCount = subscriptions.filter(
     (item) => item.enabled !== false,
   ).length;
-
+  const runningSubscriptionId = runSubscription.isPending
+    ? runSubscription.variables
+    : null;
+  const updatingSubscriptionId = updateSubscription.isPending
+    ? updateSubscription.variables?.id
+    : null;
+  const deletingSubscriptionId = deleteSubscription.isPending
+    ? deleteSubscription.variables
+    : null;
+  const draftReady = Boolean(
+    draft?.topic.trim() &&
+    draft.display_name.trim() &&
+    draft.keywords.length > 0 &&
+    draft.timezone.trim(),
+  );
   useEffect(() => {
     if (loading || loadError || subscriptions.length > 0) return;
     setBuilderOpen(true);
@@ -656,16 +693,34 @@ export function IntelligencePanel() {
 
   if (loading) {
     return (
-      <div className="flex min-h-64 items-center justify-center text-muted-foreground">
+      <div
+        role="status"
+        className="flex min-h-64 items-center justify-center gap-2 text-muted-foreground"
+      >
         <Loader2Icon className="size-5 animate-spin" />
+        <span>{t.common.loading}</span>
       </div>
     );
   }
 
   if (loadError) {
     return (
-      <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
-        {t.intelligence.loadFailed}
+      <div
+        role="alert"
+        className="flex flex-col items-start justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive sm:flex-row sm:items-center"
+      >
+        <span>{t.intelligence.loadFailed}</span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            void subscriptionsQuery.refetch();
+            void reportsQuery.refetch();
+          }}
+        >
+          <RefreshCwIcon className="mr-1.5 size-3.5" />
+          {t.intelligence.retry}
+        </Button>
       </div>
     );
   }
@@ -676,6 +731,8 @@ export function IntelligencePanel() {
         <button
           type="button"
           onClick={() => setBuilderOpen((value) => !value)}
+          aria-expanded={builderOpen}
+          aria-controls={builderRegionId}
           className="flex w-full items-center justify-between gap-2 px-2.5 py-1 text-left"
         >
           <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -691,9 +748,16 @@ export function IntelligencePanel() {
         </button>
 
         {builderOpen && (
-          <div className="grid gap-2.5 border-t border-border-default px-3 pb-3 pt-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.68fr)]">
+          <div
+            id={builderRegionId}
+            className="grid gap-2.5 border-t border-border-default px-3 pb-3 pt-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.68fr)]"
+          >
             <div className="space-y-2">
+              <Label htmlFor={goalId} className="text-xs">
+                {t.intelligencePanel.goalLabel}
+              </Label>
               <Textarea
+                id={goalId}
                 value={goal}
                 onChange={(event) => setGoal(event.target.value)}
                 placeholder={t.intelligencePanel.goalPlaceholder}
@@ -704,7 +768,8 @@ export function IntelligencePanel() {
                   <button
                     key={example}
                     type="button"
-                    onClick={() => setGoal(example)}
+                    onClick={() => handleUseExample(example)}
+                    aria-label={example}
                     className="rounded-full border border-border-default bg-background/70 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
                   >
                     {example.slice(0, 18)}...
@@ -728,67 +793,41 @@ export function IntelligencePanel() {
 
             <div className="rounded-lg border border-border-default bg-muted/20 p-2.5">
               {draft ? (
-                <div className="space-y-1.5">
-                  <Input
-                    value={draft.display_name}
-                    onChange={(event) =>
-                      setDraft((current) =>
-                        current
-                          ? {
-                              ...current,
-                              display_name: event.target.value,
-                              topic: event.target.value,
-                            }
-                          : current,
-                      )
-                    }
-                    className="h-7 bg-background/75 text-sm font-medium"
-                  />
-                  <Input
-                    value={draft.keywords.join(", ")}
-                    onChange={(event) =>
-                      setDraft((current) =>
-                        current
-                          ? {
-                              ...current,
-                              keywords: event.target.value
-                                .split(/[,，]/)
-                                .map((item) => item.trim())
-                                .filter(Boolean),
-                            }
-                          : current,
-                      )
-                    }
-                    className="h-7 bg-background/75 text-xs"
-                  />
-                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                    <Select
-                      value={draft.cadence}
-                      onValueChange={(value) =>
-                        setDraft((current) =>
-                          current ? { ...current, cadence: value } : current,
-                        )
-                      }
-                    >
-                      <SelectTrigger className="h-7 w-full bg-background/75 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {cadenceOptions.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label htmlFor={draftNameId} className="text-[11px]">
+                      {t.intelligencePanel.subscriptionName}
+                    </Label>
                     <Input
-                      value={draft.sources.join(", ")}
+                      id={draftNameId}
+                      value={draft.display_name}
                       onChange={(event) =>
                         setDraft((current) =>
                           current
                             ? {
                                 ...current,
-                                sources: event.target.value
+                                display_name: event.target.value,
+                                topic: event.target.value,
+                              }
+                            : current,
+                        )
+                      }
+                      className="h-7 bg-background/75 text-sm font-medium"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={draftKeywordsId} className="text-[11px]">
+                      {t.intelligencePanel.keywords}
+                    </Label>
+                    <Input
+                      id={draftKeywordsId}
+                      value={draft.keywords.join(", ")}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                keywords: event.target.value
                                   .split(/[,，]/)
                                   .map((item) => item.trim())
                                   .filter(Boolean),
@@ -799,13 +838,69 @@ export function IntelligencePanel() {
                       className="h-7 bg-background/75 text-xs"
                     />
                   </div>
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor={draftCadenceId} className="text-[11px]">
+                        {t.intelligencePanel.cadence}
+                      </Label>
+                      <Select
+                        value={draft.cadence}
+                        onValueChange={(value) =>
+                          setDraft((current) =>
+                            current ? { ...current, cadence: value } : current,
+                          )
+                        }
+                      >
+                        <SelectTrigger
+                          id={draftCadenceId}
+                          className="h-7 w-full bg-background/75 text-xs"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {cadenceOptions.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={draftSourcesId} className="text-[11px]">
+                        {t.intelligencePanel.sources}
+                      </Label>
+                      <Input
+                        id={draftSourcesId}
+                        value={draft.sources.join(", ")}
+                        onChange={(event) =>
+                          setDraft((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  sources: event.target.value
+                                    .split(/[,，]/)
+                                    .map((item) => item.trim())
+                                    .filter(Boolean),
+                                }
+                              : current,
+                          )
+                        }
+                        className="h-7 bg-background/75 text-xs"
+                      />
+                    </div>
+                  </div>
                   <div className="grid gap-1.5 sm:grid-cols-3">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <Label
+                        htmlFor={draftTimeId}
+                        className="flex items-center gap-1 text-[10px] text-muted-foreground"
+                      >
                         <ClockIcon className="size-3" />
                         {t.intelligencePanel.runTime}
-                      </div>
+                      </Label>
                       <Input
+                        id={draftTimeId}
                         type="time"
                         value={draft.schedule_time}
                         onChange={(event) =>
@@ -826,11 +921,14 @@ export function IntelligencePanel() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <div className="text-[10px] text-muted-foreground">
+                      <Label
+                        htmlFor={draftDayId}
+                        className="text-[10px] text-muted-foreground"
+                      >
                         {draft.cadence === t.intelligencePanel.cadenceMonthly
                           ? t.intelligencePanel.monthlyDate
                           : t.intelligencePanel.weeklyDate}
-                      </div>
+                      </Label>
                       {draft.cadence === t.intelligencePanel.cadenceMonthly ? (
                         <Select
                           value={draft.schedule_day}
@@ -842,7 +940,10 @@ export function IntelligencePanel() {
                             )
                           }
                         >
-                          <SelectTrigger className="h-7 w-full bg-background/75 text-xs">
+                          <SelectTrigger
+                            id={draftDayId}
+                            className="h-7 w-full bg-background/75 text-xs"
+                          >
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -867,7 +968,10 @@ export function IntelligencePanel() {
                             draft.cadence !== t.intelligencePanel.cadenceWeekly
                           }
                         >
-                          <SelectTrigger className="h-7 w-full bg-background/75 text-xs">
+                          <SelectTrigger
+                            id={draftDayId}
+                            className="h-7 w-full bg-background/75 text-xs"
+                          >
                             <SelectValue placeholder="-" />
                           </SelectTrigger>
                           <SelectContent>
@@ -884,10 +988,14 @@ export function IntelligencePanel() {
                       )}
                     </div>
                     <div className="space-y-1">
-                      <div className="text-[10px] text-muted-foreground">
+                      <Label
+                        htmlFor={draftTimezoneId}
+                        className="text-[10px] text-muted-foreground"
+                      >
                         {t.intelligencePanel.timezone}
-                      </div>
+                      </Label>
                       <Input
+                        id={draftTimezoneId}
                         value={draft.timezone}
                         onChange={(event) =>
                           setDraft((current) =>
@@ -903,21 +1011,30 @@ export function IntelligencePanel() {
                   <div className="rounded-md border border-border-default bg-background/50 px-2.5 py-1.5 text-[11px] text-muted-foreground">
                     {t.intelligencePanel.expectedRun(scheduleText(draft, t))}
                   </div>
-                  <Textarea
-                    value={draft.instructions}
-                    onChange={(event) =>
-                      setDraft((current) =>
-                        current
-                          ? { ...current, instructions: event.target.value }
-                          : current,
-                      )
-                    }
-                    className="min-h-[4.5rem] resize-none bg-background/75 text-xs leading-5"
-                  />
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor={draftInstructionsId}
+                      className="text-[11px]"
+                    >
+                      {t.intelligencePanel.instructions}
+                    </Label>
+                    <Textarea
+                      id={draftInstructionsId}
+                      value={draft.instructions}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current
+                            ? { ...current, instructions: event.target.value }
+                            : current,
+                        )
+                      }
+                      className="min-h-[4.5rem] resize-none bg-background/75 text-xs leading-5"
+                    />
+                  </div>
                   <Button
                     size="sm"
                     className="h-7 w-full gap-1.5 rounded-lg px-3"
-                    disabled={createSubscription.isPending}
+                    disabled={!draftReady || createSubscription.isPending}
                     onClick={handleCreateDraft}
                   >
                     {createSubscription.isPending ? (
@@ -942,7 +1059,7 @@ export function IntelligencePanel() {
 
       <div className="grid gap-3.5 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
         <section className="flex min-w-0 flex-col gap-2.5">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
             <div>
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <RadarIcon className="size-4 text-primary" />
@@ -952,7 +1069,7 @@ export function IntelligencePanel() {
                 {enabledCount} {t.intelligence.enabledTopics}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
               <Button
                 variant="outline"
                 size="sm"
@@ -1024,26 +1141,8 @@ export function IntelligencePanel() {
                 return (
                   <div
                     key={item.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      const matched = reports.find(
-                        (report) =>
-                          report.topic === item.topic || report.title === title,
-                      );
-                      setSelectedReportId(matched?.id ?? null);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter" && event.key !== " ") return;
-                      event.preventDefault();
-                      const matched = reports.find(
-                        (report) =>
-                          report.topic === item.topic || report.title === title,
-                      );
-                      setSelectedReportId(matched?.id ?? null);
-                    }}
                     className={cn(
-                      "w-full cursor-pointer rounded-2xl border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                      "w-full rounded-2xl border px-3 py-2.5 transition-colors",
                       selectedReportKey &&
                         (selectedReport?.topic === item.topic ||
                           selectedReport?.title === title)
@@ -1051,53 +1150,67 @@ export function IntelligencePanel() {
                         : "border-border-default bg-card/60 hover:border-border hover:bg-card",
                     )}
                   >
-                    <div className="flex items-start gap-2.5">
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted/80 text-xs font-semibold text-foreground">
-                        {String(index + 1).padStart(2, "0")}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <div className="truncate text-sm font-medium">
-                            {title}
+                    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start">
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-start gap-2.5 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                        aria-label={t.intelligence.selectSubscription(title)}
+                        onClick={() => {
+                          const matched = reports.find(
+                            (report) =>
+                              report.topic === item.topic ||
+                              report.title === title,
+                          );
+                          setSelectedReportId(matched?.id ?? null);
+                        }}
+                      >
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted/80 text-xs font-semibold text-foreground">
+                          {String(index + 1).padStart(2, "0")}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <div className="truncate text-sm font-medium">
+                              {title}
+                            </div>
+                            <Badge
+                              variant={enabled ? "secondary" : "outline"}
+                              className="rounded-full px-2 py-0.5 text-[10px]"
+                            >
+                              {enabled
+                                ? t.intelligence.enabled
+                                : t.intelligence.disabled}
+                            </Badge>
                           </div>
-                          <Badge
-                            variant={enabled ? "secondary" : "outline"}
-                            className="rounded-full px-2 py-0.5 text-[10px]"
-                          >
-                            {enabled
-                              ? t.intelligence.enabled
-                              : t.intelligence.disabled}
-                          </Badge>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
+                            <span>
+                              {t.intelligence.keywordsPrefix}{" "}
+                              {(item.keywords?.length
+                                ? item.keywords
+                                : [item.topic]
+                              )
+                                .filter(Boolean)
+                                .join(", ")}
+                            </span>
+                            <span>{scheduleText(item, t)}</span>
+                            <span>
+                              {reportCount} {t.intelligence.reports}
+                            </span>
+                            <span>
+                              {item.last_run
+                                ? t.intelligence.lastRunPrefix(
+                                    fmtDate(item.last_run, locale),
+                                  )
+                                : t.intelligence.neverRun}
+                            </span>
+                          </div>
+                          {item.instructions && (
+                            <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-muted-foreground/80">
+                              {item.instructions}
+                            </p>
+                          )}
                         </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
-                          <span>
-                            {t.intelligence.keywordsPrefix}{" "}
-                            {(item.keywords?.length
-                              ? item.keywords
-                              : [item.topic]
-                            )
-                              .filter(Boolean)
-                              .join(", ")}
-                          </span>
-                          <span>{scheduleText(item, t)}</span>
-                          <span>
-                            {reportCount} {t.intelligence.reports}
-                          </span>
-                          <span>
-                            {item.last_run
-                              ? t.intelligence.lastRunPrefix(
-                                  fmtDate(item.last_run),
-                                )
-                              : t.intelligence.neverRun}
-                          </span>
-                        </div>
-                        {item.instructions && (
-                          <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-muted-foreground/80">
-                            {item.instructions}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1">
+                      </button>
+                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1108,8 +1221,9 @@ export function IntelligencePanel() {
                             runSubscription.mutate(item.id);
                           }}
                           title={t.intelligence.runNow}
+                          aria-label={t.intelligence.runSubscription(title)}
                         >
-                          {runSubscription.isPending ? (
+                          {runningSubscriptionId === item.id ? (
                             <Loader2Icon className="size-3.5 animate-spin" />
                           ) : (
                             <RefreshCwIcon className="size-3.5" />
@@ -1132,10 +1246,19 @@ export function IntelligencePanel() {
                               enabled: !enabled,
                             });
                           }}
+                          aria-label={
+                            enabled
+                              ? t.intelligence.disableSubscription(title)
+                              : t.intelligence.enableSubscription(title)
+                          }
                         >
-                          {enabled
-                            ? t.intelligence.enabled
-                            : t.intelligence.disabled}
+                          {updatingSubscriptionId === item.id ? (
+                            <Loader2Icon className="size-3.5 animate-spin" />
+                          ) : enabled ? (
+                            t.intelligence.enabled
+                          ) : (
+                            t.intelligence.disabled
+                          )}
                         </Button>
                         <Button
                           variant="ghost"
@@ -1144,11 +1267,18 @@ export function IntelligencePanel() {
                           disabled={deleteSubscription.isPending}
                           onClick={(event) => {
                             event.stopPropagation();
-                            deleteSubscription.mutate(item.id);
+                            setSubscriptionToDelete({ id: item.id, title });
                           }}
                           title={t.intelligence.deleteSubscription}
+                          aria-label={t.intelligence.deleteSubscriptionNamed(
+                            title,
+                          )}
                         >
-                          <Trash2Icon className="size-3.5" />
+                          {deletingSubscriptionId === item.id ? (
+                            <Loader2Icon className="size-3.5 animate-spin" />
+                          ) : (
+                            <Trash2Icon className="size-3.5" />
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -1250,7 +1380,7 @@ export function IntelligencePanel() {
                     {selectedReport.topic || t.intelligence.topicReport}
                   </span>
                   {selectedReport.created_at && (
-                    <span>{fmtDate(selectedReport.created_at)}</span>
+                    <span>{fmtDate(selectedReport.created_at, locale)}</span>
                   )}
                   {typeof selectedReport.items_analyzed === "number" && (
                     <span>
@@ -1377,6 +1507,62 @@ export function IntelligencePanel() {
           </div>
         </section>
       )}
+
+      <Dialog
+        open={subscriptionToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteSubscription.isPending) {
+            setSubscriptionToDelete(null);
+          }
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 shadow-xl sm:max-w-[360px]"
+        >
+          <DialogHeader className="gap-1 text-left">
+            <DialogTitle className="text-[15px]">
+              {t.intelligence.deleteConfirmTitle}
+            </DialogTitle>
+            <DialogDescription className="text-[12.5px] leading-5">
+              {subscriptionToDelete
+                ? t.intelligence.deleteConfirmDescription(
+                    subscriptionToDelete.title,
+                  )
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-1 flex-row justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={deleteSubscription.isPending}
+              onClick={() => setSubscriptionToDelete(null)}
+            >
+              {t.common.cancel}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={deleteSubscription.isPending}
+              onClick={() => {
+                if (subscriptionToDelete) {
+                  deleteSubscription.mutate(subscriptionToDelete.id);
+                }
+              }}
+            >
+              {deleteSubscription.isPending ? (
+                <Loader2Icon className="mr-1.5 size-3.5 animate-spin" />
+              ) : (
+                <Trash2Icon className="mr-1.5 size-3.5" />
+              )}
+              {t.common.delete}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

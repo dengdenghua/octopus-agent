@@ -4735,6 +4735,7 @@ export interface Translations {
     noReportsHint: string;
     itemsCount: (n: number) => string;
     loadFailed: string;
+    retry: string;
     subscriptionAdded: string;
     addFailed: string;
     updateFailed: string;
@@ -4753,13 +4754,26 @@ export interface Translations {
     createSubscription: string;
     draftPlaceholder: string;
     deleteSubscription: string;
+    deleteConfirmTitle: string;
+    deleteConfirmDescription: (name: string) => string;
+    selectSubscription: (name: string) => string;
+    runSubscription: (name: string) => string;
+    enableSubscription: (name: string) => string;
+    disableSubscription: (name: string) => string;
+    deleteSubscriptionNamed: (name: string) => string;
     source: string;
     web: string;
   };
 
   intelligencePanel: {
     examplePrompts: string[];
+    goalLabel: string;
     goalPlaceholder: string;
+    subscriptionName: string;
+    keywords: string;
+    cadence: string;
+    sources: string;
+    instructions: string;
     cadenceHighFrequency: string;
     cadenceDaily: string;
     cadenceWeekly: string;
