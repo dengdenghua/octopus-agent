@@ -62,6 +62,10 @@ if (!Element.prototype.scrollIntoView) {
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
   return {
+    get length() {
+      return Object.keys(store).length;
+    },
+    key: (index: number) => Object.keys(store)[index] ?? null,
     getItem: (key: string) => (key in store ? store[key] : null),
     setItem: (key: string, value: string) => {
       store[key] = String(value);

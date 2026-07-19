@@ -476,7 +476,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       onOpenChange={(open) => props.onOpenChange?.(open)}
     >
       <DialogContent
-        className="flex h-[75vh] max-h-[calc(100vh-2rem)] flex-col sm:max-w-5xl md:max-w-6xl"
+        className="flex h-[85vh] max-h-[calc(100vh-2rem)] flex-col sm:max-w-5xl md:max-w-6xl"
         style={
           size
             ? {
@@ -550,8 +550,8 @@ export function SettingsDialog(props: SettingsDialogProps) {
             </div>
           ) : null}
         </DialogHeader>
-        <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[220px_1fr] md:grid-rows-[1fr]">
-          <nav className="bg-sidebar flex min-h-0 flex-col overflow-hidden rounded-lg border p-2">
+        <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-3 md:grid-cols-[220px_1fr] md:grid-rows-[1fr]">
+          <nav className="bg-sidebar flex max-h-36 min-h-0 flex-col overflow-hidden rounded-lg border p-2 md:max-h-none">
             <div className="relative mb-2">
               <SearchIcon className="text-muted-foreground pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2" />
               <Input
@@ -574,46 +574,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
                 </Button>
               ) : null}
             </div>
-            {!normalizedSettingsQuery && (
-              <div className="mb-2 rounded-md border border-border-default bg-background/55 p-1.5">
-                <div className="px-1 pb-1 text-[10px] font-medium uppercase text-muted-foreground">
-                  {t.settings.dialog.quickAccess}
-                </div>
-                <div className="grid grid-cols-3 gap-1">
-                  {[
-                    {
-                      id: "models" as SettingsSection,
-                      label: t.settings.model.title,
-                      icon: CpuIcon,
-                    },
-                    {
-                      id: "automation" as SettingsSection,
-                      label: t.settings.sections.automation,
-                      icon: ZapIcon,
-                    },
-                    {
-                      id: "privacy" as SettingsSection,
-                      label: t.settings.sections.privacy,
-                      icon: ShieldIcon,
-                    },
-                  ].map(({ id, label, icon: Icon }) => (
-                    <button
-                      key={id}
-                      type="button"
-                      title={label}
-                      aria-label={label}
-                      onClick={() => setActiveSection(id)}
-                      className={cn(
-                        "flex h-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
-                        activeSection === id && "bg-muted text-foreground",
-                      )}
-                    >
-                      <Icon className="size-4" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
             <div className="text-muted-foreground mb-1 flex items-center justify-between px-1.5 text-[10px] font-medium uppercase">
               <span>{t.settings.dialog.sectionsLabel}</span>
               {normalizedSettingsQuery ? (
@@ -622,13 +582,13 @@ export function SettingsDialog(props: SettingsDialogProps) {
                 </span>
               ) : null}
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <ul className="space-y-1 pr-1">
+            <div className="min-h-0 flex-1 overflow-auto">
+              <ul className="flex flex-wrap gap-1 pr-1 md:block md:space-y-1">
                 {visibleSections.map(
                   ({ id, label, icon: Icon, disabled, disabledReason }) => {
                     const active = activeSection === id;
                     return (
-                      <li key={id}>
+                      <li key={id} className="shrink-0 md:w-full">
                         <button
                           type="button"
                           onClick={() => {
@@ -641,7 +601,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                           className={cn(
                             // Match sidebar NavRow: opacity + leading 2px
                             // accent bar instead of a full primary fill.
-                            "group/sec relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-[opacity,background-color]",
+                            "group/sec relative flex w-auto min-w-max items-center gap-2 rounded-md px-3 py-2 text-sm transition-[opacity,background-color] md:w-full md:gap-3",
                             disabled
                               ? "cursor-not-allowed opacity-40"
                               : "opacity-75 hover:opacity-100 hover:bg-muted/50",

@@ -12,6 +12,12 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithProviders } from "@/test/harness";
+import {
+  getLocalSettings,
+  getThreadModelName,
+  saveLocalSettings,
+  saveThreadModelName,
+} from "@/core/settings/local";
 
 import ModelSettingsPage from "./model-settings-page";
 
@@ -45,6 +51,7 @@ vi.mock("./mix-settings-section", () => ({
 const fetchMock = vi.fn();
 
 beforeEach(() => {
+  localStorage.clear();
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   // The default model name is loaded from a /api/config call on mount.
@@ -371,7 +378,7 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
       expect(screen.getByText("Disposable")).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole("button", { name: "删除" }));
+    await user.click(screen.getByRole("button", { name: "删除: Disposable" }));
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: "删除" }));
 
@@ -387,6 +394,80 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
       ).toBe(true);
     });
     await waitFor(() => {
+      expect(screen.queryByText("Disposable")).not.toBeInTheDocument();
+    });
+  });
+
+  it("switches the default and clears stale thread overrides when deleting the current model", async () => {
+    const user = userEvent.setup();
+    saveLocalSettings({
+      ...getLocalSettings(),
+      context: {
+        ...getLocalSettings().context,
+        model_name: "disposable",
+      },
+    });
+    saveThreadModelName("legacy-thread", "disposable");
+    let models: unknown[] = [
+      {
+        id: "disposable",
+        name: "disposable",
+        display_name: "Disposable",
+        models: ["gpt-4o-mini"],
+        provider: "openai",
+        base_url: "https://api.openai.com/v1",
+        has_api_key: true,
+      },
+      {
+        id: "backup",
+        name: "backup",
+        display_name: "Backup",
+        models: ["gpt-4.1-mini"],
+        provider: "openai",
+        base_url: "https://api.openai.com/v1",
+        has_api_key: true,
+      },
+    ];
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("/api/config/custom-models/compat-diagnostics")) {
+          return jsonOk({ diagnostics: [] });
+        }
+        if (url.includes("/api/config/openai-compat-profiles")) {
+          return jsonOk({ diagnostics: [] });
+        }
+        if (
+          url.includes("/api/config/custom-models/disposable") &&
+          init?.method === "DELETE"
+        ) {
+          models = models.filter(
+            (model) => (model as { name?: string }).name !== "disposable",
+          );
+          return jsonOk({ ok: true, removed: true });
+        }
+        if (url.includes("/api/config/custom-models")) {
+          return jsonOk({ models });
+        }
+        return jsonOk({ default: "", models: [] });
+      },
+    );
+
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+    await screen.findByText("Disposable");
+
+    await user.click(screen.getByRole("button", { name: "删除: Disposable" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText(
+        "这是当前默认模型。删除后将自动切换到“Backup”。",
+      ),
+    ).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "删除" }));
+
+    await waitFor(() => {
+      expect(getLocalSettings().context.model_name).toBe("backup");
+      expect(getThreadModelName("legacy-thread")).toBeUndefined();
       expect(screen.queryByText("Disposable")).not.toBeInTheDocument();
     });
   });

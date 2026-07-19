@@ -1175,108 +1175,114 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   }, [sidebarConversationThreads, ungroupedProjectThreads]);
 
   return (
-    <Sidebar
-      variant="sidebar"
-      collapsible="icon"
-      className={cn(
-        materialTheme === "liquid"
-          ? "border-r-0 bg-transparent"
-          : "border-r bg-sidebar",
-      )}
-      {...props}
-    >
-      {/* Implementation note. */}
-      <SidebarHeader className="h-11 shrink-0 border-b border-white/40 bg-transparent p-0 pl-[10px] pr-2 py-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:px-0 dark:border-white/10">
-        <div className="grid h-full w-full grid-cols-[auto_minmax(0,1fr)] items-center group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
-          <WorkspaceSurfaceHeader
-            active={browserSurfaceActive ? "browser" : "agent"}
-            className="group-data-[collapsible=icon]:hidden"
-          />
-          <div className="flex shrink-0 items-center justify-self-end">
-            <CollapseToggle compact />
+    <>
+      <Sidebar
+        variant="sidebar"
+        collapsible="icon"
+        className={cn(
+          materialTheme === "liquid"
+            ? "border-r-0 bg-transparent"
+            : "border-r bg-sidebar",
+        )}
+        {...props}
+      >
+        {/* Implementation note. */}
+        <SidebarHeader className="h-11 shrink-0 border-b border-white/40 bg-transparent p-0 pl-[10px] pr-2 py-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:px-0 dark:border-white/10">
+          <div className="grid h-full w-full grid-cols-[auto_minmax(0,1fr)] items-center group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+            <WorkspaceSurfaceHeader
+              active={browserSurfaceActive ? "browser" : "agent"}
+              className="group-data-[collapsible=icon]:hidden"
+            />
+            <div className="flex shrink-0 items-center justify-self-end">
+              <CollapseToggle compact />
+            </div>
           </div>
-        </div>
-      </SidebarHeader>
+        </SidebarHeader>
 
-      {/* Tight body: px-1.5 py-1.5 instead of default p-2/px-2 so groups
+        {/* Tight body: px-1.5 py-1.5 instead of default p-2/px-2 so groups
           sit closer to the header and we win a few rows of vertical
           space back. */}
-      <SidebarContent className="gap-1.5 px-2.5 py-2 group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:py-1.5">
-        <SidebarGroup className="p-0 px-1 pb-0.5 group-data-[collapsible=icon]:px-0">
-          <SurfaceCreateButton
-            agentId={activeAgentId}
-            workspacePath={activeTaskWorkspacePath}
-          />
-        </SidebarGroup>
-        {/* Unified sidebar — no more surface branching. All navigation
-            items are always visible regardless of the current route. */}
-        <NavSection items={chatCapabilityItems} pathname={pathname} />
-        <LocalDatabaseSection
-          title={resolveLabel("navDatabase")}
-          items={nasLibraryItems}
-          pathname={pathname}
-          search={search}
-        />
-        {fileExplorerTarget ? (
-          <ProjectFileExplorerView
-            target={fileExplorerTarget}
-            fallbackWorkDir={activeWorkDir}
-            onBack={() => setFileExplorerTarget(null)}
-          />
-        ) : (
-          <>
-            <ProjectsSection
-              groups={projectOrder}
-              byProject={byProject}
-              pathname={sidebarPathname}
-              draftOpen={projectDraftOpen}
-              deletableProjects={deletableProjects}
-              deletingProject={deletingProject}
-              groupingEnabled={projectGroupingEnabled}
-              runStatusByHref={runStatusByHref}
-              onDraftCommit={saveProjectName}
-              onDraftCancel={() => setProjectDraftOpen(false)}
-              onDeleteProject={deleteProject}
-              onToggleGrouping={toggleProjectGrouping}
-              onOpenFiles={openThreadFiles}
-            />
-            <ChatsSection
-              threads={allHistoryThreads}
-              pathname={sidebarPathname}
-              label={t.sidebar.sectionChats}
+        <SidebarContent className="gap-1.5 px-2.5 py-2 group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:py-1.5">
+          <SidebarGroup className="p-0 px-1 pb-0.5 group-data-[collapsible=icon]:px-0">
+            <SurfaceCreateButton
               agentId={activeAgentId}
               workspacePath={activeTaskWorkspacePath}
-              runStatusByHref={runStatusByHref}
             />
-          </>
-        )}
-        {/* Hidden directory input — used as the Safari/Firefox fallback
+          </SidebarGroup>
+          {/* Unified sidebar — no more surface branching. All navigation
+            items are always visible regardless of the current route. */}
+          <NavSection items={chatCapabilityItems} pathname={pathname} />
+          <LocalDatabaseSection
+            title={resolveLabel("navDatabase")}
+            items={nasLibraryItems}
+            pathname={pathname}
+            search={search}
+          />
+          {fileExplorerTarget ? (
+            <ProjectFileExplorerView
+              target={fileExplorerTarget}
+              fallbackWorkDir={activeWorkDir}
+              onBack={() => setFileExplorerTarget(null)}
+            />
+          ) : (
+            <>
+              <ProjectsSection
+                groups={projectOrder}
+                byProject={byProject}
+                pathname={sidebarPathname}
+                draftOpen={projectDraftOpen}
+                deletableProjects={deletableProjects}
+                deletingProject={deletingProject}
+                groupingEnabled={projectGroupingEnabled}
+                runStatusByHref={runStatusByHref}
+                onDraftCommit={saveProjectName}
+                onDraftCancel={() => setProjectDraftOpen(false)}
+                onDeleteProject={deleteProject}
+                onToggleGrouping={toggleProjectGrouping}
+                onOpenFiles={openThreadFiles}
+              />
+              <ChatsSection
+                threads={allHistoryThreads}
+                pathname={sidebarPathname}
+                label={t.sidebar.sectionChats}
+                agentId={activeAgentId}
+                workspacePath={activeTaskWorkspacePath}
+                runStatusByHref={runStatusByHref}
+              />
+            </>
+          )}
+          {/* Hidden directory input — used as the Safari/Firefox fallback
             when showDirectoryPicker is unavailable. webkitdirectory
             forces a folder selection instead of a single file. */}
-        <input
-          ref={folderInputRef}
-          type="file"
-          // @ts-expect-error — non-standard but supported across Chromium/WebKit
-          webkitdirectory=""
-          directory=""
-          multiple
-          hidden
-          tabIndex={-1}
-          aria-hidden="true"
-          onChange={onFolderInputChange}
-        />
-      </SidebarContent>
+          <input
+            ref={folderInputRef}
+            type="file"
+            // @ts-expect-error — non-standard but supported across Chromium/WebKit
+            webkitdirectory=""
+            directory=""
+            multiple
+            hidden
+            tabIndex={-1}
+            aria-hidden="true"
+            onChange={onFolderInputChange}
+          />
+        </SidebarContent>
 
-      <SidebarFooter className="border-t border-border-subtle p-1.5">
-        <AgentFooter />
-      </SidebarFooter>
-      <SidebarRail />
+        <SidebarFooter className="border-t border-border-subtle p-1.5">
+          <AgentFooter />
+        </SidebarFooter>
+        <SidebarRail />
+      </Sidebar>
+      {/* Keep the settings host outside the responsive Sidebar sheet.
+          Radix unmounts a closed mobile SheetContent, which previously also
+          unmounted this dialog and made every narrow-screen settings event a
+          no-op. */}
       <SettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         defaultSection={settingsDefaultSection}
       />
-    </Sidebar>
+    </>
   );
 }
 

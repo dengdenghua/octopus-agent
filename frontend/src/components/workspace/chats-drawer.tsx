@@ -2,10 +2,10 @@ import { useCallback, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import {
-  ArrowUpDownIcon,
   MessageSquareIcon,
   MessageSquarePlusIcon,
   SearchIcon,
+  SettingsIcon,
   Trash2Icon,
 } from "lucide-react";
 
@@ -149,6 +149,16 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
     });
   }, [onOpenChange, pathname, search, threads]);
 
+  const openSettings = useCallback(() => {
+    onOpenChange(false);
+    // Let the sheet release its modal focus/aria guards before opening the
+    // settings dialog. Opening both in the same event turn causes Radix to
+    // immediately dismiss the second surface on narrow screens.
+    window.setTimeout(() => {
+      window.dispatchEvent(new Event("octopus:open-settings"));
+    }, 0);
+  }, [onOpenChange]);
+
   const handleDelete = useCallback(
     (thread: AgentThread) => {
       if (!window.confirm(t.sidebar.confirmDeleteThread(deriveTitle(thread)))) {
@@ -285,11 +295,15 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
           )}
         </div>
 
-        <div className="border-t border-border-subtle px-4 py-2 text-[10.5px] text-muted-foreground/55">
-          <span className="flex items-center gap-1">
-            <ArrowUpDownIcon className="size-2.5" />
-            {t.sidebar.actionSort}
-          </span>
+        <div className="border-t border-border-subtle p-2">
+          <button
+            type="button"
+            onClick={openSettings}
+            className="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          >
+            <SettingsIcon className="size-4" />
+            {t.common.settings}
+          </button>
         </div>
       </SheetContent>
     </Sheet>

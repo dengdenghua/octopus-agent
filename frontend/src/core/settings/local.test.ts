@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { getLocalSettings } from "./local";
+import {
+  clearThreadModelReferences,
+  getLocalSettings,
+  getThreadModelName,
+  saveThreadModelName,
+} from "./local";
 
 const LOCAL_SETTINGS_KEY = "octopus.local-settings";
 
@@ -24,5 +29,16 @@ describe("local settings defaults", () => {
     );
 
     expect(getLocalSettings().context.mode).toBe("react");
+  });
+
+  it("clears only thread overrides that reference a deleted model", () => {
+    saveThreadModelName("thread-a", "removed-model");
+    saveThreadModelName("thread-b", "kept-model");
+    saveThreadModelName("thread-c", "removed-model");
+
+    expect(clearThreadModelReferences("removed-model")).toBe(2);
+    expect(getThreadModelName("thread-a")).toBeUndefined();
+    expect(getThreadModelName("thread-b")).toBe("kept-model");
+    expect(getThreadModelName("thread-c")).toBeUndefined();
   });
 });

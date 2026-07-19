@@ -32,7 +32,11 @@ import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { useAuth } from "@/providers/AuthProvider";
-import { getLocalSettings, saveLocalSettings } from "@/core/settings/local";
+import {
+  clearThreadModelReferences,
+  getLocalSettings,
+  saveLocalSettings,
+} from "@/core/settings/local";
 import { registerPageAgentCapability } from "@/core/page-agent-bridge";
 import { ModelCookbook } from "@/components/workspace/model-cookbook";
 
@@ -496,6 +500,10 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     diagnoseGateway: string;
     advancedTitle: string;
     advancedSubtitle: string;
+    compatDetails: string;
+    deletingDefault: (replacement: string | null) => string;
+    deletedAndSwitched: (replacement: string) => string;
+    deletedAndReset: string;
   }
 > = {
   zh: {
@@ -515,6 +523,14 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     advancedTitle: "高级能力与兼容诊断",
     advancedSubtitle:
       "Cookbook、Octopus Mix 和 OpenAI-compatible 矩阵偏专家向，默认收在这里，避免干扰日常配置。",
+    compatDetails: "查看兼容处理规则",
+    deletingDefault: (replacement) =>
+      replacement
+        ? `这是当前默认模型。删除后将自动切换到“${replacement}”。`
+        : "这是当前默认模型。删除后将恢复为自动选择可用模型。",
+    deletedAndSwitched: (replacement) =>
+      `模型已删除，默认模型已切换到“${replacement}”。`,
+    deletedAndReset: "模型已删除，默认模型已恢复为自动选择。",
   },
   en: {
     overviewTitle: "Model setup overview",
@@ -533,6 +549,15 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     advancedTitle: "Advanced capabilities and diagnostics",
     advancedSubtitle:
       "Cookbook, Octopus Mix, and the OpenAI-compatible matrix are expert tools, so they stay grouped away from everyday setup.",
+    compatDetails: "View compatibility rules",
+    deletingDefault: (replacement) =>
+      replacement
+        ? `This is the current default. Deleting it will switch the default to “${replacement}”.`
+        : "This is the current default. Deleting it will restore automatic model selection.",
+    deletedAndSwitched: (replacement) =>
+      `Model deleted. The default is now “${replacement}”.`,
+    deletedAndReset:
+      "Model deleted. The default has returned to automatic selection.",
   },
   ja: {
     overviewTitle: "モデル設定の概要",
@@ -551,6 +576,14 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     advancedTitle: "高度な機能と互換診断",
     advancedSubtitle:
       "Cookbook、Octopus Mix、OpenAI 互換マトリクスは上級者向けなので、日常設定とは分けています。",
+    compatDetails: "互換処理ルールを表示",
+    deletingDefault: (replacement) =>
+      replacement
+        ? `現在の既定モデルです。削除後は「${replacement}」へ自動的に切り替わります。`
+        : "現在の既定モデルです。削除後は利用可能なモデルの自動選択に戻ります。",
+    deletedAndSwitched: (replacement) =>
+      `モデルを削除し、既定モデルを「${replacement}」に切り替えました。`,
+    deletedAndReset: "モデルを削除し、既定モデルを自動選択に戻しました。",
   },
   ko: {
     overviewTitle: "모델 설정 개요",
@@ -569,6 +602,14 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     advancedTitle: "고급 기능 및 호환성 진단",
     advancedSubtitle:
       "Cookbook, Octopus Mix, OpenAI 호환 매트릭스는 전문가용 도구이므로 일반 설정과 분리했습니다.",
+    compatDetails: "호환 처리 규칙 보기",
+    deletingDefault: (replacement) =>
+      replacement
+        ? `현재 기본 모델입니다. 삭제하면 기본 모델이 “${replacement}”(으)로 자동 전환됩니다.`
+        : "현재 기본 모델입니다. 삭제하면 사용 가능한 모델 자동 선택으로 돌아갑니다.",
+    deletedAndSwitched: (replacement) =>
+      `모델을 삭제했고 기본 모델을 “${replacement}”(으)로 전환했습니다.`,
+    deletedAndReset: "모델을 삭제했고 기본 모델을 자동 선택으로 되돌렸습니다.",
   },
 };
 
@@ -631,7 +672,7 @@ function ModelSettingsOverview({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-2 md:grid-cols-3">
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
         <div className="rounded-xl border border-border bg-background/65 p-3">
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             {copy.currentDefault}
@@ -848,6 +889,30 @@ export default function ModelSettingsPage() {
 
   const [deletingModel, setDeletingModel] = useState(false);
 
+  const reconcileDeletedModel = useCallback(
+    (name: string) => {
+      clearThreadModelReferences(name);
+      const settings = getLocalSettings();
+      if (settings.context.model_name !== name) {
+        setModels((current) => current.filter((model) => model.name !== name));
+        return null;
+      }
+
+      const replacement =
+        models.find((model) => model.name !== name)?.name ?? "";
+      saveLocalSettings({
+        ...settings,
+        context: {
+          ...settings.context,
+          model_name: replacement,
+        },
+      });
+      setModels((current) => current.filter((model) => model.name !== name));
+      return replacement;
+    },
+    [models],
+  );
+
   const doDeleteModel = async (name: string) => {
     setDeletingModel(true);
     try {
@@ -862,12 +927,21 @@ export default function ModelSettingsPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `Delete failed: ${res.status}`);
       }
-      toast.success(t.settings.model.deleteSuccess);
+      const replacement = reconcileDeletedModel(name);
+      if (replacement === null) {
+        toast.success(t.settings.model.deleteSuccess);
+      } else if (replacement) {
+        toast.success(pageCopy.deletedAndSwitched(replacement));
+      } else {
+        toast.success(pageCopy.deletedAndReset);
+      }
       await fetchModels();
+      return true;
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t.settings.model.deleteFailed,
       );
+      return false;
     } finally {
       setDeletingModel(false);
     }
@@ -1092,8 +1166,13 @@ export default function ModelSettingsPage() {
             const data = await res.json().catch(() => ({}));
             throw new Error(data.detail || `Delete failed: ${res.status}`);
           }
+          const replacement = reconcileDeletedModel(name);
           await fetchModels();
-          return { deleted: name };
+          return {
+            deleted: name,
+            defaultModelName:
+              replacement === null ? defaultModelName : replacement,
+          };
         },
       }),
     ];
@@ -1108,7 +1187,18 @@ export default function ModelSettingsPage() {
     fetchModels,
     gatewayStatus,
     models,
+    reconcileDeletedModel,
   ]);
+
+  const deletingCurrentDefault =
+    modelToDelete !== null && modelToDelete === defaultModelName;
+  const deleteReplacementModel = deletingCurrentDefault
+    ? models.find((model) => model.name !== modelToDelete)
+    : undefined;
+  const deleteReplacement =
+    deleteReplacementModel?.display_name ??
+    deleteReplacementModel?.name ??
+    null;
 
   return (
     <div className="space-y-8">
@@ -1155,15 +1245,20 @@ export default function ModelSettingsPage() {
               {models.map((m) => {
                 const list = Array.isArray(m.models) ? m.models : [];
                 const diagnostic = compatDiagnostics.byId[m.name];
+                const displayName = m.display_name || m.name;
+                const isDefault = defaultModelName === m.name;
                 return (
                   <div
                     key={m.name}
-                    className="flex items-center justify-between gap-4 px-5 py-4"
+                    className={cn(
+                      "flex flex-col items-stretch justify-between gap-4 px-4 py-4 sm:flex-row sm:items-start sm:px-5",
+                      isDefault && "bg-emerald-500/[0.035]",
+                    )}
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <div className="truncate text-sm font-medium">
-                          {m.display_name || m.name}
+                          {displayName}
                         </div>
                         <span
                           className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground dark:border-muted-foreground/40 dark:bg-muted-foreground/10 dark:text-muted-foreground"
@@ -1201,8 +1296,8 @@ export default function ModelSettingsPage() {
                         status={compatDiagnostics.status}
                       />
                     </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      {defaultModelName === m.name ? (
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 sm:max-w-64">
+                      {isDefault ? (
                         <span className="inline-flex items-center rounded-lg bg-green-100 px-3 py-1 text-xs font-medium text-green-700 dark:bg-green-500/20 dark:text-green-400">
                           {t.settings.model.systemDefault}
                         </span>
@@ -1210,6 +1305,7 @@ export default function ModelSettingsPage() {
                         <button
                           className="text-xs font-medium text-muted-foreground hover:text-foreground"
                           onClick={() => handleSetDefault(m.name)}
+                          aria-label={`${t.settings.model.setAsDefault}: ${displayName}`}
                         >
                           {t.settings.model.setAsDefault}
                         </button>
@@ -1221,12 +1317,14 @@ export default function ModelSettingsPage() {
                             editingModel === m.name ? null : m.name,
                           )
                         }
+                        aria-label={`${t.common.edit}: ${displayName}`}
                       >
                         {t.common.edit}
                       </button>
                       <button
                         className="text-xs font-medium text-orange-500 hover:text-orange-600"
                         onClick={() => handleDelete(m.name)}
+                        aria-label={`${t.common.delete}: ${displayName}`}
                       >
                         {t.common.delete}
                       </button>
@@ -1390,7 +1488,7 @@ export default function ModelSettingsPage() {
       <Dialog
         open={modelToDelete !== null}
         onOpenChange={(nextOpen) => {
-          if (!nextOpen) setModelToDelete(null);
+          if (!nextOpen && !deletingModel) setModelToDelete(null);
         }}
       >
         <DialogContent
@@ -1406,6 +1504,12 @@ export default function ModelSettingsPage() {
                 ? t.settings.model.deleteConfirm(modelToDelete)
                 : ""}
             </DialogDescription>
+            {deletingCurrentDefault && (
+              <div className="mt-2 flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-[12px] leading-5 text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300">
+                <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
+                <span>{pageCopy.deletingDefault(deleteReplacement)}</span>
+              </div>
+            )}
           </DialogHeader>
           <DialogFooter className="mt-1 flex-row justify-end gap-2">
             <button
@@ -1419,11 +1523,11 @@ export default function ModelSettingsPage() {
             <button
               type="button"
               disabled={deletingModel}
-              onClick={() => {
+              onClick={async () => {
                 if (!modelToDelete) return;
                 const target = modelToDelete;
-                setModelToDelete(null);
-                void doDeleteModel(target);
+                const deleted = await doDeleteModel(target);
+                if (deleted) setModelToDelete(null);
               }}
               className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-destructive/25 bg-destructive/[0.07] px-3 text-[12.5px] font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
             >
@@ -1558,7 +1662,8 @@ function CompatDiagnosticSummary({
   diagnostic?: CompatDiagnostic;
   status: CompatDiagnosticState["status"];
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const pageCopy = modelSettingsPageCopy(locale);
 
   if (status === "loading" && !diagnostic) {
     return (
@@ -1611,6 +1716,13 @@ function CompatDiagnosticSummary({
       ? `${scoreRange.min}`
       : `${scoreRange.min}-${scoreRange.max}`
     : null;
+  const hasDetails =
+    removed.length > 0 ||
+    changed.length > 0 ||
+    added.length > 0 ||
+    normalizationHints.length > 0 ||
+    compatibilityNotes.length > 0 ||
+    retryReasons.length > 0;
 
   return (
     <div className="mt-3 space-y-2 border-l border-border pl-3 text-[11px] text-muted-foreground">
@@ -1638,57 +1750,66 @@ function CompatDiagnosticSummary({
           </span>
         )}
       </div>
-      {(removed.length > 0 || changed.length > 0 || added.length > 0) && (
-        <div className="flex flex-wrap gap-x-3 gap-y-1">
-          {removed.length > 0 && (
-            <span title={removed.join(", ")}>
-              {t.settings.model.compatDiagnostics.removedFields(
-                removed.slice(0, 5).join(", "),
-                removed.length,
-              )}
-            </span>
-          )}
-          {changed.length > 0 && (
-            <span title={changed.join(", ")}>
-              {t.settings.model.compatDiagnostics.changedFields(
-                changed.slice(0, 5).join(", "),
-                changed.length,
-              )}
-            </span>
-          )}
-          {added.length > 0 && (
-            <span title={added.join(", ")}>
-              {t.settings.model.compatDiagnostics.addedFields(
-                added.slice(0, 5).join(", "),
-                added.length,
-              )}
-            </span>
-          )}
-        </div>
-      )}
-      {normalizationHints.length > 0 && (
-        <div title={normalizationHints.join(", ")}>
-          {t.settings.model.compatDiagnostics.normalizationHints(
-            normalizationHints.slice(0, 5).join(", "),
-            normalizationHints.length,
-          )}
-        </div>
-      )}
-      {compatibilityNotes.length > 0 && (
-        <div title={compatibilityNotes.join("; ")}>
-          {t.settings.model.compatDiagnostics.compatibilityNotes(
-            compatibilityNotes.slice(0, 2).join("; "),
-            compatibilityNotes.length,
-          )}
-        </div>
-      )}
-      {retryReasons.length > 0 && (
-        <div title={retryReasons.join(", ")}>
-          {t.settings.model.compatDiagnostics.retryReasons(
-            retryReasons.slice(0, 4).join(", "),
-            retryReasons.length,
-          )}
-        </div>
+      {hasDetails && (
+        <details className="group/compat">
+          <summary className="w-fit cursor-pointer select-none rounded px-1 py-0.5 font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+            {pageCopy.compatDetails}
+          </summary>
+          <div className="mt-2 space-y-1.5 rounded-md bg-muted/35 p-2.5">
+            {(removed.length > 0 || changed.length > 0 || added.length > 0) && (
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                {removed.length > 0 && (
+                  <span title={removed.join(", ")}>
+                    {t.settings.model.compatDiagnostics.removedFields(
+                      removed.slice(0, 5).join(", "),
+                      removed.length,
+                    )}
+                  </span>
+                )}
+                {changed.length > 0 && (
+                  <span title={changed.join(", ")}>
+                    {t.settings.model.compatDiagnostics.changedFields(
+                      changed.slice(0, 5).join(", "),
+                      changed.length,
+                    )}
+                  </span>
+                )}
+                {added.length > 0 && (
+                  <span title={added.join(", ")}>
+                    {t.settings.model.compatDiagnostics.addedFields(
+                      added.slice(0, 5).join(", "),
+                      added.length,
+                    )}
+                  </span>
+                )}
+              </div>
+            )}
+            {normalizationHints.length > 0 && (
+              <div title={normalizationHints.join(", ")}>
+                {t.settings.model.compatDiagnostics.normalizationHints(
+                  normalizationHints.slice(0, 5).join(", "),
+                  normalizationHints.length,
+                )}
+              </div>
+            )}
+            {compatibilityNotes.length > 0 && (
+              <div title={compatibilityNotes.join("; ")}>
+                {t.settings.model.compatDiagnostics.compatibilityNotes(
+                  compatibilityNotes.slice(0, 2).join("; "),
+                  compatibilityNotes.length,
+                )}
+              </div>
+            )}
+            {retryReasons.length > 0 && (
+              <div title={retryReasons.join(", ")}>
+                {t.settings.model.compatDiagnostics.retryReasons(
+                  retryReasons.slice(0, 4).join(", "),
+                  retryReasons.length,
+                )}
+              </div>
+            )}
+          </div>
+        </details>
       )}
     </div>
   );

@@ -121,6 +121,34 @@ export function saveThreadModelName(
   localStorage.setItem(key, modelName);
 }
 
+/**
+ * Remove per-thread selections that point at a model which no longer exists.
+ *
+ * Custom models can be deleted from Settings while older threads still carry
+ * a model override. Leaving those keys behind makes the picker appear to
+ * select a deleted model when the thread is opened again.
+ */
+export function clearThreadModelReferences(modelName: string): number {
+  if (!isBrowser() || !modelName) {
+    return 0;
+  }
+
+  const keysToRemove: string[] = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (
+      key?.startsWith(THREAD_MODEL_KEY_PREFIX) &&
+      localStorage.getItem(key) === modelName
+    ) {
+      keysToRemove.push(key);
+    }
+  }
+  for (const key of keysToRemove) {
+    localStorage.removeItem(key);
+  }
+  return keysToRemove.length;
+}
+
 function applyThreadModelOverride(
   settings: LocalSettings,
   threadId?: string,
