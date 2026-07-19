@@ -370,6 +370,44 @@ def redis_check(client: Any, *, name: str = "redis") -> HealthCheck:
     return HealthCheck(name=name, check=_check, kind="readiness")
 
 
+def effect_store_check(
+    store: Any,
+    *,
+    require_distributed: bool = False,
+    name: str = "tool_effects",
+) -> HealthCheck:
+    """Verify the durable receipt plane and its deployment scope."""
+
+    def _check() -> HealthStatus:
+        backend = str(getattr(store, "backend_name", type(store).__name__))
+        shared = bool(getattr(store, "shared_across_hosts", False))
+        metadata = {"backend": backend, "shared_across_hosts": shared}
+        if require_distributed and not shared:
+            return HealthStatus(
+                name=name,
+                status="fail",
+                detail="cluster mode requires a cross-host tool-effect backend",
+                metadata=metadata,
+            )
+        try:
+            ok = bool(store.ping())
+        except Exception as exc:  # noqa: BLE001 - readiness must report arbitrary backend failures
+            return HealthStatus(
+                name=name,
+                status="fail",
+                detail=f"{type(exc).__name__}: {exc}",
+                metadata=metadata,
+            )
+        return HealthStatus(
+            name=name,
+            status="pass" if ok else "fail",
+            detail="" if ok else "receipt backend ping returned falsy",
+            metadata=metadata,
+        )
+
+    return HealthCheck(name=name, check=_check, kind="readiness", critical=True)
+
+
 def journal_check(journal: Any, *, name: str = "journal") -> HealthCheck:
     """Pass if the journal's ``read_all()`` succeeds without raising."""
 
@@ -484,6 +522,7 @@ __all__ = [
     "HealthStatusValue",
     "create_probe_router",
     "disk_check",
+    "effect_store_check",
     "journal_check",
     "memory_check",
     "redis_check",

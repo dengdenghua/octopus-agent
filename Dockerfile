@@ -53,7 +53,7 @@ COPY tools/ ./tools/
 
 # --prefix=/install 将依赖安装到独立目录 · 运行时阶段只复制此目录
 RUN pip install --prefix=/install --no-warn-script-location \
-    ".[serve,tracing,web]"
+    ".[serve,tracing,web,hearts-redis]"
 
 
 # ═══════════════════════════════════════════════════════════

@@ -787,6 +787,7 @@ def create_app(
             HealthCheck,
             HealthRegistry,
             create_probe_router,
+            effect_store_check,
             journal_check,
         )
         from runtime.platform.observability.metrics import get_registry as _mreg
@@ -801,6 +802,22 @@ def create_app(
         )
         if state.journal is not None:
             _hreg.register(journal_check(state.journal))
+        if stack is not None and getattr(stack, "executor", None) is not None:
+            _effect_store = stack.executor.effect_store
+            if _effect_store is not None:
+                _require_distributed = bool(
+                    getattr(
+                        getattr(stack.config, "tool_effects", None),
+                        "require_distributed",
+                        False,
+                    )
+                )
+                _hreg.register(
+                    effect_store_check(
+                        _effect_store,
+                        require_distributed=_require_distributed,
+                    )
+                )
         app.include_router(create_probe_router(_hreg))
         # Stash on app.state so test clients / operators can probe it
         # programmatically and so other routers can register their

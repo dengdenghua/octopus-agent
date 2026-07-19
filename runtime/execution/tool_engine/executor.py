@@ -28,7 +28,7 @@ from runtime.execution.tool_engine.effect_receipts import (
     indeterminate_step,
     is_side_effecting,
 )
-from runtime.execution.tool_engine.effect_store import SQLiteEffectStore
+from runtime.execution.tool_engine.effect_store import EffectStore, SQLiteEffectStore
 from runtime.execution.tool_engine.skill_gate import (
     antigen_for,
     canonical_tool_path,
@@ -509,10 +509,14 @@ class ToolExecutor:
         hooks: HookManager | None = None,
         budget_tracker: Any = None,
         effect_store_path: str | Path | None = None,
+        effect_store: EffectStore | None = None,
     ) -> None:
+        if effect_store_path is not None and effect_store is not None:
+            raise ValueError("effect_store_path and effect_store are mutually exclusive")
         self.registry = registry
         self.immunity = immunity
         self.journal = journal if journal is not None else InMemoryJournal()
+        self._effect_store_override = effect_store
         self._effect_store_path = (
             Path(effect_store_path).expanduser().resolve(strict=False)
             if effect_store_path is not None
@@ -538,15 +542,24 @@ class ToolExecutor:
             journal_path = getattr(self.journal, "_path", None)
             if isinstance(journal_path, Path):
                 store_path = journal_path.with_suffix(journal_path.suffix + ".effects.sqlite3")
-        store = SQLiteEffectStore(store_path) if store_path is not None else None
+        store = self._effect_store_override
+        if store is None and store_path is not None:
+            store = SQLiteEffectStore(store_path)
         return ToolEffectReceiptIndex(self.journal, store=store)
 
     def configure_effect_store(self, path: str | Path) -> None:
         """Attach the process-shared receipt plane used by server workers."""
 
+        if self._effect_store_override is not None:
+            return
         self._effect_store_path = Path(path).expanduser().resolve(strict=False)
         self._effect_receipts = self._build_effect_receipts()
         self._effect_receipts_journal = self.journal
+
+    @property
+    def effect_store(self) -> EffectStore | None:
+        receipts = self._current_effect_receipts()
+        return receipts.store if receipts is not None else None
 
     def _current_effect_receipts(self) -> ToolEffectReceiptIndex | None:
         """Keep the receipt index aligned when a test/runtime swaps journals."""

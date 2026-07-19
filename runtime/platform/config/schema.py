@@ -296,6 +296,33 @@ class TentacleConfig(BaseModel):
     ws_port: int = Field(default=8765, ge=1, le=65535)
 
 
+class ToolEffectsConfig(BaseModel):
+    """Durable receipt plane for at-most-once external tool effects."""
+
+    model_config = ConfigDict(frozen=True)
+
+    backend: Literal["auto", "sqlite", "redis"] = "auto"
+    sqlite_path: str | None = None
+    redis_url: str | None = None
+    key_prefix: str = Field(default="octopus:tool-effect:", min_length=1)
+    connect_timeout_seconds: float = Field(default=2.0, ge=0.1, le=30.0)
+    require_distributed: bool = False
+
+    @model_validator(mode="after")
+    def _validate_backend(self) -> ToolEffectsConfig:
+        if self.backend == "redis" and not str(self.redis_url or "").strip():
+            raise ValueError("tool_effects.redis_url is required for backend=redis")
+        if self.backend == "sqlite" and not str(self.sqlite_path or "").strip():
+            raise ValueError("tool_effects.sqlite_path is required for backend=sqlite")
+        if self.require_distributed and self.backend != "redis":
+            raise ValueError("tool_effects.require_distributed=true requires backend=redis")
+        if self.sqlite_path is not None:
+            path = self.sqlite_path.strip()
+            if not path or "://" in path:
+                raise ValueError("tool_effects.sqlite_path must be a local path")
+        return self
+
+
 class AgentConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -317,6 +344,7 @@ class AgentConfig(BaseModel):
     local_auth: LocalAuthConfig = Field(default_factory=LocalAuthConfig)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
     tentacle: TentacleConfig = Field(default_factory=TentacleConfig)
+    tool_effects: ToolEffectsConfig = Field(default_factory=ToolEffectsConfig)
 
     intel_sources: list[IntelSourceConfig] = Field(default_factory=list)
     mcp_servers: list[MCPServerConfigEntry] = Field(default_factory=list)

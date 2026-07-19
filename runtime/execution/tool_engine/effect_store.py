@@ -26,7 +26,7 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Protocol, runtime_checkable
 
 from runtime.platform.models import Step
 
@@ -63,6 +63,78 @@ class StoreDecision:
     reason: str = ""
 
 
+@runtime_checkable
+class EffectStore(Protocol):
+    """Shared contract for local and cluster receipt planes."""
+
+    backend_name: str
+    shared_across_hosts: bool
+
+    def claim(
+        self,
+        *,
+        effect_key: str,
+        task_id: str,
+        step_id: int,
+        sucker_id: str,
+        args_fingerprint: str,
+        side_effecting: bool,
+        holder_id: str,
+        lease_ttl_s: float,
+        observed_durable_intent: bool,
+    ) -> StoreDecision: ...
+
+    def mark_started(
+        self,
+        *,
+        effect_key: str,
+        holder_id: str,
+        fencing_token: int,
+        call_id: str,
+        lease_ttl_s: float,
+    ) -> bool: ...
+
+    def renew(
+        self,
+        *,
+        effect_key: str,
+        holder_id: str,
+        fencing_token: int,
+        lease_ttl_s: float,
+    ) -> bool: ...
+
+    def commit(
+        self,
+        *,
+        effect_key: str,
+        holder_id: str,
+        fencing_token: int,
+        step: Step,
+    ) -> bool: ...
+
+    def record_committed(self, *, effect_key: str, step: Step) -> None: ...
+
+    def finish_failed(
+        self,
+        *,
+        effect_key: str,
+        holder_id: str,
+        fencing_token: int,
+        side_effecting: bool,
+        reason: str,
+    ) -> None: ...
+
+    def release_unstarted(
+        self,
+        *,
+        effect_key: str,
+        holder_id: str,
+        fencing_token: int,
+    ) -> None: ...
+
+    def ping(self) -> bool: ...
+
+
 class SQLiteEffectStore:
     """A fork-safe SQLite receipt store.
 
@@ -72,6 +144,9 @@ class SQLiteEffectStore:
     owner is alive, and ``synchronous=FULL`` makes the pre-handler claim a real
     crash boundary rather than a best-effort cache write.
     """
+
+    backend_name = "sqlite"
+    shared_across_hosts = False
 
     def __init__(self, path: str | Path, *, busy_timeout_s: float = 5.0) -> None:
         self.path = Path(path).expanduser().resolve(strict=False)
@@ -104,6 +179,13 @@ class SQLiteEffectStore:
                 time.sleep(0.02)
         with contextlib.suppress(OSError):
             os.chmod(self.path, 0o600)
+
+    def ping(self) -> bool:
+        try:
+            with contextlib.closing(self._connect()) as conn:
+                return conn.execute("SELECT 1").fetchone()[0] == 1
+        except sqlite3.Error:
+            return False
 
     def claim(
         self,
@@ -338,7 +420,23 @@ class SQLiteEffectStore:
         """Repair/seed a receipt from the durable journal's Step event."""
 
         now = time.time()
-        with contextlib.closing(self._connect()) as conn:
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            current = conn.execute(
+                """
+                SELECT state, lease_expires_at
+                FROM tool_effect_receipts WHERE effect_key = ?
+                """,
+                (effect_key,),
+            ).fetchone()
+            if (
+                current is not None
+                and str(current["state"]) in {"claimed", "started"}
+                and float(current["lease_expires_at"] or 0.0) > now
+            ):
+                conn.execute("COMMIT")
+                return
             conn.execute(
                 """
                 INSERT INTO tool_effect_receipts(
@@ -352,6 +450,13 @@ class SQLiteEffectStore:
                 """,
                 (effect_key, step.model_dump_json(), now, now),
             )
+            conn.execute("COMMIT")
+        except Exception:
+            with contextlib.suppress(sqlite3.Error):
+                conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
 
     def finish_failed(
         self,
@@ -433,4 +538,4 @@ def _dangling_intent_reason() -> str:
     )
 
 
-__all__ = ["SQLiteEffectStore", "StoreDecision"]
+__all__ = ["EffectStore", "SQLiteEffectStore", "StoreDecision"]

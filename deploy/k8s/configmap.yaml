@@ -20,12 +20,12 @@ data:
       max_tokens: 50000
       max_usd: 0.50
 
-    journal:
-      type: jsonl
-      path: /data/events.jsonl
+    journal_file: /data/events.jsonl
 
-    # Implementation note.
-    hearts:
-      coordinator:
-        type: redis
-        url: redis://redis:6379/0
+    # Cross-pod at-most-once tool effects. Readiness fails if Redis is
+    # unreachable or this silently degrades to a pod-local backend.
+    tool_effects:
+      backend: redis
+      redis_url: redis://:${REDIS_PASSWORD}@redis:6379/0
+      key_prefix: "octopus:tool-effect:"
+      require_distributed: true

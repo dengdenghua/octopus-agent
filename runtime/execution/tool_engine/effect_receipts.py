@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-from runtime.execution.tool_engine.effect_store import SQLiteEffectStore
+from runtime.execution.tool_engine.effect_store import EffectStore
 from runtime.memory.journal import Journal, StepEvent, ToolEffectIntentEvent
 from runtime.platform.models import CostEntry, ExecutionResult, Step, ToolCall, now_utc
 
@@ -117,7 +117,7 @@ class ToolEffectReceiptIndex:
         journal: Journal,
         *,
         wait_timeout_s: float = 120.0,
-        store: SQLiteEffectStore | None = None,
+        store: EffectStore | None = None,
         lease_ttl_s: float = 30.0,
         poll_interval_s: float = 0.05,
         holder_id: str | None = None,
@@ -136,6 +136,10 @@ class ToolEffectReceiptIndex:
         self._steps_by_call_id: dict[str, Step] = {}
         self._effect_by_call_id: dict[str, str] = {}
         self._heartbeats: dict[str, threading.Event] = {}
+
+    @property
+    def store(self) -> EffectStore | None:
+        return self._store
 
     def begin(
         self,
@@ -164,15 +168,18 @@ class ToolEffectReceiptIndex:
                 self._refresh_from_journal()
 
             committed = self._committed.get(key)
-            if committed is not None:
-                if self._store is not None:
-                    self._store.record_committed(effect_key=key, step=committed)
+            if committed is not None and self._store is None:
                 return EffectResolution(
                     "replay",
                     key,
                     fingerprint,
                     step=_replayed_step(committed),
                 )
+            if committed is not None and self._store is not None:
+                # A journal row alone cannot overrule a live fenced lease.
+                # Seed the shared store when safe, then let claim() make the
+                # authoritative replay/busy decision below.
+                self._store.record_committed(effect_key=key, step=committed)
 
             intent = self._intents.get(key)
             if self._store is not None:
@@ -233,12 +240,10 @@ class ToolEffectReceiptIndex:
                     committed = self._committed.get(key)
                     if committed is not None:
                         self._store.record_committed(effect_key=key, step=committed)
-                        return EffectResolution(
-                            "replay",
-                            key,
-                            fingerprint,
-                            step=_replayed_step(committed),
-                        )
+                        # Re-enter claim(): journal repair may have published
+                        # a terminal receipt, or a newer owner may still hold
+                        # the lease and must not be bypassed.
+                        continue
                     intent = self._intents.get(key)
 
             if intent is not None and (side_effecting or intent.side_effecting):
@@ -287,7 +292,6 @@ class ToolEffectReceiptIndex:
         with self._condition:
             self._stop_heartbeat(resolution.key)
             if step.success:
-                self._committed[resolution.key] = step
                 if self._store is not None:
                     committed = self._store.commit(
                         effect_key=resolution.key,
@@ -296,10 +300,10 @@ class ToolEffectReceiptIndex:
                         step=step,
                     )
                     if not committed:
-                        self._store.record_committed(
-                            effect_key=resolution.key,
-                            step=step,
-                        )
+                        self._live.discard(resolution.key)
+                        self._condition.notify_all()
+                        raise EffectLeaseLost("tool-effect lease was lost before result commit")
+                self._committed[resolution.key] = step
             elif not self._intent_is_side_effecting(resolution.key):
                 self._intents.pop(resolution.key, None)
                 if self._store is not None:

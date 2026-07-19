@@ -22,6 +22,7 @@ from runtime.core.cerebrum.planner import Rule
 from runtime.core.graph_runtime import GraphRuntime
 from runtime.execution.suckers import SkillRegistry
 from runtime.execution.tool_engine import ToolExecutor
+from runtime.execution.tool_engine.effect_store import EffectStore, SQLiteEffectStore
 from runtime.memory.hemolymph import ContextComposer
 from runtime.memory.journal import InMemoryJournal, Journal, JSONLJournal
 from runtime.platform.models import BudgetSpec, SkillId
@@ -138,7 +139,13 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
     )
 
     # 5. ToolExecutor
-    executor = ToolExecutor(registry=registry, immunity=immunity, journal=journal)
+    effect_store = _build_effect_store(config)
+    executor = ToolExecutor(
+        registry=registry,
+        immunity=immunity,
+        journal=journal,
+        effect_store=effect_store,
+    )
 
     # 6. GraphRuntime
     runtime = GraphRuntime(executor=executor, journal=journal)
@@ -199,6 +206,25 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
         runtime=runtime,
         planner=planner,
         mcp_clients=mcp_clients,
+    )
+
+
+def _build_effect_store(config: AgentConfig) -> EffectStore | None:
+    settings = config.tool_effects
+    if settings.backend == "auto":
+        # UI/server startup attaches the app-local SQLite path. Pure library
+        # callers remain in-memory unless they opt into an explicit backend.
+        return None
+    if settings.backend == "sqlite":
+        assert settings.sqlite_path is not None
+        return SQLiteEffectStore(settings.sqlite_path)
+    from runtime.execution.tool_engine.redis_effect_store import RedisEffectStore
+
+    assert settings.redis_url is not None
+    return RedisEffectStore.from_url(
+        settings.redis_url,
+        key_prefix=settings.key_prefix,
+        connect_timeout_s=settings.connect_timeout_seconds,
     )
 
 

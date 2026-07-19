@@ -10,6 +10,7 @@ from .schema import (
     LearnConfig,
     MCPServerConfigEntry,
     PlannerConfig,
+    ToolEffectsConfig,
 )
 
 __all__ = [
@@ -23,6 +24,7 @@ __all__ = [
     "MCPServerConfigEntry",
     "EvolveConfig",
     "PlannerConfig",
+    "ToolEffectsConfig",
     "apply_preset",
     "get_preset_description",
     "list_presets",

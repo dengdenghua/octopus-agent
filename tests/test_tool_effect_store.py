@@ -2,23 +2,55 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+import threading
 import time
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 
 from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.tool_engine import ToolExecutor
-from runtime.execution.tool_engine.effect_receipts import ToolEffectReceiptIndex
+from runtime.execution.tool_engine.effect_receipts import (
+    EffectLeaseLost,
+    ToolEffectReceiptIndex,
+)
 from runtime.execution.tool_engine.effect_store import SQLiteEffectStore
+from runtime.execution.tool_engine.redis_effect_store import RedisEffectStore
 from runtime.memory.journal import InMemoryJournal, StepEvent
-from runtime.platform.models import ArmId, Budget, BudgetLimits, SkillId, TaskId
+from runtime.platform.models import (
+    ArmId,
+    Budget,
+    BudgetLimits,
+    ExecutionResult,
+    SkillId,
+    Step,
+    TaskId,
+    ToolCall,
+)
 from runtime.safety.auth import TrustEngine
 
 
 def _executor_with_shared_store(
     store_path: str | Path,
+    handler,
+    *,
+    lease_ttl_s: float = 0.3,
+    wait_timeout_s: float = 4.0,
+    journal: InMemoryJournal | None = None,
+) -> ToolExecutor:
+    return _executor_with_backend(
+        SQLiteEffectStore(store_path),
+        handler,
+        lease_ttl_s=lease_ttl_s,
+        wait_timeout_s=wait_timeout_s,
+        journal=journal,
+    )
+
+
+def _executor_with_backend(
+    store,
     handler,
     *,
     lease_ttl_s: float = 0.3,
@@ -40,10 +72,11 @@ def _executor_with_shared_store(
         registry=registry,
         immunity=TrustEngine(trusted_sources=["skill://public/*"]),
         journal=journal,
+        effect_store=store,
     )
     executor._effect_receipts = ToolEffectReceiptIndex(  # noqa: SLF001
         journal,
-        store=SQLiteEffectStore(store_path),
+        store=store,
         lease_ttl_s=lease_ttl_s,
         wait_timeout_s=wait_timeout_s,
         poll_interval_s=0.02,
@@ -59,6 +92,114 @@ class _FailingStepJournal(InMemoryJournal):
         super().write(event)
 
 
+class _FakeRedisScript:
+    def __init__(self, source: str, client: _FakeRedis) -> None:
+        self.source = source
+        self.client = client
+
+    def __call__(self, *, keys: list[str], args: list[Any]) -> int:
+        with self.client.lock:
+            if "octopus_effect_repair_committed_v1" in self.source:
+                if self.client.get(keys[0]) is not None:
+                    return 0
+                self.client.set(keys[1], args[0])
+                return 1
+            expected = args[0]
+            expected_bytes = expected.encode() if isinstance(expected, str) else expected
+            if self.client.get(keys[0]) != expected_bytes:
+                return 0
+            if "octopus_effect_fenced_set_retain_v1" in self.source:
+                self.client.set(keys[1], args[1])
+                self.client.pexpire(keys[0], int(args[2]))
+                return 1
+            if "octopus_effect_fenced_set_release_v1" in self.source:
+                self.client.set(keys[1], args[1])
+                self.client.delete(keys[0])
+                return 1
+            if "octopus_effect_fenced_delete_release_v1" in self.source:
+                self.client.delete(keys[1])
+                self.client.delete(keys[0])
+                return 1
+            if "PEXPIRE" in self.source:
+                return self.client.pexpire(keys[0], int(args[1]))
+            if "DEL" in self.source:
+                return self.client.delete(keys[0])
+            return 0
+
+
+class _FakeRedis:
+    def __init__(self) -> None:
+        self.lock = threading.RLock()
+        self.values: dict[str, bytes] = {}
+        self.expires: dict[str, float] = {}
+
+    def _expire(self, key: str) -> None:
+        expires_at = self.expires.get(key)
+        if expires_at is not None and time.time() >= expires_at:
+            self.values.pop(key, None)
+            self.expires.pop(key, None)
+
+    def get(self, key: str):
+        with self.lock:
+            self._expire(key)
+            return self.values.get(key)
+
+    def set(
+        self,
+        key: str,
+        value,
+        *,
+        nx: bool = False,
+        px: int | None = None,
+    ) -> bool:
+        with self.lock:
+            self._expire(key)
+            if nx and key in self.values:
+                return False
+            self.values[key] = value.encode() if isinstance(value, str) else value
+            if px is not None:
+                self.expires[key] = time.time() + px / 1000
+            return True
+
+    def delete(self, key: str) -> int:
+        with self.lock:
+            existed = key in self.values
+            self.values.pop(key, None)
+            self.expires.pop(key, None)
+            return int(existed)
+
+    def incr(self, key: str) -> int:
+        with self.lock:
+            self._expire(key)
+            value = int(self.values.get(key, b"0")) + 1
+            self.values[key] = str(value).encode()
+            return value
+
+    def pexpire(self, key: str, ttl_ms: int) -> int:
+        with self.lock:
+            self._expire(key)
+            if key not in self.values:
+                return 0
+            self.expires[key] = time.time() + ttl_ms / 1000
+            return 1
+
+    def pttl(self, key: str) -> int:
+        with self.lock:
+            self._expire(key)
+            if key not in self.values:
+                return -2
+            expires_at = self.expires.get(key)
+            if expires_at is None:
+                return -1
+            return max(-2, int((expires_at - time.time()) * 1000))
+
+    def register_script(self, source: str) -> _FakeRedisScript:
+        return _FakeRedisScript(source, self)
+
+    def ping(self) -> bool:
+        return True
+
+
 def _run_shared(executor: ToolExecutor, task_id: TaskId):
     return executor.execute_step(
         step_id=1,
@@ -71,6 +212,24 @@ def _run_shared(executor: ToolExecutor, task_id: TaskId):
         budget=Budget(
             task_id=task_id,
             limits=BudgetLimits(tokens=10_000, usd=1.0),
+        ),
+    )
+
+
+def _sample_step(output: str = "old result") -> Step:
+    action = ToolCall(
+        caller="react_loop",
+        sucker_id=SkillId("shared_effect_tool"),
+        args={"value": "one"},
+    )
+    return Step(
+        step_id=1,
+        node_id="react_n1",
+        action=action,
+        result=ExecutionResult(
+            call_id=action.call_id,
+            status="success",
+            output=output,
         ),
     )
 
@@ -156,6 +315,51 @@ def test_expired_unstarted_claim_can_be_safely_taken_over(tmp_path: Path) -> Non
 
     assert takeover.kind == "execute"
     assert takeover.fencing_token > first.fencing_token
+
+
+def test_sqlite_journal_repair_cannot_overwrite_live_takeover(tmp_path: Path) -> None:
+    store = SQLiteEffectStore(tmp_path / "effects.sqlite3")
+    first = store.claim(
+        effect_key="effect:test",
+        task_id="task",
+        step_id=1,
+        sucker_id="tool",
+        args_fingerprint="args",
+        side_effecting=False,
+        holder_id="worker-a",
+        lease_ttl_s=0.05,
+        observed_durable_intent=False,
+    )
+    assert first.kind == "execute"
+    time.sleep(0.08)
+    takeover = store.claim(
+        effect_key="effect:test",
+        task_id="task",
+        step_id=1,
+        sucker_id="tool",
+        args_fingerprint="args",
+        side_effecting=False,
+        holder_id="worker-b",
+        lease_ttl_s=1,
+        observed_durable_intent=False,
+    )
+    assert takeover.kind == "execute"
+
+    store.record_committed(effect_key="effect:test", step=_sample_step())
+    observer = store.claim(
+        effect_key="effect:test",
+        task_id="task",
+        step_id=1,
+        sucker_id="tool",
+        args_fingerprint="args",
+        side_effecting=False,
+        holder_id="worker-c",
+        lease_ttl_s=1,
+        observed_durable_intent=False,
+    )
+
+    assert observer.kind == "busy"
+    assert observer.step is None
 
 
 def test_expired_started_side_effect_is_never_taken_over(tmp_path: Path) -> None:
@@ -288,6 +492,256 @@ def test_committed_receipt_survives_failure_before_journal_step_append(
     assert step.success is True
     assert calls == 1
     assert "durable_effect_replay" in step.result.stderr_tags
+
+
+def test_redis_backed_hosts_execute_once_and_share_result() -> None:
+    client = _FakeRedis()
+    started = threading.Event()
+    release = threading.Event()
+    calls = 0
+
+    def _handler(value: str):
+        nonlocal calls
+        calls += 1
+        started.set()
+        assert release.wait(timeout=2)
+        return {"value": value, "calls": calls}
+
+    first = _executor_with_backend(
+        RedisEffectStore(client, key_prefix="test:effects:"),
+        _handler,
+    )
+    second = _executor_with_backend(
+        RedisEffectStore(client, key_prefix="test:effects:"),
+        _handler,
+    )
+    task_id = TaskId(uuid4())
+    results = []
+    owner = threading.Thread(target=lambda: results.append(_run_shared(first, task_id)))
+    duplicate = threading.Thread(target=lambda: results.append(_run_shared(second, task_id)))
+    owner.start()
+    assert started.wait(timeout=1)
+    duplicate.start()
+    time.sleep(0.1)
+    release.set()
+    owner.join(timeout=3)
+    duplicate.join(timeout=3)
+
+    assert len(results) == 2
+    assert calls == 1
+    assert all(step.success for step in results)
+    assert sum("durable_effect_replay" in step.result.stderr_tags for step in results) == 1
+
+
+def test_redis_fencing_rejects_stale_holder_after_takeover() -> None:
+    client = _FakeRedis()
+    first = RedisEffectStore(client, key_prefix="test:effects:")
+    second = RedisEffectStore(client, key_prefix="test:effects:")
+    claim_a = first.claim(
+        effect_key="effect:read",
+        task_id="task",
+        step_id=1,
+        sucker_id="read_tool",
+        args_fingerprint="args",
+        side_effecting=False,
+        holder_id="host-a",
+        lease_ttl_s=0.05,
+        observed_durable_intent=False,
+    )
+    assert claim_a.kind == "execute"
+    assert first.mark_started(
+        effect_key="effect:read",
+        holder_id="host-a",
+        fencing_token=claim_a.fencing_token,
+        call_id="call-a",
+        lease_ttl_s=0.05,
+    )
+    time.sleep(0.08)
+    claim_b = second.claim(
+        effect_key="effect:read",
+        task_id="task",
+        step_id=1,
+        sucker_id="read_tool",
+        args_fingerprint="args",
+        side_effecting=False,
+        holder_id="host-b",
+        lease_ttl_s=1,
+        observed_durable_intent=False,
+    )
+
+    assert claim_b.kind == "execute"
+    assert claim_b.fencing_token > claim_a.fencing_token
+    assert (
+        first.renew(
+            effect_key="effect:read",
+            holder_id="host-a",
+            fencing_token=claim_a.fencing_token,
+            lease_ttl_s=1,
+        )
+        is False
+    )
+    first.record_committed(effect_key="effect:read", step=_sample_step())
+    receipt = second._read_receipt("effect:read")  # noqa: SLF001
+    assert receipt is not None
+    assert receipt["state"] == "claimed"
+    assert receipt["holder_id"] == "host-b"
+
+
+def test_stale_executor_cannot_publish_result_after_redis_takeover() -> None:
+    client = _FakeRedis()
+    first_store = RedisEffectStore(client, key_prefix="test:effects:")
+    second_store = RedisEffectStore(client, key_prefix="test:effects:")
+    journal = InMemoryJournal()
+    first = ToolEffectReceiptIndex(
+        journal,
+        store=first_store,
+        holder_id="host-a",
+        lease_ttl_s=0.05,
+        wait_timeout_s=0.1,
+    )
+    resolution = first.begin(
+        task_id="task",
+        step_id=1,
+        sucker_id="shared_effect_tool",
+        args={"value": "one"},
+        side_effecting=False,
+    )
+    assert resolution.kind == "execute"
+    time.sleep(0.18)
+    takeover = second_store.claim(
+        effect_key=resolution.key,
+        task_id="task",
+        step_id=1,
+        sucker_id="shared_effect_tool",
+        args_fingerprint=resolution.args_fingerprint,
+        side_effecting=False,
+        holder_id="host-b",
+        lease_ttl_s=1,
+        observed_durable_intent=False,
+    )
+    assert takeover.kind == "execute"
+
+    with pytest.raises(EffectLeaseLost, match="before result commit"):
+        first.finish(resolution, _sample_step())
+
+    receipt = second_store._read_receipt(resolution.key)  # noqa: SLF001
+    assert receipt is not None
+    assert receipt["state"] == "claimed"
+    assert receipt["holder_id"] == "host-b"
+
+
+def test_redis_started_side_effect_fails_closed_after_host_loss() -> None:
+    client = _FakeRedis()
+    first = RedisEffectStore(client, key_prefix="test:effects:")
+    second = RedisEffectStore(client, key_prefix="test:effects:")
+    claim = first.claim(
+        effect_key="effect:write",
+        task_id="task",
+        step_id=1,
+        sucker_id="write_tool",
+        args_fingerprint="args",
+        side_effecting=True,
+        holder_id="host-a",
+        lease_ttl_s=0.05,
+        observed_durable_intent=False,
+    )
+    assert first.mark_started(
+        effect_key="effect:write",
+        holder_id="host-a",
+        fencing_token=claim.fencing_token,
+        call_id="call-a",
+        lease_ttl_s=0.05,
+    )
+    time.sleep(0.08)
+
+    recovered = second.claim(
+        effect_key="effect:write",
+        task_id="task",
+        step_id=1,
+        sucker_id="write_tool",
+        args_fingerprint="args",
+        side_effecting=True,
+        holder_id="host-b",
+        lease_ttl_s=1,
+        observed_durable_intent=False,
+    )
+
+    assert recovered.kind == "indeterminate"
+
+
+def test_distributed_readiness_rejects_local_only_store(tmp_path: Path) -> None:
+    from runtime.platform.observability.health import HealthRegistry, effect_store_check
+
+    registry = HealthRegistry(parallel=False)
+    registry.register(
+        effect_store_check(
+            SQLiteEffectStore(tmp_path / "effects.sqlite3"),
+            require_distributed=True,
+        )
+    )
+
+    result = registry.probe(kind="readiness")
+    assert result["status"] == "fail"
+    assert result["checks"][0]["metadata"]["shared_across_hosts"] is False
+
+
+def test_tool_effect_config_requires_real_distributed_backend() -> None:
+    from runtime.platform.config import ToolEffectsConfig
+
+    with pytest.raises(ValueError, match="requires backend=redis"):
+        ToolEffectsConfig(
+            backend="auto",
+            require_distributed=True,
+        )
+    config = ToolEffectsConfig(
+        backend="redis",
+        redis_url="redis://redis:6379/0",
+        require_distributed=True,
+    )
+    assert config.backend == "redis"
+
+
+def test_server_preserves_explicit_redis_store_and_reports_readiness(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path))
+    client = _FakeRedis()
+    store = RedisEffectStore(client, key_prefix="test:effects:")
+    monkeypatch.setattr(
+        RedisEffectStore,
+        "from_url",
+        classmethod(lambda cls, url, **kwargs: store),
+    )
+
+    from runtime.platform.config import AgentConfig, ToolEffectsConfig, build_from_config
+    from runtime.platform.ui import create_app
+
+    stack = build_from_config(
+        AgentConfig(
+            enable_web_skills=False,
+            tool_effects=ToolEffectsConfig(
+                backend="redis",
+                redis_url="redis://redis:6379/0",
+                require_distributed=True,
+            ),
+        )
+    )
+    app = create_app(
+        journal=stack.journal,
+        registry=stack.registry,
+        stack=stack,
+        tentacle_enabled=False,
+    )
+
+    assert stack.executor.effect_store is store
+    readiness = app.state.health_registry.probe(kind="readiness")
+    effect_status = next(item for item in readiness["checks"] if item["name"] == "tool_effects")
+    assert effect_status["status"] == "pass"
+    assert effect_status["metadata"] == {
+        "backend": "redis",
+        "shared_across_hosts": True,
+    }
 
 
 def test_server_wires_shared_store_even_when_main_journal_is_in_memory(
