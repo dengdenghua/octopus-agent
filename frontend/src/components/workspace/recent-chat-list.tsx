@@ -137,7 +137,8 @@ export function RecentChatList() {
   const { mutate: deleteThread } = useDeleteThread();
   const { mutate: renameThread } = useRenameThread();
   const { mutate: moveThreadToProject } = useMoveThreadToProject();
-  const { mutate: deleteProject } = useDeleteProject();
+  const { mutate: deleteProject, isPending: isDeletingProject } =
+    useDeleteProject();
 
   const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -527,7 +528,11 @@ export function RecentChatList() {
             <Button variant="outline" onClick={() => setProjectToDelete(null)}>
               {t.common.cancel}
             </Button>
-            <Button variant="destructive" onClick={handleProjectDelete}>
+            <Button
+              variant="destructive"
+              onClick={handleProjectDelete}
+              disabled={isDeletingProject}
+            >
               {t.common.delete}
             </Button>
           </DialogFooter>
