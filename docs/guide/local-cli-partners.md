@@ -32,6 +32,18 @@ The older `status` field remains for compatibility and only describes registry
 or detection shape (`registered`, `detected`, `missing`). It is not enough to
 decide whether the partner can run now.
 
+## Diagnostic matrix
+
+Each partner exposes `diagnostic_items` for the connect dialog. The matrix keeps
+provider-specific facts server-side while the UI renders a consistent shape:
+
+| Label | Meaning |
+| --- | --- |
+| Model source | Whether the partner supports one-shot `/model` override, uses its own default, or requires native model setup. |
+| Account/entitlement | Reminds operators that CLI login, subscription, enterprise authorization, and desktop free entitlements may differ. |
+| Headless | Whether the detected command can run prompt-to-stdout tasks or is launcher/manual only. |
+| Check command | The copyable command or health check that proves the current CLI can actually run from Octopus. |
+
 ## Native CLI boundary
 
 The connect dialog exposes both copyable native commands and Octopus-compatible

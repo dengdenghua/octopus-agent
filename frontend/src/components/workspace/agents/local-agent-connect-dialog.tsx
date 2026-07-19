@@ -231,6 +231,7 @@ export function LocalAgentConnectDialog({
                 registerMutation.isPending;
               const badge = localPartnerBadge(partner, partnerBadgeLabels);
               const setupSteps = localPartnerSetupSteps(partner);
+              const diagnosticItems = partner.diagnostic_items ?? [];
               const probeResult = probeResults[partner.id];
               const probeFailureKindLabel = localPartnerFailureKindLabel(
                 probeResult?.failure_kind,
@@ -335,6 +336,7 @@ export function LocalAgentConnectDialog({
                     {partner.setup_hint ||
                     partner.interaction_hint ||
                     setupSteps.length > 0 ||
+                    diagnosticItems.length > 0 ||
                     commandRows.length > 0 ? (
                       <span
                         className="mt-2 block space-y-1 rounded-md border border-border-default/70 bg-muted/20 p-2"
@@ -380,6 +382,34 @@ export function LocalAgentConnectDialog({
                         {partner.interaction_hint ? (
                           <span className="block text-[11px] leading-relaxed text-muted-foreground">
                             {partner.interaction_hint}
+                          </span>
+                        ) : null}
+                        {diagnosticItems.length > 0 ? (
+                          <span className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                            {diagnosticItems.map((item) => (
+                              <span
+                                key={`${partner.id}-diagnostic-${item.label}`}
+                                className={cn(
+                                  "rounded border px-2 py-1 text-[10px]",
+                                  item.tone === "ready"
+                                    ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+                                    : item.tone === "blocked"
+                                      ? "border-amber-200 bg-amber-50 text-amber-800"
+                                      : item.tone === "warning"
+                                        ? "border-amber-100 bg-amber-50/70 text-amber-800"
+                                        : "border-border-default/60 bg-background/70 text-muted-foreground",
+                                )}
+                              >
+                                <span className="block font-medium">
+                                  {item.label}：{item.value}
+                                </span>
+                                {item.detail ? (
+                                  <span className="mt-0.5 block text-[10px] opacity-80">
+                                    {item.detail}
+                                  </span>
+                                ) : null}
+                              </span>
+                            ))}
                           </span>
                         ) : null}
                         {commandHints.length > 0 ? (

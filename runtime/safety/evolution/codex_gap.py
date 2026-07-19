@@ -87,6 +87,7 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
             required_terms=(
                 "probeLocalAgentPartner",
                 "command_hints",
+                "diagnostic_items",
                 "interaction_hint",
                 "localPartnerBadge",
                 "localPartnerFailureKindLabel",
@@ -97,6 +98,19 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
                 "健康检查",
                 "复制原生命令",
                 "修复建议",
+            ),
+        ),
+        GapBehaviorCheck(
+            id="local_partner_diagnostic_matrix",
+            title="Local partner diagnostics document model source, entitlement, headless, and health checks",
+            path="runtime/sensing/gateway/agents_local_partner.py",
+            required_terms=(
+                "_partner_diagnostic_items",
+                "模型来源",
+                "账号/权益",
+                "Headless",
+                "检查命令",
+                "桌面端可用不代表 CLI",
             ),
         ),
         GapBehaviorCheck(
@@ -132,6 +146,7 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
                 "effective_status",
                 "test_probe_local_partner_success",
                 "test_probe_local_partner_surfaces_diagnosis",
+                "diagnostic_items",
                 "test_codebuddy_launcher_only_is_detected_but_not_registerable",
                 "test_probe_local_partner_reports_not_ready_without_spawning",
             ),

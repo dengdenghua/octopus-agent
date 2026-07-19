@@ -93,6 +93,12 @@ export interface LocalAgentPartner {
     scope: string;
     behavior: string;
   }>;
+  diagnostic_items?: Array<{
+    label: string;
+    value: string;
+    tone?: "ready" | "warning" | "blocked" | "neutral" | string;
+    detail?: string;
+  }>;
 }
 
 export interface LocalAgentPartnerRegisterResult {

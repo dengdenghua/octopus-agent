@@ -920,6 +920,11 @@ class TestLocalPartners:
             "scope": "一次性覆盖",
             "behavior": "换行接任务时，转成该 CLI 本次调用的模型参数。",
         }
+        codex_diagnostics = {
+            item["label"]: item for item in partners["codex-cli"]["diagnostic_items"]
+        }
+        assert codex_diagnostics["模型来源"]["value"] == "可一次性覆盖"
+        assert codex_diagnostics["Headless"]["value"] == "可自动派工"
         assert partners["trae-cli"]["detected"] is True
         assert partners["trae-cli"]["agent_id"] == "local_trae_cli"
         assert "traecdn" in partners["trae-cli"]["avatar_url"]
@@ -931,6 +936,12 @@ class TestLocalPartners:
         assert "Trae CLI 自己管理" in partners["trae-cli"]["interaction_hint"]
         assert partners["trae-cli"]["command_hints"][0]["scope"] == "CLI 默认"
         assert partners["trae-cli"]["command_hints"][-1]["command"] == "trae-cli models --json"
+        trae_diagnostics = {
+            item["label"]: item for item in partners["trae-cli"]["diagnostic_items"]
+        }
+        assert trae_diagnostics["模型来源"]["value"] == "Trae CLI models"
+        assert "桌面端可用不代表 CLI" in trae_diagnostics["账号/权益"]["detail"]
+        assert trae_diagnostics["检查命令"]["value"] == "trae-cli models --json"
         assert partners["qoder-cli"]["detected"] is False
         assert partners["qoder-cli"]["agent_id"] == "local_qoder_cli"
         assert "alicdn" in partners["qoder-cli"]["avatar_url"]
@@ -950,6 +961,11 @@ class TestLocalPartners:
         assert partners["codebuddy-cli"]["install_command"] is None
         assert "原生 CLI 使用" in partners["codebuddy-cli"]["interaction_hint"]
         assert partners["codebuddy-cli"]["command_hints"][0]["scope"] == "一次性覆盖"
+        codebuddy_diagnostics = {
+            item["label"]: item for item in partners["codebuddy-cli"]["diagnostic_items"]
+        }
+        assert codebuddy_diagnostics["模型来源"]["value"] == "可一次性覆盖"
+        assert "桌面端权益不保证同步" in codebuddy_diagnostics["账号/权益"]["detail"]
         assert partners["openclaw"]["detected"] is False
         assert partners["openclaw"]["readiness_status"] == "missing"
         assert partners["openclaw"]["effective_status"] == "missing"
@@ -1195,6 +1211,9 @@ class TestLocalPartners:
         )
         assert partners["codebuddy-cli"]["native_command"] is None
         assert partners["codebuddy-cli"]["verify_command"] is None
+        diagnostics = {item["label"]: item for item in partners["codebuddy-cli"]["diagnostic_items"]}
+        assert diagnostics["Headless"]["value"] == "仅原生/待适配"
+        assert diagnostics["检查命令"]["tone"] == "blocked"
 
     def test_local_partner_command_hints_have_explicit_openapi_schema(self):
         app = FastAPI()

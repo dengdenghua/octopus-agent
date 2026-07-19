@@ -524,6 +524,83 @@ def _partner_command_hints(partner_id: str) -> list[dict[str, str]]:
     return hints
 
 
+def _partner_diagnostic_items(
+    partner_id: str,
+    *,
+    command: str | None,
+    ready: bool,
+    headless_supported: bool,
+    readiness_status: str,
+    verify_command: str | None,
+) -> list[dict[str, str]]:
+    """Compact provider-owned diagnostics for the connect dialog.
+
+    These are intentionally generated server-side because each CLI owns a
+    different model namespace, login boundary, and headless capability. The UI
+    renders the matrix without duplicating partner-specific rules.
+    """
+    model_value = "CLI 默认"
+    model_detail = "模型由该 CLI 自己的配置决定；Octopus 不使用全局模型列表覆盖它。"
+    if partner_id in {"claude-code", "codex-cli", "codebuddy-cli"}:
+        model_value = "可一次性覆盖"
+        model_detail = "`/model <模型名>` 换行接任务时会转成本次 CLI 模型参数。"
+    elif partner_id == "trae-cli":
+        model_value = "Trae CLI models"
+        model_detail = "以 `trae-cli models --json` 和原生 `/model` 配置为准。"
+    elif partner_id == "kimi-cli":
+        model_value = "待 headless 稳定"
+        model_detail = "保留发现入口；稳定 prompt→stdout 参数明确后再启用自动派工。"
+
+    account_detail = "桌面端账号、免费权益、企业授权不一定同步到 CLI。"
+    if partner_id in {"claude-code", "codex-cli"}:
+        account_detail = "使用该 CLI 自己的登录态、订阅权益和模型配置。"
+    elif partner_id == "codebuddy-cli":
+        account_detail = "首次运行原生 CodeBuddy CLI 登录/授权；桌面端权益不保证同步。"
+    elif partner_id == "trae-cli":
+        account_detail = "Trae 桌面端可用不代表 CLI 已获得同一模型/企业权益。"
+
+    headless_value = "可自动派工" if headless_supported else "仅原生/待适配"
+    headless_tone = "ready" if ready else ("warning" if command else "blocked")
+    if readiness_status in {"launcher_only", "headless_unsupported"}:
+        headless_tone = "blocked"
+    elif readiness_status == "model_unconfigured":
+        headless_tone = "warning"
+
+    check_value = verify_command or "先安装/打开原生 CLI"
+    check_detail = (
+        "复制验证命令或点健康检查确认真实 prompt→stdout 可用。"
+        if verify_command
+        else "未发现可验证的 headless 命令；先安装官方 CLI 或回原生终端处理。"
+    )
+
+    return [
+        {
+            "label": "模型来源",
+            "value": model_value,
+            "tone": "ready" if ready else "warning",
+            "detail": model_detail,
+        },
+        {
+            "label": "账号/权益",
+            "value": "CLI 独立",
+            "tone": "warning",
+            "detail": account_detail,
+        },
+        {
+            "label": "Headless",
+            "value": headless_value,
+            "tone": headless_tone,
+            "detail": f"当前状态：{readiness_status}。",
+        },
+        {
+            "label": "检查命令",
+            "value": check_value,
+            "tone": "neutral" if verify_command else "blocked",
+            "detail": check_detail,
+        },
+    ]
+
+
 def readiness_for_partner(
     partner_id: str,
     command: str | None,
@@ -735,6 +812,14 @@ def to_wire(
         setup_hint=guidance.get("setup_hint"),
         interaction_hint=guidance.get("interaction_hint"),
         command_hints=_partner_command_hints(str(spec["id"])),
+        diagnostic_items=_partner_diagnostic_items(
+            str(spec["id"]),
+            command=command,
+            ready=bool(readiness.get("ready")),
+            headless_supported=bool(readiness.get("headless_supported")),
+            readiness_status=readiness_status,
+            verify_command=guidance.get("verify_command"),
+        ),
     )
 
 

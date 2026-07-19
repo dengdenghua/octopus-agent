@@ -108,6 +108,13 @@ class LocalPartnerCommandHint(BaseModel):
     behavior: str
 
 
+class LocalPartnerDiagnosticItem(BaseModel):
+    label: str
+    value: str
+    tone: str = "neutral"
+    detail: str = ""
+
+
 class LocalPartnerWire(BaseModel):
     id: str
     agent_id: str
@@ -134,6 +141,7 @@ class LocalPartnerWire(BaseModel):
     setup_hint: str | None = None
     interaction_hint: str | None = None
     command_hints: list[LocalPartnerCommandHint] = Field(default_factory=list)
+    diagnostic_items: list[LocalPartnerDiagnosticItem] = Field(default_factory=list)
 
 
 class LocalPartnerRegisterItem(BaseModel):
