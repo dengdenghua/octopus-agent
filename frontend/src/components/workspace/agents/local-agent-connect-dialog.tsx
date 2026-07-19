@@ -28,13 +28,13 @@ import {
   probeLocalAgentPartner,
   registerLocalAgentPartners,
   type LocalAgentPartner,
-  type LocalAgentPartnerDoctorResponse,
   type LocalAgentPartnerProbeResponse,
 } from "@/core/agents/api";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import {
   localPartnerBadge,
+  localPartnerDoctorFromPartners,
   localPartnerFailureKindLabel,
   localPartnerSetupSteps,
 } from "./local-agent-status";
@@ -86,7 +86,7 @@ export function LocalAgentConnectDialog({
     refetchOnWindowFocus: false,
     retry: false,
   });
-  const doctorSummary = doctor ?? summarizeLocalPartnerDoctor(partners);
+  const doctorSummary = doctor ?? localPartnerDoctorFromPartners(partners);
 
   const registerMutation = useMutation({
     mutationFn: registerLocalAgentPartners,
@@ -256,6 +256,27 @@ export function LocalAgentConnectDialog({
                     <div className="mt-1 line-clamp-2 text-amber-700">
                       下一步：
                       {doctorSummary.next_actions.slice(0, 2).join("；")}
+                    </div>
+                  ) : null}
+                  {doctorSummary.groups.length > 0 ? (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {doctorSummary.groups.slice(0, 4).map((group) => (
+                        <span
+                          key={group.status}
+                          className="inline-flex max-w-full items-center gap-1 rounded border border-border-default/70 bg-background/80 px-1.5 py-0.5 text-muted-foreground"
+                          title={group.next_action}
+                        >
+                          <span className="shrink-0 font-medium text-foreground">
+                            {group.label}
+                          </span>
+                          <span className="min-w-0 truncate">
+                            {group.partner_ids.join("、")}
+                          </span>
+                          <span className="shrink-0 rounded bg-muted px-1 font-mono text-[10px]">
+                            {group.count}
+                          </span>
+                        </span>
+                      ))}
                     </div>
                   ) : null}
                 </div>
@@ -627,41 +648,4 @@ export function LocalAgentConnectDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-function summarizeLocalPartnerDoctor(
-  partners: LocalAgentPartner[],
-): LocalAgentPartnerDoctorResponse | null {
-  if (partners.length === 0) return null;
-  const ready = partners.filter((partner) => partner.ready).length;
-  const registered = partners.filter((partner) => partner.registered).length;
-  const needsAttention =
-    partners.length -
-    partners.filter(
-      (partner) =>
-        (partner.effective_status ||
-          partner.readiness_status ||
-          partner.status) === "registered" || partner.ready,
-    ).length;
-  const nextActions = Array.from(
-    new Set(
-      partners
-        .filter((partner) => !partner.ready)
-        .map((partner) => partner.fix_hint || partner.readiness_message || "")
-        .filter(Boolean),
-    ),
-  ).slice(0, 4);
-  return {
-    summary: `${ready}/${partners.length} 个本地 CLI 伙伴可自动派工，${needsAttention} 个需要处理。`,
-    total: partners.length,
-    detected: partners.filter((partner) => partner.detected).length,
-    ready,
-    registered,
-    needs_attention: needsAttention,
-    groups: [],
-    next_actions:
-      nextActions.length > 0
-        ? nextActions
-        : ["全部可用伙伴建议先跑健康检查，再执行重要派工。"],
-  };
 }

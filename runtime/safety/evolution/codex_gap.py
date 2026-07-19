@@ -91,7 +91,9 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
                 "diagnostic_items",
                 "interaction_hint",
                 "本机 CLI Doctor",
+                "partner_ids",
                 "localPartnerBadge",
+                "localPartnerDoctorFromPartners",
                 "localPartnerFailureKindLabel",
                 "localPartnerSetupSteps",
                 "native_launch_cwd",
@@ -121,6 +123,7 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
             path="frontend/src/components/workspace/agents/local-agent-status.ts",
             required_terms=(
                 "localPartnerBadge",
+                "localPartnerDoctorFromPartners",
                 "effective_status",
                 "已连接 · 需修复",
                 "model_unconfigured",
@@ -133,6 +136,7 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
             path="frontend/src/components/workspace/agents/local-agent-status.test.ts",
             required_terms=(
                 "localPartnerBadge",
+                "localPartnerDoctorFromPartners",
                 "effective_status",
                 "已连接 · 需修复",
                 "model_unconfigured",

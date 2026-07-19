@@ -1,4 +1,7 @@
-import type { LocalAgentPartner } from "@/core/agents/api";
+import type {
+  LocalAgentPartner,
+  LocalAgentPartnerDoctorResponse,
+} from "@/core/agents/api";
 
 export interface LocalPartnerBadgeLabels {
   connected: string;
@@ -207,4 +210,101 @@ export function localPartnerFailureKindLabel(kind?: string | null): string {
     default:
       return kind ? "检查失败" : "";
   }
+}
+
+const DOCTOR_STATUS_LABELS: Record<string, string> = {
+  registered: "已连接",
+  ready: "可自动派工",
+  model_unconfigured: "模型未配置",
+  launcher_only: "仅发现启动器",
+  headless_unsupported: "暂不支持 headless",
+  missing: "未安装",
+  detected: "已检测到",
+};
+
+function localPartnerDoctorNextAction(status: string): string {
+  if (status === "registered" || status === "ready") {
+    return "可直接派工；建议健康检查后再跑重要任务。";
+  }
+  if (status === "model_unconfigured") {
+    return "打开原生 CLI 登录/选模型，并确认 CLI 账号或企业授权可用。";
+  }
+  if (status === "launcher_only") {
+    return "安装官方 headless CLI；桌面/IDE 启动器只能手动使用。";
+  }
+  if (status === "headless_unsupported") {
+    return "回原生 CLI 使用，或等待厂商稳定 prompt-to-stdout 参数。";
+  }
+  if (status === "missing") {
+    return "安装对应官方 CLI，并确认命令进入 PATH。";
+  }
+  return "打开原生 CLI 复查登录、模型、权限和网络状态。";
+}
+
+export function localPartnerDoctorFromPartners(
+  partners: LocalAgentPartner[],
+): LocalAgentPartnerDoctorResponse | null {
+  if (partners.length === 0) return null;
+  const groupsByStatus = new Map<
+    string,
+    {
+      status: string;
+      label: string;
+      count: number;
+      partner_ids: string[];
+      next_action: string;
+    }
+  >();
+  for (const partner of partners) {
+    const status =
+      partner.effective_status ||
+      partner.readiness_status ||
+      partner.status ||
+      "missing";
+    const group =
+      groupsByStatus.get(status) ??
+      {
+        status,
+        label: DOCTOR_STATUS_LABELS[status] ?? status,
+        count: 0,
+        partner_ids: [],
+        next_action: localPartnerDoctorNextAction(status),
+      };
+    group.count += 1;
+    group.partner_ids.push(partner.id);
+    groupsByStatus.set(status, group);
+  }
+  const groups = Array.from(groupsByStatus.values()).sort((a, b) => {
+    const aReady = a.status === "registered" || a.status === "ready" ? 0 : 1;
+    const bReady = b.status === "registered" || b.status === "ready" ? 0 : 1;
+    return aReady - bReady || a.label.localeCompare(b.label);
+  });
+  const ready = partners.filter((partner) => partner.ready).length;
+  const registered = partners.filter((partner) => partner.registered).length;
+  const needsAttention =
+    partners.length -
+    groups
+      .filter((group) => group.status === "registered" || group.status === "ready")
+      .reduce((total, group) => total + group.count, 0);
+  const nextActions = Array.from(
+    new Set(
+      groups
+        .filter((group) => group.status !== "registered" && group.status !== "ready")
+        .map((group) => group.next_action)
+        .filter(Boolean),
+    ),
+  ).slice(0, 4);
+  return {
+    summary: `${ready}/${partners.length} 个本地 CLI 伙伴可自动派工，${needsAttention} 个需要处理。`,
+    total: partners.length,
+    detected: partners.filter((partner) => partner.detected).length,
+    ready,
+    registered,
+    needs_attention: needsAttention,
+    groups,
+    next_actions:
+      nextActions.length > 0
+        ? nextActions
+        : ["全部可用伙伴建议先跑健康检查，再执行重要派工。"],
+  };
 }

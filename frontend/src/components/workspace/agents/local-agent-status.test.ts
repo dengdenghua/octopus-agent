@@ -4,6 +4,7 @@ import type { LocalAgentPartner } from "@/core/agents/api";
 
 import {
   localPartnerBadge,
+  localPartnerDoctorFromPartners,
   localPartnerFailureKindLabel,
   localPartnerSetupSteps,
 } from "./local-agent-status";
@@ -183,5 +184,56 @@ describe("local-agent-status localPartnerFailureKindLabel", () => {
     expect(localPartnerFailureKindLabel("")).toBe("");
     expect(localPartnerFailureKindLabel(null)).toBe("");
     expect(localPartnerFailureKindLabel("vendor_specific")).toBe("检查失败");
+  });
+});
+
+describe("local-agent-status localPartnerDoctorFromPartners", () => {
+  it("groups machine readiness by effective status", () => {
+    const doctor = localPartnerDoctorFromPartners([
+      partner({
+        id: "codex-cli",
+        detected: true,
+        ready: true,
+        registered: true,
+        status: "registered",
+        effective_status: "registered",
+      }),
+      partner({
+        id: "codebuddy-cli",
+        detected: true,
+        ready: true,
+        status: "detected",
+        effective_status: "ready",
+      }),
+      partner({
+        id: "trae-cli",
+        detected: true,
+        status: "detected",
+        effective_status: "model_unconfigured",
+      }),
+      partner({
+        id: "qoder-cli",
+        detected: false,
+        status: "missing",
+        effective_status: "missing",
+      }),
+    ]);
+
+    expect(doctor?.summary).toBe("2/4 个本地 CLI 伙伴可自动派工，2 个需要处理。");
+    expect(doctor?.ready).toBe(2);
+    expect(doctor?.registered).toBe(1);
+    expect(doctor?.needs_attention).toBe(2);
+    expect(
+      Object.fromEntries(
+        (doctor?.groups ?? []).map((group) => [group.status, group.partner_ids]),
+      ),
+    ).toEqual({
+      ready: ["codebuddy-cli"],
+      registered: ["codex-cli"],
+      missing: ["qoder-cli"],
+      model_unconfigured: ["trae-cli"],
+    });
+    expect(doctor?.next_actions[0]).toContain("安装对应官方 CLI");
+    expect(doctor?.next_actions[1]).toContain("打开原生 CLI");
   });
 });
