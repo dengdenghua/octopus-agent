@@ -15,45 +15,45 @@ import {
 import { queryKeys } from "@/core/api/query-keys";
 
 export function useEvolutionOverview() {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.evolution.overview,
     queryFn: getEvolutionOverview,
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
-  return { data: data ?? null, isLoading, error };
+  return { data: data ?? null, isLoading, error, refetch };
 }
 
 export function useLearningCurve(weeks?: number) {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: [...queryKeys.evolution.learningCurve, weeks],
     queryFn: () => getLearningCurve(weeks),
   });
-  return { data: data ?? null, isLoading, error };
+  return { data: data ?? null, isLoading, error, refetch };
 }
 
 export function useSkillPerformance() {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.evolution.skills,
     queryFn: getSkillPerformance,
   });
-  return { data: data ?? null, isLoading, error };
+  return { data: data ?? null, isLoading, error, refetch };
 }
 
 export function useMemoryGrowth(days?: number) {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: [...queryKeys.evolution.memory, days],
     queryFn: () => getMemoryGrowth(days),
   });
-  return { data: data ?? null, isLoading, error };
+  return { data: data ?? null, isLoading, error, refetch };
 }
 
 export function useRecommendations() {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.evolution.recommendations,
     queryFn: getRecommendations,
   });
-  return { data: data ?? null, isLoading, error };
+  return { data: data ?? null, isLoading, error, refetch };
 }
 
 export function useFitness(agentId: string | undefined, window?: number) {

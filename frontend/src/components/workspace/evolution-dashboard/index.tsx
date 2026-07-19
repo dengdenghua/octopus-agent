@@ -7,6 +7,7 @@ import {
   Loader2Icon,
   BookOpenIcon,
   LightbulbIcon,
+  RefreshCwIcon,
 } from "lucide-react";
 
 import {
@@ -25,6 +26,7 @@ import type {
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import { GeneLockControlCard } from "@/components/workspace/gene-lock-badge";
+import { Button } from "@/components/ui/button";
 
 import { SparklineChart } from "./sparkline-chart";
 
@@ -60,17 +62,33 @@ export function EvolutionDashboard({ className }: { className?: string }) {
     overviewQ.isLoading ||
     learningCurveQ.isLoading ||
     skillPerformanceQ.isLoading ||
+    memoryGrowthQ.isLoading ||
     recommendationsQ.isLoading;
 
   const firstError =
     overviewQ.error ||
     learningCurveQ.error ||
     skillPerformanceQ.error ||
+    memoryGrowthQ.error ||
     recommendationsQ.error;
+
+  const retryAll = () => {
+    void Promise.allSettled([
+      overviewQ.refetch(),
+      learningCurveQ.refetch(),
+      skillPerformanceQ.refetch(),
+      memoryGrowthQ.refetch(),
+      recommendationsQ.refetch(),
+    ]);
+  };
 
   if (isLoading) {
     return (
-      <div className={cn("flex h-full items-center justify-center", className)}>
+      <div
+        className={cn("flex min-h-56 items-center justify-center", className)}
+        role="status"
+        aria-live="polite"
+      >
         <div className="flex flex-col items-center gap-3">
           <Loader2Icon className="size-8 animate-spin text-purple-500" />
           <span className="text-sm text-muted-foreground">
@@ -84,8 +102,21 @@ export function EvolutionDashboard({ className }: { className?: string }) {
   if (firstError) {
     return (
       <div className={cn("space-y-4", className)}>
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
-          {t.evolutionDashboard.connectionFailed}
+        <div
+          role="alert"
+          className="flex flex-col items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400 sm:flex-row sm:items-center"
+        >
+          <span>{t.evolutionDashboard.connectionFailed}</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="w-full border-red-300 bg-background/70 text-foreground sm:w-auto"
+            onClick={retryAll}
+          >
+            <RefreshCwIcon className="mr-1.5 size-3.5" aria-hidden="true" />
+            {t.evolutionDashboard.retryLoading}
+          </Button>
         </div>
       </div>
     );
@@ -197,10 +228,10 @@ function GrowthStoryHero({
       <div className="rounded-xl border border-border-default bg-gradient-to-br from-primary/10 via-background to-background p-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-sm font-semibold">
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
               <BrainCircuitIcon className="size-4 text-primary" />
               {t.evolutionDashboard.recentEvolutionTitle}
-            </div>
+            </h2>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
               {hasEvidence
                 ? t.evolutionDashboard.growthSummary(
@@ -216,6 +247,7 @@ function GrowthStoryHero({
               {t.evolutionDashboard.overallImprovementLabel}
             </div>
             <div
+              aria-label={`${t.evolutionDashboard.overallImprovementLabel}: ${improvementPct} ${t.evolutionDashboard.of100}`}
               className={cn(
                 "mt-1 text-3xl font-bold tabular-nums",
                 scoreColor(improvementScore),
@@ -229,11 +261,11 @@ function GrowthStoryHero({
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-4">
+        <ol className="mt-5 grid gap-3 md:grid-cols-4">
           {stages.map((stage, index) => (
             <EvolutionStage key={stage.title} stage={stage} index={index + 1} />
           ))}
-        </div>
+        </ol>
 
         <GeneLockControlCard compact className="mt-3" />
       </div>
@@ -293,7 +325,7 @@ function EvolutionStage({
 }) {
   const Icon = stage.icon;
   return (
-    <div
+    <li
       className={cn(
         "relative rounded-lg border px-3 py-3",
         stage.done
@@ -320,11 +352,11 @@ function EvolutionStage({
           {stage.unit}
         </span>
       </div>
-      <div className="mt-3 text-sm font-semibold">{stage.title}</div>
+      <h3 className="mt-3 text-sm font-semibold">{stage.title}</h3>
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
         {stage.description}
       </p>
-    </div>
+    </li>
   );
 }
 
@@ -345,10 +377,10 @@ function StoryMetric({
     <div className="rounded-xl border border-border-default bg-card px-4 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <Icon className="size-3.5" />
             {title}
-          </div>
+          </h3>
           <div className="mt-2 text-2xl font-bold tabular-nums">{value}</div>
           <div className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
             {detail}
@@ -442,13 +474,20 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
         />
       </div>
 
-      <div className="mt-4 flex items-end gap-2 overflow-hidden rounded-lg border border-border-subtle bg-muted/20 px-3 py-3">
+      <div
+        className="mt-4 flex items-end gap-2 overflow-hidden rounded-lg border border-border-subtle bg-muted/20 px-3 py-3"
+        role="list"
+        aria-label={t.evolutionDashboard.capabilityTrend}
+      >
         {compact.map((point) => {
           const rate = numberOrZero(point.success_rate);
+          const ratePct = Math.round(Math.min(1, Math.max(0, rate)) * 100);
           return (
             <div
               key={point.week}
               className="flex min-w-0 flex-1 flex-col items-center gap-2"
+              role="listitem"
+              aria-label={`${point.week}: ${ratePct}%`}
             >
               <div className="flex h-20 w-full items-end justify-center">
                 <div
@@ -460,7 +499,7 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
                         ? "bg-amber-500"
                         : "bg-red-500",
                   )}
-                  style={{ height: `${Math.max(rate * 100, 6)}%` }}
+                  style={{ height: `${Math.max(ratePct, 6)}%` }}
                 />
               </div>
               <div className="truncate text-[10px] text-muted-foreground">
@@ -497,6 +536,7 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
       <div className="mt-4 space-y-3">
         {data.map((skill) => {
           const rate = numberOrZero(skill.success_rate);
+          const ratePct = Math.round(Math.min(1, Math.max(0, rate)) * 100);
           return (
             <div key={skill.name} className="space-y-1.5">
               <div className="flex items-center justify-between gap-3 text-xs">
@@ -512,7 +552,14 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
                   {formatPercent(rate)}
                 </span>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-2 overflow-hidden rounded-full bg-muted"
+                role="progressbar"
+                aria-label={`${skill.name} · ${t.evolutionDashboard.successRate}`}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={ratePct}
+              >
                 <div
                   className={cn(
                     "h-full rounded-full",
@@ -522,7 +569,7 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
                         ? "bg-amber-500"
                         : "bg-red-500",
                   )}
-                  style={{ width: `${Math.max(rate * 100, 4)}%` }}
+                  style={{ width: `${Math.max(ratePct, 4)}%` }}
                 />
               </div>
               <div className="flex justify-between text-[10px] text-muted-foreground">
@@ -571,9 +618,9 @@ function RecommendationsStory({ data }: { data: Recommendation[] }) {
               <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
                 {index + 1}
               </span>
-              <span className="min-w-0 truncate text-sm font-semibold">
+              <h3 className="min-w-0 truncate text-sm font-semibold">
                 {rec.title}
-              </span>
+              </h3>
             </div>
             <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
               {rec.description}
@@ -593,10 +640,10 @@ function SectionTitle({
   title: string;
 }) {
   return (
-    <div className="flex items-center gap-2 text-sm font-semibold">
+    <h2 className="flex items-center gap-2 text-sm font-semibold">
       <Icon className="size-4 text-primary" />
       {title}
-    </div>
+    </h2>
   );
 }
 

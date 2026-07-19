@@ -103,7 +103,7 @@ export function GeneLockBadge() {
   );
 
   const triggerPanic = useCallback(async () => {
-    if (!confirm("Trigger panic? Freezes every autonomous mutation.")) return;
+    if (!window.confirm(g.panicConfirm)) return;
     setBusy(true);
     try {
       await fetch(`${getBackendBaseURL()}/api/gene-locks/panic`, {
@@ -115,7 +115,7 @@ export function GeneLockBadge() {
     } finally {
       setBusy(false);
     }
-  }, [reload]);
+  }, [g.panicConfirm, reload]);
 
   const clearPanic = useCallback(async () => {
     setBusy(true);
@@ -151,6 +151,8 @@ export function GeneLockBadge() {
           levelColor,
         )}
         title={g.badgeTitle}
+        aria-expanded={expanded}
+        aria-controls="gene-lock-details"
       >
         {panic ? (
           <SirenIcon className="size-3 animate-pulse" />
@@ -172,7 +174,10 @@ export function GeneLockBadge() {
       </button>
 
       {expanded && (
-        <div className="absolute right-0 top-full z-30 mt-1 w-72 rounded-lg border border-border-default bg-background/95 p-3 text-xs shadow-xl backdrop-blur">
+        <div
+          id="gene-lock-details"
+          className="absolute right-0 top-full z-30 mt-1 w-72 rounded-lg border border-border-default bg-background/95 p-3 text-xs shadow-xl backdrop-blur"
+        >
           <div className="mb-2 flex items-center gap-2 font-medium">
             <ShieldIcon className="size-3.5" />
             {g.dropdownTitle}
@@ -180,7 +185,9 @@ export function GeneLockBadge() {
           <div className="space-y-1 text-muted-foreground">
             <div>
               {g.modeLabel}:{" "}
-              <span className="text-foreground">{status.mode}</span>
+              <span className="text-foreground">
+                {status.mode === "production" ? g.modeStrict : g.modeRelaxed}
+              </span>
             </div>
             <div>
               {g.maturityLabel}:{" "}
@@ -330,6 +337,9 @@ export function GeneLockControlCard({
           setMsg(g.updateSuccess);
         }
         await reload();
+      } catch (error) {
+        swallow(error);
+        setMsg(error instanceof Error ? error.message : g.operationFailed);
       } finally {
         setBusy(null);
         window.setTimeout(() => setMsg(null), 3500);
@@ -369,8 +379,9 @@ export function GeneLockControlCard({
   );
 
   const setPanic = useCallback(
-    (enabled: boolean) =>
-      run(enabled ? "panic:on" : "panic:off", () =>
+    (enabled: boolean) => {
+      if (enabled && !window.confirm(g.panicConfirm)) return;
+      void run(enabled ? "panic:on" : "panic:off", () =>
         fetch(
           `${getBackendBaseURL()}/api/gene-locks/panic${enabled ? "" : "/clear"}`,
           {
@@ -383,8 +394,9 @@ export function GeneLockControlCard({
               : undefined,
           },
         ),
-      ),
-    [run],
+      );
+    },
+    [g.panicConfirm, run],
   );
 
   if (!status) return null;
@@ -396,6 +408,7 @@ export function GeneLockControlCard({
   if (compact) {
     return (
       <div
+        aria-busy={busy !== null}
         className={cn(
           "rounded-lg border border-border-default bg-background/75 px-3 py-2 shadow-[var(--shadow-xs)]",
           className,
@@ -415,7 +428,11 @@ export function GeneLockControlCard({
 
           <span className="hidden h-4 w-px bg-border/70 sm:block" />
 
-          <div className="flex items-center rounded-md bg-muted/45 p-0.5">
+          <div
+            className="flex items-center rounded-md bg-muted/45 p-0.5"
+            role="group"
+            aria-label={g.openModeLabel}
+          >
             {[
               ["dev", g.modeRelaxed],
               ["production", g.modeStrict],
@@ -429,6 +446,7 @@ export function GeneLockControlCard({
                   type="button"
                   disabled={busy !== null}
                   onClick={() => setMode(mode as "dev" | "production")}
+                  aria-pressed={selected}
                   className={cn(
                     "h-6 rounded-[5px] px-2 text-[11px] transition-colors",
                     selected
@@ -443,13 +461,18 @@ export function GeneLockControlCard({
             })}
           </div>
 
-          <div className="flex items-center rounded-md bg-muted/45 p-0.5">
+          <div
+            className="flex items-center rounded-md bg-muted/45 p-0.5"
+            role="group"
+            aria-label={g.levelLabel}
+          >
             {g.levelNames.map((name, index) => (
               <button
                 key={name}
                 type="button"
                 disabled={busy !== null || panic}
                 onClick={() => setLevel(index)}
+                aria-pressed={index === lvl}
                 title={`${name} · ${g.levelDescriptions[index]}`}
                 className={cn(
                   "h-6 rounded-[5px] px-2 font-mono text-[11px] transition-colors",
@@ -471,6 +494,7 @@ export function GeneLockControlCard({
             className="h-7 px-2 text-[11px]"
             disabled={busy !== null}
             onClick={() => setPanic(!panic)}
+            aria-pressed={panic}
           >
             {panic ? (
               <>
@@ -486,7 +510,13 @@ export function GeneLockControlCard({
           </Button>
 
           {msg ? (
-            <span className="text-[11px] text-muted-foreground">{msg}</span>
+            <span
+              className="text-[11px] text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              {msg}
+            </span>
           ) : null}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-5 text-muted-foreground">
@@ -501,7 +531,10 @@ export function GeneLockControlCard({
   }
 
   return (
-    <section className="workspace-panel rounded-[1.25rem] border border-border-default px-4 py-4">
+    <section
+      className="workspace-panel rounded-[1.25rem] border border-border-default px-4 py-4"
+      aria-busy={busy !== null}
+    >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -522,7 +555,13 @@ export function GeneLockControlCard({
             {panic ? g.panicActive : `Lv ${lvl} · ${g.levelNames[lvl]}`}
           </Badge>
           {msg ? (
-            <span className="text-xs text-muted-foreground">{msg}</span>
+            <span
+              className="text-xs text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              {msg}
+            </span>
           ) : null}
         </div>
       </div>
@@ -530,7 +569,11 @@ export function GeneLockControlCard({
       <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1.4fr_1fr]">
         <div className="rounded-lg border border-border-default bg-muted/20 p-3">
           <div className="text-xs font-medium">{g.openModeLabel}</div>
-          <div className="mt-2 grid grid-cols-2 gap-1">
+          <div
+            className="mt-2 grid grid-cols-2 gap-1"
+            role="group"
+            aria-label={g.openModeLabel}
+          >
             <Button
               type="button"
               size="sm"
@@ -538,6 +581,7 @@ export function GeneLockControlCard({
               className="h-8 text-xs"
               disabled={busy !== null}
               onClick={() => setMode("dev")}
+              aria-pressed={!strict}
             >
               {g.modeRelaxed}
             </Button>
@@ -548,6 +592,7 @@ export function GeneLockControlCard({
               className="h-8 text-xs"
               disabled={busy !== null}
               onClick={() => setMode("production")}
+              aria-pressed={strict}
             >
               {g.modeStrict}
             </Button>
@@ -564,7 +609,11 @@ export function GeneLockControlCard({
               {g.levelDescriptions[lvl]}
             </span>
           </div>
-          <div className="mt-2 grid grid-cols-5 gap-1">
+          <div
+            className="mt-2 grid grid-cols-5 gap-1"
+            role="group"
+            aria-label={g.levelLabel}
+          >
             {g.levelNames.map((name, index) => (
               <Button
                 key={name}
@@ -574,6 +623,7 @@ export function GeneLockControlCard({
                 className="h-auto min-h-10 flex-col gap-0.5 px-1 py-1 text-[11px]"
                 disabled={busy !== null || panic}
                 onClick={() => setLevel(index)}
+                aria-pressed={index === lvl}
                 title={g.levelDescriptions[index]}
               >
                 <span className="font-mono">Lv {index}</span>
@@ -592,6 +642,7 @@ export function GeneLockControlCard({
             className="mt-2 h-8 w-full text-xs"
             disabled={busy !== null}
             onClick={() => setPanic(!panic)}
+            aria-pressed={panic}
           >
             {panic ? (
               <>

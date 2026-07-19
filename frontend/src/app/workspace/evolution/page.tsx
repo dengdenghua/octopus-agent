@@ -34,7 +34,7 @@ export default function EvolutionPage() {
                     {t.evolutionDashboard.title}
                   </h1>
                   <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                    汇总近期学习、能力变化与下一步优化方向。
+                    {t.evolutionDashboard.pageDescription}
                   </p>
                 </div>
               </div>
@@ -47,7 +47,7 @@ export default function EvolutionPage() {
                 >
                   <Link to="/workspace/reflex">
                     <ActivityIcon className="mr-2 size-4" />
-                    反射规则
+                    {t.evolutionDashboard.reflexRules}
                   </Link>
                 </Button>
                 <Button
@@ -56,9 +56,13 @@ export default function EvolutionPage() {
                   size="sm"
                   className="h-8 whitespace-nowrap"
                   onClick={() => setShowAdvanced((value) => !value)}
+                  aria-expanded={showAdvanced}
+                  aria-controls="evolution-runtime-monitor"
                 >
                   <GaugeIcon className="mr-2 size-4" />
-                  {showAdvanced ? "收起监控" : "运行监控"}
+                  {showAdvanced
+                    ? t.evolutionDashboard.hideRuntimeMonitor
+                    : t.evolutionDashboard.showRuntimeMonitor}
                 </Button>
               </div>
             </div>
@@ -69,11 +73,16 @@ export default function EvolutionPage() {
           </div>
 
           {showAdvanced && (
-            <section className="workspace-panel rounded-[1.75rem] px-5 py-5">
+            <section
+              id="evolution-runtime-monitor"
+              className="workspace-panel scroll-mt-4 rounded-[1.75rem] px-5 py-5"
+            >
               <div className="mb-4 flex flex-col gap-1">
-                <h2 className="text-base font-semibold">运行监控</h2>
+                <h2 className="text-base font-semibold">
+                  {t.evolutionDashboard.showRuntimeMonitor}
+                </h2>
                 <p className="text-xs text-muted-foreground">
-                  查看预算、熔断、候选技能、模型提案、协议漂移和运行状态。
+                  {t.evolutionDashboard.runtimeMonitorDescription}
                 </p>
               </div>
               <Tabs defaultValue="control" className="flex flex-col gap-4">

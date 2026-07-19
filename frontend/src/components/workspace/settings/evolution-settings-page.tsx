@@ -68,16 +68,35 @@ export default function EvolutionSettingsPage() {
 
   if (loading && !data) {
     return (
-      <div className="flex items-center py-8 text-sm text-muted-foreground">
+      <div
+        className="flex items-center py-8 text-sm text-muted-foreground"
+        role="status"
+        aria-live="polite"
+      >
         <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
         {e.loading}
       </div>
     );
   }
-  if (err) {
+  if (err && !data) {
     return (
-      <div className="py-6 text-sm text-destructive">
-        {e.loadFailed}: {err}
+      <div
+        className="flex flex-col items-start justify-between gap-3 rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive sm:flex-row sm:items-center"
+        role="alert"
+      >
+        <span>
+          {e.loadFailed}: {err}
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="w-full sm:w-auto"
+          onClick={() => void load()}
+        >
+          <RefreshCwIcon className="mr-1.5 size-3.5" aria-hidden="true" />
+          {e.refresh}
+        </Button>
       </div>
     );
   }
@@ -90,17 +109,47 @@ export default function EvolutionSettingsPage() {
   const camouflage = data.camouflage;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" aria-busy={loading}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold">{e.title}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{e.description}</p>
         </div>
-        <Button size="sm" variant="outline" onClick={() => void load()}>
-          <RefreshCwIcon className="mr-1.5 h-3.5 w-3.5" />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={loading}
+          onClick={() => void load()}
+        >
+          <RefreshCwIcon
+            className={`mr-1.5 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+            aria-hidden="true"
+          />
           {e.refresh}
         </Button>
       </div>
+
+      {err ? (
+        <div
+          className="flex flex-col items-start justify-between gap-3 rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive sm:flex-row sm:items-center"
+          role="alert"
+        >
+          <span>
+            {e.loadFailed}: {err}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="w-full sm:w-auto"
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            {e.refresh}
+          </Button>
+        </div>
+      ) : null}
 
       {/* Scheduler */}
       <div className="rounded-lg border border-border-default bg-card/30 p-4">
@@ -236,7 +285,10 @@ export default function EvolutionSettingsPage() {
               </thead>
               <tbody>
                 {recipes.scores.map((s) => (
-                  <tr key={s.recipe_id} className="border-b border-border-subtle">
+                  <tr
+                    key={s.recipe_id}
+                    className="border-b border-border-subtle"
+                  >
                     <td className="px-2 py-1.5 font-mono">{s.recipe_id}</td>
                     <td className="px-2 py-1.5">{s.uses}</td>
                     <td className="px-2 py-1.5">

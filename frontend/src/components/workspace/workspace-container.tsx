@@ -117,9 +117,10 @@ export function WorkspaceBody({
   className,
   children,
   ...props
-}: React.ComponentProps<"main">) {
+}: React.ComponentProps<"div">) {
   return (
-    <main
+    <div
+      data-slot="workspace-body"
       className={cn(
         "relative flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto overflow-x-hidden pt-3",
         className,
@@ -135,7 +136,7 @@ export function WorkspaceBody({
       <div className="flex w-full flex-1 min-h-0 flex-col items-center">
         {children}
       </div>
-    </main>
+    </div>
   );
 }
 

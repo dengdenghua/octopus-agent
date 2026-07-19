@@ -4652,6 +4652,8 @@ Strategy:
     panicReason: "Reason",
     unlockButton: "Unlock",
     panicButton: "Panic Lock",
+    panicConfirm:
+      "Activate the panic lock? This pauses every autonomous change.",
     levelSummary: (level, name, description) =>
       `Lv ${level} ${name} · ${description}`,
     compactTitle: "Gene Lock",
@@ -5747,6 +5749,13 @@ Strategy:
   // Evolution Dashboard
   evolutionDashboard: {
     title: "Self-Evolution",
+    pageDescription:
+      "Review recent learning, capability changes, and next optimization steps.",
+    reflexRules: "Reflection rules",
+    showRuntimeMonitor: "Show runtime monitor",
+    hideRuntimeMonitor: "Hide runtime monitor",
+    runtimeMonitorDescription:
+      "Inspect budgets, circuit breakers, candidate skills, model proposals, protocol drift, and runtime status.",
     skills: "Skills",
     memories: "Memories",
     knowledgeGraph: "Knowledge Base",
@@ -5793,6 +5802,7 @@ Strategy:
     connectionFailed: "Failed to connect to the evolution dashboard API.",
     loading: "Loading evolution data...",
     refresh: "Refresh",
+    retryLoading: "Reload",
     selfImprovement: "Self Improvement",
     measureChanges: "Continuously measure capability changes",
     noLearningData:
@@ -7216,6 +7226,13 @@ Strategy:
       source: (source: string, events: number) =>
         `${source} · ${events} events`,
       resetButton: "Reset",
+      breakerStates: {
+        closed: "Healthy",
+        open: "Open",
+        halfOpen: "Half-open",
+      },
+      hourlyUsageAria: (component: string, used: number, limit: number) =>
+        `${component} hourly usage ${used} of ${limit}`,
     },
     skillProposals: {
       cardTitle: "Skill proposals from intel",

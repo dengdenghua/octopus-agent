@@ -243,7 +243,15 @@ function Pill({
   );
 }
 
-function Bar({ pct, tone }: { pct: number; tone: "ok" | "warn" | "bad" }) {
+function Bar({
+  pct,
+  tone,
+  label,
+}: {
+  pct: number;
+  tone: "ok" | "warn" | "bad";
+  label: string;
+}) {
   const color =
     tone === "bad"
       ? "bg-red-500"
@@ -251,7 +259,14 @@ function Bar({ pct, tone }: { pct: number; tone: "ok" | "warn" | "bad" }) {
         ? "bg-amber-500"
         : "bg-emerald-500";
   return (
-    <div className="h-1.5 w-full rounded-lg bg-muted">
+    <div
+      className="h-1.5 w-full rounded-lg bg-muted"
+      role="progressbar"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.min(100, Math.max(0, pct))}
+    >
       <div
         className={cn("h-full rounded-lg transition-all", color)}
         style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
@@ -262,7 +277,10 @@ function Bar({ pct, tone }: { pct: number; tone: "ok" | "warn" | "bad" }) {
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border-default px-6 py-10 text-center">
+    <div
+      className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border-default px-6 py-10 text-center"
+      role="status"
+    >
       <CircleDashedIcon className="size-5 text-muted-foreground" />
       <p className="text-sm text-muted-foreground">{text}</p>
     </div>
@@ -272,7 +290,11 @@ function EmptyState({ text }: { text: string }) {
 function LoadingRow() {
   const { t } = useI18n();
   return (
-    <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
+    <div
+      className="flex items-center gap-2 py-3 text-sm text-muted-foreground"
+      role="status"
+      aria-live="polite"
+    >
       <Loader2Icon className="size-3.5 animate-spin" />
       {t.evolutionControl.loadingText}
     </div>
@@ -359,6 +381,12 @@ function BudgetSection() {
               : c.breaker.state === "half_open"
                 ? "warn"
                 : "ok";
+          const breakerStateLabel =
+            c.breaker.state === "closed"
+              ? t.evolutionControl.budget.breakerStates.closed
+              : c.breaker.state === "open"
+                ? t.evolutionControl.budget.breakerStates.open
+                : t.evolutionControl.budget.breakerStates.halfOpen;
           const dailyUsd = c.cost?.daily_usd ?? 0;
           const dailyTokens = c.cost?.daily_tokens ?? 0;
           return (
@@ -370,7 +398,7 @@ function BudgetSection() {
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs">{c.name}</span>
                   <Pill
-                    label={c.breaker.state}
+                    label={breakerStateLabel}
                     tone={
                       breakerTone === "bad"
                         ? "bad"
@@ -394,7 +422,15 @@ function BudgetSection() {
                     {hourly}/{hourlyLimit}
                   </span>
                 </div>
-                <Bar pct={hourlyPct} tone={tone} />
+                <Bar
+                  pct={hourlyPct}
+                  tone={tone}
+                  label={t.evolutionControl.budget.hourlyUsageAria(
+                    c.name,
+                    hourly,
+                    hourlyLimit,
+                  )}
+                />
               </div>
               <div className="flex min-w-[180px] flex-col gap-0.5 text-[10px] text-muted-foreground">
                 <span>
@@ -1366,12 +1402,17 @@ export function EvolutionControlPanel() {
           <CheckCircle2Icon className="size-3.5" />
           {t.evolutionControl.panelTitle}
         </div>
-        <div className="ml-4 flex flex-wrap gap-1">
+        <div
+          className="ml-4 flex flex-wrap gap-1"
+          role="group"
+          aria-label={t.evolutionControl.panelTitle}
+        >
           {SECTION_ORDER.map((k) => (
             <button
               type="button"
               key={k}
               onClick={() => setActive(k)}
+              aria-pressed={active === k}
               className={cn(
                 "rounded-lg px-3 py-1 text-[11px] transition-colors",
                 active === k

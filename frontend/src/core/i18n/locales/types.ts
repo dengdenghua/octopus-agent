@@ -3858,6 +3858,7 @@ export interface Translations {
     panicReason: string;
     unlockButton: string;
     panicButton: string;
+    panicConfirm: string;
     levelSummary: (level: number, name: string, description: string) => string;
     compactTitle: string;
     modeRelaxed: string;
@@ -4875,6 +4876,11 @@ export interface Translations {
   // Evolution Dashboard
   evolutionDashboard: {
     title: string;
+    pageDescription: string;
+    reflexRules: string;
+    showRuntimeMonitor: string;
+    hideRuntimeMonitor: string;
+    runtimeMonitorDescription: string;
     skills: string;
     memories: string;
     knowledgeGraph: string;
@@ -4927,6 +4933,7 @@ export interface Translations {
     connectionFailed: string;
     loading: string;
     refresh: string;
+    retryLoading: string;
     selfImprovement: string;
     measureChanges: string;
     noLearningData: string;
@@ -6238,6 +6245,16 @@ export interface Translations {
       lastReset: (value: string) => string;
       source: (source: string, events: number) => string;
       resetButton: string;
+      breakerStates: {
+        closed: string;
+        open: string;
+        halfOpen: string;
+      };
+      hourlyUsageAria: (
+        component: string,
+        used: number,
+        limit: number,
+      ) => string;
     };
     skillProposals: {
       cardTitle: string;
