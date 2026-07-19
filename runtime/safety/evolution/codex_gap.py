@@ -60,6 +60,7 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
             required_terms=(
                 "probeLocalAgentPartner",
                 "command_hints",
+                "effective_status",
                 "interaction_hint",
                 "native_launch_cwd",
                 "已连接 · 需修复",

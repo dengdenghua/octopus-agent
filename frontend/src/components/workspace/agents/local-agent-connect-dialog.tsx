@@ -61,33 +61,35 @@ export function LocalAgentConnectDialog({
     label: string;
     className: string;
   } => {
-    if (partner.registered && partner.ready) {
+    const effectiveStatus =
+      partner.effective_status || partner.readiness_status || partner.status;
+    if (effectiveStatus === "registered") {
       return {
         label: t.localAgentConnect.statusConnected,
         className: "bg-emerald-50 text-emerald-700 ring-emerald-100",
       };
     }
-    if (partner.registered && !partner.ready) {
+    if (partner.registered && effectiveStatus !== "registered") {
       return {
         label: "已连接 · 需修复",
         className: "bg-amber-50 text-amber-700 ring-amber-100",
       };
     }
-    if (partner.detected && partner.ready) {
+    if (effectiveStatus === "ready") {
       return {
         label: "可连接",
         className: "bg-primary/10 text-primary ring-primary/15",
       };
     }
-    if (partner.readiness_status === "model_unconfigured") {
+    if (effectiveStatus === "model_unconfigured") {
       return {
         label: "模型未配置",
         className: "bg-amber-50 text-amber-700 ring-amber-100",
       };
     }
     if (
-      partner.readiness_status === "launcher_only" ||
-      partner.readiness_status === "headless_unsupported"
+      effectiveStatus === "launcher_only" ||
+      effectiveStatus === "headless_unsupported"
     ) {
       return {
         label: "仅可手动",
