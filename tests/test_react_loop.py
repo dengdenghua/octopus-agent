@@ -45,6 +45,7 @@ from runtime.core.cerebrum.react_loop import (
     _long_task_budget_limits,
     _looks_like_special_tool_envelope,
     _looks_like_unfinished_work,
+    _model_post_tool_timeout_s,
     _narrow_research_iteration_limit,
     _native_tool_calls_missing_required_args,
     _normalized_tool_call_from_react_action,
@@ -1331,6 +1332,177 @@ def test_hidden_reasoning_timeout_retries_once_without_extended_thinking(monkeyp
     assert router.requests[1].enable_thinking is False
     assert router.requests[1].thinking_budget == 1024
     assert any(event["type"] == "commentary_delta" for event in events)
+
+
+def test_post_tool_model_round_uses_tighter_timeout(monkeypatch) -> None:
+    monkeypatch.setenv("OCTOPUS_REACT_POST_TOOL_TIMEOUT_S", "45")
+
+    assert _model_post_tool_timeout_s(120.0) == 45.0
+    assert _model_post_tool_timeout_s(20.0) == 20.0
+
+
+def test_hidden_reasoning_timeout_switches_to_backup_model(monkeypatch) -> None:
+    from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
+
+    class SlowThenBackupRouter:
+        def __init__(self) -> None:
+            self.requests: list[Any] = []
+
+        def call_stream(self, request: Any):
+            self.requests.append(request)
+            if request.model == "test-model":
+                for _ in range(10):
+                    time.sleep(0.01)
+                    yield ModelStreamEvent(type="thinking_delta", delta="private")
+                return
+            text = "Final Answer: backup completed the answer"
+            yield ModelStreamEvent(type="text_delta", delta=text)
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(text=text, model=request.model),
+            )
+
+    monkeypatch.setattr(
+        "runtime.core.cerebrum.react_loop._model_iteration_timeout_s",
+        lambda: 0.025,
+    )
+    monkeypatch.setattr(
+        "runtime.core.cerebrum.react_loop.next_custom_model_fallback",
+        lambda current, attempted, **_kwargs: (
+            "backup-model" if "backup-model" not in attempted else None
+        ),
+    )
+    router = SlowThenBackupRouter()
+
+    events, result = _drain(
+        stream_react_loop(
+            _FakeStack(router),  # type: ignore[arg-type]
+            _intent("perform a long analysis"),
+            agent=None,
+            max_iterations=3,
+        )
+    )
+
+    assert result is not None and result.success
+    assert result.final_answer == "backup completed the answer"
+    assert [request.model for request in router.requests] == [
+        "test-model",
+        "backup-model",
+    ]
+    assert any(
+        event["type"] == "react_retry" and event.get("kind") == "model_failover"
+        for event in events
+    )
+
+
+def test_post_tool_timeout_backup_reuses_evidence_and_finishes_plain_answer(
+    monkeypatch,
+) -> None:
+    from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
+
+    class ToolThenSlowRouter:
+        def __init__(self) -> None:
+            self.requests: list[Any] = []
+
+        def call_stream(self, request: Any):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                text = 'Thought: inspect once\nAction: echo({"text": "evidence"})'
+                yield ModelStreamEvent(type="text_delta", delta=text)
+                yield ModelStreamEvent(
+                    type="done",
+                    final=ModelResponse(text=text, model=request.model),
+                )
+                return
+            if request.model == "test-model":
+                for _ in range(10):
+                    time.sleep(0.01)
+                    yield ModelStreamEvent(type="thinking_delta", delta="private")
+                return
+            text = "组件在 `idle` 和 `streaming` 两个 phase 会直接返回 null。"
+            yield ModelStreamEvent(type="text_delta", delta=text)
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(text=text, model=request.model),
+            )
+
+    monkeypatch.setattr(
+        "runtime.core.cerebrum.react_loop._model_iteration_timeout_s",
+        lambda: 0.025,
+    )
+    monkeypatch.setattr(
+        "runtime.core.cerebrum.react_loop.next_custom_model_fallback",
+        lambda current, attempted, **_kwargs: (
+            "backup-model" if "backup-model" not in attempted else None
+        ),
+    )
+    router = ToolThenSlowRouter()
+    stack = _build_stack_with_executor(router)  # type: ignore[arg-type]
+
+    events, result = _drain(
+        stream_react_loop(
+            stack,
+            _intent("inspect then answer"),
+            agent=None,
+            max_iterations=4,
+        )
+    )
+
+    assert result is not None and result.success
+    assert result.final_answer == "组件在 `idle` 和 `streaming` 两个 phase 会直接返回 null。"
+    assert [request.model for request in router.requests] == [
+        "test-model",
+        "test-model",
+        "backup-model",
+    ]
+    assert len([event for event in events if event["type"] == "tool_start"]) == 1
+
+
+def test_retryable_provider_error_switches_model_before_first_step(monkeypatch) -> None:
+    from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
+
+    class UnavailableThenBackupRouter:
+        def __init__(self) -> None:
+            self.requests: list[Any] = []
+
+        def call_stream(self, request: Any):
+            self.requests.append(request)
+            if request.model == "test-model":
+                raise TimeoutError("upstream timeout")
+            text = "Final Answer: recovered without losing the turn"
+            yield ModelStreamEvent(type="text_delta", delta=text)
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(text=text, model=request.model),
+            )
+
+    monkeypatch.setattr(
+        "runtime.core.cerebrum.react_loop.next_custom_model_fallback",
+        lambda current, attempted, **_kwargs: (
+            "backup-model" if "backup-model" not in attempted else None
+        ),
+    )
+    router = UnavailableThenBackupRouter()
+
+    events, result = _drain(
+        stream_react_loop(
+            _FakeStack(router),  # type: ignore[arg-type]
+            _intent("answer despite provider outage"),
+            agent=None,
+            max_iterations=3,
+        )
+    )
+
+    assert result is not None and result.success
+    assert result.final_answer == "recovered without losing the turn"
+    assert [request.model for request in router.requests] == [
+        "test-model",
+        "backup-model",
+    ]
+    assert any(
+        event["type"] == "commentary_delta" and "备用模型" in event["delta"]
+        for event in events
+    )
 
 
 def test_silent_model_stream_is_interrupted_by_wall_clock_deadline(monkeypatch) -> None:
@@ -3693,6 +3865,32 @@ def test_zero_anchor_answer_after_tool_evidence_finishes_on_first_response() -> 
     assert "".join(event["delta"] for event in events if event["type"] == "text_delta") == plain_answer
 
 
+def test_guarded_plain_answer_stops_after_three_unchanged_rejections() -> None:
+    plain_answer = "组件在 idle 和 streaming 两个 phase 会返回 null。"
+    router = _ScriptedRouter(
+        [
+            'Thought: inspect something\nAction: echo({"text": "not file evidence"})',
+            plain_answer,
+            plain_answer,
+            plain_answer,
+            "Final Answer: this round must never run",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("Inspect project files before answering")
+    intent.user_context["mode"] = "code"
+
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=6)
+    )
+
+    assert result is not None
+    assert result.terminated_reason == "guard_impasse"
+    assert result.success is False
+    assert router.calls == 4
+    assert any(event["type"] == "text_delta" for event in events)
+
+
 def test_zero_anchor_answer_after_parallel_tool_evidence_finishes_immediately() -> None:
     plain_answer = "并行读取已完成，证据足够。"
     stack = _build_stack_with_executor(
@@ -4750,7 +4948,7 @@ def test_react_writes_trajectory_on_success() -> None:
     assert len(traj.steps) == 1  # Implementation note.
 
 
-def test_react_final_checkpoint_without_periodic_checkpoint(
+def test_react_default_checkpoint_captures_each_iteration_and_final_state(
     monkeypatch,
 ) -> None:
     monkeypatch.delenv("OCTOPUS_CHECKPOINT_EVERY_N", raising=False)
@@ -4765,10 +4963,13 @@ def test_react_final_checkpoint_without_periodic_checkpoint(
     result = run_react_loop(stack, _intent("think"), agent=None, max_iterations=3)
 
     assert result is not None and result.success
-    assert len(stack.journal.checkpoints) == 1
-    checkpoint = stack.journal.checkpoints[0]["kwargs"]
-    assert checkpoint["iteration_completed"] == 2
-    assert checkpoint["has_final_answer"] is True
+    assert len(stack.journal.checkpoints) == 2
+    periodic = stack.journal.checkpoints[0]["kwargs"]
+    final = stack.journal.checkpoints[1]["kwargs"]
+    assert periodic["iteration_completed"] == 1
+    assert periodic["has_final_answer"] is False
+    assert final["iteration_completed"] == 2
+    assert final["has_final_answer"] is True
 
 
 def test_react_periodic_checkpoint_is_opt_in(monkeypatch) -> None:

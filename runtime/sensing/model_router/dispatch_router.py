@@ -4,6 +4,12 @@ import threading
 from typing import Any
 
 from .models import ModelRequest, ModelResponse, ModelRouter
+from .rescue_policy import (
+    is_retryable_model_error as _is_provider_unavailable_error,
+)
+from .rescue_policy import (
+    model_rescue_quality as _model_rescue_quality,
+)
 
 
 class ModelDispatchRouter(ModelRouter):
@@ -230,38 +236,6 @@ class ModelDispatchRouter(ModelRouter):
     @property
     def default_model(self) -> Any:
         return getattr(self._fallback, "default_model", None)
-
-
-def _is_provider_unavailable_error(exc: BaseException) -> bool:
-    text = f"{type(exc).__name__}: {exc}".lower()
-    return any(
-        marker in text
-        for marker in (
-            "http_402",
-            "insufficient_balance",
-            "insufficient account balance",
-            "模型账户余额不足",
-        )
-    )
-
-
-def _model_rescue_quality(model_id: str) -> int:
-    """Cheap name-only ranking for provider-outage rescue selection."""
-    name = str(model_id or "").lower()
-    score = 0
-    if "codex" in name:
-        score += 120
-    if "code" in name or "coder" in name:
-        score += 100
-    if "pro" in name:
-        score += 90
-    if "reason" in name or "thinking" in name:
-        score += 80
-    if "chat" in name:
-        score += 40
-    if "flash" in name or "mini" in name:
-        score += 10
-    return score
 
 
 def _stamp_stream_model(events: Any, model_id: str):

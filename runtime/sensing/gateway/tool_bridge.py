@@ -102,6 +102,12 @@ from runtime.sensing.model_router.models import (
     ModelRequest,
     ToolCall,
 )
+from runtime.sensing.model_router.rescue_policy import (
+    is_retryable_model_error as _is_provider_unavailable_error,
+)
+from runtime.sensing.model_router.rescue_policy import (
+    next_custom_model_fallback as _next_custom_model_fallback,
+)
 
 _logger = logging.getLogger("octopus.agentic")
 
@@ -1352,71 +1358,6 @@ def _recover_named_xml_tool_calls(
             )
         )
     return recovered
-
-
-def _is_provider_unavailable_error(exc: BaseException) -> bool:
-    text = f"{type(exc).__name__}: {exc}".lower()
-    return any(
-        marker in text
-        for marker in (
-            "http_402",
-            "insufficient_balance",
-            "insufficient account balance",
-            "模型账户余额不足",
-        )
-    )
-
-
-def _next_custom_model_fallback(current_model: str, attempted: set[str]) -> str | None:
-    """Pick the strongest tool-capable custom model after an outage."""
-    try:
-        import json
-
-        from runtime.platform.process.paths import app_paths
-
-        data = json.loads(app_paths().custom_models_path.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
-        return None
-    if not isinstance(data, dict):
-        return None
-    candidates: list[str] = []
-    for entry in data.values():
-        if not isinstance(entry, dict) or entry.get("supports_tool_use") is not True:
-            continue
-        raw_models = entry.get("models")
-        if isinstance(raw_models, list):
-            candidates.extend(
-                str(model).strip() for model in raw_models if str(model or "").strip()
-            )
-    if not candidates:
-        return None
-    indexed = list(enumerate(candidates))
-    ordered = [
-        model
-        for _idx, model in sorted(
-            indexed,
-            key=lambda row: (-_model_fallback_quality(row[1]), row[0]),
-        )
-    ]
-    return next((model for model in ordered if model not in attempted), None)
-
-
-def _model_fallback_quality(model_id: str) -> int:
-    name = str(model_id or "").lower()
-    score = 0
-    if "codex" in name:
-        score += 120
-    if "code" in name or "coder" in name:
-        score += 100
-    if "pro" in name:
-        score += 90
-    if "reason" in name or "thinking" in name:
-        score += 80
-    if "chat" in name:
-        score += 40
-    if "flash" in name or "mini" in name:
-        score += 10
-    return score
 
 
 def stream_agentic_fallback(

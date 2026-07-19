@@ -64,6 +64,7 @@ from runtime.core.cerebrum.react_parsing import (
     _TEST_FUNC_RE,
     _detect_destructive_calls_in_payload,
     _detect_dynamic_exec_in_payload,
+    _detect_no_assertion_tests_in_payload,
     _detect_secrets_in_payload,
     _detect_shell_injection_in_payload,
     _detect_unsafe_deser_in_payload,
@@ -2851,20 +2852,38 @@ _NO_ASSERT_LOOKBACK = 12
 
 
 def _trajectory_no_assertion_test_hits(steps: list[ReActStep]) -> dict[str, list[str]]:
-    out: dict[str, list[str]] = {}
+    out: dict[str, set[str]] = {}
     window = steps[-_NO_ASSERT_LOOKBACK:] if steps else []
     for step in window:
-        names = _step_introduces_no_assertion_test(step)
-        if not names:
-            continue
         parsed = _parse_action(step.action)
         if parsed is None:
             continue
         _name, args = parsed
         path = args.get("path") or args.get("file") or args.get("file_path")
-        if isinstance(path, str):
-            out.setdefault(path, []).extend(names)
-    return out
+        if not isinstance(path, str):
+            continue
+
+        new_text, _old_text = _extract_step_payloads(step)
+        touched_test_names = {
+            match.group("name") for match in _TEST_FUNC_RE.finditer(new_text)
+        }
+        if touched_test_names:
+            # A later rewrite of the same test function supersedes the earlier
+            # defect. Keeping every historical hit forever made a repaired
+            # test impossible to finish: the guard still rejected the final
+            # answer after the new body added a concrete assertion.
+            out.setdefault(path, set()).difference_update(touched_test_names)
+
+        names = set(_step_introduces_no_assertion_test(step))
+        if names:
+            out.setdefault(path, set()).update(names)
+        elif touched_test_names:
+            current_bad = set(_detect_no_assertion_tests_in_payload(new_text))
+            out.setdefault(path, set()).update(current_bad)
+
+        if path in out and not out[path]:
+            del out[path]
+    return {path: sorted(names) for path, names in out.items()}
 
 
 def _no_assertion_test_guard(

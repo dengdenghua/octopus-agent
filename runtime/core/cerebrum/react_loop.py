@@ -140,6 +140,10 @@ from runtime.safety.validation.prompt_injection import (
     set_injection_gate_handled,
     wrap_untrusted_observation,
 )
+from runtime.sensing.model_router.rescue_policy import (
+    is_retryable_model_error,
+    next_custom_model_fallback,
+)
 
 if TYPE_CHECKING:
     from runtime.execution.agents.base import Agent
@@ -416,6 +420,18 @@ def _model_recovery_timeout_s(base_timeout_s: float) -> float:
         value = 30.0
     recovery_ceiling = max(10.0, min(value, 120.0))
     return min(base_timeout_s, recovery_ceiling)
+
+
+def _model_post_tool_timeout_s(base_timeout_s: float) -> float:
+    """Use a tighter ceiling once the turn already has executable evidence."""
+
+    raw = os.environ.get("OCTOPUS_REACT_POST_TOOL_TIMEOUT_S", "45")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = 45.0
+    post_tool_ceiling = max(10.0, min(value, 180.0))
+    return min(base_timeout_s, post_tool_ceiling)
 
 
 _MODEL_STREAM_DEADLINE = object()
@@ -2734,6 +2750,49 @@ def stream_react_loop(
     # short summary instead of resuming. 8k is enough for a single
     # report section; the continuation path catches anything longer.
     _max_tokens_per_iter = 4096 if _wants_thinking else 8000
+    _attempted_models = {effective_model}
+    _model_failovers = 0
+
+    def _switch_react_model(next_model: str) -> None:
+        """Retarget later rounds while preserving this turn's evidence."""
+
+        nonlocal effective_model, _max_tokens_per_iter, _resolved_model, _wants_thinking
+        effective_model = next_model
+        _resolved_model = next_model
+        if hasattr(router, "_resolve"):
+            try:
+                _subrouter = router._resolve(next_model)
+                if _subrouter is not router:
+                    _resolved_model = (
+                        getattr(_subrouter, "default_model", None) or next_model
+                    )
+            except (AttributeError, TypeError):
+                pass
+        _wants_thinking = _supports_thinking(_resolved_model)
+        _max_tokens_per_iter = 4096 if _wants_thinking else 8000
+
+    def _try_react_model_failover(reason: str) -> str | None:
+        nonlocal _model_failovers
+        if _model_failovers >= 1:
+            return None
+        next_model = next_custom_model_fallback(
+            effective_model,
+            _attempted_models,
+            require_tool_use=_native_mode,
+        )
+        if not next_model:
+            return None
+        previous_model = effective_model
+        _switch_react_model(next_model)
+        _attempted_models.add(next_model)
+        _model_failovers += 1
+        _logger.warning(
+            "react_loop switching model %s -> %s after %s",
+            previous_model,
+            next_model,
+            reason,
+        )
+        return next_model
 
     if resume_task_id is not None:
         _grant = _pause.consume_grant(str(resume_task_id))
@@ -2860,11 +2919,16 @@ def stream_react_loop(
             _final_delta_emitted_this_iteration = False
             _iteration_soft_timed_out = False
             _base_iteration_timeout = _model_iteration_timeout_s()
-            _iteration_timeout = (
-                _model_recovery_timeout_s(_base_iteration_timeout)
-                if _iteration_recovery_mode
-                else _base_iteration_timeout
+            _has_tool_evidence = bool(
+                executed_beak_steps
+                or any(prior_step.action_results for prior_step in steps)
             )
+            if _iteration_recovery_mode:
+                _iteration_timeout = _model_recovery_timeout_s(_base_iteration_timeout)
+            elif _has_tool_evidence:
+                _iteration_timeout = _model_post_tool_timeout_s(_base_iteration_timeout)
+            else:
+                _iteration_timeout = _base_iteration_timeout
 
             def _maybe_emit_throughput(chars: int) -> dict[str, Any] | None:
                 nonlocal _throughput_last_emit
@@ -3071,6 +3135,40 @@ def stream_react_loop(
                 type(exc).__name__,
                 exc,
             )
+            _error_text_was_exposed = bool(
+                locals().get("_final_stream_started", False)
+                or locals().get("_streamed_final_chars", 0)
+            )
+            if not _error_text_was_exposed and is_retryable_model_error(exc):
+                _fallback_model = _try_react_model_failover(type(exc).__name__)
+                if _fallback_model:
+                    messages.append(
+                        Message(
+                            role="user",
+                            content=(
+                                "[SYSTEM CHECK - model failover]\n"
+                                "The previous provider failed before exposing an answer. "
+                                "Every prior tool result and message remains authoritative. "
+                                "Continue from the exact unfinished point without repeating "
+                                "successful reads, writes, or verification."
+                            ),
+                        )
+                    )
+                    yield {
+                        "type": "commentary_delta",
+                        "delta": "当前模型响应异常，已保留上下文并切换备用模型继续。",
+                        "progress_source": "runtime",
+                        "iteration": i + 1,
+                    }
+                    yield {
+                        "type": "react_retry",
+                        "kind": "model_failover",
+                        "model": _fallback_model,
+                        "iteration": i + 1,
+                        "attempt": _model_failovers,
+                    }
+                    _force_convergence_next = bool(steps)
+                    continue
             if not steps:
                 _err_msg = str(exc)
                 _err_kind = (
@@ -3085,10 +3183,6 @@ def stream_react_loop(
                 }
                 _pause.unregister_active(str(react_task_id))
                 return None
-            _error_text_was_exposed = bool(
-                locals().get("_final_stream_started", False)
-                or locals().get("_streamed_final_chars", 0)
-            )
             _error_message = str(exc).lower()
             _auth_failure = any(
                 marker in _error_message
@@ -3283,9 +3377,16 @@ def stream_react_loop(
                 steps.append(step)
                 terminated_reason = "model_stall"
                 break
+            _fallback_model = None
+            if not _final_stream_started:
+                _fallback_model = _try_react_model_failover("model stream timeout")
             recovery_update = (
-                "这一轮深度推理超过了单轮时限；已保留前面的有效结果，"
-                "下一轮会关闭扩展思考，直接收敛为阶段结论、必要操作或最终答案。"
+                "当前模型响应过慢，已保留现有结果并切换备用模型继续。"
+                if _fallback_model
+                else (
+                    "这一轮深度推理超过了单轮时限；已保留前面的有效结果，"
+                    "下一轮会关闭扩展思考，直接收敛为阶段结论、必要操作或最终答案。"
+                )
             )
             yield {
                 "type": "commentary_delta",
@@ -3293,11 +3394,20 @@ def stream_react_loop(
                 "progress_source": "runtime",
                 "iteration": i + 1,
             }
+            if _fallback_model:
+                yield {
+                    "type": "react_retry",
+                    "kind": "model_failover",
+                    "model": _fallback_model,
+                    "iteration": i + 1,
+                    "attempt": _model_failovers,
+                }
             step.public_update = recovery_update
             step.observation = (
                 "[model-iteration-timeout] The previous model stream kept producing "
                 "private reasoning without a usable Action or Final Answer. Preserve "
-                "all completed tool results. On the next turn, do not deliberate at "
+                "all completed tool results. A backup model may now be active. "
+                "On the next turn, do not deliberate at "
                 "length: emit one concrete Update plus the next necessary Action, or "
                 "emit the complete Final Answer directly."
             )
@@ -3506,6 +3616,24 @@ def stream_react_loop(
                         )
                     if _guard_hit is not None:
                         _guard_label, _guard_message = _guard_hit
+                        if _note_guard_impasse(
+                            _guard_impasse_state,
+                            _guard_label,
+                            steps,
+                        ):
+                            _logger.warning(
+                                "react_loop guard impasse (plain-answer recovery) · "
+                                "%s rejected 3x with no intervening tool execution — "
+                                "terminating",
+                                _guard_label,
+                            )
+                            final_answer = _guard_impasse_final_answer(
+                                _guard_label,
+                                _guard_message,
+                            )
+                            terminated_reason = "guard_impasse"
+                            steps.append(step)
+                            break
                         consecutive_format_violations = 0
                         step.observation = (
                             (((step.observation or "") + "\n\n") if step.observation else "")
@@ -4401,7 +4529,8 @@ def stream_react_loop(
         # ── Periodic auto-checkpoint (P3 long-task durability) ──
         # Mirrors the pause path's checkpoint write so a SIGKILL or
         # OOM restart can resume from the last completed iteration.
-        # Off by default — opt-in via OCTOPUS_CHECKPOINT_EVERY_N=N.
+        # On after every completed iteration by default; tune or disable via
+        # OCTOPUS_CHECKPOINT_EVERY_N=N (0 disables periodic snapshots).
         # Failures are swallowed; the turn must not break because
         # we couldn't snapshot.
         _ckpt_interval = _checkpoint_interval()
@@ -4904,7 +5033,7 @@ def stream_react_loop(
         final_answer=final_answer,
         steps=steps,
         terminated_reason=terminated_reason,
-        success=effective_success,
+        success=final_success,
         completion_receipt=completion_receipt,
     )
 
