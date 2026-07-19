@@ -213,6 +213,9 @@ from .agents_local_partner import (  # noqa: E402
     LOCAL_PARTNER_SPECS as _LOCAL_PARTNER_SPECS,
 )
 from .agents_local_partner import (  # noqa: E402
+    doctor_summary as _local_partner_doctor_summary,
+)
+from .agents_local_partner import (  # noqa: E402
     identity_has_admin_role as _identity_has_admin_role,
 )
 from .agents_local_partner import (  # noqa: E402
@@ -251,6 +254,7 @@ from .agents_models import (  # noqa: E402
     GroupCreate,
     GroupUpdate,
     GroupWire,
+    LocalPartnerDoctorResponse,
     LocalPartnerProbeResponse,
     LocalPartnerRegisterRequest,
     LocalPartnerRegisterResponse,
@@ -726,6 +730,20 @@ When making changes, first read the surrounding code.
                 for spec in _LOCAL_PARTNER_SPECS.values()
             ]
         }
+
+    @router.get("/api/agents/local-partners/doctor")
+    def local_partners_doctor(request: Request) -> LocalPartnerDoctorResponse:
+        # Read-only doctor summary: safe for regular users, no subprocesses.
+        _auth(request)  # AUTH-OK: actor-agnostic — summarizes local detection only
+        partners = [
+            _local_partner_wire(
+                spec,
+                registry,
+                which_fn=_which_local_partner_command,
+            )
+            for spec in _LOCAL_PARTNER_SPECS.values()
+        ]
+        return LocalPartnerDoctorResponse(**_local_partner_doctor_summary(partners))
 
     @router.get("/api/agents/local-partners/{partner_id}/model")
     def get_local_partner_model(request: Request, partner_id: str) -> dict[str, Any]:

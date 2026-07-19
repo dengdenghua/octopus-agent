@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import shlex
+import subprocess
 from io import BytesIO
 from pathlib import Path
 
@@ -969,6 +970,52 @@ class TestLocalPartners:
         assert partners["openclaw"]["detected"] is False
         assert partners["openclaw"]["readiness_status"] == "missing"
         assert partners["openclaw"]["effective_status"] == "missing"
+
+    def test_local_partners_doctor_summarizes_machine_readiness(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
+
+        def fake_which(commands: list[str]) -> tuple[str | None, str | None]:
+            if any(cmd.startswith("codex") for cmd in commands):
+                return "codex", str(tmp_path / "codex")
+            if "trae-cli" in commands:
+                return "trae-cli", str(tmp_path / "trae-cli")
+            return None, None
+
+        def fake_run(*args, **kwargs):
+            class Result:
+                returncode = 0
+                stdout = "[]"
+                stderr = ""
+
+            return Result()
+
+        monkeypatch.setattr(
+            agents_router_module,
+            "_which_local_partner_command",
+            fake_which,
+        )
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        app = FastAPI()
+        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
+        r = TestClient(app).get("/api/agents/local-partners/doctor")
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["total"] >= 6
+        assert body["ready"] >= 1
+        assert body["needs_attention"] >= 1
+        assert "本地 CLI 伙伴可自动派工" in body["summary"]
+        groups = {group["status"]: group for group in body["groups"]}
+        assert "ready" in groups
+        assert "model_unconfigured" in groups
+        assert groups["model_unconfigured"]["label"] == "模型未配置"
+        assert "trae-cli" in groups["model_unconfigured"]["partner_ids"]
+        assert any("原生 CLI" in action for action in body["next_actions"])
 
     def test_local_partner_copy_commands_quote_shell_special_paths(
         self,

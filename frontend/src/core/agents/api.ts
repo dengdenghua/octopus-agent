@@ -20,14 +20,11 @@ export class AgentNameCheckError extends Error {
 export async function listAgents(opts?: {
   signal?: AbortSignal;
 }): Promise<Agent[]> {
-  const res = await fetch(
-    `${getBackendBaseURL()}/api/agents?v=${Date.now()}`,
-    {
-      cache: "no-store",
-      headers: authHeaders(),
-      signal: opts?.signal,
-    },
-  );
+  const res = await fetch(`${getBackendBaseURL()}/api/agents?v=${Date.now()}`, {
+    cache: "no-store",
+    headers: authHeaders(),
+    signal: opts?.signal,
+  });
   if (!res.ok) throw new Error(`Failed to load agents: ${res.statusText}`);
   const data = (await res.json()) as Agent[] | { agents?: Agent[] };
   const agents = Array.isArray(data) ? data : (data.agents ?? []);
@@ -116,6 +113,25 @@ export interface LocalAgentPartnerRegisterResponse {
   skipped_count: number;
 }
 
+export interface LocalAgentPartnerDoctorGroup {
+  status: string;
+  label: string;
+  count: number;
+  partner_ids: string[];
+  next_action: string;
+}
+
+export interface LocalAgentPartnerDoctorResponse {
+  summary: string;
+  total: number;
+  detected: number;
+  ready: number;
+  registered: number;
+  needs_attention: number;
+  groups: LocalAgentPartnerDoctorGroup[];
+  next_actions: string[];
+}
+
 export interface LocalAgentPartnerProbeResponse {
   id: string;
   agent_id: string;
@@ -132,6 +148,21 @@ export interface LocalAgentPartnerProbeResponse {
   failure_title?: string;
   fix_hint?: string | null;
   elapsed_ms?: number;
+}
+
+export async function getLocalAgentPartnersDoctor(opts?: {
+  signal?: AbortSignal;
+}): Promise<LocalAgentPartnerDoctorResponse> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/agents/local-partners/doctor`,
+    {
+      headers: authHeaders(),
+      signal: opts?.signal,
+    },
+  );
+  if (!res.ok)
+    throw new Error(`Failed to load local partner doctor: ${res.statusText}`);
+  return (await res.json()) as LocalAgentPartnerDoctorResponse;
 }
 
 export async function listLocalAgentPartners(opts?: {

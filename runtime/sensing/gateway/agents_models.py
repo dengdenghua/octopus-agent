@@ -144,6 +144,25 @@ class LocalPartnerWire(BaseModel):
     diagnostic_items: list[LocalPartnerDiagnosticItem] = Field(default_factory=list)
 
 
+class LocalPartnerDoctorGroup(BaseModel):
+    status: str
+    label: str
+    count: int = 0
+    partner_ids: list[str] = Field(default_factory=list)
+    next_action: str = ""
+
+
+class LocalPartnerDoctorResponse(BaseModel):
+    summary: str
+    total: int = 0
+    detected: int = 0
+    ready: int = 0
+    registered: int = 0
+    needs_attention: int = 0
+    groups: list[LocalPartnerDoctorGroup] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
+
+
 class LocalPartnerRegisterItem(BaseModel):
     id: str
     alias: str | None = None

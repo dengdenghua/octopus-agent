@@ -44,6 +44,22 @@ provider-specific facts server-side while the UI renders a consistent shape:
 | Headless | Whether the detected command can run prompt-to-stdout tasks or is launcher/manual only. |
 | Check command | The copyable command or health check that proves the current CLI can actually run from Octopus. |
 
+## Doctor summary
+
+`GET /api/agents/local-partners/doctor` returns a machine-level readiness
+summary without spawning external CLIs. It aggregates the same detection data as
+the connect dialog:
+
+- `summary`, `total`, `detected`, `ready`, `registered`, and
+  `needs_attention`
+- grouped partner status rows such as `ready`, `model_unconfigured`,
+  `launcher_only`, `headless_unsupported`, and `missing`
+- bounded `next_actions` that explain whether to install a CLI, open the
+  native CLI, choose a model, fix PATH, or wait for headless support
+
+The connect dialog surfaces this as **Local CLI Doctor** so operators can see
+the whole machine state before expanding individual partner cards.
+
 ## Native CLI boundary
 
 The connect dialog exposes both copyable native commands and Octopus-compatible

@@ -23,10 +23,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
+  getLocalAgentPartnersDoctor,
   listLocalAgentPartners,
   probeLocalAgentPartner,
   registerLocalAgentPartners,
   type LocalAgentPartner,
+  type LocalAgentPartnerDoctorResponse,
   type LocalAgentPartnerProbeResponse,
 } from "@/core/agents/api";
 import { useI18n } from "@/core/i18n/hooks";
@@ -77,6 +79,14 @@ export function LocalAgentConnectDialog({
     enabled: open,
     refetchOnWindowFocus: false,
   });
+  const { data: doctor } = useQuery({
+    queryKey: ["agents", "local-partners", "doctor"],
+    queryFn: ({ signal }) => getLocalAgentPartnersDoctor({ signal }),
+    enabled: open,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const doctorSummary = doctor ?? summarizeLocalPartnerDoctor(partners);
 
   const registerMutation = useMutation({
     mutationFn: registerLocalAgentPartners,
@@ -115,7 +125,9 @@ export function LocalAgentConnectDialog({
     if (!open || partners.length === 0) return;
     setSelectedIds(
       partners
-        .filter((partner) => partner.detected && partner.ready && !partner.registered)
+        .filter(
+          (partner) => partner.detected && partner.ready && !partner.registered,
+        )
         .map((partner) => partner.id),
     );
     setAliases((prev) => ({
@@ -220,337 +232,370 @@ export function LocalAgentConnectDialog({
               </Button>
             </div>
           ) : (
-            partners.map((partner) => {
-              const Icon = PARTNER_ICONS[partner.id] ?? BotIcon;
-              const avatarUrl = partner.avatar_url?.trim();
-              const checked = selectedSet.has(partner.id);
-              const disabled =
-                !partner.detected ||
-                !partner.ready ||
-                partner.registered ||
-                registerMutation.isPending;
-              const badge = localPartnerBadge(partner, partnerBadgeLabels);
-              const setupSteps = localPartnerSetupSteps(partner);
-              const diagnosticItems = partner.diagnostic_items ?? [];
-              const probeResult = probeResults[partner.id];
-              const probeFailureKindLabel = localPartnerFailureKindLabel(
-                probeResult?.failure_kind,
-              );
-              const isProbing = probingId === partner.id;
-              const commandRows = [
-                partner.install_command
-                  ? { label: "复制安装命令", command: partner.install_command }
-                  : null,
-                partner.native_launch_command
-                  ? {
-                      label: "复制进入项目命令",
-                      command: partner.native_launch_command,
-                    }
-                  : null,
-                partner.native_command
-                  ? { label: "复制原生命令", command: partner.native_command }
-                  : null,
-                partner.verify_command
-                  ? { label: "复制验证命令", command: partner.verify_command }
-                  : null,
-              ].filter(
-                (item): item is { label: string; command: string } =>
+            <>
+              {doctorSummary ? (
+                <div className="rounded-lg border border-border-default bg-muted/20 p-2 text-[11px]">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-medium text-foreground">
+                      本机 CLI Doctor
+                    </span>
+                    <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700">
+                      可派工 {doctorSummary.ready}
+                    </span>
+                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
+                      需处理 {doctorSummary.needs_attention}
+                    </span>
+                    <span className="rounded bg-background px-1.5 py-0.5 text-muted-foreground">
+                      已连接 {doctorSummary.registered}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-muted-foreground">
+                    {doctorSummary.summary}
+                  </div>
+                  {doctorSummary.next_actions.length > 0 ? (
+                    <div className="mt-1 line-clamp-2 text-amber-700">
+                      下一步：
+                      {doctorSummary.next_actions.slice(0, 2).join("；")}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {partners.map((partner) => {
+                const Icon = PARTNER_ICONS[partner.id] ?? BotIcon;
+                const avatarUrl = partner.avatar_url?.trim();
+                const checked = selectedSet.has(partner.id);
+                const disabled =
+                  !partner.detected ||
+                  !partner.ready ||
+                  partner.registered ||
+                  registerMutation.isPending;
+                const badge = localPartnerBadge(partner, partnerBadgeLabels);
+                const setupSteps = localPartnerSetupSteps(partner);
+                const diagnosticItems = partner.diagnostic_items ?? [];
+                const probeResult = probeResults[partner.id];
+                const probeFailureKindLabel = localPartnerFailureKindLabel(
+                  probeResult?.failure_kind,
+                );
+                const isProbing = probingId === partner.id;
+                const commandRows = [
+                  partner.install_command
+                    ? {
+                        label: "复制安装命令",
+                        command: partner.install_command,
+                      }
+                    : null,
+                  partner.native_launch_command
+                    ? {
+                        label: "复制进入项目命令",
+                        command: partner.native_launch_command,
+                      }
+                    : null,
+                  partner.native_command
+                    ? { label: "复制原生命令", command: partner.native_command }
+                    : null,
+                  partner.verify_command
+                    ? { label: "复制验证命令", command: partner.verify_command }
+                    : null,
+                ].filter((item): item is { label: string; command: string } =>
                   Boolean(item?.command),
-              );
-              const commandHints = partner.command_hints ?? [];
-              const activate = () => togglePartner(partner);
-              return (
-                <div
-                  key={partner.id}
-                  role={disabled ? undefined : "button"}
-                  tabIndex={disabled ? undefined : 0}
-                  onClick={activate}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      activate();
-                    }
-                  }}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-lg border border-border-default bg-background/75 p-3 text-left transition-colors",
-                    !disabled && "hover:border-primary/25 hover:bg-muted/20",
-                    checked && "border-primary/30 bg-primary/5",
-                    disabled && "cursor-default opacity-75",
-                  )}
-                >
-                  <span
+                );
+                const commandHints = partner.command_hints ?? [];
+                const activate = () => togglePartner(partner);
+                return (
+                  <div
+                    key={partner.id}
+                    role={disabled ? undefined : "button"}
+                    tabIndex={disabled ? undefined : 0}
+                    onClick={activate}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        activate();
+                      }
+                    }}
                     className={cn(
-                      "grid size-8 shrink-0 place-items-center rounded-lg border",
-                      checked || partner.registered
-                        ? "border-primary/25 bg-primary/10 text-primary"
-                        : "border-border-default bg-muted text-muted-foreground",
+                      "flex w-full items-center gap-3 rounded-lg border border-border-default bg-background/75 p-3 text-left transition-colors",
+                      !disabled && "hover:border-primary/25 hover:bg-muted/20",
+                      checked && "border-primary/30 bg-primary/5",
+                      disabled && "cursor-default opacity-75",
                     )}
                   >
-                    {avatarUrl ? (
-                      <img
-                        src={avatarUrl}
-                        alt=""
-                        className="size-5 rounded-sm object-contain"
-                      />
-                    ) : checked || partner.registered ? (
-                      <CheckIcon className="size-4" aria-hidden="true" />
-                    ) : (
-                      <Icon className="size-4" aria-hidden="true" />
-                    )}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2">
-                      <span className="text-sm font-semibold">
-                        {partner.name}
-                      </span>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          "h-5 rounded-md px-1.5 text-[10px] font-medium ring-1",
-                          badge.className,
-                        )}
-                      >
-                        {badge.label}
-                      </Badge>
+                    <span
+                      className={cn(
+                        "grid size-8 shrink-0 place-items-center rounded-lg border",
+                        checked || partner.registered
+                          ? "border-primary/25 bg-primary/10 text-primary"
+                          : "border-border-default bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {avatarUrl ? (
+                        <img
+                          src={avatarUrl}
+                          alt=""
+                          className="size-5 rounded-sm object-contain"
+                        />
+                      ) : checked || partner.registered ? (
+                        <CheckIcon className="size-4" aria-hidden="true" />
+                      ) : (
+                        <Icon className="size-4" aria-hidden="true" />
+                      )}
                     </span>
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                      {partner.description}
-                    </span>
-                    {partner.readiness_message ? (
-                      <span
-                        className={cn(
-                          "mt-1 block text-[11px]",
-                          partner.ready
-                            ? "text-emerald-700"
-                            : "text-amber-700",
-                        )}
-                      >
-                        {partner.readiness_message}
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="text-sm font-semibold">
+                          {partner.name}
+                        </span>
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "h-5 rounded-md px-1.5 text-[10px] font-medium ring-1",
+                            badge.className,
+                          )}
+                        >
+                          {badge.label}
+                        </Badge>
                       </span>
-                    ) : null}
-                    {partner.fix_hint && !partner.ready ? (
-                      <span className="mt-1 block text-[11px] text-muted-foreground">
-                        修复建议：{partner.fix_hint}
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        {partner.description}
                       </span>
-                    ) : null}
-                    {partner.setup_hint ||
-                    partner.interaction_hint ||
-                    setupSteps.length > 0 ||
-                    diagnosticItems.length > 0 ||
-                    commandRows.length > 0 ? (
-                      <span
-                        className="mt-2 block space-y-1 rounded-md border border-border-default/70 bg-muted/20 p-2"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        {setupSteps.length > 0 ? (
-                          <span className="block space-y-1">
-                            <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
-                              连接步骤
-                            </span>
-                            {setupSteps.map((step, index) => (
-                              <span
-                                key={`${partner.id}-setup-${step.label}`}
-                                className={cn(
-                                  "flex gap-2 rounded border px-2 py-1 text-[10px]",
-                                  step.tone === "ready"
-                                    ? "border-emerald-100 bg-emerald-50 text-emerald-800"
-                                    : step.tone === "blocked"
-                                      ? "border-amber-200 bg-amber-50 text-amber-800"
-                                      : "border-border-default/60 bg-background/70 text-muted-foreground",
-                                )}
-                              >
-                                <span className="grid size-4 shrink-0 place-items-center rounded-full bg-background/80 font-mono text-[9px]">
-                                  {index + 1}
-                                </span>
-                                <span className="min-w-0">
-                                  <span className="block font-medium">
-                                    {step.label}
-                                  </span>
-                                  <span className="block opacity-85">
-                                    {step.detail}
-                                  </span>
-                                </span>
+                      {partner.readiness_message ? (
+                        <span
+                          className={cn(
+                            "mt-1 block text-[11px]",
+                            partner.ready
+                              ? "text-emerald-700"
+                              : "text-amber-700",
+                          )}
+                        >
+                          {partner.readiness_message}
+                        </span>
+                      ) : null}
+                      {partner.fix_hint && !partner.ready ? (
+                        <span className="mt-1 block text-[11px] text-muted-foreground">
+                          修复建议：{partner.fix_hint}
+                        </span>
+                      ) : null}
+                      {partner.setup_hint ||
+                      partner.interaction_hint ||
+                      setupSteps.length > 0 ||
+                      diagnosticItems.length > 0 ||
+                      commandRows.length > 0 ? (
+                        <span
+                          className="mt-2 block space-y-1 rounded-md border border-border-default/70 bg-muted/20 p-2"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {setupSteps.length > 0 ? (
+                            <span className="block space-y-1">
+                              <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                                连接步骤
                               </span>
-                            ))}
-                          </span>
-                        ) : null}
-                        {partner.setup_hint ? (
-                          <span className="block text-[11px] text-muted-foreground">
-                            {partner.setup_hint}
-                          </span>
-                        ) : null}
-                        {partner.interaction_hint ? (
-                          <span className="block text-[11px] leading-relaxed text-muted-foreground">
-                            {partner.interaction_hint}
-                          </span>
-                        ) : null}
-                        {diagnosticItems.length > 0 ? (
-                          <span className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                            {diagnosticItems.map((item) => (
-                              <span
-                                key={`${partner.id}-diagnostic-${item.label}`}
-                                className={cn(
-                                  "rounded border px-2 py-1 text-[10px]",
-                                  item.tone === "ready"
-                                    ? "border-emerald-100 bg-emerald-50 text-emerald-800"
-                                    : item.tone === "blocked"
-                                      ? "border-amber-200 bg-amber-50 text-amber-800"
-                                      : item.tone === "warning"
-                                        ? "border-amber-100 bg-amber-50/70 text-amber-800"
+                              {setupSteps.map((step, index) => (
+                                <span
+                                  key={`${partner.id}-setup-${step.label}`}
+                                  className={cn(
+                                    "flex gap-2 rounded border px-2 py-1 text-[10px]",
+                                    step.tone === "ready"
+                                      ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+                                      : step.tone === "blocked"
+                                        ? "border-amber-200 bg-amber-50 text-amber-800"
                                         : "border-border-default/60 bg-background/70 text-muted-foreground",
-                                )}
-                              >
-                                <span className="block font-medium">
-                                  {item.label}：{item.value}
-                                </span>
-                                {item.detail ? (
-                                  <span className="mt-0.5 block text-[10px] opacity-80">
-                                    {item.detail}
+                                  )}
+                                >
+                                  <span className="grid size-4 shrink-0 place-items-center rounded-full bg-background/80 font-mono text-[9px]">
+                                    {index + 1}
                                   </span>
-                                ) : null}
-                              </span>
-                            ))}
-                          </span>
-                        ) : null}
-                        {commandHints.length > 0 ? (
-                          <span className="block space-y-1">
-                            {commandHints.map((hint) => (
-                              <span
-                                key={`${partner.id}-${hint.command}`}
-                                className="flex gap-2 rounded border border-border-default/60 bg-background/70 px-2 py-1 text-[10px]"
-                              >
-                                <code className="shrink-0 font-mono text-foreground">
-                                  {hint.command}
-                                </code>
-                                <span className="shrink-0 text-muted-foreground/80">
-                                  {hint.scope}
+                                  <span className="min-w-0">
+                                    <span className="block font-medium">
+                                      {step.label}
+                                    </span>
+                                    <span className="block opacity-85">
+                                      {step.detail}
+                                    </span>
+                                  </span>
                                 </span>
-                                <span className="min-w-0 text-muted-foreground">
-                                  {hint.behavior}
+                              ))}
+                            </span>
+                          ) : null}
+                          {partner.setup_hint ? (
+                            <span className="block text-[11px] text-muted-foreground">
+                              {partner.setup_hint}
+                            </span>
+                          ) : null}
+                          {partner.interaction_hint ? (
+                            <span className="block text-[11px] leading-relaxed text-muted-foreground">
+                              {partner.interaction_hint}
+                            </span>
+                          ) : null}
+                          {diagnosticItems.length > 0 ? (
+                            <span className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                              {diagnosticItems.map((item) => (
+                                <span
+                                  key={`${partner.id}-diagnostic-${item.label}`}
+                                  className={cn(
+                                    "rounded border px-2 py-1 text-[10px]",
+                                    item.tone === "ready"
+                                      ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+                                      : item.tone === "blocked"
+                                        ? "border-amber-200 bg-amber-50 text-amber-800"
+                                        : item.tone === "warning"
+                                          ? "border-amber-100 bg-amber-50/70 text-amber-800"
+                                          : "border-border-default/60 bg-background/70 text-muted-foreground",
+                                  )}
+                                >
+                                  <span className="block font-medium">
+                                    {item.label}：{item.value}
+                                  </span>
+                                  {item.detail ? (
+                                    <span className="mt-0.5 block text-[10px] opacity-80">
+                                      {item.detail}
+                                    </span>
+                                  ) : null}
                                 </span>
-                              </span>
-                            ))}
-                          </span>
-                        ) : null}
-                        {partner.native_launch_cwd ? (
-                          <span className="block truncate rounded border border-border-default/60 bg-background/70 px-2 py-1 text-[10px] text-muted-foreground">
-                            工作目录：
-                            <code
-                              className="font-mono text-foreground"
-                              title={partner.native_launch_cwd}
-                            >
-                              {partner.native_launch_cwd}
-                            </code>
-                          </span>
-                        ) : null}
-                        {commandRows.length > 0 ? (
-                          <span className="flex flex-wrap gap-1">
-                            {partner.detected ? (
-                              <button
-                                type="button"
-                                onClick={() => void handleProbe(partner)}
-                                disabled={Boolean(probingId)}
-                                className="inline-flex max-w-full items-center gap-1 rounded border border-border-default/70 bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:border-primary/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                              ))}
+                            </span>
+                          ) : null}
+                          {commandHints.length > 0 ? (
+                            <span className="block space-y-1">
+                              {commandHints.map((hint) => (
+                                <span
+                                  key={`${partner.id}-${hint.command}`}
+                                  className="flex gap-2 rounded border border-border-default/60 bg-background/70 px-2 py-1 text-[10px]"
+                                >
+                                  <code className="shrink-0 font-mono text-foreground">
+                                    {hint.command}
+                                  </code>
+                                  <span className="shrink-0 text-muted-foreground/80">
+                                    {hint.scope}
+                                  </span>
+                                  <span className="min-w-0 text-muted-foreground">
+                                    {hint.behavior}
+                                  </span>
+                                </span>
+                              ))}
+                            </span>
+                          ) : null}
+                          {partner.native_launch_cwd ? (
+                            <span className="block truncate rounded border border-border-default/60 bg-background/70 px-2 py-1 text-[10px] text-muted-foreground">
+                              工作目录：
+                              <code
+                                className="font-mono text-foreground"
+                                title={partner.native_launch_cwd}
                               >
-                                {isProbing ? (
-                                  <Loader2Icon
-                                    className="size-3 animate-spin"
-                                    aria-hidden="true"
-                                  />
-                                ) : (
-                                  <CheckIcon
+                                {partner.native_launch_cwd}
+                              </code>
+                            </span>
+                          ) : null}
+                          {commandRows.length > 0 ? (
+                            <span className="flex flex-wrap gap-1">
+                              {partner.detected ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleProbe(partner)}
+                                  disabled={Boolean(probingId)}
+                                  className="inline-flex max-w-full items-center gap-1 rounded border border-border-default/70 bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:border-primary/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {isProbing ? (
+                                    <Loader2Icon
+                                      className="size-3 animate-spin"
+                                      aria-hidden="true"
+                                    />
+                                  ) : (
+                                    <CheckIcon
+                                      className="size-3"
+                                      aria-hidden="true"
+                                    />
+                                  )}
+                                  <span>
+                                    {isProbing ? "检查中" : "健康检查"}
+                                  </span>
+                                </button>
+                              ) : null}
+                              {commandRows.map((row) => (
+                                <button
+                                  key={`${partner.id}-${row.label}`}
+                                  type="button"
+                                  onClick={() => void copyCommand(row.command)}
+                                  className="inline-flex max-w-full items-center gap-1 rounded border border-border-default/70 bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
+                                  title={row.command}
+                                >
+                                  <ClipboardIcon
                                     className="size-3"
                                     aria-hidden="true"
                                   />
-                                )}
-                                <span>{isProbing ? "检查中" : "健康检查"}</span>
-                              </button>
-                            ) : null}
-                            {commandRows.map((row) => (
-                              <button
-                                key={`${partner.id}-${row.label}`}
-                                type="button"
-                                onClick={() => void copyCommand(row.command)}
-                                className="inline-flex max-w-full items-center gap-1 rounded border border-border-default/70 bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
-                                title={row.command}
-                              >
-                                <ClipboardIcon
-                                  className="size-3"
-                                  aria-hidden="true"
-                                />
-                                <span>{row.label}</span>
-                                <code className="max-w-[180px] truncate font-mono">
-                                  {row.command}
-                                </code>
-                              </button>
-                            ))}
-                          </span>
-                        ) : null}
-                        {probeResult ? (
-                          <span
-                            className={cn(
-                              "mt-1 block rounded border px-2 py-1 text-[11px]",
-                              probeResult.ok
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                                : "border-amber-200 bg-amber-50 text-amber-800",
-                            )}
-                          >
-                            <span className="block font-medium">
-                              {!probeResult.ok && probeFailureKindLabel ? (
-                                <span className="mr-1 inline-flex rounded bg-background/80 px-1.5 py-0.5 text-[10px] font-medium">
-                                  {probeFailureKindLabel}
+                                  <span>{row.label}</span>
+                                  <code className="max-w-[180px] truncate font-mono">
+                                    {row.command}
+                                  </code>
+                                </button>
+                              ))}
+                            </span>
+                          ) : null}
+                          {probeResult ? (
+                            <span
+                              className={cn(
+                                "mt-1 block rounded border px-2 py-1 text-[11px]",
+                                probeResult.ok
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                  : "border-amber-200 bg-amber-50 text-amber-800",
+                              )}
+                            >
+                              <span className="block font-medium">
+                                {!probeResult.ok && probeFailureKindLabel ? (
+                                  <span className="mr-1 inline-flex rounded bg-background/80 px-1.5 py-0.5 text-[10px] font-medium">
+                                    {probeFailureKindLabel}
+                                  </span>
+                                ) : null}
+                                {probeResult.ok
+                                  ? "健康检查通过，可真实派工"
+                                  : probeResult.failure_title ||
+                                    "健康检查未通过"}
+                                {typeof probeResult.elapsed_ms === "number"
+                                  ? `（${probeResult.elapsed_ms}ms）`
+                                  : ""}
+                              </span>
+                              {!probeResult.ok && probeResult.fix_hint ? (
+                                <span className="mt-0.5 block">
+                                  建议：{probeResult.fix_hint}
                                 </span>
                               ) : null}
-                              {probeResult.ok
-                                ? "健康检查通过，可真实派工"
-                                : probeResult.failure_title ||
-                                  "健康检查未通过"}
-                              {typeof probeResult.elapsed_ms === "number"
-                                ? `（${probeResult.elapsed_ms}ms）`
-                                : ""}
+                              {!probeResult.ok && probeResult.raw_error ? (
+                                <code className="mt-0.5 block truncate font-mono text-[10px] opacity-80">
+                                  {probeResult.raw_error}
+                                </code>
+                              ) : null}
                             </span>
-                            {!probeResult.ok && probeResult.fix_hint ? (
-                              <span className="mt-0.5 block">
-                                建议：{probeResult.fix_hint}
-                              </span>
-                            ) : null}
-                            {!probeResult.ok && probeResult.raw_error ? (
-                              <code className="mt-0.5 block truncate font-mono text-[10px] opacity-80">
-                                {probeResult.raw_error}
-                              </code>
-                            ) : null}
-                          </span>
-                        ) : null}
+                          ) : null}
+                        </span>
+                      ) : null}
+                      {partner.executable ? (
+                        <span className="mt-1 block truncate text-[11px] text-muted-foreground/80">
+                          {partner.executable}
+                        </span>
+                      ) : null}
+                      <span
+                        className="mt-2 block"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <Input
+                          value={aliases[partner.id] ?? partner.default_alias}
+                          disabled={disabled}
+                          onChange={(event) =>
+                            setAliases((prev) => ({
+                              ...prev,
+                              [partner.id]: event.target.value,
+                            }))
+                          }
+                          className="h-8 max-w-sm rounded-lg bg-background text-xs"
+                          aria-label={t.localAgentConnect.partnerNameAria(
+                            partner.name,
+                          )}
+                        />
                       </span>
-                    ) : null}
-                    {partner.executable ? (
-                      <span className="mt-1 block truncate text-[11px] text-muted-foreground/80">
-                        {partner.executable}
-                      </span>
-                    ) : null}
-                    <span
-                      className="mt-2 block"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <Input
-                        value={aliases[partner.id] ?? partner.default_alias}
-                        disabled={disabled}
-                        onChange={(event) =>
-                          setAliases((prev) => ({
-                            ...prev,
-                            [partner.id]: event.target.value,
-                          }))
-                        }
-                        className="h-8 max-w-sm rounded-lg bg-background text-xs"
-                        aria-label={t.localAgentConnect.partnerNameAria(
-                          partner.name,
-                        )}
-                      />
                     </span>
-                  </span>
-                </div>
-              );
-            })
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
 
@@ -582,4 +627,41 @@ export function LocalAgentConnectDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function summarizeLocalPartnerDoctor(
+  partners: LocalAgentPartner[],
+): LocalAgentPartnerDoctorResponse | null {
+  if (partners.length === 0) return null;
+  const ready = partners.filter((partner) => partner.ready).length;
+  const registered = partners.filter((partner) => partner.registered).length;
+  const needsAttention =
+    partners.length -
+    partners.filter(
+      (partner) =>
+        (partner.effective_status ||
+          partner.readiness_status ||
+          partner.status) === "registered" || partner.ready,
+    ).length;
+  const nextActions = Array.from(
+    new Set(
+      partners
+        .filter((partner) => !partner.ready)
+        .map((partner) => partner.fix_hint || partner.readiness_message || "")
+        .filter(Boolean),
+    ),
+  ).slice(0, 4);
+  return {
+    summary: `${ready}/${partners.length} 个本地 CLI 伙伴可自动派工，${needsAttention} 个需要处理。`,
+    total: partners.length,
+    detected: partners.filter((partner) => partner.detected).length,
+    ready,
+    registered,
+    needs_attention: needsAttention,
+    groups: [],
+    next_actions:
+      nextActions.length > 0
+        ? nextActions
+        : ["全部可用伙伴建议先跑健康检查，再执行重要派工。"],
+  };
 }
