@@ -413,18 +413,25 @@ export function TeamTasksPanel({
                   {recoveryGroups.map((group) => (
                     <span
                       key={group.key}
-                      className="inline-flex max-w-full items-center gap-1 rounded border border-amber-200 bg-background/75 px-1.5 py-0.5"
+                      className="inline-flex max-w-full flex-col items-start gap-0.5 rounded border border-amber-200 bg-background/75 px-1.5 py-0.5"
                       title={group.hints.join("；")}
                     >
-                      <span className="shrink-0 font-medium">
-                        {group.label}
+                      <span className="flex max-w-full items-center gap-1">
+                        <span className="shrink-0 font-medium">
+                          {group.label}
+                        </span>
+                        <span className="min-w-0 truncate text-amber-800/80">
+                          {group.members.join("、")}
+                        </span>
+                        <span className="shrink-0 rounded bg-amber-100 px-1 font-mono text-[10px]">
+                          {group.count}
+                        </span>
                       </span>
-                      <span className="min-w-0 truncate text-amber-800/80">
-                        {group.members.join("、")}
-                      </span>
-                      <span className="shrink-0 rounded bg-amber-100 px-1 font-mono text-[10px]">
-                        {group.count}
-                      </span>
+                      {group.hints[0] && (
+                        <span className="max-w-full truncate text-amber-800/80">
+                          建议：{group.hints[0]}
+                        </span>
+                      )}
                     </span>
                   ))}
                 </div>

@@ -223,8 +223,10 @@ describe("<TeamTasksPanel /> process timeline", () => {
     expect(screen.getByText("CLI 恢复分组")).toBeInTheDocument();
     expect(screen.getByText("账号权益")).toBeInTheDocument();
     expect(screen.getByText("local_trae_cli")).toBeInTheDocument();
+    expect(screen.getByText("建议：确认 CLI 账号订阅/企业授权。")).toBeInTheDocument();
     expect(screen.getByText("版本不兼容")).toBeInTheDocument();
     expect(screen.getByText("local_qoder_cli")).toBeInTheDocument();
+    expect(screen.getByText("建议：升级 CLI 后重试。")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /2 个产物/ }));
 
