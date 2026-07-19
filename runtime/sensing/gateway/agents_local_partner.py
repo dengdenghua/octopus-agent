@@ -694,7 +694,9 @@ def to_wire(
     registered = in_registry or dir_registered(agent_id)
     status = "registered" if registered else ("detected" if executable else "missing")
     readiness_status = str(readiness.get("readiness_status") or status)
-    effective_status = "registered" if registered else readiness_status
+    effective_status = (
+        "registered" if registered and readiness_status == "ready" else readiness_status
+    )
     return LocalPartnerWire(
         id=str(spec["id"]),
         agent_id=agent_id,

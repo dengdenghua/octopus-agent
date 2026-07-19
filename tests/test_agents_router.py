@@ -1078,6 +1078,32 @@ class TestLocalPartners:
         assert duplicate.json()["already_exists_count"] == 1
         assert duplicate.json()["results"][0]["status"] == "already_exists"
 
+    def test_registered_local_partner_effective_status_reflects_current_readiness(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
+        agent_dir = tmp_path / "local_codex_cli"
+        agent_dir.mkdir()
+        (agent_dir / "profile.jsonc").write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(
+            agents_router_module,
+            "_which_local_partner_command",
+            lambda commands: (None, None),
+        )
+        app = FastAPI()
+        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
+
+        r = TestClient(app).get("/api/agents/local-partners")
+
+        assert r.status_code == 200
+        partners = {p["id"]: p for p in r.json()["partners"]}
+        assert partners["codex-cli"]["registered"] is True
+        assert partners["codex-cli"]["status"] == "registered"
+        assert partners["codex-cli"]["readiness_status"] == "missing"
+        assert partners["codex-cli"]["effective_status"] == "missing"
+
     def test_register_missing_local_partner_skips_without_creating_agent(
         self,
         tmp_path: Path,
