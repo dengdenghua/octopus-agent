@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import shlex
 from io import BytesIO
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from runtime.execution.agents import (
 )
 from runtime.execution.arms.base import ArmPool, Worker
 from runtime.execution.arms.presets import make_web_read_arm
+from runtime.platform.process.paths import project_root
 from runtime.safety.auth import Identity, IdentityStore
 from runtime.sensing.gateway import agent_world_router
 from runtime.sensing.gateway import agents_router as agents_router_module
@@ -952,6 +954,8 @@ class TestLocalPartners:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ):
+        repo_root = project_root()
+        monkeypatch.chdir(repo_root / "runtime" / "sensing")
         executable = tmp_path / "Code Buddy (Beta)" / "codebuddy"
         executable.parent.mkdir()
         executable.touch()
@@ -976,6 +980,9 @@ class TestLocalPartners:
         codebuddy = partners["codebuddy-cli"]
         assert codebuddy["native_command"].startswith("'")
         assert "Code Buddy (Beta)" in codebuddy["native_command"]
+        assert codebuddy["native_launch_command"].startswith(
+            f"cd {shlex.quote(str(repo_root))} && "
+        )
         assert codebuddy["native_launch_command"].endswith(
             f" && {codebuddy['native_command']}"
         )

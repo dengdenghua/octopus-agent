@@ -40,6 +40,7 @@ from typing import Any
 
 from runtime.execution.agents.local_partner_bridge import build_partner_argv, run_local_partner
 from runtime.execution.misc.agent_avatar import pixel_agent_avatar_svg
+from runtime.platform.process.paths import project_root
 
 from .agents_models import LocalPartnerWire
 
@@ -446,7 +447,7 @@ def _partner_guidance(
         "install_command": install if not command else None,
         "native_command": native,
         "native_launch_command": (
-            f"cd {shlex.quote(str(Path.cwd()))} && {native}" if native else None
+            f"cd {shlex.quote(str(project_root()))} && {native}" if native else None
         ),
         "verify_command": verify,
         "setup_hint": setup_hint,
