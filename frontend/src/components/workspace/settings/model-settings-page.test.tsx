@@ -8,7 +8,7 @@
  * are editable and let us assert the "+ Add / × remove" controls).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithProviders } from "@/test/harness";
@@ -319,6 +319,76 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     // Singular "1 model" form is rendered.
     expect(screen.getByText("1 个模型")).toBeInTheDocument();
     expect(screen.getByText("gpt-4o-mini")).toBeInTheDocument();
+  });
+
+  it("deletes a custom model after confirmation and refreshes the list", async () => {
+    const user = userEvent.setup();
+    let models: unknown[] = [
+      {
+        id: "disposable",
+        name: "disposable",
+        display_name: "Disposable",
+        models: ["gpt-4o-mini"],
+        provider: "openai",
+        base_url: "https://api.openai.com/v1",
+        has_api_key: true,
+        supports_thinking: false,
+        supports_vision: false,
+      },
+    ];
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("/api/config/custom-models/compat-diagnostics")) {
+          return jsonOk({
+            schema: "octopus.openai_compat_diagnostics.v1",
+            diagnostics: [],
+          });
+        }
+        if (url.includes("/api/config/openai-compat-profiles")) {
+          return jsonOk({
+            schema: "octopus.openai_compat_profile_catalog.v1",
+            diagnostics: [],
+          });
+        }
+        if (
+          url.includes("/api/config/custom-models/disposable") &&
+          init?.method === "DELETE"
+        ) {
+          models = [];
+          return jsonOk({ ok: true, removed: true });
+        }
+        if (url.includes("/api/config/custom-models")) {
+          return jsonOk({ models });
+        }
+        return jsonOk({ default: "", models: [] });
+      },
+    );
+
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+
+    await waitFor(() => {
+      expect(screen.getByText("Disposable")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "删除" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "删除" }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input, init]) => {
+          const url = typeof input === "string" ? input : input.toString();
+          return (
+            url.includes("/api/config/custom-models/disposable") &&
+            (init as RequestInit | undefined)?.method === "DELETE"
+          );
+        }),
+      ).toBe(true);
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Disposable")).not.toBeInTheDocument();
+    });
   });
 });
 
